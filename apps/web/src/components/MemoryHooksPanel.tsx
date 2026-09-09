@@ -59,15 +59,24 @@ export function MemoryHooksPanel({
   enabled,
   flags,
   onToggle,
+  hooks,
+  testId = 'memory-hooks-panel',
 }: {
   /** Master memory switch — when off, every hook toggle is disabled. */
   enabled: boolean;
   flags: Record<MemoryHookKey, boolean>;
   onToggle: (key: MemoryHookKey, next: boolean) => void;
+  /** Render only these hooks, in this panel's own order. Omit for all four.
+   *  The Memories view passes the subset that is currently off, so a green
+   *  master switch cannot stand alone for a capability that is not running. */
+  hooks?: readonly MemoryHookKey[];
+  testId?: string;
 }) {
   const t = useT();
+  const rows = hooks ? HOOKS.filter((hook) => hooks.includes(hook.key)) : HOOKS;
+  if (rows.length === 0) return null;
   return (
-    <div className={styles.panel} data-testid="memory-hooks-panel">
+    <div className={styles.panel} data-testid={testId}>
       <div className={styles.head}>
         <span className={styles.headIcon} aria-hidden>
           <Icon name="sliders" size={15} />
@@ -78,7 +87,7 @@ export function MemoryHooksPanel({
         </div>
       </div>
       <ul className={styles.list}>
-        {HOOKS.map((hook) => (
+        {rows.map((hook) => (
           <li key={hook.key} className={styles.row}>
             <span className={styles.rowIcon} aria-hidden>
               <Icon name={hook.icon} size={14} />

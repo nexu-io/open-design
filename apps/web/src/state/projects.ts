@@ -10,7 +10,11 @@ import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { isDaemonProxyConnectionFailure } from '../runtime/daemon-proxy-failure';
 import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
-import { API_ERROR_CODES, type ApiErrorCode } from '@open-design/contracts';
+import {
+  API_ERROR_CODES,
+  isSameWorkspacePrincipal,
+  type ApiErrorCode,
+} from '@open-design/contracts';
 import type {
   AppliedPluginSnapshot,
   ApplyResult,
@@ -31,7 +35,6 @@ import type {
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
   ProjectScenarioTaskProfile,
-  RestoreProjectAutomaticScenarioResponse,
   ProjectVisibility,
   ProjectWorkspaceScopeResponse,
   TerminalSession,
@@ -167,35 +170,6 @@ export function resolvedWorkspaceContextForWrite(
     throw new Error('Workspace context is unavailable. Try again when workspace sync finishes.');
   }
   return state.context;
-}
-
-export async function restoreProjectAutomaticScenario(
-  projectId: string,
-  expectedCurrentSnapshotId: string | null,
-  workspaceContext: WorkspaceCollabContext | null,
-): Promise<RestoreProjectAutomaticScenarioResponse> {
-  const response = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/scenario/restore-automatic`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
-      },
-      body: JSON.stringify({ expectedCurrentSnapshotId }),
-    },
-  );
-  const body = await response.json().catch(() => null) as
-    | RestoreProjectAutomaticScenarioResponse
-    | { error?: { message?: string } }
-    | null;
-  if (!response.ok || !body || !('project' in body)) {
-    throw new Error(body && 'error' in body
-      ? body.error?.message ?? `HTTP ${response.status}`
-      : `HTTP ${response.status}`);
-  }
-  evictCoalescedGet(`/api/projects/${encodeURIComponent(projectId)}`);
-  return body;
 }
 
 /**
@@ -464,7 +438,14 @@ export async function bootstrapProjectRoute(
         if (
           !context
           || body.scope.workspaceId !== suppliedContext.workspaceId
-          || workspaceIdentityCacheKey(context) !== suppliedIdentity
+          // Re-confirmation asks WHO, so it compares principals, not cache keys.
+          // The witness comes from the shell and carries the member's real role;
+          // the daemon's scope route answers with its placeholder `member` on
+          // its single branch. Demanding those agree meant a workspace owner's
+          // own project was never re-confirmed — `forbidden` here becomes
+          // `failure: 'missing'` in App with no fallback, so opening a team
+          // project from its directory card reported "项目不存在".
+          || !isSameWorkspacePrincipal(context, suppliedContext)
         ) {
           // A caller-supplied witness is exact authority, never a hint. If the
           // daemon cannot re-confirm it, do not retry this project headerless or
@@ -618,8 +599,13 @@ export async function bootstrapFirstOpenTeamProjectRoute(
   if (
     bootstrap.scope.kind !== 'team'
     || bootstrap.scope.context?.workspaceType !== 'team'
-    || workspaceIdentityCacheKey(bootstrap.scope.context)
-      !== workspaceIdentityCacheKey(exactContext)
+    // Same question, same answer as the re-confirmation above: does this local
+    // binding belong to the exact principal that authorized the bootstrap? The
+    // daemon's scope placeholder role is not evidence about that, and letting it
+    // decide killed this progressive first-open lane outright for every
+    // owner/admin — every first open silently fell back to the slow
+    // full-materialization path.
+    || !isSameWorkspacePrincipal(bootstrap.scope.context, exactContext)
   ) {
     // A shared placeholder must never be rendered through an unbound/local or
     // mismatched principal, including when the web is paired with an older
@@ -1494,6 +1480,8 @@ export async function listMessages(
 
 export interface SaveMessageOptions {
   telemetryFinalized?: boolean;
+  /** Claim the row once: the daemon keeps an existing row and returns it. */
+  createOnly?: boolean;
   workspaceContext?: WorkspaceCollabContext | null;
   // Set during page-unload paths (pagehide / visibilitychange→hidden) so
   // the in-flight PUT survives even if the document tears down before the
@@ -1507,12 +1495,14 @@ export async function saveMessage(
   conversationId: string,
   message: ChatMessage,
   options: SaveMessageOptions = {},
-): Promise<void> {
+): Promise<ChatMessage | null> {
   try {
-    const body = options.telemetryFinalized
-      ? { ...message, telemetryFinalized: true }
-      : message;
-    await fetch(
+    const body = {
+      ...message,
+      ...(options.telemetryFinalized ? { telemetryFinalized: true } : {}),
+      ...(options.createOnly ? { createOnly: true } : {}),
+    };
+    const response = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(message.id)}`,
       {
         method: 'PUT',
@@ -1526,8 +1516,14 @@ export async function saveMessage(
         ...(options.keepalive ? { keepalive: true } : {}),
       },
     );
+    if (!response.ok) return null;
+    // The stored row, which a create-only claim may have kept from an earlier
+    // writer. Callers that care compare it against what they sent.
+    const saved = (await response.json()) as { message?: ChatMessage };
+    return saved.message ?? null;
   } catch {
     // best-effort persistence — UI keeps the message in-memory either way
+    return null;
   }
 }
 
@@ -1936,6 +1932,16 @@ export async function listPlugins(
   const cacheKey = pluginCatalogCacheKey(options);
   const requestGeneration = (pluginCatalogCacheGenerations.get(cacheKey) ?? 0) + 1;
   pluginCatalogCacheGenerations.set(cacheKey, requestGeneration);
+  // NOT single-flighted, deliberately. `FileWorkspace`'s load effect fires this
+  // twice ~4ms apart on a cold conversation open, and a ttl-0 join would remove
+  // the second request — but it would also remove the ordinary same-key request
+  // race that `pluginCatalogCacheGenerations` above exists to arbitrate, and
+  // that `tests/state/projects.test.ts` pins ("keeps the latest-started
+  // same-scope plugin read cached when responses finish in reverse order").
+  // Collapsing identical concurrent reads makes that race unreachable rather
+  // than merely handled, which is a change to this module's stated concurrency
+  // contract, not a request-count change. Left for the owner of that contract
+  // to decide.
   try {
     const resp = await fetch(
       '/api/plugins',

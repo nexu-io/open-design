@@ -13,6 +13,7 @@ import {
   upsertMessage,
 } from '../src/db.js';
 import {
+  createPhysicalAgentSessionUsageTracker,
   computeIncludeStable,
   hashStableInstructions,
   isAgentResumeFailure,
@@ -26,6 +27,25 @@ import {
   resolveAgentResumeFailurePolicy,
   resolveAgentResumePromptPolicy,
 } from '../src/agent-session-resume.js';
+
+describe('physical agent session usage', () => {
+  it('does not leak usage across sessions and retains it for an exact-session continuation', () => {
+    const attemptA = createPhysicalAgentSessionUsageTracker();
+    attemptA.observe('agent', {
+      type: 'usage',
+      usage: { input_tokens: 12, output_tokens: 3 },
+    });
+    expect(attemptA.inputTokens()).toBe(12);
+
+    const differentSessionAttempt = createPhysicalAgentSessionUsageTracker();
+    expect(differentSessionAttempt.inputTokens()).toBeNull();
+
+    const forcedSameSessionContinuation = createPhysicalAgentSessionUsageTracker(
+      attemptA.inputTokens(),
+    );
+    expect(forcedSameSessionContinuation.inputTokens()).toBe(12);
+  });
+});
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -97,6 +117,28 @@ describe('resolveAgentResumeContext', () => {
     expect(ctx.isResuming).toBe(true);
     expect(ctx.resumeSessionId).toBe('sess-A');
     expect(ctx.invalidationReason).toBeNull();
+  });
+
+  it('exposes stored input usage only as resume observability context', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      lastInputTokens: 123_456,
+    });
+
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+    });
+
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.storedInputTokens).toBe(123_456);
   });
 
   it('still resumes when only the current run placeholder is newer (normal follow-up)', () => {
@@ -629,9 +671,33 @@ describe('isAmrOpencodeEventStreamResumeFailure', () => {
     ).toBe(true);
   });
 
+  // vela 0.0.35 (#1847) moved the compaction continuation onto its own request
+  // and worded its EOF differently. Before this the phrase matched nothing in
+  // the repository, so the SAME bridge-level stream EOF — one phase later —
+  // could not reach the re-seed path at all and ended the conversation on a
+  // hard failure instead of one transparent cold turn.
+  it('matches the compaction-continuation EOF vela 0.0.35 introduced', () => {
+    expect(
+      isAmrOpencodeEventStreamResumeFailure(
+        'json-rpc id 4: opencode event stream: opencode compaction continuation ended before prompt completion',
+      ),
+    ).toBe(true);
+    expect(
+      isAmrOpencodeEventStreamResumeFailure(
+        'opencode compaction continuation ended before prompt completion',
+      ),
+    ).toBe(true);
+  });
+
   it('ignores unrelated AMR/opencode output', () => {
     expect(isAmrOpencodeEventStreamResumeFailure('opencode auth failed')).toBe(false);
     expect(isAmrOpencodeEventStreamResumeFailure('')).toBe(false);
+    // A compaction that merely RAN is not a compaction that died. The phrase
+    // has to name the EOF, or every successful compaction log line would send
+    // the turn through a cold re-seed.
+    expect(
+      isAmrOpencodeEventStreamResumeFailure('opencode compaction continuation started'),
+    ).toBe(false);
   });
 });
 
@@ -736,5 +802,38 @@ describe('resolveAgentResumeFailurePolicy', () => {
       autoReseedFullTranscript: false,
       reason: null,
     });
+  });
+
+  it('routes the compaction-continuation EOF into the same re-seed recovery', () => {
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'amr',
+        stderr:
+          'json-rpc id 4: opencode event stream: opencode compaction continuation ended before prompt completion',
+        stdout: '',
+        isResuming: true,
+        resumeSessionId: 'ses-old',
+      }),
+    ).toEqual({
+      resumeFailed: true,
+      clearStaleSession: true,
+      autoReseedFullTranscript: true,
+      reason: 'resume_failed',
+    });
+  });
+
+  it('leaves a compaction EOF on a create turn alone', () => {
+    // The gate that keeps this from becoming a general retry: no stored handle
+    // was being continued, so there is nothing stale to clear and nothing to
+    // re-seed — the turn already ran from scratch.
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'amr',
+        stderr: 'opencode compaction continuation ended before prompt completion',
+        stdout: '',
+        isResuming: false,
+        resumeSessionId: null,
+      }).resumeFailed,
+    ).toBe(false);
   });
 });

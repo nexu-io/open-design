@@ -39,7 +39,7 @@ const config = {
 describe('useConversationChat authoritative message loading', () => {
   beforeEach(() => {
     mockedListMessages.mockRejectedValue(new Error('workspace directory unavailable'));
-    mockedSaveMessage.mockResolvedValue(undefined);
+    mockedSaveMessage.mockResolvedValue(null);
     mockedStreamViaDaemon.mockResolvedValue(undefined);
   });
 
@@ -77,5 +77,58 @@ describe('useConversationChat authoritative message loading', () => {
 
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
     expect(mockedSaveMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('useConversationChat run failures', () => {
+  beforeEach(() => {
+    mockedListMessages.mockResolvedValue([]);
+    mockedSaveMessage.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  // Side chat runs through the same failure card, so it needs the same original
+  // error under 「view details」 as the main chat panel.
+  it('threads the captured stderr tail onto the failed assistant message', async () => {
+    const stderrTail =
+      'Error: dsh: plugin tree failed to load: credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string';
+    mockedStreamViaDaemon.mockImplementation(async (options: any) => {
+      const err = new Error('DeepSeek Harness profile exited without a terminal result.') as Error & {
+        code?: string;
+        stderrTail?: string;
+      };
+      err.code = 'DSH_PROFILE_MISSING_RESULT';
+      err.stderrTail = stderrTail;
+      options.handlers.onError(err);
+    });
+
+    const hook = renderHook(() =>
+      useConversationChat('project-1', 'conversation-1', {
+        config,
+        agentsById: new Map(),
+        locale: 'en',
+        sessionMode: 'design',
+      }),
+    );
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+    await act(async () => {
+      await hook.result.current.onSend('do the thing', [], []);
+    });
+
+    await waitFor(() => {
+      const failed = hook.result.current.messages.find(
+        (m) => m.role === 'assistant' && m.runStatus === 'failed',
+      );
+      const errorEvent = failed?.events?.find(
+        (event) => event.kind === 'status' && event.label === 'error',
+      ) as { stderrTail?: string } | undefined;
+      expect(errorEvent?.stderrTail).toBe(stderrTail);
+    });
   });
 });

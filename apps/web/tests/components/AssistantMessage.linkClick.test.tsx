@@ -339,6 +339,33 @@ describe('AssistantMessage — chat file-link routing (#1239)', () => {
     expect(clickEvent.defaultPrevented).toBe(true);
   });
 
+  it('routes angle-wrapped local paths containing spaces through onRequestOpenFile', () => {
+    const onRequestOpenFile = vi.fn();
+    const projectDir = '/Users/me/Library/Application Support/Open Design Beta/projects/project-1';
+    const { container } = render(
+      <AssistantMessage
+        message={messageWithText(
+          `交付文件：[index.html](<${projectDir}/index.html>)。`,
+        )}
+        streaming={false}
+        projectId="project-1"
+        projectFileNames={new Set(['index.html'])}
+        projectResolvedDir={projectDir}
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    const anchor = container.querySelector('a.md-link');
+    expect(anchor).not.toBeNull();
+    expect(anchor?.textContent).toBe('index.html');
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor!.dispatchEvent(clickEvent);
+
+    expect(onRequestOpenFile).toHaveBeenCalledWith('index.html');
+    expect(clickEvent.defaultPrevented).toBe(true);
+  });
+
   it('routes legacy name-keyed disk paths that match project files through onRequestOpenFile', () => {
     // Legacy 0.10.x preview data dirs are keyed by project NAME
     // (`projects/Web Prototype/`). The client cannot tell that apart from

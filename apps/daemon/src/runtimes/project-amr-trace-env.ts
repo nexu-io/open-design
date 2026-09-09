@@ -7,6 +7,9 @@ export type PinnedRunWorkspaceScope = Readonly<{
   schemaVersion: 1;
   projectId: string;
   workspaceId: string;
+  // Project writes are creator-gated. Freeze the same member for dynamic
+  // library reads; older persisted Runs may not carry this field.
+  workspaceMemberId?: string | null;
   source: 'persisted_project_binding';
 }>;
 
@@ -90,6 +93,7 @@ export function pinRunWorkspaceScopeForProject(
     schemaVersion: 1,
     projectId: normalizedProjectId,
     workspaceId,
+    workspaceMemberId: binding?.createdByWorkspaceMemberId?.trim() || null,
     source: 'persisted_project_binding',
   });
 }

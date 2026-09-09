@@ -201,6 +201,15 @@ replay gaps:
 > - `vela models` → prints the production-shaped `public_model_*    vela`
 >   catalog.
 >
+> Anything else — `vela billing summary`, `vela billing workspace-snapshot`,
+> any future one-shot — **exits 1 with a message naming the subcommand**. It has
+> to: falling through would start the ACP server, which blocks on stdin forever,
+> and the daemon callers for those subcommands `await` stdout with no timeout.
+> One unmodelled subcommand then wedges every request on the web origin (the
+> browser's six HTTP/1.1 connections all end up parked on handlers waiting for a
+> mock that will never answer), and the app looks hung rather than mocked. If a
+> test needs one of these, add a handler in `mocks/lib/vela-subcommands.mjs`.
+>
 > Error injection envs (kept in sync with
 > `apps/daemon/tests/fixtures/fake-vela.mjs`):
 > `FAKE_VELA_SESSION_NEW_ERROR` / `FAKE_VELA_SET_MODEL_ERROR` /

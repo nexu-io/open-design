@@ -52,7 +52,8 @@ export type DefaultScenarioPluginId =
   | 'example-hyperframes'
   | 'example-simple-deck'
   | 'example-web-clone'
-  | 'example-web-prototype';
+  | 'example-web-prototype'
+  | 'example-webgl-experience';
 
 export const DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID =
   'od-default' satisfies DefaultScenarioPluginId;
@@ -155,6 +156,13 @@ export function defaultScenarioPluginIdForProjectMetadata(
 ): DefaultScenarioPluginId | null {
   if (metadata?.intent === 'live-artifact') return 'example-live-artifact';
   if (metadata?.intent === 'web-clone') return 'example-web-clone';
+  // The powered-preview GPU card is a first-level output type on the create
+  // rail and binds `example-webgl-experience`, so that plugin is this
+  // metadata's automatic default the same way `example-web-clone` is
+  // web-clone's. Leaving it out resolved a WebGL project to the generic
+  // prototype seed, so the card's own binding read as a user pin and
+  // restoring it would have bound the wrong plugin.
+  if (metadata?.intent === 'webgl-experience') return 'example-webgl-experience';
   if (metadata?.intent === 'hyperframes') return 'example-hyperframes';
   if (metadata?.intent === 'marketing') return 'example-web-prototype';
   return defaultScenarioPluginIdForKind(metadata?.kind);
@@ -182,40 +190,6 @@ export function defaultScenarioTaskProfileForProjectMetadata(
     return pluginId === 'example-hyperframes' ? taskProfile : null;
   }
   return null;
-}
-
-export function hasCurrentAutomaticStrategyBinding(
-  metadata: ProjectMetadata | null | undefined,
-): boolean {
-  const binding = metadata?.strategyBinding;
-  return binding?.schemaVersion === 1
-    && binding.provenance === 'automatic_default'
-    && binding.boundAt >= 0
-    && binding.taskProfile === automaticStrategyTaskProfileForProjectMetadata(metadata);
-}
-
-/**
- * Pure read-model check used by UI surfaces. Daemon authority additionally
- * verifies that the referenced snapshot row belongs to this project and
- * carries the recorded plugin id.
- */
-export function hasCurrentAutomaticScenarioBinding(input: {
-  metadata: ProjectMetadata | null | undefined;
-  appliedPluginSnapshotId: string | null | undefined;
-}): boolean {
-  if (!input.appliedPluginSnapshotId && hasCurrentAutomaticStrategyBinding(input.metadata)) {
-    return true;
-  }
-  const binding = input.metadata?.scenarioBinding;
-  const defaultPluginId = defaultScenarioPluginIdForProjectMetadata(input.metadata);
-  return binding?.schemaVersion === 1
-    && binding.provenance === 'automatic_default'
-    && binding.snapshotId === input.appliedPluginSnapshotId
-    && binding.pluginId === defaultPluginId
-    && (binding.taskProfile ?? null) === defaultScenarioTaskProfileForProjectMetadata(
-      input.metadata,
-      binding.pluginId,
-    );
 }
 
 export function defaultScenarioPluginIdForTaskKind(

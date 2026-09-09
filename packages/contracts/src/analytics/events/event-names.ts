@@ -25,6 +25,9 @@ export type AnalyticsEventName =
   | 'mcp_tool_finished'
   // Paid media provider request outcome and bounded response retry.
   | 'media_generation_result'
+  // Chat artifact snapshot capture outcome per finished run. Daemon-only;
+  // `source_changed_count` is the correctness alarm inside it.
+  | 'chat_artifact_capture_result'
   // Packaged updater lifecycle
   | 'update_install_result'
   | 'update_check_result'
@@ -66,6 +69,8 @@ export type AnalyticsEventName =
   | 'assistant_feedback_reason_submit'
   // Settings
   | 'settings_view'
+  // Labs experiment opt-in / opt-out (generic across experiments).
+  | 'labs_item_toggled'
   | 'settings_cli_test_result'
   | 'settings_byok_test_result'
   | 'settings_byok_models_fetch_result'

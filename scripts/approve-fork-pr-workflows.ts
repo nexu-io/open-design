@@ -117,14 +117,11 @@ export function isDeniedChangedPath(path: string): boolean {
     path.startsWith(".github/") ||
     path.startsWith("scripts/") ||
     path.startsWith("e2e/scripts/") ||
-    path.startsWith("nix/") ||
     path.startsWith("tools/pack/") ||
     path === "package.json" ||
     path.endsWith("/package.json") ||
     path === "pnpm-lock.yaml" ||
     path === "pnpm-workspace.yaml" ||
-    path === "flake.nix" ||
-    path === "flake.lock" ||
     /(^|\/)tsconfig(\.[^.]+)*\.json$/.test(path) ||
     /(^|\/)(next|vite|vitest|playwright|astro|postcss|tailwind|eslint|prettier|wrangler|electron-builder)(\.config)?\.[^.]+$/.test(
       path,

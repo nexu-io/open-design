@@ -723,6 +723,60 @@ test('[P1] last project list row keeps its overflow menu inside the viewport', a
   expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThan(triggerBox?.y ?? 0);
 });
 
+test('[P1] bottom-row project card keeps its overflow menu inside the viewport', async ({ page }) => {
+  // Grid is the default view (RecentProjectsStrip.tsx `useState<'grid' | 'list'>('grid')`),
+  // and the card menu shares one render site with the list rows, so a regression in the
+  // placement effect surfaces here first. The list-row case above covers the other layout.
+  const recentProjects = Array.from({ length: 6 }, (_, index) => ({
+    id: `recent-card-menu-${index + 1}`,
+    name: `Card Project ${index + 1}`,
+    skillId: null,
+    designSystemId: null,
+    createdAt: Date.now() - (index + 1) * 10_000,
+    updatedAt: Date.now() - (index + 1) * 5_000,
+    metadata: { kind: 'prototype', nameSource: 'user' },
+  }));
+  const lastProject = recentProjects.at(-1)!;
+
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: recentProjects } });
+      return;
+    }
+    await route.continue();
+  });
+  await gotoEntryHome(page);
+
+  const lastCard = page.locator(`[data-project-id="${lastProject.id}"]`);
+  await expect(lastCard).toBeVisible();
+  await page.evaluate((projectId) => {
+    const scroller = document.querySelector<HTMLElement>('.entry-main--scroll');
+    const card = document.querySelector<HTMLElement>(`[data-project-id="${projectId}"]`);
+    const trigger = card?.querySelector<HTMLElement>('.recent-projects__card-more');
+    if (!scroller || !card || !trigger) {
+      throw new Error('Recent project card-menu fixture is missing');
+    }
+
+    const desiredTop = scroller.getBoundingClientRect().bottom - 60;
+    scroller.scrollTop += trigger.getBoundingClientRect().top - desiredTop;
+  }, lastProject.id);
+
+  await lastCard.hover();
+  const trigger = lastCard.getByRole('button', { name: /more actions/i });
+  await trigger.click();
+
+  const menu = lastCard.getByRole('menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Delete' })).toBeInViewport();
+
+  const triggerBox = await trigger.boundingBox();
+  const menuBox = await menu.boundingBox();
+  expect(triggerBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThan(triggerBox?.y ?? 0);
+});
+
 test('[P1] home left rail expands and collapses from the shell controls', async ({ page }) => {
   await gotoEntryHome(page);
 
@@ -1347,36 +1401,26 @@ test('[P0] empty home composer submits the active prototype suggestion without e
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] home session mode toggle switches Ask planning prompts away from design routing', async ({ page }) => {
+// This spec used to drive the Home mode chip: pick 「提问」, submit, and check
+// the request switched to `conversationMode: 'chat'` with no plugin. The chip
+// left the Home composer (2026-09-08, product — see the comment at its old slot
+// in `HomeHero.tsx`), so Home has no surface that can select Ask any more and
+// that half is unreachable from here rather than broken.
+//
+// What survives is the half that still describes Home: with no picker on
+// screen, every Home submission routes Design and carries a plugin. Ask/Plan
+// routing itself is untouched and still covered where it is still reachable —
+// the project side keeps its stored session mode (`project-management-flows`
+// "project detail turns carry the stored design session mode…").
+test('[P1] home composer routes every request as design with no mode picker on screen', async ({ page }) => {
   await routeProjectCreates(page);
   await routeRunsAccepted(page);
   await gotoEntryHome(page);
 
-  const modeTrigger = page.getByTestId('composer-mode-trigger');
-  // Design is the app default and is now represented as an explicit selection.
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Design');
-  await modeTrigger.click();
-  // Every mode description is always visible in the open menu (no hover card).
-  await expect(page.getByText(/planning, and discussion/i)).toBeVisible();
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
+  await expect(page.getByTestId('composer-mode-clear')).toHaveCount(0);
+  await expect(page.getByTestId('composer-mode-menu')).toHaveCount(0);
 
-  await page.getByTestId('composer-mode-menu-chat').click();
-  await expect(modeTrigger).toContainText('Ask');
-  await page.getByTestId('home-hero-input').fill('Help me plan the IA before designing screens.');
-
-  const askRequestPromise = page.waitForRequest((request) =>
-    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
-  );
-  await page.getByTestId('home-hero-submit').click();
-  const askBody = await askRequestPromise.then((request) => request.postDataJSON() as {
-    conversationMode?: string;
-    pluginId?: string | null;
-  });
-
-  expect(askBody.conversationMode).toBe('chat');
-  expect(askBody.pluginId ?? null).toBeNull();
-
-  await gotoEntryHome(page);
-  await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
   await page.getByTestId('home-hero-input').fill('Design the screens from this brief.');
 
   const designRequestPromise = page.waitForRequest((request) =>
@@ -1492,10 +1536,8 @@ test('[P1] brand-backed design system previews as a Brand Kit and carries into p
 // rest of the inline template rail in #5517; the radial picker is a fixed-size
 // ring with no scroll axis, so there is no overflow behaviour left to pin.
 //
-// The first-run "scroll up to reveal community templates" affordance
-// (`home-templates-hint` / `.home-templates-reveal__body` / the Home
-// `plugins-home-section`) went with it — `HomeTemplatesReveal` is no longer
-// rendered anywhere — so its two specs are gone too.
+// The first-run "scroll up to reveal community templates" affordance went with
+// it, so its two specs are gone too.
 
 test('[P2] home template picker offers no clear control and dismisses on Escape or outside click', async ({ page }) => {
   await gotoEntryHome(page);

@@ -26,6 +26,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -35,6 +36,7 @@ import {
 import { createPortal } from 'react-dom';
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import {
+  canReachWorkspaceBillingEntrance,
   workspaceSeatCapacityState,
   type WorkspaceActiveResponse,
   type WorkspaceBillingSummary,
@@ -57,7 +59,7 @@ import { RemixIcon } from './RemixIcon';
 import { InviteDialog } from './InviteDialog';
 import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
-import { useI18n } from '../i18n';
+import { isRtlLocale, useI18n } from '../i18n';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import { ENTRY_RAIL_TOGGLE_EVENT } from './entryRailBridge';
 import {
@@ -73,7 +75,11 @@ import {
 } from '../collab/useWorkspaceContext';
 import { canUpgradeFromPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
 import { shouldShowCreditsBalance } from './entry-rail-account-state';
-import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import {
+  AMR_CONSOLE_AUTO_RECHARGE_INTENT,
+  amrAutoRechargeUrlForProfile,
+  amrPlansUrlForProfile,
+} from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
@@ -96,6 +102,7 @@ import {
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
+import { workspaceChromeAccountActionsHost } from './workspaceChromeActions';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
@@ -209,7 +216,7 @@ interface Props {
   newProjectDisabled?: boolean;
   /** When false the rail is collapsed (hidden off-canvas) on the entry view. */
   open: boolean;
-  /** Extra content for the floating top-right cluster, rendered LEFT of the
+  /** Extra content for the top-right chrome cluster, rendered LEFT of the
    *  account module (e.g. the DeepSeek campaign badge). */
   topRightSlot?: ReactNode;
   /** The one shared workspace context; null → local (no cloud identity) state. */
@@ -232,9 +239,9 @@ interface Props {
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
    *
-   * It is an independent control immediately after the floating credits/avatar
-   * capsule (`.entry-nav-rail__account-updater`). The footer stays as the
-   * fallback home for the signed-out shell, which has no account capsule.
+   * It is an independent control in the top-right chrome cluster
+   * (`.entry-nav-rail__account-updater`), immediately after the account capsule
+   * when one is present.
    */
   updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
@@ -331,6 +338,7 @@ export function teamConsoleUrl(
     | 'settings'
     | 'billing'
     | 'create-team'
+    | 'auto-recharge'
     | 'invite',
 ): string {
   // B's console routes: members live at /team, everything account/billing
@@ -349,6 +357,7 @@ export function teamConsoleUrl(
   const path =
     section === 'members' ? 'team'
     : section === 'billing' ? 'dashboard'
+    : section === 'auto-recharge' ? 'dashboard'
     : section === 'create-team' || section === 'invite' ? 'dashboard'
     : section;
   try {
@@ -360,6 +369,17 @@ export function teamConsoleUrl(
       segments.push(path);
     }
     url.pathname = `/${segments.join('/')}`;
+    // Auto-recharge lives on the same dashboard; the intent asks B to open its
+    // settings dialog on arrival. See AMR_CONSOLE_AUTO_RECHARGE_INTENT for the
+    // (unconfirmed) B-side handler this depends on.
+    //
+    // NOTE(sync/main): the `upgrade` / `plans` billing deep-links that used to
+    // sit here were REMOVED by origin/main — generic plan comparison now goes to
+    // public Pricing via `workspaceUpgradeUrl`. Auto-recharge is a different
+    // destination and keeps its intent.
+    if (section === 'auto-recharge') {
+      url.searchParams.set('billing', AMR_CONSOLE_AUTO_RECHARGE_INTENT);
+    }
     // Vela owns the final invite action because only its dashboard has the
     // authoritative subscription + seat state needed to choose between
     // upgrading to Team, buying seats, and sending an invite. `invite=auto`
@@ -383,7 +403,16 @@ export function teamConsoleUrl(
 /**
  * Shared destination for every generic 「升级」/「升级套餐」 affordance. Pricing
  * owns comparison; selecting a concrete card there is what hands checkout to
- * Cloud. A resolved workspace without billing permission still returns null.
+ * Cloud.
+ *
+ * Who may be shown the entrance is `canReachWorkspaceBillingEntrance`'s call,
+ * not this function's: a team member without `canManageBilling` still gets
+ * null (B refuses the action, so the link could only ever be a dead button),
+ * while a personal workspace is never gated on a team-membership permission —
+ * its wallet is the signer's own. Both the audience split in
+ * `runtime/amr-balance-branch.ts` and this resolver read that one predicate, so
+ * the dialog a user is routed to and the link that dialog can offer are always
+ * decided for the same user (§6.Y).
  */
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
@@ -399,11 +428,36 @@ export function workspaceUpgradeUrl(
   _billing: WorkspaceBillingSummary | null | undefined,
   options?: { fallbackProfile: string | null | undefined },
 ): string | null {
-  // Billing is owner-only. Missing context can use the caller's fallback
-  // profile because there is no workspace identity to authorize yet.
-  if (context && context.permissions?.canManageBilling !== true) return null;
+  // Missing context can use the caller's fallback profile because there is no
+  // workspace identity to authorize yet.
+  if (context && !canReachWorkspaceBillingEntrance(context)) return null;
   if (!context && !options) return null;
   return amrPlansUrlForProfile(options?.fallbackProfile);
+}
+
+/**
+ * Where the Max-tier balance card sends THIS workspace's owner — the console's
+ * auto-recharge settings (触发阈值 / 充值金额 / 每月上限).
+ *
+ * Sibling of {@link workspaceUpgradeUrl} and deliberately built the same way,
+ * so the two upgrade destinations cannot drift: same settings-URL base, same
+ * profile fallback when no workspace identity exists yet.
+ *
+ * Gated on `canManageAutoRecharge` rather than `canManageBilling` because that
+ * is the permission for the surface being linked to (contract:
+ * `writable && isOwner`, versus billing's `readable && isOwner`). The two agree
+ * for a healthy active workspace and differ only where the workspace is
+ * readable but not writable — there the link is withheld and the caller falls
+ * back to the plans link rather than sending an owner to an action B rejects.
+ */
+export function workspaceAutoRechargeUrl(
+  context: WorkspaceCollabContext | null | undefined,
+  options: { fallbackProfile: string | null | undefined },
+): string | null {
+  if (context && context.permissions?.canManageAutoRecharge !== true) return null;
+  const settingsUrl = context?.workspaceSettingsUrl?.trim() || null;
+  if (settingsUrl) return teamConsoleUrl(settingsUrl, 'auto-recharge');
+  return amrAutoRechargeUrlForProfile(options.fallbackProfile);
 }
 
 export type WorkspaceInviteTarget =
@@ -545,7 +599,7 @@ interface EntryTopRightClusterProps {
 }
 
 /**
- * Top-right floating cluster (portaled to document.body): an optional leading
+ * Top-right chrome cluster: an optional leading
  * slot, the standalone credits pill, and the avatar account module with its
  * hover menu — one flex row riding the workbench top-right corner.
  *
@@ -574,6 +628,21 @@ export function EntryTopRightCluster({
   const { t } = useI18n();
   const analytics = useAnalytics();
   const workspaceDimensions = workspaceAnalyticsDimensions(context);
+  const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(
+    workspaceChromeAccountActionsHost,
+  );
+
+  // On the initial App render the tabs chrome and this cluster are committed
+  // in the same pass, so the host does not exist while this component renders.
+  // A layout effect finds it after the DOM commit and moves the controls before
+  // paint. Electron can then build its first draggable-region hit map with the
+  // no-drag controls as real descendants of the drag header.
+  useLayoutEffect(() => {
+    // Isolated component harnesses do not mount the application chrome. Keep
+    // those public component tests usable without re-creating the whole App;
+    // the real shell always supplies the dedicated host above.
+    setChromeActionsHost(workspaceChromeAccountActionsHost() ?? document.body);
+  }, []);
 
   const isTeam = Boolean(context) && context!.workspaceType === 'team';
   const permissions = context?.permissions;
@@ -626,6 +695,22 @@ export function EntryTopRightCluster({
   const [accountMenuMode, setAccountMenuMode] = useState<'closed' | 'hover' | 'pinned'>(
     'closed',
   );
+  const updaterSlotHostRef = useRef<HTMLDivElement | null>(null);
+  const [updaterControlVisible, setUpdaterControlVisible] = useState(false);
+  // ReactNode truthiness cannot tell whether UpdaterPopup rendered its control;
+  // observe the stable host so signed-out chrome follows actual rendered content.
+  useLayoutEffect(() => {
+    const host = updaterSlotHostRef.current;
+    if (!host) {
+      setUpdaterControlVisible(false);
+      return;
+    }
+    const syncVisibility = () => setUpdaterControlVisible(host.hasChildNodes());
+    syncVisibility();
+    const observer = new MutationObserver(syncVisibility);
+    observer.observe(host, { childList: true });
+    return () => observer.disconnect();
+  }, [chromeActionsHost, updaterSlot]);
   const accountOpen = accountMenuMode !== 'closed';
   const closeAccountMenu = () => setAccountMenuMode('closed');
   useEffect(() => {
@@ -767,28 +852,34 @@ export function EntryTopRightCluster({
     });
   }
 
-  if ((!leadingSlot && !context) || typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || !chromeActionsHost) return null;
+  if (!leadingSlot && !context && !updaterSlot) return null;
+
+  const clusterVisible = Boolean(leadingSlot || context || updaterControlVisible);
+  const updaterHostVisible = Boolean(context || updaterControlVisible);
 
   return (
     <>
       {createPortal(
-        <div className="entry-top-right-cluster">
+        <div className={clusterVisible ? 'entry-top-right-cluster' : undefined}>
           {leadingSlot}
           {/* GitHub star chip: its own option in the cluster, right after the
               campaign badge (per product) — it used to live in the account
               menu's social row. */}
-          <a
-            className="entry-top-right-github"
-            href={REPO_URL}
-            {...externalLinkProps}
-            aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            data-testid="entry-top-right-github"
-            onClick={() => trackAccountAction('github')}
-          >
-            <Icon name="github-filled" size={14} />
-            <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
-          </a>
+          {clusterVisible ? (
+            <a
+              className="entry-top-right-github"
+              href={REPO_URL}
+              {...externalLinkProps}
+              aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+              title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+              data-testid="entry-top-right-github"
+              onClick={() => trackAccountAction('github')}
+            >
+              <Icon name="github-filled" size={14} />
+              <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
+            </a>
+          ) : null}
           {/* One shared capsule for the account module (per product: 头像和积分
               合并成一个胶囊): credits segment on the left (same availability
               rule as the menu's billing card; clicking jumps to B's billing
@@ -1020,17 +1111,22 @@ export function EntryTopRightCluster({
               ) : null}
               </div>
               </div>
-              {/* Update-ready rocket: an independent control immediately after
-                  the credits/avatar capsule. The slot stays mounted so
-                  `:empty { display: none }` can remove it from cluster layout
-                  until an installer has downloaded. */}
-              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
-                {updaterSlot}
-              </div>
             </>
           ) : null}
+          {/* Update-ready rocket: an independent top-right control. With an
+              account it follows the credits/avatar capsule; signed-out keeps
+              the same position without inventing an empty account shell. The
+              slot stays mounted so `:empty { display: none }` can remove it
+              until an installer has downloaded. */}
+          <div
+            ref={updaterSlotHostRef}
+            className={updaterHostVisible ? 'entry-nav-rail__account-updater' : undefined}
+            data-testid={updaterHostVisible ? 'entry-nav-account-updater' : undefined}
+          >
+            {updaterSlot}
+          </div>
         </div>,
-        document.body,
+        chromeActionsHost,
       )}
       {/* Panel + unread polling live here (outside the hover menu, which
           unmounts when closed); the 消息中心 menu row above just opens it.
@@ -1127,6 +1223,7 @@ export function WorkspaceTopRightAccountCluster({
           page="project"
           metricsConsent={metricsConsent}
           installationId={installationId}
+          loggedIn={amrLoggedIn}
         />
       ) : null}
       updaterSlot={updaterSlot}
@@ -1140,8 +1237,9 @@ export function WorkspaceTopRightAccountCluster({
  * Community/contact links pinned to the bottom of the nav rail.
  *
  * The row's first slot is the Discord invite for every locale (the Chinese
- * Feishu group entry was retired so there is one community to point at). X
- * and mail are locale-independent. Analytics keeps reporting these
+ * Feishu group entry was retired so there is one community to point at).
+ * All three labels are translated and surface through the shared
+ * `.od-tooltip` layer. Analytics keeps reporting these
  * under `area: 'account_menu'` so the existing funnel stays comparable across
  * the move out of that menu.
  */
@@ -1152,9 +1250,20 @@ function RailSocialRow({
   page: TrackingWorkspacePage;
   dimensions: ReturnType<typeof workspaceAnalyticsDimensions>;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
+  // The rail sits on the leading edge, so tooltips open away from it —
+  // right in LTR, left once RTL moves the whole rail to the right edge.
+  // Without the flip the bubble would be clamped against the viewport
+  // and land back on top of the icons it describes.
+  const tooltipPlacement = isRtlLocale(locale) ? 'left' : 'right';
+  // One string per link doubles as the accessible name and the hover
+  // tooltip: the bubble is the only place the icons say what they do, so
+  // the copy leads with the payoff (Discord hands out credits) rather
+  // than naming the destination.
   const communityLabel = t('entry.discordAria');
+  const xLabel = t('entry.xAria');
+  const mailLabel = t('entry.mailAria');
 
   function track(element: AccountMenuClickProps['element']) {
     trackAccountMenuClick(analytics.track, {
@@ -1168,31 +1277,34 @@ function RailSocialRow({
   return (
     <div className="entry-nav-rail__social" data-testid="entry-nav-rail-social">
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={DISCORD_URL}
         {...externalLinkProps}
         aria-label={communityLabel}
-        title={communityLabel}
+        data-tooltip={communityLabel}
+        data-tooltip-placement={tooltipPlacement}
         data-testid="entry-nav-rail-discord"
         onClick={() => track('discord')}
       >
         <Icon name="discord" size={15} />
       </a>
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={X_URL}
         {...externalLinkProps}
-        aria-label="@OpenDesignHQ"
-        title="@OpenDesignHQ"
+        aria-label={xLabel}
+        data-tooltip={xLabel}
+        data-tooltip-placement={tooltipPlacement}
         onClick={() => track('twitter')}
       >
         <span className="entry-nav-rail__menu-x" aria-hidden>X</span>
       </a>
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={CONTACT_EMAIL_URL}
-        aria-label={t('entry.mailAria')}
-        title={t('entry.mailAria')}
+        aria-label={mailLabel}
+        data-tooltip={mailLabel}
+        data-tooltip-placement={tooltipPlacement}
         onClick={() => track('email')}
       >
         <Icon name="mail" size={15} />
@@ -1240,13 +1352,6 @@ export function EntryNavRail({
   const canInviteMembers = Boolean(permissions?.canInviteMembers);
   const canAccessInviteFlow = canAccessWorkspaceInviteFlow(context);
   const workspaceSettingsUrl = context?.workspaceSettingsUrl?.trim() || null;
-
-  // The updater host has exactly one home on screen at a time. The floating
-  // account row is the preferred one; the footer only takes it when there is
-  // no cloud identity, because the whole account module is absent then.
-  // Deriving both from one expression is what keeps "exactly one" true — two
-  // independent renders would double the rocket.
-  const footerUpdaterSlot = context ? null : updaterSlot;
 
   // Message-center panel for the SIGNED-OUT shell only (its rail item under
   // 设置 is the one opener there). The signed-in panel — plus the unread badge
@@ -1846,15 +1951,10 @@ export function EntryNavRail({
         )}
       </div>
       {/* The footer always has the social row to show now, so it no longer
-          collapses to nothing. `footerUpdaterSlot` is only ever set in the
-          signed-out shell: with a cloud identity the updater host rides the
-          account row instead (see `updaterSlot`), so the footer must not
-          render a second host. */}
+          collapses to nothing. The updater has one shared home in the
+          top-right cluster for both signed-in and signed-out shells. */}
       <div className="entry-nav-rail__footer">
         {footerNotice}
-        {footerUpdaterSlot ? (
-          <div className="entry-rail-actions">{footerUpdaterSlot}</div>
-        ) : null}
         <RailSocialRow page={analyticsPage} dimensions={workspaceDimensions} />
       </div>
       </div>
@@ -1893,9 +1993,9 @@ export function EntryNavRail({
             : undefined
         }
       />
-      {/* Top-right floating cluster: campaign badge (slot) + credits pill +
-          the account module, portaled to document.body so all ride the
-          workbench top-right corner in one flex row. Extracted so the project
+      {/* Top-right chrome cluster: campaign badge (slot) + credits pill +
+          the account module, mounted into the tabs chrome's no-drag actions
+          host so Electron includes it in the first native hit map. Extracted so the project
           route can mount the same cluster without the rail (see
           `EntryTopRightCluster`). */}
       <EntryTopRightCluster

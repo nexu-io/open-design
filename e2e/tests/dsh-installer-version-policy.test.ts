@@ -1,13 +1,14 @@
 // The version our one-line DeepSeek Harness installer hands the user and the
 // versions the daemon stands behind live in two places that cannot import each
-// other: `apps/landing-page/public/install-dsh.*` and the agent def in
-// `apps/daemon`. They drifted once already — the installers were moved to
-// `0.1.0-rc.8` while the def still named `0.1.0-rc.6` as the only supported
-// version, so following our own instructions produced an "untested version"
-// warning in Settings on a clean install.
+// other: `tools/release/resources/dsh-bootstrap/install-dsh.*` (canonical
+// product source) and the agent def in `apps/daemon`. They drifted once already
+// — the installers were moved to `0.1.0-rc.8` while the def still named
+// `0.1.0-rc.6` as the only supported version, so following our own instructions
+// produced an "untested version" warning in Settings on a clean install.
 //
 // This guard pins the two together across the app boundary: bumping an
 // installer without teaching the daemon to accept what it installs fails here.
+// Canonical installer bytes live in tools/release.
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -16,8 +17,8 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const INSTALL_SH = `${repoRoot}apps/landing-page/public/install-dsh.sh`;
-const INSTALL_PS1 = `${repoRoot}apps/landing-page/public/install-dsh.ps1`;
+const INSTALL_SH = `${repoRoot}tools/release/resources/dsh-bootstrap/install-dsh.sh`;
+const INSTALL_PS1 = `${repoRoot}tools/release/resources/dsh-bootstrap/install-dsh.ps1`;
 const AGENT_DEF = `${repoRoot}apps/daemon/src/runtimes/defs/deepseek-harness.ts`;
 const PEER_MANIFEST = `${repoRoot}packages/dsh-runtime/package.json`;
 
@@ -176,9 +177,16 @@ describe('accepted DeepSeek Harness versions can actually install their companio
     expect(overclaimed).toEqual([]);
   });
 
-  // The two versions the review named, pinned explicitly so a future widening
-  // has to face them rather than quietly passing a filter that matches nothing.
-  it('accepts what upstream serves and refuses the line the peers cannot reach', async () => {
+  // Both authorities have to cover a release line for it to be usable, and both
+  // have to be widened by hand — the def with a `major.minor.patch-rc.N`
+  // alternative, the peers with a comparator carrying that same tuple. Naming
+  // the shipped lines one by one is what forces a widening to face them, rather
+  // than quietly passing a filter that happens to match nothing.
+  //
+  // Each line upstream has actually released and we have taken on belongs here.
+  // A line we have not taken on belongs in the refusal below, so widening can
+  // never degenerate into "accept everything".
+  it('covers every release line we support with both the def and the peers', async () => {
     const [def, manifest] = await Promise.all([
       readFile(AGENT_DEF, 'utf8'),
       readFile(PEER_MANIFEST, 'utf8'),
@@ -188,8 +196,21 @@ describe('accepted DeepSeek Harness versions can actually install their companio
     expect(accepts(def, '0.1.1-rc.2')).toBe(true);
     expect(peerCanInstall(ranges, '0.1.1-rc.2')).toBe(true);
 
-    expect(peerCanInstall(ranges, '0.1.2-rc.1')).toBe(false);
-    expect(accepts(def, '0.1.2-rc.1')).toBe(false);
+    // `0.1.2-rc.1` became npm's `latest` dist-tag on 2026-09-03, so this is what
+    // a user who installs `@deepseek-ai/dsh` without naming a version gets.
+    expect(accepts(def, '0.1.2-rc.1')).toBe(true);
+    expect(peerCanInstall(ranges, '0.1.2-rc.1')).toBe(true);
+  });
+
+  it('refuses a release line neither authority has been widened to', async () => {
+    const [def, manifest] = await Promise.all([
+      readFile(AGENT_DEF, 'utf8'),
+      readFile(PEER_MANIFEST, 'utf8'),
+    ]);
+    const ranges = dshPeerRanges(manifest);
+
+    expect(peerCanInstall(ranges, '0.2.0-rc.1')).toBe(false);
+    expect(accepts(def, '0.2.0-rc.1')).toBe(false);
   });
 
   // A bump that updates one peer and forgets the rest is the realistic way this

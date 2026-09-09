@@ -518,8 +518,8 @@
   position: fixed;
   inset: 0;
   background: rgba(13, 12, 10, 0.32);
-  /* Sits in the modal tier (alongside prompt-template-modal-overlay) so
-   * the palette renders above any open context menus or popovers. */
+  /* Sits in the modal tier so the palette renders above any open context
+   * menus or popovers. */
   z-index: 1500;
   display: flex;
   align-items: flex-start;

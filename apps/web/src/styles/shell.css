@@ -37,11 +37,10 @@
   backdrop-filter: none;
   overflow: hidden;
 }
-/* The shell grid owns exactly two children: the tabs chrome and the body.
-   Pin each to its row so a stray extra shell child (e.g. an inline popover
-   anchor mounted at shell level — the floating account cluster renders its
-   MessageCenter anchor there) falls into a zero-height implicit row instead
-   of auto-placing into (and stealing) the 1fr body row. */
+/* The shell grid owns exactly two layout children: the tabs chrome and the
+   body. Pin each to its row so any non-layout shell child falls into a
+   zero-height implicit row instead of auto-placing into (and stealing) the
+   1fr body row. */
 .workspace-shell > .workspace-tabs-chrome {
   grid-row: 1;
 }
@@ -77,9 +76,17 @@
   border-bottom: 0;
   user-select: none;
   -webkit-app-region: drag;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   z-index: 120;
+}
+.workspace-chrome-account-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: 12px;
+  -webkit-app-region: no-drag;
 }
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);
@@ -2414,6 +2421,18 @@ a.avatar-item:visited {
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
+}
+/* The floating comments card lives outside the workspace grid, so it does not
+   naturally reduce the preview's layout width. Reserve the card's 360px width,
+   its 16px viewport inset, and the same 12px breathing room as the local dock
+   while the portal is populated. Keeping the reservation on `.viewer-body`
+   makes the iframe, annotation overlays, and composer popover share one
+   unobstructed coordinate space; the toolbar may continue beneath the float.
+   Preserve a small usable canvas on narrow split layouts instead of allowing
+   padding to consume the whole viewer. */
+.split:has(> .comment-float-host:not(:empty)) .viewer-body {
+  box-sizing: border-box;
+  padding-right: max(0px, min(388px, calc(100% - 160px)));
 }
 /* The portal target is pre-mounted so opening comments never waits a frame
    for parent state. An empty host must be visually and interactively absent. */

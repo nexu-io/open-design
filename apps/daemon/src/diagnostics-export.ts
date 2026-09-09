@@ -17,7 +17,7 @@ import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
-  type SidecarStamp,
+  type LegacySidecarRuntimeLayout,
 } from '@open-design/sidecar-proto';
 import {
   resolveLogFilePath,
@@ -26,6 +26,10 @@ import {
 } from '@open-design/sidecar';
 
 import { readCurrentAppVersionInfo } from './app-version.js';
+import {
+  CHAT_SCROLL_FORENSICS_SUMMARY_FILE,
+  buildChatScrollForensicsSummary,
+} from './diagnostics-client-evidence.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { spawnEnvForAgent } from './agents.js';
 import { collectBrowserUseDiscoveryFacts } from './browser/index.js';
@@ -85,7 +89,7 @@ async function resolveDiagnosticsAgentEnvironment(
 
 export interface DiagnosticsHandlerOptions {
   /** Sidecar runtime context, present when daemon is launched via tools-dev or packaged sidecar. */
-  runtime: SidecarRuntimeContext<SidecarStamp> | null;
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null;
   /** Project root used to derive crash-report match strings. */
   projectRoot: string;
   /** Directory containing per-run event logs at <runsDir>/<runId>/events.jsonl. */
@@ -137,7 +141,7 @@ async function shouldListOptionalSource(path: string): Promise<boolean> {
 }
 
 async function buildSidecarLogSources(
-  runtime: SidecarRuntimeContext<SidecarStamp> | null,
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null,
 ): Promise<LogSource[]> {
   if (runtime == null) return [];
   // In packaged builds `runtime.base` is `<namespaceRoot>/runtime`, so the log
@@ -209,7 +213,7 @@ async function buildSidecarLogSources(
 // The desktop relocates Electron's crashDumps to `<logs/desktop>/crashes` (see
 // apps/desktop/src/main/crash-diagnostics.ts) so the minidumps live inside the
 // same log tree this export already collects. Derive that dir the same way.
-function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<SidecarStamp> | null): string | null {
+function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null): string | null {
   if (runtime == null) return null;
   const namespaceRoot = resolveRuntimeNamespaceRoot({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -284,6 +288,19 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         },
         sources,
         summaries: {
+          // Renderer-side scene for the chat scroll freeze. Always written,
+          // even when nothing was posted, so an empty slot reads as a stated
+          // fact instead of a missing file. See diagnostics-client-evidence.ts.
+          [CHAT_SCROLL_FORENSICS_SUMMARY_FILE]: {
+            ...buildChatScrollForensicsSummary(),
+            app: {
+              version: versionInfo?.version ?? null,
+              channel: versionInfo?.channel ?? null,
+              packaged: versionInfo?.packaged ?? null,
+              platform: versionInfo?.platform ?? null,
+              arch: versionInfo?.arch ?? null,
+            },
+          },
           'recent-api-failures.json': {
             retainedLimit: 100,
             privacy:

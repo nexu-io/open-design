@@ -335,7 +335,7 @@ pnpm tools-dev run web
 
 افتح الرابط الذي يطبعه `tools-dev`؛ تُخصَّص منافذ التطوير ديناميكيًا ما لم تمرر أعلام منافذ صريحة.
 
-‏Node `~24`، وpnpm `10.33.x`. مستخدمو Windows، راجعوا [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). البدء السريع الكامل، ومتغيرات البيئة، وNix flake، وسير بناء الحزمة ← [`QUICKSTART.md`](../../QUICKSTART.md).
+‏Node `~24`، وpnpm `10.33.x`. مستخدمو Windows، راجعوا [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). البدء السريع الكامل، ومتغيرات البيئة، وسير بناء الحزمة ← [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### سير عمل كامل — من الموجز إلى المخرَج
 

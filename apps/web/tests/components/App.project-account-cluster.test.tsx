@@ -3,7 +3,7 @@
 // The floating avatar + credits cluster must survive opening a project.
 //
 // The entry refresh moved the account module (avatar chip + credits pill)
-// into a fixed top-right cluster owned by EntryNavRail — which unmounts with
+// into a top-right chrome cluster owned by EntryNavRail — which unmounts with
 // EntryShell the moment a project tab opens. Product: the avatar and credits
 // stay visible on the project view too, in the same top-right spot. App.tsx
 // therefore mounts `WorkspaceTopRightAccountCluster` with the route-owned
@@ -332,8 +332,8 @@ describe('project route — floating account cluster', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(<App />);
 
-    // Both cluster members ride the portal on document.body; they appear once
-    // the workspace context read resolves.
+    // Both cluster members ride the shared chrome portal; they appear once the
+    // workspace context read resolves.
     const avatar = await screen.findByTestId('entry-nav-account');
     expect(avatar.closest('.entry-top-right-cluster')).not.toBeNull();
 

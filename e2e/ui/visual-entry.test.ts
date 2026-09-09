@@ -83,6 +83,12 @@ test('[P2] captures the onboarding Local Agent CLI list surface', async ({ page 
   // column shares an alignment line.
   await expect(chips.first()).toBeVisible();
   expect(await chips.count()).toBeGreaterThan(1);
+  // The panel validates the selected agent on its own, so its status line is
+  // part of the surface being archived. Let that settle first, or the capture
+  // races the transient "testing" copy.
+  await expect(panel.locator('.onboarding-view__test-status.is-success')).toBeVisible({
+    timeout: T.medium,
+  });
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-onboarding-local-agent');
@@ -199,6 +205,33 @@ test('[P2] captures the plugin detail share menu surface', async ({ page }) => {
 
   await captureVisual(page, 'visual-plugin-share-menu');
   await captureVisualTarget(page, 'visual-plugin-share-menu-popover', [trigger, popover]);
+});
+
+test('[P2] plugin detail owns vertical scrolling inside the fixed workspace shell', async ({ page }) => {
+  await configureVisualPage(page);
+  const plugins = await openVisualPluginsCatalog(page);
+  // Navigate with the standard visual viewport; shrink only the detail page so
+  // the assertion owns the detail scroller rather than the responsive nav.
+  await page.setViewportSize({ width: 960, height: 600 });
+
+  const card = plugins.getByTestId('plugins-card-visual-prototype-starter');
+  await expect(card).toBeVisible();
+  await card.locator('.plugin-marketplace__row-main').click();
+  await expect(page).toHaveURL(/\/marketplace\/visual-prototype-starter$/);
+
+  const detail = page.locator('.plugin-suite-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail).toHaveCSS('overflow-y', 'auto');
+  const before = await detail.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop,
+  }));
+  expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
+  expect(before.scrollTop).toBe(0);
+
+  await detail.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect.poll(() => detail.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
 
 test('[P2] captures the home context picker surface', async ({ page }) => {

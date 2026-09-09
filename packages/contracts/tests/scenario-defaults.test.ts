@@ -14,8 +14,6 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   defaultScenarioPluginIdForTaskKind,
   defaultScenarioTaskProfileForProjectMetadata,
-  hasCurrentAutomaticStrategyBinding,
-  hasCurrentAutomaticScenarioBinding,
 } from '../src/plugins/scenario-defaults.js';
 
 describe('automaticStrategyTaskProfileForRouteId', () => {
@@ -99,33 +97,6 @@ describe('automaticStrategyTaskProfileForRouteId', () => {
     expect(automaticStrategyTaskProfileForProjectMetadata(undefined)).toBeNull();
   });
 
-  it('recognizes only an exact daemon-owned strategy binding as current automatic routing', () => {
-    const metadata = {
-      kind: 'prototype' as const,
-      strategyBinding: {
-        schemaVersion: 1 as const,
-        provenance: 'automatic_default' as const,
-        taskProfile: 'prototype' as const,
-        boundAt: 1,
-      },
-    };
-    expect(hasCurrentAutomaticStrategyBinding(metadata)).toBe(true);
-    expect(hasCurrentAutomaticScenarioBinding({
-      metadata,
-      appliedPluginSnapshotId: null,
-    })).toBe(true);
-    // A Wireframe refinement stays on the same Prototype route, so its
-    // binding remains current.
-    expect(hasCurrentAutomaticStrategyBinding({
-      ...metadata,
-      fidelity: 'wireframe' as const,
-    })).toBe(true);
-    // Metadata that owns no OD Next route does invalidate the binding.
-    expect(hasCurrentAutomaticStrategyBinding({
-      ...metadata,
-      intent: 'web-clone' as const,
-    })).toBe(false);
-  });
 });
 
 describe('defaultScenarioPluginIdForKind', () => {
@@ -158,6 +129,10 @@ describe('defaultScenarioPluginIdForKind', () => {
       kind: 'prototype',
       intent: 'live-artifact',
     })).toBe('example-live-artifact');
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'prototype',
+      intent: 'webgl-experience',
+    })).toBe('example-webgl-experience');
     expect(defaultScenarioPluginIdForProjectMetadata({ kind: 'prototype' }))
       .toBe('example-web-prototype');
     expect(defaultScenarioPluginIdForProjectMetadata(undefined)).toBeNull();
@@ -213,34 +188,8 @@ describe('defaultScenarioPluginIdForKind', () => {
     )).toBeNull();
   });
 
-  it('detects stale or tampered automatic bindings for the restore surface', () => {
-    const metadata = {
-      kind: 'prototype' as const,
-      scenarioBinding: {
-        schemaVersion: 1 as const,
-        provenance: 'automatic_default' as const,
-        pluginId: 'example-web-prototype',
-        snapshotId: 'snapshot-1',
-        taskProfile: 'prototype' as const,
-        boundAt: 1,
-      },
-    };
-    expect(hasCurrentAutomaticScenarioBinding({
-      metadata,
-      appliedPluginSnapshotId: 'snapshot-1',
-    })).toBe(true);
-    expect(hasCurrentAutomaticScenarioBinding({
-      metadata,
-      appliedPluginSnapshotId: 'snapshot-2',
-    })).toBe(false);
-    expect(hasCurrentAutomaticScenarioBinding({
-      metadata: {
-        ...metadata,
-        scenarioBinding: { ...metadata.scenarioBinding, pluginId: 'od-media-generation' },
-      },
-      appliedPluginSnapshotId: 'snapshot-1',
-    })).toBe(false);
-  });
+
+
 
   it('exposes the hidden free-form Home fallback plugin separately from kind defaults', () => {
     expect(DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID).toBe('od-default');

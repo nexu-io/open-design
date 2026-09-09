@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+import {
+  DELIVERABLE_SYNTAX_SAFE_FIX_RULES,
+  DELIVERABLE_SYNTAX_FINALIZATION_REASONS,
+  DELIVERABLE_SYNTAX_SAFE_FIX_REFUSALS,
+} from '../api/deliverable-syntax.js';
 import { StrategyInputStageV2Schema } from '../plugins/strategy-v2.js';
 
 export const NORMALIZED_AGENT_OBSERVATION_V1_SCHEMA =
@@ -676,6 +681,60 @@ export const SafeRunProcessOutcomeV1Schema = z.object({
 }).strict();
 export type SafeRunProcessOutcomeV1 = z.infer<typeof SafeRunProcessOutcomeV1Schema>;
 
+export const SafeDeliverableSyntaxFinalizationV1Schema = z.object({
+  action: z.enum(['allow', 'fail']),
+  reason: z.enum(DELIVERABLE_SYNTAX_FINALIZATION_REASONS).optional(),
+  refusal: z.enum(DELIVERABLE_SYNTAX_SAFE_FIX_REFUSALS).optional(),
+  summaryVersion: z.literal(1).optional(),
+  initialStatus: z.enum(['pass', 'repairable', 'incomplete', 'skipped']).optional(),
+  repairEngine: z.literal('host-safe-fixer@2').optional(),
+  stagedPatchCount: z.number().int().nonnegative().optional(),
+  committedPatchCount: z.number().int().nonnegative().optional(),
+  committedRepairRules: z.array(z.enum(DELIVERABLE_SYNTAX_SAFE_FIX_RULES))
+    .max(DELIVERABLE_SYNTAX_SAFE_FIX_RULES.length).optional(),
+}).strict();
+
+export const SafeDeliverableSyntaxTelemetryV1Schema = z.object({
+  schemaVersion: z.literal('deliverable-syntax-telemetry-v1'),
+  applicable: z.boolean(),
+  status: z.enum(['pass', 'repairable', 'incomplete', 'exhausted', 'skipped']),
+  source: z.enum(['agent_tool', 'run_finalizer']),
+  checker: z.string().max(128).nullable(),
+  checkedFileCount: z.number().int().nonnegative(),
+  checkCount: z.number().int().nonnegative(),
+  checkerDurationMs: z.number().nonnegative().nullable(),
+  repairWindowDurationMs: z.number().nonnegative().nullable(),
+  repairToDeliveryDurationMs: z.number().nonnegative().nullable(),
+  repairToTerminalDurationMs: z.number().nonnegative().nullable().optional(),
+  terminalRunStatus: z.enum(['succeeded', 'failed', 'canceled']).optional(),
+  finalization: SafeDeliverableSyntaxFinalizationV1Schema.optional(),
+  repairExecutor: z.enum(['agent', 'host_safe_fixer']).nullable().optional(),
+  repairDurationMs: z.number().nonnegative().nullable().optional(),
+  appliedRepairRules: z.array(z.enum(DELIVERABLE_SYNTAX_SAFE_FIX_RULES)).max(
+    DELIVERABLE_SYNTAX_SAFE_FIX_RULES.length,
+  ).optional(),
+  safeFixProposalCount: z.number().int().nonnegative().optional(),
+  safeFixProposalDurationMs: z.number().nonnegative().nullable().optional(),
+  repairableCheckCount: z.number().int().nonnegative(),
+  initialDiagnosticCount: z.number().int().nonnegative().nullable(),
+  latestDiagnosticCount: z.number().int().nonnegative().nullable(),
+  repairTriggered: z.boolean(),
+  repairAttempts: z.number().int().nonnegative(),
+  maxRepairAttempts: z.number().int().nonnegative().nullable(),
+  repairOutcome: z.enum([
+    'not_applicable',
+    'not_needed',
+    'repaired',
+    'exhausted',
+    'unresolved',
+  ]),
+  recoveredDeliveryCount: z.union([z.literal(0), z.literal(1)]),
+  blockedBrokenDeliveryCount: z.union([z.literal(0), z.literal(1)]),
+}).strict();
+export type SafeDeliverableSyntaxTelemetryV1 = z.infer<
+  typeof SafeDeliverableSyntaxTelemetryV1Schema
+>;
+
 export const SafeRunQualityV1Schema = z.object({
   schema: z.literal(SAFE_RUN_QUALITY_V1_SCHEMA),
   result: z.object({
@@ -690,6 +749,7 @@ export const SafeRunQualityV1Schema = z.object({
     inputTextSnapshots: z.array(SafeObservationManifestEntryV1Schema).max(50),
   }).strict().optional(),
   process: SafeRunProcessOutcomeV1Schema.optional(),
+  deliverableSyntax: SafeDeliverableSyntaxTelemetryV1Schema.optional(),
 }).strict();
 export type SafeRunQualityV1 = z.infer<typeof SafeRunQualityV1Schema>;
 

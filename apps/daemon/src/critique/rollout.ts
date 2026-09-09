@@ -81,7 +81,31 @@ export interface RolloutInputs {
  *   phase === 'M2'                    -> skillPolicy === 'opt-in'
  *   phase === 'M3'                    -> true
  */
+/**
+ * 评审剧场(Critique Theater)**已下线**(产品裁决 2026-08-26:「评审图这个东西干掉吧」)。
+ *
+ * 关掉的直接原因:它的通信语法会**整块漏进聊天正文** —— 用户在真实客户端里连着撞到
+ * 三次 `<CRITIQUE_RUN>` / `<PANELIST role="Critic" score="8.4">` / `<ROUND_END …/>`
+ * 原样打在回答里。追下来是这么一条链:
+ *
+ *   · 面板提示词只在 `critiqueShouldRun` 为真时注入,而它要求 `isPlainAdapter`;
+ *   · 可是漏出来的那一轮跑的是 **codex(`json-event-stream`,非 plain)**,
+ *     按判据根本不该注入 —— 也就是说**注入源至今没查清**;
+ *   · 而可见文本路径上**没有任何 panel 语法的剥离器**(`<od-title>` 有,它没有),
+ *     所以一旦注入,协议就直接进正文。
+ *
+ * 在「注入源没查清 + 没有兜底剥离」这两件事同时成立时,任何一层开关都可能把
+ * 协议噪音送到用户面前。所以在**总闸**上关死:skill / project / env / phase
+ * 四层一起失效,提示词不再注入、编排器不再启动,也就没有东西可漏。
+ *
+ * 代码没有删 —— `apps/daemon/src/critique/` 有自己的 AGENTS.md 和归属人,
+ * 整体移除是另一个决定。要重新启用:删掉下面这一行 return,并且**先把兜底剥离补上**。
+ */
+const CRITIQUE_THEATER_RETIRED = true;
+
 export function isCritiqueEnabled(input: RolloutInputs): boolean {
+  if (CRITIQUE_THEATER_RETIRED) return false;
+
   // Skill-level vetoes win unconditionally. A skill that explicitly
   // opts out cannot have critique forced on it by an env var or a
   // global rollout; a skill that opts in cannot be vetoed.

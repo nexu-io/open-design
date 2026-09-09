@@ -100,10 +100,12 @@ function setupBridgeDom(
   bodyHtml: string,
   mode: 'inspect' | 'comment',
   visibleSelectors: string[] = [],
+  transportActivationGeneration?: string,
 ) {
   const srcdoc = buildSrcdoc(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
     inspectBridge: mode === 'inspect',
     commentBridge: mode === 'comment',
+    transportActivationGeneration,
   });
   const script = extractBridgeScript(srcdoc);
   const bridgeStyle = extractSelectionBridgeStyle(srcdoc);
@@ -467,17 +469,21 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     expect(win.getComputedStyle(iframe).pointerEvents).toBe('auto');
   });
 
-  it('restores the active page state captured from the URL-loaded preview', async () => {
-    const { win } = setupBridgeDom(
+  it('completes runtime restoration after synthetic input events during the retry window', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
       '<main id="home" data-page="home"><h1>Home</h1></main>' +
         '<main id="profile" data-page="profile" hidden><h1>Profile</h1></main>',
       'inspect',
+      [],
+      'runtime-state-generation',
     );
 
     win.dispatchEvent(
       new win.MessageEvent('message', {
         data: {
           type: 'od:preview-runtime-state-restore',
+          id: 'restore-after-synthetic-events',
+          generation: 'runtime-state-generation',
           state: {
             version: 1,
             hash: '',
@@ -508,27 +514,39 @@ describe('selection bridge — empty annotation surface (#890)', () => {
 
     const home = win.document.getElementById('home')!;
     const profile = win.document.getElementById('profile')!;
-    home.dispatchEvent(new win.Event('pointerdown', { bubbles: true }));
     home.removeAttribute('hidden');
     home.setAttribute('data-edit-revision', 'fresh');
     profile.setAttribute('hidden', '');
+    home.dispatchEvent(new win.Event('input', { bubbles: true }));
+    home.dispatchEvent(new win.Event('change', { bubbles: true }));
 
     await new Promise<void>((resolve) => win.setTimeout(resolve, 120));
-    expect(home.hasAttribute('hidden')).toBe(false);
-    expect(home.getAttribute('data-edit-revision')).toBe('fresh');
-    expect(profile.hasAttribute('hidden')).toBe(true);
+    expect(home.hasAttribute('hidden')).toBe(true);
+    expect(home.getAttribute('data-edit-revision')).toBeNull();
+    expect(profile.hasAttribute('hidden')).toBe(false);
+    expect(postedMessages(parentPostMessage, 'od:preview-runtime-state-restored')).toEqual([
+      expect.objectContaining({
+        id: 'restore-after-synthetic-events',
+        generation: 'runtime-state-generation',
+        outcome: 'restored',
+      }),
+    ]);
   });
 
   it('restores the current page content before manual edit activates', async () => {
-    const { win } = setupBridgeDom(
+    const { win, parentPostMessage } = setupBridgeDom(
       '<main id="app" data-page="today"><h1 data-od-source-path="path-0-0">Today page</h1></main>',
       'inspect',
+      [],
+      'runtime-state-generation',
     );
 
     win.dispatchEvent(
       new win.MessageEvent('message', {
         data: {
           type: 'od:preview-runtime-state-restore',
+          id: 'restore-after-settle',
+          generation: 'runtime-state-generation',
           state: {
             version: 1,
             hash: '',
@@ -550,6 +568,93 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     expect(win.document.querySelector('[data-od-id="profile-screen"] h1')?.textContent).toBe('Profile page');
     expect(win.document.body.textContent).toContain('Current page content');
     expect(win.document.body.textContent).not.toContain('Today page');
+    expect(postedMessages(parentPostMessage, 'od:preview-runtime-state-restored')).toHaveLength(0);
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 120));
+    expect(postedMessages(parentPostMessage, 'od:preview-runtime-state-restored')).toEqual([
+      expect.objectContaining({
+        id: 'restore-after-settle',
+        generation: 'runtime-state-generation',
+      }),
+    ]);
+  });
+
+  it('does not copy stale source annotations onto a different runtime-rendered page', async () => {
+    const { win } = setupBridgeDom(
+      '<main data-od-id="today-screen" data-od-source-path="path-0"><h1>Today page</h1></main>',
+      'inspect',
+      [],
+      'runtime-state-generation',
+    );
+
+    win.dispatchEvent(
+      new win.MessageEvent('message', {
+        data: {
+          type: 'od:preview-runtime-state-restore',
+          id: 'restore-profile-page',
+          generation: 'runtime-state-generation',
+          state: {
+            version: 1,
+            hash: '',
+            bodyHtml: '<main data-od-id="profile-screen"><h1>Profile page</h1></main>',
+            roots: [],
+            htmlAttrs: {},
+            bodyAttrs: {},
+            entries: [],
+          },
+        },
+      }),
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 120));
+    const profile = win.document.querySelector('[data-od-id="profile-screen"]');
+    expect(profile?.textContent).toContain('Profile page');
+    expect(profile?.getAttribute('data-od-source-path')).toBeNull();
+    expect(win.document.querySelector('[data-od-id="today-screen"]')).toBeNull();
+  });
+
+  it('restores generated source annotations after replacing a bare authored body', async () => {
+    const bareSource = '<main><h1>Bare source page</h1></main>';
+    const parserDom = new JSDOM('');
+    globalThis.DOMParser = parserDom.window.DOMParser;
+    const annotatedSrcdoc = buildSrcdoc(bareSource, { editBridge: true });
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+    const annotatedDocument = new JSDOM(annotatedSrcdoc).window.document;
+    const annotatedMain = annotatedDocument.querySelector('main')?.outerHTML;
+    expect(bareSource).not.toContain('data-od-id');
+    expect(annotatedMain).toContain('data-od-id="path-0"');
+    expect(annotatedMain).toContain('data-od-source-path="path-0"');
+
+    const { win } = setupBridgeDom(
+      annotatedMain ?? bareSource,
+      'inspect',
+      [],
+      'runtime-state-generation',
+    );
+    win.dispatchEvent(
+      new win.MessageEvent('message', {
+        data: {
+          type: 'od:preview-runtime-state-restore',
+          id: 'restore-bare-source-page',
+          generation: 'runtime-state-generation',
+          state: {
+            version: 1,
+            hash: '',
+            bodyHtml: '<main><h1>Runtime-rendered page</h1></main>',
+            roots: [],
+            htmlAttrs: {},
+            bodyAttrs: {},
+            entries: [],
+          },
+        },
+      }),
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 120));
+    const restoredMain = win.document.querySelector('main');
+    expect(restoredMain?.textContent).toContain('Runtime-rendered page');
+    expect(restoredMain?.getAttribute('data-od-id')).toBe('path-0');
+    expect(restoredMain?.getAttribute('data-od-source-path')).toBe('path-0');
   });
 
   it('posts od:comment-target for the annotated card when the device-frame iframe is clicked', async () => {

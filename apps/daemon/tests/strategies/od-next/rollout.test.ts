@@ -1,24 +1,12 @@
-import Database from 'better-sqlite3';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
-  clearOdNextRolloutStop,
   evaluateOdNextRollout,
-  latchOdNextRolloutStop,
-  migrateOdNextRolloutStore,
-  odNextRolloutSignalForRun,
   odNextTaskTypeForProjectScenarioBinding,
   readOdNextRolloutControlStatus,
   readOdNextRolloutPolicy,
-  readOdNextRolloutStop,
-  resetOdNextRolloutStop,
   stableOdNextAssignmentBucket,
-  stopModeForOdNextSignal,
 } from '../../../src/strategies/od-next/rollout.js';
-import {
-  rolloutStopSignalForBlockedContinuation,
-} from '../../../src/strategies/od-next/automatic-continuation-service.js';
-import { latchOdNextRolloutStopOperationally } from '../../../src/strategies/od-next/rollout-control-telemetry.js';
 import { odNextRolloutAnalyticsProperties } from '../../../src/strategies/od-next/rollout-analytics.js';
 
 function syntheticPolicy() {
@@ -29,7 +17,7 @@ function syntheticPolicy() {
 }
 
 describe('OD Next controlled rollout', () => {
-  it('owns all four artifact types once a mode is asked for, and none until then', () => {
+  it('owns all four artifact types by default, and honours a mode that was named', () => {
     const policy = readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' });
     expect(policy).toMatchObject({
       requestedMode: 'active',
@@ -38,10 +26,10 @@ describe('OD Next controlled rollout', () => {
       productionActiveApproved: true,
       assignmentPercent: 100,
     });
-    // Shipping the strategy in a build is not the same as turning it on: an
-    // installation that configured nothing takes the ordinary route.
+    // An installation that configured nothing runs the strategy: OD Next is
+    // the default route, and the saved mode is how an installation leaves it.
     expect(readOdNextRolloutPolicy({})).toMatchObject({
-      requestedMode: 'off',
+      requestedMode: 'active',
       requestedModeSource: 'default',
     });
     expect(readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'off' }).requestedMode)
@@ -67,7 +55,7 @@ describe('OD Next controlled rollout', () => {
     }
   });
 
-  describe('opting one installation in', () => {
+  describe('choosing a mode for one installation', () => {
     it('takes the saved mode when the environment names none', () => {
       expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'active' })).toMatchObject({
         requestedMode: 'active',
@@ -96,16 +84,61 @@ describe('OD Next controlled rollout', () => {
       )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'env' });
     });
 
-    it('stays off for a saved value that is not a mode', () => {
-      for (const saved of ['acive', '', 'true', 1, null, undefined, {}] as unknown[]) {
+    it('treats an absent preference, and only an absent one, as unconfigured', () => {
+      // `null` and `undefined` are the two shapes of "nobody has chosen", and
+      // they reach the default.
+      for (const saved of [null, undefined] as unknown[]) {
         expect(readOdNextRolloutPolicy(
           {},
           { odNextStrategyMode: saved as never },
-        )).toMatchObject({ requestedMode: 'off', requestedModeSource: 'default' });
+        )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'default' });
+      }
+
+      // A value that is not a mode never arrives here in production: the read
+      // path in `app-config.ts` resolves an unreadable config to `off` before
+      // this function sees it, because unconfigured now means `active` and
+      // "we could not read your choice" must not become "you chose OD Next".
+      // The end-to-end guarantee is asserted across that join in
+      // `tests/app-config.test.ts`; this function stays a pure reader of what
+      // it is handed.
+      for (const saved of ['acive', '', 'true', 1, {}] as unknown[]) {
+        expect(readOdNextRolloutPolicy(
+          {},
+          { odNextStrategyMode: saved as never },
+        )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'default' });
       }
     });
 
-    it('admits an eligible task once the installation opted in', () => {
+    it('keeps an installation that opted out off, whatever the default becomes', () => {
+      // The one guarantee the default owes users who were here before it
+      // flipped. It holds only because opting out stores `off` rather than
+      // clearing the key: a cleared key reads as unconfigured, and unconfigured
+      // is `active`. If this ever goes red because the switch was "simplified"
+      // into deleting the key, every opted-out installation was just switched
+      // back on without being asked.
+      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'off' })).toMatchObject({
+        requestedMode: 'off',
+        requestedModeSource: 'app_config',
+      });
+      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'observe' })).toMatchObject({
+        requestedMode: 'observe',
+        requestedModeSource: 'app_config',
+      });
+      // And the decision that follows has to actually leave the strategy
+      // unused: a preserved `off` that still evaluated to `active` would keep
+      // this guarantee only on paper.
+      expect(evaluateOdNextRollout({
+        policy: readOdNextRolloutPolicy({}, { odNextStrategyMode: 'off' }),
+        assignmentIdentity: 'project:conversation',
+        taskType: 'prototype',
+        agentId: 'codex',
+        agentVersion: 'codex-e2e 0.0.0',
+        sourceKind: 'bundled',
+        runtimeCapabilityVerified: true,
+      })).toMatchObject({ requestedMode: 'off', effectiveMode: 'off', eligible: false });
+    });
+
+    it('admits an eligible task on an installation that stayed on the default', () => {
       const decision = evaluateOdNextRollout({
         policy: readOdNextRolloutPolicy(
           { OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY: '1' },
@@ -125,25 +158,27 @@ describe('OD Next controlled rollout', () => {
     });
 
     it('reports the deciding authority through the control status', () => {
-      const db = new Database(':memory:');
-      migrateOdNextRolloutStore(db);
-      expect(readOdNextRolloutControlStatus(db, {}))
-        .toMatchObject({ requestedMode: 'off', requestedModeSource: 'default', effectiveMode: 'off' });
-      expect(readOdNextRolloutControlStatus(db, {}, { odNextStrategyMode: 'active' }))
+      expect(readOdNextRolloutControlStatus({}))
+        .toEqual({
+          strategyId: 'od-next-strategy',
+          scope: 'daemon_instance',
+          requestedMode: 'active',
+          requestedModeSource: 'default',
+          effectiveMode: 'active',
+        });
+      expect(readOdNextRolloutControlStatus({}, { odNextStrategyMode: 'off' }))
+        .toMatchObject({ requestedMode: 'off', requestedModeSource: 'app_config', effectiveMode: 'off' });
+      expect(readOdNextRolloutControlStatus({}, { odNextStrategyMode: 'active' }))
         .toMatchObject({
           requestedMode: 'active',
           requestedModeSource: 'app_config',
           effectiveMode: 'active',
         });
-      // A latch still overrides an opted-in installation.
-      latchOdNextRolloutStop(db, { mode: 'observe', reasonCode: 'quality_regression', updatedAt: 1 });
-      expect(readOdNextRolloutControlStatus(db, {}, { odNextStrategyMode: 'active' }))
-        .toMatchObject({
-          requestedMode: 'active',
-          requestedModeSource: 'app_config',
-          effectiveMode: 'observe',
-        });
-      db.close();
+      // Status takes no database, because there is no longer any stored state
+      // for the reported mode to disagree with. `toEqual` above is the point:
+      // two readers at the same moment cannot see different answers.
+      expect(readOdNextRolloutControlStatus({ OD_NEXT_STRATEGY_ROLLOUT: 'off' }, { odNextStrategyMode: 'active' }))
+        .toMatchObject({ requestedMode: 'off', requestedModeSource: 'env', effectiveMode: 'off' });
     });
   });
 
@@ -251,223 +286,58 @@ describe('OD Next controlled rollout', () => {
     expect(bucket).toBeLessThan(10_000);
   });
 
-  it('persists automatic stop and manual rollback without touching task rows', () => {
-    const db = new Database(':memory:');
-    migrateOdNextRolloutStore(db);
-    latchOdNextRolloutStop(db, { mode: 'observe', reasonCode: 'native_resume_failed', updatedAt: 1 });
-    expect(readOdNextRolloutStop(db)).toEqual({ mode: 'observe', reasonCode: 'native_resume_failed' });
-    expect(readOdNextRolloutControlStatus(db, { OD_NEXT_STRATEGY_ROLLOUT: 'active' }))
-      .toMatchObject({
-        scope: 'daemon_instance',
-        requestedMode: 'active',
-        effectiveMode: 'observe',
-        revision: 1,
-        lastEvent: { action: 'latched', reasonCode: 'native_resume_failed', at: 1 },
-      });
-    latchOdNextRolloutStop(db, { mode: 'off', reasonCode: 'machine_contract_leak', updatedAt: 2 });
-    expect(readOdNextRolloutStop(db)).toEqual({ mode: 'off', reasonCode: 'machine_contract_leak' });
-    latchOdNextRolloutStop(db, { mode: 'observe', reasonCode: 'quality_regression', updatedAt: 3 });
-    expect(readOdNextRolloutStop(db)).toEqual({
-      mode: 'off',
-      reasonCode: 'machine_contract_leak',
-    });
-    expect(resetOdNextRolloutStop(db, {
-      expectedRevision: 2,
-      reasonCode: 'operator_reset',
-      updatedAt: 4,
-    })).toEqual({ ok: false, currentRevision: 3 });
-    clearOdNextRolloutStop(db);
-    expect(readOdNextRolloutStop(db)).toBeNull();
-    expect(readOdNextRolloutControlStatus(db, { OD_NEXT_STRATEGY_ROLLOUT: 'off' }))
-      .toMatchObject({
-        requestedMode: 'off',
-        effectiveMode: 'off',
-        revision: 4,
-        resetAllowed: false,
-        lastEvent: { action: 'cleared', reasonCode: 'internal_test_reset' },
-      });
-    latchOdNextRolloutStop(db, {
-      mode: 'observe',
-      reasonCode: 'threshold_exceeded',
-      updatedAt: 5,
-    });
-    expect(readOdNextRolloutStop(db)).toEqual({
-      mode: 'observe',
-      reasonCode: 'threshold_exceeded',
-    });
-    db.close();
-  });
-
-  it('maps execution-local stop signals without any observability dependency', () => {
-    expect(stopModeForOdNextSignal('native_resume_failed')).toBe('observe');
-    expect(stopModeForOdNextSignal('machine_contract_leak')).toBe('off');
-    expect(stopModeForOdNextSignal('unknown')).toBeNull();
-    expect(odNextRolloutSignalForRun({ durationMs: 101, maxDurationMs: 100 }))
-      .toBe('threshold_exceeded');
-    expect(odNextRolloutSignalForRun({ durationMs: 100, maxDurationMs: 100 }))
-      .toBeNull();
-  });
-
-  it('emits a bounded operational event when a run latches the instance', async () => {
-    const db = new Database(':memory:');
-    migrateOdNextRolloutStore(db);
-    const capture = vi.fn().mockResolvedValue(undefined);
-    latchOdNextRolloutStopOperationally({
-      db,
-      analytics: {
-        capture,
-        captureSafety: vi.fn(),
-        mergeAnonymousPerson: vi.fn(),
-        identifyGroup: vi.fn(),
-        shutdown: vi.fn(),
-      },
-      analyticsContext: {
-        deviceId: 'device',
-        sessionId: 'session',
-        clientType: 'web',
-        locale: 'en',
-        requestId: null,
-      },
-      appVersion: '0.19.2',
-      mode: 'observe',
-      reasonCode: 'native_resume_failed',
-      // The latch only means anything on an installation that opted in, so the
-      // event has to report the mode that run was admitted under rather than
-      // the unconfigured default.
-      readAppConfig: () => ({ odNextStrategyMode: 'active' }),
-    });
-    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
-    expect(capture).toHaveBeenCalledWith(expect.objectContaining({
-      eventName: 'strategy_rollout_control_changed',
-      properties: {
-        strategy_id: 'od-next-strategy',
-        action: 'latch',
-        scope: 'daemon_instance',
-        requested_latch_mode: 'observe',
-        effective_latch_mode: 'observe',
-        reason_code: 'native_resume_failed',
-        effective_mode: 'observe',
-      },
-    }));
-    db.close();
-  });
-
-  it('still latches when the app config cannot be read, and stays silent', async () => {
-    // The latch is the safety stop. It must land whether or not this daemon
-    // can read its own config — and the event must not claim the installation
-    // is `off` when what actually happened is that the disk did not answer.
-    const db = new Database(':memory:');
-    migrateOdNextRolloutStore(db);
-    const capture = vi.fn().mockResolvedValue(undefined);
-    latchOdNextRolloutStopOperationally({
-      db,
-      analytics: {
-        capture,
-        captureSafety: vi.fn(),
-        mergeAnonymousPerson: vi.fn(),
-        identifyGroup: vi.fn(),
-        shutdown: vi.fn(),
-      },
-      analyticsContext: {
-        deviceId: 'device',
-        sessionId: 'session',
-        clientType: 'web',
-        locale: 'en',
-        requestId: null,
-      },
-      appVersion: '0.19.2',
-      mode: 'off',
-      reasonCode: 'machine_contract_leak',
-      readAppConfig: () => {
-        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
-      },
-    });
-    expect(readOdNextRolloutStop(db)).toEqual({
-      mode: 'off',
-      reasonCode: 'machine_contract_leak',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(capture).not.toHaveBeenCalled();
-    db.close();
-  });
-
-  it('does not stop the whole daemon for one agent-side protocol defect', () => {
-    // Field-observed regression: two vague prompts made the agent emit a
-    // clarification state carrying a premature executionMode. That is a
-    // single-task agent defect — the machine block never reached the user —
-    // yet it latched a global hard `off`, silently returning every later
-    // request in the daemon to the legacy path across restarts.
-    for (const code of [
-      'od_next_protocol_runtime_state_invalid_schema',
-      'od_next_protocol_runtime_state_missing',
-      'od_next_protocol_runtime_state_invalid_json',
-      'od_next_protocol_runtime_state_duplicate',
-      'od_next_protocol_plan_contract_invalid_schema',
-      'od_next_protocol_plan_contract_duplicate',
-      'od_next_protocol_plan_contract_missing',
-      'od_next_protocol_plan_contract_unexpected',
-      'od_next_protocol_stage_mismatch',
-    ]) {
-      expect(rolloutStopSignalForBlockedContinuation([code]), code).toBeNull();
-    }
-
-    // A block the stream could not delimit or had to drop is a genuine
-    // contract-boundary failure and still stops the rollout.
-    expect(rolloutStopSignalForBlockedContinuation([
-      'od_next_protocol_machine_block_malformed',
-    ])).toBe('machine_contract_leak');
-    expect(rolloutStopSignalForBlockedContinuation([
-      'od_next_protocol_machine_block_too_large',
-    ])).toBe('machine_contract_leak');
-
-    // Route/mode drift and unverified children keep their existing signals.
-    expect(rolloutStopSignalForBlockedContinuation([
-      'od_next_protocol_route_mismatch',
-    ])).toBe('route_mode_drift');
-    expect(rolloutStopSignalForBlockedContinuation([
-      'od_next_protocol_execution_mode_mismatch',
-    ])).toBe('route_mode_drift');
-  });
-
-  it('never turns unverifiable Children into the daemon-wide stop', () => {
-    // The other two signals mean OD Next's own contract broke, which is true
-    // whichever agent hit it. Unverifiable Children are a property of ONE
-    // runtime — Vela ships no child-lifecycle producer, so an AMR complex Run
-    // cannot be certified at all — and that task is already fail-closed with
-    // its reason codes persisted. Latching took OD Next away from Codex,
-    // Claude and OpenCode because a fourth runtime lacks a capability, and only
-    // an operator `od strategy rollout reset` gave it back.
-    for (const reasonCode of [
-      'od_next_complex_child_evidence_missing',
-      'od_next_complex_child_evidence_invalid',
-      'od_next_complex_child_started_missing',
-      'od_next_complex_child_terminal_missing',
-    ]) {
-      expect(rolloutStopSignalForBlockedContinuation([reasonCode]), reasonCode).toBeNull();
-    }
-
-    // A genuine contract break still stops the daemon, even alongside a child
-    // code, because that one is not about the runtime.
-    expect(rolloutStopSignalForBlockedContinuation([
-      'od_next_complex_child_evidence_missing',
-      'od_next_protocol_route_mismatch',
-    ])).toBe('route_mode_drift');
-  });
-
-  it('requires exact HyperFrames metadata and lets hard off dominate an observe latch', () => {
-    expect(odNextTaskTypeForProjectScenarioBinding({ provenance: 'automatic_default' })).toBeNull();
-    expect(odNextTaskTypeForProjectScenarioBinding({
-      provenance: 'automatic_default',
-      taskProfile: 'hyperframes',
-    })).toBe('hyperframes');
-    expect(evaluateOdNextRollout({
-      policy: { ...syntheticPolicy(), requestedMode: 'off' },
+  it('cannot be turned off by anything a previous run did', () => {
+    // What this replaces. OD Next used to carry a stop latch: a run that hit a
+    // contract failure wrote a row that disabled the strategy for the whole
+    // daemon instance, outranked the saved mode, survived restart, and could
+    // only be lifted by an operator running `od strategy rollout reset`.
+    //
+    // The field regression that made the case against it: two vague prompts
+    // made one agent emit a clarification state carrying a premature
+    // executionMode. A single-task agent defect — the machine block never
+    // reached the user — and it latched a global hard `off`, silently returning
+    // every later request in the daemon to the legacy path across restarts. A
+    // second signal did the same thing for a capability only one runtime
+    // lacked, taking OD Next away from Codex, Claude and OpenCode because Vela
+    // ships no child-lifecycle producer.
+    //
+    // Both were narrowed in place at the time. This is the general form of the
+    // same fix, and what pins it is a shape rather than a list: the decision is
+    // a function of the policy and THIS run's facts, and takes no argument
+    // through which an earlier run could reach it. There is no signal left to
+    // enumerate, so no new one can be added by accident.
+    const facts = {
       assignmentIdentity: 'project:conversation',
       taskType: 'prototype',
       agentId: 'codex',
       agentVersion: 'codex-e2e 0.0.0',
       sourceKind: 'bundled',
-      stoppedMode: 'observe',
-    }).effectiveMode).toBe('off');
+      runtimeCapabilityVerified: true,
+    } as const;
+    const admitted = evaluateOdNextRollout({ policy: syntheticPolicy(), ...facts });
+    expect(admitted).toMatchObject({ effectiveMode: 'active', eligible: true });
+    // A fresh policy object each time: the reading of the environment and the
+    // saved config is the only state involved, so repeating the call after any
+    // number of failed or blocked tasks has to give the same answer.
+    expect(evaluateOdNextRollout({ policy: syntheticPolicy(), ...facts })).toEqual(admitted);
+
+    // Off stays reachable, through the mode and only through the mode.
+    expect(evaluateOdNextRollout({
+      policy: { ...syntheticPolicy(), requestedMode: 'off' },
+      ...facts,
+    })).toMatchObject({ effectiveMode: 'off', eligible: false });
+
+    // And a blocked task still records its attribution — the consequence was
+    // never the part worth keeping, the reason codes were.
+    expect(readOdNextRolloutControlStatus({}, { odNextStrategyMode: 'active' }).effectiveMode)
+      .toBe('active');
+  });
+
+  it('requires exact HyperFrames metadata', () => {
+    expect(odNextTaskTypeForProjectScenarioBinding({ provenance: 'automatic_default' })).toBeNull();
+    expect(odNextTaskTypeForProjectScenarioBinding({
+      provenance: 'automatic_default',
+      taskProfile: 'hyperframes',
+    })).toBe('hyperframes');
   });
 });

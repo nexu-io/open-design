@@ -4,6 +4,7 @@ import type {
 } from '@open-design/contracts';
 import {
   AppliedStrategyBindingV2Schema,
+  OD_NEXT_AGENT_DECLARED_BLOCK_REASON,
   OD_NEXT_RUNTIME_STATE_SCHEMA,
   composeOdNextStrategyContinuationV2,
 } from '@open-design/contracts';
@@ -15,7 +16,9 @@ import {
   compareAndTransitionStrategyTaskExecution,
   getStrategyTaskExecution,
   strategyPlanContractHash,
+  type StrategyTaskBlockedContext,
   type StrategyTaskExecutionRecord,
+  type StrategyTaskOutcome,
 } from '../task-store.js';
 import type { OdNextMachineProtocolStream } from './protocol.js';
 import {
@@ -119,6 +122,66 @@ function uniqueReasonCodes(values: ReadonlyArray<string>): string[] {
  * Agent's declaration when the turn comes back. Callers that already know the
  * route keep using `prepareStrategyRequest`.
  */
+/**
+ * The reason codes a blocked turn is attributed with: whatever the caller
+ * established, plus any question-form marker violation the visible text
+ * carries.
+ */
+function blockedReasonCodesFor(
+  visibleText: string,
+  reasonCodes: readonly string[],
+): string[] {
+  return uniqueReasonCodes([
+    ...reasonCodes,
+    ...questionFormMarkerReasonCodes(visibleText),
+  ]);
+}
+
+/**
+ * The attribution a task settling on `blocked` must carry, shaped to spread
+ * into a transition.
+ *
+ * `blockedContext` is the only durable answer to "why did this stop": the chat
+ * error card, the diagnostics export, and every later triage read it and have
+ * nothing else to fall back on. Three paths settle a task on `blocked`, and
+ * until OPEND-2565 only `blockTask` recorded anything —`prepareStrategyRequest`
+ * computed its reason codes and returned them to its caller without persisting
+ * them, and `finalizeStrategyPlanningResult` passed an agent-declared `blocked`
+ * straight through, dropping the agent's own written explanation with it. Both
+ * reached the client as an anonymous failure, which is exactly what the field
+ * report on Design Harness saw.
+ *
+ * A non-blocked outcome spreads to nothing on purpose: a task that did not
+ * block must not carry a blocked context, and the accepted-turn tests pin that.
+ */
+function blockedAttribution(
+  outcome: StrategyTaskOutcome,
+  visibleText: string,
+  reasonCodes: readonly string[],
+): { blockedContext: StrategyTaskBlockedContext } | Record<string, never> {
+  if (outcome !== 'blocked') return {};
+  return {
+    blockedContext: {
+      reasonCodes: blockedReasonCodesFor(visibleText, reasonCodes),
+      visibleText: visibleText.length > 0 ? visibleText : null,
+    },
+  };
+}
+
+/** One log line per blocked task, whichever path settled it. */
+function logStrategyTaskBlocked(
+  current: StrategyTaskExecutionRecord,
+  runId: string,
+  reasonCodes: readonly string[],
+): void {
+  console.warn('[od-next-task] blocked', {
+    taskExecutionId: current.taskExecutionId,
+    runId,
+    inputStage: current.inputStage,
+    reasonCodes: [...reasonCodes],
+  });
+}
+
 export function prepareStrategyIntake(db: SqliteDb, input: {
   taskExecutionId: string;
   intake: OdNextIntakePreflightInput;
@@ -194,15 +257,22 @@ export function prepareStrategyRequest(db: SqliteDb, input: {
     : [];
   const blockingCodes = [...preflightCodes, ...executionCodes];
   const reasonCodes = uniqueReasonCodes([...route.reasonCodes, ...blockingCodes]);
+  const outcome: StrategyTaskOutcome = blockingCodes.length > 0 ? 'blocked' : 'running';
+  if (outcome === 'blocked') {
+    logStrategyTaskBlocked(current, current.latestRunId, reasonCodes);
+  }
   const task = compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
     expectedRevision: current.revision,
     to: {
       route: route.route,
       inputStage: 'request',
-      outcome: blockingCodes.length > 0 ? 'blocked' : 'running',
+      outcome,
       executionMode: route.executionMode,
     },
+    // The router already knows why it refused; without this the codes lived
+    // only in the value returned to the caller (OPEND-2565).
+    ...blockedAttribution(outcome, '', reasonCodes),
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
   });
   return {
@@ -364,7 +434,10 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       const bindingCodes = plan ? validatePlanBinding(db, current, plan) : [];
       const repair = tryBeginSerializationRepair(db, current, input, parsed, protocolCodes);
       if (repair) return repair;
-      const blockedCodes = [...protocolCodes, ...bindingCodes];
+      const blockedCodes = [
+        ...reattributeUndeclaredTurn(current, parsed, protocolCodes),
+        ...bindingCodes,
+      ];
       logOdNextMachineContractGap(current, input.runId, parsed, blockedCodes);
       return blockTask(
         db,
@@ -411,6 +484,16 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       executionMode: state.executionMode,
     });
   }
+  // An agent may declare `blocked` itself — it is the turn that knows a task
+  // ran out of clarification budget, and it writes that reasoning out for the
+  // user. Carry both here: this transition used to pass the verdict through
+  // and drop the attribution, so the chat could only say "the strategy task
+  // could not continue" over an explanation the agent had already written
+  // (OPEND-2565).
+  const acceptedReasonCodes = uniqueReasonCodes([...state.reasonCodes, ...markerCodes]);
+  if (state.outcome === 'blocked') {
+    logStrategyTaskBlocked(current, input.runId, acceptedReasonCodes);
+  }
   const task = compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
     expectedRevision: current.revision,
@@ -420,6 +503,13 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       outcome: state.outcome,
       executionMode: state.executionMode,
     },
+    ...blockedAttribution(
+      state.outcome,
+      parsed.visibleText,
+      acceptedReasonCodes.length > 0
+        ? acceptedReasonCodes
+        : [OD_NEXT_AGENT_DECLARED_BLOCK_REASON],
+    ),
     ...(parsed.planContract ? { planContract: parsed.planContract } : {}),
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
   });
@@ -429,7 +519,7 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       : state.outcome,
     task,
     visibleText: parsed.visibleText,
-    reasonCodes: uniqueReasonCodes([...state.reasonCodes, ...markerCodes]),
+    reasonCodes: acceptedReasonCodes,
     ...(parsed.planContract
       ? { decisionSummary: parsed.planContract.decisionSummary }
       : {}),
@@ -460,6 +550,35 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
  * report, never a completion to infer.
  */
 /**
+ * Did the turn emit NO machine block at all — as opposed to emitting one badly?
+ *
+ * True only when the absent Runtime State is the sole protocol issue and the
+ * parser recovered nothing, neither strictly nor as a repair anchor. A
+ * malformed, duplicated or schema-invalid block fails this check: such a turn
+ * did declare something, its remedy is different, and it is the only shape the
+ * one allowed serialization repair can anchor on.
+ *
+ * Shared precondition for the completion inferences below and for
+ * `reattributeUndeclaredTurn`.
+ */
+function turnEmittedNoMachineBlock(
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']> | null | undefined,
+): parsed is ReturnType<OdNextMachineProtocolStream['finish']> {
+  if (!parsed) return false;
+  const issueCodes = [...new Set(parsed.issues.map((issue) => issue.code))];
+  if (
+    issueCodes.length !== 1
+    || issueCodes[0] !== 'od_next_protocol_runtime_state_missing'
+  ) return false;
+  return !(
+    parsed.planContract
+    || parsed.repairPlanContract
+    || parsed.runtimeState
+    || parsed.repairRuntimeState
+  );
+}
+
+/**
  * Did the turn answer in prose only — no machine block of any kind, and nothing
  * to ask?
  *
@@ -471,20 +590,53 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
 function turnDeclaredNothing(
   parsed: ReturnType<OdNextMachineProtocolStream['finish']> | null | undefined,
 ): parsed is ReturnType<OdNextMachineProtocolStream['finish']> {
-  if (!parsed) return false;
-  const issueCodes = [...new Set(parsed.issues.map((issue) => issue.code))];
-  if (
-    issueCodes.length !== 1
-    || issueCodes[0] !== 'od_next_protocol_runtime_state_missing'
-  ) return false;
-  if (
-    parsed.planContract
-    || parsed.repairPlanContract
-    || parsed.runtimeState
-    || parsed.repairRuntimeState
-  ) return false;
+  if (!turnEmittedNoMachineBlock(parsed)) return false;
   // A question form means the agent wanted to ask, not to finish.
   return countRenderableQuestionForms(parsed.visibleText) === 0;
+}
+
+/**
+ * Name the gate a block-less turn actually hit, instead of the gate that
+ * happened to notice it first.
+ *
+ * Every turn that emits no machine block lands on
+ * `od_next_protocol_runtime_state_missing`, because the parser raises that
+ * issue before `validateAcceptedTurn` — the function that owns the precise
+ * clarification gates — is ever reached. So a clarification turn that answered
+ * the user's answers with ANOTHER question form was filed under the generic
+ * name, and `od_next_clarification_repeated` could never appear for it, even
+ * though the declared variant of the identical failure reports exactly that.
+ *
+ * That is not cosmetic. `reasonCodes[0]` is the code the web client shows the
+ * user, the key the failure card matches on, and the analytics bucket, so the
+ * generic name merges "the agent kept asking" into the same bucket as "the
+ * agent forgot the block" and leaves the user with a code that explains
+ * nothing.
+ *
+ * ATTRIBUTION ONLY — the verdict does not move and must not. The clarification
+ * stage admits `plan_ready` (which needs a Plan Contract this turn never
+ * carried), `blocked` or `canceled`, so the turn is fail-closed either way;
+ * this only renames the block.
+ *
+ * Fail-closed on ambiguity: it fires only for a turn that declared nothing at
+ * all, and only when a form actually rendered. The repeat predicate is the same
+ * one `validateAcceptedTurn` applies to a turn that rendered an unrequested
+ * form, so the declared and undeclared shapes of one failure cannot drift
+ * apart. A first request turn — where a form is the expected thing to emit, and
+ * `inferClarificationRuntimeState` already accepts the unambiguous case — keeps
+ * the parser's own code.
+ */
+function reattributeUndeclaredTurn(
+  task: StrategyTaskExecutionRecord,
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+  protocolCodes: string[],
+): string[] {
+  if (!turnEmittedNoMachineBlock(parsed)) return protocolCodes;
+  if (countRenderableQuestionForms(parsed.visibleText) === 0) return protocolCodes;
+  if (task.clarificationCount === 0 && task.inputStage !== 'clarification') {
+    return protocolCodes;
+  }
+  return ['od_next_clarification_repeated'];
 }
 
 export function odNextTurnMayInferDirectEditCompletion(
@@ -941,19 +1093,10 @@ function blockTask(
   const route = current.route ?? 'full_plan';
   // A turn blocked for another reason still gets its marker violation recorded:
   // `blocked_reason_codes_json` is the only durable attribution channel the task
-  // store has, and these codes raise no rollout stop signal
-  // (`rolloutStopSignalForBlockedContinuation` matches route/execution-mode
-  // drift and machine-block boundary failures only).
-  const blockedReasonCodes = uniqueReasonCodes([
-    ...reasonCodes,
-    ...questionFormMarkerReasonCodes(visibleText),
-  ]);
-  console.warn('[od-next-task] blocked', {
-    taskExecutionId: current.taskExecutionId,
-    runId: current.latestRunId,
-    inputStage: current.inputStage,
-    reasonCodes: blockedReasonCodes,
-  });
+  // store has, and blocking is where the consequence stops — a blocked task no
+  // longer disables OD Next for anything but itself.
+  const blockedReasonCodes = blockedReasonCodesFor(visibleText, reasonCodes);
+  logStrategyTaskBlocked(current, current.latestRunId, blockedReasonCodes);
   const task = compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
     expectedRevision: current.revision,
@@ -963,10 +1106,7 @@ function blockTask(
       outcome: 'blocked',
       executionMode: current.executionMode,
     },
-    blockedContext: {
-      reasonCodes: blockedReasonCodes,
-      visibleText: visibleText.length > 0 ? visibleText : null,
-    },
+    ...blockedAttribution('blocked', visibleText, reasonCodes),
     ...(updatedAt === undefined ? {} : { updatedAt }),
   });
   return {

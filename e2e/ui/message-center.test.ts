@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 
@@ -9,6 +9,10 @@ const READ_KEY = 'open-design.message-center.anonymous-read-ids.v1';
 test.describe.configure({ timeout: 30_000 });
 
 async function seedEntryHome(page: Page, options?: { locale?: string }) {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx) and its backdrop sits
+  // at z-index 1500 — above the z-index 120 chrome that owns the rail/settings
+  // controls this spec clicks. A live release card would swallow those clicks.
+  await suppressWhatsNew(page);
   await page.addInitScript(({ key, locale }) => {
     window.localStorage.clear();
     window.sessionStorage.clear();
@@ -150,6 +154,61 @@ test('[P1] message center uses account read APIs when Vela is signed in', async 
   await dialog.getByRole('button', { name: 'Read', exact: true }).click();
   await expect(dialog.getByText('Build output recovered')).toBeVisible();
   await expect(dialog.getByText('Prerelease channel ready')).toBeVisible();
+});
+
+test('[P1] targeted Go Plan announcement opens automatically once and stays dismissed after acknowledgement', async ({ page }) => {
+  await seedEntryHome(page);
+
+  let acknowledged = false;
+  let readCalls = 0;
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({ json: { loggedIn: true } });
+  });
+  await page.route('**/api/integrations/vela/message-center/messages**', async (route) => {
+    await route.fulfill({
+      json: {
+        messages: [
+          {
+            id: 'go-plan-sunset-e2e',
+            messageKey: 'go-plan-sunset-2026-08',
+            audienceType: 'targeted',
+            typeName: 'Account notice',
+            title: 'Remote selector copy is not the modal contract',
+            body: 'Only the allowlisted key and unread state select the client-owned dialog.',
+            publishedAt: '2026-08-26T00:00:00.000Z',
+            readAt: acknowledged ? '2026-08-26T01:00:00.000Z' : null,
+          },
+        ],
+        nextCursor: null,
+        unreadCount: acknowledged ? 0 : 1,
+      },
+    });
+  });
+  await page.route('**/api/integrations/vela/message-center/messages/*/read', async (route) => {
+    readCalls += 1;
+    acknowledged = true;
+    await route.fulfill({ json: { ok: true } });
+  });
+
+  // The announcement is expected to win the first-paint race. Do not use the
+  // normal Home helper here: it opens the rail, which is deliberately blocked
+  // by the modal backdrop we are trying to witness.
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+
+  const announcement = page.getByTestId('go-plan-sunset-dialog');
+  await expect(announcement).toBeVisible();
+  await expect(page.getByTestId('message-center-dialog')).toHaveCount(0);
+
+  await announcement.locator('footer button').last().click();
+  await expect.poll(() => readCalls).toBe(1);
+  await expect(announcement).toHaveCount(0);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(announcement).toHaveCount(0);
 });
 
 test('[P1] message center dismisses with Escape and restores the trigger state', async ({ page }) => {

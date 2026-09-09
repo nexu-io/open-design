@@ -421,6 +421,123 @@ describe('useProjectWorkspaceScope', () => {
     outage.unmount();
   });
 
+  // A 404 from this endpoint means two very different things. An old daemon
+  // that never had the route is authoritatively unsupported. But
+  // `PROJECT_NOT_FOUND` on a team project simply means the daemon has not
+  // materialized the local row YET -- the first open of a project pulled from
+  // the hub. That clears within seconds, so giving up on it permanently leaves
+  // the scope null forever, which in turn wedges every consumer that needs a
+  // resolved scope kind (measured: the chat pane spun indefinitely because the
+  // empty-conversation seed can only act once the scope resolves).
+  it('keeps polling a project the daemon has not materialized yet', async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const fetchMock = vi.fn(async () => {
+      attempts += 1;
+      if (attempts <= 2) {
+        return new Response(
+          JSON.stringify({ error: { code: 'PROJECT_NOT_FOUND', message: 'not found' } }),
+          { status: 404 },
+        );
+      }
+      return new Response(
+        JSON.stringify(teamScope('project-materializing', 'ws-1', 'wm-1')),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const view = renderHook(() => useProjectWorkspaceScope('project-materializing'));
+    await act(async () => {
+      for (let turn = 0; turn < 10; turn += 1) await Promise.resolve();
+    });
+    expect(view.result.current.scope).toBeNull();
+    // Retrying must not widen the failure KIND. Consumers read that kind to
+    // decide how much authority the project has -- reporting `unavailable`
+    // here flipped `projectResourceAuthority` from `denied` to `workspace`
+    // mid-materialization and broke the first-open P0.
+    expect(view.result.current.failure).toBe('unsupported');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(view.result.current.scope?.kind).toBe('team');
+    view.unmount();
+  });
+
+  // The condition being retried is usually "the daemon has not written this
+  // project's row yet", which clears in a second or two. A flat 5s cadence
+  // therefore spends most of the wait idle AFTER the row already exists, and
+  // that dead time is what a user sees as a slow first open. Probe tightly
+  // first, then relax to the steady cadence.
+  it('probes again quickly before settling into the steady retry cadence', async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const fetchMock = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return new Response(
+          JSON.stringify({ error: { code: 'PROJECT_NOT_FOUND', message: 'not found' } }),
+          { status: 404 },
+        );
+      }
+      return new Response(
+        JSON.stringify(teamScope('project-backoff', 'ws-1', 'wm-1')),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const view = renderHook(() => useProjectWorkspaceScope('project-backoff'));
+    await act(async () => {
+      for (let turn = 0; turn < 10; turn += 1) await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Well inside the steady 5s cadence.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(view.result.current.scope?.kind).toBe('team');
+    view.unmount();
+  });
+
+  // "Not materialized yet" is only worth re-asking while it can still become
+  // true. A project that is simply gone answers the same 404 forever, and a
+  // stale tab pointed at a deleted project would otherwise poll for as long as
+  // it stays open. Give the materialization window a deadline; a transient
+  // backend outage keeps its existing unbounded poll because that one can
+  // still start succeeding at any moment.
+  it('stops polling a project that never materializes', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ error: { code: 'PROJECT_NOT_FOUND', message: 'not found' } }),
+      { status: 404 },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const view = renderHook(() => useProjectWorkspaceScope('project-never-arrives'));
+    await act(async () => {
+      for (let turn = 0; turn < 10; turn += 1) await Promise.resolve();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150_000);
+    });
+    const settled = fetchMock.mock.calls.length;
+    expect(settled).toBeGreaterThan(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    expect(fetchMock.mock.calls.length).toBe(settled);
+    view.unmount();
+  });
+
   it('does not poll a settled forbidden scope on the retry timer', async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn(async () => new Response('{}', { status: 403 }));

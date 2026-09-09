@@ -5,7 +5,6 @@
     "web_tests_required",
     "tools_dev_tests_required",
     "tools_pack_tests_required",
-    "terminal_scene_required",
     "windows_tools_pack_payload_tests_required",
     "ui_critical_validation_required",
     "ui_p0_validation_required",
@@ -35,11 +34,14 @@
       ]
     },
     "certain-exempt": {
-      "prefixes": [".vscode/", ".idea/", "docs/", "apps/landing-page/", ".github/ISSUE_TEMPLATE/"],
+      "prefixes": [".vscode/", ".idea/", "docs/", ".github/ISSUE_TEMPLATE/"],
       "exact": ["LICENSE", ".github/CODEOWNERS"],
       "exclude": ["match://daemon-doc"]
     },
     "daemon-doc": { "exact": ["docs/agent-adapters.md"] },
+    "dsh-bootstrap-installer": {
+      "prefixes": ["tools/release/resources/dsh-bootstrap/"]
+    },
     "packaged-leaf": {
       "prefixes": [
         "apps/desktop/src/", "apps/desktop/tests/", "apps/packaged/src/", "apps/packaged/tests/",
@@ -68,14 +70,15 @@
       "exact": ["docs/agent-adapters.md"],
       "exclude": ["match://daemon-runtime-definition", "prefix://apps/daemon/src/sidecar/"]
     },
+    "terminal-exact": {
+      "prefixes": ["apps/closure/", "packages/standalone/", "shells/terminal/"],
+      "exact": [".github/scripts/pack.py", ".github/scripts/release.py", ".github/workflows/convergence-exact.atom.yml", ".github/workflows/release-exact.yml"]
+    },
     "medium-exempt": {
-      "prefixes": ["nix/"],
       "exact": [
-        ".gitignore", ".editorconfig", "flake.nix", "flake.lock",
-        ".github/workflows/landing-page-ci.yml", ".github/workflows/landing-page-staging.yml",
-        ".github/workflows/landing-page-production.yml", ".github/workflows/blog-indexing-on-deploy.yml",
+        ".gitignore", ".editorconfig",
         ".github/workflows/autofix.atom.yml", ".github/workflows/comment.atom.yml",
-        ".github/workflows/report.atom.yml", ".github/workflows/docker-image.yml", ".github/workflows/nix.yml"
+        ".github/workflows/report.atom.yml", ".github/workflows/docker-image.yml"
       ],
       "regexes": ["\\.(?:md|mdx|txt)$"],
       "exclude": ["match://certain-surface"]
@@ -84,10 +87,10 @@
       "include": ["match://certain-exempt", "match://packaged-leaf", "match://daemon-core"]
     },
     "workspace-exempt": {
-      "include": ["match://certain-exempt", "match://medium-exempt", "match://packaged-leaf", "match://daemon-core"]
+      "include": ["match://certain-exempt", "match://medium-exempt", "match://packaged-leaf", "match://daemon-core", "match://terminal-exact"]
     },
     "ui-critical-exempt": {
-      "include": ["match://certain-exempt", "match://medium-exempt", "match://daemon-core"],
+      "include": ["match://certain-exempt", "match://medium-exempt", "match://daemon-core", "match://terminal-exact"],
       "prefixes": ["apps/desktop/", "apps/packaged/", "tools/pack/"]
     }
   },
@@ -124,6 +127,11 @@
       "effects": ["daemon_tests_required", "web_tests_required"], "confidence": "medium"
     },
     {
+      "id": "dsh-bootstrap-installer",
+      "match": { "include": ["match://dsh-bootstrap-installer"] },
+      "effects": ["web_tests_required"], "confidence": "medium"
+    },
+    {
       "id": "script-contract-tests", "match": { "prefixes": ["e2e/tests/scripts/"] },
       "effects": ["daemon_tests_required", "web_tests_required"], "confidence": "medium"
     },
@@ -158,12 +166,9 @@
       "effects": ["tools_pack_tests_required"], "confidence": "medium"
     },
     {
-      "id": "terminal-scene-sources",
-      "match": {
-        "prefixes": ["apps/closure/", "packages/standalone/", "shells/terminal/"],
-        "exact": [".github/scripts/pack.py", ".github/scripts/release.py", ".github/workflows/release-exact.yml"]
-      },
-      "effects": ["terminal_scene_required", "workspace_validation_required"], "confidence": "certain"
+      "id": "terminal-exact-sources",
+      "match": { "include": ["match://terminal-exact"] },
+      "effects": [], "confidence": "certain"
     },
     {
       "id": "workspace-manifests-and-ci",

@@ -1,17 +1,25 @@
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
-  SIDECAR_MESSAGES,
   type DaemonStatusSnapshot,
   type DesktopStatusSnapshot,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+import { getSidecarStatus, type SidecarStamp } from "@open-design/sidecar";
 
 export type AppRuntimeLookup = {
   base: string;
   namespace: string;
 };
+
+function convergedStamp(runtime: AppRuntimeLookup, app: (typeof APP_KEYS)[keyof typeof APP_KEYS]): SidecarStamp {
+  return {
+    app,
+    channel: "local",
+    mode: "dev",
+    namespace: runtime.namespace,
+    source: "tools-dev",
+  };
+}
 
 export const DAEMON_STARTUP_TIMEOUT_MS = 120_000;
 const WEB_STARTUP_TIMEOUT_MS = 35_000;
@@ -25,21 +33,9 @@ function assertSpawnedProcessAlive(appName: string, isProcessAlive: ProcessAlive
   }
 }
 
-export function resolveDaemonIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.DAEMON, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
-}
-
-export function resolveWebIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.WEB, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
-}
-
-export function resolveDesktopIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
-}
-
 export async function inspectDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DaemonStatusSnapshot | null> {
   try {
-    return await requestJsonIpc<DaemonStatusSnapshot>(resolveDaemonIpcPath(runtime), { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs });
+    return await getSidecarStatus<DaemonStatusSnapshot>(convergedStamp(runtime, APP_KEYS.DAEMON), { timeoutMs });
   } catch {
     return null;
   }
@@ -64,7 +60,7 @@ export async function waitForDaemonRuntime(
 
 export async function inspectWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<WebStatusSnapshot | null> {
   try {
-    return await requestJsonIpc<WebStatusSnapshot>(resolveWebIpcPath(runtime), { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs });
+    return await getSidecarStatus<WebStatusSnapshot>(convergedStamp(runtime, APP_KEYS.WEB), { timeoutMs });
   } catch {
     return null;
   }
@@ -89,7 +85,7 @@ export async function waitForWebRuntime(
 
 export async function inspectDesktopRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DesktopStatusSnapshot | null> {
   try {
-    return await requestJsonIpc<DesktopStatusSnapshot>(resolveDesktopIpcPath(runtime), { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs });
+    return await getSidecarStatus<DesktopStatusSnapshot>(convergedStamp(runtime, APP_KEYS.DESKTOP), { timeoutMs });
   } catch {
     return null;
   }

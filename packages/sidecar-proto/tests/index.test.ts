@@ -9,7 +9,7 @@ import {
   normalizeDaemonSidecarMessage,
   normalizeDesktopSidecarMessage,
   normalizeNamespace,
-  normalizeSidecarStamp,
+  normalizeSidecarRuntimeLayout,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
@@ -58,16 +58,16 @@ describe("open-design sidecar contract", () => {
   });
 
   it("accepts exactly app, mode, namespace, ipc, and source", () => {
-    expect(normalizeSidecarStamp(validStamp)).toEqual(validStamp);
+    expect(normalizeSidecarRuntimeLayout(validStamp)).toEqual(validStamp);
   });
 
   it("rejects legacy or extra stamp fields", () => {
-    expect(() => normalizeSidecarStamp({ ...validStamp, runtimeToken: "legacy" })).toThrow();
-    expect(() => normalizeSidecarStamp({ ...validStamp, role: "web-sidecar" })).toThrow();
+    expect(() => normalizeSidecarRuntimeLayout({ ...validStamp, runtimeToken: "legacy" })).toThrow();
+    expect(() => normalizeSidecarRuntimeLayout({ ...validStamp, role: "web-sidecar" })).toThrow();
   });
 
   it("rejects non-contract sidecar sources", () => {
-    expect(() => normalizeSidecarStamp({ ...validStamp, source: "custom-script" })).toThrow();
+    expect(() => normalizeSidecarRuntimeLayout({ ...validStamp, source: "custom-script" })).toThrow();
   });
 
   it("validates daemon IPC messages", () => {
@@ -336,6 +336,47 @@ describe("open-design sidecar contract", () => {
         type: SIDECAR_MESSAGES.RENDER_SLIDES,
       }),
     ).toThrow();
+  });
+
+  it("validates deterministic desktop frame-render IPC inputs", () => {
+    expect(
+      normalizeDesktopSidecarMessage({
+        input: {
+          baseHref: "file:///project/composition/",
+          fps: 30,
+          height: 720,
+          html: "<!doctype html><main data-composition-id=\"main\"></main>",
+          outputDir: "/tmp/open-design-frames",
+          width: 1280,
+        },
+        type: SIDECAR_MESSAGES.RENDER_FRAMES,
+      }),
+    ).toEqual({
+      input: {
+        baseHref: "file:///project/composition/",
+        fps: 30,
+        height: 720,
+        html: "<!doctype html><main data-composition-id=\"main\"></main>",
+        outputDir: "/tmp/open-design-frames",
+        width: 1280,
+      },
+      type: "render-frames",
+    });
+
+    for (const input of [
+      { fps: 0, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { fps: 241, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { height: 0, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { height: 720, html: "", outputDir: "/tmp/x", width: 1280 },
+      { height: 720, html: "<p>x</p>", outputDir: "relative", width: 1280 },
+      { height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 8193 },
+      { bogus: true, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+    ]) {
+      expect(() => normalizeDesktopSidecarMessage({
+        input,
+        type: SIDECAR_MESSAGES.RENDER_FRAMES,
+      })).toThrow();
+    }
   });
 
   it("accepts PNG/JPEG artifact image export and rejects WebP up front", () => {

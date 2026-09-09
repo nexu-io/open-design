@@ -32,7 +32,6 @@ import {
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
   resolvedWorkspaceContextForWrite,
-  restoreProjectAutomaticScenario,
   startGeneratedPluginShareTask,
   uploadPluginFolder,
   waitGeneratedPluginShareTask,
@@ -1976,61 +1975,6 @@ describe('createPluginShareProject', () => {
       code: 'share-action-plugin-missing',
       message: 'Restart the daemon.',
     });
-  });
-});
-
-describe('restoreProjectAutomaticScenario', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('sends the snapshot CAS and the current Workspace authority', async () => {
-    const payload = {
-      project: {
-        id: 'project/one',
-        name: 'Prototype',
-        skillId: null,
-        designSystemId: null,
-        createdAt: 1,
-        updatedAt: 2,
-        appliedPluginSnapshotId: 'snapshot-new',
-        metadata: { kind: 'prototype' },
-      },
-      scenarioBinding: {
-        schemaVersion: 1,
-        provenance: 'automatic_default',
-        pluginId: 'example-web-prototype',
-        snapshotId: 'snapshot-new',
-        taskProfile: 'prototype',
-        boundAt: 2,
-      },
-      changed: true,
-    };
-    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
-      JSON.stringify(payload),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-    const context = teamWorkspaceContext({
-      workspaceId: 'workspace-1',
-      workspaceMemberId: 'member-1',
-    });
-
-    await expect(restoreProjectAutomaticScenario(
-      'project/one',
-      'snapshot-old',
-      context,
-    )).resolves.toEqual(payload);
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project%2Fone/scenario/restore-automatic',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ expectedCurrentSnapshotId: 'snapshot-old' }),
-      }),
-    );
-    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
-    expect(headers.get('x-od-workspace-id')).toBe('workspace-1');
-    expect(headers.get('x-od-workspace-member-id')).toBe('member-1');
   });
 });
 

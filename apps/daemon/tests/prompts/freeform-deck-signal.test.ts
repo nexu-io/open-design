@@ -12,6 +12,7 @@ describe('detectDeckIntentSignal', () => {
     expect(detectDeckIntentSignal('Write a Seed Pitch like a Top Pre-Seed Founder')).toBe(true);
     expect(detectDeckIntentSignal('a 10-slide keynote')).toBe(true);
     expect(detectDeckIntentSignal('export the PPT')).toBe(true);
+    expect(detectDeckIntentSignal('Turn this into a PowerPoint')).toBe(true);
     expect(detectDeckIntentSignal('make a slideshow of the trip')).toBe(true);
   });
 
@@ -67,5 +68,35 @@ describe('composeSystemPrompt — freeform maybe-deck gating', () => {
     expect(out).toContain(DECK_FRAMEWORK_HEADING);
     expect(out).toContain(NESTED_DIAGRAM_HEADING);
     expect(out).not.toContain(MAYBE_DECK_HEADING);
+  });
+
+  it('honors an explicit deck turn after a prototype was created from Home', () => {
+    const prototypeSkillBody = '# Prototype seed\n\nCopy `assets/template.html` before building.';
+    const out = composeSystemPrompt({
+      metadata: { kind: 'prototype' },
+      skillMode: 'prototype',
+      skillBody: prototypeSkillBody,
+      executionProfile: 'filesystem',
+      freeformDeckSignal: true,
+    });
+
+    expect(out).toContain(MAYBE_DECK_HEADING);
+    expect(out).toContain(DECK_FRAMEWORK_HEADING);
+    expect(out).toContain('data-od-deck-protocol="1"');
+    expect(out).toContain("type: 'od:deck-ready'");
+    expect(out).toContain("type: 'od:slide-state'");
+  });
+
+  it('does not turn an ordinary prototype turn into a deck prompt', () => {
+    const out = composeSystemPrompt({
+      metadata: { kind: 'prototype' },
+      skillMode: 'prototype',
+      skillBody: '# Prototype seed\n\nCopy `assets/template.html` before building.',
+      executionProfile: 'filesystem',
+      freeformDeckSignal: false,
+    });
+
+    expect(out).not.toContain(MAYBE_DECK_HEADING);
+    expect(out).not.toContain(DECK_FRAMEWORK_HEADING);
   });
 });

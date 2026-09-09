@@ -10,6 +10,7 @@ import { checkDesignSystemPackageQuality } from "./check-design-system-package-q
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
+import { checkHtmlPluginPreviewContracts } from "./check-html-plugin-preview-contracts.ts";
 import { checkPluginPreviewManifest } from "./check-plugin-preview-manifest.ts";
 import {
   checkDesignSystemA1RequiredTokens,
@@ -20,14 +21,19 @@ import {
   checkDesignSystemUnknownTokens,
 } from "./check-tokens-fixture-sync.ts";
 import { checkCraftReferences } from "./lint-craft-references.ts";
+import { checkWhatsNewDocument } from "./check-whats-new-document.ts";
+import { checkWhatsNewPublishWorkflow } from "./check-whats-new-publish-workflow.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 import { checkScriptsLibraryArchitecture } from "./lib/guard/architecture.ts";
 import { runGuardChecks, type GuardCheck, type GuardContext } from "./lib/guard/core.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
+  "e2e/scripts/artifact-render-parity.ts",
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
+  // Explicit opt-in local daemon acceptance; not part of hermetic CI test discovery.
+  "e2e/scripts/syntax-acceptance.ts",
   "e2e/scripts/visual-report.ts",
 ]);
 
@@ -86,11 +92,6 @@ const residualAllowedExactPaths = new Set([
   // for editable PPTX export. It is loaded into the off-screen Chromium page as
   // an upstream browser asset, not compiled as project-owned TypeScript.
   "apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
-  // Shared nav enhancer for the landing-page static `/community/` pages,
-  // which are verbatim HTML served straight from `public/` (not Astro-
-  // compiled). It must ship as a browser-loadable `.js` asset, same as the
-  // web notifications service worker above.
-  "apps/landing-page/public/community/_site-nav.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
@@ -113,7 +114,7 @@ const residualAllowedExactPaths = new Set([
   // `dist/acp.js` and drives a real `vela agent run` against a live model.
   // Kept as .mjs so it can be invoked directly via Node without any transform.
   "apps/daemon/scripts/verify-amr-real-vela.mjs",
-  // Fake `vela agent run --runtime opencode` ACP stdio stub used by the AMR
+  // Fake `vela agent run` ACP stdio stub used by the AMR
   // integration tests. The Vitest test spawns it via `child_process.spawn`,
   // which needs a directly-executable file (shebang + .mjs).
   "apps/daemon/tests/fixtures/fake-vela.mjs",
@@ -136,6 +137,13 @@ const residualAllowedExactPaths = new Set([
   "tools/release/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
+  // Terminal distributions execute these native runtime entrypoints with the
+  // verified embedded Node after leaving the pnpm/TypeScript workspace.
+  "shells/terminal/runtime/fixture-lifecycle.mjs",
+  "shells/terminal/runtime/fixture-shell-updater.mjs",
+  "shells/terminal/runtime/fossil.mjs",
+  "shells/terminal/runtime/sidecar-bootstrap.mjs",
+  "shells/terminal/runtime/sidecar-host.mjs",
   "tools/pack/resources/mac/notarize.cjs",
   // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
   "tools/pack/resources/web-standalone-after-pack.cjs",
@@ -189,6 +197,20 @@ const residualAllowedPathPrefixes = [
   // browser-loadable JavaScript (`code.js` sandbox + `ui.html`); same
   // precedent as the clipper, and it must not be retypecast to TypeScript.
   "figma-plugin/",
+  // ChatPanel 评审载体:场景模拟器与它的出图脚本(`docs/design/chat-sim/`、
+  // `docs/design/chat-panel-diagrams/`)。模拟器是**双击即开的浏览器页面** ——
+  // 设计与产品要在没有构建步骤、没有服务的情况下打开单文件 HTML 评审,
+  // 所以那些脚本必须是浏览器可直接加载的 JS,不能改成 TypeScript(改了就得先编译,
+  // 评审载体也就没法直接发人了)。出图脚本(`shoot.mjs` / `topng.mjs`)是同一批
+  // 一次性工具,用 Node 直接跑、只读 mermaid 源码出 SVG/PNG。
+  // 这批是 docs 下的设计评审产物,不参与产品运行时。见
+  // `docs/design/chat-sim/README.md` 与 `docs/design/chat-panel-diagrams/README.md`。
+  // `docs/design/chat-mirror/` 是同一批里的第三个:用我们的组件渲染的镜像陈列页
+  // 与它的逐格出图脚本(`shoot.mjs`,走无头 Chrome 的 CDP)。
+  // 见 `docs/design/chat-mirror/README.md`。
+  "docs/design/chat-sim/",
+  "docs/design/chat-panel-diagrams/",
+  "docs/design/chat-mirror/",
   "test-results/",
   "vendor/",
 ];
@@ -264,6 +286,18 @@ async function checkResidualJavaScript(): Promise<boolean> {
   }
 
   console.log("Residual JavaScript check passed: project-owned code is TypeScript-only.");
+  return true;
+}
+
+export async function checkRootPackageManagerLockfiles(root: string = repoRoot): Promise<boolean> {
+  const entries = await readdir(root);
+  if (entries.includes("bun.lock")) {
+    console.error("Unexpected root bun.lock found.");
+    console.error("pnpm-lock.yaml is the repository's only dependency lockfile; remove bun.lock.");
+    return false;
+  }
+
+  console.log("Root package-manager lockfile check passed: no bun.lock found.");
   return true;
 }
 
@@ -1147,7 +1181,7 @@ const hardcodedColorAllowlist: StylePolicyAllowlistEntry[] = [
     reason: "global token definitions, shadows, overlays, and retained migration inventory live in the CSS source of truth",
   },
   {
-    pathPattern: /^apps\/web\/src\/components\/(?:AgentIcon|PaletteTweaks|PetSettings|SettingsDialog)\.tsx$/,
+    pathPattern: /^apps\/web\/src\/components\/(?:AgentIcon|PetSettings|SettingsDialog)\.tsx$/,
     valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
     reason: "brand accents, user accent choices, and legacy token fallbacks are classified as Phase 1 migration inventory",
   },
@@ -1328,6 +1362,108 @@ async function checkStylePolicy(): Promise<boolean> {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// HTML structural boundary lookups
+//
+// Preview and export splice bridges into an artifact's own bytes, so they need
+// the offset of a real `<head>` / `</body>` / `<base>` / `<title>`. Finding one
+// with a plain text match is what broke nexu-io/open-design#7410: those tags
+// are also ordinary content, and any prototype that builds an HTML document
+// string writes them into a script or an attribute. The injected markup then
+// lands inside the author's string and silently truncates their page.
+//
+// That defect reappeared in six separate files because each one hand-rolled its
+// own lookup. `@open-design/contracts/runtime/html-injection-points` is now the
+// single implementation, and this check is what keeps the next one from being
+// written: a grep-driven sweep already missed an entire app once.
+// ---------------------------------------------------------------------------
+
+const htmlBoundaryOwnerPath = "packages/contracts/src/runtime/html-injection-points.ts";
+const htmlBoundarySkippedDirectories = new Set([".git", ".od", ".tmp", "dist", "node_modules", "out", "test-results"]);
+const htmlBoundaryCheckedPathPrefixes = [
+  "apps/daemon/src/",
+  "apps/desktop/src/",
+  "apps/packaged/src/",
+  "apps/web/src/",
+  "packages/",
+  "tools/",
+];
+const htmlBoundarySourceExtensions = new Set([".ts", ".tsx", ".mjs", ".cjs", ".js"]);
+/**
+ * A boundary tag reached by pattern-matching the raw text. These are always
+ * wrong: the match lands wherever the tag first appears, content or not.
+ */
+const htmlBoundaryPatternOpPattern = new RegExp(
+  [
+    // `html.replace(/<\/body>/i, …)` — operation first, literal second. The
+    // escaped slash matters: a close-tag regex is always written `<\/body`,
+    // and that backslash is what an earlier version of this check missed,
+    // leaving the exact shape of #7410 invisible to it.
+    String.raw`(?:replace|replaceAll|split|search|exec|match|test)\s*\(\s*(?:\/|['"\`])\s*<\s*\\?\/?\s*(?:body|head|html|base|title)\b`,
+    // `/<\/body>/i.test(html)` — literal first, operation second.
+    String.raw`(?:\/|['"\`])\s*<\s*\\?\/?\s*(?:body|head|html|base|title)\b[^/\n]*\/[gimsuy]*\s*\.\s*(?:test|exec)`,
+  ].join("|"),
+  "i",
+);
+/**
+ * A boundary tag reached by a plain index scan. Legitimate as a *continuation*
+ * — once the shared locator has found an element's start, walking forward to
+ * its close tag is correct — so this only fires in files that never import the
+ * locator at all.
+ */
+const htmlBoundaryIndexOpPattern =
+  /(?:indexOf|lastIndexOf)\s*\(\s*['"`]\s*<\s*\/?\s*(?:body|head|html|base|title)\b/i;
+const htmlBoundaryLocatorImport = "runtime/html-injection-points";
+/**
+ * An anchored pattern asks "does this text start/end with the tag", which is a
+ * shape assertion on a buffer, not a search for a boundary inside a document.
+ * It cannot find the wrong one, because the anchor pins the position.
+ */
+const htmlBoundaryAnchoredPattern = /\/\^|\$\s*\/[gimsuy]*/;
+
+async function checkHtmlBoundaryLookups(): Promise<boolean> {
+  const files = await collectRepositoryFiles(repoRoot, htmlBoundarySkippedDirectories);
+  const violations: { filePath: string; lineNumber: number; line: string }[] = [];
+
+  for (const filePath of files) {
+    if (filePath === htmlBoundaryOwnerPath) continue;
+    if (!htmlBoundaryCheckedPathPrefixes.some((prefix) => filePath.startsWith(prefix))) continue;
+    if (!htmlBoundarySourceExtensions.has(path.extname(filePath))) continue;
+    // Tests are where these shapes get *asserted against*, so they may say them.
+    if (isTestFile(path.basename(filePath)) || filePath.includes("/tests/")) continue;
+
+    const contents = await readFile(path.join(repoRoot, filePath), "utf8");
+    const usesLocator = contents.includes(htmlBoundaryLocatorImport);
+    contents.split("\n").forEach((line, index) => {
+      const offending =
+        !htmlBoundaryAnchoredPattern.test(line) &&
+        (htmlBoundaryPatternOpPattern.test(line) || (!usesLocator && htmlBoundaryIndexOpPattern.test(line)));
+      if (offending) {
+        violations.push({ filePath, lineNumber: index + 1, line: line.trim().slice(0, 120) });
+      }
+    });
+  }
+
+  if (violations.length > 0) {
+    console.error("HTML structural boundary check failed.");
+    console.error(
+      "These locate a `<head>`/`</body>`/`<base>`/`<title>` by text match. A tag an author",
+    );
+    console.error(
+      "wrote into a script string or an attribute would match first, and the injection would",
+    );
+    console.error("land inside their content (nexu-io/open-design#7410). Use findRealTagOffset /");
+    console.error(`findRealTagEnd from ${htmlBoundaryOwnerPath} instead.`);
+    for (const violation of violations) {
+      console.error(`- ${violation.filePath}:${violation.lineNumber}: ${violation.line}`);
+    }
+    return false;
+  }
+
+  console.log(`HTML structural boundary check passed: no hand-rolled boundary lookups outside ${htmlBoundaryOwnerPath}.`);
+  return true;
+}
+
 let crossAppImportsResult: Promise<boolean> | undefined;
 
 function checkCrossAppImportsOnce(): Promise<boolean> {
@@ -1335,11 +1471,53 @@ function checkCrossAppImportsOnce(): Promise<boolean> {
   return crossAppImportsResult;
 }
 
+
+// Only the internal run-creation service may start a physical Run.
+//
+// The run analytics lifecycle is installed there, once, for every Run. Four
+// daemon-internal callers used to reach past it and call the run registry
+// directly; each of those Runs reported no `run_created` and no `run_finished`,
+// and nothing said so (OPEND-2365). The service's `start` now requires the
+// caller to declare its analytics identity, but that only binds callers who go
+// through it — this check is what keeps the bypass from coming back.
+const RUN_START_BYPASS_ALLOWLIST = new Set([
+  "apps/daemon/src/services/internal-run-service.ts",
+]);
+
+async function checkRunStartChokePoint(): Promise<boolean> {
+  const violations: string[] = [];
+  const daemonSource = path.join(repoRoot, "apps", "daemon", "src");
+  if (!(await repositoryDirectoryExists("apps/daemon/src"))) return true;
+
+  for (const repositoryPath of await collectRepositoryFiles(daemonSource)) {
+    if (!repositoryPath.endsWith(".ts")) continue;
+    if (RUN_START_BYPASS_ALLOWLIST.has(repositoryPath)) continue;
+    const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
+    source.split("\n").forEach((line, index) => {
+      if (!/\.runs\.start\s*\(/.test(line)) return;
+      violations.push(`${repositoryPath}:${index + 1} ${line.trim()}`);
+    });
+  }
+
+  if (violations.length > 0) {
+    console.error("Run start choke-point violations found:");
+    console.error("Start physical Runs through `internalRunCreation.start(run, analytics, starter)`");
+    console.error("so the Run analytics lifecycle is installed. See AGENTS.md -> Starting a physical Run.");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Run start choke-point check passed: every physical Run starts through the internal run-creation service.");
+  return true;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
+  { name: "root package-manager lockfile", run: ({ repoRoot: root }) => checkRootPackageManagerLockfiles(root) },
   { name: "package dependency specs", run: checkPackageDependencySpecs },
   { name: "product neutrality", run: checkProductNeutrality },
   { name: "cross-app imports", run: checkCrossAppImportsOnce },
+  { name: "HTML structural boundaries", run: checkHtmlBoundaryLookups },
   { name: "@ts-nocheck import resolution", run: checkTsNocheckImports },
   { name: "test layout", run: checkTestLayout },
   { name: "scripts test-free", run: checkScriptsTestFree },
@@ -1347,9 +1525,13 @@ const checks: GuardCheck[] = [
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "web import isolation", run: checkWebImportIsolation },
+  { name: "run start choke point", run: checkRunStartChokePoint },
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
   { name: "craft references", run: checkCraftReferences },
+  { name: "what's new document", run: ({ repoRoot: root }) => checkWhatsNewDocument(root) },
+  { name: "what's new publish workflow", run: ({ repoRoot: root }) => checkWhatsNewPublishWorkflow(root) },
+  { name: "HTML plugin preview contracts", run: ({ repoRoot: root }) => checkHtmlPluginPreviewContracts(root) },
   { name: "plugin preview manifest", run: checkPluginPreviewManifest },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },

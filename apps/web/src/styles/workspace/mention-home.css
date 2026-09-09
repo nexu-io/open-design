@@ -361,8 +361,7 @@
      This base rule serves the signed-out fallback home, where the host
      (`.entry-updater-menu`) sits in the rail footer at the bottom of the nav
      rail — a top-anchored panel grew down past the window edge and the
-     「更新已就绪」 copy was clipped mid-sentence. `.entry-help-popover` already
-     anchors this way for exactly the same reason. The signed-in home (the
+     「更新已就绪」 copy was clipped mid-sentence. The signed-in home (the
      floating account row, top-right) opens downward via the override below. */
   bottom: 0;
   left: calc(100% + 12px);
@@ -927,11 +926,23 @@
 /* Keep passive save feedback out of dialog/page layout and below the
    body-portaled model picker (z-index 10500). This leaves Local CLI controls
    unobscured in dialog, page, and narrow presentations while the full status
-   copy remains readable. */
+   copy remains readable.
+
+   It rides the app's TOP chrome row (52px — `.workspace-tabs-chrome`,
+   viewer/routines.css), centred on that row's line. OPEND-2148 originally
+   parked it at the bottom of the viewport to get it off the Local CLI
+   pickers; the chrome row clears them just as well and is the better home for
+   it — on the full page that band is empty, and in the dialog it sits above
+   the panel rather than over any of its content. What that ticket actually
+   guarantees is unchanged: a viewport-level layer, out of the controls' band,
+   and under the body-portaled model picker. */
 .settings-autosave-layer {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  top: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
   z-index: 9000;
   transform: translateX(-50%);
   max-width: calc(100vw - 32px);
@@ -1551,10 +1562,14 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  /* The whole content block rides one white card (spec: white surface +
-     #dbdbdb hairline + large radius) floating on the shell ground. */
+  /* The whole content block rides one white card (white surface + hairline +
+     large radius) floating on the shell ground. */
   background: var(--bg);
-  border: 1px solid var(--border);
+  /* One step lighter than the app's default `--border`: at this size the card
+     is a large, quiet plane, and the standard #dbdbdb rule read as a hard box
+     drawn around it. `--border-soft` also moves the right way in dark mode
+     (#494949, i.e. softer than --border's #5c5c5c). */
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
 }
 /* Stretching the window widens only the card — the content column stays a

@@ -55,11 +55,13 @@ function createHarness(initial: {
     options?.beforeClaimCommit?.();
     return { ok: true as const };
   });
+  const install = vi.fn();
   const service = createInternalRunCreationService({
     runs: registry,
     claimAssistantMessage,
+    analyticsLifecycle: { install },
   });
-  return { claimAssistantMessage, drop, registry, run, service, start };
+  return { claimAssistantMessage, drop, install, registry, run, service, start };
 }
 
 describe('internal run creation service', () => {
@@ -87,9 +89,53 @@ describe('internal run creation service', () => {
 
     const starter = vi.fn(async () => undefined);
     if (prepared.kind !== 'ready') throw new Error('expected ready run');
-    harness.service.start(prepared.run, starter);
+    harness.service.start(
+      prepared.run,
+      { body: { ...meta }, requestAnalyticsContext: null },
+      starter,
+    );
     expect(harness.start).toHaveBeenCalledOnce();
     expect(starter).toHaveBeenCalledWith(harness.run);
+  });
+
+  // Every physical Run is started here, so this is the one place that can
+  // guarantee analytics without each caller remembering to ask for it. Four
+  // daemon-internal callers used to start Runs another way and reported
+  // nothing at all (OPEND-2365).
+  it('arms the analytics lifecycle for the run before it starts', async () => {
+    const harness = createHarness();
+    const starter = vi.fn(async () => undefined);
+    const facts = {
+      body: { projectId: 'project-1' },
+      requestAnalyticsContext: {
+        deviceId: 'device-1',
+        sessionId: 'session-1',
+        clientType: 'web' as const,
+        locale: 'en',
+        requestId: null,
+      },
+      creationKind: 'created' as const,
+      resumed: false,
+    };
+
+    harness.service.start(harness.run, facts, starter);
+
+    expect(harness.install).toHaveBeenCalledWith({ ...facts, run: harness.run });
+    expect(harness.install.mock.invocationCallOrder[0]!)
+      .toBeLessThan(harness.start.mock.invocationCallOrder[0]!);
+  });
+
+  it('starts the run even when no caller identity is available', async () => {
+    // A scheduled Automation has nobody to attribute the Run to. It still goes
+    // through the one start path so the Run is never silently uninstrumented
+    // for a reason other than "there was no identity".
+    const harness = createHarness();
+    const starter = vi.fn(async () => undefined);
+
+    harness.service.start(harness.run, { body: {}, requestAnalyticsContext: null }, starter);
+
+    expect(harness.install).toHaveBeenCalledOnce();
+    expect(harness.start).toHaveBeenCalledOnce();
   });
 
   it('drops an optimistic run when the assistant ownership claim is rejected', () => {

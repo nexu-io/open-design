@@ -136,14 +136,23 @@ function extractErrorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
-function isRecoverableCodexReconnect(message: string): boolean {
-  return (
-    message.startsWith('Reconnecting...') &&
-    (
-      message.includes('timeout waiting for child process to exit') ||
-      message.includes('stream disconnected before completion')
-    )
-  );
+function recoverableCodexReconnectProgress(
+  message: string,
+): { attempt: number; max: number } | null {
+  if (
+    !message.includes('timeout waiting for child process to exit') &&
+    !message.includes('stream disconnected before completion')
+  ) {
+    return null;
+  }
+  const match = /^Reconnecting\.\.\.\s+(\d+)\/(\d+)\b/u.exec(message);
+  if (!match) return null;
+  const attempt = Number(match[1]);
+  const max = Number(match[2]);
+  if (!Number.isFinite(attempt) || attempt <= 0 || !Number.isFinite(max) || max <= 0) {
+    return null;
+  }
+  return { attempt, max };
 }
 
 function formatOpenCodeUsage(tokens: unknown): Usage | null {
@@ -747,14 +756,312 @@ function emitCodexReasoningItem(
   return true;
 }
 
+/**
+ * Codex never names the tool it patched a file with: the only trace a write
+ * leaves in the stream is a `file_change` ITEM. Recorded shape, verbatim:
+ *
+ *   {"type":"item.started","item":{"id":"item_3","type":"file_change",
+ *     "changes":[{"path":"…/page.html","kind":"add"}],"status":"in_progress"}}
+ *
+ * That frame really does carry a path and a kind and nothing else — but it is
+ * only ONE of the two codex wires, and no longer the shipping one.
+ * `codex exec --json` still sends exactly the above on codex-cli 0.151.0
+ * (probed 2026-09-03, the same build as the app-server probe below), and
+ * `OD_CODEX_TRANSPORT=exec-json` still selects it as the rollback path.
+ * The shipping default since `2b9a03a4a4` is `codex app-server`, whose
+ * `fileChange` item carries a THIRD field next to those two:
+ *
+ *   {"path":"…/note.md","kind":{"type":"update","move_path":null},
+ *    "diff":"@@ -2,3 +2,4 @@\n beta\n-gamma\n+GAMMA-1\n+GAMMA-2\n delta\n"}
+ *
+ * `FileUpdateChange` in codex's own generated protocol (`codex app-server
+ * generate-ts`, 0.151.0) declares `diff` as a REQUIRED string, and the repo's
+ * own recorded fixture `tests/fixtures/codex-app-server/turn-app-server.jsonl`
+ * has carried one since the transport landed. It was thrown away one layer up,
+ * in `codex-app-server/normalize.ts`, which rebuilt the change as `{path,
+ * kind}` to feed this handler — so from here the wire looked unchanged and this
+ * comment kept reading as true. Codex file rows therefore showed elapsed time
+ * where the same row under Claude showed `+N −M`.
+ *
+ * Until this branch existed both lifecycle events fell through to `raw`, so a
+ * codex turn that created or edited a file showed NO row in the execution
+ * record while the same turn under Claude showed one.
+ *
+ * One item can carry SEVERAL changes (writing an artifact plus its brand spec
+ * is one item with two paths), so every change becomes its own call under a
+ * derived id `<item id>#<index>`. The chat row model is one file per row, and
+ * the web dedupes `tool_use` by id — a shared id would collapse the batch
+ * into a single row and hide the rest.
+ *
+ * The emitted pair is the canonical Write/Edit shape (`file_path` in the
+ * input) that `apps/web/src/runtime/chat/tool-kind.ts` already resolves to
+ * 「新建」/「改写」 plus a file button, so nothing downstream needs a new event
+ * kind. When a patch is present its two line counts ride along under
+ * `od_diff_stat` and the patch itself is dropped here — see
+ * `codexChangeDiffStat`. When it is absent (`exec --json`) the input keeps its
+ * old single-key shape, `diffStat` returns null, and the row shows elapsed time
+ * rather than a fabricated `+N −M`.
+ *
+ * `kind` values other than `add`/`update` (codex also patches by deleting)
+ * stay `raw` on purpose. The record has no delete verb, and labelling a
+ * deletion 「新建」 or 「改写」 would be a lie; a raw line remains the visible
+ * signal that a shape is still unhandled.
+ */
+const CODEX_FILE_CHANGE_TOOL_BY_KIND: Record<string, string> = {
+  add: 'Write',
+  update: 'Edit',
+};
+
+interface CodexFileChange {
+  /** Per-change tool id derived from the item id, unique within the run. */
+  id: string;
+  /** Canonical tool name the web already knows how to render. */
+  name: string;
+  path: string;
+  /** Line counts read off the change's patch, or null when it carried none. */
+  stat: CodexDiffStat | null;
+}
+
+interface CodexDiffStat {
+  added: number;
+  removed: number;
+}
+
+/**
+ * Count one codex change the way `diffStat` counts the equivalent Claude call,
+ * so the two agents cannot disagree about the same edit.
+ *
+ * `diffStat` (apps/web/src/runtime/chat/format.ts) has exactly two rules and
+ * both map onto a codex kind without inventing a third:
+ *
+ *   Write  added = content.split('\n').length,  removed = 0
+ *   Edit   added = new_string lines,            removed = old_string lines
+ *
+ * An `add` change's `diff` IS the file's whole text — codex sends the content
+ * with no `+` prefixes at all — so `add` uses the Write expression verbatim,
+ * trailing-newline quirk included: a five-line file reports 6 under BOTH agents.
+ * Matching Claude is the requirement; being independently "right" about the
+ * trailing newline would put two different numbers on the same file.
+ *
+ * An `update` change's `diff` is a unified diff, so the "lines that appear in
+ * new" and "lines that appear in old" of the Edit rule are its `+` and `-`
+ * lines. Counting them directly rather than rebuilding the two texts and
+ * splitting keeps `+0` distinguishable from "one empty line" — `''.split('\n')`
+ * is 1, which would have made every deletion-only patch read `+1`.
+ *
+ * Returns null when there is nothing to count: `exec --json` sends no `diff`,
+ * and a non-string `diff` from some future shape must degrade to the old
+ * elapsed-time row rather than to `+0 −0`.
+ */
+function codexChangeDiffStat(kind: string, diff: unknown): CodexDiffStat | null {
+  if (typeof diff !== 'string' || diff.length === 0) return null;
+  if (kind === 'add') return { added: diff.split('\n').length, removed: 0 };
+  if (kind !== 'update') return null;
+  let added = 0;
+  let removed = 0;
+  for (const line of diff.split('\n')) {
+    // `+++`/`---` are file headers, not content. Codex's own patches omit them,
+    // but a diff pasted through some other producer would double-count without
+    // this guard.
+    if (line.startsWith('+') && !line.startsWith('+++')) added += 1;
+    else if (line.startsWith('-') && !line.startsWith('---')) removed += 1;
+  }
+  return added === 0 && removed === 0 ? null : { added, removed };
+}
+
+/**
+ * Read a codex `file_change` item into one call per changed file, or null when
+ * the item is not a fully recognized `file_change` (wrong item type, no id, no
+ * changes, or ANY change whose kind we cannot name honestly). Returning null
+ * for a partially unknown item is deliberate: emitting the recognized half
+ * would silently drop the rest, whereas a null keeps the whole line visible as
+ * `raw`.
+ *
+ * The patch text is read here and NOT kept: one recorded patch was 20k+
+ * characters, and every field of a `tool_use` input is persisted verbatim by
+ * `chat-run-messages.ts`. Two integers survive the call; the patch does not.
+ */
+function codexFileChanges(item: JsonObject): CodexFileChange[] | null {
+  if (item.type !== 'file_change') return null;
+  const itemId = typeof item.id === 'string' ? item.id : '';
+  if (!itemId) return null;
+  if (!Array.isArray(item.changes) || item.changes.length === 0) return null;
+  const changes: unknown[] = item.changes;
+  const out: CodexFileChange[] = [];
+  for (let index = 0; index < changes.length; index += 1) {
+    const change = changes[index];
+    if (!isRecord(change)) return null;
+    const filePath = typeof change.path === 'string' ? change.path : '';
+    const kind = typeof change.kind === 'string' ? change.kind : '';
+    const name = kind ? CODEX_FILE_CHANGE_TOOL_BY_KIND[kind] : undefined;
+    if (!filePath || !name) return null;
+    out.push({
+      id: `${itemId}#${index}`,
+      name,
+      path: filePath,
+      stat: codexChangeDiffStat(kind, change.diff),
+    });
+  }
+  return out;
+}
+
+/**
+ * Emit the `tool_use` half of each file change, once per derived id.
+ *
+ * Called from `item.started` so the row gets a real duration: `tool-timing.ts`
+ * stamps `startedAt` at the single event exit, and a `tool_use` that arrives
+ * together with its `tool_result` reads as "unknown", not "instant". The
+ * `codexToolUses` guard makes the later `item.completed` a no-op, and equally
+ * makes `item.completed` self-sufficient when the started event never arrived.
+ */
+function emitCodexFileChangeToolUses(
+  changes: readonly CodexFileChange[],
+  onEvent: StreamEventHandler,
+  state: ParserState,
+): void {
+  for (const change of changes) {
+    if (state.codexToolUses.has(change.id)) continue;
+    state.codexToolUses.add(change.id);
+    onEvent({
+      type: 'tool_use',
+      id: change.id,
+      name: change.name,
+      // Absent, not null, when there is nothing to report: an input that keeps
+      // its single-key shape is byte-identical to what `exec --json` produced
+      // before this existed, so the rollback transport cannot drift.
+      input: change.stat
+        ? { file_path: change.path, od_diff_stat: change.stat }
+        : { file_path: change.path },
+    });
+  }
+}
+
+/**
+ * Codex reports a call to a connected MCP server as an `mcp_tool_call` ITEM.
+ * Recorded shape, verbatim (codex-cli 0.149.1):
+ *
+ *   {"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call",
+ *     "server":"echofacts","tool":"echo_fact","arguments":{"topic":"…"},
+ *     "result":null,"error":null,"status":"in_progress"}}
+ *   {"type":"item.completed","item":{…,"error":{"message":"…"},"status":"failed"}}
+ *
+ * This is a live surface, not a hypothetical: `mcp-agent-install.ts` registers
+ * every connected MCP server into codex with `codex mcp add`, so any user with
+ * a connector sees these frames. Until this branch existed both lifecycle
+ * events fell through to `raw`, and `build-turn-blocks.ts` skips `raw`
+ * outright — so a codex turn that called a connector showed NO row at all,
+ * success or failure alike.
+ *
+ * `mcp__<server>__<tool>` is the repository's existing name shape for an
+ * MCP-provided tool (`tool-kind.ts` documents `mcp__*__todo_write`, and the
+ * canonical `isTodoWriteToolName` matches on the `__` boundary), so a snapshot
+ * tool injected over MCP keeps being recognised as one. Returns null when the
+ * item is not a fully named MCP call — a partially known frame stays `raw`
+ * rather than becoming a row labelled with a blank server or tool.
+ */
+function codexMcpToolName(item: JsonObject): string | null {
+  if (item.type !== 'mcp_tool_call') return null;
+  const server = typeof item.server === 'string' ? item.server : '';
+  const tool = typeof item.tool === 'string' ? item.tool : '';
+  if (!server || !tool) return null;
+  return `mcp__${server}__${tool}`;
+}
+
+/**
+ * Emit the `tool_use` half of an MCP call, once per item id.
+ *
+ * Called from `item.started` because every field the row needs (server, tool,
+ * arguments) is already present there — holding it back to `item.completed`
+ * would cost the row its duration for nothing (`tool-timing.ts` stamps
+ * `startedAt` at the single event exit). The `codexToolUses` guard makes the
+ * later `item.completed` a no-op, and equally makes `item.completed`
+ * self-sufficient when the started event never arrived.
+ */
+function emitCodexMcpToolUse(
+  item: JsonObject,
+  id: string,
+  name: string,
+  onEvent: StreamEventHandler,
+  state: ParserState,
+): void {
+  if (state.codexToolUses.has(id)) return;
+  state.codexToolUses.add(id);
+  onEvent({
+    type: 'tool_use',
+    id,
+    name,
+    input: isRecord(item.arguments) ? item.arguments : {},
+  });
+}
+
+/**
+ * An MCP call reports failure through BOTH `status: 'failed'` and a populated
+ * `error` object; either alone is enough to mark the row failed. The message is
+ * the only thing the failure case carries (`result` stays null), and during a
+ * denied call it is the sole explanation the user would ever get.
+ *
+ * NOT VERIFIED: the payload shape of a SUCCESSFUL `result`. `codex exec` runs
+ * with approval policy `never` and refuses every MCP call before it reaches the
+ * server, so no successful frame could be captured. `stringifyContent` is the
+ * deliberate generic fallback rather than a guessed field path.
+ */
+function codexMcpToolResult(item: JsonObject): { content: string; isError: boolean } {
+  const error = isRecord(item.error) ? item.error : null;
+  const isError = item.status === 'failed' || error !== null;
+  const message = error && typeof error.message === 'string' ? error.message : '';
+  return { content: message || stringifyContent(item.result ?? ''), isError };
+}
+
+/**
+ * Read a codex `web_search` item into the query it actually searched for, or
+ * null when the frame carries no search we can render honestly.
+ *
+ * Recorded shape, verbatim (codex-cli 0.149.1 — web search is ON by default,
+ * no flag needed, so this reaches every codex user):
+ *
+ *   {"type":"item.started","item":{"id":"item_2","type":"web_search",
+ *     "id":"exec-9fb8985e-…","query":"","action":{"type":"other"}}}
+ *   {"type":"item.completed","item":{"id":"item_2","type":"web_search",
+ *     "id":"exec-9fb8985e-…","query":"OpenAI Codex CLI release notes",
+ *     "action":{"type":"search","query":"OpenAI Codex CLI release notes"}}}
+ *
+ * Two codex oddities are load-bearing here. First, `id` is serialised TWICE;
+ * `JSON.parse` keeps the last, so the tool id is the `exec-…` value. It is
+ * stable across the pair, so the pairing still holds. Second, the started
+ * frame's `query` is EMPTY — the query only exists at completion, and the query
+ * IS the row (`toolTitle` and `searchPattern` both read it). That is why the
+ * pair is emitted at `item.completed` and the started frame emits nothing.
+ *
+ * Only `action.type === 'search'` is recognised. codex's action taxonomy has
+ * more members (the started frame shows `other`) and we have captured only this
+ * one; calling a page fetch a 「搜索」 is the same class of lie as calling a file
+ * deletion 「新建」, so anything else stays `raw` — the visible signal that a
+ * shape is still unhandled.
+ */
+function codexWebSearchQuery(item: JsonObject): string | null {
+  if (item.type !== 'web_search') return null;
+  const action = isRecord(item.action) ? item.action : null;
+  if (!action || action.type !== 'search') return null;
+  const query = typeof item.query === 'string' ? item.query : '';
+  return query.length > 0 ? query : null;
+}
+
 function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
   if (obj.type === 'error') {
     const message = extractErrorMessage(obj.message ?? obj.error, 'Codex error');
-    // Reconnecting events are recoverable — treat as status warning, not fatal
-    if (isRecoverableCodexReconnect(message)) {
-      onEvent({ type: 'status', label: message });
+    // Codex reports its own upstream reconnect loop as error-shaped JSONL.
+    // Normalize it into an ephemeral machine status: the web renders one
+    // in-place reconnect row, while the daemon persistence layer drops it.
+    // Never put the raw SDK sentence in assistant history.
+    const reconnect = recoverableCodexReconnectProgress(message);
+    if (reconnect) {
+      onEvent({
+        type: 'status',
+        label: 'agent_reconnecting',
+        detail: `${reconnect.attempt}/${reconnect.max}`,
+      });
       return true;
     }
     if (!state.codexErrorEmitted) {
@@ -826,6 +1133,54 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
       }
       return true;
     }
+    const startedFileChanges = codexFileChanges(item);
+    if (startedFileChanges) {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
+      emitCodexFileChangeToolUses(startedFileChanges, onEvent, state);
+      return true;
+    }
+    const startedMcpToolName = codexMcpToolName(item);
+    if (startedMcpToolName && typeof item.id === 'string' && item.id) {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
+      emitCodexMcpToolUse(item, item.id, startedMcpToolName, onEvent, state);
+      return true;
+    }
+    if (item.type === 'web_search') {
+      // The started frame's `query` really is always empty (`action.type` is
+      // `"other"` here; the term only exists on `item.completed`). This used to
+      // emit nothing at all for that reason — "a 「搜索」 row with no term is
+      // worse than no row".
+      //
+      // The product overruled that trade-off on 2026-09-03: a call must reach
+      // the screen and start its clock when it is made, never only once it
+      // returns. A row with no term still answers the question the user is
+      // actually asking — where is it stuck — because it carries the stopwatch.
+      // There is no local `web_search` sample to time, so the size is taken
+      // from the same class of call: claude's `WebFetch` runs 7.42s.
+      //
+      // `tool_in_flight` is the generic early form, not an ACP-only event: the
+      // client retires it into the settled `tool_use` that shares its id
+      // (`dropSupersededInFlightToolUses`), so this is one row with one clock,
+      // not a second row. The settled pair below is untouched and still carries
+      // the term. `startedAt` is filled at the single emission gateway
+      // (`stampToolTiming`) because this parser holds no clock.
+      //
+      // ⚠️ `item.id` is the id AFTER `JSON.parse` deduplicates codex's twice-
+      // serialised `id` key — the `exec-…` value, not `item_2`. The completed
+      // frame resolves to the same one, which is exactly why the early row
+      // retires instead of drawing a second search row.
+      if (typeof item.id === 'string' && item.id) {
+        state.codexPreviousEventWasAgentMessage = false;
+        state.codexLastAgentMessageEndedWithNewline = false;
+        onEvent({ type: 'tool_in_flight', id: item.id, name: 'web_search', input: {} });
+      }
+      // Boundary state is otherwise deliberately NOT cleared here — it is
+      // cleared where the settled row is emitted, so an unrecognised action
+      // still reads as no tool row.
+      return true;
+    }
   }
 
   if (obj.type === 'item.updated' && isRecord(obj.item)) {
@@ -882,6 +1237,59 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
       }
       return true;
     }
+    const completedFileChanges = codexFileChanges(item);
+    if (completedFileChanges) {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
+      emitCodexFileChangeToolUses(completedFileChanges, onEvent, state);
+      // The result carries no content on purpose. `exec --json` genuinely
+      // reports no per-file output; `app-server` does send the patch, but a
+      // patch is not command output — it belongs on the row as `+N −M` (read
+      // by `codexChangeDiffStat` above), not in the terminal panel a
+      // `tool_result` body opens. `status: 'failed'` is the only failure
+      // signal on the item, on both wires.
+      const isError = item.status === 'failed';
+      for (const change of completedFileChanges) {
+        onEvent({ type: 'tool_result', toolUseId: change.id, content: '', isError });
+      }
+      return true;
+    }
+    const completedMcpToolName = codexMcpToolName(item);
+    if (completedMcpToolName && typeof item.id === 'string' && item.id) {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
+      emitCodexMcpToolUse(item, item.id, completedMcpToolName, onEvent, state);
+      const { content, isError } = codexMcpToolResult(item);
+      onEvent({ type: 'tool_result', toolUseId: item.id, content, isError });
+      return true;
+    }
+    const completedSearchQuery = codexWebSearchQuery(item);
+    if (completedSearchQuery && typeof item.id === 'string' && item.id) {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
+      if (!state.codexToolUses.has(item.id)) {
+        state.codexToolUses.add(item.id);
+        onEvent({
+          type: 'tool_use',
+          id: item.id,
+          name: 'web_search',
+          input: { query: completedSearchQuery },
+        });
+      }
+      // The result carries no content, so the row shows 「搜索 <query>」 without
+      // a fabricated 「N 处」. There is no failure field on the captured shape.
+      //
+      // Not because codex has nothing to say any more: `WebSearchItem` in the
+      // 0.151.0 generated protocol declares `results: Array<JsonValue> | null`
+      // ("structured search results returned out-of-band"), so the field the
+      // original note said did not exist now does. What has NOT been measured
+      // is whether codex populates it in this integration, and
+      // `codex-app-server/normalize.ts` drops it on the way in regardless — so
+      // a hit count here would be invented, not read. Measure the wire before
+      // changing this; do not infer a count from the type alone.
+      onEvent({ type: 'tool_result', toolUseId: item.id, content: '', isError: false });
+      return true;
+    }
   }
 
   if (
@@ -920,22 +1328,8 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
   return false;
 }
 
-export interface JsonEventStreamHandlerOptions {
-  openCodeChildEvidence?: {
-    rootSessionId?: string;
-    cliVersion: string;
-    onCandidate: (candidate: OpenCodeTaskTerminalCandidate) => void;
-    now?: () => number;
-  };
-}
-
-export function createJsonEventStreamHandler(
-  kind: ParserKind,
-  onEvent: StreamEventHandler,
-  options: JsonEventStreamHandlerOptions = {},
-) {
-  let buffer = '';
-  const state: ParserState = {
+function createParserState(): ParserState {
+  return {
     cursorTextSoFar: '',
     cursorTurnStart: 0,
     openCodeToolUses: new Set<string>(),
@@ -951,6 +1345,45 @@ export function createJsonEventStreamHandler(
     artifactOpenCandidate: '',
     pendingArtifactText: '',
   };
+}
+
+/**
+ * Feed already-parsed codex stream frames (the `exec --json` object shapes)
+ * through the same branch `createJsonEventStreamHandler('codex', …)` uses.
+ *
+ * This exists so the app-server transport can reuse the shipping item ->
+ * tool_use/tool_result/thinking mapping verbatim instead of maintaining a
+ * second copy that would drift. The app-server bridge translates its camelCase
+ * JSON-RPC notifications into these frames and routes them here; anything the
+ * codex branch does not recognise reports `false` so the caller can decide
+ * whether to ignore it or surface it.
+ */
+export function createCodexFrameHandler(onEvent: StreamEventHandler) {
+  const state = createParserState();
+  return {
+    /** Returns true when the codex branch consumed the frame. */
+    handleFrame(frame: JsonObject): boolean {
+      return handleCodexEvent(frame, onEvent, state);
+    },
+  };
+}
+
+export interface JsonEventStreamHandlerOptions {
+  openCodeChildEvidence?: {
+    rootSessionId?: string;
+    cliVersion: string;
+    onCandidate: (candidate: OpenCodeTaskTerminalCandidate) => void;
+    now?: () => number;
+  };
+}
+
+export function createJsonEventStreamHandler(
+  kind: ParserKind,
+  onEvent: StreamEventHandler,
+  options: JsonEventStreamHandlerOptions = {},
+) {
+  let buffer = '';
+  const state: ParserState = createParserState();
   const openCodeChildEvidence = kind === 'opencode' && options.openCodeChildEvidence
     ? createOpenCodeRootTaskEvidenceCollector(options.openCodeChildEvidence)
     : null;

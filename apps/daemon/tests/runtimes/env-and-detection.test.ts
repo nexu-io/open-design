@@ -5,9 +5,10 @@ import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as platform from '@open-design/platform';
 import {
-  assert, chmodSync, detectAgents, detectAgentsStream, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  antigravity, assert, chmodSync, detectAgents, detectAgentsStream, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
+import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import { getRememberedLiveModels } from '../../src/runtimes/models.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
@@ -993,6 +994,40 @@ test('detectAgents applies configured env while probing the CLI', async () => {
       assert.equal(detected?.version, '/tmp/claude-config-probe');
     });
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectAgents records Antigravity permission capability from stderr help output', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-antigravity-capability-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const bin = join(dir, 'agy');
+      writeFileSync(
+        bin,
+        '#!/bin/sh\n' +
+          'if [ "$1" = "--version" ]; then echo "agy 1.0.3"; exit 0; fi\n' +
+          'if [ "$1" = "--help" ]; then echo "--dangerously-skip-permissions" >&2; exit 0; fi\n' +
+          'exit 0\n',
+      );
+      chmodSync(bin, 0o755);
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+      agentCapabilities.delete('antigravity');
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'antigravity');
+
+      assert.equal(detected?.available, true);
+      assert.deepEqual(agentCapabilities.get('antigravity'), {
+        skipPermissions: true,
+      });
+      assert.ok(
+        antigravity.buildArgs('', [], [], {}).includes('--dangerously-skip-permissions'),
+      );
+    });
+  } finally {
+    agentCapabilities.delete('antigravity');
     rmSync(dir, { recursive: true, force: true });
   }
 });

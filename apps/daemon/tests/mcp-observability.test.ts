@@ -71,6 +71,13 @@ describe('local MCP plugin observability contract', () => {
       externalPluginContext: pluginContext,
     })).not.toThrow();
 
+    expect(() => validateMcpToolArgs('confirm_brief', {
+      briefDraftId: 'brief-draft',
+      nonce: 'brief-nonce',
+      answers: {},
+      pluginWorkflowId: '018f6f2e-4444-7444-8444-444444444444',
+    })).not.toThrow();
+
     expect(() => validateMcpToolArgs('start_run', {
       project: 'Demo',
       prompt: 'Create a launch page',
@@ -214,6 +221,68 @@ describe('local MCP plugin observability contract', () => {
         '018f6f2e-2222-7222-8222-222222222222',
       ),
     ).toBe('skipped');
+  });
+
+  it('rejects confirmation workflow ids that do not match the brief draft', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      enabled: false,
+      deviceId: null,
+      locale: 'en',
+    }), { status: 200 })));
+    const session = await McpObservabilitySession.create(
+      'http://127.0.0.1:17456',
+      { name: 'codex', version: '1.0.0' },
+    );
+    const store = createLocalMcpBriefStore();
+    const pluginWorkflowId = '018f6f2e-2222-7222-8222-222222222222';
+    const collected = store.collect({
+      artifactType: 'website',
+      skip: true,
+      pluginWorkflowId,
+      externalPluginContext: pluginContext,
+    });
+
+    await expect(session.resolveAttribution('confirm_brief', {
+      briefDraftId: collected.briefDraftId,
+      pluginWorkflowId: '018f6f2e-9999-7999-8999-999999999999',
+    }, store)).rejects.toThrow(/pluginWorkflowId does not match the brief draft/u);
+    await expect(session.resolveAttribution('confirm_brief', {
+      briefDraftId: collected.briefDraftId,
+      pluginWorkflowId,
+    }, store)).resolves.toEqual({
+      context: pluginContext,
+      pluginWorkflowId,
+    });
+  });
+
+  it('rejects plugin workflow ids on ordinary brief confirmations', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      enabled: false,
+      deviceId: null,
+      locale: 'en',
+    }), { status: 200 })));
+    const session = await McpObservabilitySession.create(
+      'http://127.0.0.1:17456',
+      { name: 'codex', version: '1.0.0' },
+    );
+    const store = createLocalMcpBriefStore();
+    const pluginArgs = {
+      artifactType: 'website',
+      externalPluginContext: pluginContext,
+    };
+    const attribution = await session.resolveAttribution(
+      'collect_brief',
+      pluginArgs,
+      store,
+    );
+    const ordinary = store.collect({ artifactType: 'website', skip: true });
+
+    await expect(session.resolveAttribution('confirm_brief', {
+      briefDraftId: ordinary.briefDraftId,
+      pluginWorkflowId: attribution?.pluginWorkflowId,
+    }, store)).rejects.toThrow(
+      /pluginWorkflowId requires an attributed brief draft/u,
+    );
   });
 
   it('records a confirmed brief state without retaining answers in analytics', () => {

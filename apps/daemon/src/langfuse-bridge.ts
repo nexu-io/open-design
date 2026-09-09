@@ -17,12 +17,21 @@ import {
   type TrackingRunCancelOrigin,
   type TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
-import type { OdNextRolloutDecision, SafeRunQualityV1 } from '@open-design/contracts';
+import {
+  DELIVERABLE_SYNTAX_FINALIZATION_REASONS,
+  DELIVERABLE_SYNTAX_SAFE_FIX_REFUSALS,
+  DELIVERABLE_SYNTAX_SAFE_FIX_RULES,
+  type DeliverableSyntaxFinalization,
+  type DeliverableSyntaxSafeFixRule,
+  type DeliverableSyntaxRepairState,
+  type DeliverableSyntaxValidationEvidence,
+  type OdNextRolloutDecision,
+  type SafeRunQualityV1,
+} from '@open-design/contracts';
 
 import { agentCliEnvForAgent, readAppConfig, type TelemetryPrefs } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
-import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-relay.js';
 import {
   deriveLangfuseDeliveryState,
   buildSafeRunQualityProjectionV1,
@@ -35,6 +44,7 @@ import {
   type ArtifactSummary,
   type AttachmentManifestEntry,
   type EventsSummary,
+  type DeliverableSyntaxTelemetry,
   type FeedbackReportContext,
   type LangfuseDeliveryState,
   type InputTextSnapshotManifestEntry,
@@ -61,13 +71,17 @@ import {
 import {
   collectStderrTailSummary,
   collectStdoutTailSummary,
+  promptBudgetAnalyticsFromDiagnostic,
   summarizeRunDiagnosticsForAnalytics,
+  type RunDiagnosticsAnalytics,
 } from './run-diagnostics.js';
+import { projectToolExecutionLifecycleDiagnostic } from './agent-protocol/acp/tool-execution-lifecycle.js';
 import {
   classifyRunFailure,
   type RunFailureClassification,
 } from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
+import { runAdmissionEvidenceForRun } from './runtimes/run-lifecycle-analytics.js';
 import { buildTraceObjectManifests } from './trace-object-manifest.js';
 import type { TraceArtifactObjectSource, TraceObjectUploadManifests } from './trace-object-manifest.js';
 import { getDetectedRuntimeVersions } from './runtimes/detection.js';
@@ -121,7 +135,10 @@ export interface DaemonRunRecord {
   retryFinalResult?: string;
   retrySuppressedReason?: string;
   retryOriginalFailure?: RunFailureClassification;
+  promptBudgetDiagnostics?: Partial<RunDiagnosticsAnalytics> | null;
   strategyRolloutDecision?: OdNextRolloutDecision | null;
+  deliverableSyntaxRepair?: DeliverableSyntaxRepairState;
+  deliverableSyntaxValidation?: DeliverableSyntaxValidationEvidence;
 }
 
 export interface BuildSafeRunQualityProjectionFromDaemonOpts {
@@ -152,9 +169,12 @@ export interface SafeRunQualityDaemonRunRecord {
   cancelOrigin?: TrackingRunCancelOrigin | null | undefined;
   terminalTrigger?: TrackingRunTerminalTrigger | null | undefined;
   analyticsTelemetry?: RunTelemetryTimestamps | null | undefined;
+  promptBudgetDiagnostics?: Partial<RunDiagnosticsAnalytics> | null | undefined;
   userPrompt?: string | undefined;
   projectAttachmentPaths?: string[] | undefined;
   projectMetadata?: Record<string, unknown> | null | undefined;
+  deliverableSyntaxRepair?: DeliverableSyntaxRepairState;
+  deliverableSyntaxValidation?: DeliverableSyntaxValidationEvidence;
 }
 
 interface TraceSafeManifestResult {
@@ -245,53 +265,182 @@ function mergeTraceSafeManifests(
   };
 }
 
-function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
-  if (!objectRelayUrl) {
-    const telemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-    return telemetryRelayUrl
-      ? normalizeOpenDesignTelemetryRelayUrl(telemetryRelayUrl)
-      : null;
-  }
-  const normalizedObjectRelayUrl = normalizeOpenDesignTelemetryRelayUrl(
-    objectRelayUrl,
-  );
-  try {
-    const url = new URL(normalizedObjectRelayUrl);
-    url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
-    return url.toString().replace(/\/+$/, '');
-  } catch {
-    return normalizedObjectRelayUrl
-      .replace(/\/api\/objects\/batch\/?$/, '/api/langfuse')
-      .replace(/\/+$/, '');
-  }
+function nonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
 }
 
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+function nonNegativeFinite(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
 }
 
-function parseNonNegativeInt(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+function safeRepairRules(value: readonly DeliverableSyntaxSafeFixRule[]): DeliverableSyntaxSafeFixRule[] {
+  return [...new Set(value.filter((rule) => DELIVERABLE_SYNTAX_SAFE_FIX_RULES.includes(rule)))];
 }
 
-function objectRegistrationTelemetryConfig(
-  env: NodeJS.ProcessEnv = process.env,
-): Extract<TelemetrySinkConfig, { kind: 'relay' }> | null {
-  const relayUrl = inferObjectRegistrationRelayUrl(env);
-  if (!relayUrl) return null;
+/** Never spread persisted objects into safe telemetry: no paths or diagnostic text. */
+function projectSyntaxFinalization(value: DeliverableSyntaxFinalization): DeliverableSyntaxFinalization | undefined {
+  if (value.action !== 'allow' && value.action !== 'fail') return undefined;
   return {
-    kind: 'relay',
-    relayUrl,
-    timeoutMs: parsePositiveInt(
-      env.OPEN_DESIGN_OBJECT_RELAY_TIMEOUT_MS ?? env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS,
-      20_000,
-    ),
-    retries: parseNonNegativeInt(env.OPEN_DESIGN_TELEMETRY_RETRIES, 1),
+    action: value.action,
+    ...(value.reason && DELIVERABLE_SYNTAX_FINALIZATION_REASONS.includes(value.reason) ? { reason: value.reason } : {}),
+    ...(value.refusal && DELIVERABLE_SYNTAX_SAFE_FIX_REFUSALS.includes(value.refusal) ? { refusal: value.refusal } : {}),
+    ...(value.summaryVersion === 1 ? { summaryVersion: 1 } : {}),
+    ...(value.initialStatus && ['pass', 'repairable', 'incomplete', 'skipped'].includes(value.initialStatus)
+      ? { initialStatus: value.initialStatus } : {}),
+    ...(value.repairEngine === 'host-safe-fixer@2' ? { repairEngine: value.repairEngine } : {}),
+    ...(nonNegativeInteger(value.stagedPatchCount) !== undefined ? { stagedPatchCount: value.stagedPatchCount } : {}),
+    ...(nonNegativeInteger(value.committedPatchCount) !== undefined ? { committedPatchCount: value.committedPatchCount } : {}),
+    ...(Array.isArray(value.committedRepairRules) ? { committedRepairRules: safeRepairRules(value.committedRepairRules) } : {}),
+  };
+}
+
+/** Build the one safe syntax fact-sheet shared by evaluation and production telemetry. */
+export function projectDeliverableSyntaxTelemetry(
+  run: Pick<DaemonRunRecord, 'deliverableSyntaxRepair' | 'deliverableSyntaxValidation'>
+    & Partial<Pick<DaemonRunRecord, 'status'>>,
+): DeliverableSyntaxTelemetry | undefined {
+  const validation = run.deliverableSyntaxValidation;
+  if (!validation) return undefined;
+
+  const repairDirective = 'repair' in validation ? validation.repair : undefined;
+  const embeddedRepairState = 'repairState' in validation
+    ? validation.repairState
+    : undefined;
+  const repairState = run.deliverableSyntaxRepair ?? embeddedRepairState;
+  const finalization = validation.finalization
+    ? projectSyntaxFinalization(validation.finalization) : undefined;
+  // Any new field marks versioned evidence. A missing version must not turn
+  // an incomplete Host summary into legacy Agent recovery or a clean check.
+  const rawFinalization = validation.finalization;
+  const versionedSummary = rawFinalization !== null
+    && typeof rawFinalization === 'object' && !Array.isArray(rawFinalization) && [
+    'summaryVersion', 'initialStatus', 'repairEngine', 'stagedPatchCount',
+    'committedPatchCount', 'committedRepairRules',
+  ].some((field) => field in rawFinalization);
+  const hostSummary = finalization?.summaryVersion === 1;
+  const stagedPatchCount = finalization?.stagedPatchCount;
+  const committedPatchCount = finalization?.committedPatchCount;
+  const originalCommittedRules = validation.finalization?.committedRepairRules;
+  // Version alone is not commit proof. Partial or contradictory historical
+  // objects remain unknown, never confirmed successful/no-repair deliveries.
+  const completeHostSummary = hostSummary
+    && finalization.repairEngine === 'host-safe-fixer@2'
+    && finalization.initialStatus !== undefined
+    && stagedPatchCount !== undefined && stagedPatchCount <= 8
+    && committedPatchCount !== undefined && committedPatchCount <= stagedPatchCount
+    && Array.isArray(originalCommittedRules)
+    && originalCommittedRules.length <= DELIVERABLE_SYNTAX_SAFE_FIX_RULES.length
+    && originalCommittedRules.every((rule) => DELIVERABLE_SYNTAX_SAFE_FIX_RULES.includes(rule))
+    && (committedPatchCount > 0 ? originalCommittedRules.length > 0 : originalCommittedRules.length === 0);
+  const terminalRunStatus = run.status === 'succeeded' || run.status === 'failed' || run.status === 'canceled'
+    ? run.status : undefined;
+  const repairAttempts = hostSummary
+    ? nonNegativeInteger(finalization.stagedPatchCount) ?? 0
+    : nonNegativeInteger(repairState?.attempt)
+    ?? nonNegativeInteger(repairDirective?.attempt)
+    ?? 0;
+  const maxRepairAttempts = hostSummary ? 8 : nonNegativeInteger(repairState?.maxAttempts)
+    ?? nonNegativeInteger(repairDirective?.maxAttempts)
+    ?? null;
+  const metrics = validation.metrics;
+  const diagnostics = 'diagnostics' in validation ? validation.diagnostics : undefined;
+  const repairTriggered = hostSummary ? finalization.initialStatus === 'repairable' : repairAttempts > 0
+    || validation.status === 'repairable'
+    || validation.status === 'exhausted'
+    || (metrics?.repairableCheckCount ?? 0) > 0;
+  const exhausted = hostSummary
+    ? finalization.reason === 'attempt_limit_reached'
+    : validation.status === 'exhausted'
+    || (
+      validation.status === 'repairable'
+      && maxRepairAttempts !== null
+      && repairAttempts >= maxRepairAttempts
+    );
+  const hostEvidence = versionedSummary || validation.source === 'run_finalizer'
+    || metrics?.repairExecutor === 'host_safe_fixer' || repairState?.mode === 'host_safe_fixer';
+  const recoveredDelivery = hostSummary
+    ? completeHostSummary && finalization.initialStatus === 'repairable'
+      && (finalization.committedPatchCount ?? 0) > 0
+      && validation.status === 'pass' && finalization.action === 'allow'
+      && terminalRunStatus === 'succeeded'
+    : !hostEvidence && validation.status === 'pass' && repairTriggered
+      && finalization?.action !== 'fail' && terminalRunStatus === 'succeeded';
+  const repairOutcome: DeliverableSyntaxTelemetry['repairOutcome'] =
+    validation.status === 'skipped'
+      ? 'not_applicable'
+      : recoveredDelivery
+        ? 'repaired'
+        : validation.status === 'pass' && !repairTriggered && finalization?.action !== 'fail'
+          && (!versionedSummary || completeHostSummary)
+          ? 'not_needed'
+          : exhausted
+            ? 'exhausted'
+            : 'unresolved';
+  const checkedFiles = 'checkedFiles' in validation ? validation.checkedFiles : undefined;
+  const fallbackDiagnosticCount = diagnostics?.length ?? null;
+  const observedSyntaxError = hostSummary
+    ? finalization.initialStatus === 'repairable' || validation.status === 'repairable'
+    : validation.status === 'repairable' || validation.status === 'exhausted'
+      || (metrics?.repairableCheckCount ?? 0) > 0;
+
+  return {
+    schemaVersion: 'deliverable-syntax-telemetry-v1',
+    applicable: validation.status !== 'skipped',
+    status: validation.status,
+    source: validation.source,
+    checker: 'checker' in validation ? validation.checker : null,
+    checkedFileCount: checkedFiles?.length ?? 0,
+    checkCount: nonNegativeInteger(metrics?.checkCount)
+      ?? (validation.status === 'incomplete' && !('checker' in validation && validation.checker)
+        ? 0
+        : 1),
+    checkerDurationMs: nonNegativeFinite(metrics?.checkerDurationMs) ?? null,
+    repairWindowDurationMs:
+      nonNegativeFinite(metrics?.repairWindowDurationMs) ?? null,
+    repairToDeliveryDurationMs:
+      nonNegativeFinite(metrics?.repairToDeliveryDurationMs) ?? null,
+    ...(metrics?.repairToTerminalDurationMs !== undefined || metrics?.repairToDeliveryDurationMs !== undefined
+      ? { repairToTerminalDurationMs: nonNegativeFinite(metrics?.repairToTerminalDurationMs)
+        ?? nonNegativeFinite(metrics?.repairToDeliveryDurationMs) ?? null } : {}),
+    ...(terminalRunStatus ? { terminalRunStatus } : {}),
+    ...(finalization ? { finalization } : {}),
+    ...(hostSummary || metrics?.repairExecutor || repairState?.mode
+      ? {
+          repairExecutor:
+            (hostSummary ? 'host_safe_fixer' : metrics?.repairExecutor)
+            ?? (repairState?.mode === 'host_safe_fixer' ? 'host_safe_fixer' : 'agent'),
+        }
+      : {}),
+    ...(metrics?.repairDurationMs !== undefined
+      ? { repairDurationMs: nonNegativeFinite(metrics.repairDurationMs) ?? null }
+      : {}),
+    ...(Array.isArray(metrics?.appliedRepairRules)
+      ? { appliedRepairRules: safeRepairRules(metrics.appliedRepairRules) }
+      : {}),
+    ...(nonNegativeInteger(metrics?.safeFixProposalCount) !== undefined
+      ? { safeFixProposalCount: metrics!.safeFixProposalCount } : {}),
+    ...(metrics?.safeFixProposalDurationMs !== undefined
+      ? { safeFixProposalDurationMs: nonNegativeFinite(metrics.safeFixProposalDurationMs) ?? null } : {}),
+    repairableCheckCount: nonNegativeInteger(metrics?.repairableCheckCount)
+      ?? (validation.status === 'repairable' || validation.status === 'exhausted' ? 1 : 0),
+    initialDiagnosticCount: nonNegativeInteger(metrics?.initialDiagnosticCount)
+      ?? (validation.status === 'repairable' || validation.status === 'exhausted'
+        ? fallbackDiagnosticCount
+        : repairTriggered
+          ? null
+          : 0),
+    latestDiagnosticCount: nonNegativeInteger(metrics?.latestDiagnosticCount)
+      ?? fallbackDiagnosticCount,
+    repairTriggered,
+    repairAttempts,
+    maxRepairAttempts,
+    repairOutcome,
+    recoveredDeliveryCount: recoveredDelivery ? 1 : 0,
+    blockedBrokenDeliveryCount: finalization?.action === 'fail' && observedSyntaxError ? 1 : 0,
   };
 }
 
@@ -547,12 +696,14 @@ function collectAgentEvents(
   runStartedAt: number,
   runEndedAt: number,
   agentId: string | null | undefined,
+  retainedPromptBudget?: Partial<RunDiagnosticsAnalytics> | null,
 ): AgentEventSummary[] {
   const out: AgentEventSummary[] = [];
   const statusCounts = new Map<string, number>();
   const diagnosticCounts = new Map<string, number>();
   let thinkingCount = 0;
   let usageCount = 0;
+  let promptBudgetObserved = false;
   const source =
     typeof agentId === 'string' && agentId.trim().length > 0
       ? agentId.trim()
@@ -652,14 +803,22 @@ function collectAgentEvents(
         typeof data.name === 'string' && data.name.length > 0
           ? data.name
           : 'runtime_diagnostic';
+      const toolExecutionLifecycle = diagnosticName === 'tool_execution_lifecycle'
+        ? projectToolExecutionLifecycleDiagnostic(data)
+        : null;
+      if (diagnosticName === 'tool_execution_lifecycle' && !toolExecutionLifecycle) continue;
       const index = diagnosticCounts.get(diagnosticName) ?? 0;
       diagnosticCounts.set(diagnosticName, index + 1);
+      const promptBudget = promptBudgetAnalyticsFromDiagnostic(
+        data as Record<string, unknown>,
+      );
+      if (promptBudget) promptBudgetObserved = true;
       out.push({
         id: `diagnostic-${diagnosticName}-${index}`,
         name: `agent-diagnostic:${diagnosticName}`,
         timestamp,
         input: eventInput('diagnostic'),
-        output: {
+        output: toolExecutionLifecycle ?? {
           name: diagnosticName,
           ...(typeof data.source === 'string' ? { source: data.source } : {}),
           ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
@@ -677,12 +836,67 @@ function collectAgentEvents(
             : {}),
           ...(typeof data.suppressing === 'boolean' ? { suppressing: data.suppressing } : {}),
           ...(data.shape && typeof data.shape === 'object' ? { shape: data.shape } : {}),
+          ...(promptBudget
+            ? {
+                schema_version: 1,
+                frame_bytes: promptBudget.prompt_frame_bytes,
+                prompt_bytes: promptBudget.prompt_bytes,
+                prompt_token_estimate: promptBudget.prompt_token_estimate,
+                token_estimate_method: promptBudget.prompt_token_estimate_method,
+                session_mode: promptBudget.prompt_session_mode,
+                model_id: promptBudget.prompt_model_id,
+                context_window_source: promptBudget.prompt_context_window_source,
+                ...(promptBudget.prompt_context_window_tokens !== undefined
+                  ? { context_window_tokens: promptBudget.prompt_context_window_tokens }
+                  : {}),
+                prior_session_usage_source:
+                  promptBudget.prompt_prior_session_usage_source,
+                ...(promptBudget.prompt_prior_session_input_tokens !== undefined
+                  ? {
+                      prior_session_input_tokens:
+                        promptBudget.prompt_prior_session_input_tokens,
+                    }
+                  : {}),
+              }
+            : {}),
         },
         metadata: {
           diagnostic_name: diagnosticName,
         },
       });
     }
+  }
+  if (!promptBudgetObserved && retainedPromptBudget?.prompt_budget_version === 'prompt_budget_v1') {
+    out.push({
+      id: 'diagnostic-prompt_budget_v1-retained',
+      name: 'agent-diagnostic:prompt_budget_v1',
+      timestamp: runStartedAt,
+      input: eventInput('diagnostic'),
+      output: {
+        name: 'prompt_budget_v1',
+        source: 'acp-json-rpc',
+        schema_version: 1,
+        frame_bytes: retainedPromptBudget.prompt_frame_bytes,
+        prompt_bytes: retainedPromptBudget.prompt_bytes,
+        prompt_token_estimate: retainedPromptBudget.prompt_token_estimate,
+        token_estimate_method: retainedPromptBudget.prompt_token_estimate_method,
+        session_mode: retainedPromptBudget.prompt_session_mode,
+        model_id: retainedPromptBudget.prompt_model_id,
+        context_window_source: retainedPromptBudget.prompt_context_window_source,
+        ...(retainedPromptBudget.prompt_context_window_tokens !== undefined
+          ? { context_window_tokens: retainedPromptBudget.prompt_context_window_tokens }
+          : {}),
+        prior_session_usage_source:
+          retainedPromptBudget.prompt_prior_session_usage_source,
+        ...(retainedPromptBudget.prompt_prior_session_input_tokens !== undefined
+          ? {
+              prior_session_input_tokens:
+                retainedPromptBudget.prompt_prior_session_input_tokens,
+            }
+          : {}),
+      },
+      metadata: { diagnostic_name: 'prompt_budget_v1' },
+    });
   }
   return out;
 }
@@ -1116,6 +1330,7 @@ export async function buildSafeRunQualityProjectionFromDaemon(
     cancelOrigin: run.cancelOrigin ?? null,
     terminalTrigger: run.terminalTrigger ?? null,
     events: run.events,
+    admissionEvidence: runAdmissionEvidenceForRun(run),
   });
   // Terminal process evidence. The single-Run trace reported the stderr and
   // stdout tails only for a non-succeeded Run, and always reported the derived
@@ -1128,11 +1343,13 @@ export async function buildSafeRunQualityProjectionFromDaemon(
     : collectStdoutTailSummary(run.events);
   const diagnostics = summarizeRunDiagnosticsForAnalytics({
     events: run.events,
+    promptBudgetDiagnostics: run.promptBudgetDiagnostics,
     exitCode: run.exitCode ?? null,
     signal: run.signal ?? null,
     cancelRequested: status === 'canceled',
     firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
   });
+  const deliverableSyntax = projectDeliverableSyntaxTelemetry(run);
   return buildSafeRunQualityProjectionV1({
     prefs: opts.prefs,
     messageOutput: messageContent,
@@ -1146,6 +1363,7 @@ export async function buildSafeRunQualityProjectionFromDaemon(
     ...(stderr ? { stderr } : {}),
     ...(stdout ? { stdout } : {}),
     diagnostics,
+    ...(deliverableSyntax ? { deliverableSyntax } : {}),
     tools: collectToolCalls(run.events, run.createdAt, run.updatedAt),
     attachmentManifest: manifests.attachmentManifest,
     artifactManifest: manifests.artifactManifest,
@@ -1236,6 +1454,7 @@ export async function reportRunCompletedFromDaemon(
       cancelOrigin: run.cancelOrigin ?? null,
       terminalTrigger: run.terminalTrigger ?? null,
       events: run.events,
+      admissionEvidence: runAdmissionEvidenceForRun(run),
     });
     const timings = summarizeRunTimingAnalytics({
       runCreatedAt: run.createdAt,
@@ -1262,6 +1481,7 @@ export async function reportRunCompletedFromDaemon(
     const artifacts = summarizeProducedFiles(traceObjectFilesRaw);
     const diagnostics = summarizeRunDiagnosticsForAnalytics({
       events: run.events,
+      promptBudgetDiagnostics: run.promptBudgetDiagnostics,
       exitCode: run.exitCode ?? null,
       signal: run.signal ?? null,
       cancelRequested: run.status === 'canceled',
@@ -1274,6 +1494,7 @@ export async function reportRunCompletedFromDaemon(
       attachmentsRaw,
       traceObjectFilesRaw,
     });
+    const deliverableSyntax = projectDeliverableSyntaxTelemetry(run);
     const objectManifestOptions = {
       installationId,
       projectId: run.projectId ?? '',
@@ -1343,8 +1564,15 @@ export async function reportRunCompletedFromDaemon(
       manifestCompleteness: finalManifests.completeness,
       traceObjectSummary,
       tools: collectToolCalls(run.events, startedAt, endedAt),
-      agentEvents: collectAgentEvents(run.events, startedAt, endedAt, run.agentId),
+      agentEvents: collectAgentEvents(
+        run.events,
+        startedAt,
+        endedAt,
+        run.agentId,
+        run.promptBudgetDiagnostics,
+      ),
       eventsSummary: summarizeEvents(run.events, durationMs),
+      ...(deliverableSyntax ? { deliverableSyntax } : {}),
       prefs,
       ...(turn ? { turn } : {}),
       runtime,
@@ -1362,26 +1590,21 @@ export async function reportRunCompletedFromDaemon(
     let uploadedManifests: TraceObjectUploadManifests | undefined;
     let finalObjectManifests = registrationManifests;
 
-    if (registrationManifests) {
-      // Authenticated runs register object authority through Vela's signed
-      // service path. Anonymous/direct runs retain the legacy relay boundary.
-      // The authority worker handles registration_only without writing a
-      // content-free Langfuse trace.
-      const registrationTelemetryConfig = finalTelemetryConfig?.kind === 'vela'
-        ? finalTelemetryConfig
-        : objectRegistrationTelemetryConfig();
-      if (registrationTelemetryConfig) {
-        await reportRunCompleted(
-          buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
-          {
-            config: registrationTelemetryConfig,
-            deliveryPurpose: 'object-registration',
-            ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
-          },
-        );
-        uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
-        finalObjectManifests = uploadedManifests ?? registrationManifests;
-      }
+    if (registrationManifests && finalTelemetryConfig?.kind === 'vela') {
+      // Only Vela's signed service path can establish object authority. An
+      // anonymous relay/direct client must not create a content-free Langfuse
+      // registration trace or obtain upload permission from self-reported
+      // object metadata.
+      await reportRunCompleted(
+        buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
+        {
+          config: finalTelemetryConfig,
+          deliveryPurpose: 'object-registration',
+          ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+        },
+      );
+      uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
+      finalObjectManifests = uploadedManifests ?? registrationManifests;
     }
 
     const finalManifests = mergeTraceSafeManifests(manifests, finalObjectManifests);

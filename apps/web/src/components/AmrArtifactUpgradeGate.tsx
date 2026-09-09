@@ -37,6 +37,14 @@ interface Props {
 interface RouteSurface {
   homeVisible: boolean;
   offer: AmrArtifactUpgradeHomeOffer | null;
+  plan: string | null;
+  planResolved: boolean;
+}
+
+interface PendingHomeOffer {
+  offer: AmrArtifactUpgradeHomeOffer;
+  plan: string | null;
+  planResolved: boolean;
 }
 
 interface PendingSendDecision {
@@ -87,7 +95,7 @@ export function AmrArtifactUpgradeGate({
   const [pendingRevision, setPendingRevision] = useState(0);
   const [dialogSessionKey, setDialogSessionKey] = useState<string | null>(null);
   const [pendingHomeOffer, setPendingHomeOffer] =
-    useState<AmrArtifactUpgradeHomeOffer | null>(null);
+    useState<PendingHomeOffer | null>(null);
   const openRef = useRef(false);
   const pendingSendRef = useRef<PendingSendDecision | null>(null);
   const eligibleSessionsRef = useRef<Set<string>>(new Set());
@@ -101,6 +109,8 @@ export function AmrArtifactUpgradeGate({
       activeConversationId,
       activeFileName,
     ),
+    plan,
+    planResolved,
   });
 
   useEffect(() => {
@@ -200,7 +210,11 @@ export function AmrArtifactUpgradeGate({
       && eligibleSessionsRef.current.has(previous.offer.sessionKey)
       && !homeOfferedSessionsRef.current.has(previous.offer.sessionKey)
     ) {
-      setPendingHomeOffer(previous.offer);
+      setPendingHomeOffer({
+        offer: previous.offer,
+        plan: previous.plan,
+        planResolved: previous.planResolved,
+      });
     }
     previousSurfaceRef.current = {
       homeVisible,
@@ -209,18 +223,34 @@ export function AmrArtifactUpgradeGate({
         activeConversationId,
         activeFileName,
       ),
+      plan,
+      planResolved,
     };
-  }, [activeConversationId, activeFileName, activeProjectId, homeVisible]);
+  }, [
+    activeConversationId,
+    activeFileName,
+    activeProjectId,
+    homeVisible,
+    plan,
+    planResolved,
+  ]);
 
   useEffect(() => {
-    if (!pendingHomeOffer || !planResolved) return;
-    if (cloudModelSelected && isFreePlanTier(plan) && !hasOpenModal()) {
-      homeOfferedSessionsRef.current.add(pendingHomeOffer.sessionKey);
-      promptedSessionsRef.current.add(pendingHomeOffer.sessionKey);
-      onHomeOfferChange?.(pendingHomeOffer);
+    if (!pendingHomeOffer) return;
+    if (
+      pendingHomeOffer.planResolved
+      && cloudModelSelected
+      && isFreePlanTier(pendingHomeOffer.plan)
+      && !hasOpenModal()
+    ) {
+      homeOfferedSessionsRef.current.add(pendingHomeOffer.offer.sessionKey);
+      promptedSessionsRef.current.add(pendingHomeOffer.offer.sessionKey);
+      onHomeOfferChange?.(pendingHomeOffer.offer);
+    } else {
+      onHomeOfferChange?.(null);
     }
     setPendingHomeOffer(null);
-  }, [cloudModelSelected, onHomeOfferChange, pendingHomeOffer, plan, planResolved]);
+  }, [cloudModelSelected, onHomeOfferChange, pendingHomeOffer]);
 
   useEffect(() => {
     if (cloudModelSelected && (!planResolved || isFreePlanTier(plan))) return;

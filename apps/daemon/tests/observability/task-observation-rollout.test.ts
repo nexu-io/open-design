@@ -260,6 +260,7 @@ describe('task observation rollout', () => {
   function service(input: {
     mode: 'off' | 'observe' | 'send';
     prefs?: { metrics: boolean; content: boolean; artifactManifest: boolean };
+    appVersionInfo?: { version: string; channel: string; packaged: boolean };
     readTelemetryError?: Error;
     env?: Record<string, string>;
     fetchImpl?: typeof fetch;
@@ -276,6 +277,7 @@ describe('task observation rollout', () => {
         return {
           prefs: input.prefs ?? { metrics: true, content: true, artifactManifest: false },
           installationId: 'installation-fixture',
+          ...(input.appVersionInfo ? { appVersionInfo: input.appVersionInfo } : {}),
         };
       },
       env: {
@@ -334,6 +336,46 @@ describe('task observation rollout', () => {
        WHERE task_execution_id = 'task-1'
     `).run();
   }
+
+  it('keeps the mapped run version when restart finalization replaces single-run telemetry', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    const startedVersion = {
+      version: '0.21.1',
+      channel: 'stable',
+      packaged: true,
+    };
+    const restartedVersion = {
+      version: '0.22.0',
+      channel: 'stable',
+      packaged: true,
+    };
+    const durableRun = {
+      ...syntheticRun(),
+      appVersionInfo: { ...startedVersion, platform: 'darwin', arch: 'arm64' },
+    };
+
+    await expect(service({
+      mode: 'send',
+      appVersionInfo: restartedVersion,
+      fetchImpl,
+      getRun: (runId) => runId === 'run-1' ? durableRun : null,
+    }).finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
+
+    const batch = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch as Array<{
+      type: string;
+      body: Record<string, unknown>;
+    }>;
+    const trace = batch.find((event) => event.type === 'trace-create');
+    expect(trace?.body).toMatchObject({
+      release: startedVersion.version,
+      version: startedVersion.version,
+      metadata: {
+        appVersion: startedVersion.version,
+        appChannel: startedVersion.channel,
+        packaged: startedVersion.packaged,
+      },
+    });
+  });
 
   it('defaults unset/auto to send, fails invalid explicit mode closed, and reuses shared context', () => {
     expect(readTaskObservationRolloutConfig({

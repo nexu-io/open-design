@@ -333,7 +333,7 @@ pnpm tools-dev run web
 
 `tools-dev`가 출력한 URL을 여세요. 명시적인 포트 플래그가 없으면 개발 포트는 동적으로 배정됩니다.
 
-Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요. 전체 빠른 시작, 환경 변수, Nix flake, 패키징 빌드 흐름 → [`QUICKSTART.ko.md`](QUICKSTART.ko.md).
+Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요. 전체 빠른 시작, 환경 변수, 패키징 빌드 흐름 → [`QUICKSTART.ko.md`](QUICKSTART.ko.md).
 
 ### 전체 워크플로 — 브리프에서 아티팩트까지
 

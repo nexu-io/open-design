@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { reconcileDurableRunTerminals } from '../../src/runtimes/run-terminal-reconciliation.js';
+import { createChatRunService } from '../../src/runtimes/runs.js';
 
 describe('durable run terminal reconciliation', () => {
   let tmpDir: string;
@@ -29,6 +30,178 @@ describe('durable run terminal reconciliation', () => {
     vi.restoreAllMocks();
     db.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('keeps the app version that started an interrupted run after a newer daemon restarts', async () => {
+    const startedWithVersion = {
+      version: '0.21.1',
+      channel: 'stable',
+      packaged: true,
+      platform: 'darwin',
+      arch: 'arm64',
+    };
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      getAppVersionInfo: () => startedWithVersion,
+      runsLogDir: tmpDir,
+    } as never);
+    const run = runs.create({
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm1',
+      agentId: 'claude',
+    });
+    runs.setAnalyticsRecovery(run, {
+      context: {
+        deviceId: 'device-1',
+        sessionId: 'session-1',
+        clientType: 'desktop',
+        locale: 'en',
+      },
+      properties: {
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        project_id: 'p1',
+        conversation_id: 'c1',
+        run_id: run.id,
+      },
+      insertId: 'run-created-version-a',
+    });
+    run.status = 'running';
+    runs.persistState(run);
+
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+      appVersionInfo: startedWithVersion,
+    });
+
+    const capture = vi.fn(async () => undefined);
+    const reportLangfuse = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    await reconcileDurableRunTerminals({
+      analytics: { capture },
+      appVersion: '0.22.0',
+      appVersionInfo: {
+        version: '0.22.0',
+        channel: 'stable',
+        packaged: true,
+        platform: 'darwin',
+        arch: 'arm64',
+      },
+      db,
+      reportLangfuse,
+      runsLogDir: tmpDir,
+    });
+
+    expect(capture).toHaveBeenCalledWith(expect.objectContaining({
+      eventName: 'run_finished',
+      appVersion: startedWithVersion.version,
+    }));
+    expect(reportLangfuse).toHaveBeenCalledWith(expect.objectContaining({
+      appVersion: startedWithVersion,
+    }));
+  });
+
+  it('uses the resolved current version when a legacy durable run has no version snapshot', async () => {
+    const runId = 'run-legacy-version';
+    const runDir = path.join(tmpDir, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm1',
+      agentId: 'claude',
+      status: 'running',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      analyticsRecovery: {
+        context: {},
+        properties: { run_id: runId },
+        insertId: 'run-created-legacy-version',
+      },
+    }));
+    const currentVersion = {
+      version: '0.22.0',
+      channel: 'stable',
+      packaged: true,
+      platform: 'darwin',
+      arch: 'arm64',
+    };
+    const capture = vi.fn(async () => undefined);
+    const reportLangfuse = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+
+    await reconcileDurableRunTerminals({
+      analytics: { capture },
+      appVersion: currentVersion.version,
+      appVersionInfo: currentVersion,
+      db,
+      reportLangfuse,
+      runsLogDir: tmpDir,
+    });
+
+    expect(capture).toHaveBeenCalledWith(expect.objectContaining({
+      appVersion: currentVersion.version,
+    }));
+    expect(reportLangfuse).toHaveBeenCalledWith(expect.objectContaining({
+      appVersion: currentVersion,
+    }));
+  });
+
+  it('uses explicit unknown or missing semantics when no real version can be resolved', async () => {
+    const runId = 'run-version-unknown';
+    const runDir = path.join(tmpDir, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm1',
+      agentId: 'claude',
+      status: 'running',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      analyticsRecovery: {
+        context: {},
+        properties: { run_id: runId },
+        insertId: 'run-created-version-unknown',
+      },
+    }));
+    const capture = vi.fn(async () => undefined);
+    const reportLangfuse = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+
+    await reconcileDurableRunTerminals({
+      analytics: { capture },
+      appVersion: '0.0.0',
+      appVersionInfo: {
+        version: '0.0.0',
+        channel: 'development',
+        packaged: false,
+        platform: 'darwin',
+        arch: 'arm64',
+      },
+      db,
+      reportLangfuse,
+      runsLogDir: tmpDir,
+    });
+
+    expect(capture).toHaveBeenCalledWith(expect.objectContaining({
+      appVersion: 'unknown',
+    }));
+    expect(reportLangfuse).toHaveBeenCalledWith(expect.objectContaining({
+      appVersion: null,
+    }));
   });
 
   it('fails an interrupted run, repairs its message, and emits missing terminal telemetry once', async () => {
@@ -71,6 +244,22 @@ describe('durable run terminal reconciliation', () => {
         insertId: 'run-created-1',
       },
     }));
+    fs.writeFileSync(path.join(runDir, 'events.jsonl'), `${JSON.stringify({
+      id: 1,
+      event: 'agent',
+      timestamp: 1_500,
+      data: {
+        type: 'diagnostic',
+        name: 'tool_execution_lifecycle',
+        schema: 'vela.tool_execution_lifecycle',
+        version: 1,
+        toolCallIdHash: 'acp_0123456789abcdef01234567',
+        trigger: 'abort',
+        terminal: 'interrupted',
+        events: [{ phase: 'kill_requested' }],
+        toolTerminal: { source: 'processor_cleanup', confirmed: false },
+      },
+    })}\n`);
     db.prepare(
       `INSERT INTO messages (id, run_id, run_status, events_json)
        VALUES (?, ?, 'running', '[]')`,
@@ -104,11 +293,29 @@ describe('durable run terminal reconciliation', () => {
         failure_category: 'process_exit',
         failure_detail: 'interrupted',
         failure_stage: 'finalize',
+        failure_mechanism: 'unknown',
+        failure_domain: 'cross_boundary',
+        evidence_level: 'lifecycle_signal',
+        repair_owner: 'shared_boundary',
+        admission_status: 'unknown',
+        admission_phase: 'unknown',
+        classifier_version: 'run-failure-v3',
         retryable: true,
         user_action: 'retry',
         terminal_trigger: 'daemon_restart',
         terminal_reconciled: true,
+        terminal_integrity: 'reconciled',
         terminal_recovery_reason: 'daemon_restart',
+        posthog_delivery_status: 'queued',
+        posthog_acknowledgement: 'local_buffer',
+        posthog_delivery_attempt_count: 1,
+        posthog_error_type: null,
+        mature_unfinished_state: 'unknown',
+        tool_execution_lifecycle_seen: true,
+        tool_execution_trigger: 'abort',
+        tool_terminal_source: 'processor_cleanup',
+        tool_kill_outcome: 'requested',
+        tool_execution_evidence_incomplete: true,
       }),
     }));
     expect(reportLangfuse).toHaveBeenCalledWith(expect.objectContaining({
@@ -134,6 +341,140 @@ describe('durable run terminal reconciliation', () => {
     expect(second.analyticsReplayed).toBe(0);
     expect(capture).toHaveBeenCalledTimes(1);
     expect(reportLangfuse).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a structured PostHog enqueue failure pending across reconciliation boots', async () => {
+    const runId = 'run-posthog-retry';
+    const runDir = path.join(tmpDir, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: null,
+      agentId: 'amr',
+      status: 'failed',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      errorCode: 'AGENT_EXIT_1',
+      analyticsRecovery: {
+        context: {},
+        properties: { run_id: runId },
+        insertId: 'run-created-posthog-retry',
+      },
+    }));
+    const capture = vi.fn(async () => ({
+      status: 'failed' as const,
+      acknowledgement: 'none' as const,
+      errorType: 'enqueue_failed' as const,
+    }));
+    const options = {
+      analytics: { capture },
+      appVersion: '0.15.1',
+      db,
+      reportLangfuse: vi.fn(async () => ({
+        langfuse_expected: false,
+        langfuse_delivery_status: 'not_expected' as const,
+      })),
+      runsLogDir: tmpDir,
+    };
+
+    const first = await reconcileDurableRunTerminals(options);
+    const second = await reconcileDurableRunTerminals(options);
+
+    expect(first.analyticsReplayed).toBe(0);
+    expect(second.analyticsReplayed).toBe(0);
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')))
+      .toMatchObject({
+        terminalLifecycle: {
+          posthogDelivery: {
+            status: 'failed',
+            acknowledgement: 'none',
+            attemptCount: 2,
+            errorType: 'enqueue_failed',
+          },
+          unfinishedState: 'terminal_persisted_posthog_failed',
+        },
+      });
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')))
+      .not.toHaveProperty('analyticsRecovery.completedAt');
+  });
+
+  it('treats a readable terminal journal as acknowledged persistence during replay', async () => {
+    const runId = 'run-readable-terminal-journal';
+    const runDir = path.join(tmpDir, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: null,
+      agentId: 'amr',
+      status: 'failed',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      errorCode: 'AGENT_EXIT_1',
+      analyticsRecovery: {
+        context: {},
+        properties: { run_id: runId },
+        insertId: 'run-readable-terminal-journal',
+      },
+      langfuseCompletedAt: 2_000,
+      terminalLifecycle: {
+        version: 1,
+        runAttempt: 0,
+        runtimeGenerationId: null,
+        terminationOrigin: 'unknown',
+        terminalIntegrity: 'canonical',
+        terminalPersistence: {
+          status: 'failed',
+          errorType: 'storage_full',
+        },
+        posthogDelivery: {
+          status: 'failed',
+          acknowledgement: 'none',
+          attemptCount: 0,
+          errorType: 'enqueue_failed',
+        },
+        unfinishedState: 'terminated_persistence_missing',
+        duplicateTerminalCount: 0,
+        lateTerminalCount: 0,
+      },
+    }));
+    const capture = vi.fn(async () => ({
+      status: 'queued' as const,
+      acknowledgement: 'local_buffer' as const,
+      errorType: null,
+    }));
+
+    await expect(reconcileDurableRunTerminals({
+      analytics: { capture },
+      appVersion: '0.15.1',
+      db,
+      reportLangfuse: vi.fn(),
+      runsLogDir: tmpDir,
+    })).resolves.toMatchObject({ analyticsReplayed: 1 });
+
+    expect(capture).toHaveBeenCalledWith(expect.objectContaining({
+      properties: expect.objectContaining({
+        terminal_persistence_status: 'acknowledged',
+        terminal_persistence_error_type: null,
+        mature_unfinished_state: 'unknown',
+      }),
+    }));
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')))
+      .toMatchObject({
+        terminalLifecycle: {
+          terminalPersistence: {
+            status: 'acknowledged',
+            errorType: null,
+          },
+          unfinishedState: 'unknown',
+        },
+      });
   });
 
   it('repairs legacy queued messages even when no state journal exists', async () => {
@@ -185,6 +526,7 @@ describe('durable run terminal reconciliation', () => {
           project_id: 'p1',
           conversation_id: 'c1',
           run_id: runId,
+          terminal_integrity: 'overwritten',
         },
         insertId: 'run-created-analytics-incomplete',
       },
@@ -228,6 +570,7 @@ describe('durable run terminal reconciliation', () => {
         retryable: false,
         user_action: 'login',
         terminal_reconciled: true,
+        terminal_integrity: 'overwritten',
         terminal_recovery_reason: 'analytics_incomplete',
       }),
     }));

@@ -2489,11 +2489,17 @@ export function deckPreviewSrcDoc(html: string): string {
       display: block !important;
       scroll-snap-type: none !important;
     }
+    /* Scripts normally fit fixed-stage decks at runtime. Static covers remove
+       those scripts, so normalize both named wrappers as well as the direct
+       slide parent instead of letting an outer transform move slide 1 away. */
+    .deck-shell,
+    .deck-stage,
     :where(body *):has(> [data-od-cover-slide]) {
       position: absolute !important;
       inset: 0 !important;
       width: ${DECK_PREVIEW_WIDTH}px !important;
       height: ${DECK_PREVIEW_HEIGHT}px !important;
+      display: block !important;
       margin: 0 !important;
       overflow: hidden !important;
       transform: none !important;
@@ -2565,41 +2571,32 @@ export function deckPreviewSrcDoc(html: string): string {
 }
 
 function markFirstDeckPage(html: string): string {
-  const tags = [...html.matchAll(/<[a-z][\w:-]*\b[^>]*>/giu)];
-  const classSlide = tags.find((match) => {
-    const className = match[0].match(/\bclass\s*=\s*(["'])(.*?)\1/iu)?.[2];
-    return className?.split(/\s+/u).includes('slide') === true;
-  });
-  const page = classSlide
-    ?? tags.find((match) => /\sdata-slide(?:\s|=|>)/iu.test(match[0]))
-    ?? tags.find((match) => /\sdata-screen-label(?:\s|=|>)/iu.test(match[0]));
-  if (!page || page.index === undefined) return html;
-  const tag = page[0];
-  const classAttribute = tag.match(/\bclass\s*=\s*(["'])(.*?)\1/iu);
-  const activeClasses = ['active', 'is-active'];
-  let activated = tag;
-  if (classAttribute) {
-    const quote = classAttribute[1];
-    const classes = classAttribute[2]?.split(/\s+/u).filter(Boolean) ?? [];
-    for (const activeClass of activeClasses) {
-      if (!classes.includes(activeClass)) classes.push(activeClass);
-    }
-    activated = activated.replace(
-      classAttribute[0],
-      `class=${quote}${classes.join(' ')}${quote}`,
-    );
-  } else {
-    activated = activated.replace(/\s*\/?\s*>$/u, (ending) => (
-      ` class="${activeClasses.join(' ')}"${ending}`
-    ));
+  // The cover document is already inert after script removal. Parse it as HTML
+  // so examples inside comments and raw-text elements cannot impersonate a slide.
+  if (typeof DOMParser === 'undefined') return html;
+  let parsed: Document;
+  try {
+    parsed = new DOMParser().parseFromString(html, 'text/html');
+  } catch {
+    return html;
   }
-  activated = activated
-    .replace(/\saria-hidden\s*=\s*(["'])true\1/iu, ' aria-hidden="false"')
-    .replace(/\shidden(?:\s*=\s*(["'])?hidden\1?)?(?=\s|\/?\s*>)/iu, '');
-  const marked = activated.endsWith('/>')
-    ? `${activated.slice(0, -2)} data-od-cover-slide />`
-    : `${activated.slice(0, -1)} data-od-cover-slide>`;
-  return `${html.slice(0, page.index)}${marked}${html.slice(page.index + tag.length)}`;
+  const page = parsed.querySelector('.slide')
+    ?? parsed.querySelector('[data-slide]')
+    ?? parsed.querySelector('[data-screen-label]');
+  if (!page) return html;
+  const activeClasses = ['active', 'is-active'];
+  for (const activeClass of activeClasses) {
+    page.classList.add(activeClass);
+  }
+  if (page.getAttribute('aria-hidden')?.toLowerCase() === 'true') {
+    page.setAttribute('aria-hidden', 'false');
+  }
+  page.removeAttribute('hidden');
+  page.setAttribute('data-od-cover-slide', '');
+  const doctype = parsed.doctype && typeof XMLSerializer !== 'undefined'
+    ? new XMLSerializer().serializeToString(parsed.doctype)
+    : '';
+  return `${doctype}${parsed.documentElement.outerHTML}`;
 }
 
 function injectBefore(source: string, marker: string, addition: string): string {

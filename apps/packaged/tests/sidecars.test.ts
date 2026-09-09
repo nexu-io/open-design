@@ -15,23 +15,14 @@
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
-import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer, type Socket } from 'node:net';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createProcessStampArgs, isProcessAlive, stopProcesses, waitForProcessExit } from '@open-design/platform';
-import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
-import {
-  APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
-  SIDECAR_ENV,
-  SIDECAR_MODES,
-  SIDECAR_SOURCES,
-} from '@open-design/sidecar-proto';
+import type { SidecarStamp } from '@open-design/sidecar';
+import { APP_KEYS } from '@open-design/sidecar-proto';
 
 import {
   buildPackagedDaemonSpawnEnv,
@@ -39,12 +30,10 @@ import {
   createPackagedSidecarSpawnOptions,
   createRestartPolicy,
   createWebSidecarSupervisor,
-  DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS,
-  MANAGED_CHILD_EXIT_GRACE_MS,
   openLog,
+  packagedChildStamp,
   registerPackagedWebUrl,
-  resolveManagedChildExitGraceMs,
-  retireExistingSidecarEndpoint,
+  retireExistingSidecar,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
@@ -57,45 +46,66 @@ function slashPath(value: string): string {
   return value.replaceAll('\\', '/');
 }
 
-async function spawnStampedHungWebOwner(
-  socketPath: string,
-  ipcPath = socketPath,
-): Promise<{ child: ChildProcess; pid: number }> {
-  const stamp = {
-    app: APP_KEYS.WEB,
-    ipc: ipcPath,
-    mode: SIDECAR_MODES.RUNTIME,
-    namespace: 'packaged-stale-web-test',
-    source: SIDECAR_SOURCES.PACKAGED,
-  };
-  const child = spawn(
-    process.execPath,
-    [
-      '-e',
-      "process.on('SIGTERM',()=>{});require('net').createServer(s=>s.resume()).listen(process.env.OD_TEST_SOCK,()=>process.stdout.write('ready\\n'));setInterval(()=>{},1000)",
-      '--',
-      ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
-    ],
-    {
-      env: { ...process.env, OD_TEST_SOCK: socketPath },
-      stdio: ['ignore', 'pipe', 'pipe'],
+function testStamp(app: "daemon" | "web" = APP_KEYS.DAEMON): SidecarStamp {
+  return { app, channel: "stable", mode: "runtime", namespace: "test", source: "packaged" };
+}
+
+describe('packaged sidecar shutdown', () => {
+  it('rejects surviving generation processes and always closes the log handle', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-sidecar-close-'));
+    const logPath = join(root, 'latest.log');
+    const closeLog = vi.fn(async () => undefined);
+    const stop = vi.fn(async () => ({
+      alreadyStopped: false,
+      forcedPids: [42],
+      gracefulAccepted: false,
+      matchedPids: [42],
+      remainingPids: [42],
+      stoppedPids: [],
+    }));
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null,
+      pid: 42,
+      signalCode: null,
+    });
+
+    try {
+      await expect(closeManagedChild({
+        app: APP_KEYS.DAEMON,
+        child,
+        generation: { stop },
+        logHandle: { close: closeLog },
+        logPath,
+        stamp: testStamp(),
+      } as unknown as Parameters<typeof closeManagedChild>[0])).rejects.toThrow(
+        'failed to stop packaged daemon sidecar processes: 42',
+      );
+      expect(closeLog).toHaveBeenCalledOnce();
+      expect(readFileSync(logPath, 'utf8')).toContain('shutdown requested');
+      expect(readFileSync(logPath, 'utf8')).not.toContain('exited app=daemon');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('packaged child stamps', () => {
+  it.each(['runtime', 'headless'] as const)(
+    'propagates the owning %s mode to daemon and web children',
+    (mode) => {
+      const runtime = {
+        app: APP_KEYS.DESKTOP,
+        base: '/runtime',
+        mode,
+        namespace: 'test',
+        source: 'packaged',
+      } as const;
+
+      expect(packagedChildStamp(APP_KEYS.DAEMON, 'stable', runtime).mode).toBe(mode);
+      expect(packagedChildStamp(APP_KEYS.WEB, 'stable', runtime).mode).toBe(mode);
     },
   );
-  const pid = child.pid;
-  if (pid == null) throw new Error('test child did not start');
-  await new Promise<void>((resolve, reject) => {
-    const fail = (error: Error): void => {
-      child.kill('SIGKILL');
-      reject(error);
-    };
-    child.once('error', fail);
-    child.once('exit', (code, signal) => {
-      fail(new Error(`stamped hung web owner exited before ready code=${code} signal=${signal}`));
-    });
-    child.stdout?.once('data', () => resolve());
-  });
-  return { child, pid };
-}
+});
 
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the 35-second baseline budget on platforms without a known slow-cold-start class', () => {
@@ -165,47 +175,93 @@ describe('resolveDaemonStatusTimeoutMs', () => {
 
 describe('packaged web URL registration', () => {
   it('registers the current dynamic web URL with the daemon sidecar and supports a later port', async () => {
-    const namespace = `web-url-${process.pid}-${Date.now()}`;
-    const daemonIpc = resolveAppIpcPath({
-      app: APP_KEYS.DAEMON,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace,
-    });
     const received: unknown[] = [];
-    const server = await createJsonIpcServer({
-      socketPath: daemonIpc,
-      handler: async (message) => {
-        received.push(message);
-        return { accepted: true };
-      },
-    });
+    const invoke = async (...args: unknown[]) => {
+      received.push(args);
+      return { accepted: true };
+    };
+    const daemonStamp = testStamp();
+    await registerPackagedWebUrl(daemonStamp, 'http://127.0.0.1:64248', invoke as never);
+    await registerPackagedWebUrl(daemonStamp, 'http://127.0.0.1:53421', invoke as never);
+    expect(received).toEqual([
+      [daemonStamp, 'register-web-url', { url: 'http://127.0.0.1:64248' }, { timeoutMs: 1200 }],
+      [daemonStamp, 'register-web-url', { url: 'http://127.0.0.1:53421' }, { timeoutMs: 1200 }],
+    ]);
+  });
+});
 
+describe('packaged stale sidecar retirement', () => {
+  const stopped = (overrides: Partial<{
+    matchedPids: number[];
+    remainingPids: number[];
+    staleEndpointRemoved: boolean;
+  }> = {}) => ({
+    alreadyStopped: false,
+    forcedPids: [],
+    gracefulAccepted: false,
+    matchedPids: overrides.matchedPids ?? [4321],
+    remainingPids: overrides.remainingPids ?? [],
+    staleEndpointRemoved: overrides.staleEndpointRemoved ?? false,
+    stoppedPids: overrides.matchedPids ?? [4321],
+  });
+
+  async function withLog(run: (logPath: string) => Promise<void>): Promise<void> {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-retire-'));
     try {
-      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:64248');
-      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:53421');
-      expect(received).toEqual([
-        {
-          input: { url: 'http://127.0.0.1:64248' },
-          type: 'register-web-url',
-        },
-        {
-          input: { url: 'http://127.0.0.1:53421' },
-          type: 'register-web-url',
-        },
-      ]);
+      await run(join(root, 'latest.log'));
     } finally {
-      await server.close();
+      rmSync(root, { recursive: true, force: true });
     }
+  }
+
+  it('delegates a clean first boot to the sidecar lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => ({ ...stopped({ matchedPids: [] }), alreadyStopped: true }));
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retires an unresponsive daemon through the sidecar lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retires an unresponsive web generation through the same lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('allows recovery when the lifecycle atomic removes only a stale endpoint', async () => {
+    await withLog(async (logPath) => {
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop: async () => stopped({ matchedPids: [], staleEndpointRemoved: true }),
+      })).resolves.toBeUndefined();
+    });
+  });
+
+  it('does not relaunch after a healthy generation fails to stop', async () => {
+    await withLog(async (logPath) => {
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop: async () => stopped({ remainingPids: [4321] }),
+      })).rejects.toThrow('generation remains: 4321');
+    });
   });
 });
 
 describe('packaged child Vite+ environment forwarding', () => {
-  it('pins packaged sidecars to the packaged desktop parent process', () => {
-    const env = resolvePackagedChildBaseEnv({}, false, {}, false);
-
-    expect(env[SIDECAR_ENV.TOOLS_DEV_PARENT_PID]).toBe(String(process.pid));
-  });
-
   it('forwards CODEX_HOME so isolated and managed Codex installs never fall back to another user config', () => {
     const env = resolvePackagedChildBaseEnv({
       CODEX_HOME: '/tmp/isolated-codex-home',
@@ -378,258 +434,6 @@ describe('packaged child Vite+ environment forwarding', () => {
   });
 });
 
-describe.runIf(process.platform !== 'win32')('packaged stale web endpoint recovery', () => {
-  it('unlinks a web socket whose owner accepts connections but never answers IPC', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-'));
-    const socketPath = join(root, 'web.sock');
-    const logPath = join(root, 'web.log');
-    const sockets = new Set<Socket>();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const server = createServer((socket) => {
-      sockets.add(socket);
-      socket.once('close', () => sockets.delete(socket));
-      socket.resume();
-    });
-    await new Promise<void>((resolveListen, rejectListen) => {
-      server.once('error', rejectListen);
-      server.listen(socketPath, () => {
-        server.off('error', rejectListen);
-        resolveListen();
-      });
-    });
-
-    try {
-      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB);
-      expect(existsSync(socketPath)).toBe(false);
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('unresponsive web sidecar endpoint removed before relaunch'),
-      );
-    } finally {
-      warn.mockRestore();
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-      rmSync(root, { force: true, recursive: true });
-    }
-  });
-
-  it('stops the stamped web owner before unlinking its unresponsive socket', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-owner-'));
-    const socketPath = join(root, 'web.sock');
-    const logPath = join(root, 'web.log');
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { child, pid } = await spawnStampedHungWebOwner(socketPath);
-
-    try {
-      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB);
-      expect(isProcessAlive(pid)).toBe(false);
-      expect(existsSync(socketPath)).toBe(false);
-      expect(readFileSync(logPath, 'utf8')).toContain(
-        'stopping unresponsive stamped web sidecar before socket takeover',
-      );
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('unresponsive web sidecar endpoint removed before relaunch'),
-      );
-    } finally {
-      warn.mockRestore();
-      child.kill('SIGKILL');
-      await waitForProcessExit(pid, 1_000);
-      rmSync(root, { force: true, recursive: true });
-    }
-  }, 10_000);
-
-  it('does not unlink when the stamped web owner survives stopProcesses', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-remaining-'));
-    const socketPath = join(root, 'web.sock');
-    const logPath = join(root, 'web.log');
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { child, pid } = await spawnStampedHungWebOwner(socketPath);
-    const stopProcesses = vi.fn(async () => ({
-      alreadyStopped: false,
-      forcedPids: [],
-      matchedPids: [pid],
-      remainingPids: [pid],
-      stoppedPids: [],
-    }));
-
-    try {
-      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB, { stopProcesses });
-      expect(isProcessAlive(pid)).toBe(true);
-      expect(existsSync(socketPath)).toBe(true);
-      expect(readFileSync(logPath, 'utf8')).toContain(
-        'unresponsive stamped web sidecar still running after stop',
-      );
-      expect(warn).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-      child.kill('SIGKILL');
-      await waitForProcessExit(pid, 1_000);
-      rmSync(root, { force: true, recursive: true });
-    }
-  }, 10_000);
-
-  it('does not unlink when process discovery returns no snapshots', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-empty-list-'));
-    const socketPath = join(root, 'web.sock');
-    const logPath = join(root, 'web.log');
-    const sockets = new Set<Socket>();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const server = createServer((socket) => {
-      sockets.add(socket);
-      socket.once('close', () => sockets.delete(socket));
-      socket.resume();
-    });
-    await new Promise<void>((resolveListen, rejectListen) => {
-      server.once('error', rejectListen);
-      server.listen(socketPath, () => {
-        server.off('error', rejectListen);
-        resolveListen();
-      });
-    });
-    const listProcessSnapshots = vi.fn(async () => []);
-
-    try {
-      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB, { listProcessSnapshots });
-      expect(existsSync(socketPath)).toBe(true);
-      expect(readFileSync(logPath, 'utf8')).toContain(
-        'process discovery failed before web socket takeover',
-      );
-      expect(warn).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-      rmSync(root, { force: true, recursive: true });
-    }
-  });
-
-  it('does not unlink when process discovery throws', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-list-throw-'));
-    const socketPath = join(root, 'web.sock');
-    const logPath = join(root, 'web.log');
-    const sockets = new Set<Socket>();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const server = createServer((socket) => {
-      sockets.add(socket);
-      socket.once('close', () => sockets.delete(socket));
-      socket.resume();
-    });
-    await new Promise<void>((resolveListen, rejectListen) => {
-      server.once('error', rejectListen);
-      server.listen(socketPath, () => {
-        server.off('error', rejectListen);
-        resolveListen();
-      });
-    });
-    const listProcessSnapshots = vi.fn(async () => {
-      throw new Error('ps-failed');
-    });
-
-    try {
-      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB, { listProcessSnapshots });
-      expect(existsSync(socketPath)).toBe(true);
-      expect(readFileSync(logPath, 'utf8')).toContain(
-        'failed to enumerate processes before web socket takeover',
-      );
-      expect(warn).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-      rmSync(root, { force: true, recursive: true });
-    }
-  });
-
-  it('does not unlink when stopping the stamped web owner throws', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-stop-throw-'));
-    const socketPath = join(root, 'web.sock');
-    const logPath = join(root, 'web.log');
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { child, pid } = await spawnStampedHungWebOwner(socketPath);
-    const stopProcesses = vi.fn(async () => {
-      throw new Error('stop-failed');
-    });
-
-    try {
-      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB, { stopProcesses });
-      expect(isProcessAlive(pid)).toBe(true);
-      expect(existsSync(socketPath)).toBe(true);
-      expect(readFileSync(logPath, 'utf8')).toContain(
-        'failed to stop unresponsive stamped web sidecar',
-      );
-      expect(warn).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-      child.kill('SIGKILL');
-      await waitForProcessExit(pid, 1_000);
-      rmSync(root, { force: true, recursive: true });
-    }
-  }, 10_000);
-
-  it('does not stop a stamped web owner of a different ipc path', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-other-'));
-    const ownerSocketPath = join(root, 'owner.sock');
-    const targetSocketPath = join(root, 'web.sock');
-    const logPath = join(root, 'web.log');
-    const sockets = new Set<Socket>();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { child, pid } = await spawnStampedHungWebOwner(ownerSocketPath);
-    const server = createServer((socket) => {
-      sockets.add(socket);
-      socket.once('close', () => sockets.delete(socket));
-      socket.resume();
-    });
-    await new Promise<void>((resolveListen, rejectListen) => {
-      server.once('error', rejectListen);
-      server.listen(targetSocketPath, () => {
-        server.off('error', rejectListen);
-        resolveListen();
-      });
-    });
-
-    try {
-      await retireExistingSidecarEndpoint(targetSocketPath, logPath, APP_KEYS.WEB);
-      expect(isProcessAlive(pid)).toBe(true);
-      expect(existsSync(ownerSocketPath)).toBe(true);
-      expect(existsSync(targetSocketPath)).toBe(false);
-    } finally {
-      warn.mockRestore();
-      child.kill('SIGKILL');
-      await waitForProcessExit(pid, 1_000);
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-      rmSync(root, { force: true, recursive: true });
-    }
-  }, 10_000);
-
-  it('does not unlink an unresponsive daemon socket', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-daemon-'));
-    const socketPath = join(root, 'daemon.sock');
-    const logPath = join(root, 'daemon.log');
-    const sockets = new Set<Socket>();
-    const server = createServer((socket) => {
-      sockets.add(socket);
-      socket.once('close', () => sockets.delete(socket));
-      socket.resume();
-    });
-    await new Promise<void>((resolveListen, rejectListen) => {
-      server.once('error', rejectListen);
-      server.listen(socketPath, () => {
-        server.off('error', rejectListen);
-        resolveListen();
-      });
-    });
-
-    try {
-      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.DAEMON);
-      expect(existsSync(socketPath)).toBe(true);
-    } finally {
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-      rmSync(root, { force: true, recursive: true });
-    }
-  });
-});
-
 describe('resolvePackagedElectronNodeCommand', () => {
   it('uses the hidden Electron helper as the macOS Electron-as-Node command when available', async () => {
     const root = mkdtempSync(join(tmpdir(), 'od-packaged-electron-helper-'));
@@ -719,12 +523,10 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     return {
       cacheRoot: '/tmp/od-pkg/cache',
       dataRoot: '/tmp/od-pkg/data',
-      desktopIdentityPath: '/tmp/od-pkg/runtime/desktop-root.json',
       desktopLogPath: '/tmp/od-pkg/logs/desktop/latest.log',
       desktopLogsRoot: '/tmp/od-pkg/logs/desktop',
       electronSessionDataRoot: '/tmp/od-pkg/user-data/session',
       electronUserDataRoot: '/tmp/od-pkg/user-data',
-      headlessIdentityPath: '/tmp/od-pkg/runtime/headless-root.json',
       installationRoot: '/tmp/od-pkg/..',
       installerObservationRoot: '/tmp/od-pkg/data/observations/installer',
       logsRoot: '/tmp/od-pkg/logs',
@@ -732,7 +534,6 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       resourceRoot: '/tmp/od-pkg/resources',
       runtimeRoot: '/tmp/od-pkg/runtime',
       updateRoot: '/tmp/od-pkg/updates',
-      webIdentityPath: '/tmp/od-pkg/runtime/web-root.json',
     };
   }
 
@@ -1089,7 +890,7 @@ describe('waitForStatus child-exit fast-fail', () => {
 
     const startedAt = Date.now();
     const promise = waitForStatus<{ url: string | null }>(
-      ipcPath,
+      { label: 'daemon', read: async () => { throw new Error(`missing ${ipcPath}`); } },
       (status) => status.url != null,
       30 * 60 * 1000,
       { child, logPath },
@@ -1132,7 +933,7 @@ describe('waitForStatus child-exit fast-fail', () => {
     let captured: unknown;
     try {
       await waitForStatus<{ url: string | null }>(
-        '/tmp/od-test-no-such-ipc-pre-' + Date.now(),
+        { label: 'daemon', read: async () => { throw new Error('missing'); } },
         (status) => status.url != null,
         30 * 60 * 1000,
         { child, logPath: '/tmp/od-test-daemon.log' },
@@ -1148,42 +949,18 @@ describe('waitForStatus child-exit fast-fail', () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 
-  it('does not accept ready status from a stale IPC endpoint owned by a different pid', async () => {
+  it('does not interpret a business status pid as the generation root pid', async () => {
     const child = fakeChild();
     child.pid = 5678;
-    const ipcPath = resolveAppIpcPath({
-      app: APP_KEYS.WEB,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace: `stale-ipc-${process.pid}-${Date.now()}`,
-    });
-    const server = await createJsonIpcServer({
-      socketPath: ipcPath,
-      handler: async () => ({
-        pid: 1234,
-        state: 'running',
-        updatedAt: new Date().toISOString(),
-        url: 'http://127.0.0.1:1234',
-      }),
-    });
-
-    try {
-      let captured: unknown;
-      try {
-        await waitForStatus<{ pid?: number | null; url: string | null }>(
-          ipcPath,
-          (status) => status.url != null,
-          250,
-          { child, logPath: join(tmpdir(), 'od-test-web.log') },
-        );
-      } catch (err) {
-        captured = err;
-      }
-
-      expect(captured).toBeInstanceOf(Error);
-      expect((captured as Error).message).toContain('sidecar status pid 1234 did not match spawned pid 5678');
-    } finally {
-      await server.close();
-    }
+    await expect(waitForStatus<{ pid: number; url: string | null }>(
+      {
+        label: 'web',
+        read: async () => ({ pid: 1234, url: 'http://127.0.0.1:1234' }),
+      },
+      (status) => status.url != null,
+      250,
+      { child, logPath: join(tmpdir(), 'od-test-web.log') },
+    )).resolves.toEqual({ pid: 1234, url: 'http://127.0.0.1:1234' });
   });
 });
 
@@ -1468,156 +1245,3 @@ describe('packaged sidecar log rotation', () => {
     }
   });
 });
-
-describe('packaged managed-child shutdown grace', () => {
-  it('keeps the ordinary 5s grace unless shutdown is deferred', () => {
-    expect(resolveManagedChildExitGraceMs(undefined)).toBe(MANAGED_CHILD_EXIT_GRACE_MS);
-    expect(resolveManagedChildExitGraceMs({ accepted: true })).toBe(MANAGED_CHILD_EXIT_GRACE_MS);
-    expect(resolveManagedChildExitGraceMs({ accepted: true, deferred: false })).toBe(
-      MANAGED_CHILD_EXIT_GRACE_MS,
-    );
-    expect(resolveManagedChildExitGraceMs({ accepted: true, deferred: true })).toBe(
-      DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS,
-    );
-  });
-});
-
-describe.runIf(process.platform !== 'win32')(
-  'packaged deferred shutdown vs stopProcesses SIGKILL',
-  () => {
-    const journalNames = ['handoff.json', 'attempts.json', 'runtime.json'] as const;
-
-    async function spawnSlowJournalChild(journalDir: string, writeDelayMs: number): Promise<{
-      child: ChildProcess;
-      pid: number;
-    }> {
-      mkdirSync(journalDir, { recursive: true });
-      const child = spawn(
-        process.execPath,
-        [
-          '-e',
-          [
-            "process.on('SIGTERM',()=>{});",
-            "const fs=require('fs');",
-            "const path=require('path');",
-            "const dir=process.env.OD_TEST_JOURNAL_DIR;",
-            "const delay=Number(process.env.OD_TEST_WRITE_DELAY_MS);",
-            "const files=['handoff.json','attempts.json','runtime.json'];",
-            '(async()=>{',
-            '  for (const file of files) {',
-            '    await new Promise((resolve)=>setTimeout(resolve, delay));',
-            "    fs.writeFileSync(path.join(dir, file), JSON.stringify({ committed: file }) + '\\n');",
-            '  }',
-            '})();',
-            'setInterval(()=>{}, 1000);',
-          ].join(''),
-        ],
-        {
-          env: {
-            ...process.env,
-            OD_TEST_JOURNAL_DIR: journalDir,
-            OD_TEST_WRITE_DELAY_MS: String(writeDelayMs),
-          },
-          stdio: 'ignore',
-        },
-      );
-      const pid = child.pid;
-      if (pid == null) {
-        child.kill('SIGKILL');
-        throw new Error('slow journal child did not start');
-      }
-      return { child, pid };
-    }
-
-    function committedJournalCount(journalDir: string): number {
-      return journalNames.filter((name) => existsSync(join(journalDir, name))).length;
-    }
-
-    it('lets real stopProcesses SIGKILL truncate a non-deferred journal', async () => {
-      const root = mkdtempSync(join(tmpdir(), 'od-packaged-sigkill-trunc-'));
-      const ipcPath = join(root, 'daemon.sock');
-      const logPath = join(root, 'daemon.log');
-      const journalDir = join(root, 'journal');
-      const server = await createJsonIpcServer({
-        socketPath: ipcPath,
-        handler: async () => ({ accepted: true }),
-      });
-      const { child, pid } = await spawnSlowJournalChild(journalDir, 200);
-      const logHandle = await openLog(logPath);
-      let stopResult: Awaited<ReturnType<typeof stopProcesses>> | undefined;
-
-      try {
-        await closeManagedChild(
-          {
-            app: APP_KEYS.DAEMON,
-            child,
-            ipcPath,
-            logHandle,
-            logPath,
-          },
-          {
-            exitGraceMs: 0,
-            stopOptions: { killGraceMs: 1_000, termGraceMs: 0 },
-            stopProcesses: async (pids, options) => {
-              stopResult = await stopProcesses(pids, options);
-              return stopResult;
-            },
-          },
-        );
-
-        expect(committedJournalCount(journalDir)).toBeLessThan(journalNames.length);
-        expect(stopResult?.forcedPids).toContain(pid);
-        expect(isProcessAlive(pid)).toBe(false);
-      } finally {
-        child.kill('SIGKILL');
-        await waitForProcessExit(pid, 1_000);
-        await server.close();
-        rmSync(root, { recursive: true, force: true });
-      }
-    }, 10_000);
-
-    it('commits all three journal files before deferred stopProcesses SIGKILL', async () => {
-      const root = mkdtempSync(join(tmpdir(), 'od-packaged-sigkill-hold-'));
-      const ipcPath = join(root, 'daemon.sock');
-      const logPath = join(root, 'daemon.log');
-      const journalDir = join(root, 'journal');
-      const server = await createJsonIpcServer({
-        socketPath: ipcPath,
-        handler: async () => ({ accepted: true, deferred: true }),
-      });
-      const { child, pid } = await spawnSlowJournalChild(journalDir, 100);
-      const logHandle = await openLog(logPath);
-      let stopResult: Awaited<ReturnType<typeof stopProcesses>> | undefined;
-
-      try {
-        await closeManagedChild(
-          {
-            app: APP_KEYS.DAEMON,
-            child,
-            ipcPath,
-            logHandle,
-            logPath,
-          },
-          {
-            deferredExitGraceMs: 1_500,
-            exitGraceMs: 0,
-            stopOptions: { killGraceMs: 1_000, termGraceMs: 0 },
-            stopProcesses: async (pids, options) => {
-              stopResult = await stopProcesses(pids, options);
-              return stopResult;
-            },
-          },
-        );
-
-        expect(committedJournalCount(journalDir)).toBe(journalNames.length);
-        expect(stopResult?.forcedPids).toContain(pid);
-        expect(isProcessAlive(pid)).toBe(false);
-      } finally {
-        child.kill('SIGKILL');
-        await waitForProcessExit(pid, 1_000);
-        await server.close();
-        rmSync(root, { recursive: true, force: true });
-      }
-    }, 10_000);
-  },
-);

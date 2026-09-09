@@ -38,35 +38,8 @@ interface VelaWalletBalanceResponse {
   updatedAt?: unknown;
 }
 
-interface VelaCodingPlanModelsResponse {
-  membershipTier?: unknown;
-  models?: unknown;
-}
-
 function isValidUsdBalance(value: unknown): value is string {
   return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value);
-}
-
-function codingPlanModelsFromResponse(
-  response: Response | null,
-): Promise<string[] | null> {
-  if (!response?.ok) return Promise.resolve(null);
-  return response
-    .json()
-    .then((value: unknown) => {
-      const body = value && typeof value === 'object'
-        ? value as VelaCodingPlanModelsResponse
-        : {};
-      if (
-        typeof body.membershipTier !== 'string' ||
-        !Array.isArray(body.models) ||
-        body.models.some((model) => typeof model !== 'string' || !model.trim())
-      ) {
-        return null;
-      }
-      return [...new Set(body.models.map((model) => model.trim()))];
-    })
-    .catch(() => null);
 }
 
 function publicUser(user: VelaUser | null): AmrWalletSnapshot['user'] {
@@ -91,7 +64,6 @@ function unavailableSnapshot(input: {
     profile: input.profile,
     user: input.user,
     balanceUsd: null,
-    codingPlanModels: null,
     updatedAt: null,
     fetchedAt: input.fetchedAt,
     stale: false,
@@ -163,16 +135,6 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
     const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
     try {
       const url = new URL('/api/v1/wallet/balance', input.apiUrl || DEFAULT_AMR_API_URL);
-      const codingPlanUrl = new URL(
-        '/api/v1/billing/coding-plan-models',
-        input.apiUrl || DEFAULT_AMR_API_URL,
-      );
-      const codingPlanRequest = fetchImpl(codingPlanUrl, {
-        headers: {
-          authorization: `Bearer ${input.controlKey}`,
-        },
-        signal: controller.signal,
-      }).catch(() => null);
       const response = await fetchImpl(url, {
         headers: {
           authorization: `Bearer ${input.controlKey}`,
@@ -230,15 +192,11 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
         });
       }
       const balanceUsd = body.balanceUsd;
-      const codingPlanModels = await codingPlanModelsFromResponse(
-        await codingPlanRequest,
-      );
       const snapshot: AmrWalletSnapshot = {
         status: 'available',
         profile: input.profile,
         user: input.user,
         balanceUsd,
-        codingPlanModels,
         updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : null,
         fetchedAt,
         stale: false,

@@ -1,11 +1,11 @@
 import type { Server } from 'node:http';
 import { execFile } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppliedStrategyBindingV2,
   OdNextRuntimeCapabilitySnapshotV1,
@@ -34,7 +34,11 @@ vi.mock('node:crypto', async (importOriginal) => {
 
 import { closeDatabase, openDatabase } from '../src/db.js';
 import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
-import { resolvePluginFolder, upsertInstalledPlugin } from '../src/plugins/registry.js';
+import {
+  getInstalledPlugin,
+  resolvePluginFolder,
+  upsertInstalledPlugin,
+} from '../src/plugins/registry.js';
 import { createBundledStrategyBindingV2 } from '../src/plugins/strategy-package.js';
 import { startServer, type StartServerOptions } from '../src/server.js';
 import {
@@ -43,10 +47,6 @@ import {
 } from '../src/strategies/task-store.js';
 import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
 import { prepareStrategyRequest } from '../src/strategies/od-next/coordinator.js';
-import {
-  clearOdNextRolloutStop,
-  latchOdNextRolloutStop,
-} from '../src/strategies/od-next/rollout.js';
 import {
   hashOdNextRuntimeCapabilitySnapshotV1,
   resolveBundledOdNextRuntimeCapability,
@@ -87,6 +87,13 @@ const THREAD_ID = '019fffaa-0000-7000-8000-000000000010';
 const execFileP = promisify(execFile);
 const DAEMON_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(DAEMON_ROOT, '../..');
+const CREATIVE_VOLTAGE_EXAMPLE_DIR = path.join(
+  REPO_ROOT,
+  'plugins',
+  '_official',
+  'examples',
+  'fs-creative-voltage',
+);
 const CLI_SRC = path.resolve(DAEMON_ROOT, 'src/cli.ts');
 const TSX_CLI = path.resolve(REPO_ROOT, 'node_modules/tsx/dist/cli.mjs');
 const EXECUTION_PREFLIGHT = {
@@ -140,11 +147,18 @@ describe('OD Next automatic production through the real server', () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
   let sequence = 0;
+  let previousCodexTransport: string | undefined;
+
+  beforeEach(() => {
+    previousCodexTransport = process.env.OD_CODEX_TRANSPORT;
+    process.env.OD_CODEX_TRANSPORT = 'exec-json';
+  });
 
   afterEach(async () => {
+    if (previousCodexTransport == null) delete process.env.OD_CODEX_TRANSPORT;
+    else process.env.OD_CODEX_TRANSPORT = previousCodexTransport;
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
-    delete process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS;
     uuidControl.forced.length = 0;
     pendingAutomaticFixtureIdentity = null;
     await stopServer(started);
@@ -198,82 +212,373 @@ describe('OD Next automatic production through the real server', () => {
     expect(researchContract).toContain('Run the ordinary public fixture.');
   });
 
-  // ACCEPTANCE for the opt-in switch. Nothing configured takes the ordinary
-  // route; the SAME running daemon takes the OD Next route on the next run
-  // once `odNextStrategyMode` is saved through the public app-config API. No
-  // restart, no environment variable — that is what "configure it and it
-  // takes effect" has to mean for a packaged install.
-  it('admits OD Next on the next run once the installation configures it, and not before', async () => {
-    const fixture = await createPublicRolloutFixture('app-config-opt-in', 'design');
+  it('runs the selected official example on the ordinary route without pinning it to the project', async () => {
+    const fixture = await createPublicRolloutFixture('selected-example-ordinary', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+
+    const selected = await createProjectForScenario(
+      started.url,
+      'selected-example-deck',
+      { kind: 'deck' },
+      undefined,
+      'ppt',
+      {
+        pluginId: 'example-fs-creative-voltage',
+        source: CREATIVE_VOLTAGE_EXAMPLE_DIR,
+      },
+    );
+    expect(selected.appliedPluginSnapshotId).toBeUndefined();
+    expect(selected.metadata?.exampleBinding).toMatchObject({
+      provenance: 'example_card',
+      pluginId: 'example-fs-creative-voltage',
+      pluginSource: CREATIVE_VOLTAGE_EXAMPLE_DIR,
+    });
+
+    const created = await postRun(started.url, publicRunRequest(
+      selected,
+      'Build the selected fundraising deck.',
+      'selected-example-ordinary',
+    ));
+    expect(created.strategyTask).toBeUndefined();
+    expect(created.pluginId).toBe('example-fs-creative-voltage');
+    expect(created.appliedPluginSnapshotId).toEqual(expect.any(String));
+    await waitForRunTerminal(started.url, created.runId as string);
+
+    expect(database().prepare(`
+      SELECT applied_plugin_snapshot_id AS snapshotId
+        FROM projects
+       WHERE id = ?
+    `).get(selected.projectId)).toEqual({ snapshotId: null });
+    expect(database().prepare(`
+      SELECT applied_plugin_snapshot_id AS snapshotId
+        FROM conversations
+       WHERE id = ?
+    `).get(selected.conversationId)).toEqual({ snapshotId: null });
+    expect(database().prepare(`
+      SELECT plugin_id AS pluginId, run_id AS runId
+        FROM applied_plugin_snapshots
+       WHERE id = ?
+    `).get(created.appliedPluginSnapshotId)).toEqual({
+      pluginId: 'example-fs-creative-voltage',
+      runId: created.runId,
+    });
+    const userMessage = database().prepare(`
+      SELECT applied_plugin_snapshot_json AS snapshotJson
+        FROM messages
+       WHERE id = ?
+    `).get('user-selected-example-ordinary') as { snapshotJson: string };
+    expect(JSON.parse(userMessage.snapshotJson)).toMatchObject({
+      pluginId: 'example-fs-creative-voltage',
+      pluginTitle: 'Write a Seed Pitch like a Top Pre-Seed Founder',
+    });
+
+    const invocations = await readProjectInvocations(fixture.logPath, selected.projectId);
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]?.stdin).toContain('Creative Voltage');
+    expect(invocations[0]?.stdin).not.toContain('克制的 COO');
+  });
+
+  it('lets a verified example replace an existing automatic-default pin for only the current run', async () => {
+    const fixture = await createPublicRolloutFixture('selected-example-upgrade', 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
+
+    const createAffectedProject = async (label: string) => {
+      const project = await createProjectForScenario(
+        started!.url,
+        label,
+        { kind: 'deck' },
+        undefined,
+        undefined,
+        {
+          pluginId: 'example-fs-creative-voltage',
+          source: CREATIVE_VOLTAGE_EXAMPLE_DIR,
+        },
+      );
+      expect(project.appliedPluginSnapshotId).toEqual(expect.any(String));
+      expect(project.metadata?.scenarioBinding).toMatchObject({
+        provenance: 'automatic_default',
+        pluginId: 'example-simple-deck',
+        snapshotId: project.appliedPluginSnapshotId,
+      });
+      expect(project.metadata?.exampleBinding).toMatchObject({
+        provenance: 'example_card',
+        pluginId: 'example-fs-creative-voltage',
+        pluginSource: CREATIVE_VOLTAGE_EXAMPLE_DIR,
+      });
+      return project;
+    };
+    const expectRunScopedExample = (
+      project: Awaited<ReturnType<typeof createAffectedProject>>,
+      created: {
+        pluginId?: string;
+        appliedPluginSnapshotId?: string;
+        runId?: string;
+      },
+    ) => {
+      expect(created.pluginId).toBe('example-fs-creative-voltage');
+      expect(created.appliedPluginSnapshotId).toEqual(expect.any(String));
+      expect(created.appliedPluginSnapshotId).not.toBe(project.appliedPluginSnapshotId);
+      expect(database().prepare(`
+        SELECT applied_plugin_snapshot_id AS snapshotId
+          FROM projects
+         WHERE id = ?
+      `).get(project.projectId)).toEqual({ snapshotId: project.appliedPluginSnapshotId });
+      expect(database().prepare(`
+        SELECT applied_plugin_snapshot_id AS snapshotId
+          FROM conversations
+         WHERE id = ?
+      `).get(project.conversationId)).toEqual({ snapshotId: project.appliedPluginSnapshotId });
+      expect(database().prepare(`
+        SELECT plugin_id AS pluginId, run_id AS runId
+          FROM applied_plugin_snapshots
+         WHERE id = ?
+      `).get(created.appliedPluginSnapshotId)).toEqual({
+        pluginId: 'example-fs-creative-voltage',
+        runId: created.runId,
+      });
+    };
+
+    const rolloutOffProject = await createAffectedProject('selected-example-upgrade-off');
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    const ordinary = await postRun(started.url, publicRunRequest(
+      rolloutOffProject,
+      'Use the selected example after upgrading the ordinary route.',
+      'selected-example-upgrade-off',
+    ));
+    expect(ordinary.strategyTask).toBeUndefined();
+    await waitForRunTerminal(started.url, ordinary.runId as string);
+    expectRunScopedExample(rolloutOffProject, ordinary);
+
+    const prestartFallbackProject = await createAffectedProject(
+      'selected-example-upgrade-prestart',
+    );
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    database().exec(`
+      CREATE TRIGGER reject_selected_example_strategy_task
+      BEFORE INSERT ON strategy_task_executions
+      BEGIN
+        SELECT RAISE(ABORT, 'fixture selected-example strategy preparation rejected');
+      END
+    `);
+    try {
+      const fallback = await postRun(started.url, publicRunRequest(
+        prestartFallbackProject,
+        'Use the selected example after automatic pre-start fallback.',
+        'selected-example-upgrade-prestart',
+      ));
+      expect(fallback.strategyTask).toBeUndefined();
+      expect(fallback.taskExecutionId).toBeUndefined();
+      await waitForRunTerminal(started.url, fallback.runId as string);
+      expectRunScopedExample(prestartFallbackProject, fallback);
+    } finally {
+      database().exec('DROP TRIGGER IF EXISTS reject_selected_example_strategy_task');
+    }
+
+    const invocations = await readProjectInvocations(fixture.logPath, rolloutOffProject.projectId);
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]?.stdin).toContain('Creative Voltage');
+    expect(invocations[0]?.stdin).not.toContain('克制的 COO');
+    const fallbackInvocations = await readProjectInvocations(
+      fixture.logPath,
+      prestartFallbackProject.projectId,
+    );
+    expect(fallbackInvocations).toHaveLength(1);
+    expect(fallbackInvocations[0]?.stdin).toContain('Creative Voltage');
+    expect(fallbackInvocations[0]?.stdin).not.toContain('克制的 COO');
+  });
+
+  it('does not reuse an automatic-default pin when the bound example identity is stale', async () => {
+    const fixture = await createPublicRolloutFixture('stale-selected-example', 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
+    const exampleDir = path.join(binDir, 'stale-selected-example');
+    await cp(CREATIVE_VOLTAGE_EXAMPLE_DIR, exampleDir, { recursive: true });
+    const staleExamplePluginId = 'example-stale-creative-voltage';
+    const manifestPath = path.join(exampleDir, 'open-design.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+    await writeFile(manifestPath, JSON.stringify({
+      ...manifest,
+      name: staleExamplePluginId,
+    }), 'utf8');
+    const installResponse = await fetch(`${started.url}/api/plugins/install`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({ source: exampleDir }),
+    });
+    const installEvents = await installResponse.text();
+    expect(installEvents).toContain('event: success');
+    const installedExample = getInstalledPlugin(database(), staleExamplePluginId);
+    expect(installedExample).not.toBeNull();
+
+    const createAffectedProject = async (label: string) => {
+      const project = await createProjectForScenario(
+        started!.url,
+        label,
+        { kind: 'deck' },
+        undefined,
+        undefined,
+        {
+          pluginId: staleExamplePluginId,
+          source: installedExample!.source,
+        },
+      );
+      expect(project.appliedPluginSnapshotId).toEqual(expect.any(String));
+      expect(project.metadata?.scenarioBinding).toMatchObject({
+        provenance: 'automatic_default',
+        pluginId: 'example-simple-deck',
+        snapshotId: project.appliedPluginSnapshotId,
+      });
+      return project;
+    };
+    const rolloutOffProject = await createAffectedProject('stale-selected-example-off');
+    const prestartFallbackProject = await createAffectedProject(
+      'stale-selected-example-prestart',
+    );
+
+    // Both projects froze the original manifest identity. Mutating it now
+    // reproduces an example that was removed or upgraded after selection.
+    await writeFile(
+      path.join(installedExample!.fsPath, 'SKILL.md'),
+      '# Changed after the project selected this example\n',
+      'utf8',
+    );
+
+    const expectDefaultWasNotReused = async (
+      project: Awaited<ReturnType<typeof createAffectedProject>>,
+      created: { pluginId?: string; runId?: string },
+    ) => {
+      expect(created.pluginId).toBeUndefined();
+      await waitForRunTerminal(started!.url, created.runId as string);
+      expect(database().prepare(`
+        SELECT applied_plugin_snapshot_id AS snapshotId
+          FROM projects
+         WHERE id = ?
+      `).get(project.projectId)).toEqual({ snapshotId: project.appliedPluginSnapshotId });
+      const invocations = await readProjectInvocations(fixture.logPath, project.projectId);
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0]?.stdin).not.toContain('Creative Voltage');
+      expect(invocations[0]?.stdin).not.toContain('克制的 COO');
+    };
+
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    const ordinary = await postRun(started.url, publicRunRequest(
+      rolloutOffProject,
+      'Do not substitute an unrelated default for the stale example.',
+      'stale-selected-example-off',
+    ));
+    expect(ordinary.strategyTask).toBeUndefined();
+    await expectDefaultWasNotReused(rolloutOffProject, ordinary);
+
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    database().exec(`
+      CREATE TRIGGER reject_stale_example_strategy_task
+      BEFORE INSERT ON strategy_task_executions
+      BEGIN
+        SELECT RAISE(ABORT, 'fixture stale-example strategy preparation rejected');
+      END
+    `);
+    try {
+      const fallback = await postRun(started.url, publicRunRequest(
+        prestartFallbackProject,
+        'Do not substitute an unrelated default after pre-start fallback.',
+        'stale-selected-example-prestart',
+      ));
+      expect(fallback.strategyTask).toBeUndefined();
+      expect(fallback.taskExecutionId).toBeUndefined();
+      await expectDefaultWasNotReused(prestartFallbackProject, fallback);
+    } finally {
+      database().exec('DROP TRIGGER IF EXISTS reject_stale_example_strategy_task');
+    }
+  });
+
+  // ACCEPTANCE for the opt-out switch. Nothing configured takes the OD Next
+  // route — that is the default this build ships. The SAME running daemon
+  // takes the ordinary route on the next run once `odNextStrategyMode: 'off'`
+  // is saved through the public app-config API. No restart, no environment
+  // variable — that is what "configure it and it takes effect" has to mean for
+  // a packaged install, where the saved mode is the only control a user has:
+  // the packaged child environment allowlist carries no `OD_NEXT_*` key.
+  it('runs OD Next by default and leaves it on the next run once the installation opts out', async () => {
+    const fixture = await createPublicRolloutFixture('app-config-opt-out', 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
-    const beforeOptIn = await postRun(started.url, publicRunRequest(
+    const beforeOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run before this installation opted in.',
-      'app-config-opt-in-before',
+      'Run before this installation opted out.',
+      'app-config-opt-out-before',
     ));
-    expect(beforeOptIn.strategyTask).toBeUndefined();
-    expect(beforeOptIn.pluginId).toBe('example-web-prototype');
-    await waitForRunTerminal(started.url, beforeOptIn.runId as string);
-    const ordinaryInvocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(ordinaryInvocations).toHaveLength(1);
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(beforeOptOut.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+    expect(await readDurableRunState(beforeOptOut.runId as string)).toMatchObject({
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
+    });
+    await fetch(
+      `${started.url}/api/runs/${encodeURIComponent(beforeOptOut.runId as string)}/cancel`,
+      { method: 'POST' },
+    );
+    await waitForRunTerminal(started.url, beforeOptOut.runId as string);
 
-    const optIn = await fetch(`${started.url}/api/app-config`, {
+    const optOut = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ odNextStrategyMode: 'active' }),
+      body: JSON.stringify({ odNextStrategyMode: 'off' }),
     });
-    expect(optIn.status).toBe(200);
-    expect((await optIn.json() as { config?: { odNextStrategyMode?: string } }).config?.odNextStrategyMode)
-      .toBe('active');
+    expect(optOut.status).toBe(200);
+    expect((await optOut.json() as { config?: { odNextStrategyMode?: string } }).config?.odNextStrategyMode)
+      .toBe('off');
 
-    // A typo is refused rather than absorbed. Dropping it would switch this
-    // installation back off while the caller saw success — the one failure
-    // mode a control switch must not have.
+    // A typo is refused rather than absorbed. Dropping it would leave the key
+    // unconfigured, and unconfigured is `active` — so an absorbed typo would
+    // revoke this opt-out while the caller saw success. That is the one
+    // failure mode a control switch must not have.
     const typo = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ odNextStrategyMode: 'acive' }),
+      body: JSON.stringify({ odNextStrategyMode: 'of' }),
     });
     expect(typo.status).toBe(400);
     expect((await typo.json() as { error?: { code?: string } }).error?.code)
       .toBe('INVALID_APP_CONFIG_VALUE');
-    const stillActive = await fetch(`${started.url}/api/app-config`);
-    expect((await stillActive.json() as { config?: { odNextStrategyMode?: string } })
-      .config?.odNextStrategyMode).toBe('active');
+    const stillOff = await fetch(`${started.url}/api/app-config`);
+    expect((await stillOff.json() as { config?: { odNextStrategyMode?: string } })
+      .config?.odNextStrategyMode).toBe('off');
 
-    const afterOptIn = await postRun(started.url, publicRunRequest(
+    // Count first, compare after: the canceled run above may or may not have
+    // reached a spawn, so what this asserts is the invocations the ordinary
+    // run added — not the whole log.
+    const invocationsBefore = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
+    const afterOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run after this installation opted in.',
-      'app-config-opt-in-after',
+      'Run after this installation opted out.',
+      'app-config-opt-out-after',
     ));
-    expect(afterOptIn.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
-    expect(await readDurableRunState(afterOptIn.runId as string)).toMatchObject({
-      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
-    });
+    expect(afterOptOut.strategyTask).toBeUndefined();
+    expect(afterOptOut.pluginId).toBe('example-web-prototype');
+    await waitForRunTerminal(started.url, afterOptOut.runId as string);
+    const ordinaryInvocations = (await readProjectInvocations(fixture.logPath, fixture.projectId))
+      .slice(invocationsBefore);
+    expect(ordinaryInvocations).toHaveLength(1);
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
 
     // The operator-facing surface names the authority that decided, so the
     // person who just configured the mode can confirm theirs is the one in
-    // effect rather than inferring it from the resulting mode.
+    // effect rather than inferring it from the resulting mode — which matters
+    // more now that `default` and a saved `off` resolve to opposite routes.
     const status = await fetch(`${started.url}/api/strategies/od-next/rollout`);
     expect(status.status).toBe(200);
     expect((await status.json() as { status: unknown }).status).toMatchObject({
-      requestedMode: 'active',
+      requestedMode: 'off',
       requestedModeSource: 'app_config',
-      effectiveMode: 'active',
+      effectiveMode: 'off',
     });
-
-    await fetch(
-      `${started.url}/api/runs/${encodeURIComponent(afterOptIn.runId as string)}/cancel`,
-      { method: 'POST' },
-    );
-    await waitForRunTerminal(started.url, afterOptIn.runId as string);
     // Two full runs against a real server, plus config writes and a status
     // read — the heaviest case in this file, and the only one that drives more
     // than a single run. The suite default of 20s leaves it no headroom on a
@@ -284,7 +589,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('prestart-skill-fallback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -318,7 +622,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('preclaim-task-fallback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const strategySnapshotCountAtStart = (database().prepare(`
@@ -373,7 +676,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('approved-profiles', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -707,7 +1009,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('legacy-scenario-compat', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const legacy = await createProjectForScenario(
@@ -752,7 +1053,6 @@ describe('OD Next automatic production through the real server', () => {
     );
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
 
     const resolvedCapability = resolveBundledOdNextRuntimeCapability({
@@ -790,62 +1090,90 @@ describe('OD Next automatic production through the real server', () => {
     expect(canceled.status).toBe(200);
   });
 
-  it('exposes the instance stop latch through the shared API and CLI CAS reset', async () => {
+  it('reports the deciding authority through the shared API and CLI, and offers no reset', async () => {
+    // This used to cover the instance stop latch and its compare-and-swap
+    // reset. Both are gone: nothing but the saved mode turns OD Next off, so
+    // there is no latch to inspect and no operator recovery to protect. What is
+    // still worth an endpoint is the authority — `default` and a saved `off`
+    // produce opposite routes, and the mode alone does not say which happened.
     const fixture = await createPublicRolloutFixture('rollout-control', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    latchOdNextRolloutStop(database(), {
-      mode: 'off',
-      reasonCode: 'route_mode_drift',
+    delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    // Cases in this file share one data dir, and an earlier one leaves a saved
+    // `off` behind. Clearing the key is the deliberate way back to the default,
+    // and asserting it here is also what proves `null` still means that.
+    const cleared = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: null }),
     });
+    expect(cleared.status).toBe(200);
 
-    const beforeResult = await runOdCli([
+    const defaultResult = await runOdCli([
       'strategy', 'rollout', 'status', '--daemon-url', started.url, '--json',
     ]);
-    expect(beforeResult.stderr).toBe('');
-    const before = JSON.parse(beforeResult.stdout) as {
-      status: { scope: string; revision: number; latch: { mode: string; reasonCode: string } | null };
-    };
-    expect(before.status).toMatchObject({
+    expect(defaultResult.stderr).toBe('');
+    expect((JSON.parse(defaultResult.stdout) as { status: unknown }).status).toEqual({
+      strategyId: 'od-next-strategy',
       scope: 'daemon_instance',
-      latch: { mode: 'off', reasonCode: 'route_mode_drift' },
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
 
-    const resetResult = await runOdCli([
-      'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
+    const optOut = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: 'off' }),
+    });
+    expect(optOut.status).toBe(200);
+
+    const savedResult = await runOdCli([
+      'strategy', 'rollout', 'status', '--daemon-url', started.url, '--json',
     ]);
-    expect(resetResult.stderr).toBe('');
-    const reset = JSON.parse(resetResult.stdout) as {
-      status: {
-        revision: number;
-        latch: null;
-        lastEvent: { action: string; reasonCode: string } | null;
-      };
-    };
-    expect(reset.status.revision).toBe(before.status.revision + 1);
-    expect(reset.status.latch).toBeNull();
-    expect(reset.status.lastEvent).toMatchObject({
-      action: 'cleared',
-      reasonCode: 'operator_reset',
+    expect(savedResult.stderr).toBe('');
+    expect((JSON.parse(savedResult.stdout) as { status: unknown }).status).toMatchObject({
+      requestedMode: 'off',
+      requestedModeSource: 'app_config',
+      effectiveMode: 'off',
     });
 
-    const staleReset = await fetch(`${started.url}/api/strategies/od-next/rollout/reset`, {
+    // The reset endpoint and its CLI subcommand are both gone, and gone the
+    // same way — a daemon that still answered it would be a daemon that still
+    // had something to reset.
+    const reset = await fetch(`${started.url}/api/strategies/od-next/rollout/reset`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedRevision: before.status.revision }),
+      body: JSON.stringify({ expectedRevision: 0 }),
     });
-    expect(staleReset.status).toBe(409);
-    await expect(staleReset.json()).resolves.toMatchObject({
-      error: { code: 'ROLLOUT_REVISION_CONFLICT' },
-      status: { revision: reset.status.revision },
-    });
+    expect(reset.status).toBe(404);
+    // `runOdCli` rejects on a non-zero exit, and an unknown subcommand is
+    // exactly that: usage, exit 2. Catching keeps the assertion on what the CLI
+    // told the operator rather than on the rejection itself.
+    const resetCli = await runOdCli([
+      'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
+    ]).then(
+      (ok) => ({ code: 0, stdout: ok.stdout, stderr: ok.stderr }),
+      (error: { code?: number; stdout?: string; stderr?: string }) => ({
+        code: error.code ?? -1,
+        stdout: error.stdout ?? '',
+        stderr: error.stderr ?? '',
+      }),
+    );
+    expect(resetCli.code).toBe(2);
+    // Named, not silently absent from a usage dump. `reset` shipped in 0.21.0
+    // and 0.21.1, so an operator who scripted it gets told what happened and
+    // what replaced it — and gets a non-zero exit, because the recovery it
+    // asked for neither happened nor can.
+    expect(resetCli.stderr).toContain('od strategy rollout reset was removed');
+    expect(resetCli.stderr).toContain('od config set odNextStrategyMode off');
   });
 
   it('keeps active retry/task recipe-only while rollback lazily resolves the ordinary default', async () => {
     const fixture = await createPublicRolloutFixture('rollback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     const strategyTaskCountAtStart = (
       database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as {
         count: number;
@@ -871,6 +1199,16 @@ describe('OD Next automatic production through the real server', () => {
         selections: [],
       });
     expect(activeTask?.runs[0]?.finalText).toEqual(activeTask?.promptBundle);
+    const promptBundleText = activeTask?.promptBundle.text ?? '';
+    const doneKey = /<od-done key="([a-f0-9]{16})"\/>/.exec(promptBundleText)?.[1];
+    expect(doneKey).toMatch(/^[a-f0-9]{16}$/);
+    expect(promptBundleText).toContain('route=direct_edit');
+    expect(promptBundleText).toContain(`<od-next key="${doneKey}" value="Add an orders list page"/>`);
+    expect(promptBundleText).toContain(`<od-focus key="${doneKey}"`);
+    expect(promptBundleText.slice(
+      promptBundleText.indexOf('<open_design_core_system_prompt>'),
+      promptBundleText.indexOf('</open_design_core_system_prompt>'),
+    )).not.toContain(doneKey);
     expect(activeTask?.promptBundle.utf8Bytes).toBe(
       Buffer.byteLength(activeTask?.promptBundle.text ?? '', 'utf8'),
     );
@@ -879,10 +1217,10 @@ describe('OD Next automatic production through the real server', () => {
     ).get(fixture.projectId) as { snapshotId: string | null }).snapshotId)
       .toBeNull();
 
-    latchOdNextRolloutStop(database(), {
-      mode: 'observe',
-      reasonCode: 'threshold_exceeded',
-    });
+    // The rest of this case needs later runs on the ordinary route. Saying so
+    // through the mode is now the only way to say it: a run can no longer put
+    // this daemon on the legacy path for the runs that follow it.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     const replayed = await postRun(started!.url, activeBody);
     expect(replayed).toMatchObject({
       runId: active.runId,
@@ -925,7 +1263,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('web-cli-skill-parity', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const dataDir = process.env.OD_DATA_DIR!;
@@ -1009,7 +1346,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('project-skill-row', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const skillDir = path.join(process.env.OD_DATA_DIR!, 'skills', 'home-picked-skill');
@@ -1065,7 +1401,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('context-plugin-authority', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const contextual = await createProjectForScenario(
@@ -1101,7 +1436,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('headless-conversation', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1132,7 +1466,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('persisted-task-tamper', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1183,7 +1516,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('persisted-task-scope-drift', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const body = publicRunRequest(
@@ -1219,7 +1551,6 @@ describe('OD Next automatic production through the real server', () => {
     );
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     expect(fixture.projectMetadata?.scenarioBinding).toMatchObject({
       provenance: 'explicit_user',
       pluginId: 'example-web-prototype',
@@ -1341,6 +1672,77 @@ describe('OD Next automatic production through the real server', () => {
     });
     await waitForRunTerminal(started.url, automatic.runId as string);
   });
+
+  // OPEND-2365 (P1). Only the HTTP-created Run passes through the analytics
+  // lifecycle installed on POST /api/runs; the repair and production Runs the
+  // daemon allocates for the SAME logical task are started straight off
+  // `internalRunCreation.start(...)` and never enter it. Every OD Next rate
+  // computed per physical Run — volume, success, failure, cancellation,
+  // duration — is therefore measured on the request stage alone.
+  it('installs the run analytics lifecycle on every physical Run of an automatic chain', async () => {
+    const fixture = await createFixture('repair');
+    const analyticsHeaders = {
+      'x-od-analytics-device-id': 'device-opend-2365',
+      'x-od-analytics-session-id': 'session-opend-2365',
+      'x-od-analytics-client-type': 'desktop',
+    };
+
+    queueFixtureIds(fixture);
+    const created = await postRun(
+      started!.url,
+      createRunRequest(fixture, 'Build the operator prototype.'),
+      analyticsHeaders,
+    );
+    expect(created.runId).toBe(fixture.initialRunId);
+
+    await waitForRunTerminal(started!.url, fixture.initialRunId);
+    const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
+    expect(terminal.runs.map((run) => run.inputStage)).toEqual([
+      'request',
+      'contract_repair',
+      'production',
+    ]);
+
+    const recoveries = await waitForRunAnalyticsRecoveries(
+      terminal.runs.map((mapping) => mapping.runId),
+    );
+    // Reported at all.
+    expect(
+      terminal.runs
+        .map((mapping, index) => (recoveries[index] ? null : mapping.inputStage))
+        .filter(Boolean),
+    ).toEqual([]);
+    // One stable identity per physical Run — a shared insert id would collapse
+    // three Runs into one row on ingest.
+    const insertIds = recoveries.map((recovery) => recovery?.insertId);
+    expect(new Set(insertIds).size).toBe(3);
+    // The continuation inherits the requesting client's identity rather than
+    // inventing one, so the chain stays attributable to the same person.
+    for (const recovery of recoveries) {
+      expect(recovery?.context?.deviceId).toBe('device-opend-2365');
+    }
+    // The terminal listener ran for each Run, which is what emits run_finished.
+    for (const recovery of recoveries) {
+      expect(typeof recovery?.completedAt).toBe('number');
+    }
+    // The lineage is what stitches the physical Runs back into one turn: one
+    // shared task id, one shared first Run, and a Run index that advances.
+    const lineage = recoveries.map((recovery) => recovery?.properties ?? {});
+    expect(new Set(lineage.map((props) => props.task_execution_id)).size).toBe(1);
+    expect(new Set(lineage.map((props) => props.initial_run_id))).toEqual(
+      new Set([fixture.initialRunId]),
+    );
+    expect(lineage.map((props) => props.task_run_index)).toEqual([0, 1, 2]);
+    // The rollout decision is daemon-owned truth; every Run of an admitted
+    // task reports the harness it actually ran under.
+    expect(lineage.map((props) => props.harness)).toEqual([
+      'od_next',
+      'od_next',
+      'od_next',
+    ]);
+    // The lifecycle re-reads host facts (app config, agent detection) before
+    // it captures, so three physical Runs settle well past the shared default.
+  }, 90_000);
 
   it('runs parsed plan -> serialization repair -> production after each source end and remains exactly-once across restart', async () => {
     const fixture = await createFixture('repair');
@@ -1469,7 +1871,9 @@ describe('OD Next automatic production through the real server', () => {
     expect(invocations[0]?.stdin).not.toContain('<task_config>');
     expect(invocations[0]?.stdin).not.toContain('<user_prompt>');
     // The Bundle is a tree: each spec slot is its own element, not a '---'
-    // section inside one blob, and the user's words come last.
+    // section inside one blob, and the user's words come last. Markdown inside
+    // a CDATA prompt is allowed to contain a thematic break, so inspect only
+    // the XML envelope when guarding against the rejected flat serialization.
     for (const nested of [
       '<execution_boundary>',
       '<core_strategy>',
@@ -1487,7 +1891,11 @@ describe('OD Next automatic production through the real server', () => {
     ]) {
       expect(invocations[0]!.stdin).toContain(nested);
     }
-    expect(invocations[0]!.stdin).not.toContain('\n\n---\n\n');
+    const structuralEnvelope = invocations[0]!.stdin.replace(
+      /<!\[CDATA\[[\s\S]*?\]\]>/gu,
+      '<![CDATA[…]]>',
+    );
+    expect(structuralEnvelope).not.toContain('\n\n---\n\n');
     expect(invocations[0]!.stdin).not.toContain('## Active stage:');
     expect(invocations[0]!.stdin.lastIndexOf('<user_first_prompt>'))
       .toBeGreaterThan(invocations[0]!.stdin.lastIndexOf('</context>'));
@@ -1533,7 +1941,10 @@ describe('OD Next automatic production through the real server', () => {
     expect(invocations[1]?.stdin).not.toContain('# User request');
     expect(invocations[2]?.stdin).not.toContain('# User request');
     expect(invocations[1]?.stdin).not.toContain('open-design.strategy-state/v2');
-    expect(invocations[2]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(invocations[2]?.stdin).toContain('## Closing Runtime State');
+    expect(invocations[2]?.stdin).toContain('schema open-design.strategy-state/v2');
+    expect(invocations[2]?.stdin).toContain('inputStage production');
+    expect(invocations[2]?.stdin).toContain('no Plan Contract block');
     expect(statuses[0]!.updatedAt).toBeLessThanOrEqual(invocations[1]!.startedAt);
     expect(statuses[1]!.updatedAt).toBeLessThanOrEqual(invocations[2]!.startedAt);
     for (const invocation of invocations) {
@@ -2026,7 +2437,6 @@ describe('OD Next automatic production through the real server', () => {
       const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design');
       started = publicFixture.started;
       binDir = publicFixture.binDir;
-      clearOdNextRolloutStop(database());
       process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
       process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
       const template = await createStrategyTemplate();
@@ -2239,6 +2649,7 @@ async function createProjectForScenario(
     pluginInputs: Record<string, unknown>;
   },
   automaticStrategyTaskProfile?: ProjectScenarioTaskProfile,
+  exampleReference?: { pluginId: string; source: string },
 ) {
   const projectId = `od-next-public-${label}-${Date.now()}`;
   const response = await fetch(`${url}/api/projects`, {
@@ -2250,6 +2661,7 @@ async function createProjectForScenario(
       metadata,
       ...plugin,
       ...(automaticStrategyTaskProfile ? { automaticStrategyTaskProfile } : {}),
+      ...(exampleReference ? { exampleReference } : {}),
       conversationMode: 'design',
       skipDiscoveryBrief: true,
     }),
@@ -2270,6 +2682,11 @@ async function createProjectForScenario(
           provenance: string;
           taskProfile: ProjectScenarioTaskProfile;
           boundAt: number;
+        };
+        exampleBinding?: {
+          provenance: string;
+          pluginId: string;
+          pluginSource: string;
         };
       };
     };
@@ -2849,10 +3266,14 @@ function queueFixtureIds(fixture: {
   uuidControl.forced.push(fixture.initialRunId);
 }
 
-async function postRun(url: string, body: Record<string, unknown>) {
+async function postRun(
+  url: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {},
+) {
   const response = await fetch(`${url}/api/runs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
   expect(response.headers.get('content-type')).toContain('application/json');
@@ -2895,6 +3316,53 @@ async function waitForTask(taskExecutionId: string, outcome: string) {
   throw new Error(
     `task ${taskExecutionId} did not reach ${outcome}: ${JSON.stringify(latest)}`,
   );
+}
+
+/**
+ * The persisted analytics recovery record for one physical Run.
+ *
+ * This is the daemon's own durable evidence that a Run entered the analytics
+ * lifecycle: `run_created` was captured under this `insertId`, and the terminal
+ * listener replays `run_finished` from it after a restart. A physical Run that
+ * has no record never reported, and never will.
+ */
+async function readRunAnalyticsRecovery(runId: string): Promise<{
+  insertId?: string;
+  context?: { deviceId?: string };
+  properties?: Record<string, unknown>;
+  completedAt?: number;
+} | null> {
+  const statePath = path.join(process.env.OD_DATA_DIR!, 'runs', runId, 'state.json');
+  try {
+    const raw = await readFile(statePath, 'utf8');
+    return (JSON.parse(raw) as { analyticsRecovery?: any }).analyticsRecovery ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Poll until each Run's recovery record has settled.
+ *
+ * The lifecycle installs after the response is sent and re-reads host facts
+ * (app config, agent detection) before it captures, so the record appears a
+ * beat behind the Run itself and is stamped complete only once the terminal
+ * listener has run.
+ */
+async function waitForRunAnalyticsRecoveries(
+  runIds: string[],
+  timeoutMs = 45_000,
+): Promise<Array<Awaited<ReturnType<typeof readRunAnalyticsRecovery>>>> {
+  const deadline = Date.now() + timeoutMs;
+  let latest = await Promise.all(runIds.map(readRunAnalyticsRecovery));
+  while (
+    Date.now() < deadline
+    && !latest.every((recovery) => recovery && typeof recovery.completedAt === 'number')
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    latest = await Promise.all(runIds.map(readRunAnalyticsRecovery));
+  }
+  return latest;
 }
 
 async function readProjectInvocations(logPath: string, projectId: string): Promise<Invocation[]> {
