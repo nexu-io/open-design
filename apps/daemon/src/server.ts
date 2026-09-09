@@ -939,6 +939,7 @@ import { createSqlitePublicFilePublicationStore } from './collab/public-file-pub
 import {
   createActiveWorkspaceSelectionStore,
 } from './collab/active-workspace-selection.js';
+import { resolveWorkspaceSelectionIdentity } from './collab/workspace-selection-identity.js';
 import {
   headerValue,
   resolveOptionalLocalWorkspaceRequestAuthority,
@@ -3691,7 +3692,14 @@ export async function startServer({
       ...(project.metadata ? { metadata: project.metadata } : {}),
     };
   };
-  const activeWorkspace = createActiveWorkspaceSelectionStore(RUNTIME_DATA_DIR);
+  // The restart-default selection is only usable under the identity that made
+  // it, so it is read and written against the account + AMR environment in
+  // play. `configuredAmrEnv` is read lazily (the store never resolves an
+  // identity at construction time) so a Settings-backed account switch — which
+  // rewrites app-config rather than `~/.amr/config.json` — is seen too.
+  const activeWorkspace = createActiveWorkspaceSelectionStore(RUNTIME_DATA_DIR, {
+    identity: () => resolveWorkspaceSelectionIdentity(process.env, configuredAmrEnv()),
+  });
   const teamMirrorPromotionJournalDir = path.join(
     RUNTIME_DATA_DIR,
     'team-mirror-promotions',
