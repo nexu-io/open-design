@@ -99,6 +99,8 @@ export async function requestStorageObject(config: StorageConfig, objectKey: str
   const payloadHash = hash(body ?? "");
   const headers = Object.fromEntries(new Headers(init.headers).entries());
   delete headers.authorization;
+  // CAS must use the stored representation's validator, not a compressed variant.
+  if (init.method === "GET") headers["accept-encoding"] = "identity";
   if (headers["if-match"]) headers["if-match"] = strongQuotedEtag(headers["if-match"]);
   headers.host = url.host;
   headers["x-amz-content-sha256"] = payloadHash;

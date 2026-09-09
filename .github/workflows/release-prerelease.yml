@@ -955,6 +955,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
+          cache: ${{ matrix.shell == 'electron' && 'pnpm' || '' }}
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Restore distribution scene
         shell: bash

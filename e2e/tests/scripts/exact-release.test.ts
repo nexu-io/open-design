@@ -431,6 +431,9 @@ describe("exact Electron release topology", () => {
       expect(workflow).not.toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_AK");
       expect(workflow).not.toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_SK");
       const distributionBuild = workflow.split("- name: Build native distribution")[1]!.split("- uses:")[0]!;
+      const distributionSetup = workflow.split("- name: Restore distribution scene")[0]!.split("- uses: actions/setup-node@v6").at(-1)!;
+      expect(distributionSetup).toContain("cache: ${{ matrix.shell == 'electron' && 'pnpm' || '' }}");
+      expect(distributionSetup).toContain("cache-dependency-path: pnpm-lock.yaml");
       expect(distributionBuild).toContain("CSC_LINK: ${{ matrix.shell == 'electron' && secrets.APPLE_SIGNING_CERTIFICATE_BASE64 || '' }}");
       expect(distributionBuild).toContain("secrets.APPLE_APP_SPECIFIC_PASSWORD");
       expect(distributionBuild).toContain("secrets.APPLE_TEAM_ID");
