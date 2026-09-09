@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -33,4 +33,22 @@ it.skipIf(process.platform === "win32")("rejects traversal metadata before nativ
   await writeFile(archive.file, bytes);
   await expect(extract(archive.file, join(root, "restored"), { tool: { kind: "unzip", executable: "unzip" } })).rejects.toThrow("path");
   await expect(stat(join(root, "restored"))).rejects.toThrow("ENOENT");
+});
+
+it.skipIf(process.platform === "win32")("drains concurrent native readers before cleaning a failed extraction", async () => {
+  const { root, source } = await fixture();
+  await Promise.all(Array.from({ length: 16 }, (_, index) => writeFile(join(source, `file-${index}`), `payload-${index}`)));
+  const archive = await pack(source, join(root, "base.zip"), { tool: { kind: "zip", executable: "zip" } });
+  const options = { tool: { kind: "unzip" as const, executable: "unzip" } };
+  await extract(archive.file, join(root, "good"), options);
+  expect(await readFile(join(root, "good/file-15"), "utf8")).toBe("payload-15");
+  const bytes = await readFile(archive.file), central = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  expect(central).toBeGreaterThan(0);
+  bytes.writeUInt32LE((bytes.readUInt32LE(central + 16) ^ 1) >>> 0, central + 16);
+  const local = bytes.readUInt32LE(central + 42);
+  bytes.writeUInt32LE(bytes.readUInt32LE(central + 16), local + 14);
+  await writeFile(archive.file, bytes);
+  await expect(extract(archive.file, join(root, "bad"), options)).rejects.toThrow("archive extraction failed");
+  await expect(stat(join(root, "bad"))).rejects.toThrow("ENOENT");
+  expect((await readdir(root)).filter(name => name.startsWith(".archive-"))).toEqual([]);
 });

@@ -46,17 +46,29 @@ export async function extract(file: string, destination: string, options: Archiv
     const entries = await inspect(snapshot, options); await mkdir(stage);
     for (const entry of entries.filter(entry => entry.kind === "directory")) await mkdir(join(stage, entry.path), { recursive: true });
     const links: { path: string; target: string }[] = [];
-    for (const entry of entries.filter(entry => entry.kind !== "directory")) {
-      await mkdir(dirname(join(stage, entry.path)), { recursive: true });
-      if (entry.kind === "link") {
-        const chunks: Buffer[] = [];
-        await entryBytes(snapshot, entry, backend, new Writable({ write(chunk: Buffer, _encoding, callback) { chunks.push(chunk); callback(); } }), options);
-        const target = Buffer.concat(chunks).toString("utf8"); safeLink(entry.path, target); links.push({ path: entry.path, target });
-      } else {
-        await entryBytes(snapshot, entry, backend, createWriteStream(join(stage, entry.path), { flags: "wx" }), options);
-        await chmod(join(stage, entry.path), options.permissions === "portable" ? 0o644 : entry.mode);
+    const files = entries.filter(entry => entry.kind !== "directory");
+    let cursor = 0, failed = false;
+    // Bound process fan-out while retaining per-entry size/path authority.
+    // Drain every worker before removing the private staging tree on failure.
+    const worker = async () => {
+      while (!failed && cursor < files.length) {
+        const entry = files[cursor++]!;
+        try {
+          await mkdir(dirname(join(stage, entry.path)), { recursive: true });
+          if (entry.kind === "link") {
+            const chunks: Buffer[] = [];
+            await entryBytes(snapshot, entry, backend, new Writable({ write(chunk: Buffer, _encoding, callback) { chunks.push(chunk); callback(); } }), options);
+            const target = Buffer.concat(chunks).toString("utf8"); safeLink(entry.path, target); links.push({ path: entry.path, target });
+          } else {
+            await entryBytes(snapshot, entry, backend, createWriteStream(join(stage, entry.path), { flags: "wx" }), options);
+            await chmod(join(stage, entry.path), options.permissions === "portable" ? 0o644 : entry.mode);
+          }
+        } catch (error) { failed = true; throw error; }
       }
-    }
+    };
+    const results = await Promise.allSettled(Array.from({ length: Math.min(4, files.length) }, worker));
+    const failure = results.find(result => result.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
     for (const link of links) await symlink(link.target, join(stage, link.path));
     for (const entry of entries.filter(entry => entry.kind === "directory").sort((a, b) => b.path.length - a.path.length)) await chmod(join(stage, entry.path), options.permissions === "portable" ? 0o755 : entry.mode);
     await absent(output); await rename(stage, output);
