@@ -4,6 +4,51 @@
     "excludeDirectoryNames": [".next", ".tmp", "coverage", "dist", "node_modules", "out"]
   },
   "sourceSets": {
+    "closure.data.build-control": {
+      "paths": [
+        ".node-version", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
+        "apps/closure/package.json", "apps/closure/esbuild.config.ts",
+        "apps/closure/src/build/data-resources.ts", "apps/closure/src/data-resources.ts",
+        "packages/standalone/package.json", "packages/standalone/esbuild.config.ts",
+        "packages/standalone/src", "tools/release/src/exact/resource-build.ts"
+      ]
+    },
+    "closure.data.skills.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"skills","excludeDirectoryNames":[]}]
+    },
+    "closure.data.design-templates.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"design-templates","excludeDirectoryNames":[]}]
+    },
+    "closure.data.design-systems.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"design-systems","excludeDirectoryNames":[]}]
+    },
+    "closure.data.craft.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"craft","excludeDirectoryNames":[]}]
+    },
+    "closure.data.plugins.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"plugins/_official","excludeDirectoryNames":[]}, {"path":"plugins/registry","excludeDirectoryNames":[]}]
+    },
+    "closure.data.frames.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"assets/frames","excludeDirectoryNames":[]}]
+    },
+    "closure.data.community-pets.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"assets/community-pets","excludeDirectoryNames":[]}]
+    },
+    "closure.data.prompt-templates.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"prompt-templates","excludeDirectoryNames":[]}]
+    },
+    "closure.data.plugin-previews.build": {
+      "inherits": ["closure.data.build-control"],
+      "paths": [{"path":"data/plugin-previews","excludeDirectoryNames":[]}]
+    },
     "electron.contract.build": {
       "normalizePackageVersion": true,
       "paths": [
@@ -216,6 +261,15 @@
     }
   },
   "identities": {
+    "closure.data.skills.build": {"schemaVersion": 1, "sourceSets": ["closure.data.skills.build"], "parameters": ["target"]},
+    "closure.data.design-templates.build": {"schemaVersion": 1, "sourceSets": ["closure.data.design-templates.build"], "parameters": ["target"]},
+    "closure.data.design-systems.build": {"schemaVersion": 1, "sourceSets": ["closure.data.design-systems.build"], "parameters": ["target"]},
+    "closure.data.craft.build": {"schemaVersion": 1, "sourceSets": ["closure.data.craft.build"], "parameters": ["target"]},
+    "closure.data.plugins.build": {"schemaVersion": 1, "sourceSets": ["closure.data.plugins.build"], "parameters": ["target"]},
+    "closure.data.frames.build": {"schemaVersion": 1, "sourceSets": ["closure.data.frames.build"], "parameters": ["target"]},
+    "closure.data.community-pets.build": {"schemaVersion": 1, "sourceSets": ["closure.data.community-pets.build"], "parameters": ["target"]},
+    "closure.data.prompt-templates.build": {"schemaVersion": 1, "sourceSets": ["closure.data.prompt-templates.build"], "parameters": ["target"]},
+    "closure.data.plugin-previews.build": {"schemaVersion": 1, "sourceSets": ["closure.data.plugin-previews.build"], "parameters": ["target"]},
     "electron.contract.build": {"schemaVersion": 1, "sourceSets": ["electron.contract.build"], "parameters": ["target"]},
     "electron.contract.test": {"schemaVersion": 1, "sourceSets": ["electron.contract.test"], "parameters": ["target"]},
     "electron.shell.build": {"schemaVersion": 1, "sourceSets": ["electron.shell.build"], "parameters": ["target"]},

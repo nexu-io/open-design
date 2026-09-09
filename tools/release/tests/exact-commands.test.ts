@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { build } from "esbuild";
 import { afterEach, expect, it } from "vitest";
+import { resolveExactDataPlanNode } from "../src/exact/plan.ts";
 
 const run = promisify(execFile);
 const roots: string[] = [];
@@ -82,6 +83,37 @@ it("builds one Closure data resource without requiring Shell, platform or releas
     resource: { request: { id: "design-systems", workspaceRoot: f.root, outputDirectory: output } } });
   await expect(f.invoke([...args, "--shell", "electron"])).rejects.toThrow("resource build does not accept --shell");
   await expect(f.invoke([...args, "--target", "darwin-arm64"])).rejects.toThrow("resource build does not accept --target");
+});
+
+it("binds a selected data build without needing other plan nodes or resource directories", async () => {
+  const f = await fixture(), id = "closure.data.craft.build", target = "darwin-arm64";
+  const pkg = join(f.root, "tools/release/node_modules/@open-design/closure");
+  await mkdir(pkg, { recursive: true });
+  await writeFile(join(pkg, "package.json"), JSON.stringify({ type: "module", exports: { "./build-resources": "./build.mjs" } }));
+  await writeFile(join(pkg, "build.mjs"), "export async function buildClosureDataResource(request) { return { request }; }\n");
+  await mkdir(join(f.root, "craft/dist"), { recursive: true });
+  await writeFile(join(f.root, "craft/dist/input.txt"), "baseline");
+  const registryPath = join(f.root, "tools/release/resources/exact-plan-identities.json");
+  await mkdir(dirname(registryPath), { recursive: true });
+  await writeFile(registryPath, JSON.stringify({ schemaVersion: 1,
+    identities: { [id]: { schemaVersion: 1, sourceSets: [id], parameters: ["target"] } },
+    sourceSets: { [id]: { paths: [{ path: "craft", excludeDirectoryNames: [] }] } },
+  }));
+  const node = await resolveExactDataPlanNode({ root: f.root, registryPath, id, target });
+  const plan = join(f.root, "plan.json"), receipt = join(f.root, "result.json");
+  const value = { schemaVersion: 1, actions: [{ id }], plan: { target, nodes: { [id]: node } } };
+  await writeFile(plan, JSON.stringify(value));
+  const args = ["build", "resource", "--root", f.root, "--resource-id", "craft", "--output", join(f.root, "out"), "--plan", plan, "--receipt", receipt];
+  await f.invoke(args);
+  expect(JSON.parse(await readFile(receipt, "utf8")).planNode).toEqual({ id, identity: node.identity, target });
+  await writeFile(join(f.root, "craft/dist/input.txt"), "changed bytes inside dist are real resource inputs");
+  const failedArgs = args.map(arg => arg === receipt ? join(f.root, "failed.json") : arg);
+  await expect(f.invoke(failedArgs)).rejects.toThrow("plan binding mismatch");
+  await expect(readFile(join(f.root, "failed.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  await writeFile(join(f.root, "craft/dist/input.txt"), "baseline");
+  await writeFile(join(pkg, "build.mjs"), "import {writeFile} from 'node:fs/promises'; export async function buildClosureDataResource(request) { await writeFile(request.workspaceRoot + '/craft/dist/input.txt', 'changed during build'); return {}; }\n");
+  await expect(f.invoke(failedArgs)).rejects.toThrow("source changed during execution");
+  await expect(readFile(join(f.root, "failed.json"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("keeps workspace command names distinct from the relocatable exact grammar", async () => {

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { parseContentIdentityRegistry } from "@open-design/metatool";
 
 import { acceptedShellBaselineIdentity, createAcceptedShellBaselineReceipt, type AcceptedShellBaselinePayload } from "../src/exact/accepted-baseline.js";
-import { createExactPlan } from "../src/exact/plan.js";
+import { createExactPlan, EXACT_DATA_PLAN_NODE_IDS } from "../src/exact/plan.js";
 import { createExactReleasePlan } from "../src/exact/release-plan.js";
 
 const roots: string[] = [];
@@ -21,6 +21,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "od-exact-release-plan-"));
   roots.push(root);
   const ids = [
+    ...EXACT_DATA_PLAN_NODE_IDS,
     "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
     "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot",
   ] as const;
@@ -49,7 +50,7 @@ describe("exact release plan", () => {
     });
     expect(first.baseline.mode).toBe("bootstrap");
     expect(first.actions.map(({ id }) => id)).toEqual([
-      "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test", "electron.distribution",
+      "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", ...EXACT_DATA_PLAN_NODE_IDS, "closure.build", "closure.test", "electron.distribution",
       "electron.acceptance.full", "exact.compose", "exact.publish", "exact.activate",
     ]);
 

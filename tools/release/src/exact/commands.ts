@@ -83,7 +83,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Build output")
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
-    .option("--plan <file>", "Electron plan (scene)")
+    .option("--plan <file>", "Release plan (scene; optional identity binding for resource)")
     .option("--resources <file>", "Closure resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (scene)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
@@ -96,12 +96,13 @@ export function registerExactCommands(cli: CAC): void {
     .option("--source-commit <sha>", "Exact source commit (distribution)")
     .action(async (operation: string, options: Options) => {
       if (operation === "resource") {
-        const allowed = new Set(["root", "resourceId", "output", "receipt", "--"]);
+        const allowed = new Set(["root", "resourceId", "output", "receipt", "plan", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) {
           throw new Error(`resource build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
         }
         await buildReleaseDataResource({ root: required(options, "root"), resourceId: required(options, "resourceId"),
-          output: required(options, "output"), receipt: required(options, "receipt") });
+          output: required(options, "output"), receipt: required(options, "receipt"),
+          ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
         return;
       }
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");

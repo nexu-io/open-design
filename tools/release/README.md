@@ -94,6 +94,19 @@ artifact, never a complete resource set or a reusable-result authorization.
 The planner owns build/restore selection; release composition must still verify
 all required resources before producing complete signed content.
 
+The exact plan declares `closure.data.<id>.build` for all nine public data
+groups. Each identity includes its producer and its own unfiltered resource
+bytes; identities remain target-scoped conservatively. Optional `build resource
+--plan <release-plan>` verifies that selected node before and after production,
+then adds `planNode` to the receipt. It hashes only that resource's declared
+closure, so unrelated resource directories and daemon/Web sources need not be
+present. A stale plan or mid-build source change emits no success receipt;
+existing receipts are never overwritten. This binding is evidence for the
+existing convergence authority, not permission to publish cache results.
+The old aggregate scene/Closure dependencies remain in place until independent
+build, restore and composition are wired end to end; these nodes alone do not
+enable workflow skips.
+
 Scene cache transport uses an opaque `scene.tar` inside the existing GitHub
 artifact / convergence ZIP. It preserves native executable permissions,
 read-only files and hidden inputs, while convergence retains ownership of

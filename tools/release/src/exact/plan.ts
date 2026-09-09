@@ -6,12 +6,18 @@ import {
   resolveContentIdentityDeclaration,
   type ContentIdentityRegistry,
 } from "@open-design/metatool";
+import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 
 export const EXACT_PLAN_SCHEMA_VERSION = 1 as const;
 
 export type ExactTarget = import("@open-design/release").ExactStorageTarget;
+type DataNodeId = `closure.data.${typeof CLOSURE_DATA_RESOURCES[number]["id"]}.build`;
+export const EXACT_DATA_PLAN_NODE_IDS: readonly DataNodeId[] = Object.freeze(
+  CLOSURE_DATA_RESOURCES.map(({ id }) => `closure.data.${id}.build` as const),
+);
 
 export type ExactPlanNodeId =
+  | DataNodeId
   | "closure.acceptance.hot"
   | "closure.build"
   | "closure.test"
@@ -41,8 +47,8 @@ export type ExactPlanAction = Readonly<{
   reason: "identity-miss" | "release-finalization";
 }>;
 
-const NODE_DEPENDENCIES: Readonly<Record<ExactPlanNodeId, readonly ExactPlanNodeId[]>> = {
-  "closure.acceptance.hot": ["electron.distribution", "closure.build"],
+const NODE_DEPENDENCIES: Readonly<Record<Exclude<ExactPlanNodeId, DataNodeId>, readonly ExactPlanNodeId[]>> = {
+  "closure.acceptance.hot": ["electron.distribution", "closure.build", ...EXACT_DATA_PLAN_NODE_IDS],
   "closure.build": ["electron.contract.build"],
   "closure.test": ["closure.build", "electron.contract.test"],
   "electron.contract.build": [],
@@ -58,6 +64,7 @@ const NODE_ORDER = Object.freeze([
   "electron.contract.test",
   "electron.shell.build",
   "electron.shell.test",
+  ...EXACT_DATA_PLAN_NODE_IDS,
   "closure.build",
   "closure.test",
   "electron.distribution",
@@ -98,7 +105,8 @@ async function resolveNode(
     schemaVersion: resolved.declaration.schemaVersion,
     sources: resolved.sources,
   });
-  const dependencies = NODE_DEPENDENCIES[id];
+  const dependencies = Object.hasOwn(NODE_DEPENDENCIES, id)
+    ? NODE_DEPENDENCIES[id as keyof typeof NODE_DEPENDENCIES] : [];
   const dependencyNodes = dependencies.map((dependency) => {
     const node = nodes[dependency];
     if (node == null) throw new Error(`exact plan dependency ${dependency} must precede ${id}`);
@@ -138,6 +146,16 @@ export async function createExactPlanFromRegistryFile(input: Readonly<{
   target: ExactTarget;
 }>): Promise<ExactPlan> {
   return await createExactPlan({ ...input, registry: await readContentIdentityRegistry(input.registryPath) });
+}
+
+/** A data producer checks only its own closure, without reading unrelated
+ * resource groups or requiring daemon/Web build inputs to exist locally. */
+export async function resolveExactDataPlanNode(input: Readonly<{
+  id: string; root: string; registryPath: string; target: ExactTarget;
+}>): Promise<ExactPlanNode> {
+  if (!EXACT_DATA_PLAN_NODE_IDS.some(id => id === input.id)) throw new Error("unknown data plan node");
+  const registry = await readContentIdentityRegistry(input.registryPath);
+  return resolveNode(`sha256:${"0".repeat(64)}`, input.id as DataNodeId, input.root, input.target, registry, {});
 }
 
 export async function resolveExactPlanSourceIdentity(input: Readonly<{

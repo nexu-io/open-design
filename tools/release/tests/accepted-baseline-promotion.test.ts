@@ -8,7 +8,7 @@ import { cac } from "cac";
 import { registerExactCommands } from "../src/exact/commands.ts";
 
 import { executeExactReleaseControl } from "../src/exact/control-release.js";
-import { createExactPlanFromRegistryFile } from "../src/exact/plan.js";
+import { createExactPlanFromRegistryFile, EXACT_DATA_PLAN_NODE_IDS } from "../src/exact/plan.js";
 import { createExactReleasePlanFromRegistryFile } from "../src/exact/release-plan.js";
 import { writeReleasePolicy } from "../src/policy/release-profile.js";
 
@@ -28,6 +28,7 @@ async function fixture() {
   roots.push(root);
   const repository = join(root, "repository");
   const ids = [
+    ...EXACT_DATA_PLAN_NODE_IDS,
     "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
     "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot",
   ];

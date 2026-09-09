@@ -6,8 +6,9 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseContentIdentityRegistry, resolveContentIdentityDeclaration } from "@open-design/metatool";
+import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 
-import { createExactPlan, selectExactPlanActions, type ExactPlan } from "../src/exact/plan.js";
+import { createExactPlan, selectExactPlanActions, EXACT_DATA_PLAN_NODE_IDS, type ExactPlan } from "../src/exact/plan.js";
 
 const roots: string[] = [];
 const ACCEPTED_BASELINE = `sha256:${"a".repeat(64)}` as const;
@@ -20,6 +21,7 @@ async function fixture(): Promise<{ registry: ReturnType<typeof parseContentIden
   const root = await mkdtemp(join(tmpdir(), "od-exact-plan-"));
   roots.push(root);
   const ids = [
+    ...EXACT_DATA_PLAN_NODE_IDS,
     "electron.contract.build",
     "electron.contract.test",
     "electron.shell.build",
@@ -55,6 +57,30 @@ function identities(plan: ExactPlan): Set<string> {
 }
 
 describe("exact release plan", () => {
+  it("selects only the changed data producer and hot acceptance when independent results are available", async () => {
+    const input = { ...await fixture(), acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" as const };
+    const before = await createExactPlan(input);
+    await writeFile(join(input.root, "closure.data.craft.build", "input.txt"), "new craft bytes");
+    const after = await createExactPlan(input);
+    expect(selectExactPlanActions(after, identities(before)).map(action => action.id)).toEqual([
+      "closure.data.craft.build", "closure.acceptance.hot", "exact.compose", "exact.publish", "exact.activate",
+    ]);
+    for (const id of EXACT_DATA_PLAN_NODE_IDS.filter(id => id !== "closure.data.craft.build")) {
+      expect(after.nodes[id].identity).toBe(before.nodes[id].identity);
+    }
+  });
+  it("declares one byte-exact data identity per public Closure resource", async () => {
+    const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+    const registry = parseContentIdentityRegistry(JSON.parse(await readFile(join(repositoryRoot, "tools/release/resources/exact-plan-identities.json"), "utf8")));
+    for (const resource of CLOSURE_DATA_RESOURCES) {
+      const { sources } = resolveContentIdentityDeclaration(registry, `closure.data.${resource.id}.build`);
+      for (const input of resource.inputs) {
+        expect(sources.find(source => source.path === input.source)).toMatchObject({ excludeDirectoryNames: [] });
+      }
+      expect(sources.map(source => source.path)).toContain("apps/closure/src/build/data-resources.ts");
+      expect(sources.some(source => source.path.startsWith("apps/daemon") || source.path.startsWith("apps/web"))).toBe(false);
+    }
+  });
   it("keeps the checked-in identities complete and separated by delivery boundary", async () => {
     const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
     const registry = parseContentIdentityRegistry(JSON.parse(await readFile(join(repositoryRoot, "tools/release/resources/exact-plan-identities.json"), "utf8")) as unknown);
