@@ -33,6 +33,15 @@ async function fixture() {
 }
 
 describe.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process.platform}-${process.arch}`))("read-only physical platform binding", () => {
+  it("propagates preparation cancellation to both native probes", async () => {
+    const input = await fixture();
+    const controller = new AbortController();
+    await bindNodePlatform(input.root, { signal: controller.signal });
+    expect(execute.mock.calls.every(call => call[2].signal === controller.signal)).toBe(true);
+    execute.mockClear(); controller.abort(new Error("startup cancelled"));
+    await expect(bindNodePlatform(input.root, { signal: controller.signal })).rejects.toThrow("physical Node platform is unavailable");
+    expect(execute).not.toHaveBeenCalled();
+  });
   it("checks native identity and the bound product probe, preserving post-sign executable bytes", async () => {
     const input = await fixture();
     const before = await readdir(input.root, { recursive: true });

@@ -1,6 +1,6 @@
 import { canonicalJson, compareVersions, sha256Hex, validateShellIdentity, type ArtifactReference, type StandaloneShellIdentity } from "@open-design/standalone";
 
-export const ELECTRON_CAPSULE_PROTOCOL = "electron-capsule-v5" as const;
+export const ELECTRON_CAPSULE_PROTOCOL = "electron-capsule-v6" as const;
 export type ElectronCapsuleTarget = "darwin-arm64" | "darwin-x64" | "win32-x64";
 export type ElectronCapsuleManifest = Readonly<{
   schemaVersion: 1;

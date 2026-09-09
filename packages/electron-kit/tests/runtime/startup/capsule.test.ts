@@ -14,7 +14,7 @@ async function fixture(source = 'module.exports.createElectronCapsuleDefinition 
   const root = await mkdtemp(join(tmpdir(), "capsule-load-")); roots.push(root);
   const body = Buffer.from(`${source}\n${startup ? 'module.exports.runElectronCapsule = async () => {};' : ''}`), entrypoint = join(root, "capsule.cjs");
   await writeFile(entrypoint, body);
-  const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v5", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
+  const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v6", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
     requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
     archive: { sha256: "a".repeat(64), size: 100, treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", sha256: createHash("sha256").update(body).digest("hex"), size: body.byteLength }]) } });
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");

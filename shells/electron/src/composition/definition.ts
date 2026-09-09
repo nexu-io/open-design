@@ -18,6 +18,7 @@ import type { ElectronWindowsLifecyclePolicy } from "@open-design/electron-kit/w
 
 import { createElectronRendererAdapter } from "../adapters/renderer/renderer.js";
 import { createElectronStandaloneAuthorityFactory } from "../adapters/standalone/authority.js";
+import { prepareElectronNodeRuntime } from "../adapters/standalone/platform.js";
 import { scheduleElectronShellRestart } from "../adapters/standalone/electron-control.js";
 import { resolveElectronChannelHeadOverride } from "../adapters/standalone/release-feed.js";
 import type { ElectronPhysicalResourceSetDeclaration } from "../adapters/standalone/physical-resources.js";
@@ -43,6 +44,7 @@ export function createElectronShellDefinition(installedManifest: ElectronShellMa
       productName: shellManifest.productName, appearance: shellAppearance,
       media: splashMedia as Readonly<{ mimeType: "video/webm"; base64: string }>,
     }),
+    prepareNodeRuntime: prepareElectronNodeRuntime,
     mac: macRuntime as ElectronMacRuntimePolicy,
     warmup,
     warmupExecutors: assertShellWarmupBindings(warmup, renderer.warmupExecutors),

@@ -30,7 +30,7 @@ it("archives deterministically and prepares/reuses exact verified bytes before p
   expect(second.resource).toEqual(f.resource);
   expect(f.resource.executables).toEqual(["bin/node"]);
   const installed = await prepareNodePlatformResource(f.input, f.options);
-  expect(bind).toHaveBeenCalledWith(installed.root);
+  expect(bind).toHaveBeenCalledWith(installed.root, { signal: undefined });
   expect(await readFile(join(installed.root, "bin/node"), "utf8")).toBe("official Node fixture");
   if (process.platform !== "win32") expect((await stat(join(installed.root, "bin/node"))).mode & 0o777).toBe(0o755);
   await rm(f.archivePath);

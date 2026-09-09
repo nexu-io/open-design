@@ -6,7 +6,7 @@ import { assertElectronPendingCapsule } from "@/adapters/standalone/capsule.js";
 
 function fixture() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  const manifest: ElectronCapsuleManifest = { schemaVersion: 1, protocol: "electron-capsule-v5", version: "1.0.0",
+  const manifest: ElectronCapsuleManifest = { schemaVersion: 1, protocol: "electron-capsule-v6", version: "1.0.0",
     target: "darwin-arm64", entrypoint: "capsule.cjs", requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
     archive: { sha256: "a".repeat(64), size: 1, treeSha256: "b".repeat(64) } };
   const carrier = { target: "darwin-arm64" as const, shell: { type: "electron", version: "1.0.0", buildHash: "c".repeat(64), digest: "d".repeat(64) } };

@@ -4,7 +4,7 @@ import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import type {
   GenerationRecord, StandaloneGenerationBinding, StandaloneHandoffAttachment,
   StandaloneRuntimeHandle, StandaloneRuntimeStatus, StandaloneShellCapabilityRequest,
-  StandaloneShellCapabilityPort, StandaloneScope,
+  StandaloneShellCapabilityPort, StandaloneScope, NodeRuntimeBinding,
 } from "@open-design/standalone";
 import {
   validateElectronShellAppearance,
@@ -33,7 +33,7 @@ export async function runElectronCapsule(
   definition: ElectronShellDefinition,
   context: ElectronCapsuleSession,
 ): Promise<ElectronCapsuleReady> {
-  const { manifest, shell, presentation, paths, preflight, resourceRoot, nodeRuntime, processErrors } = context;
+  const { manifest, shell, presentation, paths, preflight, resourceRoot, processErrors } = context;
   const sessionNamespace = context.namespace;
   const runtimeRoot = paths.runtimeRoot;
   let rendererLease: ElectronRendererLease | null = null;
@@ -70,6 +70,7 @@ export async function runElectronCapsule(
   let updaterRevisionAtStart: number | null = null;
   let warmup: ElectronWarmupRun | null = null;
   let runtimeAcquisition: Promise<StandaloneRuntimeHandle> | null = null;
+  let platformAcquisition: Promise<NodeRuntimeBinding> | null = null;
   let rendererMount: Promise<void> | null = null;
   const rendererShutdown = new AbortController();
   let rendererReplacement: Promise<unknown> | null = null;
@@ -191,7 +192,10 @@ export async function runElectronCapsule(
       rendererShutdown.abort(new Error("Electron startup cancelled"));
       await warmup?.dispose();
     },
-    async settleRendererMount() { await rendererMount?.catch(() => undefined); },
+    async settleRendererMount() {
+      await platformAcquisition?.catch(() => undefined);
+      await rendererMount?.catch(() => undefined);
+    },
     async releaseRendererIntegration() { await rendererLease?.releaseIntegration(); },
     async releaseStandaloneAttachment() {
       const prepared = await preparationAcquisition?.catch(() => null);
@@ -207,6 +211,12 @@ export async function runElectronCapsule(
     splash = startupPresentation.window;
   }
   startupPresentation?.setStage(appearance.splash.initialLabel);
+
+  // The local Capsule owns the first screen. Node/native preparation may need
+  // I/O and must not precede that screen or escape the carrier's quit barrier.
+  platformAcquisition = definition.prepareNodeRuntime({ resourceRoot, runtimeRoot, signal: rendererShutdown.signal });
+  const nodeRuntime = await context.startupQuit.guard(platformAcquisition);
+  context.log.write("platform.ready", { command: nodeRuntime.command });
 
   warmup = runElectronWarmupTopology({
     topology: warmupTopology,

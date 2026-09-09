@@ -1,4 +1,4 @@
-import type { NodeRuntimeBinding, StandaloneShellIdentity } from "@open-design/standalone";
+import type { StandaloneShellIdentity } from "@open-design/standalone";
 import type { ElectronShellManifest } from "../../contracts/index.js";
 import type { ElectronActivationAttempt } from "../session/activation.js";
 import type { installElectronLaunchIngress } from "../session/launch-ingress.js";
@@ -36,7 +36,6 @@ export type ElectronCapsuleSession = Readonly<{
   paths: ElectronNamespacePaths;
   preflight: ElectronPreflightResult;
   resourceRoot: string;
-  nodeRuntime: NodeRuntimeBinding;
   log: ElectronRuntimeLog;
   processErrors: ElectronProcessErrorLease;
   ingress: ReturnType<typeof installElectronLaunchIngress>;

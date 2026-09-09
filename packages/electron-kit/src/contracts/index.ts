@@ -186,6 +186,7 @@ export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
   appearance: ElectronShellAppearance;
   createStartupPresentation(): Promise<ElectronStartupPresentation>;
+  prepareNodeRuntime(input: Readonly<{ resourceRoot: string; runtimeRoot: string; signal: AbortSignal }>): Promise<NodeRuntimeBinding>;
   mac: ElectronMacRuntimePolicy;
   warmup: ElectronWarmupTopology;
   headless?: boolean;

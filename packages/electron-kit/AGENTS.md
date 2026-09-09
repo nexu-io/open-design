@@ -24,7 +24,7 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Capsule content builds emit release-neutral bytes and a content descriptor;
   public contracts compose version and compatibility metadata without loading a
   compiler. Keep build-cache policy and final signature authority in tools.
-- Capsule protocol v5 supplies a verified composite Shell identity alongside the
+- Capsule protocol v6 supplies a verified composite Shell identity alongside the
   immutable physical manifest. Its build hash binds carrier build inputs and
   exact Capsule content, excluding release versions; its runtime digest binds
   the full authenticated combination. Do not accept module-exported identity
@@ -34,9 +34,12 @@ Follow the root and `packages/AGENTS.md` guidance first.
   commit and releases the startup quit barrier. Do not expose either commit method
   to Capsule or log complete startup from its partial initialization path.
 - Loading documents, animation, DOM updates and startup/session sequencing belong
-  to electron-capsule. Establish presentation permission, physical integrity and
+  to electron-capsule. Establish presentation permission, carrier integrity and
   activation/quit protection before invoking its versioned startup entry. Native
   launch ingress is registered before loading and delivers only typed events.
+- Carrier session v6 does not contain a prepared Node runtime. Capsule calls the
+  product definition's preparation after first-screen mount, under startup
+  cancellation. Native probes must not block the local Capsule loading screen.
 - `/capsule-loader` is the Node-safe verification/loading leaf. Recovery inspection must
   authenticate the same signed manifest, compatibility edges and exact materialized
   bytes as execution without evaluating candidate code. An inspection receipt

@@ -16,7 +16,7 @@ const execute = promisify(execFile);
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /** Read-only physical preflight. Never acquire, repair, or consume upgrade state. */
-export async function bindNodePlatform(root: string): Promise<NodeRuntimeBinding> {
+export async function bindNodePlatform(root: string, options: Readonly<{ signal?: AbortSignal }> = {}): Promise<NodeRuntimeBinding> {
   try {
     if (!isAbsolute(root)) throw new Error("physical platform root must be absolute");
     const target = currentOfficialNodeTarget();
@@ -44,13 +44,16 @@ export async function bindNodePlatform(root: string): Promise<NodeRuntimeBinding
     const command = await local(executable);
     const env = Object.freeze({ NODE_PATH: await local("node_modules"), NODE_OPTIONS: "", ELECTRON_RUN_AS_NODE: "",
       PATH: `${dirname(command)}${delimiter}${process.env.PATH ?? ""}` });
-    const options = { cwd: platformRoot, env: { ...process.env, ...env }, timeout: 15_000, maxBuffer: 1024 * 1024 };
+    const execution = { cwd: platformRoot, env: { ...process.env, ...env }, timeout: 15_000, maxBuffer: 1024 * 1024,
+      ...(options.signal == null ? {} : { signal: options.signal }) };
     // Signing may change executable bytes. The signed installation owns integrity;
     // the pre-sign digest is provenance, not a post-sign executable checksum.
-    const { stdout } = await execute(command, ["-e", "process.stdout.write(JSON.stringify({version:process.versions.node,abi:process.versions.modules,target:process.platform+'-'+process.arch,electron:process.versions.electron??null}))"], options);
+    options.signal?.throwIfAborted();
+    const { stdout } = await execute(command, ["-e", "process.stdout.write(JSON.stringify({version:process.versions.node,abi:process.versions.modules,target:process.platform+'-'+process.arch,electron:process.versions.electron??null}))"], execution);
     const actual = JSON.parse(stdout) as { version?: unknown; abi?: unknown; target?: unknown; electron?: unknown };
     if (actual.version !== manifest.node.version || actual.abi !== manifest.node.abi || actual.target !== target || actual.electron !== null) throw new Error("physical Node identity or ABI differs");
-    await execute(command, [await local("platform-check.cjs")], options);
+    options.signal?.throwIfAborted();
+    await execute(command, [await local("platform-check.cjs")], execution);
     return Object.freeze({ command, env });
   } catch (cause) {
     throw new Error("physical Node platform is unavailable; install the latest physical Shell", { cause });

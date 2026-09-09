@@ -63,16 +63,16 @@ beforeEach(() => {
 });
 afterEach(() => { app.removeAllListeners(); vi.restoreAllMocks(); });
 
-it("establishes physical integrity and activation before loading one Capsule in-process", async () => {
+it("establishes carrier ownership and activation before Capsule, without preparing its Node runtime", async () => {
   const module = capsule();
   const loadCapsule = vi.fn(async () => module);
   await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule });
   expect(mock.lease).toHaveBeenCalledWith("/runtime");
-  expect(mock.lease.mock.invocationCallOrder[0]).toBeLessThan(mock.bind.mock.invocationCallOrder[0]!);
-  expect(mock.bind.mock.invocationCallOrder[0]).toBeLessThan(mock.begin.mock.invocationCallOrder[0]!);
+  expect(mock.bind).not.toHaveBeenCalled();
+  expect(mock.lease.mock.invocationCallOrder[0]).toBeLessThan(mock.begin.mock.invocationCallOrder[0]!);
   expect(mock.begin.mock.invocationCallOrder[0]).toBeLessThan(loadCapsule.mock.invocationCallOrder[0]!);
   expect(module.runElectronCapsule).toHaveBeenCalledExactlyOnceWith(expect.any(Object), expect.objectContaining({
-    manifest, shell, presentation: "headless", namespace: "test-headless", nodeRuntime: { command: "/physical/platform/bin/node", env: {} },
+    manifest, shell, presentation: "headless", namespace: "test-headless",
   }));
   expect(module.createElectronCapsuleDefinition).toHaveBeenCalledWith(manifest, shell);
   expect(manifest.shell.version).toBe("0.1.0");

@@ -1,7 +1,5 @@
-import { join } from "node:path";
 import { BrowserWindow, app, nativeImage, protocol } from "electron";
 import { canonicalJson, validateShellIdentity, withStandaloneMaintenanceLock } from "@open-design/standalone";
-import { bindNodePlatform } from "@open-design/standalone/packages";
 import {
   validateElectronShellManifest, validateElectronShellAppearance,
   type ElectronShellManifest,
@@ -91,12 +89,6 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
   context.sessionLease = await loadElectronCarrierCapsule(app, () => acquireElectronSessionLease(paths.runtimeRoot));
   log.write("session.owned", { runtimeRoot: paths.runtimeRoot });
   const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
-  // Platform damage cannot consume generation or installer handoff state.
-  const nodeRuntime = await loadElectronCarrierCapsule(app, async () => {
-    const binding = await bindNodePlatform(join(resourceRoot, "platform"));
-    log.write("platform.verified", { command: binding.command });
-    return binding;
-  });
 
   let cleanup: ElectronCapsuleCleanup | null = null;
   let activationAcquisition: Promise<ElectronActivationAttempt> | null = null;
@@ -169,7 +161,7 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
     },
   });
   const ready = await startupQuit.guard(capsule.runElectronCapsule(definition, Object.freeze({
-    manifest, shell, presentation, namespace, paths, preflight, resourceRoot, nodeRuntime,
+    manifest, shell, presentation, namespace, paths, preflight, resourceRoot,
     log, processErrors, ingress,
     activation: Object.freeze({ stop: () => activation.stop() }),
     startup: capsuleStartup,

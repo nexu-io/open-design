@@ -31,7 +31,7 @@ export async function prepareNodePlatformResource(input: Readonly<{
       if (process.platform !== "win32") await chmod(file, 0o755);
     }
     options.signal?.throwIfAborted();
-    const binding = await bindNodePlatform(tree.path).catch(cause => {
+    const binding = await bindNodePlatform(tree.path, { signal: options.signal }).catch(cause => {
       throw new Error("verified Node platform resource failed its runtime probe; explicit recovery required", { cause });
     });
     return Object.freeze({ root: tree.path, binding, archive, reused: tree.reused });

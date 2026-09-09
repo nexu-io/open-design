@@ -27,7 +27,8 @@ it("keeps Capsule session orchestration out of the reusable carrier entry", asyn
     bundle: true, external: ["electron"], format: "cjs", platform: "node", target: "node24", write: false,
   });
   const code = result.outputFiles[0]!.text;
-  expect(code).toContain("platform.verified");
+  expect(code.includes("platform.verified")).toBe(false);
+  expect(code.includes("bindNodePlatform")).toBe(false);
   expect(code).toContain("startup.cancellation.failed");
   expect(code).not.toContain("renderer.recovery.committed");
   expect(code).not.toContain("warmup.ready");
@@ -44,7 +45,8 @@ it("loads product Capsule bytes independently of the physical main bundle", asyn
   expect(inputs.some(path => /(?:^|\/)src\/capsule\.ts$/u.test(path))).toBe(false);
   expect(inputs.some(path => /(?:^|\/)config\/runtime\.json$/u.test(path))).toBe(false);
   const code = result.outputFiles[0]!.text;
-  expect(code.includes("platform.verified")).toBe(true);
+  expect(code.includes("platform.verified")).toBe(false);
+  expect(code.includes("bindNodePlatform")).toBe(false);
   expect(code.includes("renderer.recovery.committed")).toBe(false);
   expect(code.includes("@keyframes slide")).toBe(false);
   expect(code.includes("Resolving the Standalone generation")).toBe(false);

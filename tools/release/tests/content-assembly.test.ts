@@ -36,7 +36,7 @@ describe("exact release control", () => {
       closure: { sha256: digest(await readFile(closure)) },
       standalone: { sha256: digest(await readFile(launcher)) },
       ...(shellType !== "electron" ? {} : { capsule: { archiveFile: "capsule.zip", content: {
-        schemaVersion: 1, protocol: "electron-capsule-v5", target: "darwin-arm64", entrypoint: "capsule.cjs",
+        schemaVersion: 1, protocol: "electron-capsule-v6", target: "darwin-arm64", entrypoint: "capsule.cjs",
         archive: capsule.archive,
       } } }),
     };

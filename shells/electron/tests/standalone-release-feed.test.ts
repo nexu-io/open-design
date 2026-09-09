@@ -40,7 +40,7 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { channel?: 
   const capsuleArchive = await readFile(seed.archiveFile);
   const archive = seed.envelope.document.archive;
   const capsuleArchiveUrl = `${base}/capsule.zip`;
-  const capsule = { schemaVersion: 1, protocol: "electron-capsule-v5", version: "0.2.0", target: options.target ?? "darwin-arm64", entrypoint: "capsule.cjs",
+  const capsule = { schemaVersion: 1, protocol: "electron-capsule-v6", version: "0.2.0", target: options.target ?? "darwin-arm64", entrypoint: "capsule.cjs",
     requires: { carrierVersion: options.minimumCarrierVersion ?? "0.1.0" }, provides: { shellVersion: "0.2.0" },
     archive: { ...archive, sha256: options.archiveSha256 ?? archive.sha256, treeSha256: options.treeSha256 ?? archive.treeSha256 } };
   const capsuleBytes = Buffer.from(canonicalJson(signDocument(capsule, [{ keyId: "release", privateKey: options.badSignature ? generateKeyPairSync("ed25519").privateKey : keys.privateKey }])));

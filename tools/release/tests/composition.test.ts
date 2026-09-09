@@ -44,7 +44,7 @@ it("prepares and finalizes signed content within release ownership, with no requ
     await json(join(source, "scene.json"), { schemaVersion: 1, target: item.target, shellVersion: "0.1.0", shellBuildHash: sha(item.shell),
       closure: { file: "closure.mjs", sha256: sha("closure"), size: 7 }, standalone: { entrypoint: "launcher.mjs", sha256: sha("launcher") },
       ...(item.shell !== "electron" ? {} : { capsule: { archiveFile: "capsule.zip", content: {
-        schemaVersion: 1, protocol: "electron-capsule-v5", target: item.target, entrypoint: "capsule.cjs",
+        schemaVersion: 1, protocol: "electron-capsule-v6", target: item.target, entrypoint: "capsule.cjs",
         archive: baselineCapsule.archive,
       } } }) });
     await packSceneArtifact(source, join(scenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
@@ -103,7 +103,7 @@ it("prepares and finalizes signed content within release ownership, with no requ
   await mkdir(capsuleTarget, { recursive: true });
   const currentCapsule = await capsuleFixture("current capsule");
   await writeFile(join(capsuleTarget, "capsule.zip"), currentCapsule.bytes);
-  await json(join(capsuleTarget, "capsule-content.json"), { schemaVersion: 1, protocol: "electron-capsule-v5",
+  await json(join(capsuleTarget, "capsule-content.json"), { schemaVersion: 1, protocol: "electron-capsule-v6",
     target: "darwin-arm64", entrypoint: "capsule.cjs", archive: currentCapsule.archive });
   for (const item of active) await packSceneArtifact(join(root, `source-${item.shell}`),
     join(independentScenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
