@@ -12010,9 +12010,20 @@ export async function startServer({
      * (emit one inline marker the host parses and strips), same "don't narrate
      * this to the user" clause.
      */
+    /*
+     * The run's UI locale rides along (OPEND-2765).
+     *
+     * `# UI locale override` states the same rule, but it lives in
+     * `daemonSystemPrompt` — the cache-stable head, which the payload below
+     * drops whenever `includeStableForPayload` is false. These three markers
+     * are re-sent every turn because of the nonce, so on a resume turn the
+     * marker contract was arriving with no locale attached and the follow-up
+     * suggestions came back in English on a zh-CN run.
+     */
     const hostProtocol = renderChatTurnHostProtocolInstructions(
       typeof run.doneKey === 'string' ? run.doneKey : '',
       'ordinary',
+      typeof locale === 'string' ? locale : undefined,
     );
     /*
      * This turn's follow-up suggestions.
@@ -16733,6 +16744,11 @@ export async function startServer({
               task: strategyTaskAtStart,
               parsed: strategyProtocolResult,
               toolUseCount: strategyToolUseCount,
+              // OPEND-2765: the production stage closes with the keyed host
+              // protocols, whose follow-up suggestions are user-visible prose.
+              ...(typeof chatBody.locale === 'string' && chatBody.locale
+                ? { locale: chatBody.locale }
+                : {}),
               ...(executionPreflight ? { executionPreflight } : {}),
               ...(complexRuntimeEvidence ? { complexRuntimeEvidence } : {}),
               ...(

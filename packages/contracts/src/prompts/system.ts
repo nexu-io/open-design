@@ -43,6 +43,7 @@ import {
   type OdNextStrategyRequestRecipeV2,
 } from './od-next-strategy.js';
 import { SETTINGS_MEDIA_PROVIDERS_PATH } from '../settings-nav.js';
+import { normalizePromptLocale, promptLanguageName } from './ui-locale.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
@@ -75,13 +76,9 @@ const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
 };
 
 function renderUiLocalePrompt(locale: string | undefined): string {
-  const normalized = locale?.trim();
-  if (!normalized || normalized.toLowerCase() === 'en') return '';
-  const languageName = normalized === 'zh-CN'
-    ? 'Simplified Chinese'
-    : normalized === 'zh-TW'
-      ? 'Traditional Chinese'
-      : normalized;
+  const normalized = normalizePromptLocale(locale);
+  if (!normalized) return '';
+  const languageName = promptLanguageName(normalized);
   const lines = [
     '# UI locale override',
     '',
