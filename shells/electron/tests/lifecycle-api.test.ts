@@ -33,7 +33,7 @@ it("passes the caller log descriptor to the physical launch without closing or r
   try {
     await controlElectronDevelopment({ schemaVersion: 2, operation: "electron.dev.start", channel: "dev", namespace: "public-api",
       controlRuntimeRoot: root, installationRoot: join(root, "installation"), ownerPid: process.pid,
-      installationInput: { channel: "dev", releaseVersion: "0.1.0", channelHeadUrl: "http://localhost/head", contentFile: "/content", trustFile: "/trust", seedFiles: ["/seed"], capsule: { manifestFile: "/capsule.json", archiveFile: "/capsule.zip" } } }, { logFd: log.fd });
+      installationInput: { channel: "dev", releaseVersion: "0.1.0", channelHeadUrl: "http://localhost/head", contentFile: "/content", trustFile: "/trust", capsule: { manifestFile: "/capsule.json", archiveFile: "/capsule.zip" } } }, { logFd: log.fd });
     expect(mock.launch).toHaveBeenCalledWith(expect.objectContaining({ logFd: log.fd, resources: expect.objectContaining({ ownerPid: process.pid }) }));
     await log.write("caller-still-owns-log\n");
   } finally { await log.close(); }

@@ -23,7 +23,7 @@ vi.mock("@/adapters/standalone/release-feed.js", () => ({ ElectronReleaseExactFe
 vi.mock("@/adapters/standalone/shell-updater-candidate.js", () => ({ ElectronStandaloneShellCandidateLedger: class { read = state.candidate; } }));
 vi.mock("@/adapters/standalone/shell-updater-ledger.js", () => ({ ElectronStandaloneShellUpdaterLedger: class { read = state.updater; update = state.updateLedger; } }));
 vi.mock("@/adapters/standalone/installation.js", () => ({ loadElectronInstalledCapsuleSeed: state.seed,
-  loadElectronStandaloneInstallation: async () => ({ envelope: { metadata: { installed: true } }, candidates: {}, trustedKeys: {},
+  loadElectronStandaloneInstallation: async () => ({ envelope: { metadata: { installed: true } }, trustedKeys: {},
     declaration: { releaseVersion: "0.2.0-betahyx.1", update: { channelHeadUrl: "https://invalid.test/betahyx/head.json" } } }),
   resolveElectronStandaloneTarget: () => "darwin-arm64" }));
 vi.mock("@open-design/standalone", async original => ({

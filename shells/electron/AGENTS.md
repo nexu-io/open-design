@@ -24,11 +24,13 @@ Shell and the typed adapter boundary consumed by repository tools.
   Carrier bytes. Exact planning binds it and `/lifecycle` to Shell tests and
   installed acceptance, not Carrier builds. Build recipes and installation
   composition stay outside this directory and retain their build identity.
-- Tool dev/pack schema 2 consumes local installation schema 3, including a signed
-  Capsule manifest and exact archive separate from Closure seeds. Loopback fixture
+- Tool dev/pack schema 2 consumes local installation schema 4, including a signed
+  Capsule manifest and exact archive, without Closure payload seeds. Loopback fixture
   acquisition belongs to tools-dev/tools-pack via the tools-serve fixture client,
   not to Shell or electron-kit. Product installation assembly is shared with exact
-  distribution and must preserve prebuilt scene authority bytes.
+  distribution and must preserve prebuilt scene authority bytes. Distribution
+  explicitly projects only installation resources and the current prepared Capsule;
+  scene build inputs must not become implicit installer payloads.
 - `tests/` validates Shell policy and both Shell/Closure updater handler lines.
 - Capsule composition consumes the explicit installed manifest; never bundle a
   default release manifest into its independently built product content.

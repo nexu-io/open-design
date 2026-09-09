@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import type { ElectronExactSceneRequest } from "@open-design/shell-electron/build";
@@ -157,8 +157,9 @@ export async function buildReleaseDistribution(input: BuildInput & Readonly<{ sc
       sourceCommit: input.sourceCommit, publishedAt: prepared.publishedAt, artifactBaseUrl: prepared.artifactBaseUrl } });
   const { buildElectronInstaller } = await electronBuilder(input.root);
   const capsule = await checkedFile(expected.capsule.manifest, "prepared Capsule manifest", join(preparedRoot, "documents", `capsule-${buildTarget}.json`));
+  const capsuleArchive = await checkedFile(expected.capsule.archive, "prepared Capsule archive", join(preparedRoot, "artifacts", basename(expected.capsule.archive.file)));
   const result = await buildElectronInstaller({ ...common, schemaVersion: 2, operation: "electron.distribution.build", acceptedContentMetadataFile: content, acceptedTrustFile: trust,
-    acceptedCapsuleManifestFile: capsule,
+    acceptedCapsuleManifestFile: capsule, acceptedCapsuleArchiveFile: capsuleArchive,
     channel: policy.channel, releaseVersion: policy.releaseVersion, channelHeadUrl: `${policy.target.publicBaseUrl}/${input.channel}/latest/channel-head.json` });
   await writeObject(join(input.output, "shell-contribution.json"), result);
   await writeObject(input.receipt, result);

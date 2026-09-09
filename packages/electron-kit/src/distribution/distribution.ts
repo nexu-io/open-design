@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -27,14 +27,21 @@ export type BuildElectronDistributionInput = Readonly<{
   policy: ElectronDistributionPolicy;
   windowsLifecycle: ElectronWindowsLifecyclePolicy;
   outputRoot: string;
-  additionalResources?: readonly Readonly<{ name: string; path: string }>[];
+  /** Complete installation projection; scene build inputs are never implicit payloads. */
+  resources: readonly Readonly<{ name: string; path: string }>[];
 }>;
 
-/** Explicit files bypass builder directory filters, especially node_modules. */
-export function resolveElectronSceneResourceFiles(resources: ElectronSceneReceipt["authorityResources"]) {
-  return resources.flatMap(resource => resource.tree == null
-    ? [{ from: resource.path, to: resource.name }]
-    : resource.tree.map(file => ({ from: join(resource.path, file.path), to: `${resource.name}/${file.path}` })));
+/** Distribution consumes only the caller's explicit, flat installation projection. */
+export async function resolveElectronDistributionResourceFiles(resources: BuildElectronDistributionInput["resources"]) {
+  const names = new Set<string>();
+  for (const resource of resources) {
+    if (!/^[a-z][a-z0-9.-]{0,127}$/u.test(resource.name) || names.has(resource.name)) throw new Error(`invalid or duplicate Electron distribution resource: ${resource.name}`);
+    names.add(resource.name);
+    if (resolve(resource.path) !== resource.path) throw new Error("Electron distribution resource path must be absolute and normalized");
+    const info = await lstat(resource.path);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error("Electron distribution resource must be a regular file");
+  }
+  return resources.map(resource => ({ from: resource.path, to: resource.name }));
 }
 
 export async function buildElectronDistribution(input: BuildElectronDistributionInput): Promise<ElectronDistributionReceipt> {
@@ -42,6 +49,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   const manifest = validateElectronShellManifest(input.manifest);
   const policy = validateElectronDistributionPolicy(input.policy);
   const windowsLifecycle = validateElectronWindowsLifecyclePolicy(input.windowsLifecycle);
+  const resourceFiles = await resolveElectronDistributionResourceFiles(input.resources);
   const platform: ElectronDistributionReceipt["platform"] = resolveElectronDistributionPlatform(process.platform);
   await rm(input.outputRoot, { force: true, recursive: true });
   await mkdir(input.outputRoot, { recursive: true });
@@ -54,13 +62,6 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   const projectRoot = join(scratchRoot, "project");
   const windowsNsisIncludePath = platform === "win" ? join(scratchRoot, "installer.nsh") : undefined;
   let built: string[];
-  const existingResourceNames = new Set(scene.authorityResources.map(({ name }) => name));
-  const additionalResources = input.additionalResources ?? [];
-  for (const resource of additionalResources) {
-    if (!/^[a-z][a-z0-9.-]{0,127}$/u.test(resource.name) || existingResourceNames.has(resource.name)) throw new Error(`invalid or duplicate Electron distribution resource: ${resource.name}`);
-    existingResourceNames.add(resource.name);
-    await access(resource.path);
-  }
   try {
     await mkdir(projectRoot, { recursive: true });
     const iconPath = manifest.iconDataUrl == null ? undefined : join(scratchRoot, "icon.png");
@@ -98,12 +99,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
           windowsNsisIncludePath,
         }),
         ...(iconPath == null ? {} : { icon: iconPath }),
-        // A directory glob applies builder defaults (including node_modules
-        // exclusions). Physical trees must copy the exact verified inventory.
-        extraResources: [
-          ...resolveElectronSceneResourceFiles(scene.authorityResources),
-          ...additionalResources.map(resource => ({ from: resource.path, to: resource.name })),
-        ],
+        extraResources: resourceFiles,
       },
     });
   } finally {

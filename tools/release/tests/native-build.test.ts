@@ -112,19 +112,25 @@ it("binds native distribution to authorized prepared content, trust and scene", 
   await writeFile(content, "content"); await writeFile(trust, "trust");
   const capsule = join(prepared, "documents/capsule-darwin-arm64.json");
   await writeFile(capsule, "capsule");
+  await mkdir(join(prepared, "artifacts"));
+  const capsuleArchive = join(prepared, "artifacts/capsule-current.zip");
+  await writeFile(capsuleArchive, "current archive");
   const manifest = JSON.stringify({ target: f.target }); await writeFile(join(scene, "scene.json"), manifest);
   const identity = { channel: "betahyx", releaseVersion: "0.1.0-betahyx.1", sourceCommit: "a".repeat(40) };
   await json(policy, resolveReleasePolicy({ schemaVersion: 1, operation: "release.policy.resolve", ...identity, profile: "exact-validation", sourceRef: "refs/heads/feat/test",
     switches: { endUserDistribution: false, stableAuthorized: false }, target: { endpointUrl: "https://storage.example", bucket: "releases", publicBaseUrl: "https://public.example",
       latestChannelHeadUrl: "https://storage.example/releases/betahyx/latest/channel-head.json" } }));
   await json(join(prepared, "prepare-receipt.json"), { ...identity, contentMetadata: { sha256: digest("content"), size: 7 }, trustFile: { sha256: digest("trust"), size: 5 },
-    shells: [{ type: f.shell, scenes: [{ target: f.target, sceneManifestSha256: digest(manifest), capsule: { manifest: { sha256: digest("capsule"), size: 7 } } }] }] });
+    shells: [{ type: f.shell, scenes: [{ target: f.target, sceneManifestSha256: digest(manifest), capsule: { manifest: { sha256: digest("capsule"), size: 7 }, archive: { file: "capsule-current.zip", sha256: digest("current archive"), size: 15 } } }] }] });
   const input = { ...f, ...identity, prepared, scene, policy };
   await buildReleaseDistribution(input);
   expect(await readFile(join(f.output, "shell-contribution.json"), "utf8")).toBe(await readFile(f.receipt, "utf8"));
   expect(JSON.parse(await readFile(f.receipt, "utf8")).request).toMatchObject({ operation: "electron.distribution.build",
-    schemaVersion: 2, acceptedCapsuleManifestFile: capsule, acceptedContentMetadataFile: content, acceptedTrustFile: trust, channelHeadUrl: "https://public.example/betahyx/latest/channel-head.json", sceneManifestSha256: digest(manifest) });
+    schemaVersion: 2, acceptedCapsuleArchiveFile: capsuleArchive, acceptedCapsuleManifestFile: capsule, acceptedContentMetadataFile: content, acceptedTrustFile: trust, channelHeadUrl: "https://public.example/betahyx/latest/channel-head.json", sceneManifestSha256: digest(manifest) });
   await expect(buildReleaseDistribution({ ...input, channel: "stable" })).rejects.toThrow("binding mismatch");
+  await writeFile(capsuleArchive, "wrong archive");
+  await expect(buildReleaseDistribution(input)).rejects.toThrow("prepared Capsule archive binding verification failed");
+  await writeFile(capsuleArchive, "current archive");
   await writeFile(trust, "tampered");
   await expect(buildReleaseDistribution(input)).rejects.toThrow("prepared trust binding verification failed");
   await writeFile(trust, "trust"); await writeFile(join(scene, "scene.json"), JSON.stringify({ target: f.target, extra: true }));

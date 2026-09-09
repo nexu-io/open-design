@@ -32,5 +32,5 @@ export async function packElectronShell(input: Readonly<{
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     carrierConfigPath: input.carrierConfigPath,
   });
-  return await buildElectronDistribution({ scene, manifest, policy, windowsLifecycle, outputRoot: input.outputRoot });
+  return await buildElectronDistribution({ scene, manifest, policy, windowsLifecycle, resources: scene.authorityResources, outputRoot: input.outputRoot });
 }

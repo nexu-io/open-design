@@ -7,11 +7,10 @@ import {
   verifyDocument,
   type SignedDocument,
   type SignedStandaloneMetadata,
-  type StandaloneBlobCandidate,
 } from "@open-design/standalone";
 import { assertElectronCapsuleCompatibility, validateElectronCapsuleManifest, type ElectronCapsuleManifest } from "@open-design/electron-kit/contracts";
 
-export const ELECTRON_STANDALONE_INSTALLATION_SCHEMA_VERSION = 3 as const;
+export const ELECTRON_STANDALONE_INSTALLATION_SCHEMA_VERSION = 4 as const;
 export const ELECTRON_STANDALONE_TRUST_SCHEMA_VERSION = 1 as const;
 export const ELECTRON_STANDALONE_INSTALLATION_FILE = "standalone-installation.json";
 
@@ -35,7 +34,6 @@ export type ElectronStandaloneInstallation = Readonly<{
   trust: InstalledFile;
   capsule: Readonly<{ manifest: InstalledFile; archive: InstalledFile }>;
   update: Readonly<{ channelHeadUrl: string }>;
-  seeds: readonly Readonly<InstalledFile & { blobSha256: string }>[];
 }>;
 
 export type ResolvedElectronStandaloneInstallation = Readonly<{
@@ -45,7 +43,6 @@ export type ResolvedElectronStandaloneInstallation = Readonly<{
   hostPath: string;
   updaterProviderPath: string;
   supervisorPath: string;
-  candidates: Readonly<Record<string, readonly StandaloneBlobCandidate[]>>;
 }>;
 
 const digestPattern = /^[a-f0-9]{64}$/u;
@@ -97,14 +94,13 @@ function channelHeadUrl(value: unknown): string {
 
 export function validateElectronStandaloneInstallation(value: unknown): ElectronStandaloneInstallation {
   const candidate = record(value, "Electron Standalone installation");
-  exactKeys(candidate, ["capsule", "channel", "content", "host", "releaseVersion", "schemaVersion", "seeds", "supervisor", "target", "trust", "update", "updaterProvider"], "Electron Standalone installation");
+  exactKeys(candidate, ["capsule", "channel", "content", "host", "releaseVersion", "schemaVersion", "supervisor", "target", "trust", "update", "updaterProvider"], "Electron Standalone installation");
   if (candidate.schemaVersion !== ELECTRON_STANDALONE_INSTALLATION_SCHEMA_VERSION) throw new Error("unsupported Electron Standalone installation schema");
   if (typeof candidate.channel !== "string") throw new Error("Electron Standalone installation channel must be a string");
   if (typeof candidate.releaseVersion !== "string") throw new Error("Electron Standalone installation releaseVersion must be a string");
   if (typeof candidate.target !== "string" || !supportedTargets.has(candidate.target as ElectronStandaloneTarget)) {
     throw new Error("Electron Standalone installation has an unsupported target");
   }
-  if (!Array.isArray(candidate.seeds) || candidate.seeds.length === 0) throw new Error("Electron Standalone installation must contain offline seeds");
   const files = new Set<string>();
   const reserve = <T extends InstalledFile>(file: T, label: string): T => {
     if (files.has(file.file)) throw new Error(`${label} reuses installed file ${file.file}`);
@@ -123,18 +119,6 @@ export function validateElectronStandaloneInstallation(value: unknown): Electron
     manifest: reserve(installedFile(capsuleInput.manifest, "Electron Capsule manifest"), "Electron Capsule manifest"),
     archive: reserve(installedFile(capsuleInput.archive, "Electron Capsule archive"), "Electron Capsule archive"),
   });
-  const blobDigests = new Set<string>();
-  const seeds = candidate.seeds.map((value, index) => {
-    const seed = record(value, `Electron Standalone seed ${index}`);
-    exactKeys(seed, ["blobSha256", "file", "sha256", "size"], `Electron Standalone seed ${index}`);
-    const file = installedFile({ file: seed.file, sha256: seed.sha256, size: seed.size }, `Electron Standalone seed ${index}`);
-    if (typeof seed.blobSha256 !== "string" || !digestPattern.test(seed.blobSha256) || blobDigests.has(seed.blobSha256)) {
-      throw new Error(`Electron Standalone seed ${index} has an invalid or duplicate blob digest`);
-    }
-    reserve(file, `Electron Standalone seed ${index}`);
-    blobDigests.add(seed.blobSha256);
-    return Object.freeze({ ...file, blobSha256: seed.blobSha256 });
-  });
   return Object.freeze({
     schemaVersion: ELECTRON_STANDALONE_INSTALLATION_SCHEMA_VERSION,
     channel: candidate.channel,
@@ -147,7 +131,6 @@ export function validateElectronStandaloneInstallation(value: unknown): Electron
     trust,
     capsule,
     update: Object.freeze({ channelHeadUrl: channelHeadUrl(candidate.update) }),
-    seeds: Object.freeze(seeds),
   });
 }
 
@@ -244,12 +227,11 @@ export async function loadElectronStandaloneInstallation(input: Readonly<{
 }>): Promise<ResolvedElectronStandaloneInstallation> {
   const declaration = await installedDeclaration(input);
 
-  const [hostBytes, supervisorBytes, contentBytes, trustBytes, seedBytes] = await Promise.all([
+  const [hostBytes, supervisorBytes, contentBytes, trustBytes] = await Promise.all([
     verifiedInstalledBytes(input.resourceRoot, declaration.host, "Electron Standalone host"),
     verifiedInstalledBytes(input.resourceRoot, declaration.supervisor, "Electron Standalone supervisor"),
     verifiedInstalledBytes(input.resourceRoot, declaration.content, "Electron Standalone content"),
     verifiedInstalledBytes(input.resourceRoot, declaration.trust, "Electron Standalone trust"),
-    Promise.all(declaration.seeds.map((seed, index) => verifiedInstalledBytes(input.resourceRoot, seed, `Electron Standalone seed ${index}`))),
   ]);
   void hostBytes;
   await verifiedInstalledBytes(input.resourceRoot, declaration.updaterProvider, "Electron updater provider");
@@ -261,18 +243,6 @@ export async function loadElectronStandaloneInstallation(input: Readonly<{
     throw new Error("Electron Standalone content does not match its installed release binding");
   }
 
-  const metadataDigests = Object.keys(envelope.metadata.blobs).sort();
-  const seedDigests = declaration.seeds.map(({ blobSha256 }) => blobSha256).sort();
-  if (metadataDigests.length !== seedDigests.length || metadataDigests.some((digest, index) => digest !== seedDigests[index])) {
-    throw new Error("Electron Standalone offline seeds do not exactly cover signed content blobs");
-  }
-  const candidates = Object.fromEntries(declaration.seeds.map((seed, index) => {
-    const blob = envelope.metadata.blobs[seed.blobSha256]!;
-    if (seed.sha256 !== blob.sha256 || seed.size !== blob.size || seedBytes[index]!.byteLength !== blob.size) {
-      throw new Error(`Electron Standalone seed does not match signed blob ${seed.blobSha256}`);
-    }
-    return [seed.blobSha256, Object.freeze([{ path: join(input.resourceRoot, seed.file), source: "seed" as const }])];
-  }));
   return Object.freeze({
     declaration,
     updaterProviderPath: join(input.resourceRoot, declaration.updaterProvider.file),
@@ -280,7 +250,6 @@ export async function loadElectronStandaloneInstallation(input: Readonly<{
     trustedKeys,
     hostPath: join(input.resourceRoot, declaration.host.file),
     supervisorPath: join(input.resourceRoot, declaration.supervisor.file),
-    candidates: Object.freeze(candidates),
   });
 }
 
@@ -292,7 +261,7 @@ export async function loadElectronStandaloneAuthorityResources(resourceRoot: str
     await regularInstalledBytes(path, "Electron Standalone installation"),
     "Electron Standalone installation",
   ));
-  const descriptors = [declaration.host, declaration.updaterProvider, declaration.supervisor, declaration.content, declaration.trust, declaration.capsule.manifest, declaration.capsule.archive, ...declaration.seeds];
+  const descriptors = [declaration.host, declaration.updaterProvider, declaration.supervisor, declaration.content, declaration.trust, declaration.capsule.manifest, declaration.capsule.archive];
   if (descriptors.some(({ file }) => file === ELECTRON_STANDALONE_INSTALLATION_FILE)) {
     throw new Error("Electron Standalone installed resource reuses its installation declaration");
   }

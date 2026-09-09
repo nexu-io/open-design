@@ -47,7 +47,6 @@ describe("Standalone exact fixture server", () => {
         channelHeadUrl: string;
         content: { sha256: string; size: number; url: string };
         releaseVersion: string;
-        seeds: Array<{ blobSha256: string; component: string; sha256: string; url: string }>;
         trust: { url: string };
       };
       expect(bootstrap).toMatchObject({
@@ -55,8 +54,6 @@ describe("Standalone exact fixture server", () => {
         channelHeadUrl: server.info.channelHeadUrl,
         releaseVersion: "0.1.0-dev.1",
       });
-      expect(bootstrap.seeds.map(({ component }) => component)).toEqual(["standalone.launcher", "standalone.resource", "standalone.resource", "standalone.resource"]);
-      expect(bootstrap.seeds.every(({ blobSha256, sha256 }) => blobSha256 === sha256)).toBe(true);
 
       const trust = await (await fetch(bootstrap.trust.url)).json() as {
         keys: Array<{ keyId: string; publicKey: string }>;
@@ -77,9 +74,13 @@ describe("Standalone exact fixture server", () => {
       expect(verifyStandaloneChannelHead(head, ring)).toBe("local-exact");
       expect(head.head.lanes.content).toMatchObject({ releaseVersion: "0.1.0-dev.1", sha256: bootstrap.content.sha256 });
 
-      const seed = await fetch(bootstrap.seeds[0]!.url, { method: "HEAD" });
+      expect(bootstrap).not.toHaveProperty("seeds");
+      const launcherBlob = content.metadata.blobs[content.metadata.resources.find(resource => resource.component === "standalone.launcher")!.blob]!;
+      const source = launcherBlob.sources[0]!;
+      if (source.kind !== "remote") throw new Error("fixture launcher needs a remote source");
+      const seed = await fetch(source.url, { method: "HEAD" });
       expect(seed.ok).toBe(true);
-      expect(seed.headers.get("etag")).toBe(`"${bootstrap.seeds[0]!.sha256}"`);
+      expect(seed.headers.get("etag")).toBe(`"${launcherBlob.sha256}"`);
       expect(await fetch(server.info.bootstrapUrl, { method: "POST" })).toMatchObject({ status: 405 });
     } finally {
       await server.close();

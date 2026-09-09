@@ -8,11 +8,12 @@ import { buildElectronCapsuleContent, buildElectronScene, buildElectronInstaller
 import { resolveElectronSceneManifest } from "@/adapters/tools/manifests.js";
 import { ELECTRON_CAPSULE_PROTOCOL } from "@open-design/electron-kit/contracts";
 
-const mock = vi.hoisted(() => ({ capsule: vi.fn(), assemble: vi.fn(), load: vi.fn(), distribute: vi.fn(), install: vi.fn(), trust: vi.fn() }));
+const mock = vi.hoisted(() => ({ capsule: vi.fn(), assemble: vi.fn(), load: vi.fn(), distribute: vi.fn(), install: vi.fn(), resources: vi.fn(), trust: vi.fn() }));
 vi.mock("@open-design/electron-kit/distribution", () => ({ buildElectronCapsuleContent: mock.capsule, assembleElectronScene: mock.assemble, loadElectronScene: mock.load, buildElectronDistribution: mock.distribute }));
 vi.mock("@open-design/electron-kit/installation", () => ({ inspectMacElectronAppTrust: mock.trust }));
 vi.mock("@/adapters/standalone/build.ts", () => ({ buildElectronStandaloneAuthority: async () => ({ host: {}, updaterProvider: {}, supervisor: {} }) }));
 vi.mock("@/adapters/standalone/assemble-installation.ts", () => ({ withElectronInstallation: mock.install }));
+vi.mock("@/adapters/standalone/installation.ts", () => ({ loadElectronStandaloneAuthorityResources: mock.resources }));
 vi.mock("@/platform/build.ts", () => { throw new Error("scene assembly must not load the native platform builder"); });
 
 const roots: string[] = [];
@@ -57,13 +58,14 @@ it.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process.platf
   const root = await fixture(), target = `${process.platform}-${process.arch}` as "darwin-arm64" | "darwin-x64" | "win32-x64";
   const manifest = await resolveElectronSceneManifest("b".repeat(64));
   const sceneManifestPath = join(root, "scene.json"), shellManifestPath = join(root, "shell.json"), contentPath = join(root, "content.json");
-  await writeFile(sceneManifestPath, JSON.stringify({ target, closure: { file: "closure.mjs" }, standalone: { entrypoint: "launcher.mjs" }, capsule: { archiveFile: "capsule.zip" } }));
+  await writeFile(sceneManifestPath, JSON.stringify({ target }));
   await writeFile(shellManifestPath, JSON.stringify(manifest));
   await writeFile(contentPath, JSON.stringify({ metadata: { channel: "betahyx", releaseVersion: "1.2.3-betahyx.2", resources: [] } }));
   await writeFile(join(root, "closure-resources.json"), JSON.stringify({ resources: [] }));
   mock.load.mockResolvedValue({ sceneManifestPath, shellManifestPath,
     authorityResources: ["standalone-host.mjs", "electron-updater.mjs", "supervisor.mjs", "closure.mjs", "launcher.mjs", "closure-resources.json", "capsule.zip"].map(name => ({ name, path: join(root, name) })) });
   const request = { schemaVersion: 2, operation: "electron.distribution.build", target, sceneDirectory: root, sceneManifestSha256: "c".repeat(64),
+    acceptedCapsuleArchiveFile: join(root, "prepared-current-capsule.zip"),
     acceptedCapsuleManifestFile: join(root, "capsule-manifest.json"),
     outputDirectory: join(root, "output"), acceptedContentMetadataFile: contentPath, acceptedTrustFile: join(root, "trust.json"),
     channel: "betahyx", releaseVersion: "1.2.3-betahyx.1", channelHeadUrl: "https://example.com/betahyx/latest/channel-head.json" } as const;
@@ -75,6 +77,8 @@ it.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process.platf
   const artifactPath = join(root, process.platform === "darwin" ? "installer.dmg" : "installer.exe");
   await writeFile(artifactPath, "installer-bytes");
   mock.install.mockImplementation(async (_input, consume) => consume({ resourceDirectory: root }));
+  const resources = [{ name: "capsule.zip", path: join(root, "installed-capsule.zip") }];
+  mock.resources.mockResolvedValue(resources);
   mock.distribute.mockImplementation(async ({ manifest: release }) => {
     expect(release.shell).toEqual(manifest.shell);
     expect(release).toMatchObject({ channel: request.channel, version: request.releaseVersion });
@@ -82,6 +86,9 @@ it.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process.platf
     return { artifacts: [artifactPath, join(root, "Open Design.app")] };
   });
   const result = await buildElectronInstaller(request);
+  expect(mock.install.mock.calls[0]![0].input).toMatchObject({ capsule: { archiveFile: request.acceptedCapsuleArchiveFile } });
+  expect(mock.install.mock.calls[0]![0].input).not.toHaveProperty("seedFiles");
+  expect(mock.distribute.mock.calls[0]![0].resources).toEqual(resources);
   expect(result.operation).toBe("shell.distribution.contribute");
   expect(result.shell.buildHash).toBe(manifest.shell.buildHash);
   expect(result.artifact.sha256).toBe(createHash("sha256").update(await readFile(artifactPath)).digest("hex"));

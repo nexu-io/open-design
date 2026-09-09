@@ -146,7 +146,6 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
         const state = await store.readState();
         await store.recoverGeneration({ envelope, trustedKeys, shell: verified.shell,
           expectedGenerationId: target.closureGenerationId, expectedRevision: state.revision }, {
-          candidates: installation.candidates,
           ...(request.allowNetwork === true ? {} : {
             fetch: async () => { throw new Error("exact recovery resource is missing locally; online reacquisition was not authorized"); },
           }),

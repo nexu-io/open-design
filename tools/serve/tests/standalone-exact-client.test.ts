@@ -36,7 +36,9 @@ it("acquires fixture bytes through the download primitive and disposes only its 
       first = files.contentFile;
       expect(files).toMatchObject({ channel: "dev", releaseVersion: "0.1.0-dev.1" });
       expect(JSON.parse(await readFile(files.contentFile, "utf8")).metadata.channel).toBe("dev");
-      expect(await Promise.all(files.seedFiles.map(path => readFile(path, "utf8")))).toEqual(["launcher", "closure"]);
+      expect(files).not.toHaveProperty("seedFiles");
+      const downloaded = await readdir(join(files.contentFile, ".."));
+      expect(downloaded.filter(name => name !== "downloads").sort()).toEqual(["capsule-manifest.json", "capsule.zip", "standalone-content.json", "standalone-trust.json"]);
       expect(files.capsule).toBeDefined();
       expect(await readFile(files.capsule!.archiveFile)).toEqual(capsuleBytes);
       const trust = JSON.parse(await readFile(files.trustFile, "utf8"));

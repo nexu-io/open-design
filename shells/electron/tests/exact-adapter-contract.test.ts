@@ -25,6 +25,7 @@ describe("Electron exact Shell adapter contract", () => {
   it("accepts only a digest-bound native distribution request", () => {
     const request = {
       acceptedContentMetadataFile: absolute("content-metadata.json"), acceptedTrustFile: absolute("keys.json"),
+      acceptedCapsuleArchiveFile: absolute("capsule.zip"),
       acceptedCapsuleManifestFile: absolute("capsule-manifest.json"),
       channelHeadUrl: "https://releases.example/betahyx/latest/channel-head.json",
       operation: "electron.distribution.build", outputDirectory: absolute("distribution"), sceneDirectory: absolute("scene"),

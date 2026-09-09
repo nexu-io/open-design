@@ -15,7 +15,7 @@ describe("Electron dev lifecycle adapter", () => {
       channel: "dev",
       namespace: "isolated-electron",
       controlRuntimeRoot,
-      installationInput: { channel: "dev", releaseVersion: "0.1.0-dev.1", channelHeadUrl: "http://127.0.0.1/latest/channel-head.json", contentFile: join(controlRuntimeRoot, "content.json"), trustFile: join(controlRuntimeRoot, "trust.json"), seedFiles: [join(controlRuntimeRoot, "seed.mjs")], capsule: { manifestFile: join(controlRuntimeRoot, "capsule.json"), archiveFile: join(controlRuntimeRoot, "capsule.zip") } },
+      installationInput: { channel: "dev", releaseVersion: "0.1.0-dev.1", channelHeadUrl: "http://127.0.0.1/latest/channel-head.json", contentFile: join(controlRuntimeRoot, "content.json"), trustFile: join(controlRuntimeRoot, "trust.json"), capsule: { manifestFile: join(controlRuntimeRoot, "capsule.json"), archiveFile: join(controlRuntimeRoot, "capsule.zip") } },
       installationRoot: join(controlRuntimeRoot, "installation"),
       ownerPid: 42,
     })).toMatchObject({ operation: "electron.dev.start", namespace: "isolated-electron", ownerPid: 42 });

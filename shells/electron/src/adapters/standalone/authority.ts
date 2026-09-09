@@ -230,7 +230,7 @@ export function createElectronStandaloneAuthorityFactory(
       }
       if (state.active == null && pendingCapsule == null) {
         if (state.prepared == null) {
-          await store.prepare(installation.envelope, installation.trustedKeys, { candidates: installation.candidates, feedback: observeFeedback });
+          await store.prepare(installation.envelope, installation.trustedKeys, { feedback: observeFeedback });
           state = await store.readState();
         }
         if (state.prepared !== installedGenerationId) throw new Error("Electron Standalone cold start cannot authorize a generation outside its installed seed");

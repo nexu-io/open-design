@@ -20,6 +20,7 @@ export type ElectronExactSceneRequest = Readonly<{
 
 export type ElectronExactDistributionRequest = Readonly<{
   acceptedContentMetadataFile: string;
+  acceptedCapsuleArchiveFile: string;
   acceptedCapsuleManifestFile: string;
   acceptedTrustFile: string;
   channelHeadUrl: string;
@@ -76,7 +77,7 @@ export function parseElectronExactSceneRequest(value: unknown): ElectronExactSce
 
 export function parseElectronExactDistributionRequest(value: unknown): ElectronExactDistributionRequest {
   const input = record(value, "Electron exact distribution request");
-  exactKeys(input, ["acceptedCapsuleManifestFile", "acceptedContentMetadataFile", "acceptedTrustFile", "channel", "channelHeadUrl", "operation", "outputDirectory", "releaseVersion", "sceneDirectory", "sceneManifestSha256", "schemaVersion", "target"], "Electron exact distribution request");
+  exactKeys(input, ["acceptedCapsuleArchiveFile", "acceptedCapsuleManifestFile", "acceptedContentMetadataFile", "acceptedTrustFile", "channel", "channelHeadUrl", "operation", "outputDirectory", "releaseVersion", "sceneDirectory", "sceneManifestSha256", "schemaVersion", "target"], "Electron exact distribution request");
   if (input.schemaVersion !== ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION || input.operation !== "electron.distribution.build") {
     throw new Error("Electron exact distribution request identity is invalid");
   }
@@ -85,6 +86,7 @@ export function parseElectronExactDistributionRequest(value: unknown): ElectronE
   if (typeof input.channel !== "string" || !input.channel || typeof input.releaseVersion !== "string" || !input.releaseVersion) throw new Error("Electron exact release identity is invalid");
   return Object.freeze({
     acceptedContentMetadataFile: absolutePath(input, "acceptedContentMetadataFile", "Electron exact distribution"),
+    acceptedCapsuleArchiveFile: absolutePath(input, "acceptedCapsuleArchiveFile", "Electron exact distribution"),
     acceptedCapsuleManifestFile: absolutePath(input, "acceptedCapsuleManifestFile", "Electron exact distribution"),
     acceptedTrustFile: absolutePath(input, "acceptedTrustFile", "Electron exact distribution"),
     channelHeadUrl: input.channelHeadUrl,

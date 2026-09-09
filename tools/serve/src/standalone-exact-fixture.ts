@@ -214,7 +214,7 @@ export async function startStandaloneExactFixtureServer(
     const channelHead = jsonFile("channel-head.json", signStandaloneChannelHead(head, signer), channelHeadUrl);
     const bootstrapUrl = `${origin}/${encodeURIComponent(options.channel)}/bootstrap.json`;
     const bootstrap = jsonFile("bootstrap.json", {
-      schemaVersion: 2,
+      schemaVersion: 3,
       channel: options.channel,
       releaseVersion: options.releaseVersion,
       channelHeadUrl,
@@ -224,11 +224,6 @@ export async function startStandaloneExactFixtureServer(
       },
       content: { ...artifact(content), file: "standalone-content.json" },
       trust: { ...artifact(trust), file: "standalone-trust.json" },
-      seeds: [
-        { ...artifact(launcher), blobSha256: launcher.sha256, component: "standalone.launcher", file: launcher.file },
-        { ...artifact(closure), blobSha256: closure.sha256, component: "standalone.resource", file: closure.file },
-        ...resources.map(({ file }) => ({ ...artifact(file), blobSha256: file.sha256, component: "standalone.resource" as const, file: file.file })),
-      ],
     }, bootstrapUrl);
 
     for (const file of [launcher, closure, ...resources.map((resource) => resource.file), content, trust, channelHead, bootstrap, ...(capsule == null ? [] : [capsule.manifest, capsule.archive, capsule.platform])]) {

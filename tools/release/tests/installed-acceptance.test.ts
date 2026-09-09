@@ -49,7 +49,7 @@ async function fixture() {
   const body = Buffer.from("installed payload");
   await writeFile(join(root, "payload.bin"), body);
   const file = { file: "payload.bin", sha256: createHash("sha256").update(body).digest("hex"), size: body.length };
-  const installation = { schemaVersion: 3, channel: policy.channel, releaseVersion: policy.releaseVersion, target: required.target, host: file, updaterProvider: file, supervisor: file, content: file, trust: file, capsule: { manifest: file, archive: file }, seeds: [file] };
+  const installation = { schemaVersion: 4, channel: policy.channel, releaseVersion: policy.releaseVersion, target: required.target, host: file, updaterProvider: file, supervisor: file, content: file, trust: file, capsule: { manifest: file, archive: file } };
   await save("standalone-installation.json", installation);
   const events = ["startup.committed", "shutdown.complete"].map((event) => ({ attemptId: "attempt-1", event }));
   const runtimeLog = join(root, "runtime.jsonl");

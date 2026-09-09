@@ -1,17 +1,29 @@
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { resolveElectronSceneResourceFiles } from "@/distribution/distribution.js";
+import { resolveElectronDistributionResourceFiles } from "@/distribution/distribution.js";
 
-it("maps every verified native file explicitly instead of using a filtered directory glob", () => {
-  const files = ["bin/node", "node_modules/better-sqlite3/build/Release/better_sqlite3.node", "node_modules/.package-lock.json", "NODE-LICENSE", "empty"];
-  const resources = resolveElectronSceneResourceFiles([
-    { name: "host.mjs", path: "/scene/host.mjs", sha256: "a".repeat(64), size: 1 },
-    { name: "platform", path: "/scene/platform", sha256: "b".repeat(64), size: 5,
-      tree: files.map(path => ({ path, size: 1, sha256: "c".repeat(64), mode: 0o755 })) },
-  ]);
-  expect(resources).toEqual([
-    { from: "/scene/host.mjs", to: "host.mjs" },
-    ...files.map(path => ({ from: join("/scene/platform", path), to: `platform/${path}` })),
-  ]);
-  expect(resources.some(file => file.from === "/scene/platform")).toBe(false);
+it("projects only explicit installation files, excluding adjacent scene payloads", async () => {
+  const root = await mkdtemp(join(tmpdir(), "distribution-resources-"));
+  try {
+    const capsule = join(root, "capsule.zip");
+    await writeFile(capsule, "current Capsule");
+    await writeFile(join(root, "closure.zip"), "not installed");
+    await mkdir(join(root, "platform"));
+    expect(await resolveElectronDistributionResourceFiles([{ name: "capsule.zip", path: capsule }]))
+      .toEqual([{ from: capsule, to: "capsule.zip" }]);
+    await expect(resolveElectronDistributionResourceFiles([{ name: "platform", path: join(root, "platform") }]))
+      .rejects.toThrow("regular file");
+    const link = join(root, "linked.zip");
+    await symlink(capsule, link);
+    await expect(resolveElectronDistributionResourceFiles([{ name: "linked.zip", path: link }]))
+      .rejects.toThrow("regular file");
+    await expect(resolveElectronDistributionResourceFiles([{ name: "../capsule.zip", path: capsule }]))
+      .rejects.toThrow("invalid or duplicate");
+    await expect(resolveElectronDistributionResourceFiles([{ name: "capsule.zip", path: capsule }, { name: "capsule.zip", path: capsule }]))
+      .rejects.toThrow("invalid or duplicate");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
