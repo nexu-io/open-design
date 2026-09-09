@@ -1,3 +1,4 @@
+import { getDiagnosticsEvidence, recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
 import { createHash } from 'node:crypto';
 import {
   buildWorkspacePermissions,
@@ -878,6 +879,7 @@ export async function fetchVelaWorkspaceDirectory(
       signal: controller.signal,
     });
     if (!response.ok) {
+      recordDiagnosticFailure({ source: 'workspace-directory', status: response.status, env: process.env });
       if (response.status === 401 || response.status === 403) {
         if (!options.readSession) {
           markVelaAuthorizationExpired(process.env, configuredEnv);
@@ -896,8 +898,11 @@ export async function fetchVelaWorkspaceDirectory(
         status: response.status,
       };
     }
-    return { ok: true, items: mapVelaWorkspaceDirectory(await response.json()) };
-  } catch {
+    const items = mapVelaWorkspaceDirectory(await response.json());
+    getDiagnosticsEvidence()?.observeDirectory(items);
+    return { ok: true, items };
+  } catch (error) {
+    recordDiagnosticFailure({ source: 'workspace-directory', error, timedOut: controller.signal.aborted, env: process.env });
     return { ok: false, items: [], reason: 'network' };
   } finally {
     clearTimeout(timeout);
