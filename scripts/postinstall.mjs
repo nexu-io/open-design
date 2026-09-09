@@ -17,6 +17,7 @@ const buildTargets = [
   "packages/components",
   "packages/platform",
   "packages/download",
+  "packages/archive",
   "packages/electron-contract",
   "packages/registry-protocol",
   "packages/agui-adapter",

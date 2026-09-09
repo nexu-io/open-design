@@ -15,6 +15,7 @@ import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resour
 import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
 import { contributePlatform, restorePlatform } from "./platform-cache.ts";
 import { contributeCapsule, restoreCapsule } from "./capsule-cache.ts";
+import { contributeBase, restoreBase } from "./base-cache.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { validateExactPlanNode } from "./validation.ts";
@@ -257,7 +258,7 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("baseline operation must be stage or promote");
     });
 
-  for (const product of ["platform", "capsule"] as const) {
+  for (const product of ["platform", "capsule", "base"] as const) {
     cli.command(`${product} <operation>`, `Restore or contribute an independently planned ${product}`)
       .option("--plan <file>", "Exact release plan")
       .option("--pending <file>", "Convergence planner receipt")
@@ -269,8 +270,8 @@ export function registerExactCommands(cli: CAC): void {
       .action(async (operation: string, options: Options) => {
         const common = { plan: required(options, "plan"), pending: required(options, "pending"),
           workload: required(options, "workload"), output: required(options, "output") };
-        const restore = product === "platform" ? restorePlatform : restoreCapsule;
-        const contribute = product === "platform" ? contributePlatform : contributeCapsule;
+        const restore = product === "platform" ? restorePlatform : product === "capsule" ? restoreCapsule : restoreBase;
+        const contribute = product === "platform" ? contributePlatform : product === "capsule" ? contributeCapsule : contributeBase;
         const result = operation === "restore" ? await restore(common)
           : operation === "contribute" ? await contribute({ ...common, buildReceipt: required(options, "buildReceipt"), artifact: required(options, "artifact") })
           : (() => { throw new Error(`${product} operation must be restore or contribute`); })();

@@ -4,6 +4,8 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 ## Package responsibilities
 
+- `packages/archive`: native archive backend injection, capability probes, ZIP inspection and safe file-tree conversion. Runtime exposes inspect/extract; build adds pack. Own no download, cache, release or product policy. Never silently substitute a tool after explicit configuration fails.
+
 - `packages/agui-adapter`: pure TypeScript adapter between persisted OpenDesign agent/GenUI/plugin-pipeline events and the AG-UI event protocol. Keep transport and filesystem concerns out; daemon producers and web/CopilotKit consumers share this conversion boundary.
 - `packages/contracts`: web/daemon app contract layer. Keep it pure TypeScript; it must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
 - `packages/components`: shared React UI primitives and primitive CSS. It may depend on React types/runtime only; keep product workflows and app-specific layout/styling in the apps.

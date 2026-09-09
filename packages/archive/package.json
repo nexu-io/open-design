@@ -1,0 +1,18 @@
+{
+  "name": "@open-design/archive",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/runtime.d.ts", "default": "./dist/runtime.js" },
+    "./build": { "types": "./dist/build.d.ts", "default": "./dist/build.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": { "@types/node": "24.12.2", "typescript": "6.0.3", "vitest": "4.1.6" },
+  "engines": { "node": "~24" }
+}
