@@ -16,6 +16,9 @@ Shell and the typed adapter boundary consumed by repository tools.
   inspection is read-only; explicit CDP updater calls use the running product contract.
   Installed manifest inspection delegates to the isolated Kit ASAR reader and
   returns actual physical bytes/identity, never a caller's expected release receipt.
+  `/lifecycle/installed` exposes Node-safe native installer/process primitives
+  without loading compiler dependencies; release scenarios and evidence policy
+  remain in tools-release.
   Local callers use typed functions, not private source paths or adapter subprocesses.
   tools-release exposes scene/distribution commands over `/build`; manifest
   resolution is internal product composition, not a separate command or file RPC.

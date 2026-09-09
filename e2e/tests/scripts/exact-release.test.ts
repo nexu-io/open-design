@@ -171,15 +171,15 @@ describe("exact Electron release topology", () => {
     expect(prepare).toContain('--capsules "$RUNNER_TEMP/capsules"');
     const scene = workflow.split("\n  scene:")[1]!.split("\n  platform:")[0]!;
     expect(scene).toContain("needs: [tools, plan, capsule]");
-    expect(scene).toContain('--capsule-content "$RUNNER_TEMP/capsules/$TARGET/capsule-content.json"');
-    expect(scene).toContain('--capsule-archive "$RUNNER_TEMP/capsules/$TARGET/capsule.zip"');
+    expect(scene).toContain('--capsule-directory "$RUNNER_TEMP/capsules"');
+    expect(scene).not.toContain("capsule_args");
     for (const command of ["base import", "base pack", "build base", "base export"]) expect(scene).toContain(`tools-release ${command}`);
     expect(scene).toContain("fromJSON(needs.plan.outputs.run)[matrix.base_workload]");
     expect(scene).toContain("path: ${{ runner.temp }}/base-contribution/artifact");
     expect(scene).not.toContain("path: ${{ runner.temp }}/base-contribution/products");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
     expect(distribution).toContain('tools-release base unpack');
-    expect(distribution).toContain('--base-receipt "$RUNNER_TEMP/base/base-build-receipt.json"');
+    expect(distribution).toContain('--base-directory "$RUNNER_TEMP/base"');
     expect(distribution).toContain("name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}");
   });
 
@@ -224,8 +224,9 @@ describe("exact Electron release topology", () => {
     const stage = acceptance.split("- name: Fetch accepted baseline for upgrade acceptance")[1]!;
     expect(stage).toContain('--validation "$RUNNER_TEMP/exact-validation/shell.json"');
     expect(stage).toContain('tools-release baseline fetch');
-    expect(stage).toContain('--first-install-root "$installed_root"');
-    expect(stage).toContain('--first-install-user-data-root "$user_data_root"');
+    expect(stage).toContain('tools-release installation collect');
+    expect(stage).toContain('--work-root "$RUNNER_TEMP/installed-acceptance"');
+    expect(stage).not.toMatch(/installed_root=|user_data_root=|hot_args/u);
   });
 
   it("preserves native scene inputs through the actual convergence ZIP normalizer", async () => {
@@ -256,14 +257,14 @@ describe("exact Electron release topology", () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     const hot = workflow.split("- name: Exercise accepted macOS Shell through CDP hot update")[1]?.split("- name: Install and exercise Windows Electron Shell")[0];
     expect(hot).toBeDefined();
-    expect(hot).toMatch(/wait "\$electron_pid"\s+trap - EXIT\s+OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "\$executable" --user-data-dir="\$RUNNER_TEMP\/baseline-user-data"/u);
-    expect(hot).toContain('app="$RUNNER_TEMP/baseline-electron.app"');
+    expect(hot).toContain("tools-release installation exercise");
+    expect(hot).toContain("--mode hot");
+    expect(hot).toContain('--baseline-receipt "$RUNNER_TEMP/baseline/fetch-receipt.json"');
     expect(hot).not.toContain('"$RUNNER_TEMP/public-shell-artifact.dmg"');
     expect(hot).not.toContain("python3");
     expect(hot).not.toContain("candidateVersion");
     expect(hot).toContain('CHANNEL: ${{ inputs.channel }}');
-    expect(hot).toContain('tools-release acceptance hot-update');
-    expect(hot).toContain('--od-channel-head-url="$ELECTRON_CANDIDATE_HEAD_URL"');
+    expect(hot).not.toMatch(/hdiutil|electron_pid|trap |Contents\/MacOS/u);
     expect(hot).not.toContain("DevToolsActivePort");
   });
 
@@ -292,7 +293,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain("exact-scene-request.json");
     expect(workflow).not.toContain("distribution-request.json");
     expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
-    expect(workflow).toContain('tools-release build runtime-resources');
+    expect(workflow).toContain('tools-release build scene-inputs');
     expect(workflow).not.toContain("build:resources");
     expect(workflow).not.toContain("tools/pack/dist/exact-control.mjs");
     expect(workflow).toContain("tools/release/dist/tools-release");
@@ -331,8 +332,8 @@ describe("exact Electron release topology", () => {
     expect(workflow).toContain('tools-release acceptance fetch');
     expect(workflow).not.toContain('urllib.request.urlretrieve(required["artifact"]["url"], archive)');
     expect(workflow).not.toContain("Resolve installed Electron identity");
-    expect(workflow).toContain('tools-release acceptance hot-update');
-    expect(workflow).toContain('tools-release acceptance collect');
+    expect(workflow).toContain('tools-release installation exercise');
+    expect(workflow).toContain('tools-release installation collect');
     expect(workflow).not.toContain("electron-cdp-control.mjs");
     expect(workflow).not.toContain("electron-cdp-request.json");
     expect(workflow).not.toContain("acceptance-request.json");
@@ -431,7 +432,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain(".github/scripts/pack.py");
     expect(workflow).not.toContain(".github/scripts/release.py");
     expect(workflow).not.toContain("installed_acceptance.py");
-    expect(workflow).toContain('tools-release acceptance collect');
+    expect(workflow).toContain('tools-release installation collect');
     expect(workflow).not.toContain("node tools/release/src/exact/control-cli.ts");
     expect(workflow).not.toContain("somechan");
     expect(workflow).not.toContain("somepreview");

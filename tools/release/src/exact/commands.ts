@@ -7,7 +7,7 @@ import { writeObject } from "./control-common.ts";
 import { importSceneArtifact, packSceneArtifact, unpackSceneArtifact, verifySceneArtifact } from "./scene-artifact.ts";
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, inspectAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
-import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "./native-build.ts";
+import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene, buildReleaseSceneInputs } from "./native-build.ts";
 import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { exportDataResource, importDataResource } from "./resource-artifact.ts";
 import { exportPlatform, importPlatform } from "./platform-artifact.ts";
@@ -15,6 +15,7 @@ import { exportCapsule, importCapsule } from "./capsule-artifact.ts";
 import { exportBase, packBase, importBase, unpackBase } from "./base-artifact.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
+import { collectExecutedAcceptance, exerciseReleaseInstallation } from "./acceptance-execution.ts";
 import { validateReleaseRecipe } from "./validation.ts";
 
 type Options = Record<string, unknown>;
@@ -36,6 +37,26 @@ async function emit(options: Options, receipt: unknown): Promise<void> {
 
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  cli.command("installation <operation>", "Exercise a published installation and collect its bound evidence")
+    .option("--publication <file>", "Publication receipt")
+    .option("--policy <file>", "Release policy")
+    .option("--shell <name>", "electron or terminal")
+    .option("--target <target>", "Native platform architecture")
+    .option("--work-root <directory>", "Caller-owned installation execution workspace")
+    .option("--artifact <file>", "Verified installer to exercise")
+    .option("--mode <mode>", "first or hot")
+    .option("--baseline-receipt <file>", "Verified baseline acquisition receipt (hot)")
+    .option("--inspection <file>", "Baseline compatibility receipt (Electron collection)")
+    .option("--receipt <file>", "Final installed acceptance credential")
+    .action(async (operation: string, options: Options) => {
+      const input = { publication: required(options, "publication"), policy: required(options, "policy"),
+        shell: required(options, "shell"), target: required(options, "target"), workRoot: required(options, "workRoot") };
+      if (operation === "exercise") await exerciseReleaseInstallation({ ...input, artifact: required(options, "artifact"),
+        mode: required(options, "mode"), ...(options.baselineReceipt == null ? {} : { baselineReceipt: required(options, "baselineReceipt") }) });
+      else if (operation === "collect") await collectExecutedAcceptance({ ...input, receipt: required(options, "receipt"),
+        ...(options.inspection == null ? {} : { inspection: required(options, "inspection") }) });
+      else throw new Error("installation operation must be exercise or collect");
+    });
   cli.command("[command]", "Show help when no command is given").action((command?: string) => {
     if (command != null) throw new Error(`Unknown command: ${command}`);
     cli.outputHelp();
@@ -91,8 +112,10 @@ export function registerExactCommands(cli: CAC): void {
     .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
+    .option("--capsule-directory <directory>", "Portable Capsule products, indexed by target (scene; Electron consumes)")
     .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
     .option("--base-receipt <file>", "Verified neutral base receipt (Electron distribution)")
+    .option("--base-directory <directory>", "Restored neutral base product (distribution; Electron consumes)")
     .option("--scene <directory>", "Verified scene (distribution)")
     .option("--prepared <directory>", "Prepared signed content (distribution)")
     .option("--policy <file>", "Release policy (distribution)")
@@ -117,6 +140,8 @@ export function registerExactCommands(cli: CAC): void {
       }
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
       if (options.baseReceipt != null && operation !== "distribution") throw new Error("--base-receipt is only supported by build distribution");
+      if (options.baseDirectory != null && operation !== "distribution") throw new Error("--base-directory is only supported by build distribution");
+      if (options.capsuleDirectory != null && operation !== "scene") throw new Error("--capsule-directory is only supported by build scene");
       if (operation === "capsule") {
         const allowed = new Set(["root", "shell", "target", "output", "receipt", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`Capsule build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
@@ -129,7 +154,9 @@ export function registerExactCommands(cli: CAC): void {
       }
       const common = { root: required(options, "root"), shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt") };
       if (operation !== "scene" && (options.capsuleContent != null || options.capsuleArchive != null)) throw new Error("prebuilt Capsule inputs are only supported by build scene");
-      if (operation === "scene") await buildReleaseScene({ ...common,
+      if (operation === "scene-inputs") await buildReleaseSceneInputs(common);
+      else if (operation === "scene") await buildReleaseScene({ ...common,
+        ...(options.capsuleDirectory == null ? {} : { capsuleDirectory: required(options, "capsuleDirectory") }),
         ...(options.capsuleContent == null ? {} : { capsuleContent: required(options, "capsuleContent") }),
         ...(options.capsuleArchive == null ? {} : { capsuleArchive: required(options, "capsuleArchive") }),
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
@@ -139,8 +166,9 @@ export function registerExactCommands(cli: CAC): void {
       else if (operation === "platform") await buildReleasePlatform({ ...common,
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "distribution") await buildReleaseDistribution({ ...common, ...(options.baseReceipt == null ? {} : { baseReceipt: required(options, "baseReceipt") }), scene: required(options, "scene"), prepared: required(options, "prepared"),
+        ...(options.baseDirectory == null ? {} : { baseDirectory: required(options, "baseDirectory") }),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
-      else throw new Error("build operation must be resource, runtime-resources, platform, capsule, base, scene or distribution");
+      else throw new Error("build operation must be resource, runtime-resources, platform, capsule, base, scene-inputs, scene or distribution");
     });
 
   cli.command("prepare", "Compose and sign content from the declared Shell scenes")

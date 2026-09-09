@@ -335,18 +335,10 @@ jobs:
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
-          set -euo pipefail
-          pnpm --filter @open-design/platform build
-          pnpm --filter @open-design/sidecar build
-          pnpm --filter @open-design/standalone build
-          pnpm --filter @open-design/closure build
-          pnpm --filter @open-design/electron-contract build
-          pnpm --filter @open-design/electron-kit build
-          if [[ "$SHELL_TYPE" == "electron" ]]; then
-            tools-release build runtime-resources \
-              --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/exact-closure-resources" \
-              --receipt "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json"
-          fi
+          tools-release build scene-inputs \
+            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --output "$RUNNER_TEMP/exact-closure-resources" \
+            --receipt "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json"
 
       - uses: actions/download-artifact@v8
         if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -361,13 +353,9 @@ jobs:
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
-          capsule_args=()
-          if [[ "$SHELL_TYPE" == "electron" ]]; then
-            capsule_args=(--capsule-content "$RUNNER_TEMP/capsules/$TARGET/capsule-content.json" --capsule-archive "$RUNNER_TEMP/capsules/$TARGET/capsule.zip")
-          fi
           tools-release build scene \
             --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
-            --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" "${capsule_args[@]}" \
+            --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" --capsule-directory "$RUNNER_TEMP/capsules" \
             --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
 
       - name: Restore converged Electron base
@@ -931,15 +919,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base_args=()
-          if [[ "$SHELL_TYPE" == "electron" ]]; then
-            base_args=(--base-receipt "$RUNNER_TEMP/base/base-build-receipt.json")
-          fi
           tools-release build distribution \
             --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
             --policy "$RUNNER_TEMP/release-policy/release-policy.json" \
             --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
-            --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" "${base_args[@]}" \
+            --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" --base-directory "$RUNNER_TEMP/base" \
             --output "$RUNNER_TEMP/distribution" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json"
 
       - uses: actions/upload-artifact@v4
@@ -1167,49 +1151,20 @@ jobs:
       - name: Install and exercise Darwin Shell lifecycle
         if: ${{ matrix.shell == 'terminal' && startsWith(matrix.target, 'darwin-') }}
         shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/extracted"
-          tar -xzf "$RUNNER_TEMP/public-shell-artifact.tar.gz" -C "$RUNNER_TEMP/extracted"
-          sh "$RUNNER_TEMP/extracted/nexu-terminal/sh/install.sh" \
-            --source "$RUNNER_TEMP/extracted/nexu-terminal" \
-            --root "$RUNNER_TEMP/installed-shell" \
-            --channel "${{ inputs.channel }}" \
-            --namespace exact-public-acceptance > "$RUNNER_TEMP/installed-proof.json"
-          run_terminal() {
-            operation=$1
-            shift
-            sh "$RUNNER_TEMP/installed-shell/sh/terminal.sh" \
-              --root "$RUNNER_TEMP/installed-shell" \
-              --store-root "$RUNNER_TEMP/acceptance-store" \
-              --channel "${{ inputs.channel }}" \
-              --namespace exact-public-acceptance \
-              --operation "$operation" \
-              --result "$RUNNER_TEMP/runtime-$operation.json" \
-              "$@"
-          }
-          run_terminal start --attachment-id public-acceptance
-          run_terminal status
-          run_terminal stop
+        run: >-
+          tools-release installation exercise
+          --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json"
+          --shell terminal --target "${{ matrix.target }}" --mode first
+          --artifact "$RUNNER_TEMP/public-shell-artifact.tar.gz" --work-root "$RUNNER_TEMP/installed-acceptance"
 
       - name: Install and exercise macOS Electron Shell
         if: ${{ matrix.shell == 'electron' && startsWith(matrix.target, 'darwin-') }}
         shell: bash
-        run: |
-          set -euo pipefail
-          volume="$RUNNER_TEMP/electron-volume"
-          app="$RUNNER_TEMP/installed-electron.app"
-          mkdir -p "$volume"
-          hdiutil attach "$RUNNER_TEMP/public-shell-artifact.dmg" -nobrowse -readonly -mountpoint "$volume"
-          trap 'hdiutil detach "$volume" >/dev/null 2>&1 || true' EXIT
-          source_app=$(find "$volume" -maxdepth 1 -type d -name '*.app' -print -quit)
-          test -n "$source_app"
-          ditto "$source_app" "$app"
-          hdiutil detach "$volume"
-          trap - EXIT
-          executable="$app/Contents/MacOS/$ELECTRON_EXECUTABLE"
-          test -x "$executable"
-          OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "$executable" --user-data-dir="$RUNNER_TEMP/electron-user-data"
+        run: >-
+          tools-release installation exercise
+          --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json"
+          --shell electron --target "${{ matrix.target }}" --mode first
+          --artifact "$RUNNER_TEMP/public-shell-artifact.dmg" --work-root "$RUNNER_TEMP/installed-acceptance"
 
       - uses: actions/download-artifact@v8
         if: ${{ matrix.shell == 'electron' && env.ELECTRON_ACCEPTANCE_MODE == 'hot' }}
@@ -1238,79 +1193,30 @@ jobs:
         env:
           CHANNEL: ${{ inputs.channel }}
         shell: bash
-        run: |
-          set -euo pipefail
-          volume="$RUNNER_TEMP/electron-volume"
-          app="$RUNNER_TEMP/baseline-electron.app"
-          mkdir -p "$volume"
-          hdiutil attach "$RUNNER_TEMP/baseline/baseline-shell-artifact.dmg" -nobrowse -readonly -mountpoint "$volume"
-          trap 'hdiutil detach "$volume" >/dev/null 2>&1 || true' EXIT
-          source_app=$(find "$volume" -maxdepth 1 -type d -name '*.app' -print -quit)
-          test -n "$source_app"
-          ditto "$source_app" "$app"
-          hdiutil detach "$volume"
-          trap - EXIT
-          executable="$app/Contents/MacOS/$ELECTRON_EXECUTABLE"
-          OD_PACKAGED_E2E_HEADLESS=1 "$executable" \
-            --user-data-dir="$RUNNER_TEMP/baseline-user-data" \
-            --remote-debugging-address=127.0.0.1 \
-            --remote-debugging-port=0 \
-            --od-channel-head-url="$ELECTRON_CANDIDATE_HEAD_URL" &
-          electron_pid=$!
-          trap 'kill "$electron_pid" >/dev/null 2>&1 || true; wait "$electron_pid" >/dev/null 2>&1 || true' EXIT
-          tools-release acceptance hot-update \
-            --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
-            --shell electron --target "${{ matrix.target }}" --base-user-data-root "$RUNNER_TEMP/baseline-user-data" \
-            --receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
-          wait "$electron_pid"
-          trap - EXIT
-          OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "$executable" --user-data-dir="$RUNNER_TEMP/baseline-user-data"
+        run: >-
+          tools-release installation exercise
+          --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json"
+          --shell electron --target "${{ matrix.target }}" --mode hot
+          --artifact "$RUNNER_TEMP/baseline/baseline-shell-artifact.dmg" --work-root "$RUNNER_TEMP/installed-acceptance"
+          --baseline-receipt "$RUNNER_TEMP/baseline/fetch-receipt.json"
 
       - name: Install and exercise Windows Electron Shell
         if: ${{ matrix.shell == 'electron' && startsWith(matrix.target, 'win32-') }}
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $installer = Join-Path $env:RUNNER_TEMP 'public-shell-artifact.exe'
-          $installRoot = Join-Path $env:RUNNER_TEMP 'installed-electron'
-          $install = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
-          if ($install.ExitCode -ne 0) { throw "Electron installer exited with $($install.ExitCode)" }
-          $executable = Join-Path $installRoot "$env:ELECTRON_EXECUTABLE.exe"
-          if (-not (Test-Path $executable)) { throw 'installed Electron executable is missing' }
-          $env:OD_PACKAGED_E2E_HEADLESS = '1'
-          $env:ELECTRON_KIT_SMOKE_EXIT_MS = '3000'
-          $runtime = Start-Process -FilePath $executable -ArgumentList "--user-data-dir=$env:RUNNER_TEMP/electron-user-data" -Wait -PassThru
-          if ($runtime.ExitCode -ne 0) { throw "installed Electron exited with $($runtime.ExitCode)" }
+        run: >-
+          tools-release installation exercise
+          --publication "$env:RUNNER_TEMP/published/publish-receipt.json" --policy "$env:RUNNER_TEMP/published/release-policy.json"
+          --shell electron --target "${{ matrix.target }}" --mode first
+          --artifact "$env:RUNNER_TEMP/public-shell-artifact.exe" --work-root "$env:RUNNER_TEMP/installed-acceptance"
 
       - name: Bind installed acceptance credential
-        env:
-          SHELL_TYPE: ${{ matrix.shell }}
-          TARGET: ${{ matrix.target }}
-          CHANNEL: ${{ inputs.channel }}
-          ACCEPTANCE_MODE: ${{ env.ELECTRON_ACCEPTANCE_MODE }}
         shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "$SHELL_TYPE" == "electron" && "$TARGET" == darwin-* ]]; then
-            installed_root="$RUNNER_TEMP/installed-electron.app/Contents/Resources"
-          elif [[ "$SHELL_TYPE" == "electron" ]]; then
-            installed_root="$RUNNER_TEMP/installed-electron/resources"
-          else
-            installed_root="$RUNNER_TEMP/installed-shell"
-          fi
-          hot_args=()
-          user_data_root="$RUNNER_TEMP/electron-user-data"
-          if [[ "$ACCEPTANCE_MODE" == "hot" ]]; then
-            hot_args=(--hot-receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
-              --first-install-root "$installed_root" --first-install-user-data-root "$user_data_root")
-            installed_root="$RUNNER_TEMP/baseline-electron.app/Contents/Resources"
-            user_data_root="$RUNNER_TEMP/baseline-user-data"
-          fi
-          tools-release acceptance collect \
-            --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
-            --shell "$SHELL_TYPE" --target "$TARGET" --installed-root "$installed_root" \
-            --runtime-proof-root "$RUNNER_TEMP" --base-user-data-root "$user_data_root" \
-            "${hot_args[@]}" --receipt "$RUNNER_TEMP/acceptance/$SHELL_TYPE-$TARGET.json"
+        run: >-
+          tools-release installation collect
+          --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json"
+          --shell "${{ matrix.shell }}" --target "${{ matrix.target }}"
+          --work-root "$RUNNER_TEMP/installed-acceptance" --inspection "$RUNNER_TEMP/baseline-inspection/receipt.json"
+          --receipt "$RUNNER_TEMP/acceptance/${{ matrix.shell }}-${{ matrix.target }}.json"
 
       - uses: actions/upload-artifact@v4
         with:

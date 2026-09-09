@@ -202,9 +202,14 @@ requires matching physical carrier bytes and current successful native Shell
 test evidence. It neither consumes nor recomputes a plan.
 The fetched installer is only an upgrade-test fixture, never a distribution
 contribution. Every release assembles a new installer with its current Capsule.
-Hot acceptance collects the upgraded baseline with `--hot-receipt` and requires
-separate `--first-install-root` and `--first-install-user-data-root` evidence for
-the current installer. The resulting credential retains current first-install
+Release workflows use `installation exercise --mode first|hot --work-root <dir>`
+and `installation collect --work-root <dir> --inspection <receipt>`. The tool
+owns separate first-install and upgraded-baseline evidence, validates installer
+bytes before execution, and binds execution receipts to the publication.
+Native macOS installation and bounded process ownership use the public Shell
+lifecycle adapter over Electron Kit. Windows execution remains unsupported in
+this delivery and fails explicitly; no Windows runner is enabled.
+The resulting credential retains current first-install
 proof as its primary installation and nests the old installation under
 `installed.proof.hotUpdate.baseline`.
 

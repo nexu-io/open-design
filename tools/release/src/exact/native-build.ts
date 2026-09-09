@@ -10,9 +10,20 @@ import { acquireBuildArchive } from "@open-design/tools-pack/build";
 import { readOfficialNodeLock, validateNodePlatformResource } from "@open-design/standalone/packages";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
+import { buildReleaseRuntimeResources } from "./resource-build.ts";
 
 type Target = ElectronExactSceneRequest["target"];
 type BuildInput = Readonly<{ root: string; shell: string; target: string; output: string; receipt: string }>;
+/** Workspace preparation for a scene is a build recipe, not workflow policy. */
+export async function buildReleaseSceneInputs(input: BuildInput) {
+  target(input);
+  for (const name of ["platform", "sidecar", "standalone", "closure", "electron-contract", "electron-kit"]) {
+    await promisify(execFile)("pnpm", ["--filter", `@open-design/${name}`, "build"],
+      { cwd: resolve(input.root), timeout: 10 * 60_000, maxBuffer: 8 * 1024 * 1024 });
+  }
+  if (input.shell === "electron") return buildReleaseRuntimeResources(input);
+  await writeObject(input.receipt, { schemaVersion: 1, operation: "terminal.scene.inputs", target: input.target });
+}
 async function electronBuilder(root: string): Promise<typeof import("@open-design/shell-electron/build")> {
   // A relocated CI controller resolves native build dependencies from the explicitly
   // selected workspace, never from its temporary artifact directory.
@@ -44,8 +55,14 @@ async function terminalBuild(input: BuildInput, operation: "scene" | "distributi
 
 export async function buildReleaseScene(input: BuildInput & Readonly<{
   resources?: string; nodeArchive?: string;
-  capsuleContent?: string; capsuleArchive?: string;
+  capsuleContent?: string; capsuleArchive?: string; capsuleDirectory?: string;
 }>) {
+  if (input.capsuleDirectory != null) {
+    if (input.capsuleContent != null || input.capsuleArchive != null) throw new Error("Capsule directory and individual files are mutually exclusive");
+    if (input.shell === "electron") input = { ...input,
+      capsuleContent: join(resolve(input.capsuleDirectory), input.target, "capsule-content.json"),
+      capsuleArchive: join(resolve(input.capsuleDirectory), input.target, "capsule.zip") };
+  }
   if ((input.capsuleContent != null || input.capsuleArchive != null)
     && (input.shell !== "electron" || !input.capsuleContent || !input.capsuleArchive)) {
     throw new Error("Capsule inputs require electron and both --capsule-content and --capsule-archive");
@@ -151,7 +168,11 @@ export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: str
   return receipt;
 }
 
-export async function buildReleaseDistribution(input: BuildInput & Readonly<{ baseReceipt?: string; scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
+export async function buildReleaseDistribution(input: BuildInput & Readonly<{ baseDirectory?: string; baseReceipt?: string; scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
+  if (input.baseDirectory != null) {
+    if (input.baseReceipt != null) throw new Error("Base directory and receipt are mutually exclusive");
+    if (input.shell === "electron") input = { ...input, baseReceipt: join(resolve(input.baseDirectory), "base-build-receipt.json") };
+  }
   const buildTarget = target(input), preparedRoot = resolve(input.prepared);
   const baseReceipt = input.baseReceipt == null ? undefined : await readObject(input.baseReceipt);
   if (baseReceipt != null && (input.shell !== "electron" || baseReceipt.schemaVersion !== 1
