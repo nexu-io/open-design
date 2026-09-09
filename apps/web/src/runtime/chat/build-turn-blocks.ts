@@ -1629,9 +1629,30 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
     /** 这张壳收了它那个 run 时,那个 run 的终点(还在跑就是「现在」);否则 `null` */
     closeTo: number | null,
   ): number | null {
+    /*
+     * **只认这张壳自己的事件。**
+     *
+     * 这里原来在拿不到 `shellSpan` 时回落到 `firstStartedAt` / `lastEndedAt`,而那两个
+     * 是**全轮所有时刻**的 min / max。既然这张壳没有自己的跨度,那两个值里但凡有数,
+     * 就必然是**别的壳**盖出来的 —— 所以那条兜底在构造上等价于「借另一张卡的表」,
+     * 不存在它恰好等于本张卡的情形。
+     *
+     * 借来的表怎么变成用户看得见的错(评审 #7921):一个只有 status / text、一个带时刻的
+     * 事件都没有的后继 run(澄清 run 的典型形态),它那张壳捡起前一个 run 的工具时刻,
+     * 再和自己的 run 边界取 min / max —— 真机形状的语料里,一张只跑了 20 秒的卡
+     * 因此写成 5m 10s,多出来的五分钟是前一个 run 加上用户读产出、想怎么回话的那一段。
+     *
+     * 为什么不是「在 `closeRun()` 里把那两个时钟清零」:那只堵住跨 run 这一个入口。
+     * 同一段代码在**一个 run 之内**同样会借 —— 一轮里 done 之后另起第二张卡、而那张卡
+     * 没有带时刻的事件时,`closeRun()` 根本不会跑。而且那两个时钟另有两位读者
+     * (`thinkGapStart` / `shellQuiet`),在边界上清零会顺手改掉它们的语义,
+     * 那是副作用不是修复。
+     *
+     * 拿不到就返回 null —— 不知道就是不知道(§2.2b),和本文件其它几处同一条纪律。
+     */
     const span = shell ? shellSpan.get(shell) : undefined;
-    let from = span ? span.from : firstStartedAt;
-    let to = span ? span.to : lastEndedAt;
+    let from = span ? span.from : null;
+    let to = span ? span.to : null;
 
     // 开这个 run 的那张壳:表从 run 开头就开始走(第一个工具之前的推理在这一截里)
     if (openFrom != null) {

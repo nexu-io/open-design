@@ -233,6 +233,110 @@ describe('OPEND-2824 · 卡头的总耗时不得小于卡里的阶段耗时', ()
   });
 });
 
+/**
+ * 评审 #7921 指出的**另一半**:补上 run 边界之后,壳头**仍然**会去借别的 run 的钟。
+ *
+ * `shellElapsed` 拿不到这张壳自己的 `shellSpan` 时,起止会回落到 `firstStartedAt` /
+ * `lastEndedAt` —— 那两个是**全轮共用**的,`closeRun()` 也不清它们。于是一个
+ * 「只有 status / text、一个带时刻的事件都没有」的后继 run(澄清 run 的典型形态),
+ * 它那张壳会捡起**前一个 run** 的工具时刻,再和自己的 run 边界取 min / max,
+ * 把前一个 run 整段算进自己名下。
+ *
+ * 这和这个文件开头那两张单是同一个毛病(数字来自别的 run),只是触发条件换了:
+ * 前面修掉的是「中间 run 没有数字」,这一条是「中间 run 的数字是别人的」。
+ *
+ * ⚠️ 那条兜底**任何时候都说不出正确答案**:这张壳没有自己的 `shellSpan`,而
+ * `firstStartedAt` / `lastEndedAt` 只可能由**别的壳**盖出来(它们是全轮所有时刻的
+ * min / max)。所以「回落到全轮时钟」在构造上等价于「借另一张卡的表」,不存在
+ * 它恰好等于本张卡的情形。清掉它,让秒表只认这张壳自己的事件 + 它那个 run 的边界。
+ */
+describe('评审 #7921 · 壳头不许借别的 run 的时钟', () => {
+  const K0 = 'c1d2e3f4a5b60718';
+  const K1 = 'f7e6d5c4b3a29180';
+  const TASK = 'task-borrowed-clock';
+
+  /** run 0:正常干活,有带时刻的工具事件 —— 它就是被借的那口钟。 */
+  const RUN0: ChatMessage = {
+    id: 'run0', role: 'assistant', content: '',
+    createdAt: 1_000_000, endedAt: 1_060_000, runStatus: 'succeeded',
+    strategyTaskExecutionId: TASK, strategyTaskRunIndex: 0,
+    events: [
+      { kind: 'done_key', key: K0 },
+      { kind: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' }, startedAt: 1_010_000 },
+      { kind: 'tool_result', toolUseId: 't1', content: 'ok', isError: false, completedAt: 1_050_000 },
+      { kind: 'text', text: `<od-done key="${K0}"></od-done>初版给你了,要哪个方向?` },
+    ],
+  } as unknown as ChatMessage;
+
+  /**
+   * run 1:**只有 status 和 text**,一个 `startedAt` / `completedAt` 都没有。
+   * 中间隔着四分钟 —— 用户在读上一轮的产出、想怎么回话,那段时间没有任何模型在跑。
+   *
+   * 头一段正文留在壳里(done 之前的过程叙述),所以这张壳不是空壳、不会被 B47 丢掉;
+   * 而它一条 thinking 都没有,所以也不会有推理把 `shellSpan` 撑出来 ——
+   * 正是评审描述的那个形态。
+   */
+  const RUN1: ChatMessage = {
+    id: 'run1', role: 'assistant', content: '',
+    createdAt: 1_300_000, endedAt: 1_320_000, runStatus: 'succeeded',
+    strategyTaskExecutionId: TASK, strategyTaskRunIndex: 1,
+    events: [
+      { kind: 'done_key', key: K1 },
+      { kind: 'status', label: 'starting' },
+      { kind: 'text', text: '先看看你的项目。' },
+      { kind: 'text', text: `<od-done key="${K1}"></od-done>已经按第二个方向改好了。` },
+    ],
+  } as unknown as ChatMessage;
+
+  const foldedPair = (): ChatMessage => {
+    const folded = foldStrategyTaskTurns([RUN0, RUN1]).filter((m) => m.role === 'assistant');
+    expect(folded, '两个 run 要折成一条').toHaveLength(1);
+    return folded[0]!;
+  };
+
+  /** 先证语料真的造出了那个形态 —— 不然下面几条会空转。 */
+  it('对照组 · run 1 确实一个带时刻的事件都没有', () => {
+    const stamped = (RUN1.events ?? []).filter(
+      (e) => (e as { startedAt?: number }).startedAt != null
+        || (e as { completedAt?: number }).completedAt != null,
+    );
+    expect(stamped).toHaveLength(0);
+    // 而 run 0 有 —— 它就是会被借走的那口钟
+    expect((RUN0.events ?? []).some((e) => (e as { startedAt?: number }).startedAt != null)).toBe(true);
+  });
+
+  it('折叠之后,run 1 的壳头报的是它自己那 20 秒,不是从 run 0 开始的五分钟', () => {
+    const shells = shellsOf(blocksOf(foldedPair()));
+    expect(shells, '两个 run 各一张壳').toHaveLength(2);
+    const second = shells[1]!;
+    // 它自己的跨度:1_320_000 - 1_300_000
+    expect(second.elapsedMs).toBe(20_000);
+    expect(headText(second)).toBe('20s');
+  });
+
+  /**
+   * 同一件事换个说法钉一遍:壳头**绝不能**把 run 之间那段没人在跑的时间算进来。
+   * 红的时候这里是 310_000ms(从 run 0 的第一个工具一路量到 run 1 收尾)。
+   */
+  it('run 1 的壳头装不下 run 之间那段空白', () => {
+    const shells = shellsOf(blocksOf(foldedPair()));
+    const second = shells[1]!;
+    const ownSpan = RUN1.endedAt! - RUN1.createdAt!;
+    const sinceRun0 = RUN1.endedAt! - RUN0.createdAt!;
+    expect(second.elapsedMs).not.toBeNull();
+    expect(second.elapsedMs!).toBeLessThanOrEqual(ownSpan);
+    expect(second.elapsedMs!, '把 run 0 也算进来了').toBeLessThan(sinceRun0);
+  });
+
+  /** 还是那条最强的锚:折叠出来的数字必须逐字等于它自己 live 时的数字。 */
+  it('折叠前后逐字相同 —— 两张壳都是', () => {
+    const live = [RUN0, RUN1].map((run) => headText(shellsOf(blocksOf(run))[0]!));
+    const reload = shellsOf(blocksOf(foldedPair())).map(headText);
+    expect(live).toEqual(['1m 0s', '20s']);
+    expect(reload).toEqual(live);
+  });
+});
+
 describe('反向锚点 · 真的没有计时数据时,展示规则保持一致', () => {
   /** 一个带时刻的事件都没有、轮次自己的起止也没有 —— 这时候「不知道」就是不知道。 */
   const NOTHING: PersistedAgentEvent[] = [
