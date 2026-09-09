@@ -96,6 +96,7 @@ function decision(placementKey: (typeof placements)[number]): TestDecision {
 
 describe("Test decisions at the existing host touchpoints", () => {
 	beforeEach(() => {
+		vi.stubEnv("NEXT_PUBLIC_CMS_HOST_RELEASE", `sha256:${"a".repeat(64)}`);
 		document.documentElement.lang = "zh-CN";
 		vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
 		(globalThis as HostGlobal).__cmsTestHost = {
@@ -116,6 +117,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 		clearTestRuntimeSession();
 		cleanup();
 		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
 		delete (globalThis as HostGlobal).__cmsTestHost;
 	});
@@ -156,7 +158,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 			decisions,
 		};
 		setTestRuntimeSession(session);
-		const fetchMock = vi.fn(async (url: string) => {
+		const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
 			if (url.includes("acceptances")) return new Response(JSON.stringify({ id: "acceptance" }), { status: 201 });
 			return new Response(JSON.stringify({ error: "production_read_forbidden" }), { status: 404 });
 		});
@@ -177,6 +179,19 @@ describe("Test decisions at the existing host touchpoints", () => {
 		await waitFor(() => expect(entry).not.toHaveAttribute("hidden"));
 		fireEvent.pointerEnter(entry!);
 		await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url.includes("acceptances")).length).toBe(4));
+		const reports = fetchMock.mock.calls.filter(([url]) => url.includes("acceptances")).map(([, init]) => JSON.parse(String(init?.body)));
+		expect(reports.map((report) => report.placementKey).sort()).toEqual([...placements].sort());
+		for (const report of reports) {
+			expect(report.hostCompatibility).toMatchObject({
+				version: 1,
+				snapshotHash: session.deployment.snapshotHash,
+				hostFamily: "open-design-desktop",
+				platform: "desktop",
+				hostRelease: `sha256:${"a".repeat(64)}`,
+				runtime: {kind: "web-component", apiVersion: 1, wrapperVersion: "vela-touchpoint-wrapper-v1", sdkVersion: "vela-touchpoint-sdk-v1"},
+			});
+			expect(report.hostCompatibility.capabilities).toEqual(decisions.get(report.placementKey)?.requiredCapabilities);
+		}
 		expect(fetchMock.mock.calls.some(([url]) => url.includes("production-runtime"))).toBe(false);
 		expect(screen.getByTestId("campaign-custom-element").querySelector("opend-touchpoint")).not.toBeNull();
 		expect(screen.getByTestId("production-campaign-badge").querySelector("opend-touchpoint")).not.toBeNull();

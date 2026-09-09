@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -156,6 +157,21 @@ function configuredAllowedDevHosts(): string[] {
 }
 
 const nextConfig: NextConfig = {
+  env: {
+    // Embedded in the client at build time. Packaged servers use the already
+    // compiled client and need not retain source files to load this config.
+    NEXT_PUBLIC_CMS_HOST_RELEASE: existsSync(resolve(WEB_ROOT, 'src/components/touchpoint-component.ts'))
+      ? `sha256:${[
+          'apps/web/src/components/touchpoint-component.ts',
+          'apps/web/src/components/touchpoint-static-actions.ts',
+          'apps/web/src/components/TestCampaignModal.tsx',
+          'apps/web/src/components/ProductionCampaignModal.tsx',
+          'apps/web/src/components/ProductionCampaignBadge.tsx',
+          'apps/web/src/components/ProductionCampaignHover.tsx',
+          'packages/contracts/src/touchpoint-component-v2.ts',
+        ].reduce((hash, file) => hash.update(file).update('\0').update(readFileSync(resolve(WORKSPACE_ROOT, file))), createHash('sha256')).digest('hex')}`
+      : undefined,
+  },
   allowedDevOrigins: configuredAllowedDevHosts(),
   outputFileTracingRoot: WORKSPACE_ROOT,
   reactStrictMode: true,

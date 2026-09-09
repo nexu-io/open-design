@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenDesignHost, OPEN_DESIGN_HOST_VERSION } from "@open-design/host";
+import { TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION, TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION, TOUCHPOINT_COMPONENT_V2_SDK_VERSION } from "@open-design/contracts";
 import {
 	emitWebTouchpointDiagnostic,
 	ensureWebTouchpointElement,
@@ -240,6 +241,24 @@ export async function recordTestAcceptance(input: Readonly<{
 				locale: input.locale,
 				scenario: input.scenario,
 				evidence: acceptanceEvidence(input),
+				hostCompatibility: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE ? {
+					version: 1,
+					snapshotHash: input.snapshotHash,
+					hostFamily: "open-design-desktop",
+					platform: "desktop",
+					hostRelease: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE,
+					runtime: {
+						kind: "web-component",
+						apiVersion: TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
+						wrapperVersion: TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION,
+						sdkVersion: TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
+					},
+					capabilities: input.placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
+						? [...TEST_CAMPAIGN_MODAL_CAPABILITIES]
+						: input.placementKey === "opend.home.account-badge"
+							? ["static-action"]
+							: [...placementCapabilities],
+				} : undefined,
 			}),
 		},
 	);
