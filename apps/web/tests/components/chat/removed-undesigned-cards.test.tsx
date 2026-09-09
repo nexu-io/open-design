@@ -90,7 +90,7 @@ describe.each(['shell', 'prose'] as const)('removed ChatPanel cards in %s', (lan
       expect(container.textContent).not.toContain('"summary"');
       expect(container.textContent).not.toContain('"assertion"');
       for (const name of ['Keep', 'Edit', 'Discard']) {
-        expect(within(container).queryByRole('button', { name, exact: true })).toBeNull();
+        expect(within(container).queryByRole('button', { name })).toBeNull();
       }
     });
   });
