@@ -23,6 +23,9 @@
       "tools/release/src/exact/resource-composition.ts",
       "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/commands.ts",
+      "tools/release/src/exact/build-commands.ts",
+      "tools/release/src/exact/resource-commands.ts",
+      "tools/release/src/policy/",
       "tools/release/src/index.ts",
       "tools/release/esbuild.config.mjs",
       "tools/release/src/exact/capsule-artifact.ts",
@@ -108,6 +111,7 @@
       "packages/sidecar-proto/"
     ],
     "closure-data-control": [
+      "tools/release/src/exact/resource-commands.ts",
       ".node-version",
       "package.json",
       "pnpm-lock.yaml",
@@ -204,6 +208,7 @@
       "tools/release/"
     ],
     "release-executor": [
+      "tools/release/src/exact/build-commands.ts",
       "tools/release/src/exact/command-input.ts",
       ".node-version",
       "packages/metatool/",
@@ -212,12 +217,12 @@
       "packages/archive/src/",
       "tools/release/package.json",
       "tools/release/esbuild.config.mjs",
-      "tools/release/src/index.ts",
-      "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/control-common.ts",
       "tools/release/src/exact/artifact-product.ts"
     ],
     "validation-control": [
+      "tools/release/src/index.ts",
+      "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/validation-commands.ts",
       "tools/release/src/exact/command-input.ts",
       ".node-version",

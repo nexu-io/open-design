@@ -7,9 +7,7 @@ import { writeObject } from "./control-common.ts";
 import { importSceneArtifact, packSceneArtifact, unpackSceneArtifact, verifySceneArtifact } from "./scene-artifact.ts";
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, inspectAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
-import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene, buildReleaseSceneInputs } from "./native-build.ts";
-import { buildReleaseDataResource, buildReleaseDataResources, materializeReleaseDataResources, buildReleaseRuntimeResources } from "./resource-build.ts";
-import { exportDataResource, importDataResource } from "./resource-artifact.ts";
+import { registerResourceCommands } from "./resource-commands.ts";
 import { exportPlatform, importPlatform } from "./platform-artifact.ts";
 import { exportCapsule, importCapsule } from "./capsule-artifact.ts";
 import { exportBase, packBase, importBase, unpackBase } from "./base-artifact.ts";
@@ -17,6 +15,7 @@ import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { collectExecutedAcceptance, exerciseReleaseInstallation } from "./acceptance-execution.ts";
 import { registerValidationCommands } from "./validation-commands.ts";
+import { registerBuildCommands } from "./build-commands.ts";
 import { required, emit, type Options } from "./command-input.ts";
 import { acquireArtifactProduct } from "./artifact-product.ts";
 
@@ -88,77 +87,7 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("acceptance operation must be fetch or hot-update or collect");
     });
 
-  cli.command("build <operation>", "Build independent resources, platform, Capsule content, native scenes or distributions")
-    .option("--root <directory>", "Checked-out workspace with built inputs")
-    .option("--shell <name>", "electron or terminal")
-    .option("--target <target>", "Native platform architecture")
-    .option("--output <directory>", "Build output")
-    .option("--receipt <file>", "Build receipt")
-    .option("--resource-id <id>", "Closure data resource group (resource)")
-    .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
-    .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
-    .option("--runtime-archive <file>", "Optional local official Electron archive; pinned checksum required (base)")
-    .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
-    .option("--capsule-directory <directory>", "Portable Capsule products, indexed by target (scene; Electron consumes)")
-    .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
-    .option("--base-receipt <file>", "Verified neutral base receipt (Electron distribution)")
-    .option("--base-directory <directory>", "Restored neutral base product (distribution; Electron consumes)")
-    .option("--scene <directory>", "Verified scene (distribution)")
-    .option("--prepared <directory>", "Prepared signed content (distribution)")
-    .option("--policy <file>", "Release policy (distribution)")
-    .option("--channel <name>", "Release channel (distribution)")
-    .option("--release-version <version>", "Release version (distribution)")
-    .option("--source-commit <sha>", "Exact source commit (distribution)")
-    .action(async (operation: string, options: Options) => {
-      if (operation === "runtime-resources") {
-        const allowed = new Set(["root", "output", "receipt", "--"]);
-        for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`runtime resource build does not accept --${key}`);
-        await buildReleaseRuntimeResources({ root: required(options, "root"), output: required(options, "output"), receipt: required(options, "receipt") });
-        return;
-      }
-      if (operation === "resource") {
-        const allowed = new Set(["root", "resourceId", "output", "receipt", "--"]);
-        for (const key of Object.keys(options)) if (!allowed.has(key)) {
-          throw new Error(`resource build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
-        }
-        await buildReleaseDataResource({ root: required(options, "root"), resourceId: required(options, "resourceId"),
-          output: required(options, "output"), receipt: required(options, "receipt") });
-        return;
-      }
-      if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
-      if (options.runtimeArchive != null && operation !== "base") throw new Error("--runtime-archive is only supported by build base");
-      if (options.baseReceipt != null && operation !== "distribution") throw new Error("--base-receipt is only supported by build distribution");
-      if (options.baseDirectory != null && operation !== "distribution") throw new Error("--base-directory is only supported by build distribution");
-      if (options.capsuleDirectory != null && operation !== "scene") throw new Error("--capsule-directory is only supported by build scene");
-      if (operation === "capsule") {
-        const allowed = new Set(["root", "shell", "target", "output", "receipt", "--"]);
-        for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`Capsule build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
-      }
-      if (operation === "platform") {
-        const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "--"]);
-        for (const key of Object.keys(options)) if (!allowed.has(key)) {
-          throw new Error(`platform build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
-        }
-      }
-      const common = { root: required(options, "root"), shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt") };
-      if (operation !== "scene" && (options.capsuleContent != null || options.capsuleArchive != null)) throw new Error("prebuilt Capsule inputs are only supported by build scene");
-      if (operation === "scene-inputs") await buildReleaseSceneInputs(common);
-      else if (operation === "scene") await buildReleaseScene({ ...common,
-        ...(options.capsuleDirectory == null ? {} : { capsuleDirectory: required(options, "capsuleDirectory") }),
-        ...(options.capsuleContent == null ? {} : { capsuleContent: required(options, "capsuleContent") }),
-        ...(options.capsuleArchive == null ? {} : { capsuleArchive: required(options, "capsuleArchive") }),
-        ...(options.resources == null ? {} : { resources: required(options, "resources") }),
-        ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
-      else if (operation === "capsule") await buildReleaseCapsule(common);
-      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene"),
-        ...(options.runtimeArchive == null ? {} : { runtimeArchive: required(options, "runtimeArchive") }) });
-      else if (operation === "platform") await buildReleasePlatform({ ...common,
-        ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
-      else if (operation === "distribution") await buildReleaseDistribution({ ...common, ...(options.baseReceipt == null ? {} : { baseReceipt: required(options, "baseReceipt") }), scene: required(options, "scene"), prepared: required(options, "prepared"),
-        ...(options.baseDirectory == null ? {} : { baseDirectory: required(options, "baseDirectory") }),
-        policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
-      else throw new Error("build operation must be resource, runtime-resources, platform, capsule, base, scene-inputs, scene or distribution");
-    });
+  registerBuildCommands(cli);
 
   cli.command("prepare", "Compose and sign content from the declared Shell scenes")
     .option("--policy <file>", "Release policy receipt")
@@ -286,37 +215,7 @@ export function registerExactCommands(cli: CAC): void {
     });
   }
 
-  cli.command("resource <operation>", "Export or import an independently verified data resource")
-    .option("--root <directory>", "Source data checkout (build)")
-    .option("--resource-ids <json>", "Selected resource IDs as a JSON array (build)")
-    .option("--sources <file>", "Business resource sources: IDs and optional verified artifact descriptors (materialize)")
-    .option("--resource-id <id>", "Public Closure data resource group")
-    .option("--output <directory>", "New resource directory")
-    .option("--resource-receipt <file>", "Business build receipt (export)")
-    .option("--descriptor <file>", "Exact artifact URL and SHA-256 (import)")
-    .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
-    .action(async (operation: string, options: Options) => {
-      if (operation === "materialize") {
-        const allowed = new Set(["root", "sources", "output", "receipt", "--"]);
-        for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`resource materialize does not accept --${key}`);
-        await materializeReleaseDataResources({ root: required(options, "root"), sources: required(options, "sources"),
-          output: required(options, "output"), receipt: required(options, "receipt") });
-        return;
-      }
-      if (operation === "build") {
-        const allowed = new Set(["root", "resourceIds", "output", "receipt", "--"]);
-        for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`resource batch build does not accept --${key}`);
-        await buildReleaseDataResources({ root: required(options, "root"), resourceIds: JSON.parse(required(options, "resourceIds")),
-          output: required(options, "output"), receipt: required(options, "receipt") });
-        return;
-      }
-      if (options.resourceIds != null || options.root != null || options.sources != null) throw new Error("batch options require resource build or materialize");
-      const common = { resourceId: required(options, "resourceId"), output: required(options, "output") };
-      const result = operation === "import" ? await importDataResource({ ...common, descriptor: required(options, "descriptor") })
-        : operation === "export" ? await exportDataResource({ ...common, resourceReceipt: required(options, "resourceReceipt") })
-        : (() => { throw new Error("resource operation must be export or import"); })();
-      await emit(options, { schemaVersion: 1, operation: "exact.resource." + operation, ...result });
-    });
+  registerResourceCommands(cli);
 
   cli.command("scene <operation>", "Transport or verify a release-neutral scene")
     .option("--scene <directory>", "Source scene (pack or verify)")

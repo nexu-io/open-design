@@ -45,7 +45,7 @@ async function fixture() {
   const required = {
     artifact: { mediaType: "application/x-apple-diskimage", sha256: createHash("sha256").update(artifactBody).digest("hex"), size: artifactBody.byteLength, url: `${publicBase}/betahyx/${releaseVersion}/electron.dmg` },
     installIdentity: { executableName: "open-design-betahyx", namespace: "betahyx" },
-    platformTrust: { designatedRequirement: 'identifier "io.open-design.betahyx"', mode: "verify-only", platform: "macos", teamIdentifier: "adhoc" },
+    platformTrust: { designatedRequirement: 'identifier "io.open-design.betahyx"', mode: "formal", platform: "macos", teamIdentifier: "ABC1234XYZ" },
     shell,
     shellMetadata: { sha256: "d".repeat(64), size: 50, url: `${publicBase}/betahyx/${releaseVersion}/electron-metadata.json` },
     target: "darwin-arm64",

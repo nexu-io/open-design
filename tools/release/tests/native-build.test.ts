@@ -7,7 +7,7 @@ import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildR
 import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 
 const roots: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 async function json(file: string, value: unknown) { await writeFile(file, JSON.stringify(value)); }
 async function fixture() {
@@ -15,7 +15,7 @@ async function fixture() {
   const pkg = join(root, "tools/release/node_modules/@open-design/shell-electron");
   await mkdir(pkg, { recursive: true });
   await json(join(pkg, "package.json"), { name: "@open-design/shell-electron", type: "module", exports: { "./build": "./build.mjs" } });
-  await writeFile(join(pkg, "build.mjs"), "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronInstaller(request) { return { request }; }\nexport async function buildElectronCapsuleContent(request) { return { request, contentPath: request.outputRoot + '/capsule-content.json', archivePath: request.outputRoot + '/capsule.zip' }; }\n");
+  await writeFile(join(pkg, "build.mjs"), "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronInstaller(request) { return { request, platformTrust: { mode: 'formal' } }; }\nexport async function buildElectronCapsuleContent(request) { return { request, contentPath: request.outputRoot + '/capsule-content.json', archivePath: request.outputRoot + '/capsule.zip' }; }\n");
   const receipt = join(root, "receipt.json");
   return { root, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
 }
@@ -144,6 +144,9 @@ it("binds native distribution to authorized prepared content, trust and scene", 
   await json(join(prepared, "prepare-receipt.json"), { ...identity, contentMetadata: { sha256: digest("content"), size: 7 }, trustFile: { sha256: digest("trust"), size: 5 },
     shells: [{ type: f.shell, scenes: [{ target: f.target, sceneManifestSha256: digest(manifest), capsule: { manifest: { sha256: digest("capsule"), size: 7 }, archive: { file: "capsule-current.zip", sha256: digest("current archive"), size: 15 } } }] }] });
   const input = { ...f, ...identity, prepared, scene, policy };
+  for (const name of ["APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID", "APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER", "APPLE_KEYCHAIN_PROFILE"]) vi.stubEnv(name, undefined);
+  await expect(buildReleaseDistribution(input)).rejects.toThrow("requires notarization credentials");
+  vi.stubEnv("APPLE_KEYCHAIN_PROFILE", "test-profile");
   await buildReleaseDistribution(input);
   expect(await readFile(join(f.output, "shell-contribution.json"), "utf8")).toBe(await readFile(f.receipt, "utf8"));
   expect(JSON.parse(await readFile(f.receipt, "utf8")).request).toMatchObject({ operation: "electron.distribution.build",

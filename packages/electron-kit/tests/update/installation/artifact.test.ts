@@ -187,6 +187,7 @@ describe("Electron installer artifact staging", () => {
       expect(run).toHaveBeenCalledWith("/usr/bin/hdiutil", ["attach", staged.artifact.path, "-nobrowse", "-readonly", "-mountpoint", mountRoot]);
       expect(run).toHaveBeenCalledWith("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", join(mountRoot, trustedApp.appBundleName)]);
       expect(run).toHaveBeenCalledWith("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", join(mountRoot, trustedApp.appBundleName)]);
+      expect(run).toHaveBeenCalledWith("/usr/bin/xcrun", ["stapler", "validate", join(mountRoot, trustedApp.appBundleName)]);
       expect(run).toHaveBeenCalledWith("/usr/bin/hdiutil", ["detach", mountRoot, "-quiet"]);
     } finally {
       await rm(value.root, { recursive: true, force: true });

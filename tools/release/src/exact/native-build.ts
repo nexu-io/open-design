@@ -9,6 +9,7 @@ import type { ElectronExactSceneRequest } from "@open-design/shell-electron/buil
 import { acquireBuildArchive } from "@open-design/tools-pack/build";
 import { readOfficialNodeLock, validateNodePlatformResource } from "@open-design/standalone/packages";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
+import { assertMacNotarizationCredentials, requiresFormalMacTrust } from "../policy/native-trust.ts";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 import { buildReleaseRuntimeResources } from "./resource-build.ts";
 
@@ -181,6 +182,9 @@ export async function buildReleaseDistribution(input: BuildInput & Readonly<{ ba
     || baseReceipt.operation !== "electron.base.build" || baseReceipt.target !== buildTarget)) throw new Error("distribution base receipt binding mismatch");
   const policy = await readReleasePolicyReceipt(input.policy, { capability: "prepare",
     channel: input.channel, releaseVersion: input.releaseVersion, sourceCommit: input.sourceCommit });
+  if (input.shell === "electron" && buildTarget.startsWith("darwin-") && requiresFormalMacTrust(policy)) {
+    assertMacNotarizationCredentials();
+  }
   const prepared = await readObject(join(preparedRoot, "prepare-receipt.json"));
   if (prepared.channel !== input.channel || prepared.releaseVersion !== input.releaseVersion || prepared.sourceCommit !== input.sourceCommit) throw new Error("prepared release identity mismatch");
   const content = await checkedFile(prepared.contentMetadata, "prepared content", join(preparedRoot, "documents/content-metadata.json"));
@@ -200,6 +204,9 @@ export async function buildReleaseDistribution(input: BuildInput & Readonly<{ ba
     ...(baseReceipt == null ? {} : { base: baseReceipt.base }),
     acceptedCapsuleManifestFile: capsule, acceptedCapsuleArchiveFile: capsuleArchive,
     channel: policy.channel, releaseVersion: policy.releaseVersion, channelHeadUrl: `${policy.target.publicBaseUrl}/${input.channel}/latest/channel-head.json` });
+  if (buildTarget.startsWith("darwin-") && requiresFormalMacTrust(policy) && result.platformTrust?.mode !== "formal") {
+    throw new Error("public macOS distribution requires formal signed and notarized platform trust");
+  }
   await writeObject(join(input.output, "shell-contribution.json"), result);
   await writeObject(input.receipt, result);
   return result;

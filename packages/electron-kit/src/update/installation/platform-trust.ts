@@ -96,7 +96,10 @@ export async function inspectMacElectronAppTrust(input: Readonly<{
   if (!status.isDirectory() || status.isSymbolicLink() || !basename(input.appPath).endsWith(".app")) throw new Error("macOS app trust target is not an app bundle");
   const run = input.run ?? (async (executable, args) => await execFileAsync(executable, [...args]));
   await run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", input.appPath]);
-  if (input.mode === "formal") await run("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", input.appPath]);
+  if (input.mode === "formal") {
+    await run("/usr/bin/xcrun", ["stapler", "validate", input.appPath]);
+    await run("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", input.appPath]);
+  }
   const details = await run("/usr/bin/codesign", ["--display", "--requirements", "-", "--verbose=4", input.appPath]);
   const plistPath = join(input.appPath, "Contents", "Info.plist");
   const executableName = scalar(await run("/usr/bin/plutil", ["-extract", "CFBundleExecutable", "raw", "-o", "-", plistPath]), "CFBundleExecutable");

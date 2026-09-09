@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { executeExactReleaseControl, validateReleaseArtifactTrust } from "@/exact/control-release.js";
 import { readReleasePolicyReceipt, releaseTargetsEqual, resolveReleasePolicy, writeReleasePolicy } from "@/policy/release-profile.js";
+import { assertMacNotarizationCredentials } from "@/policy/native-trust.js";
 
 const roots: string[] = [];
 const sourceCommit = "a".repeat(40);
@@ -82,19 +83,34 @@ describe("tools-release profile policy", () => {
       .toThrow("matching release/vX.Y.Z ref");
   });
 
-  it("allows verify-only mac trust only in the isolated exact-validation profile", () => {
+  it("allows verify-only mac trust only for loopback exact-validation fixtures", () => {
     const acceptance = {
       shell: { type: "electron" },
       target: "darwin-arm64",
       platformTrust: { platform: "macos", mode: "verify-only", designatedRequirement: 'identifier "io.open-design.betahyx"', teamIdentifier: "adhoc" },
     };
-    expect(() => validateReleaseArtifactTrust(resolveReleasePolicy(request("exact-validation")), [acceptance])).not.toThrow();
+    const exact = resolveReleasePolicy(request("exact-validation"));
+    expect(() => validateReleaseArtifactTrust(exact, [acceptance])).toThrow("requires formal Electron macOS trust");
+    const local = { ...exact, target: { ...exact.target, endpointUrl: "http://127.0.0.1:1234", publicBaseUrl: "http://localhost:1234" } };
+    expect(() => validateReleaseArtifactTrust(local, [acceptance])).not.toThrow();
+    expect(() => validateReleaseArtifactTrust({ ...local, target: { ...local.target, publicBaseUrl: exact.target.publicBaseUrl } }, [acceptance]))
+      .toThrow("requires formal Electron macOS trust");
     expect(() => validateReleaseArtifactTrust(resolveReleasePolicy(request("prerelease-distribution")), [acceptance]))
       .toThrow("requires formal Electron macOS trust");
     expect(() => validateReleaseArtifactTrust(resolveReleasePolicy(request("stable-distribution")), [{
       ...acceptance,
       platformTrust: { ...acceptance.platformTrust, mode: "formal", teamIdentifier: "ABC1234XYZ" },
     }])).not.toThrow();
+  });
+
+  it("requires a complete supported notarization credential group without leaking values", () => {
+    expect(() => assertMacNotarizationCredentials({})).toThrow("requires notarization credentials");
+    expect(() => assertMacNotarizationCredentials({ APPLE_ID: "private-account", APPLE_TEAM_ID: "ABC1234XYZ" }))
+      .toThrow("APPLE_APP_SPECIFIC_PASSWORD");
+    expect(() => assertMacNotarizationCredentials({ APPLE_ID: "private-account", APPLE_APP_SPECIFIC_PASSWORD: "private-password", APPLE_TEAM_ID: "ABC1234XYZ" })).not.toThrow();
+    expect(() => assertMacNotarizationCredentials({ APPLE_API_KEY: "/private/key", APPLE_API_KEY_ID: "key-id", APPLE_API_ISSUER: "issuer" })).not.toThrow();
+    expect(() => assertMacNotarizationCredentials({ APPLE_KEYCHAIN_PROFILE: "local-profile" })).not.toThrow();
+    expect(() => assertMacNotarizationCredentials({ APPLE_API_KEY: "/private/key" })).toThrow("APPLE_API_KEY_ID, APPLE_API_ISSUER");
   });
 
   it("writes a canonical receipt and revalidates its exact binding at the side-effect boundary", async () => {

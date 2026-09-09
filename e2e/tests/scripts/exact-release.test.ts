@@ -16,6 +16,36 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["release-exact", "release-prerelease", "release-stable"])("isolates CLI registration from product recipes in %s", async lane => {
+    const result = await run("python3", ["-c", [
+      "import json,sys", "from pathlib import Path", "from unittest.mock import patch",
+      "sys.path.insert(0,sys.argv[1])",
+      "from convergence import ConvergenceContract, GitFingerprinter, calculate",
+      "root=Path(sys.argv[2]); lane=sys.argv[3]",
+      "contract=ConvergenceContract(root/('.github/config/plan/'+lane+'.json'))",
+      "workflow=contract.workflow(lane)",
+      "def compute(): return calculate(contract,root,lane,workflow.execution['runners'])",
+      "before=compute(); original=GitFingerprinter.records",
+      "def changed(path):",
+      " def records(self,token):",
+      "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in original(self,token)]",
+      " with patch.object(GitFingerprinter,'records',records): after=compute()",
+      " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
+      "print(json.dumps({path:changed('tools/release/src/'+path) for path in ['index.ts','exact/commands.ts','exact/build-commands.ts','exact/resource-commands.ts']}))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
+    const changed: Record<string, string[]> = JSON.parse(result.stdout);
+    const control = ["release_tools", "validation_closure_darwin_arm64", "validation_contract_darwin_arm64", "validation_shell_darwin_arm64"];
+    expect(changed["index.ts"]).toEqual(control);
+    expect(changed["exact/commands.ts"]).toEqual(control);
+    expect(changed["exact/resource-commands.ts"]).toEqual([
+      ...dataIds.map(id => `closure_data_${id.replaceAll("-", "_")}_darwin_arm64`), "release_tools",
+    ].sort());
+    expect(changed["exact/build-commands.ts"]).toEqual(expect.arrayContaining([
+      "electron_base_darwin_arm64", "electron_capsule_darwin_arm64", "electron_platform_darwin_arm64",
+      "electron_scene_darwin_arm64", "terminal_scene_darwin_arm64", "closure_data_skills_darwin_arm64",
+    ]));
+  });
+
   it("keeps notification edits out of product identities and scopes declaration changes", async () => {
     const result = await run("python3", ["-c", [
       "import json,sys,copy", "from pathlib import Path", "from unittest.mock import patch",

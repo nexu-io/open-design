@@ -12,6 +12,7 @@ import { fetchAcceptedShellBaseline } from "./baseline-acquisition.ts";
 import { bindReleaseValidation } from "./validation.ts";
 import { collectInstalledAcceptance, readPublishedAcceptance } from "./installed-acceptance.ts";
 import { authorizeReleaseCapability, readReleasePolicyReceipt, releaseTargetsEqual, type ReleasePolicyReceipt, type ReleaseTarget } from "../policy/release-profile.ts";
+import { requiresFormalMacTrust } from "../policy/native-trust.ts";
 
 function releaseComponent(value: string): number {
   const parsed = Number(value);
@@ -104,7 +105,7 @@ export function validateReleaseArtifactTrust(policy: ReleasePolicyReceipt, accep
     if (trust?.platform !== "macos" || !["formal", "verify-only"].includes(String(trust.mode))) {
       throw new Error("Electron macOS release acceptance lacks platform trust");
     }
-    if (policy.profile !== "exact-validation" && trust.mode !== "formal") {
+    if (requiresFormalMacTrust(policy) && trust.mode !== "formal") {
       throw new Error(`${policy.profile} requires formal Electron macOS trust`);
     }
     if (trust.mode === "formal" && (!/^[A-Z0-9]{10}$/u.test(String(trust.teamIdentifier ?? ""))
