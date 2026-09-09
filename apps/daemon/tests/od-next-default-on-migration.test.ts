@@ -246,6 +246,71 @@ describe('migrateOdNextDefaultOnSync', () => {
     expect(boot().result).toMatchObject({ status: 'cleared', clearedMode: 'off' });
   });
 
+  // OPEND-2959. The one-time clear tidies an illegal value away on the first
+  // boot, but it is not what makes an illegal value safe — after the marker is
+  // down the migration never looks again, and a value that arrives later (a
+  // hand edit, a build that spells the mode differently) has to resolve on the
+  // read path alone. Treating it as an opt-out there means "we could not read
+  // your choice" becomes "you chose to stay off", against installations that
+  // never chose anything.
+  describe('an illegal saved mode reads as unconfigured, marker or no marker', () => {
+    const illegal: Array<[string, unknown]> = [
+      ['a typo', 'acive'],
+      ['a mode this build does not recognise', 'Off'],
+      ['different casing of a real mode', 'OFF'],
+      ['an empty string', ''],
+      ['a boolean', true],
+      ['a number', 123],
+      ['an object', { mode: 'off' }],
+      ['an array', ['off']],
+    ];
+
+    for (const [label, value] of illegal) {
+      it(`resolves ${label} to the default after the installation has adopted`, async () => {
+        writeConfig({ agentId: 'codex', odNextStrategyMode: 'off' });
+        expect(boot().result.status).toBe('cleared');
+        expect(markerExists()).toBe(true);
+
+        // The value arrives after adoption, so nothing clears it any more.
+        writeConfig({ agentId: 'codex', odNextStrategyMode: value });
+        expect(boot().result.status).toBe('already_adopted');
+
+        const config = await readAppConfig(dataDir);
+        expect(config.odNextStrategyMode).toBeUndefined();
+        expect(readOdNextRolloutControlStatus({}, config)).toMatchObject({
+          requestedMode: 'active',
+          requestedModeSource: 'default',
+          effectiveMode: 'active',
+        });
+        // Reading past one unusable key must not cost the user the rest.
+        expect(config.agentId).toBe('codex');
+      });
+
+      it(`resolves ${label} to the default with no marker present either`, async () => {
+        writeConfig({ odNextStrategyMode: value });
+
+        const config = await readAppConfig(dataDir);
+        expect(config.odNextStrategyMode).toBeUndefined();
+        expect(readOdNextRolloutControlStatus({}, config)).toMatchObject({
+          requestedMode: 'active',
+          requestedModeSource: 'default',
+        });
+      });
+    }
+
+    it('still keeps a legible mode exactly as saved', async () => {
+      for (const mode of ['off', 'observe', 'active'] as const) {
+        writeConfig({ odNextStrategyMode: mode });
+        const config = await readAppConfig(dataDir);
+        expect(config.odNextStrategyMode).toBe(mode);
+        expect(readOdNextRolloutControlStatus({}, config)).toMatchObject({
+          requestedMode: mode,
+          requestedModeSource: 'app_config',
+        });
+      }
+    });
+  });
+
   it('does not create a data directory it was not given a reason to touch beyond the marker', () => {
     const missing = path.join(dataDir, 'not-yet');
 
