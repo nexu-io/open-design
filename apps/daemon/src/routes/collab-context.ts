@@ -1,3 +1,4 @@
+import { getDiagnosticsEvidence, recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
 import type { Express, Request, Response } from 'express';
 import type {
   CollabCloudMemberDirectoryEntry,
@@ -453,12 +454,16 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
           fetchWorkspaceDirectory,
           configuredEnv: configuredEnv(),
         });
-    if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
+    if (!verified.ok) {
+      recordDiagnosticFailure({ source: 'workspace-context', status: verified.status });
+      return sendWorkspaceVerificationFailure(res, verified);
+    }
     const enriched = await workspaceContext.resolveExact?.({
       authorization,
       workspaceId: verified.context.workspaceId,
     }).catch(() => null);
     const context = enrichVerifiedWorkspaceContext(verified.context, enriched);
+    getDiagnosticsEvidence()?.observeContext(context);
     const body: WorkspaceContextResponse = { context };
     void deps.observeWorkspace?.(req, context, workspaceGroupProperties(context));
     res.json(body);
@@ -535,6 +540,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
     );
     if (!directory.ok) {
+      recordDiagnosticFailure({ source: 'local-api', operation: '/api/workspace/directory', status: directory.reason === 'unauthorized' ? 401 : 503 });
       if (directory.reason === 'unauthorized') {
         return sendApiError(
           res,

@@ -43,6 +43,7 @@ import {
   settledSignalFromMessages,
 } from '../runtime/chat/reconnect-state';
 import { forkBoundaryMessageIndex } from '../runtime/chat/fork-boundary';
+import { resolveRecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
   deletePreviewComment,
@@ -438,6 +439,23 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  copy that the queue drain would then send twice. This flag is
    *  transport-only and is stripped before queue persistence. */
   acceptDurableQueue?: boolean;
+  /**
+   * 这一发的正文**此刻属于输入框**,而且输入框正等着知道要不要把它收回去。
+   *
+   * 只有 `handleComposerSend` 打这个标记。它是 OPEND-2719 那条「余额耗尽不代管、
+   * 把正文还给输入框」的**唯一**入场券:`handleSend` 还有十来个直接调用方
+   * (分享到社区、设计系统反馈、继续未完成任务、续跑、问答表单、首页自动发送、
+   * 重发失败的用户消息……),它们的正文不在输入框里,用户也没在等着编辑它 ——
+   * 对它们「不代管」等于悄悄取消了排队。
+   *
+   * ⚠️ 判据必须是**肯定式**。原来写成「不是重试、不是排空队列 ⇒ 就是输入框」,
+   * 而那份排除法把上面那十来个调用方全算成了输入框(PR #7927 评审)。
+   *
+   * ⚠️ 和 `acceptDurableQueue` 同类:**transport-only**,由
+   * `stripQueueOnlyFromMeta` 在入队前摘掉。一条排过队的输入框消息,它的正文已经
+   * 交给队列项保管了,回放时再声称「输入框在等它」就是撒谎。
+   */
+  composerOwnedDraft?: true;
   /** Stable task lineage for retries, resumes and clarification answers. */
   taskAnalytics?: ChatTaskExecutionAnalytics;
   /** Explicit daemon-issued OD Next continuation handle. */
@@ -3141,6 +3159,30 @@ export function ProjectView({
   // effect would re-hit the wallet endpoint and re-pop the dialog. Lifted by
   // the next send that passes the gate.
   const amrGatePausedQueueConversationsRef = useRef<Set<string>>(new Set());
+  /**
+   * 被余额硬拦下来的那一发的 `clientRequestId`(OPEND-2719)。
+   *
+   * 拦截档不再把这一发塞进待发送队列 —— 队列的语义是「等一等就能跑」,而钱包
+   * 是空的:它会一直躺在那儿,用户看到的就是单里说的「没有触发额度不足提示,
+   * 而是把消息加入待发送队列」。既然不代管,就得把正文还给输入框,而
+   * `handleSend` 只回一个布尔。用请求 id 做钥匙,`handleComposerSend` 才认得出
+   * 「回 false 的这一发正是我刚发的那一发」,而不是被一次并发的拒绝误伤。
+   */
+  const amrGateBlockedRequestRef = useRef<string | null>(null);
+  /**
+   * 正在等服务端确认的那一次重试(OPEND-2758)。
+   *
+   * `failedAssistantId` 是报错卡的主,重试期间卡钉在它身上;
+   * `replacementAssistantId` 是这一发新画出去的助手消息 —— 它拿到 `runId`
+   * (也就是 `POST /api/runs` 回来了)才算「服务端确认」,宣告到那一刻才撤。
+   */
+  const [retryPending, setRetryPending] = useState<{
+    conversationId: string;
+    failedAssistantId: string;
+    replacementAssistantId: string;
+  } | null>(null);
+  /** 这次重试的替补助手消息**曾经**上过屏 —— 见下面那个 effect 的第三条出路。 */
+  const retryPendingPaintedRef = useRef<string | null>(null);
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
   const initialChatPanelWidth = useMemo(readSavedChatPanelWidth, []);
@@ -3498,7 +3540,23 @@ export function ProjectView({
     || currentConversationLoading
     || failedMessagesConversationId === activeConversationId
     || currentConversationAwaitingActiveRunAttach;
-  const currentConversationActionDisabled = currentConversationBusy || currentConversationSendDisabled;
+  /**
+   * 报错卡上那一排恢复动作动不了的时候,**是哪一档挡住的**(OPEND-2821)。
+   *
+   * 这不是新的门:四档是原来那个布尔(`busy || sendDisabled`)所覆盖的同一个
+   * 集合的一个划分,等价性写在 `runtime/chat/recovery-gating.ts` 的注释里。
+   * 有了原因之后按钮才能既画成禁用态、又说得出话 —— 在此之前
+   * `handleRetry` 在这六个条件下静默 `return`,而按钮永远画成可点。
+   */
+  const currentConversationActionBlockReason = resolveRecoveryActionBlockReason({
+    readOnly: Boolean(projectMutationReadOnly),
+    messagesUnavailable: failedMessagesConversationId === activeConversationId,
+    billingPrincipalResolved: Boolean(projectRunHasBillableAmrPrincipal),
+    conversationBusy: Boolean(
+      currentConversationBusy || currentConversationAwaitingActiveRunAttach,
+    ),
+  });
+  const currentConversationActionDisabled = currentConversationActionBlockReason !== null;
   const currentConversationQueueDisabled = projectMutationReadOnly
     || currentConversationLoading
     || failedMessagesConversationId === activeConversationId;
@@ -8297,15 +8355,19 @@ export function ProjectView({
                     : undefined,
                   amrModelId,
                 );
-          // A blocked send parks in the conversation queue with its FULL
-          // payload (prompt, attachments, comment context) — the composer
-          // already cleared itself, and a text-only draft restore would
-          // silently drop staged attachments. Retries keep their error card
-          // and queue drains already have their queue item, so both skip the
+          // A send blocked by something that can still resolve on its own —
+          // a signed-out wallet, an unreadable billing read — parks in the
+          // conversation queue with its FULL payload (prompt, attachments,
+          // comment context), because those states clear and the parked send
+          // is then genuinely runnable. Retries keep their error card and
+          // queue drains already have their queue item, so both skip the
           // re-queue. The pause keeps queued items from re-hitting the gate
           // (and re-popping a dialog) on every unrelated state change; any
           // later send that passes the gate lifts it, and a manual "run now"
           // on a queued item bypasses it deliberately.
+          //
+          // ⚠️ An EXHAUSTED wallet is not one of those states — see
+          // `rejectBlockedSend` below (OPEND-2719).
           const queueGateSend = (): boolean => {
             // 判定拒绝 = 这一轮不会有 run。先把已经画出去的那一轮收回,再决定
             // 它去哪儿 —— 三条拒绝路(会话切走 / 拦截 / 读不到)都经过这里,
@@ -8327,6 +8389,31 @@ export function ProjectView({
             const queued = queueGateSend();
             amrGatePausedQueueConversationsRef.current.add(gateConversationId);
             return queued;
+          };
+          /**
+           * 余额耗尽这一档**不代管**这一发(OPEND-2719)。
+           *
+           * 待发送队列说的是「等一等就能跑」——排在前面的那一轮跑完、或者用户
+           * 自己按〔立即发送〕。钱包空着的时候这两件事都不会发生:消息就那么躺
+           * 在队列里,而用户看到的是「没有触发额度不足提示,消息被加进了队列」。
+           *
+           * 所以这一档只做三件事:把画出去的那一轮收回、把队列暂停(免得队列里
+           * 早先的东西继续撞同一堵墙)、记下这一发的请求 id。正文由
+           * `handleComposerSend` 凭那个 id 认领回输入框 —— 队列不是保管处,输入框
+           * 才是,而且那样用户下一步该干什么(充值 / 换 agent / 改需求)都还看得见。
+           *
+           * ⚠️ 两道收窄,缺一不可:
+           * ① 只有 `insufficient`。`signed_out` 同样是硬拦,但它的出路是登录,
+           *    登录完那一发确实还能跑 —— 那一档保留原来的排队 + 恢复路径。
+           * ② 只有 `composerOwnedDraft` 打过标记的那一发,也就是**真的从输入框
+           *    发出来的**。别的调用方的正文不在输入框里,取消它们的排队等于
+           *    把消息弄丢(PR #7927 评审)。
+           */
+          const rejectBlockedSend = (): false => {
+            retractPaintedTurn();
+            amrGatePausedQueueConversationsRef.current.add(gateConversationId);
+            amrGateBlockedRequestRef.current = clientRequestId;
+            return false;
           };
           const acceptedDurableQueue = (queued: boolean): boolean => {
             return queued && meta?.acceptDurableQueue === true;
@@ -8382,13 +8469,17 @@ export function ProjectView({
             // 只对「余额耗尽」出卡。被登出也走这条硬拦截,但那张卡说的是钱的事,
             // 摆一个 $0.00 去解释一次登录过期是在误导 —— 那一档交给弹窗。
             if (gate.reason === 'insufficient') {
-              // **没有轮次可锚。** 这一档下面紧跟着 `parkBlockedSend()`,而它会
+              // **没有轮次可锚。** 这一档下面紧跟着 `rejectBlockedSend()`,而它会
               // `retractPaintedTurn()` 把刚画出去的那一轮收回 —— 没有 run,也就
               // 没有「那一轮」可挂。锚点给 `null`,读数照旧落在流水末尾(T61)。
               setAmrBalanceCard(
                 amrBalanceCardCue(amrBalanceCardBalanceUsd(gate.snapshot), null),
               );
               setAmrBalanceCardProfile(gate.snapshot.profile ?? null);
+              // 余额耗尽 **且这一发的正文归输入框**:不进队列(OPEND-2719)。
+              // 弹窗 + 卡就是这一发的答复,正文回到输入框。别的调用方掉到
+              // 下面那条原来的排队路上,行为一个字不变。
+              if (meta?.composerOwnedDraft) return rejectBlockedSend();
             }
             return acceptedDurableQueue(parkBlockedSend());
           }
@@ -10133,7 +10224,31 @@ export function ProjectView({
         });
         if (decision === 'cancel') return 'restore-draft';
       }
-      void handleSend(prompt, attachments, commentAttachments, meta);
+      /*
+       * 等 `handleSend` 落定,好让**被余额拦下的那一发**把正文还回输入框
+       * (OPEND-2719)。以前这里是 `void handleSend(...)`:输入框立刻清空,
+       * 于是「不代管就会丢正文」变成了硬约束,拦截档只能拿队列去接。
+       *
+       * 这一等**只对 OpenDesign Cloud 有实际时长** —— 只有那一档在
+       * `POST /api/runs` 之前有一次预检往返;别的 agent 这条路上一个 await
+       * 都没有,promise 在微任务里就落定,输入框和以前一样立刻清空。
+       * 等待期间 `ChatComposer` 自己会把发送键换成「准备中」那枚不可点的
+       * 药丸(`composedSendPending`)—— 那套机制原本就是为这道预检写的,
+       * 只是在此之前没有宿主真的去等它。
+       */
+      const clientRequestId = meta?.clientRequestId ?? randomUUID();
+      const started = await handleSend(prompt, attachments, commentAttachments, {
+        ...(meta ?? {}),
+        clientRequestId,
+        // 这条路,而且只有这条路,的正文归输入框所有 —— 见
+        // `ProjectChatSendMeta.composerOwnedDraft`。
+        composerOwnedDraft: true,
+      });
+      if (started) return;
+      // 认领必须按请求 id:同一条会话里可能有别的发送也在这段时间被拒。
+      if (amrGateBlockedRequestRef.current !== clientRequestId) return;
+      amrGateBlockedRequestRef.current = null;
+      return 'restore-draft';
     },
     [activeConversationId, cloudModelSelected, handleSend, project.id],
   );
@@ -10388,23 +10503,102 @@ export function ProjectView({
     setModelPickerOpenSignal((n) => n + 1);
   }, []);
 
+  /**
+   * 〔重试〕。
+   *
+   * ⚠️ 这里**不只是**转发给 `handleSend`。`handleSend` 为了不让用户对着 1–2 秒
+   * 没反应的界面(OPEND-2614)会先把新一轮画出去,而画出去的那一刻队尾就换了人:
+   * `retryableAssistantMessage` 立刻返回 null,报错卡在**服务端还没确认这一发**
+   * 的时候当场消失。用户既判断不出重试有没有被接收,也读不到原来的失败原因和
+   * 别的出路 —— OPEND-2758 说的就是这一段。
+   *
+   * 所以按下去先立一份「这一轮正在重试」的宣告:卡靠它钉在原来那条失败消息上,
+   * 按钮靠它进加载态并锁住。宣告只在两种情况下撤:新 run 拿到了 id(下面那个
+   * effect),或者这一发压根没起来(`handleSend` 回 false —— 只读、空转录、
+   * 预检拒绝都走这条)。
+   *
+   * `assistantMessageId` 是**先定后发**的:新那条助手消息的 id 由这里生成,
+   * 否则宣告没法认出「哪条消息拿到 runId 才算这一次重试确认了」。
+   */
   const handleRetry = useCallback(
     (
       assistantMessage: ChatMessage,
       recoveryActionType: TrackingRunRecoveryActionType = 'manual_retry',
     ) => {
       if (currentConversationActionDisabled) return;
-      void handleSend('', [], [], {
-        retryOfAssistantId: assistantMessage.id,
-        taskAnalytics: buildRecoveryTaskAnalytics(
-          messages,
-          assistantMessage,
-          recoveryActionType,
-        ),
+      const retryConversationId = activeConversationId;
+      if (!retryConversationId) return;
+      const replacementAssistantId = randomUUID();
+      setRetryPending({
+        conversationId: retryConversationId,
+        failedAssistantId: assistantMessage.id,
+        replacementAssistantId,
       });
+      void (async () => {
+        const started = await handleSend('', [], [], {
+          retryOfAssistantId: assistantMessage.id,
+          assistantMessageId: replacementAssistantId,
+          taskAnalytics: buildRecoveryTaskAnalytics(
+            messages,
+            assistantMessage,
+            recoveryActionType,
+          ),
+        });
+        if (started) return;
+        // 这一发没有起来:把宣告收回,原失败卡和它那一排动作跟着回来。
+        setRetryPending((current) =>
+          current?.replacementAssistantId === replacementAssistantId ? null : current,
+        );
+      })();
     },
-    [currentConversationActionDisabled, handleSend, messages],
+    [activeConversationId, currentConversationActionDisabled, handleSend, messages],
   );
+
+  /**
+   * 宣告的另一半:**服务端确认了就撤**(OPEND-2758 ②)。
+   *
+   * 判据是那条新助手消息拿到了 `runId` —— 它由 `onRunCreated` 写进来,而
+   * `onRunCreated` 正是 `POST /api/runs` 带着 run id 回来的那一刻。用它而不是
+   * 「流式开始了」:后者在提前上屏之后立刻为真,等于没等。
+   *
+   * 另外两条出路:那条消息已经不在活跃态了(run 没建成就报错,或者被停掉),
+   * 以及会话被切走。两者都说明这一次重试不再有人等着确认。
+   *
+   * ⚠️ API / BYOK 模式没有 daemon run 可确认(`runStatus` 一直是 undefined),
+   * 于是这条 effect 会在上屏的同一批里撤掉宣告 —— 那一档保持原有行为,
+   * 本来也没有「服务端确认」这个环节。
+   */
+  useEffect(() => {
+    if (!retryPending) {
+      retryPendingPaintedRef.current = null;
+      return;
+    }
+    if (retryPending.conversationId !== activeConversationId) {
+      setRetryPending(null);
+      return;
+    }
+    const replacement = messages.find(
+      (message) => message.id === retryPending.replacementAssistantId,
+    );
+    if (replacement) {
+      retryPendingPaintedRef.current = retryPending.replacementAssistantId;
+      if (replacement.runId || !isActiveRunStatus(replacement.runStatus)) {
+        setRetryPending(null);
+      }
+      return;
+    }
+    /*
+     * 画出去过、现在又不见了 = 这一发被收回了。`POST /api/runs` 自己失败时
+     * `onError` 会把这条占位助手消息整条删掉、把失败记回用户那一行
+     * (「没有 run 存在过」),于是上面那两条判据一条都够不着。
+     *
+     * 「画出去过」这个记号是必须的:预检那一路在画之前先 await,那一段里
+     * 这条消息本来就还不存在 —— 不区分的话宣告会在刚立起来的下一帧就被撤掉。
+     */
+    if (retryPendingPaintedRef.current === retryPending.replacementAssistantId) {
+      setRetryPending(null);
+    }
+  }, [activeConversationId, messages, retryPending]);
 
   // "Continue" on a resumable failed run: send a fresh turn in the same
   // conversation. For a session-resuming runtime (Claude) the daemon persisted
@@ -13123,6 +13317,15 @@ export function ProjectView({
               onSend={handleComposerSend}
               onResendUserMessage={handleResendUserMessage}
               onRetry={handleRetry}
+              // 这一刻接不接得住恢复动作,以及接不住时该说哪句话(OPEND-2821)。
+              recoveryActionsBlockedReason={currentConversationActionBlockReason}
+              // 哪一轮的重试还在等服务端确认(OPEND-2758)。会话对不上就不算 ——
+              // 宣告是按会话认领的,别的会话的卡不该被它钉住。
+              retryPendingAssistantId={
+                retryPending && retryPending.conversationId === activeConversationId
+                  ? retryPending.failedAssistantId
+                  : null
+              }
               onSwitchModel={handleSwitchModel}
               amrAuthRetryContinuation={amrAuthRetryContinuation}
               amrAuthRetryMountId={amrAuthRetryMountIdRef.current}
@@ -13564,9 +13767,14 @@ export function ProjectView({
           onClose={() => setAmrBalanceGateBlock(null)}
           onResolved={() => {
             // Sign-in completed or the recharge landed: lift the balance
-            // pause and kick the drain so the parked send starts on its own
+            // pause and kick the drain so anything parked starts on its own
             // (it still re-gates, so a half-measure recharge surfaces the
             // soft reminder rather than silently failing mid-run).
+            //
+            // ⚠️ Since OPEND-2719 the exhausted-wallet block no longer parks
+            // its own send — that draft went back to the composer. What this
+            // still drains is whatever the OTHER blocked states (signed out,
+            // unreadable billing) parked earlier in this conversation.
             const conversationId = amrBalanceGateBlock.conversationId;
             setAmrBalanceGateBlock(null);
             amrGatePausedQueueConversationsRef.current.delete(conversationId);
@@ -14058,6 +14266,10 @@ function stripQueueOnlyFromMeta(
   const {
     queueOnly: _queueOnly,
     acceptDurableQueue: _acceptDurableQueue,
+    // 一旦排过队,正文的保管方就是队列项而不是输入框了 —— 这份认领不能跟着
+    // 回放走,否则一条排过队的输入框消息在回放时被拦下,会去撤一个早就清空的
+    // 草稿,而队列里那条反而被扔掉。见 `composerOwnedDraft` 的说明。
+    composerOwnedDraft: _composerOwnedDraft,
     ...rest
   } = meta as ProjectChatSendMeta;
   return Object.keys(rest).length > 0 ? rest : undefined;

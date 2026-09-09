@@ -1093,9 +1093,8 @@ function blockTask(
   const route = current.route ?? 'full_plan';
   // A turn blocked for another reason still gets its marker violation recorded:
   // `blocked_reason_codes_json` is the only durable attribution channel the task
-  // store has, and these codes raise no rollout stop signal
-  // (`rolloutStopSignalForBlockedContinuation` matches route/execution-mode
-  // drift and machine-block boundary failures only).
+  // store has, and blocking is where the consequence stops — a blocked task no
+  // longer disables OD Next for anything but itself.
   const blockedReasonCodes = blockedReasonCodesFor(visibleText, reasonCodes);
   logStrategyTaskBlocked(current, current.latestRunId, blockedReasonCodes);
   const task = compareAndTransitionStrategyTaskExecution(db, {

@@ -515,7 +515,6 @@ import {
 } from './strategies/od-next/native-build-package.js';
 import {
   resolveAutomaticContinuationEvidence,
-  rolloutStopSignalForBlockedContinuation,
   type OdNextComplexProductionResolver,
   type OdNextExecutionPreflightResolver,
 } from './strategies/od-next/automatic-continuation-service.js';
@@ -563,12 +562,7 @@ import {
   odNextTurnMayInferDirectEditCompletion,
   odNextTurnMayInferProductionCompletion,
 } from './strategies/od-next/automatic-simple-production.js';
-import {
-  odNextRolloutSignalForRun,
-  readOdNextRolloutPolicy,
-  stopModeForOdNextSignal,
-} from './strategies/od-next/rollout.js';
-import { latchOdNextRolloutStopOperationally } from './strategies/od-next/rollout-control-telemetry.js';
+import { readOdNextRolloutPolicy } from './strategies/od-next/rollout.js';
 import {
   getStrategyTaskExecutionByRunId,
   reconcileStrategyTaskRunTerminal,
@@ -719,6 +713,7 @@ import {
   validateTarget as validateRoutineTarget,
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
+import { configureDiagnosticsEvidence } from './services/diagnostics-evidence.js';
 import { createDiagnosticsExportHandler } from './diagnostics-export.js';
 import {
   CHAT_SCROLL_FORENSICS_PATH,
@@ -1348,6 +1343,7 @@ const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
 });
+configureDiagnosticsEvidence(RUNTIME_DATA_DIR);
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
 const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
@@ -7750,29 +7746,11 @@ export async function startServer({
     currentAppVersionInfo()?.version ?? UNKNOWN_APP_VERSION;
   const { analyticsService } = telemetry;
   registerStrategyRolloutRoutes(app, {
-    db,
-    analytics: analyticsService,
-    getAppVersion: currentAppVersion,
     requireLocalDaemonRequest,
     // Uncaught on purpose: an operator asking which mode is in effect must get
     // an error when the config cannot be read, never `off` / `default`.
     readOdNextPreference: () => readAppConfig(RUNTIME_DATA_DIR),
   });
-  const latchOdNextRolloutForRun = (run, mode, reasonCode) => {
-    latchOdNextRolloutStopOperationally({
-      db,
-      analytics: analyticsService,
-      analyticsContext: run.analyticsContext,
-      appVersion: currentAppVersion(),
-      mode,
-      reasonCode,
-      // A thunk, not a value: the latch is the safety action and must land
-      // even if this read fails. Sync because run-terminal bookkeeping cannot
-      // await, and read at all so the reported effective mode matches the mode
-      // the run was admitted under.
-      readAppConfig: () => readAppConfigSync(RUNTIME_DATA_DIR),
-    });
-  };
   workspaceAnalyticsService = analyticsService;
   console.info(
     '[telemetry] effective run sink',
@@ -12745,21 +12723,6 @@ export async function startServer({
       return 'unknown';
     };
     const finishStrategyAwarePhysicalRun = (status, code = null, signal = null) => {
-      const maxDurationRaw = Number(process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS);
-      const thresholdSignal = strategyTaskAtStart
-        ? odNextRolloutSignalForRun({
-            durationMs: Math.max(0, Date.now() - run.createdAt),
-            maxDurationMs: Number.isFinite(maxDurationRaw) ? maxDurationRaw : null,
-          })
-        : null;
-      if (thresholdSignal) {
-        latchOdNextRolloutForRun(run, 'observe', thresholdSignal);
-        design.runs.emit(run, 'diagnostic', {
-          type: 'od_next_rollout_stop',
-          mode: 'observe',
-          reason_code: thresholdSignal,
-        });
-      }
       const finished = finishRun(status, code, signal);
       return finished;
     };
@@ -15996,7 +15959,6 @@ export async function startServer({
         if (strategyTaskAtStart && strategyTaskAtStart.inputStage !== 'request') {
           const blocked = blockAutomaticContinuation(db, { runId: run.id });
           if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
-          latchOdNextRolloutForRun(run, 'observe', 'native_resume_failed');
           send('error', createSseErrorPayload(
             'AGENT_SESSION_RESUME_FAILED',
             'The locked OD Next native session is unavailable; the task was blocked without cold re-seeding.',
@@ -16605,16 +16567,16 @@ export async function startServer({
             run.deliverableSyntaxRepair = syntaxFinalization.validation.repairState;
           }
           design.runs.persistState(run);
-          if (syntaxFinalization.validation.checker) {
+          {
             design.runs.emit(run, 'diagnostic', {
               type: 'deliverable_syntax_validation',
               source: 'run_finalizer',
               status: syntaxFinalization.validation.status,
-              checker: syntaxFinalization.validation.checker,
+              checker: 'checker' in syntaxFinalization.validation ? syntaxFinalization.validation.checker : null,
               candidateHash:
-                syntaxFinalization.validation.candidateHash ?? null,
+                'candidateHash' in syntaxFinalization.validation ? syntaxFinalization.validation.candidateHash : null,
               checkedFileCount:
-                syntaxFinalization.validation.checkedFiles?.length ?? 0,
+                'checkedFiles' in syntaxFinalization.validation ? syntaxFinalization.validation.checkedFiles.length : 0,
               checkCount:
                 syntaxFinalization.validation.metrics?.checkCount ?? null,
               checkerDurationMs:
@@ -16632,17 +16594,8 @@ export async function startServer({
               safeFixProposalDurationMs: syntaxFinalization.validation.metrics?.safeFixProposalDurationMs ?? null,
             });
           }
-          if (syntaxFinalization.action === 'fail') {
-            send('error', createSseErrorPayload(
-              'AGENT_EXECUTION_FAILED',
-              syntaxFinalization.reason === 'check_incomplete'
-                ? `Final Web deliverable syntax check is incomplete at ${syntaxFinalization.location}; delivery blocked.`
-                : `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. Deterministic host repair stopped: ${syntaxFinalization.reason}.`,
-              { retryable: false },
-            ));
-            finishStrategyAwarePhysicalRun('failed', 1, signal);
-            return;
-          }
+          // A syntax warning is durable quality evidence, not an execution
+          // failure. Continue the normal artifact/ref/version delivery path.
         }
         if (strategyCompletionCandidate) {
           // Observation only (this branch has no repair loop): did a phone-app
@@ -16699,10 +16652,10 @@ export async function startServer({
             }
           }
         }
-        // Snapshot only after the completion gate accepts the settled Web
-        // candidate. A parse-broken deliverable must not create a version that
-        // looks successfully delivered.
-        // Freeze the committed bytes before linking the HTML version below;
+        // Capture after best-effort syntax repair: verified committed bytes on
+        // success, or the retained original on refusal. Snapshotting denotes
+        // delivery, not syntax correctness; the Run keeps the warning evidence.
+        // Freeze the delivered bytes before linking the HTML version below;
         // cover rendering remains asynchronous and does not delay the Run.
         await captureChatArtifactsBeforeSuccess();
         try {
@@ -16842,15 +16795,6 @@ export async function startServer({
             return;
           }
           run.strategyTask = projectStrategyTask(transition.result.task, run.id);
-          if (transition.result.action === 'blocked') {
-            const signal = rolloutStopSignalForBlockedContinuation(
-              transition.result.reasonCodes,
-            );
-            const stopMode = signal ? stopModeForOdNextSignal(signal) : null;
-            if (signal && stopMode) {
-              latchOdNextRolloutForRun(run, stopMode, signal);
-            }
-          }
           if (transition.start && transition.prepared?.kind === 'ready') {
             const nextRun = transition.prepared.run;
             nextRun.strategyTask = projectStrategyTask(transition.result.task, nextRun.id);

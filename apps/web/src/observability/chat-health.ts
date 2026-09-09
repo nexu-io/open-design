@@ -156,6 +156,24 @@ export function openChatSurface(input: {
   activeSurface?.detach();
   const surface = new ChatSurface(input);
   activeSurface = surface;
+  // Adopt the run that is already streaming, if there is one.
+  //
+  // A surface is not created once per run — it is recreated every time the
+  // user switches conversation or leaves and returns to the Chat tab, and
+  // `chatSurfaceRunStarted` only ever reaches the surface that happened to
+  // exist when the provider fired it. So a surface opened MID-RUN started life
+  // believing nothing was running: its jank window stayed shut and every long
+  // task until the next run start was dropped on the floor. That is precisely
+  // the stretch a user is watching — they came back to the tab to see
+  // something generate.
+  //
+  // The in-flight run is read from the correlation context rather than a
+  // second flag kept here: `chat-interaction.ts` already derives its whole
+  // `streaming` breakdown the same way, and one source cannot disagree with
+  // itself. Nothing is double counted — `runCount` and the window clock are
+  // per-surface, and the surface this opens on was constructed a line ago.
+  const inFlightRunId = chatCorrelation().run_id;
+  if (inFlightRunId != null) surface.runStarted(inFlightRunId);
   return surface;
 }
 

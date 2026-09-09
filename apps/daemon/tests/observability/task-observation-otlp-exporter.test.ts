@@ -432,6 +432,125 @@ const OTLP_OBSERVATION_METADATA_FIELDS = [
 ] as const;
 
 describe('task observation OTLP exporter', () => {
+  it.each([0, 1, undefined] as const)('preserves optional warning count %s on legacy and OTLP Task and Run metadata', (count) => {
+    const source = aggregate();
+    const run = source.observations.find((candidate) => candidate.kind === 'task_run')!;
+    run.quality!.deliverableSyntax = {
+      schemaVersion: 'deliverable-syntax-telemetry-v1', applicable: true,
+      status: 'repairable', source: 'run_finalizer', checker: 'web-syntax@1',
+      checkedFileCount: 1, checkCount: 1, checkerDurationMs: 2,
+      repairWindowDurationMs: null, repairToDeliveryDurationMs: 5,
+      terminalRunStatus: 'succeeded',
+      finalization: {
+        action: 'warn', reason: 'no_safe_fix', refusal: 'unsupported_syntax_error',
+        summaryVersion: 1, initialStatus: 'repairable', repairEngine: 'host-safe-fixer@2',
+        stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [],
+      },
+      repairableCheckCount: 1, initialDiagnosticCount: 1, latestDiagnosticCount: 1,
+      repairTriggered: true, repairAttempts: 0, maxRepairAttempts: 8,
+      repairOutcome: 'unresolved', recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0,
+      ...(count !== undefined ? { deliveredWithSyntaxWarningCount: count } : {}),
+    };
+    const legacy = buildLegacyTaskObservationPayload(source);
+    const otlp = buildOtlpTaskObservationPayload(source);
+    for (const id of [source.root.observationId, run.identity.observationId]) {
+      const metadata = legacyEventFor(legacy, id).body.metadata as Record<string, unknown>;
+      expect(metadata).toMatchObject({
+        deliverable_syntax_finalization_action: 'warn',
+        deliverable_syntax_finalization_reason: 'no_safe_fix',
+        deliverable_syntax_finalization_refusal: 'unsupported_syntax_error',
+      });
+      const span = spanFor(otlp, id);
+      const key = 'deliverable_syntax_delivered_with_syntax_warning_count';
+      const isRoot = id === source.root.observationId;
+      const attribute = span.attributes.find((item) => item.key === `langfuse.trace.metadata.${key}`);
+      // Existing OTLP Run quality is a safe_quality JSON attribute, while
+      // Task metadata is flattened; preserve both established wire shapes.
+      const runQuality = isRoot ? undefined : JSON.parse(stringAttribute(
+        span, 'langfuse.observation.metadata.safe_quality',
+      )!);
+      if (count === undefined) {
+        expect(metadata).not.toHaveProperty(key);
+        if (isRoot) expect(attribute).toBeUndefined();
+        else expect(runQuality).not.toHaveProperty(key);
+      } else {
+        expect(metadata[key]).toBe(count);
+        if (isRoot) expect(attribute?.value.intValue).toBe(String(count));
+        else expect(runQuality[key]).toBe(count);
+      }
+    }
+    source.coverage.runs.availability = 'partial';
+    const partial = legacyEventFor(buildLegacyTaskObservationPayload(source), source.root.observationId);
+    expect(partial.body.metadata).not.toHaveProperty('deliverable_syntax_delivered_with_syntax_warning_count');
+    source.coverage.runs.availability = 'complete';
+    const later = {
+      ...run,
+      identity: { ...run.identity, observationId: 'later-run', runId: 'later-run', taskRunIndex: 1 },
+      quality: undefined,
+    };
+    source.observations.push(later);
+    const missingLater = legacyEventFor(buildLegacyTaskObservationPayload(source), source.root.observationId);
+    expect(missingLater.body.metadata).not.toHaveProperty('deliverable_syntax_delivered_with_syntax_warning_count');
+    for (const terminalRunStatus of ['failed', 'canceled'] as const) {
+      source.observations[source.observations.length - 1] = {
+        ...later, status: terminalRunStatus,
+        quality: { ...run.quality!, deliverableSyntax: {
+          ...run.quality!.deliverableSyntax!, terminalRunStatus, deliveredWithSyntaxWarningCount: 0,
+        } },
+      };
+      const endedLater = legacyEventFor(buildLegacyTaskObservationPayload(source), source.root.observationId);
+      expect(endedLater.body.metadata).toHaveProperty('deliverable_syntax_delivered_with_syntax_warning_count', 0);
+    }
+  });
+
+  it('does not report a recovered Task after its latest Run delivers with a syntax warning', () => {
+    const source = aggregate();
+    const repairedRun = source.observations.find((candidate) => candidate.kind === 'task_run')!;
+    repairedRun.quality!.deliverableSyntax = {
+      schemaVersion: 'deliverable-syntax-telemetry-v1', applicable: true,
+      status: 'pass', source: 'run_finalizer', checker: 'web-syntax@1',
+      checkedFileCount: 1, checkCount: 2, checkerDurationMs: 2,
+      repairWindowDurationMs: 2, repairToDeliveryDurationMs: 5,
+      terminalRunStatus: 'succeeded',
+      repairableCheckCount: 1, initialDiagnosticCount: 1, latestDiagnosticCount: 0,
+      repairTriggered: true, repairAttempts: 1, maxRepairAttempts: 8,
+      repairOutcome: 'repaired', recoveredDeliveryCount: 1, blockedBrokenDeliveryCount: 0,
+      deliveredWithSyntaxWarningCount: 0,
+    };
+    const warningRun = {
+      ...repairedRun,
+      identity: { ...repairedRun.identity, observationId: 'warning-run', runId: 'warning-run', taskRunIndex: 1 },
+      quality: { ...repairedRun.quality!, deliverableSyntax: {
+        ...repairedRun.quality!.deliverableSyntax!,
+        status: 'repairable' as const, repairOutcome: 'unresolved' as const,
+        recoveredDeliveryCount: 0 as const, deliveredWithSyntaxWarningCount: 1 as const,
+        finalization: {
+          action: 'warn' as const, reason: 'no_safe_fix' as const,
+          summaryVersion: 1 as const, initialStatus: 'repairable' as const,
+          repairEngine: 'host-safe-fixer@2' as const,
+          stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [],
+        },
+      } },
+    };
+    source.observations.push(warningRun);
+    const legacy = buildLegacyTaskObservationPayload(source);
+    expect(legacyEventFor(legacy, source.root.observationId).body.metadata).toMatchObject({
+      deliverable_syntax_delivered_with_syntax_warning_count: 1,
+      deliverable_syntax_recovered_delivery_count: 0,
+      deliverable_syntax_blocked_broken_delivery_count: 0,
+      deliverable_syntax_repair_outcome: 'unresolved',
+    });
+    expect(legacyEventFor(legacy, repairedRun.identity.observationId).body.metadata).toMatchObject({
+      deliverable_syntax_recovered_delivery_count: 1,
+      deliverable_syntax_repair_outcome: 'repaired',
+    });
+    const root = spanFor(buildOtlpTaskObservationPayload(source), source.root.observationId);
+    expect(root.attributes.find((attribute) => (
+      attribute.key === 'langfuse.trace.metadata.deliverable_syntax_recovered_delivery_count'
+    ))?.value.intValue).toBe('0');
+    expect(stringAttribute(root, 'langfuse.trace.metadata.deliverable_syntax_repair_outcome')).toBe('unresolved');
+  });
+
   it('keeps syntax timing and repaired-delivery value on the Task trace', () => {
     const source = aggregate();
     const run = source.observations.find((candidate) => candidate.kind === 'task_run')!;

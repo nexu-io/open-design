@@ -13,9 +13,11 @@ import {
 import { scrubBeforeSend } from './scrub';
 import {
   clearExceptionTrackingContext,
+  detectBrowserOsName,
   setExceptionTrackingContext,
 } from './error-tracking';
 import { pinFirstSessionForCapture } from './identity';
+import { registerChatReplaySessionSource } from '../observability/chat-context';
 import { coalescedGet } from '../lib/coalesced-get';
 
 interface AnalyticsContext {
@@ -224,6 +226,8 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         apiKey: cfg.key,
         host: cfg.host,
         distinctId,
+        clientType: context.clientType,
+        osName: detectBrowserOsName(),
         appVersion: context.appVersion,
         sessionId: context.sessionId,
         telemetryEnv,
@@ -353,6 +357,15 @@ export async function getAnalyticsClient(
         },
 
         loaded: (instance) => {
+          // Hand the chat-observability correlation block its replay-session
+          // reader. This is the ONLY place it can come from: we load
+          // posthog-js through `await import('posthog-js')`, and the ESM
+          // build — unlike the landing page's `array.js` snippet — never
+          // publishes itself as `window.posthog`. Without this line every
+          // `replay_session_id` on a `client_chat_*` event is silently
+          // undefined while the wiring looks complete. See the trap
+          // documented on `registerChatReplaySessionSource`.
+          registerChatReplaySessionSource(() => instance.get_session_id());
           lastRegisterPayload = {
             event_schema_version: EVENT_SCHEMA_VERSION,
             env: telemetryEnv,
@@ -384,6 +397,8 @@ export async function getAnalyticsClient(
             apiKey: cfgKey,
             host: cfgHost,
             distinctId,
+            clientType: context.clientType,
+            osName: detectBrowserOsName(),
             appVersion: context.appVersion,
             sessionId: context.sessionId,
             telemetryEnv,
