@@ -2580,6 +2580,21 @@ export function ChatPane({
       area: 'chat_panel',
       element: 'run_failed_toast',
       error_code: failedRunErrorEvent.code,
+      /*
+       * 卡上那句话**到底是哪一句**,以及它是不是兜底那句。
+       *
+       * `error_code` 回答的是「daemon 说这是什么错」,回答不了「用户读到了什么」——
+       * 这两件事之间隔着一张映射表,而映射表**总会少一行**
+       * (`resolveRunErrorCardDescription` 的注释把这件事写死了:表可以短一行,
+       * 判据不能)。少那一行的时候用户看到的是一句空洞的「任务失败了」,
+       * 这正是最该被量出来的一格。
+       *
+       * 判据现成:`runFailureUi.messageKey` 为 null 就是「表里没有这条文案」
+       * (`amr-guidance.ts` 的 `RunErrorCardDescription`)。
+       * 兜底那一格**必须有自己的值而不是缺字段** —— 缺了,兜底率的分母就没了。
+       */
+      message_key: runFailureUi?.messageKey ?? 'generic_fallback',
+      failure_category: failedRunErrorEvent.failureCategory ?? 'unknown',
       project_id: projectId ?? '',
       project_kind: projectKindForTracking,
       conversation_id: activeConversationId,
@@ -2591,9 +2606,11 @@ export function ChatPane({
     analytics.track,
     displayError,
     failedRunErrorEvent?.code,
+    failedRunErrorEvent?.failureCategory,
     projectId,
     projectKindForTracking,
     retryAssistant,
+    runFailureUi?.messageKey,
   ]);
   const importedFolderArtifacts = useMemo(
     () =>
