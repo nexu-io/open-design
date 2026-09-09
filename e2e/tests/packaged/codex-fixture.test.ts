@@ -6,10 +6,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createFakeAgentRuntimes } from '@/fake-agents';
 import {
+  codexAppServerInvocationsCompleted,
   PACKAGED_HOME_FIRST_RUN_OUTPUT,
   PACKAGED_HOME_FIRST_RUN_PROMPT,
 } from '@/vitest/packaged-home-first-run';
 import { attachCodexAppServerSession } from '../../../apps/daemon/src/agent-protocol/codex-app-server/session.js';
+import {
+  resolveDaemonOwnedOdNextExecutionPreflight,
+  runExecutionPreflight,
+} from '../../../apps/daemon/src/strategies/od-next/resolver.js';
 
 describe('packaged Codex fixture transport', () => {
   it.each([null, 'resumed-smoke-thread'])(
@@ -17,6 +22,9 @@ describe('packaged Codex fixture transport', () => {
     async (resumeSessionId) => {
       const root = await mkdtemp(join(tmpdir(), 'od-codex-fixture-'));
       const { codex } = await createFakeAgentRuntimes({ root, runtimeIds: ['codex'], recordInvocations: true });
+      const probe = spawn(process.execPath, [join(root, 'codex-e2e.cjs'), 'exec', '--help']);
+      probe.stdin.end();
+      expect(await once(probe, 'close')).toEqual([0, null]);
       const child = spawn(process.execPath, [join(root, 'codex-e2e.cjs'), 'app-server'], { stdio: 'pipe' });
       const closed = once(child, 'close');
       const events: Record<string, unknown>[] = [];
@@ -37,7 +45,13 @@ describe('packaged Codex fixture transport', () => {
         expect(JSON.stringify(events)).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
         expect(session.stats()).toEqual({ unknownNotifications: 0, unknownItems: 0 });
         const receipts = (await readFile(codex.invocation!.path, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
-        expect(receipts.every((entry) => entry.nonce === codex.invocation!.nonce && entry.pid === child.pid)).toBe(true);
+        expect(receipts.some((entry) => entry.pid === probe.pid && entry.mode === 'exec-json')).toBe(true);
+        expect(receipts.filter((entry) => entry.mode === 'app-server').every((entry) => entry.pid === child.pid)).toBe(true);
+        expect(codexAppServerInvocationsCompleted(receipts, codex.invocation!.nonce)).toBe(true);
+        expect(codexAppServerInvocationsCompleted(receipts, 'another-smoke')).toBe(false);
+        expect(codexAppServerInvocationsCompleted(receipts.filter((entry) => entry.mode !== 'app-server'), codex.invocation!.nonce)).toBe(false);
+        expect(codexAppServerInvocationsCompleted(receipts.filter((entry) => entry.event !== 'completed'), codex.invocation!.nonce)).toBe(false);
+        expect(codexAppServerInvocationsCompleted(receipts.map((entry) => entry.event === 'completed' ? { ...entry, pid: -1 } : entry), codex.invocation!.nonce)).toBe(false);
         expect(receipts.filter((entry) => entry.event === 'request').map((entry) => entry.method))
           .toEqual(['initialize', 'initialized', resumeSessionId ? 'thread/resume' : 'thread/start', 'turn/start']);
         expect(JSON.stringify(receipts)).not.toContain(PACKAGED_HOME_FIRST_RUN_PROMPT);
@@ -98,8 +112,14 @@ describe('packaged Codex fixture transport', () => {
           expect(await closed).toEqual([0, null]);
           expect(session.completedSuccessfully()).toBe(true);
           const text = events.filter((event) => event.type === 'text_delta').map((event) => event.delta).join('');
-          if (index === 0) expect(text).toContain('<open-design-plan-contract>');
-          else {
+          if (index === 0) {
+            const contract = text.match(/<open-design-plan-contract>\s*([\s\S]*?)\s*<\/open-design-plan-contract>/)?.[1];
+            expect(contract).toBeTruthy();
+            // The packaged daemon admits the built-in request input. A fake
+            // plan must pass that real gate before its native continuation.
+            expect(runExecutionPreflight(resolveDaemonOwnedOdNextExecutionPreflight(JSON.parse(contract!))))
+              .toEqual({ status: 'passed', reasonCodes: [] });
+          } else {
             expect(text).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
             expect(text).toContain('"outcome":"completed"');
             expect(await readFile(join(root, 'od-next-active-canary.html'), 'utf8')).toContain('Delayed Daemon Smoke');
