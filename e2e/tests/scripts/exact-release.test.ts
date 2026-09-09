@@ -196,7 +196,10 @@ describe("exact Electron release topology", () => {
     const capsule = workflow.split("\n  capsule:")[1]!.split("\n  data:")[0]!;
     expect(capsule).toContain("matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}");
     expect(capsule.indexOf("Restore converged capsule")).toBeLessThan(capsule.indexOf("actions/checkout"));
-    for (const command of ["capsule restore", "build capsule", "capsule contribute"]) expect(capsule).toContain(`exact-release-control.mjs" ${command}`);
+    for (const command of ["capsule import", "build capsule", "capsule export"]) expect(capsule).toContain(`exact-release-control.mjs" ${command}`);
+    expect(capsule).not.toMatch(/--plan|--pending|--workload|convergence\.py/u);
+    expect(workflow).toContain('--products-output "$RUNNER_TEMP/exact-plan/artifacts"');
+    expect(workflow).toContain('convergence.py --config .github/config/plan/release-exact.json contribute');
     expect(prepare).toContain('--capsules "$RUNNER_TEMP/capsules"');
     const scene = workflow.split("\n  scene:")[1]!.split("\n  platform:")[0]!;
     expect(scene).toContain("needs: [plan, capsule]");

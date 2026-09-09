@@ -175,14 +175,6 @@ export async function resolveExactPlatformPlanNode(input: Readonly<{
   return resolveNode(`sha256:${"0".repeat(64)}`, "electron.platform.build", input.root, input.target, registry, {});
 }
 
-/** Capsule content has no release version, signing or platform archive input. */
-export async function resolveExactCapsulePlanNode(input: Readonly<{
-  root: string; registryPath: string; target: ExactTarget;
-}>): Promise<ExactPlanNode> {
-  const registry = await readContentIdentityRegistry(input.registryPath);
-  return resolveNode(`sha256:${"0".repeat(64)}`, "electron.capsule.build", input.root, input.target, registry, {});
-}
-
 /** Resolve only carrier and base inputs, without loading Closure/data trees. */
 export async function resolveExactBasePlanNode(input: Readonly<{
   root: string; registryPath: string; target: ExactTarget; acceptedShellBaseline: `sha256:${string}`;

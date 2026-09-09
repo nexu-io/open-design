@@ -76,7 +76,8 @@ it("dispatches Capsule production through the selected workspace public package"
   await f.invoke(args);
   expect(JSON.parse(await readFile(receipt, "utf8"))).toEqual({ schemaVersion: 1, operation: "electron.capsule.build", request: { target: "darwin-arm64", outputRoot: output } });
   await expect(f.invoke(args.map(value => value === "electron" ? "terminal" : value))).rejects.toThrow("requires electron");
-  await expect(f.invoke([...args, "--capsule-content", "content.json"])).rejects.toThrow("only supported by build scene");
+  await expect(f.invoke([...args, "--capsule-content", "content.json"])).rejects.toThrow("Capsule build does not accept --capsule-content");
+  await expect(f.invoke([...args, "--plan", "plan.json"])).rejects.toThrow("Capsule build does not accept --plan");
   await expect(f.invoke([...args.map(value => value === "capsule" ? "scene" : value), "--capsule-content", "content.json"])).rejects.toThrow("both --capsule-content and --capsule-archive");
 });
 

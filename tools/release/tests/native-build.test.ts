@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
 import * as planModule from "@/exact/plan.ts";
-import { resolveExactCapsulePlanNode, resolveExactPlatformPlanNode } from "@/exact/plan.ts";
+import { resolveExactPlatformPlanNode } from "@/exact/plan.ts";
 import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 
 const roots: string[] = [];
@@ -59,7 +59,7 @@ it("resolves only the public build export in the selected workspace and passes t
 });
 
 it("builds neutral Capsule content without Node archives, Closure inputs or version policy", async () => {
-  const f = await fixture(); await buildReleaseCapsule({ ...f, plan: undefined });
+  const f = await fixture(); await buildReleaseCapsule(f);
   expect(JSON.parse(await readFile(f.receipt, "utf8"))).toEqual({ schemaVersion: 1, operation: "electron.capsule.build",
     contentPath: join(f.output, "capsule-content.json"), archivePath: join(f.output, "capsule.zip"),
     request: { target: f.target, outputRoot: f.output } });
@@ -67,36 +67,11 @@ it("builds neutral Capsule content without Node archives, Closure inputs or vers
   await expect(buildReleaseCapsule({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
 });
 
-it.each(["bound", "unchanged", "before-drift", "during-drift", "wrong-target"])("binds Capsule builds to source identity (%s)", async mode => {
+it("does not read planner files or source registries during Capsule production", async () => {
   const f = await fixture();
-  const source = join(f.root, "capsule-input");
-  await writeFile(source, "source");
-  const registryPath = join(f.root, "tools/release/resources/exact-plan-identities.json");
-  await mkdir(join(f.root, "tools/release/resources"), { recursive: true });
-  await json(registryPath, { schemaVersion: 1,
-    identities: { "electron.capsule.build": { schemaVersion: 1, parameters: ["target"], sourceSets: ["capsule"] } },
-    sourceSets: { capsule: { paths: ["capsule-input"] } } });
-  const node = await resolveExactCapsulePlanNode({ root: f.root, registryPath, target: "darwin-arm64" });
-  await json(f.plan, { schemaVersion: 1, actions: mode === "unchanged" ? [] : [{ id: "electron.capsule.build" }],
-    plan: { target: mode === "wrong-target" ? "win32-x64" : f.target, nodes: { "electron.capsule.build": node } } });
-  if (mode === "before-drift") await writeFile(source, "changed");
-  await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"), `
-    import { writeFile } from 'node:fs/promises';
-    export async function buildElectronCapsuleContent(request) {
-      ${mode === "during-drift" ? `await writeFile(${JSON.stringify(source)}, 'changed');` : ""}
-      return { contentPath: request.outputRoot + '/capsule-content.json', archivePath: request.outputRoot + '/capsule.zip' };
-    }
-  `);
-  const failure = mode === "before-drift" ? "plan binding mismatch" : mode === "during-drift" ? "source changed during execution" : mode === "wrong-target" ? "valid target-bound release plan" : undefined;
-  if (failure) {
-    await expect(buildReleaseCapsule(f)).rejects.toThrow(failure);
-    await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
-    return;
-  }
+  await rm(f.plan);
   await buildReleaseCapsule(f);
-  expect(JSON.parse(await readFile(f.receipt, "utf8"))).toMatchObject({
-    operation: "electron.capsule.build", planNode: { id: "electron.capsule.build", identity: node.identity, target: f.target },
-  });
+  expect(JSON.parse(await readFile(f.receipt, "utf8"))).not.toHaveProperty("planNode");
 });
 
 it.each(["unbound", "bound", "unchanged", "drift"])("builds an independent platform with verified metadata (%s)", async mode => {

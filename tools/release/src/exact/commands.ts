@@ -14,7 +14,7 @@ import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildR
 import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
 import { contributePlatform, restorePlatform } from "./platform-cache.ts";
-import { contributeCapsule, restoreCapsule } from "./capsule-cache.ts";
+import { exportCapsule, importCapsule } from "./capsule-artifact.ts";
 import { contributeBase, packBase, restoreBase, unpackBase } from "./base-cache.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
@@ -91,7 +91,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Build output")
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
-    .option("--plan <file>", "Release plan (scene; optional identity binding for resource/platform/capsule/base)")
+    .option("--plan <file>", "Release plan (resource/platform/base)")
     .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
@@ -122,6 +122,10 @@ export function registerExactCommands(cli: CAC): void {
       }
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
       if (options.baseReceipt != null && operation !== "distribution") throw new Error("--base-receipt is only supported by build distribution");
+      if (operation === "capsule") {
+        const allowed = new Set(["root", "shell", "target", "output", "receipt", "--"]);
+        for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`Capsule build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
+      }
       if (operation === "platform") {
         const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "plan", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) {
@@ -136,8 +140,7 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
-      else if (operation === "capsule") await buildReleaseCapsule({ ...common,
-        ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
+      else if (operation === "capsule") await buildReleaseCapsule(common);
       else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene"),
         ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
       else if (operation === "platform") await buildReleasePlatform({ ...common,
@@ -262,7 +265,21 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("baseline operation must be fetch or promote");
     });
 
-  for (const product of ["platform", "capsule", "base"] as const) {
+  cli.command("capsule <operation>", "Export or import a verified portable Capsule artifact")
+    .option("--target <target>", "Expected native target")
+    .option("--output <directory>", "New product directory")
+    .option("--build-receipt <file>", "Business build receipt (export)")
+    .option("--descriptor <file>", "Exact artifact URL and SHA-256 (import)")
+    .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
+    .action(async (operation: string, options: Options) => {
+      const common = { target: required(options, "target"), output: required(options, "output") };
+      const result = operation === "export" ? await exportCapsule({ ...common, buildReceipt: required(options, "buildReceipt") })
+        : operation === "import" ? await importCapsule({ ...common, descriptor: required(options, "descriptor") })
+        : (() => { throw new Error("capsule operation must be export or import"); })();
+      await emit(options, { schemaVersion: 1, operation: `exact.capsule.${operation}`, ...result });
+    });
+
+  for (const product of ["platform", "base"] as const) {
     const command = cli.command(`${product} <operation>`, product === "base" ? "Pack, unpack, restore or contribute a planned base" : `Restore or contribute an independently planned ${product}`)
       .option("--plan <file>", "Exact release plan")
       .option("--pending <file>", "Convergence planner receipt")
@@ -281,8 +298,8 @@ export function registerExactCommands(cli: CAC): void {
         }
         const common = { plan: required(options, "plan"), pending: required(options, "pending"),
           workload: required(options, "workload"), output: required(options, "output") };
-        const restore = product === "platform" ? restorePlatform : product === "capsule" ? restoreCapsule : restoreBase;
-        const contribute = product === "platform" ? contributePlatform : product === "capsule" ? contributeCapsule : contributeBase;
+        const restore = product === "platform" ? restorePlatform : restoreBase;
+        const contribute = product === "platform" ? contributePlatform : contributeBase;
         const result = operation === "restore" ? await restore(common)
           : operation === "contribute" ? await contribute({ ...common, buildReceipt: required(options, "buildReceipt"), artifact: required(options, "artifact") })
           : (() => { throw new Error(`${product} operation must be restore or contribute`); })();

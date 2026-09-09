@@ -32,7 +32,8 @@
       "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/control-cli.ts",
       "tools/release/esbuild.config.mjs",
-      "tools/release/src/exact/capsule-cache.ts",
+      "tools/release/src/exact/capsule-artifact.ts",
+      "tools/release/src/exact/artifact-product.ts",
       "tools/release/src/exact/base-cache.ts",
       "tools/release/src/exact/capsule-budget.ts"
     ],

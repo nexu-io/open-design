@@ -154,7 +154,8 @@ jobs:
             --scope-plan "$RUNNER_TEMP/exact-plan/scope.json" \
             --runner-plan-json "$RUNNER_PLAN" \
             --mode enforce \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json"
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" \
+            --products-output "$RUNNER_TEMP/exact-plan/artifacts"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -523,9 +524,8 @@ jobs:
           WORKLOAD: ${{ matrix.workload }}
         shell: bash
         run: |
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" capsule restore \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" capsule import \
+            --target "$TARGET" --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/capsule.json" \
             --output "$RUNNER_TEMP/exact-capsule/$TARGET"
 
       - uses: actions/checkout@v6.0.2
@@ -553,23 +553,20 @@ jobs:
           pnpm --filter @open-design/shell-electron build
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build capsule \
             --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
             --output "$RUNNER_TEMP/exact-capsule/$TARGET" \
             --receipt "$RUNNER_TEMP/exact-capsule/$TARGET/capsule-build-receipt.json"
 
-      - name: Contribute verified capsule
+      - name: Export verified portable capsule
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
           TARGET: ${{ matrix.target }}
           WORKLOAD: ${{ matrix.workload }}
-          ARTIFACT_NAME: exact-capsule-cache-${{ matrix.target }}-${{ inputs.source_sha }}
         shell: bash
         run: |
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" capsule contribute \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" capsule export \
+            --target "$TARGET" \
             --build-receipt "$RUNNER_TEMP/exact-capsule/$TARGET/capsule-build-receipt.json" \
-            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/capsule-contribution"
+            --output "$RUNNER_TEMP/capsule-contribution"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -583,14 +580,6 @@ jobs:
         with:
           name: exact-capsule-cache-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/capsule-contribution/artifact
-          if-no-files-found: error
-          retention-days: 1
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/capsule-contribution/products
           if-no-files-found: error
           retention-days: 1
 
@@ -945,6 +934,23 @@ jobs:
           pattern: exact-convergence-manifest-*-${{ github.run_id }}
           path: ${{ runner.temp }}/convergence-products
           merge-multiple: true
+
+      - name: Bind Capsule workload results in the Linux control plane
+        env:
+          CAPSULE_MATRIX: ${{ needs.plan.outputs.capsule_matrix }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          jq -c '.include[]' <<< "$CAPSULE_MATRIX" | while IFS= read -r entry; do
+            workload=$(jq -r '.workload' <<< "$entry")
+            target=$(jq -r '.target' <<< "$entry")
+            if jq -e --arg workload "$workload" '.workloads[$workload].run' "$RUNNER_TEMP/exact-plan/pending.json" >/dev/null; then
+              python3 .github/scripts/convergence.py --config .github/config/plan/release-exact.json contribute \
+                --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$workload" \
+                --product capsule --artifact "exact-capsule-cache-$target-$SOURCE_SHA" \
+                --output "$RUNNER_TEMP/convergence-products"
+            fi
+          done
 
       - name: Create reusable scene handoff
         id: convergence_handoff
