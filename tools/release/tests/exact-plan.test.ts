@@ -23,7 +23,7 @@ async function fixture(): Promise<{ registry: ReturnType<typeof parseContentIden
   const ids = [
     ...EXACT_DATA_PLAN_NODE_IDS,
     "electron.contract.build",
-    "electron.contract.test",
+    "electron.contract.test", "electron.platform.build",
     "electron.shell.build",
     "electron.shell.test",
     "closure.build",
@@ -57,6 +57,22 @@ function identities(plan: ExactPlan): Set<string> {
 }
 
 describe("exact release plan", () => {
+  it("rebuilds only the independent platform and downstream distribution when native inputs change", async () => {
+    const input = { ...await fixture(), acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" as const };
+    const before = await createExactPlan(input);
+    await writeFile(join(input.root, "electron.platform.build/input.txt"), "changed platform");
+    const after = await createExactPlan(input);
+    expect(selectExactPlanActions(after, identities(before)).map(action => action.id)).toEqual([
+      "electron.platform.build", "electron.distribution", "electron.acceptance.full", "exact.compose", "exact.publish", "exact.activate",
+    ]);
+    expect(after.nodes["electron.platform.build"].dependencies).toEqual([]);
+    const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+    const registry = parseContentIdentityRegistry(JSON.parse(await readFile(join(repositoryRoot, "tools/release/resources/exact-plan-identities.json"), "utf8")));
+    const paths = resolveContentIdentityDeclaration(registry, "electron.platform.build").sources.map(source => source.path);
+    expect(paths).toContain("shells/electron/config/carriers/node-lock.json");
+    expect(paths).toContain("shells/electron/resources/platform");
+    expect(paths.some(path => path.startsWith("apps/") || path.startsWith("packages/electron-capsule"))).toBe(false);
+  });
   it("selects only the changed data producer and hot acceptance when independent results are available", async () => {
     const input = { ...await fixture(), acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" as const };
     const before = await createExactPlan(input);

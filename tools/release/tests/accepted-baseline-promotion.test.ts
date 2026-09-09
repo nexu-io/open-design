@@ -29,7 +29,7 @@ async function fixture() {
   const repository = join(root, "repository");
   const ids = [
     ...EXACT_DATA_PLAN_NODE_IDS,
-    "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
+    "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
     "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot",
   ];
   for (const id of ids) {
@@ -90,10 +90,11 @@ async function fixture() {
   await writeFile(acceptanceCredential, JSON.stringify({
     schemaVersion: 1, operation: "exact.acceptance", status: "accepted", channel: "betahyx", releaseVersion, sourceCommit,
     ...required,
-    installed: { shell, target: "darwin-arm64", proof: { files: { seeds: [
-      { file: "standalone-launcher.mjs", sha256: "e".repeat(64), size: 40 },
-      { file: "closure.mjs", sha256: "f".repeat(64), size: 60 },
-    ] } } },
+    installed: { shell, target: "darwin-arm64", proof: { files: {
+      content: { file: "standalone-content.json", sha256: "e".repeat(64), size: 40 },
+      capsule: { manifest: { file: "capsule-manifest.json", sha256: "f".repeat(64), size: 60 },
+        archive: { file: "capsule.zip", sha256: "9".repeat(64), size: 100 } },
+    } } },
   }));
   return { acceptanceCredential, activationReceipt, artifactBody, channelHeadBody, policyReceipt, publishReceipt, registry, repository, root };
 }
@@ -159,9 +160,9 @@ describe("accepted Electron baseline promotion", () => {
     });
     expect(releasePlan.actions.map(({ id }) => id)).toContain("closure.acceptance.hot");
     expect(releasePlan.actions.map(({ id }) => id)).toEqual(expect.arrayContaining([
-      "electron.contract.build", "electron.contract.test", "electron.shell.test", "closure.build", "closure.test",
+      "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.shell.test", "closure.build", "closure.test",
     ]));
-    for (const id of ["electron.contract.test", "electron.shell.test", "closure.test"] as const) {
+    for (const id of ["electron.contract.test", "electron.platform.build", "electron.shell.test", "closure.test"] as const) {
       expect(receipt.acceptedIdentities).not.toContain(releasePlan.plan.nodes[id].identity);
     }
     const releasePlanPath = join(input.root, "release-plan.json");

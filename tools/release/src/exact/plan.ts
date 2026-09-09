@@ -23,6 +23,7 @@ export type ExactPlanNodeId =
   | "closure.test"
   | "electron.contract.build"
   | "electron.contract.test"
+  | "electron.platform.build"
   | "electron.acceptance.full"
   | "electron.distribution"
   | "electron.shell.build"
@@ -53,8 +54,9 @@ const NODE_DEPENDENCIES: Readonly<Record<Exclude<ExactPlanNodeId, DataNodeId>, r
   "closure.test": ["closure.build", "electron.contract.test"],
   "electron.contract.build": [],
   "electron.contract.test": ["electron.contract.build"],
+  "electron.platform.build": [],
   "electron.acceptance.full": ["electron.distribution"],
-  "electron.distribution": ["electron.shell.build"],
+  "electron.distribution": ["electron.shell.build", "electron.platform.build"],
   "electron.shell.build": ["electron.contract.build"],
   "electron.shell.test": ["electron.shell.build", "electron.contract.test"],
 };
@@ -62,6 +64,7 @@ const NODE_DEPENDENCIES: Readonly<Record<Exclude<ExactPlanNodeId, DataNodeId>, r
 const NODE_ORDER = Object.freeze([
   "electron.contract.build",
   "electron.contract.test",
+  "electron.platform.build",
   "electron.shell.build",
   "electron.shell.test",
   ...EXACT_DATA_PLAN_NODE_IDS,
@@ -156,6 +159,14 @@ export async function resolveExactDataPlanNode(input: Readonly<{
   if (!EXACT_DATA_PLAN_NODE_IDS.some(id => id === input.id)) throw new Error("unknown data plan node");
   const registry = await readContentIdentityRegistry(input.registryPath);
   return resolveNode(`sha256:${"0".repeat(64)}`, input.id as DataNodeId, input.root, input.target, registry, {});
+}
+
+/** Independent native producer identity; never reads Capsule or Closure inputs. */
+export async function resolveExactPlatformPlanNode(input: Readonly<{
+  root: string; registryPath: string; target: ExactTarget;
+}>): Promise<ExactPlanNode> {
+  const registry = await readContentIdentityRegistry(input.registryPath);
+  return resolveNode(`sha256:${"0".repeat(64)}`, "electron.platform.build", input.root, input.target, registry, {});
 }
 
 export async function resolveExactPlanSourceIdentity(input: Readonly<{

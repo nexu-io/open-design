@@ -4,6 +4,33 @@
     "excludeDirectoryNames": [".next", ".tmp", "coverage", "dist", "node_modules", "out"]
   },
   "sourceSets": {
+    "electron.platform.build": {
+      "normalizePackageVersion": true,
+      "paths": [
+        ".node-version",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "packages/standalone/package.json",
+        "packages/standalone/esbuild.config.ts",
+        "packages/standalone/tsconfig.json",
+        "packages/standalone/src",
+        "packages/platform/package.json",
+        "packages/platform/src",
+        "packages/download/package.json",
+        "packages/download/src",
+        "shells/electron/package.json",
+        "shells/electron/tsconfig.build.json",
+        "shells/electron/src/build-api.ts",
+        "shells/electron/src/platform",
+        "shells/electron/config/carriers/node-lock.json",
+        "shells/electron/resources/platform",
+        "tools/pack/package.json",
+        "tools/pack/src",
+        "tools/release/src/exact/native-build.ts",
+        "tools/release/src/exact/control-common.ts"
+      ]
+    },
     "closure.data.build-control": {
       "paths": [
         ".node-version", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
@@ -263,6 +290,15 @@
     }
   },
   "identities": {
+    "electron.platform.build": {
+      "schemaVersion": 1,
+      "sourceSets": [
+        "electron.platform.build"
+      ],
+      "parameters": [
+        "target"
+      ]
+    },
     "closure.data.skills.build": {"schemaVersion": 1, "sourceSets": ["closure.data.skills.build"], "parameters": ["target"]},
     "closure.data.design-templates.build": {"schemaVersion": 1, "sourceSets": ["closure.data.design-templates.build"], "parameters": ["target"]},
     "closure.data.design-systems.build": {"schemaVersion": 1, "sourceSets": ["closure.data.design-systems.build"], "parameters": ["target"]},

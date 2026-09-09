@@ -7,7 +7,7 @@ import type { ExactTarget } from "./plan.js";
 const SHA256_IDENTITY = /^sha256:[a-f0-9]{64}$/u;
 const SHA256_DIGEST = /^[a-f0-9]{64}$/u;
 
-export const ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION = 1 as const;
+export const ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION = 2 as const;
 
 type FileBinding = Readonly<{
   sha256: string;
@@ -23,9 +23,9 @@ type AcceptedShell = Readonly<{
 export type AcceptedShellBaselinePayload = Readonly<{
   artifact: FileBinding;
   channel: string;
-  seed: Readonly<{
-    closure: FileBinding;
-    standalone: FileBinding;
+  installation: Readonly<{
+    content: FileBinding;
+    capsule: Readonly<{ manifest: FileBinding; archive: FileBinding }>;
   }>;
   shell: AcceptedShell;
   target: ExactTarget;
@@ -50,7 +50,7 @@ export type AcceptedShellBaselineResolution = Readonly<{
   acceptedReceiptSha256?: `sha256:${string}`;
   baseline: AcceptedShellBaselinePayload | Readonly<{
     channel: string;
-    seed: Readonly<{ closureIdentity: `sha256:${string}` }>;
+    closureIdentity: `sha256:${string}`;
     target: ExactTarget;
   }>;
   baselineIdentity: `sha256:${string}`;
@@ -74,18 +74,19 @@ export function createAcceptedShellBaselineReceipt(value: unknown, acceptedIdent
       || typeof credential.sourceCommit !== "string" || !/^[a-f0-9]{40}$/u.test(credential.sourceCommit)) {
     throw new Error("Electron installed acceptance credential identity is invalid");
   }
-  if (!Array.isArray(files.seeds)) throw new Error("Electron installed acceptance seeds are invalid");
-  const seeds = new Map(files.seeds.map((seed) => {
-    const candidate = record(seed, "Electron installed acceptance seed");
-    if (typeof candidate.file !== "string") throw new Error("Electron installed acceptance seed file is invalid");
-    return [candidate.file, candidate] as const;
-  }));
+  if (Object.hasOwn(files, "seeds")) throw new Error("Electron installed acceptance retains retired seeds");
+  const capsule = record(files.capsule, "Electron installed acceptance Capsule");
+  const installedFile = (value: unknown, name: string) => {
+    const file = record(value, `Electron installed acceptance ${name}`);
+    if (file.file !== name) throw new Error(`Electron installed acceptance ${name} binding is invalid`);
+    return { sha256: file.sha256, size: file.size };
+  };
   const baseline = payload({
     artifact: { sha256: artifact.sha256, size: artifact.size },
     channel: credential.channel,
-    seed: {
-      closure: { sha256: seeds.get("closure.mjs")?.sha256, size: seeds.get("closure.mjs")?.size },
-      standalone: { sha256: seeds.get("standalone-launcher.mjs")?.sha256, size: seeds.get("standalone-launcher.mjs")?.size },
+    installation: {
+      content: installedFile(files.content, "standalone-content.json"),
+      capsule: { manifest: installedFile(capsule.manifest, "capsule-manifest.json"), archive: installedFile(capsule.archive, "capsule.zip") },
     },
     shell,
     target: credential.target,
@@ -132,7 +133,7 @@ function target(value: unknown): ExactTarget {
 
 function payload(value: unknown): AcceptedShellBaselinePayload {
   const input = record(value, "accepted Shell baseline payload");
-  exactKeys(input, ["artifact", "channel", "seed", "shell", "target"], "accepted Shell baseline payload");
+  exactKeys(input, ["artifact", "channel", "installation", "shell", "target"], "accepted Shell baseline payload");
   if (typeof input.channel !== "string" || !/^[a-z][a-z0-9-]{0,31}$/u.test(input.channel)) throw new Error("accepted Shell baseline channel is invalid");
   const shell = record(input.shell, "accepted Shell baseline identity");
   exactKeys(shell, ["buildHash", "type", "version"], "accepted Shell baseline identity");
@@ -140,14 +141,19 @@ function payload(value: unknown): AcceptedShellBaselinePayload {
       || typeof shell.buildHash !== "string" || !SHA256_DIGEST.test(shell.buildHash)) {
     throw new Error("accepted Shell baseline identity is invalid");
   }
-  const seed = record(input.seed, "accepted Shell baseline seed");
-  exactKeys(seed, ["closure", "standalone"], "accepted Shell baseline seed");
+  const installation = record(input.installation, "accepted Shell baseline installation");
+  exactKeys(installation, ["content", "capsule"], "accepted Shell baseline installation");
+  const capsule = record(installation.capsule, "accepted Shell baseline Capsule");
+  exactKeys(capsule, ["manifest", "archive"], "accepted Shell baseline Capsule");
   return Object.freeze({
     artifact: fileBinding(input.artifact, "accepted Shell baseline artifact"),
     channel: input.channel,
-    seed: Object.freeze({
-      closure: fileBinding(seed.closure, "accepted Shell Closure seed"),
-      standalone: fileBinding(seed.standalone, "accepted Shell Standalone seed"),
+    installation: Object.freeze({
+      content: fileBinding(installation.content, "accepted Shell content metadata"),
+      capsule: Object.freeze({
+        manifest: fileBinding(capsule.manifest, "accepted Shell Capsule manifest"),
+        archive: fileBinding(capsule.archive, "accepted Shell Capsule archive"),
+      }),
     }),
     shell: Object.freeze({ buildHash: shell.buildHash, type: "electron", version: shell.version }),
     target: target(input.target),
@@ -172,7 +178,7 @@ export function resolveAcceptedShellBaseline(input: Readonly<{
   if (input.acceptedReceipt == null) {
     const baseline = Object.freeze({
       channel: input.channel,
-      seed: Object.freeze({ closureIdentity: input.currentClosureIdentity }),
+      closureIdentity: input.currentClosureIdentity,
       target: input.target,
     });
     return Object.freeze({

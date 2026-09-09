@@ -84,7 +84,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Build output")
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
-    .option("--plan <file>", "Release plan (scene; optional identity binding for resource)")
+    .option("--plan <file>", "Release plan (scene; optional identity binding for resource/platform)")
     .option("--resources <file>", "Closure resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
@@ -108,7 +108,7 @@ export function registerExactCommands(cli: CAC): void {
       }
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
       if (operation === "platform") {
-        const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "--"]);
+        const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "plan", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) {
           throw new Error(`platform build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
         }
@@ -123,6 +123,7 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "capsule") await buildReleaseCapsule(common);
       else if (operation === "platform") await buildReleasePlatform({ ...common,
+        ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "distribution") await buildReleaseDistribution({ ...common, scene: required(options, "scene"), prepared: required(options, "prepared"),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });

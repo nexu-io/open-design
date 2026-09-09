@@ -30,7 +30,7 @@ it("requires an explicit reason for business coverage and rejects unsupported co
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(script = 'node -e "console.log(\'executed contract test\')"') {
   const root = await mkdtemp(join(tmpdir(), "release-validation-")); roots.push(root);
-  const ids = [...EXACT_DATA_PLAN_NODE_IDS, "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test",
+  const ids = [...EXACT_DATA_PLAN_NODE_IDS, "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.shell.build", "electron.shell.test",
     "closure.build", "closure.test", "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot"];
   for (const id of ids) { await mkdir(join(root, id)); await writeFile(join(root, id, "input.txt"), id); }
   const registry = join(root, "registry.json"), plan = join(root, "plan.json");

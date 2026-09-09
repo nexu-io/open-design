@@ -90,7 +90,7 @@ it("dispatches independent platform builds and rejects unrelated policy or Capsu
   await f.invoke(args);
   expect(JSON.parse(await readFile(receipt, "utf8"))).toMatchObject({ operation: "electron.platform.build", target: "darwin-arm64",
     resourcePath: join(output, "platform-resource.json"), archivePath: join(output, "platform.zip") });
-  for (const option of ["--channel", "--capsule-content", "--resources", "--plan"]) {
+  for (const option of ["--channel", "--capsule-content", "--resources"]) {
     await expect(f.invoke([...args, option, "unrelated"])).rejects.toThrow(`platform build does not accept ${option}`);
   }
 });

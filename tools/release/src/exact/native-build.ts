@@ -9,7 +9,8 @@ import type { ElectronExactSceneRequest } from "@open-design/shell-electron/buil
 import { acquireBuildArchive } from "@open-design/tools-pack/build";
 import { readOfficialNodeLock, validateNodePlatformResource } from "@open-design/standalone/packages";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
-import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
+import { canonicalBytes, checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
+import { resolveExactPlatformPlanNode } from "./plan.ts";
 
 type Target = ElectronExactSceneRequest["target"];
 type BuildInput = Readonly<{ root: string; shell: string; target: string; output: string; receipt: string }>;
@@ -113,9 +114,19 @@ export async function buildReleaseCapsule(input: BuildInput) {
 
 /** Independent Node/native production. No Capsule compilation, Closure inputs,
  * channel policy or signing; release preparation authenticates this descriptor. */
-export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeArchive?: string }>) {
+export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeArchive?: string; plan?: string }>) {
   if (input.shell !== "electron") throw new Error("external platform build requires electron");
   const buildTarget = target(input), output = resolve(input.output);
+  const plan = input.plan == null ? undefined : await readObject(input.plan);
+  const id = "electron.platform.build";
+  if (plan != null && (plan.schemaVersion !== 1 || plan.plan?.target !== buildTarget
+    || !Array.isArray(plan.actions) || !plan.actions.some(action => action?.id === id))) {
+    throw new Error("platform build is not selected by a valid release plan");
+  }
+  const matches = async () => plan == null || canonicalBytes(await resolveExactPlatformPlanNode({
+    root: resolve(input.root), registryPath: join(resolve(input.root), "tools/release/resources/exact-plan-identities.json"), target: buildTarget,
+  })).equals(canonicalBytes(plan.plan.nodes?.[id] ?? null));
+  if (!await matches()) throw new Error("platform build plan binding mismatch");
   const { buildElectronPlatformResource, resolveElectronNodeArchive } = await electronBuilder(input.root);
   await mkdir(dirname(output), { recursive: true });
   // A cache hit is restored by the plan owner, never inferred from output presence.
@@ -131,10 +142,12 @@ export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeAr
   const archive = await describeFile(outputArchivePath, "application/zip");
   if (resource.target !== buildTarget || resource.blob.sources.length !== 0 || built.archivePath !== outputArchivePath
     || archive.sha256 !== resource.blob.sha256 || archive.size !== resource.blob.size) throw new Error("platform build product binding mismatch");
+  if (!await matches()) throw new Error("platform build source changed during execution");
   const resourcePath = join(output, "platform-resource.json");
   await writeObject(resourcePath, resource);
   const receipt = { schemaVersion: 1, operation: "electron.platform.build", target: buildTarget,
-    archivePath: outputArchivePath, resourcePath, resource };
+    archivePath: outputArchivePath, resourcePath, resource,
+    ...(plan == null ? {} : { planNode: { id, identity: plan.plan.nodes[id].identity, target: buildTarget } }) };
   await writeObject(input.receipt, receipt);
   return receipt;
 }

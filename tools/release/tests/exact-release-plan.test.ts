@@ -22,7 +22,7 @@ async function fixture() {
   roots.push(root);
   const ids = [
     ...EXACT_DATA_PLAN_NODE_IDS,
-    "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
+    "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
     "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot",
   ] as const;
   await Promise.all(ids.map(async (id) => {
@@ -50,7 +50,7 @@ describe("exact release plan", () => {
     });
     expect(first.baseline.mode).toBe("bootstrap");
     expect(first.actions.map(({ id }) => id)).toEqual([
-      "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", ...EXACT_DATA_PLAN_NODE_IDS, "closure.build", "closure.test", "electron.distribution",
+      "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.shell.build", "electron.shell.test", ...EXACT_DATA_PLAN_NODE_IDS, "closure.build", "closure.test", "electron.distribution",
       "electron.acceptance.full", "exact.compose", "exact.publish", "exact.activate",
     ]);
 
@@ -67,7 +67,7 @@ describe("exact release plan", () => {
     const input = await fixture();
     const baseline: AcceptedShellBaselinePayload = {
       artifact: { sha256: "a".repeat(64), size: 100 }, channel: "betahyx",
-      seed: { closure: { sha256: "b".repeat(64), size: 10 }, standalone: { sha256: "c".repeat(64), size: 20 } },
+      installation: { content: { sha256: "b".repeat(64), size: 10 }, capsule: { manifest: { sha256: "c".repeat(64), size: 20 }, archive: { sha256: "9".repeat(64), size: 30 } } },
       shell: { buildHash: "d".repeat(64), type: "electron", version: "0.1.0" }, target: "darwin-arm64",
     };
     const baselineIdentity = acceptedShellBaselineIdentity(baseline);
@@ -77,10 +77,11 @@ describe("exact release plan", () => {
       schemaVersion: 1, operation: "exact.acceptance", status: "accepted", channel: "betahyx",
       releaseVersion: "0.1.0-betahyx.4", sourceCommit: "f".repeat(40), target: "darwin-arm64",
       shell: baseline.shell, artifact: { url: "https://releases.example/electron.dmg", ...baseline.artifact },
-      installed: { shell: baseline.shell, target: "darwin-arm64", proof: { files: { seeds: [
-        { file: "standalone-launcher.mjs", ...baseline.seed.standalone },
-        { file: "closure.mjs", ...baseline.seed.closure },
-      ] } } },
+      installed: { shell: baseline.shell, target: "darwin-arm64", proof: { files: {
+        content: { file: "standalone-content.json", ...baseline.installation.content },
+        capsule: { manifest: { file: "capsule-manifest.json", ...baseline.installation.capsule.manifest },
+          archive: { file: "capsule.zip", ...baseline.installation.capsule.archive } },
+      } } },
     };
     const bytes = Buffer.from(`${JSON.stringify(createAcceptedShellBaselineReceipt(acceptance, acceptedIdentities))}\n`);
     await writeFile(join(input.root, "closure.build", "input.txt"), "new Closure\n");

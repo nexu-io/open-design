@@ -13,9 +13,9 @@ const CLOSURE_IDENTITY = `sha256:${"c".repeat(64)}` as const;
 const baseline: AcceptedShellBaselinePayload = {
   artifact: { sha256: "a".repeat(64), size: 123 },
   channel: "betahyx",
-  seed: {
-    closure: { sha256: "b".repeat(64), size: 45 },
-    standalone: { sha256: "d".repeat(64), size: 67 },
+  installation: {
+    content: { sha256: "b".repeat(64), size: 45 },
+    capsule: { manifest: { sha256: "d".repeat(64), size: 67 }, archive: { sha256: "9".repeat(64), size: 100 } },
   },
   shell: { buildHash: "e".repeat(64), type: "electron", version: "0.1.0" },
   target: "darwin-arm64",
@@ -30,10 +30,11 @@ function acceptance(value: AcceptedShellBaselinePayload = baseline) {
     shell: value.shell,
     artifact: { url: "https://releases.example/electron.dmg", ...value.artifact },
     installed: {
-      shell: value.shell, target: value.target, proof: { files: { seeds: [
-        { file: "standalone-launcher.mjs", ...value.seed.standalone },
-        { file: "closure.mjs", ...value.seed.closure },
-      ] } },
+      shell: value.shell, target: value.target, proof: { files: {
+        content: { file: "standalone-content.json", ...value.installation.content },
+        capsule: { manifest: { file: "capsule-manifest.json", ...value.installation.capsule.manifest },
+          archive: { file: "capsule.zip", ...value.installation.capsule.archive } },
+      } },
     },
   };
 }
@@ -44,6 +45,19 @@ function acceptedReceipt(value: AcceptedShellBaselinePayload = baseline) {
 }
 
 describe("accepted Shell baseline resolution", () => {
+  it("rejects retired receipts and missing or substituted Capsule proof", () => {
+    const old = { ...createAcceptedShellBaselineReceipt(acceptance(), ACCEPTED_IDENTITIES), schemaVersion: 1 };
+    const bytes = Buffer.from(JSON.stringify(old));
+    expect(() => resolveAcceptedShellBaseline({ channel: "betahyx", target: "darwin-arm64", currentClosureIdentity: CLOSURE_IDENTITY,
+      acceptedReceipt: { bytes, sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}` },
+    })).toThrow("receipt identity is invalid");
+    const invalid = acceptance();
+    invalid.installed.proof.files.capsule.archive.file = "closure.mjs";
+    expect(() => createAcceptedShellBaselineReceipt(invalid, ACCEPTED_IDENTITIES)).toThrow("capsule.zip binding");
+    const original = acceptance();
+    const missing = { ...original, installed: { ...original.installed, proof: { files: { content: original.installed.proof.files.content } } } };
+    expect(() => createAcceptedShellBaselineReceipt(missing, ACCEPTED_IDENTITIES)).toThrow("Capsule is invalid");
+  });
   it("promotes only a complete installed Electron acceptance into a baseline receipt", () => {
     const receipt = createAcceptedShellBaselineReceipt(acceptance(), ACCEPTED_IDENTITIES);
     expect(receipt.baseline).toEqual(baseline);
@@ -53,7 +67,7 @@ describe("accepted Shell baseline resolution", () => {
       releaseVersion: "0.1.0-betahyx.4", sourceCommit: SOURCE_COMMIT, target: "darwin-arm64",
       shell: baseline.shell, artifact: baseline.artifact,
       installed: { shell: baseline.shell, target: "darwin-arm64", proof: { files: { seeds: [] } } },
-    }, ACCEPTED_IDENTITIES)).toThrow(/Closure seed/u);
+    }, ACCEPTED_IDENTITIES)).toThrow(/retired seeds/u);
   });
 
   it("bootstraps a cold channel from current Closure and forces full acceptance", () => {
@@ -61,7 +75,7 @@ describe("accepted Shell baseline resolution", () => {
     expect(resolved.mode).toBe("bootstrap");
     expect(resolved.requiredAcceptance).toBe("full");
     expect(resolved.acceptedIdentities).toEqual([]);
-    expect(resolved.baseline).toEqual({ channel: "betahyx", seed: { closureIdentity: CLOSURE_IDENTITY }, target: "win32-x64" });
+    expect(resolved.baseline).toEqual({ channel: "betahyx", closureIdentity: CLOSURE_IDENTITY, target: "win32-x64" });
   });
 
   it("reuses an exactly bound accepted baseline for hot acceptance", () => {

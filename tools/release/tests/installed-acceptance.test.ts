@@ -10,6 +10,7 @@ import { afterEach, expect, it } from "vitest";
 
 import { executeExactReleaseControl } from "@/exact/control-release.js";
 import { resolveReleasePolicy } from "@/policy/release-profile.js";
+import { createAcceptedShellBaselineReceipt, resolveAcceptedShellBaseline } from "@/exact/accepted-baseline.js";
 
 const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -58,6 +59,30 @@ async function fixture() {
   const input = { schemaVersion: 1, operation: "exact.acceptance", policyReceipt: await save("policy.json", policy), publishReceipt: await save("publish.json", published), shellType: "electron", target: "darwin-arm64", installedRoot: root, runtimeLog };
   return { root, input, save, installation, published, physical, archive, events, log, output: join(root, "acceptance.json") };
 }
+
+it("promotes the actual minimal installation proof into a reusable baseline without Closure seeds", async () => {
+  const f = await fixture();
+  const named = async (name: string) => {
+    await copyFile(join(f.root, "payload.bin"), join(f.root, name));
+    return { ...f.installation.content, file: name };
+  };
+  await f.save("standalone-installation.json", { ...f.installation,
+    content: await named("standalone-content.json"),
+    capsule: { manifest: await named("capsule-manifest.json"), archive: await named("capsule.zip") },
+  });
+  await executeExactReleaseControl(f.input, f.output);
+  const acceptance = JSON.parse(await readFile(f.output, "utf8"));
+  expect(acceptance.installed.proof.files).not.toHaveProperty("seeds");
+  const receipt = createAcceptedShellBaselineReceipt(acceptance, [`sha256:${"1".repeat(64)}`]);
+  const bytes = Buffer.from(JSON.stringify(receipt));
+  const resolved = resolveAcceptedShellBaseline({ channel: "betahyx", target: "darwin-arm64",
+    currentClosureIdentity: `sha256:${"2".repeat(64)}`,
+    acceptedReceipt: { bytes, sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}` },
+  });
+  expect(resolved.mode).toBe("accepted");
+  expect(receipt.schemaVersion).toBe(2);
+  expect(receipt.baseline.installation.capsule.archive.sha256).toBe(f.installation.capsule.archive.sha256);
+});
 
 it.each(["buildHash", "version"])("rejects a different actual physical Shell %s despite matching declared installation files", async field => {
   const f = await fixture();
