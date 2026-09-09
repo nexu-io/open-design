@@ -1,0 +1,233 @@
+{
+  "fixtureKind": "sanitized_real_best_effort",
+  "runtime": "vela-opencode",
+  "velaVersion": "0.0.1-test.matrix-six.g27f003483279",
+  "companionVersion": "0.0.0--202609020336",
+  "modelEndpoint": "loopback_fixture",
+  "executionSemantics": "agent_cli",
+  "recordingDigest": "sha256:d774fe3262af703690a8abbbc311784c79af9abe3091561fb15b600237cc296e",
+  "observations": [
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:e92f577bef95eee4f47052cf48952ab20bb80e70a96c9876f480bda14ff9fa1f"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:d81182c80f16f2c179dc253407730e72f99ac5cda392b22d9410445f7efc5e60"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:a846584cf4709db5d11e016961100a9e8be14865aa07f5ab4ec25139054c0a24"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:7dd6846c1f5798006239d80a4369e9ccbe2c61937b72cc48aa50cf3ebeb541fb"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:66cb084db5835ad48fcd6191976a4282321f19daae42b2d375a1c7fb91de335b"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:4716a442d7caa0e9d7bbca2c558f554e6bc9c9a2a01041baa39d711840c6eca2"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:10388a82962830c9c8fdd1356cac56bdc452f167a8f6393310cc2e9efbafce0c"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:5cc6e8055baa7f8d28590f369eb75e019f7601aa7141e15dec6a07cd3dfaff02"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:419de41e8b7436a9cb914a17d95656755ba6ef57eccda9c8722f7f58b6b89991"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:7a6bb23755449ca4cc20df74b1600b85b0352382716550bf10ab9f0b090ad284"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:083d30262bba9df6131bb54c17aefc774dd6b43f23403d15505dba8e941ab8ee"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:9ad38edabaebf67a54d333d8e90c3e3fd784f6fbbd2d29b4ce71f54aa234c92b"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:ca91f2b18708763800d19d1687e440c5ec8cd81861c53ecfbd9e6c4b2e8d918a"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:5932b8e3bf1ca0a510d25c26cb5e5bb3c1795ee5266bf3276f944ccf3a2ba148"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:dd0e9f11a61fcce51a689f8c196b1cdf8b8a8d1ef75aafc37d685dab9a01eb2b"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:d7594078b962528d6514c63e300c07832a35d56d3bf71110b64fc53d53b553fa"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:b8cd85c493945a412c456b94719f4270b53c8e3cc71bc61970c5e173938d9ae8"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:1f8a86f944b064b1ddbbbc9598d8ebefced806360495b4730b634c9d51077553"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:a24df59a05d43fcd85943dbafdad6e11605119cbdc43ec19e41c16f807f34cae"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:ef2da8725d3aa2a19730b11c2647d37c7305005a7fb8e336ebe70afc351e490d"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:e3106b7294cf01976cc5eac531a318a7ee11bc29c7e263fe58422e6866df1a43"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:6062f77f589bb384d7285fcfbc49d0e5036fc4153f66218bb16e5c2b9dc8aeda"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:5a81c7a9c07f44962776faec2811cb90759aaa630406bb8f394d1ddccc8970a9"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:e92f577bef95eee4f47052cf48952ab20bb80e70a96c9876f480bda14ff9fa1f"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:d81182c80f16f2c179dc253407730e72f99ac5cda392b22d9410445f7efc5e60"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:a846584cf4709db5d11e016961100a9e8be14865aa07f5ab4ec25139054c0a24"
+    },
+    {
+      "channel": "http_request",
+      "stage": "resume",
+      "digest": "sha256:f221b4491dee76585a81f4449c1f8e06f6ae1001709c7b81318b724910c7a1e1"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:0c6dad8cd05e782d60a1d9509e87e57fb5ad2341a542b6c9320714308e88134b"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:c6c51d0ad794c835f97395f00950925830c7618d23d73000e4b23ada56543d54"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:ef2da8725d3aa2a19730b11c2647d37c7305005a7fb8e336ebe70afc351e490d"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:47d55f515b63f31493633d82095d983ecd0517648c0ba5abf357be24ed3e9e22"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:4cf046fc73f334e961e8b149672949792d0cbee64edb784e5b394c27006df4cc"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:c5fd2c225238ded0556f44c5e046b3f9ef9b7d7038536f1e5ed0183185fd7835"
+    },
+    {
+      "channel": "http_request",
+      "stage": "cancel",
+      "digest": "sha256:5c34dc46a053a9d58da7c110b81bb92d4d1e9e15e81155dfdd18433b37ffb59d"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "cancel",
+      "digest": "sha256:d4d01454a081ca040cbb6bbcab20c966bc80d9f97262d24563662b7a4888e7d8"
+    },
+    {
+      "channel": "http_request",
+      "stage": "timeout",
+      "digest": "sha256:1f1df87c37320c62a0395c979a6ea92768e421eea32dc2ff7c6bf72039bb6a9c"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "timeout",
+      "digest": "sha256:2f88a6489f72f0f5f337ebf56682ab3bedbffb865e5e8de953bd48f6a636166e"
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "main_run",
+      "outcome": "passed",
+      "evidence": "real_opencode_acp_end_turn"
+    },
+    {
+      "caseId": "tool",
+      "outcome": "passed",
+      "evidence": "real_opencode_tool_and_file_bytes"
+    },
+    {
+      "caseId": "child_success",
+      "outcome": "unavailable",
+      "evidence": "no_child_lifecycle_claim"
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "outcome": "unavailable",
+      "evidence": "no_child_lifecycle_claim"
+    },
+    {
+      "caseId": "cancel",
+      "outcome": "passed",
+      "evidence": "real_opencode_session_cancel"
+    },
+    {
+      "caseId": "timeout",
+      "outcome": "passed",
+      "evidence": "host_deadline_session_cancel"
+    },
+    {
+      "caseId": "resume",
+      "outcome": "passed",
+      "evidence": "new_vela_process_loads_opencode_tool_history"
+    }
+  ]
+}

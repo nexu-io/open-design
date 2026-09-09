@@ -15485,7 +15485,9 @@ export async function startServer({
           // Keep first_visible_output owned by the final text emission.
           if (progressClockFrozen) return;
           if (!firstOutputSeen) {
-            send('agent', { type: 'diagnostic', name: 'amr_direct_model_output_started', contentBytes });
+            send('agent', { type: 'diagnostic',
+              name: run.amrRuntime === 'none' ? 'amr_direct_model_output_started' : 'amr_buffered_model_output_started',
+              amrRuntime: run.amrRuntime, contentBytes });
           }
           firstOutputSeen = true;
           clearFirstOutputWatchdog();

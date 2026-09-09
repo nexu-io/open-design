@@ -7763,11 +7763,11 @@ async function runRun(args) {
                [--prompt-file <path|->] [--task-execution <id>]
                [--client-request-id <id>]
                [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|opencode|amr] [--amr-runtime opencode|pi|codex|dsh|none]
+               [--agent claude|codex|opencode|amr] [--amr-runtime opencode|pi|codex|claude|dsh|none]
                [--model <id>] [--service-tier <id>]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
-               [--agent <id>] [--amr-runtime opencode|pi|codex|dsh|none]
+               [--agent <id>] [--amr-runtime opencode|pi|codex|claude|dsh|none]
                [--model <id>] [--service-tier <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.

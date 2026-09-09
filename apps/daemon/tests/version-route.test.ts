@@ -94,7 +94,7 @@ describe('/api/version', () => {
     expect(health).toEqual({
       ok: true,
       version: version.version?.version,
-      amrRuntimeSelection: { version: 1, runtimes: ['opencode', 'pi', 'codex', 'dsh', 'none'] },
+      amrRuntimeSelection: { version: 1, runtimes: ['opencode', 'pi', 'codex', 'claude', 'dsh', 'none'] },
       amrTerminalReporter: {
         status: 'active',
         pending: 0,

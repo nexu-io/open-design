@@ -1,0 +1,143 @@
+{
+  "fixtureKind": "sanitized_real_best_effort",
+  "runtime": "vela-pi",
+  "velaVersion": "0.0.1-test.matrix-six.g27f003483279",
+  "companionVersion": "0.85.1",
+  "modelEndpoint": "loopback_fixture",
+  "executionSemantics": "agent_cli",
+  "recordingDigest": "sha256:e675bc05cdf40efa8b4093b8d90c64d7e4f844682941e3b92682d0b69403c53f",
+  "observations": [
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:d37e8fd4360574ca309269b2596cc3ed6d041b20d2c407dd30d54779decdc582"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:7149a7ee1831ae609ecf87317f4552b831b5395b769de97dfa665ccbe4d20409"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:a846584cf4709db5d11e016961100a9e8be14865aa07f5ab4ec25139054c0a24"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:51fb94c5dc4793d6c0a81abdb807de284640369366608c4c82bd1fc80b313dee"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:81680691d34df265d1da63407dbc13608101723c52aa9c3a0630dfe6df09d548"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:816d8f11fd1604783939795a7b543034018dd97765ff18195c40c56c05a24ee1"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:5c677c14633864f665bc9ee15c79869a8392d7514e1c48a0dd0aa5182232ecd6"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:e9b52e260bf45fbe533866793473c8568fbce359f7bf9278828a37d10aba2bc5"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:934ae4934cec7398883eb7e910c922f519595df42671c45cb7432fb10b06f831"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:d37e8fd4360574ca309269b2596cc3ed6d041b20d2c407dd30d54779decdc582"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:7149a7ee1831ae609ecf87317f4552b831b5395b769de97dfa665ccbe4d20409"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:a846584cf4709db5d11e016961100a9e8be14865aa07f5ab4ec25139054c0a24"
+    },
+    {
+      "channel": "http_request",
+      "stage": "resume",
+      "digest": "sha256:2370dc755223d5c74647d503b6d9dc1d2b78ed27e6a3c0b1922669e61d2fc390"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:e9b52e260bf45fbe533866793473c8568fbce359f7bf9278828a37d10aba2bc5"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:5dbf2676b8e2e66e7199075c8227ba58dfce95b3818db1fc98ec9cc88022137e"
+    },
+    {
+      "channel": "http_request",
+      "stage": "cancel",
+      "digest": "sha256:7e3b33c93d3b2b0db571267ff77b924ec47bde7a94093df8f396efe706c2d08e"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "cancel",
+      "digest": "sha256:b5bd6f1945a2d9f6488a31dc117912cad8e9dc835b7c3df84822cc9bba1be9a9"
+    },
+    {
+      "channel": "http_request",
+      "stage": "timeout",
+      "digest": "sha256:620307ee56583976d6447a9e10d691f7ee61a66dba267419005d6420e659fc82"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "timeout",
+      "digest": "sha256:cae15d6869588e99be856d6618685f7728245bd355499819277f2e60c7bc21c2"
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "main_run",
+      "outcome": "passed",
+      "evidence": "real_pi_acp_end_turn"
+    },
+    {
+      "caseId": "tool",
+      "outcome": "passed",
+      "evidence": "real_pi_tool_and_file_bytes"
+    },
+    {
+      "caseId": "child_success",
+      "outcome": "unavailable",
+      "evidence": "no_child_lifecycle_claim"
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "outcome": "unavailable",
+      "evidence": "no_child_lifecycle_claim"
+    },
+    {
+      "caseId": "cancel",
+      "outcome": "passed",
+      "evidence": "real_pi_session_cancel"
+    },
+    {
+      "caseId": "timeout",
+      "outcome": "passed",
+      "evidence": "host_deadline_session_cancel"
+    },
+    {
+      "caseId": "resume",
+      "outcome": "passed",
+      "evidence": "new_vela_process_loads_pi_tool_history"
+    }
+  ]
+}

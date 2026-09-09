@@ -1,0 +1,158 @@
+{
+  "fixtureKind": "sanitized_real_best_effort",
+  "runtime": "vela-claude",
+  "velaVersion": "0.0.1-test.matrix-six.g27f003483279",
+  "companionVersion": "2.1.263 (Claude Code)",
+  "modelEndpoint": "loopback_fixture",
+  "executionSemantics": "agent_cli",
+  "recordingDigest": "sha256:374ae21fd5d7229f8e095ae8766e6830d275a08ee68a79c52e4ee2f9b13fcb86",
+  "observations": [
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:aab7c9a86310b5d96ef185cd30b61295e2f96e13777293fdedf93889bc2c32b4"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:e3dceca0e8660d1b0e1d189e402becc7652aef56f1f728e652a408260caceea6"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:7cbf83e4251125ea0410999a7eba5557a3f5c8678a277df05e24ad1578e3ad6e"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:7f064005e691eb546342273c180cf8cf42988479713c1ecb827fe67e72284ebf"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:4eba6c8747ad43ce3b7e2cac34d72e87a69645287b83bd74765c68e8a1aba9d6"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:87dfbda5487b083e9e8f9fbf69c4db7a133359adb9627d276172f64e58ce6779"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:b675b9f5aa628a1a397dc3d3a69a73f0b7aa90926ae41849359e6aa3e2c2cfbd"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:cd9b02f9269d699b9fb13f4578b77eaac42042e1de8188c2220ab11fcff88bfc"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:46357e4968e81c498675e2c3908596baaf28bacea65a5b7848faba3250bcf3e6"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:46ecc1bc818f367c716a75dd0691c1a0cec4459e840f08d579caeea9f995cf69"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:f4e033933ed2c8f01758268ed4a930703bd3e107a2dc9553de291b7b13896f47"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:aab7c9a86310b5d96ef185cd30b61295e2f96e13777293fdedf93889bc2c32b4"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:e3dceca0e8660d1b0e1d189e402becc7652aef56f1f728e652a408260caceea6"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:7cbf83e4251125ea0410999a7eba5557a3f5c8678a277df05e24ad1578e3ad6e"
+    },
+    {
+      "channel": "http_request",
+      "stage": "resume",
+      "digest": "sha256:23b4108a6133452945019158a4b91e6088c1bfb6ab932ce0bfed784da72d0178"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:04422459c1140399f439591cafabeb701977dbdca73649f472e2ebb056e58211"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:46ecc1bc818f367c716a75dd0691c1a0cec4459e840f08d579caeea9f995cf69"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:57cdb7af1532835172ea7cc6d65d4c7293a3be05fddf81f9fd6287c053590afe"
+    },
+    {
+      "channel": "http_request",
+      "stage": "cancel",
+      "digest": "sha256:70181ee4e774a02ed0d68c1b927907279e3d048b4e483d536aac21741e2fa3af"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "cancel",
+      "digest": "sha256:02395a78a415d4daa5d691076f3247f1090e679bccd845bcb62dc062a1e79168"
+    },
+    {
+      "channel": "http_request",
+      "stage": "timeout",
+      "digest": "sha256:70181ee4e774a02ed0d68c1b927907279e3d048b4e483d536aac21741e2fa3af"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "timeout",
+      "digest": "sha256:c1aa811b4c51f93664c342662ebf359225333c752a193190a3328d9c455ca6d5"
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "main_run",
+      "outcome": "passed",
+      "evidence": "real_claude_acp_end_turn"
+    },
+    {
+      "caseId": "tool",
+      "outcome": "passed",
+      "evidence": "real_claude_tool_and_file_bytes"
+    },
+    {
+      "caseId": "child_success",
+      "outcome": "unavailable",
+      "evidence": "no_child_lifecycle_claim"
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "outcome": "unavailable",
+      "evidence": "no_child_lifecycle_claim"
+    },
+    {
+      "caseId": "cancel",
+      "outcome": "passed",
+      "evidence": "real_claude_session_cancel"
+    },
+    {
+      "caseId": "timeout",
+      "outcome": "passed",
+      "evidence": "host_deadline_session_cancel"
+    },
+    {
+      "caseId": "resume",
+      "outcome": "passed",
+      "evidence": "new_vela_process_loads_claude_tool_history"
+    }
+  ]
+}

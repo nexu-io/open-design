@@ -3509,7 +3509,43 @@ class FakeAcpChild extends EventEmitter {
   }
 }
 
-test.each(['pi', 'codex', 'dsh', 'none'] as const)('AMR %s records the verified runtime/model and its durable session', (runtime) => {
+test.each(['legacy', 'version-only', 'observed-model'] as const)('AMR OpenCode records only provided evidence for %s envelopes', (mode) => {
+  const child = new FakeAcpChild();
+  const evidence: unknown[] = [];
+  const session = attachAcpSession({
+    child: child as never, prompt: 'Build a page', model: 'gpt-6-astra',
+    expectedAmrRuntime: 'opencode', send: () => {}, onAmrRuntimeEvidence: (value) => evidence.push(value),
+  });
+  const identity = { runtime: 'opencode', runtimeVersion: '1.2.10' };
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'vela-opencode', openCodeSessionId: 'sess-native', ...(mode === 'legacy' ? {} : identity) });
+  writeAcpResult(child, 3, { models: { currentModelId: 'amr/gpt-6-astra' } });
+  expect(evidence.every((value) => !(value as { modelId?: string }).modelId)).toBe(true);
+  writeAcpResult(child, 4, mode === 'observed-model' ? { ...identity, modelId: 'amr/gpt-6-astra' } : {});
+  expect(session.completedSuccessfully()).toBe(true);
+  expect(session.getDurableSessionId()).toBe('sess-native');
+  expect(evidence.at(-1)).toEqual(mode === 'legacy' ? undefined : {
+    requestedRuntime: 'opencode', actualRuntime: 'opencode', runtimeVersion: '1.2.10',
+    ...(mode === 'observed-model' ? { modelId: 'gpt-6-astra' } : {}),
+  });
+});
+
+test.each(['wrong-runtime', 'invalid-version', 'wrong-final-model', 'wrong-final-version'] as const)('AMR OpenCode rejects explicitly reported %s evidence', (mode) => {
+  const child = new FakeAcpChild();
+  const session = attachAcpSession({ child: child as never, prompt: 'Build a page', model: 'gpt-6-astra', expectedAmrRuntime: 'opencode', send: () => {} });
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'vela-opencode', openCodeSessionId: 'sess-native',
+    runtime: mode === 'wrong-runtime' ? 'pi' : 'opencode', runtimeVersion: mode === 'invalid-version' ? 'unknown' : '1.2.10' });
+  if (mode.startsWith('wrong-final')) {
+    writeAcpResult(child, 3, { models: { currentModelId: 'amr/gpt-6-astra' } });
+    writeAcpResult(child, 4, { runtime: 'opencode', runtimeVersion: mode === 'wrong-final-version' ? '1.2.11' : '1.2.10',
+      modelId: mode === 'wrong-final-model' ? 'other-model' : 'gpt-6-astra' });
+  }
+  expect(session.hasFatalError()).toBe(true);
+  expect(session.completedSuccessfully()).toBe(false);
+});
+
+test.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('AMR %s records the verified runtime/model and its durable session', (runtime) => {
   const child = new FakeAcpChild();
   const evidence: unknown[] = [];
   const writes: string[] = [];
@@ -3538,6 +3574,21 @@ test.each(['pi', 'codex', 'dsh', 'none'] as const)('AMR %s records the verified 
   expect(writes.filter((line) => JSON.parse(line).method === 'session/prompt')).toHaveLength(1);
 });
 
+test.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('AMR %s preserves distinct catalog/backend model evidence', (runtime) => {
+  const child = new FakeAcpChild();
+  const evidence: unknown[] = [];
+  const session = attachAcpSession({ child: child as never, prompt: 'Build a page', model: 'gpt-6-astra-high', expectedAmrRuntime: runtime,
+    send: () => {}, onAmrRuntimeEvidence: (value) => evidence.push(value) });
+  const sessionId = `${runtime}-${'a'.repeat(32)}`;
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId, durableSessionId: sessionId, runtime, runtimeVersion: '1.0.0' });
+  writeAcpResult(child, 3, { modelId: 'amr/gpt-6-astra-high' });
+  const modelResponses = [{ requestedModelId: 'gpt-6-astra-high', requestId: 'link-id', responseId: 'response-id', responseModelId: 'teamorouter/gpt-6-astra' }];
+  writeAcpResult(child, 4, { runtime, runtimeVersion: '1.0.0', modelId: 'amr/gpt-6-astra-high', modelResponses });
+  expect(session.completedSuccessfully()).toBe(true);
+  expect(evidence.at(-1)).toMatchObject({ modelId: 'gpt-6-astra-high', modelResponses });
+});
+
 test.each(['codex', 'none'] as const)('AMR %s preserves provider cache and reasoning subsets through ACP analytics', (runtime) => {
   const child = new FakeAcpChild();
   const events: Array<{ event: string; data: unknown }> = [];
@@ -3563,24 +3614,24 @@ test.each(['codex', 'none'] as const)('AMR %s preserves provider cache and reaso
   });
 });
 
-test('AMR buffered model progress requires verified identity and growing content bytes without exposing text', () => {
+test.each(['none', 'claude'] as const)('AMR %s buffered model progress requires verified identity and growing content bytes without exposing text', (runtime) => {
   const child = new FakeAcpChild();
   const progress: number[] = [];
   const events: Array<{ event: string; data: unknown }> = [];
   attachAcpSession({
-    child: child as never, prompt: 'Build a page', model: 'gpt-6-astra', expectedAmrRuntime: 'none',
+    child: child as never, prompt: 'Build a page', model: 'gpt-6-astra', expectedAmrRuntime: runtime,
     onAmrModelOutputProgress: (bytes) => progress.push(bytes), send: (event, data) => events.push({ event, data }),
   });
-  const sessionId = `none-${'a'.repeat(32)}`;
+  const sessionId = `${runtime}-${'a'.repeat(32)}`;
   const notify = (overrides: Record<string, unknown> = {}, envelopeSession = sessionId) => child.stdout.write(`${JSON.stringify({
     jsonrpc: '2.0', method: 'session/update', params: { sessionId: envelopeSession,
-      update: { sessionUpdate: 'amr_model_output_progress', runtime: 'none', modelId: 'gpt-6-astra', contentBytes: 12, ...overrides } },
+      update: { sessionUpdate: 'amr_model_output_progress', runtime, modelId: 'gpt-6-astra', contentBytes: 12, ...overrides } },
   })}\n`);
   notify(); // No verified session or pending prompt yet.
   writeAcpResult(child, 1, {});
-  writeAcpResult(child, 2, { sessionId, durableSessionId: sessionId, runtime: 'none', runtimeVersion: '1.0.0' });
+  writeAcpResult(child, 2, { sessionId, durableSessionId: sessionId, runtime, runtimeVersion: '1.0.0' });
   writeAcpResult(child, 3, { modelId: 'amr/gpt-6-astra' });
-  notify({}, `none-${'b'.repeat(32)}`);
+  notify({}, `${runtime}-${'b'.repeat(32)}`);
   notify({ runtime: 'pi' });
   notify({ modelId: 'other-model' });
   notify({ contentBytes: -1 });
@@ -3592,12 +3643,12 @@ test('AMR buffered model progress requires verified identity and growing content
   notify({ contentBytes: 24 });
   expect(progress).toEqual([12, 24]);
   expect(events.some(({ data }) => (data as { type?: string })?.type === 'text_delta')).toBe(false);
-  writeAcpResult(child, 4, { runtime: 'none', runtimeVersion: '1.0.0', modelId: 'gpt-6-astra' });
+  writeAcpResult(child, 4, { runtime, runtimeVersion: '1.0.0', modelId: 'gpt-6-astra' });
   notify({ contentBytes: 30 });
   expect(progress).toEqual([12, 24]);
 });
 
-test.each(['pi', 'codex', 'dsh', 'none'] as const)('AMR %s refuses an old OpenCode handshake before sending a prompt', (runtime) => {
+test.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('AMR %s refuses an old OpenCode handshake before sending a prompt', (runtime) => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
   child.stdin.on('data', (chunk) => writes.push(String(chunk)));
@@ -3612,7 +3663,7 @@ test.each(['pi', 'codex', 'dsh', 'none'] as const)('AMR %s refuses an old OpenCo
   expect(writes.some((line) => JSON.parse(line).method === 'session/prompt')).toBe(false);
 });
 
-test.each(['pi', 'codex', 'dsh', 'none'].flatMap((runtime) => ['unconfirmed-selection', 'wrong-selection', 'wrong-final-model', 'wrong-final-runtime', 'wrong-session-namespace'].map((scenario) => ({ runtime: runtime as 'pi' | 'codex' | 'dsh' | 'none', scenario }))))(
+test.each(['pi', 'codex', 'claude', 'dsh', 'none'].flatMap((runtime) => ['unconfirmed-selection', 'wrong-selection', 'wrong-final-model', 'wrong-final-runtime', 'wrong-session-namespace'].map((scenario) => ({ runtime: runtime as 'pi' | 'codex' | 'claude' | 'dsh' | 'none', scenario }))))(
   'AMR $runtime rejects $scenario instead of counting a different configuration as success', ({ runtime, scenario }) => {
     const child = new FakeAcpChild();
     const writes: string[] = [];
@@ -3643,7 +3694,7 @@ test.each(['pi', 'codex', 'dsh', 'none'].flatMap((runtime) => ['unconfirmed-sele
   },
 );
 
-test.each(['pi', 'codex', 'dsh', 'none'] as const)('AMR %s records a concrete model when the default was requested', (runtime) => {
+test.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('AMR %s records a concrete model when the default was requested', (runtime) => {
   const child = new FakeAcpChild();
   const evidence: unknown[] = [];
   const session = attachAcpSession({
@@ -3659,7 +3710,7 @@ test.each(['pi', 'codex', 'dsh', 'none'] as const)('AMR %s records a concrete mo
   expect(evidence.at(-1)).toEqual({ requestedRuntime: runtime, actualRuntime: runtime, runtimeVersion: '1.0.0', modelId: 'gpt-6-astra' });
 });
 
-test.each(['pi', 'codex', 'dsh', 'none'] as const)('AMR %s refuses a different durable session returned by session/load', (runtime) => {
+test.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('AMR %s refuses a different durable session returned by session/load', (runtime) => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
   child.stdin.on('data', (chunk) => writes.push(String(chunk)));

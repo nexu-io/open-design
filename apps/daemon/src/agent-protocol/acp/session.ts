@@ -8,6 +8,7 @@
  */
 import path from 'node:path';
 import type { AmrRuntime, AmrRuntimeEvidence, ExecutionProfile } from '@open-design/contracts';
+import { parseAmrModelResponses } from '@open-design/contracts';
 import {
   createDsmlArtifactTextSuppressor,
   createToolCallTextSuppressor,
@@ -132,7 +133,7 @@ export interface AttachAcpSessionOptions {
   /** Non-default AMR runtimes require affirmative runtime/model evidence from Vela. */
   expectedAmrRuntime?: AmrRuntime;
   onAmrRuntimeEvidence?: (evidence: AmrRuntimeEvidence) => void;
-  /** Real model bytes received while direct-model artifact text awaits validation. */
+  /** Real model bytes received while an AMR adapter buffers output for validation. */
   onAmrModelOutputProgress?: (contentBytes: number) => void;
   // Some ACP adapters expose an explicit `turn_end` session update as their
   // terminal turn signal instead of returning the pending session/prompt RPC.
@@ -1057,9 +1058,10 @@ export function attachAcpSession({
     if (obj.method === 'session/update' && update) {
       if (update.sessionUpdate === 'amr_model_output_progress') {
         const progressModel = typeof update.modelId === 'string' ? update.modelId.replace(/^amr\//, '') : '';
-        if (expectedAmrRuntime === 'none' && amrRuntimeEvidence?.actualRuntime === 'none'
+        if ((expectedAmrRuntime === 'none' || expectedAmrRuntime === 'claude')
+          && amrRuntimeEvidence?.actualRuntime === expectedAmrRuntime
           && params?.sessionId === sessionId && sessionId !== null && promptRequestId !== null
-          && update.runtime === 'none' && progressModel !== ''
+          && update.runtime === expectedAmrRuntime && progressModel !== ''
           && progressModel === amrRuntimeEvidence.modelId
           && typeof update.contentBytes === 'number' && Number.isSafeInteger(update.contentBytes)
           && update.contentBytes > amrModelContentBytes && update.contentBytes <= 8 * 1024 * 1024) {
@@ -1372,6 +1374,21 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 2) {
+      // New OpenCode builds may report their actual program version. Historical
+      // builds remain readable, but absence never becomes invented evidence.
+      if (expectedAmrRuntime === 'opencode' && result.runtime !== undefined) {
+        if (result.runtime !== 'opencode' || typeof result.runtimeVersion !== 'string'
+          || result.runtimeVersion.length > 64
+          || !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+.][a-zA-Z0-9.-]+)?$/.test(result.runtimeVersion)) {
+          fail('AMR OpenCode reported a different or invalid runtime version.', {
+            retryable: false, details: { kind: 'amr_runtime_mismatch' },
+          });
+          return;
+        }
+        amrRuntimeEvidence = { requestedRuntime: 'opencode', actualRuntime: 'opencode', runtimeVersion: result.runtimeVersion };
+        onAmrRuntimeEvidence?.(amrRuntimeEvidence);
+        send('agent', { type: 'diagnostic', name: 'amr_runtime', ...amrRuntimeEvidence });
+      }
       if (expectedAmrRuntime && expectedAmrRuntime !== 'opencode') {
         if (
           result.runtime !== expectedAmrRuntime
@@ -1431,6 +1448,33 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
+      if (expectedAmrRuntime && amrRuntimeEvidence && result.modelResponses !== undefined) {
+        try {
+          const catalogModel = typeof result.modelId === 'string' ? result.modelId.replace(/^amr\//, '') : '';
+          const modelResponses = parseAmrModelResponses(result.modelResponses, catalogModel);
+          if (modelResponses) amrRuntimeEvidence = { ...amrRuntimeEvidence, modelResponses };
+        } catch {
+          emitUsageIfPresent(result.usage);
+          fail('AMR returned invalid request/response model evidence.', {
+            retryable: false, details: { kind: 'amr_runtime_model_mismatch' },
+          });
+          return;
+        }
+      }
+      if (expectedAmrRuntime === 'opencode' && amrRuntimeEvidence && result.modelId !== undefined) {
+        const actualModel = typeof result.modelId === 'string' ? result.modelId.trim().replace(/^amr\//, '') : '';
+        if (result.runtime !== 'opencode' || result.runtimeVersion !== amrRuntimeEvidence.runtimeVersion
+          || !actualModel || (model && model !== 'default' && actualModel !== model.replace(/^amr\//, ''))) {
+          emitUsageIfPresent(result.usage);
+          fail('AMR OpenCode returned a different or invalid observed model.', {
+            retryable: false, details: { kind: 'amr_runtime_model_mismatch' },
+          });
+          return;
+        }
+        amrRuntimeEvidence = { ...amrRuntimeEvidence, modelId: actualModel };
+        onAmrRuntimeEvidence?.(amrRuntimeEvidence);
+        send('agent', { type: 'diagnostic', name: 'amr_runtime', ...amrRuntimeEvidence });
+      }
       if (expectedAmrRuntime && expectedAmrRuntime !== 'opencode') {
         const actualModel = typeof result.modelId === 'string' ? result.modelId.trim().replace(/^amr\//, '') : null;
         if (

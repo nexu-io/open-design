@@ -19,6 +19,7 @@ import {
   OD_NEXT_RUNTIME_PATH_DESCRIPTORS,
   VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
   VELA_PI_LOCAL_BEST_EFFORT_MANIFEST,
+  VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS,
   evaluateOdNextAdmissionEligibility,
   evaluateOdNextExecutionEligibility,
   hashRuntimeCapabilityFixtureManifestV1,
@@ -157,13 +158,63 @@ describe('OD Next runtime capability gate', () => {
       'child_success', 'child_failure_parent_recovers',
     ]);
   });
-  it.each(['codex', 'dsh', 'none'] as const)('never reuses OpenCode native-child evidence for AMR %s', (runtime) => {
+  it.each(['codex', 'claude', 'dsh'] as const)('admits verified AMR %s continuation without borrowing OpenCode child evidence', (runtime) => {
     const capability = resolveBundledOdNextRuntimeCapability({
-      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-od-next-local',
+      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.matrix-six.g27f003483279',
       runtimeCompanionName: 'opencode', runtimeCompanionVersion: '1.18.18',
     });
+    expect(capability.reason).toBe('capability_resolved');
+    expect(capability.snapshot).toMatchObject({
+      runtimePath: `vela-${runtime}`, recordedRuntimeCompanionName: runtime,
+      nativeSessionContinuation: { support: 'verified', evidenceLevel: 'L0' },
+      nativeSubagents: { support: 'unknown', evidenceLevel: 'L0' },
+    });
+    expect(capability.snapshot?.runtimeCompanionName).toBeUndefined();
+    expect(evaluateOdNextAdmissionEligibility(capability.snapshot!).eligible).toBe(true);
+    expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'complex')).toEqual({ eligible: false, reason: 'native_subagents_not_verified' });
+  });
+  it.each([
+    { runtime: 'opencode' as const, companionVersion: '0.0.0--202609020336' },
+    { runtime: 'pi' as const, companionVersion: '0.85.1' },
+  ])('uses the installed new $runtime tuple with its own simple-only evidence', ({ runtime, companionVersion }) => {
+    const capability = resolveBundledOdNextRuntimeCapability({
+      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.matrix-six.g27f003483279',
+      runtimeCompanionName: runtime, runtimeCompanionVersion: companionVersion,
+    });
+    expect(capability.reason).toBe('capability_resolved');
+    expect(capability.snapshot).toMatchObject({
+      recordedAgentCliVersion: '0.0.1-test.matrix-six.g27f003483279',
+      recordedRuntimeCompanionName: runtime, recordedRuntimeCompanionVersion: companionVersion,
+      nativeSessionContinuation: { support: 'verified' }, nativeSubagents: { support: 'unknown' },
+    });
+    expect(evaluateOdNextAdmissionEligibility(capability.snapshot!).eligible).toBe(true);
+    expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'complex')).toEqual({ eligible: false, reason: 'native_subagents_not_verified' });
+    expect(evaluateOdNextAdmissionEligibility({ ...capability.snapshot!, agentId: 'claude' }).eligible).toBe(false);
+  });
+  it('keeps direct-model execution outside OD Next until its text-artifact strategy is verified', () => {
+    const capability = resolveBundledOdNextRuntimeCapability({ agentId: 'amr', amrRuntime: 'none' });
     expect(capability.reason).toBe('runtime_out_of_scope');
     expect(capability.snapshot).toBeNull();
+  });
+  it.each(['opencode', 'pi', 'codex', 'claude', 'dsh', 'none'] as const)('records actual %s HTTP/ACP observations independently of declared outcomes', (runtime) => {
+    const seed = JSON.parse(readFileSync(join(fixtureDir, `vela-${runtime}-six-local.sanitized-real-seed.json`), 'utf8'));
+    const digest = `sha256:${createHash('sha256').update(JSON.stringify(seed.observations)).digest('hex')}`;
+    expect(seed.recordingDigest).toBe(digest);
+    expect(seed.observations.some((observation: { channel: string }) => observation.channel === 'http_request')).toBe(true);
+    expect(seed.observations.some((observation: { channel: string }) => observation.channel === 'acp_response')).toBe(true);
+    expect(seed.cases.filter(({ caseId }: { caseId: string }) => caseId.startsWith('child_')).every(({ outcome }: { outcome: string }) => outcome === 'unavailable')).toBe(true);
+    if (runtime === 'none') {
+      expect(seed.executionSemantics).toBe('amr_model_text_artifact');
+      expect(seed.cases.find(({ caseId }: { caseId: string }) => caseId === 'tool').outcome).toBe('unavailable');
+    }
+    const manifest = VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS.find((entry) => entry.runtimePath === `vela-${runtime}`);
+    if (manifest) {
+      expect(manifest.provenance).toMatchObject({ kind: 'sanitized_real', recordingDigest: digest });
+      expect(manifest.agentCliVersion).toBe(seed.velaVersion);
+      expect(manifest.runtimeCompanionVersion).toBe(seed.companionVersion);
+      const entry = OD_NEXT_RUNTIME_CAPABILITY_REGISTRY.find((entry) => entry.fixtureVersion === manifest.fixtureVersion)!;
+      expect(entry.evidence.caseResults).toEqual(seed.cases.map(({ caseId, outcome }: { caseId: string; outcome: string }) => ({ id: caseId, outcome })));
+    }
   });
   it('binds initial path descriptors to existing runtime definitions without changing detection', () => {
     for (const descriptor of OD_NEXT_RUNTIME_PATH_DESCRIPTORS) {
@@ -172,17 +223,18 @@ describe('OD Next runtime capability gate', () => {
   });
 
   it('registers every reviewed tuple, Vela included', () => {
-    expect(OD_NEXT_RUNTIME_CAPABILITY_REGISTRY).toHaveLength(5);
+    expect(OD_NEXT_RUNTIME_CAPABILITY_REGISTRY).toHaveLength(10);
     expect(OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS).toEqual([
       CODEX_0_147_0_BEST_EFFORT_MANIFEST,
       CLAUDE_2_1_233_BEST_EFFORT_MANIFEST,
       OPENCODE_1_18_18_BEST_EFFORT_MANIFEST,
       VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
       VELA_PI_LOCAL_BEST_EFFORT_MANIFEST,
+      ...VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS,
     ]);
     const manifests = fixtureFiles.map(readFixture);
     expect(manifests.map((manifest) => manifest.runtimePath)).toEqual(
-      OD_NEXT_RUNTIME_PATH_DESCRIPTORS.filter(descriptor => descriptor.runtimePath !== 'vela-pi').map((descriptor) => descriptor.runtimePath),
+      OD_NEXT_RUNTIME_PATH_DESCRIPTORS.filter(descriptor => !('admissionMode' in descriptor)).map((descriptor) => descriptor.runtimePath),
     );
 
     for (const manifest of manifests) {

@@ -189,7 +189,7 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od run CLI', () => {
-  it.each(['pi', 'codex', 'dsh', 'none'] as const)('starts %s with a prompt file and keeps its harness/model when continuing', async (runtime) => {
+  it.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('starts %s with a prompt file and keeps its harness/model when continuing', async (runtime) => {
     stub = await startRunStubServer(true, { agentId: 'amr', amrRuntime: runtime, model: 'gpt-6-astra' });
     tempDir = await mkdtemp(join(tmpdir(), 'od-pi-cli-'));
     const promptFile = join(tempDir, 'prompt.txt');

@@ -22,7 +22,7 @@ export interface OdNextRuntimePathDescriptor {
   agentId: string;
   runtimeAdapterVersion: string;
   requiredRuntimeCompanionName?: string;
-  /** Existing paths retain complex admission; Pi starts with single-Agent work. */
+  /** New AMR adapters enter through verified single-Agent work only. */
   admissionMode?: 'simple' | 'complex';
 }
 
@@ -59,6 +59,13 @@ export const OD_NEXT_RUNTIME_PATH_DESCRIPTORS = [
     requiredRuntimeCompanionName: 'pi',
     admissionMode: 'simple',
   },
+  ...(['codex', 'claude', 'dsh'] as const).map((runtime) => ({
+    runtimePath: `vela-${runtime}`,
+    agentId: 'amr',
+    runtimeAdapterVersion: `od-vela-${runtime}-acp/v1`,
+    requiredRuntimeCompanionName: runtime,
+    admissionMode: 'simple' as const,
+  })),
 ] as const satisfies readonly OdNextRuntimePathDescriptor[];
 
 const ALL_REQUIRED_CASES = [
@@ -214,6 +221,35 @@ export const VELA_PI_LOCAL_BEST_EFFORT_MANIFEST =
     cases: ALL_REQUIRED_CASES,
   });
 
+/**
+ * Real fixed CLI + loopback-provider replays, including a file tool, cold
+ * continuation, cancellation and host deadline. Children were not exercised.
+ * Reproduce with tests/runtimes/vela-harness-continuation.test.ts; the seed
+ * hashes actual HTTP/ACP observations rather than the declared case outcomes.
+ */
+export const VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS = [
+  { runtime: 'opencode', companionVersion: '0.0.0--202609020336', recordingDigest: 'sha256:d774fe3262af703690a8abbbc311784c79af9abe3091561fb15b600237cc296e' },
+  { runtime: 'pi', companionVersion: '0.85.1', recordingDigest: 'sha256:e675bc05cdf40efa8b4093b8d90c64d7e4f844682941e3b92682d0b69403c53f' },
+  { runtime: 'codex', companionVersion: 'codex-cli 0.153.2', recordingDigest: 'sha256:df8b41a981587205af556888cd5da3f02c847362635dde35b30e09c4f883bb3c' },
+  { runtime: 'claude', companionVersion: '2.1.263 (Claude Code)', recordingDigest: 'sha256:374ae21fd5d7229f8e095ae8766e6830d275a08ee68a79c52e4ee2f9b13fcb86' },
+  { runtime: 'dsh', companionVersion: '0.1.2-rc.1', recordingDigest: 'sha256:404b1693e4ba39ebf69e2c5857fb49ccb4556a841e545be6fb138777d8d9e84e' },
+].map(({ runtime, companionVersion, recordingDigest }) => RuntimeCapabilityFixtureManifestV1Schema.parse({
+  schema: OD_NEXT_RUNTIME_FIXTURE_MANIFEST_V1_SCHEMA,
+  fixtureVersion: `vela-${runtime}-six-local-continuation/v1`,
+  runtimePath: `vela-${runtime}`,
+  agentId: 'amr',
+  agentCliVersion: '0.0.1-test.matrix-six.g27f003483279',
+  runtimeAdapterVersion: `od-vela-${runtime}-acp/v1`,
+  runtimeCompanionName: runtime,
+  runtimeCompanionVersion: companionVersion,
+  provenance: {
+    kind: 'sanitized_real', recordingDigest,
+    anonymizationVersion: 'od-runtime-evidence/v1', evidenceReview: 'open_design_best_effort',
+  },
+  containsSensitiveContent: false,
+  cases: ALL_REQUIRED_CASES,
+}));
+
 export const OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS:
   readonly RuntimeCapabilityFixtureManifestV1[] = [
     CODEX_0_147_0_BEST_EFFORT_MANIFEST,
@@ -221,7 +257,21 @@ export const OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS:
     OPENCODE_1_18_18_BEST_EFFORT_MANIFEST,
     VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
     VELA_PI_LOCAL_BEST_EFFORT_MANIFEST,
+    ...VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS,
   ];
+
+function isSingleAgentAmrPath(runtimePath: string): boolean {
+  return OD_NEXT_RUNTIME_PATH_DESCRIPTORS.some((descriptor) =>
+    descriptor.runtimePath === runtimePath && 'admissionMode' in descriptor && descriptor.admissionMode === 'simple');
+}
+
+/** A replay may verify less than another build on the same runtime path. */
+function fixtureAdmissionMode(input: { agentId: string; runtimePath: string; fixtureVersion: string }): 'simple' | 'complex' {
+  if (VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS.some((manifest) =>
+    manifest.agentId === input.agentId && manifest.runtimePath === input.runtimePath && manifest.fixtureVersion === input.fixtureVersion)) return 'simple';
+  const descriptor: OdNextRuntimePathDescriptor | undefined = OD_NEXT_RUNTIME_PATH_DESCRIPTORS.find((candidate) => candidate.agentId === input.agentId && candidate.runtimePath === input.runtimePath);
+  return descriptor?.admissionMode ?? 'complex';
+}
 
 export const OD_NEXT_RUNTIME_CAPABILITY_REGISTRY:
   readonly RuntimeCapabilityRegistryEntryV1[] = OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS.map((manifest) => RuntimeCapabilityRegistryEntryV1Schema.parse({
@@ -241,12 +291,12 @@ export const OD_NEXT_RUNTIME_CAPABILITY_REGISTRY:
       schema: OD_NEXT_RUNTIME_CAPABILITY_EVIDENCE_V1_SCHEMA,
       source: 'fixture_replay',
       nativeSessionContinuation: { support: 'verified', evidenceLevel: 'L0' },
-      nativeSubagents: manifest.runtimePath === 'vela-pi'
+      nativeSubagents: fixtureAdmissionMode(manifest) === 'simple'
         ? { support: 'unknown', evidenceLevel: 'L0' }
         : { support: 'verified', evidenceLevel: 'L2' },
       caseResults: ALL_REQUIRED_CASES.map(({ id }) => ({
         id,
-        outcome: manifest.runtimePath === 'vela-pi' && id.startsWith('child_')
+        outcome: fixtureAdmissionMode(manifest) === 'simple' && id.startsWith('child_')
           ? 'unavailable' : 'passed',
       })),
     },
@@ -520,9 +570,9 @@ export function resolveOdNextRuntimeCapability(
   const capturedAt = input.capturedAt ?? Date.now();
   const agentCliVersion = input.agentCliVersion?.trim() || undefined;
   // The generic Vela --version probe currently reports bundled OpenCode even
-  // when Pi is selected. Do not label that companion as the executing runtime.
-  const foreignCompanion = descriptor.runtimePath === 'vela-pi'
-    && input.runtimeCompanionName?.trim() !== 'pi';
+  // when another Harness is selected. Do not mislabel it as the executing runtime.
+  const foreignCompanion = isSingleAgentAmrPath(descriptor.runtimePath)
+    && input.runtimeCompanionName?.trim() !== descriptor.requiredRuntimeCompanionName;
   const runtimeCompanionName = foreignCompanion ? undefined : input.runtimeCompanionName?.trim() || undefined;
   const runtimeCompanionVersion = foreignCompanion ? undefined : input.runtimeCompanionVersion?.trim() || undefined;
   const base = {
@@ -623,7 +673,7 @@ export function resolveOdNextRuntimeCapability(
       subagentEvidenceLevel: entry.evidence.nativeSubagents.evidenceLevel,
     });
   }
-  if (!evaluateOdNextExecutionEligibility(entry.evidence, descriptor.admissionMode ?? 'complex').eligible) {
+  if (!evaluateOdNextExecutionEligibility(entry.evidence, fixtureAdmissionMode(manifest)).eligible) {
     return unknownResolution({
       ...base,
       fixtureHash,
@@ -665,7 +715,7 @@ export function resolveBundledOdNextRuntimeCapability(input: {
   capturedAt?: number;
 }): OdNextRuntimeCapabilityResolution {
   const descriptor = descriptorForAgent(input.agentId, input.amrRuntime);
-  const fixture = OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS.find((candidate) => (
+  const fixtures = OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS.filter((candidate) => (
     descriptor !== null
     && candidate.agentId === descriptor.agentId
     && candidate.runtimePath === descriptor.runtimePath
@@ -673,6 +723,9 @@ export function resolveBundledOdNextRuntimeCapability(input: {
     && (candidate.runtimeCompanionName ?? undefined) ===
       descriptor.requiredRuntimeCompanionName
   ));
+  // Prefer evidence captured for this installed producer when several builds
+  // share a path. Existing forward-compatible fallback remains unchanged.
+  const fixture = fixtures.find((candidate) => candidate.agentCliVersion === input.agentCliVersion?.trim()) ?? fixtures[0];
   return resolveOdNextRuntimeCapability({
     ...input,
     fixtureVersion: fixture?.fixtureVersion ?? 'od-next-runtime-contract/v1',
@@ -760,10 +813,7 @@ export function evaluateOdNextExecutionEligibility(
   return { eligible: true, reason: 'eligible' };
 }
 
-/** Pi can enter planning with continuation alone; existing paths keep their gate. */
+/** Admit according to the selected replay, without promoting simple evidence to children. */
 export function evaluateOdNextAdmissionEligibility(snapshot: OdNextRuntimeCapabilitySnapshotV1) {
-  const descriptor: OdNextRuntimePathDescriptor | undefined = OD_NEXT_RUNTIME_PATH_DESCRIPTORS.find(
-    candidate => candidate.runtimePath === snapshot.runtimePath && candidate.agentId === snapshot.agentId,
-  );
-  return evaluateOdNextExecutionEligibility(snapshot, descriptor?.admissionMode ?? 'complex');
+  return evaluateOdNextExecutionEligibility(snapshot, fixtureAdmissionMode(snapshot));
 }

@@ -18,7 +18,7 @@ it('keeps legacy OpenCode handles separate from Pi and other agents', () => {
   expect(agentSessionStorageKey('pi')).toBe('pi');
 });
 
-it.each(['codex', 'dsh', 'none'] as const)('passes %s through and keeps its own session namespace', (runtime) => {
+it.each(['codex', 'claude', 'dsh', 'none'] as const)('passes %s through and keeps its own session namespace', (runtime) => {
   expect(amrAgentDef.buildArgs('', [], [], { amrRuntime: runtime }))
     .toEqual(['agent', 'run', '--runtime', runtime]);
   expect(agentSessionStorageKey('amr', runtime)).toBe(`amr:${runtime}`);

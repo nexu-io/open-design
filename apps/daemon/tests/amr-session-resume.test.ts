@@ -67,7 +67,7 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     restoreEnv(originalEnv);
   });
 
-  it.each(['pi', 'codex', 'dsh', 'none'] as const)('resumes %s turns and safely reseeds after a different harness advances the conversation', async (selectedRuntime) => {
+  it.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('resumes %s turns and safely reseeds after a different harness advances the conversation', async (selectedRuntime) => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-pi-resume-'));
     const logPath = path.join(binDir, 'invocations.jsonl');
     const bin = await writeVelaWrapper(binDir, 'vela-pi', { logPath });
@@ -683,7 +683,7 @@ async function sendRunAndWait(
   encoded: string,
   message: string,
   model?: string,
-  amrRuntime?: 'opencode' | 'pi' | 'codex' | 'dsh' | 'none',
+  amrRuntime?: 'opencode' | 'pi' | 'codex' | 'claude' | 'dsh' | 'none',
 ): Promise<RunStatus> {
   const [projectId, conversationId, workspaceId, workspaceMemberId] =
     encoded.split('::');
