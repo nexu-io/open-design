@@ -198,6 +198,24 @@ function eventIndex(events: StubEvent[], event: StubEvent["event"], target: stri
 }
 
 describe("postinstall script contract", () => {
+  it("[P2] bootstraps runtime consumers' dependencies without compiling daemon or Web", () => {
+    const sandbox = createSandbox();
+    try {
+      for (const target of [...postinstallBuildTargetList(), "apps/web"]) {
+        const manifest = readJsonObject(`${target}/package.json`);
+        writeTarget(sandbox, target, { name: packageName(manifest),
+          dependencies: Object.fromEntries([...workspaceDependencyNames(manifest, true)].map(name => [name, "workspace:*"])) });
+      }
+      const log = writePnpmStub(sandbox);
+      const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_LEVEL: "release-smoke", OPEN_DESIGN_POSTINSTALL_CONCURRENCY: "2" });
+      expect(result.status, String(result.stderr)).toBe(0);
+      const targets = readStubEvents(log).filter(event => event.event === "start").map(event => event.target);
+      expect(targets).toEqual(expect.arrayContaining(["packages/plugin-runtime", "packages/registry-protocol", "packages/agui-adapter", "packages/components"]));
+      expect(targets).not.toContain("apps/daemon");
+      expect(targets).not.toContain("apps/web");
+    } finally { rmSync(sandbox, { recursive: true, force: true }); }
+  });
+
   it("[P2] selects the resource dependency closure without unrelated builds or native verification", () => {
     const sandbox = createSandbox();
     try {

@@ -41,7 +41,7 @@ const postinstallLevels = {
   full: { roots: buildTargets, verifyNativeAddon: true },
   "release-prepare": { roots: ["tools/pack", "tools/release"], verifyNativeAddon: false },
   "release-platform": { roots: ["tools/pack", "tools/release", "tools/serve"], verifyNativeAddon: true },
-  "release-smoke": { roots: ["apps/closure", "tools/pack", "tools/release", "tools/serve"], verifyNativeAddon: true },
+  "release-smoke": { roots: ["apps/closure", "tools/pack", "tools/release", "tools/serve"], dependencyRoots: ["apps/daemon", "apps/web"], verifyNativeAddon: true },
   "resource-build": { roots: ["apps/closure"], verifyNativeAddon: false },
   "electron-build": { roots: ["shells/electron"], verifyNativeAddon: false },
   "terminal-build": { roots: ["apps/closure"], verifyNativeAddon: false },
@@ -177,6 +177,16 @@ function buildTargetsForLevel(availableTargets, level) {
     for (const dependency of dependencies.get(target)) visit(dependency);
   }
   for (const root of postinstallLevels[level].roots) visit(root);
+  // Runtime producers/tests consume these apps' dependencies, but own the app
+  // build themselves. Do not compile daemon/Web twice or bootstrap a Next build.
+  const byName = new Map(availableTargets.map(target => [readPackageJson(target).name, target]));
+  for (const root of postinstallLevels[level].dependencyRoots ?? []) {
+    for (const name of workspaceDependencyNames(readPackageJson(root))) {
+      const dependency = byName.get(name);
+      if (dependency == null) throw new Error(`postinstall: ${level} requires unavailable dependency ${name} of ${root}`);
+      visit(dependency);
+    }
+  }
   return availableTargets.filter(target => selected.has(target));
 }
 
