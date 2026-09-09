@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import JSZip from "jszip";
 import { afterEach, expect, it, vi } from "vitest";
-import { packSceneArtifact } from "../src/exact/scene-artifact.ts";
-import { restoreSceneCache } from "../src/exact/scene-cache.ts";
+import { packSceneArtifact } from "@/exact/scene-artifact.ts";
+import { restoreSceneCache } from "@/exact/scene-cache.ts";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllGlobals(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

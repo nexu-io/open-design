@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { signStandaloneMetadata, verifyDocument, verifyStandaloneMetadata, verifyStandaloneShellMetadata } from "@open-design/standalone";
 
-import { prepareContent, finalizeContent } from "../src/exact/content.ts";
+import { prepareContent, finalizeContent } from "@/exact/content.ts";
 import { capsuleFixture } from "./capsule-fixture.ts";
 
 const roots: string[] = [];

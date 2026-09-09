@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 import { afterEach, expect, it } from "vitest";
-import { composeReleaseDataResources } from "../src/exact/resource-composition.ts";
+import { composeReleaseDataResources } from "@/exact/resource-composition.ts";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

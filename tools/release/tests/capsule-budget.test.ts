@@ -5,7 +5,7 @@ import { join } from "node:path";
 import JSZip from "jszip";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { afterEach, expect, it } from "vitest";
-import { CAPSULE_RELEASE_BUDGET, verifyCapsuleReleaseBudget } from "../src/exact/capsule-budget.ts";
+import { CAPSULE_RELEASE_BUDGET, verifyCapsuleReleaseBudget } from "@/exact/capsule-budget.ts";
 import { capsuleFixture } from "./capsule-fixture.ts";
 
 const roots: string[] = [];

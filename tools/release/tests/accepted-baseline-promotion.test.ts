@@ -5,12 +5,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cac } from "cac";
-import { registerExactCommands } from "../src/exact/commands.ts";
+import { registerExactCommands } from "@/exact/commands.ts";
 
-import { executeExactReleaseControl } from "../src/exact/control-release.js";
-import { createExactPlanFromRegistryFile, EXACT_DATA_PLAN_NODE_IDS } from "../src/exact/plan.js";
-import { createExactReleasePlanFromRegistryFile } from "../src/exact/release-plan.js";
-import { writeReleasePolicy } from "../src/policy/release-profile.js";
+import { executeExactReleaseControl } from "@/exact/control-release.js";
+import { createExactPlanFromRegistryFile, EXACT_DATA_PLAN_NODE_IDS } from "@/exact/plan.js";
+import { createExactReleasePlanFromRegistryFile } from "@/exact/release-plan.js";
+import { writeReleasePolicy } from "@/policy/release-profile.js";
 
 const roots: string[] = [];
 const sourceCommit = "a".repeat(40);

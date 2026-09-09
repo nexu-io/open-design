@@ -3,8 +3,8 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { fetchAcceptanceArtifact } from "../src/exact/acceptance-artifact.ts";
-import { resolveReleasePolicy } from "../src/policy/release-profile.ts";
+import { fetchAcceptanceArtifact } from "@/exact/acceptance-artifact.ts";
+import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllGlobals(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

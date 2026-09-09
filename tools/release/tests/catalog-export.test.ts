@@ -4,10 +4,10 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { resolveRepoRoot } from "../src/catalog/export-catalog.ts";
-import { exportCatalog } from "../src/catalog/export.ts";
-import { exporterVersion } from "../src/catalog/pack-catalog.ts";
-import { assertValidCatalog, validateCatalog } from "../src/catalog/validate.ts";
+import { resolveRepoRoot } from "@/catalog/export-catalog.ts";
+import { exportCatalog } from "@/catalog/export.ts";
+import { exporterVersion } from "@/catalog/pack-catalog.ts";
+import { assertValidCatalog, validateCatalog } from "@/catalog/validate.ts";
 
 const FIXTURE_ROOT = resolve(import.meta.dirname, "fixtures/catalog");
 const WORKSPACE_ROOT = resolve(import.meta.dirname, "../../..");

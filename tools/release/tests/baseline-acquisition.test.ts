@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { fetchAcceptedShellBaseline, type AcceptedBaselineFetcher } from "../src/exact/baseline-acquisition.js";
+import { fetchAcceptedShellBaseline, type AcceptedBaselineFetcher } from "@/exact/baseline-acquisition.js";
 
 function response(url: string, status: number, body: string) {
   return { bytes: Buffer.from(body), status, url };

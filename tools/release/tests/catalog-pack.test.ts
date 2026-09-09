@@ -7,19 +7,19 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 
-import { exportCatalog } from "../src/catalog/export.ts";
-import { packCatalogSnapshot, verifyCatalogChecksums, writeCatalogJson } from "../src/catalog/pack.ts";
+import { exportCatalog } from "@/catalog/export.ts";
+import { packCatalogSnapshot, verifyCatalogChecksums, writeCatalogJson } from "@/catalog/pack.ts";
 import {
   createPlaywrightPreviewRenderer,
   createStubPreviewRenderer,
   renderCatalogPreviews,
   SystemicPreviewError,
-} from "../src/catalog/render-previews.ts";
+} from "@/catalog/render-previews.ts";
 import {
   MINIMAL_WEBP,
   renderCardFromExternal,
   renderFallbackCard,
-} from "../src/catalog/fallback-preview-card.ts";
+} from "@/catalog/fallback-preview-card.ts";
 
 const FIXTURE_ROOT = resolve(import.meta.dirname, "fixtures/catalog");
 const SOURCE_COMMIT = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

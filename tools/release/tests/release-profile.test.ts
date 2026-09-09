@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { executeExactReleaseControl, validateReleaseArtifactTrust } from "../src/exact/control-release.js";
-import { readReleasePolicyReceipt, releaseTargetsEqual, resolveReleasePolicy, writeReleasePolicy } from "../src/policy/release-profile.js";
+import { executeExactReleaseControl, validateReleaseArtifactTrust } from "@/exact/control-release.js";
+import { readReleasePolicyReceipt, releaseTargetsEqual, resolveReleasePolicy, writeReleasePolicy } from "@/policy/release-profile.js";
 
 const roots: string[] = [];
 const sourceCommit = "a".repeat(40);

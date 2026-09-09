@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cac } from "cac";
 import { afterEach, expect, it, vi } from "vitest";
-import { registerExactCommands } from "../src/exact/commands.ts";
-import { packSceneArtifact } from "../src/exact/scene-artifact.ts";
-import { resolveReleasePolicy } from "../src/policy/release-profile.ts";
+import { registerExactCommands } from "@/exact/commands.ts";
+import { packSceneArtifact } from "@/exact/scene-artifact.ts";
+import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 import { capsuleFixture } from "./capsule-fixture.ts";
 

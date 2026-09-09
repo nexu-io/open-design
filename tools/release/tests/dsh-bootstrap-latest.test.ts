@@ -5,8 +5,8 @@ const storageMocks = vi.hoisted(() => ({
   putStorageObjectWithStatus: vi.fn(),
 }));
 
-vi.mock("../src/storage/s3-upload.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/storage/s3-upload.ts")>()),
+vi.mock("@/storage/s3-upload.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/storage/s3-upload.ts")>()),
   getStorageObject: storageMocks.getStorageObject,
   putStorageObjectWithStatus: storageMocks.putStorageObjectWithStatus,
 }));
@@ -15,8 +15,8 @@ import {
   resolveDshBootstrapVersion,
   updateDshBootstrapLatestPointer,
   type DshBootstrapLatestPointer,
-} from "../src/storage/dsh-bootstrap-latest.ts";
-import type { StorageConfig } from "../src/storage/s3-upload.ts";
+} from "@/storage/dsh-bootstrap-latest.ts";
+import type { StorageConfig } from "@/storage/s3-upload.ts";
 
 const storage: StorageConfig = {
   accessKeyId: "ak",

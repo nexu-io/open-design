@@ -6,11 +6,11 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { exportCatalog } from "../src/catalog/export.ts";
-import { packCatalogSnapshot, writeCatalogJson } from "../src/catalog/pack.ts";
-import { createStubPreviewRenderer, renderCatalogPreviews } from "../src/catalog/render-previews.ts";
-import { publishCatalogSnapshot } from "../src/storage/publish-catalog.ts";
-import { strongQuotedEtag, type StorageConfig } from "../src/storage/s3-upload.ts";
+import { exportCatalog } from "@/catalog/export.ts";
+import { packCatalogSnapshot, writeCatalogJson } from "@/catalog/pack.ts";
+import { createStubPreviewRenderer, renderCatalogPreviews } from "@/catalog/render-previews.ts";
+import { publishCatalogSnapshot } from "@/storage/publish-catalog.ts";
+import { strongQuotedEtag, type StorageConfig } from "@/storage/s3-upload.ts";
 
 const FIXTURE_ROOT = resolve(import.meta.dirname, "fixtures/catalog");
 const SOURCE_COMMIT = "cccccccccccccccccccccccccccccccccccccccc";

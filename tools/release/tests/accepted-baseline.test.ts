@@ -7,7 +7,7 @@ import {
   createAcceptedShellBaselineReceipt,
   resolveAcceptedShellBaseline,
   type AcceptedShellBaselinePayload,
-} from "../src/exact/accepted-baseline.js";
+} from "@/exact/accepted-baseline.js";
 
 const CLOSURE_IDENTITY = `sha256:${"c".repeat(64)}` as const;
 const baseline: AcceptedShellBaselinePayload = {

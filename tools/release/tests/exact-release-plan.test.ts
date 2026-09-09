@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { parseContentIdentityRegistry } from "@open-design/metatool";
 
-import { acceptedShellBaselineIdentity, createAcceptedShellBaselineReceipt, type AcceptedShellBaselinePayload } from "../src/exact/accepted-baseline.js";
-import { createExactPlan, EXACT_DATA_PLAN_NODE_IDS } from "../src/exact/plan.js";
-import { createExactReleasePlan } from "../src/exact/release-plan.js";
+import { acceptedShellBaselineIdentity, createAcceptedShellBaselineReceipt, type AcceptedShellBaselinePayload } from "@/exact/accepted-baseline.js";
+import { createExactPlan, EXACT_DATA_PLAN_NODE_IDS } from "@/exact/plan.js";
+import { createExactReleasePlan } from "@/exact/release-plan.js";
 
 const roots: string[] = [];
 

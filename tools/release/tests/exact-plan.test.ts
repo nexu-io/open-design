@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { parseContentIdentityRegistry, resolveContentIdentityDeclaration } from "@open-design/metatool";
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 
-import { createExactPlan, selectExactPlanActions, EXACT_DATA_PLAN_NODE_IDS, type ExactPlan } from "../src/exact/plan.js";
+import { createExactPlan, selectExactPlanActions, EXACT_DATA_PLAN_NODE_IDS, type ExactPlan } from "@/exact/plan.js";
 
 const roots: string[] = [];
 const ACCEPTED_BASELINE = `sha256:${"a".repeat(64)}` as const;

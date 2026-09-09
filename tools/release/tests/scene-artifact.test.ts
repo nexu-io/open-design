@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { create } from "tar";
-import { packSceneArtifact, unpackSceneArtifact } from "../src/exact/scene-artifact.ts";
+import { packSceneArtifact, unpackSceneArtifact } from "@/exact/scene-artifact.ts";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

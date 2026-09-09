@@ -9,9 +9,9 @@ import {
   createReleaseNotePublication,
   releaseNoteMetadataFromPublication,
   verifyReleaseNotePublication,
-} from "../src/release-note/publication.js";
-import { assertReleaseNotePlanPolicy } from "../src/release-note/policy.js";
-import { discoverReleaseNotePlan } from "../src/release-note/source.js";
+} from "@/release-note/publication.js";
+import { assertReleaseNotePlanPolicy } from "@/release-note/policy.js";
+import { discoverReleaseNotePlan } from "@/release-note/source.js";
 
 const roots: string[] = [];
 

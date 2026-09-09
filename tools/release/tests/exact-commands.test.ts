@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { build } from "esbuild";
 import { afterEach, expect, it } from "vitest";
-import { resolveExactDataPlanNode } from "../src/exact/plan.ts";
+import { resolveExactDataPlanNode } from "@/exact/plan.ts";
 import { buildClosureDataResource } from "@open-design/closure/build-resources";
 
 const run = promisify(execFile);

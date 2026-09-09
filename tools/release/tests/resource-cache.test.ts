@@ -5,8 +5,8 @@ import { join } from "node:path";
 import JSZip from "jszip";
 import { buildClosureDataResources, CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 import { afterEach, expect, it, vi } from "vitest";
-import { contributeDataResource, restoreDataResource } from "../src/exact/resource-cache.ts";
-import { composeReleaseDataResources } from "../src/exact/resource-composition.ts";
+import { contributeDataResource, restoreDataResource } from "@/exact/resource-cache.ts";
+import { composeReleaseDataResources } from "@/exact/resource-composition.ts";
 
 const roots: string[] = [];
 afterEach(async () => {

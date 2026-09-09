@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { createExactPlanFromRegistryFile, EXACT_DATA_PLAN_NODE_IDS } from "../src/exact/plan.ts";
-import { resolveExactValidationRecipe, validateExactPlanNode } from "../src/exact/validation.ts";
+import { createExactPlanFromRegistryFile, EXACT_DATA_PLAN_NODE_IDS } from "@/exact/plan.ts";
+import { resolveExactValidationRecipe, validateExactPlanNode } from "@/exact/validation.ts";
 
 const roots: string[] = [];
 it("defaults Closure validation to architecture boundaries, not business aggregates", () => {

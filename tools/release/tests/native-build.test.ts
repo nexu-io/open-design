@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "../src/exact/native-build.ts";
-import { resolveReleasePolicy } from "../src/policy/release-profile.ts";
+import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
+import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

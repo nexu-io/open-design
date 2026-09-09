@@ -6,7 +6,7 @@ import {
   dshBootstrapChecksums,
   materializeDshBootstrapInstallers,
   type DshBootstrapObject,
-} from "../src/storage/dsh-bootstrap-bundle.ts";
+} from "@/storage/dsh-bootstrap-bundle.ts";
 
 const LANDING_PS1_URL = "https://open-design.ai/install-dsh.ps1?version=1";
 

@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createPackage } from "@electron/asar";
 import { describeElectronRuntimeDiagnostics } from "@open-design/shell-electron/lifecycle/inspection";
-import { collectReleaseAcceptance } from "../src/exact/acceptance.ts";
+import { collectReleaseAcceptance } from "@/exact/acceptance.ts";
 
 import { afterEach, expect, it } from "vitest";
 
-import { executeExactReleaseControl } from "../src/exact/control-release.js";
-import { resolveReleasePolicy } from "../src/policy/release-profile.js";
+import { executeExactReleaseControl } from "@/exact/control-release.js";
+import { resolveReleasePolicy } from "@/policy/release-profile.js";
 
 const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
