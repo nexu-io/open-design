@@ -19,6 +19,7 @@ import {
   buildRunFinishedV4Aliases,
   deriveConfigureGlobals,
   harnessAnalyticsFromRolloutDecision,
+  odNextBlockedAnalyticsFromStrategyTask,
   modelIdForTracking,
   sessionModeToTracking,
   type RunTaskLineageProps,
@@ -966,22 +967,15 @@ export function createRunAnalyticsLifecycle(
           const terminalLifecycle = run.terminalLifecycle
             ? terminalLifecycleForPosthogLocalQueue(run.terminalLifecycle)
             : undefined;
-          // The gate that refused an OD Next turn. `result` above comes from
-          // the physical run status, and a refused turn normally exits 0 — so
-          // without this the whole class counted as `success` while the user
-          // was looking at a failure card, and nothing queryable disagreed.
-          // Read off the run's own terminal projection, the same object the
-          // SSE `end` payload and the failure card were built from.
-          const odNextBlockedReasonCode =
-            run.strategyTask?.terminal === true
-            && run.strategyTask.outcome === 'blocked'
-              ? run.strategyTask.blockedContext?.reasonCodes?.[0]
-              : undefined;
           const finishedProperties: Record<string, unknown> = {
               ...baseProps,
-              ...(odNextBlockedReasonCode
-                ? { od_next_blocked_reason_code: odNextBlockedReasonCode }
-                : {}),
+              // The gate that refused an OD Next turn. `result` above comes
+              // from the physical run status, and a refused turn normally exits
+              // 0 — so without this the whole class counted as `success` while
+              // the user was looking at a failure card. Read off the run's own
+              // terminal projection, the same object the SSE `end` payload and
+              // the failure card were built from, so the three cannot drift.
+              ...odNextBlockedAnalyticsFromStrategyTask(run.strategyTask),
               design_system_id: run.designSystemId ?? undefined,
               design_system_digest: run.designSystemDigest ?? undefined,
               design_system_selection_source: run.designSystemSelectionSource ?? 'none',
