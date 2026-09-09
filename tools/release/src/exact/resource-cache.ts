@@ -1,7 +1,7 @@
 import { copyFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { assertConvergedProductAbsent, stageConvergedProduct, convergenceProductCandidate, readConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
+import { assertConvergedProductAbsent, stageConvergedProduct, convergenceProductCandidate, openConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
 import { EXACT_DATA_PLAN_NODE_IDS } from "./plan.ts";
 import { validateDataResourceReceipt } from "./resource-composition.ts";
 
@@ -48,11 +48,12 @@ export async function contributeDataResource(input: Input & Readonly<{ resourceR
 export async function restoreDataResource(input: Input) {
   const expected = await binding(input);
   await assertConvergedProductAbsent(resolve(input.output));
-  const { archive, cache } = await readConvergedProduct({ ...input, product: "resource" });
+  await using product = await openConvergedProduct({ ...input, product: "resource" });
+  const { archive, cache } = product;
   await stageConvergedProduct(input.output, async stage => {
     await writeConvergedEntry(archive, RECEIPT, join(stage, RECEIPT), 64 * 1024);
     const receipt = await readObject(join(stage, RECEIPT)), resource = boundResource(receipt, expected, input.resourceId);
-    if (Object.keys(archive.files).length !== 2 || archive.files[resource.file] == null) throw new Error("resource cache contains unexpected payloads");
+    if (archive.entries.length !== 2 || !archive.entries.some(entry => entry.path === resource.file)) throw new Error("resource cache contains unexpected payloads");
     await writeConvergedEntry(archive, resource.file, join(stage, resource.file), resource.size);
     await checkedFile(resource, "restored data resource", join(stage, resource.file));
   });

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import JSZip from "jszip";
+import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { buildClosureDataResources, CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 import { afterEach, expect, it, vi } from "vitest";
 import { contributeDataResource, restoreDataResource } from "@/exact/resource-cache.ts";
@@ -35,13 +35,13 @@ async function fixture() {
   return { root, resources, receipts, value, input: { plan, pending, workload, resourceId: "craft", output: join(root, "candidate"),
     resourceReceipt: join(root, "built/craft.json"), artifact: "craft-artifact" } as const };
 }
-async function cache(f: Awaited<ReturnType<typeof fixture>>, mutate?: (zip: JSZip) => void) {
+async function cache(f: Awaited<ReturnType<typeof fixture>>, mutate?: (zip: ZipFixtureEntries) => void) {
   const result = await contributeDataResource(f.input);
   expect(result.contributed).toBe(true);
-  const zip = new JSZip();
-  for (const file of await readdir(join(f.input.output, "artifact"))) zip.file(file, await readFile(join(f.input.output, "artifact", file)));
+  const zip = {} as ZipFixtureEntries;
+  for (const file of await readdir(join(f.input.output, "artifact"))) zip[file] = await readFile(join(f.input.output, "artifact", file));
   mutate?.(zip);
-  const body = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const body = await zipFixture(zip);
   const value = { workloads: { [f.input.workload]: { run: false, resultHit: true, result: { products: { resource: {
     type: "url", source: "https://cache.example/craft.zip", data: { sha256: createHash("sha256").update(body).digest("hex") },
   } } } } } };
@@ -79,9 +79,9 @@ it("rejects a non-hit before download and leaves no restored directory", async (
 it.each(["wrong identity", "wrong target", "extra payload", "changed archive", "oversized receipt"])("rejects %s without publishing a restored product", async fault => {
   const f = await fixture();
   const hit = await cache(f, zip => {
-    if (fault === "extra payload") zip.file("extra.txt", "unexpected");
-    if (fault === "changed archive") zip.file(f.resources.find(resource => resource.id === "craft")!.file, "tampered");
-    if (fault === "oversized receipt") zip.file("resource-receipt.json", " ".repeat(65 * 1024));
+    if (fault === "extra payload") zip["extra.txt"] = "unexpected";
+    if (fault === "changed archive") zip[f.resources.find(resource => resource.id === "craft")!.file] = "tampered";
+    if (fault === "oversized receipt") zip["resource-receipt.json"] = " ".repeat(65 * 1024);
   });
   if (fault === "wrong identity") {
     const plan = JSON.parse(await readFile(f.input.plan, "utf8"));

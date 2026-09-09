@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import JSZip from "jszip";
+import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import { packSceneArtifact } from "@/exact/scene-artifact.ts";
 import { restoreSceneCache } from "@/exact/scene-cache.ts";
@@ -14,8 +14,8 @@ async function fixture(extra = false) {
   const source = join(root, "source"); await mkdir(source); await writeFile(join(source, "scene.json"), "{}");
   await writeFile(join(source, ".native"), "native"); await chmod(join(source, ".native"), 0o755);
   const tar = join(root, "source.tar"); await packSceneArtifact(source, tar);
-  const zip = new JSZip(); zip.file("scene.tar", await readFile(tar)); if (extra) zip.file("extra", "unlisted");
-  const body = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const zip = {} as ZipFixtureEntries; zip["scene.tar"] = await readFile(tar); if (extra) zip["extra"] = "unlisted";
+  const body = await zipFixture(zip);
   const pending = join(root, "pending.json"), workload = "electron_scene";
   const value = { workloads: { [workload]: { run: false, resultHit: true, result: { products: { scene: {
     type: "url", source: "https://cache.example/scene.zip", data: { sha256: createHash("sha256").update(body).digest("hex") },

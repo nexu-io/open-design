@@ -2,7 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pack, extract } from "@open-design/archive/build";
 import { canonicalBytes, checkedFile, describeFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { assertConvergedProductAbsent, convergenceProductCandidate, readConvergedProduct, stageConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
+import { assertConvergedProductAbsent, convergenceProductCandidate, openConvergedProduct, stageConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
 
 type Input = Readonly<{ plan: string; pending: string; workload: string; output: string }>;
 const RECEIPT = "base-build-receipt.json", ARCHIVE = "base.zip";
@@ -45,9 +45,10 @@ export async function contributeBase(input: Input & Readonly<{ buildReceipt: str
 }
 export async function restoreBase(input: Input) {
   const expected = await binding(input), output = resolve(input.output); await assertConvergedProductAbsent(output);
-  const { archive, cache } = await readConvergedProduct({ ...input, product: "base" });
+  await using product = await openConvergedProduct({ ...input, product: "base" });
+  const { archive, cache } = product;
   await stageConvergedProduct(output, async stage => {
-    if (Object.keys(archive.files).sort().join(",") !== [ARCHIVE, RECEIPT].sort().join(",")) throw new Error("base cache contains unexpected payloads");
+    if (archive.entries.map(entry => entry.path).sort().join(",") !== [ARCHIVE, RECEIPT].sort().join(",")) throw new Error("base cache contains unexpected payloads");
     await writeConvergedEntry(archive, RECEIPT, join(stage, RECEIPT), 64 * 1024);
     const receipt = await readObject(join(stage, RECEIPT)); bound(receipt, expected);
     if (Object.keys(receipt).sort().join(",") !== "archive,base,operation,planNode,schemaVersion,target"

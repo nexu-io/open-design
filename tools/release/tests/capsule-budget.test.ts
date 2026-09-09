@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import JSZip from "jszip";
+import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { afterEach, expect, it } from "vitest";
 import { CAPSULE_RELEASE_BUDGET, verifyCapsuleReleaseBudget } from "@/exact/capsule-budget.ts";
@@ -33,21 +33,27 @@ it("rejects oversized archives before parsing and independently verifies both di
 });
 
 it.each(["file-count", "expanded-bytes", "traversal", "symlink"])("rejects %s even with a matching archive digest", async reason => {
-  const zip = new JSZip();
+  const entries: ZipFixtureEntries = {};
   if (reason === "file-count") {
-    for (let i = 0; i <= CAPSULE_RELEASE_BUDGET.files; i++) zip.file(`${i}.cjs`, "x");
-  } else if (reason === "expanded-bytes") zip.file("capsule.cjs", Buffer.alloc(CAPSULE_RELEASE_BUDGET.expandedBytes + 1));
-  else if (reason === "traversal") zip.file("../capsule.cjs", "x", { createFolders: false });
-  else zip.file("capsule.cjs", "target", { unixPermissions: 0o120777 });
-  const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", platform: "UNIX" });
+    for (let i = 0; i <= CAPSULE_RELEASE_BUDGET.files; i++) entries[`${i}.cjs`] = "x";
+  } else entries["capsule.cjs"] = reason === "expanded-bytes" ? Buffer.alloc(CAPSULE_RELEASE_BUDGET.expandedBytes + 1) : "target";
+  const bytes = await zipFixture(entries);
+  // Start from a real native archive, then corrupt only the metadata under test.
+  if (reason === "traversal") {
+    for (let offset = bytes.indexOf("capsule.cjs"); offset !== -1; offset = bytes.indexOf("capsule.cjs", offset + 11)) bytes.write("../evil.cjs", offset);
+  } else if (reason === "symlink") {
+    const offset = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    if (offset < 0) throw new Error("fixture central directory missing");
+    bytes.writeUInt16LE(0x0314, offset + 4);
+    bytes.writeUInt32LE((0o120777 * 65536) >>> 0, offset + 38);
+  }
   await expect(verifyCapsuleReleaseBudget(await file(bytes), { sha256: sha(bytes), size: bytes.length, treeSha256: "0".repeat(64) }))
     .rejects.toThrow(reason === "file-count" ? "file count" : reason === "expanded-bytes" ? "expanded bytes" : "payload entry");
 });
 
 it("accepts the exact expanded-byte limit without allocating the expansion in the verifier", async () => {
   const module = Buffer.alloc(CAPSULE_RELEASE_BUDGET.expandedBytes);
-  const zip = new JSZip(); zip.file("capsule.cjs", module);
-  const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const bytes = await zipFixture({ "capsule.cjs": module });
   const result = await verifyCapsuleReleaseBudget(await file(bytes), { sha256: sha(bytes), size: bytes.length,
     treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", size: module.length, sha256: sha(module) }]) });
   expect(result.expandedBytes).toBe(CAPSULE_RELEASE_BUDGET.expandedBytes);

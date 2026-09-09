@@ -14,7 +14,9 @@ export async function absent(path: string) {
   throw new Error("archive destination already exists");
 }
 async function entryBytes(file: string, entry: ArchiveEntry, backend: ArchiveBackend, output: Writable, options: ArchiveOptions) {
-  const args = backend.kind === "7z" ? ["e", "-so", "-spd", "-y", file, "--", entry.path] : ["-p", file, entry.path];
+  // Info-ZIP interprets entry arguments as patterns even without a shell.
+  const literal = entry.path.replace(/[\[\]]/gu, "\\$&");
+  const args = backend.kind === "7z" ? ["e", "-so", "-spd", "-y", file, "--", entry.path] : ["-p", file, literal];
   const child = spawn(backend.executable, args, { env: options.env ?? process.env, stdio: ["ignore", "pipe", "pipe"], signal: options.signal });
   const timer = setTimeout(() => child.kill(), options.timeoutMs ?? 120_000);
   let diagnostic = "";

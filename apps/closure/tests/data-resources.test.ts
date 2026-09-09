@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, utimes, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import JSZip from "jszip";
+import { extract, inspect } from "@open-design/archive";
 import { createHash } from "node:crypto";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { OPEN_DESIGN_DATA_RESOURCE_IDS } from "@open-design/contracts";
@@ -49,15 +49,16 @@ describe("independent Closure data blobs", () => {
     expect(changed.filter((item, index) => item.sha256 !== first[index]!.sha256).map(item => item.id)).toEqual(["design-systems"]);
     expect(first).toHaveLength(9);
     for (const resource of first) {
-      const zip = await JSZip.loadAsync(await readFile(resource.path));
-      const entries = await Promise.all(Object.values(zip.files).map(async file => {
-        const body = await file.async("nodebuffer");
-        return { path: file.name, sha256: createHash("sha256").update(body).digest("hex"), size: body.byteLength };
+      const output = join(input.outputDirectory, "unpacked", resource.id);
+      await extract(resource.path, output);
+      const entries = await Promise.all((await inspect(resource.path)).filter(file => file.kind === "file").map(async file => {
+        const body = await readFile(join(output, file.path));
+        return { path: file.path, sha256: createHash("sha256").update(body).digest("hex"), size: body.byteLength };
       }));
       expect(resource.treeSha256).toBe(standaloneTreeSha256(entries));
     }
-    const plugins = await JSZip.loadAsync(await readFile(first.find(item => item.id === "plugins")!.path));
-    expect(Object.keys(plugins.files).sort()).toEqual(["_official/content.txt", "registry/content.txt", "resource.json"]);
+    const plugins = await inspect(first.find(item => item.id === "plugins")!.path);
+    expect(plugins.filter(file => file.kind === "file").map(file => file.path).sort()).toEqual(["_official/content.txt", "registry/content.txt", "resource.json"]);
     expect(first.every(item => item.entrypoint === "resource.json" && item.sync)).toBe(true);
   });
 

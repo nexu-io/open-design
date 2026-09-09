@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import JSZip from "jszip";
+import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import { contributeBase, restoreBase } from "@/exact/base-cache.ts";
 const roots: string[] = [];
@@ -21,13 +21,13 @@ it.each([false, true])("restores portable base permissions and links, refusing i
   await json(input.buildReceipt, { schemaVersion: 1, operation: node.id, target: node.target, planNode: node, base: { root: base, manifestSha256: sha(manifest) } });
   await json(input.pending, { workloads: { [input.workload]: { run: true, resultHit: false, digest: "b".repeat(64), executionClass: { runnerClass: "mac", labels: ["macos-15"] } } } });
   await contributeBase(input);
-  const zip = new JSZip();
-  for (const name of await readdir(join(input.output, "artifact"))) zip.file(name, await readFile(join(input.output, "artifact", name)));
+  const zip = {} as ZipFixtureEntries;
+  for (const name of await readdir(join(input.output, "artifact"))) zip[name] = await readFile(join(input.output, "artifact", name));
   if (corrupt) {
     const receipt = JSON.parse(await readFile(join(input.output, "artifact/base-build-receipt.json"), "utf8"));
-    receipt.planNode.identity = `sha256:${"c".repeat(64)}`; zip.file("base-build-receipt.json", JSON.stringify(receipt));
+    receipt.planNode.identity = `sha256:${"c".repeat(64)}`; zip["base-build-receipt.json"] = JSON.stringify(receipt);
   }
-  const bytes = await zip.generateAsync({ type: "nodebuffer" });
+  const bytes = await zipFixture(zip);
   await json(input.pending, { workloads: { [input.workload]: { run: false, resultHit: true, result: { products: { base: {
     type: "url", source: "https://cache.example/base.zip", data: { sha256: sha(bytes) },
   } } } } } });

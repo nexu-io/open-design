@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import JSZip from "jszip";
+import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { afterEach, expect, it, vi } from "vitest";
 import { contributeCapsule, restoreCapsule } from "@/exact/capsule-cache.ts";
@@ -17,8 +17,8 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "release-capsule-cache-")); roots.push(root);
   const target = "darwin-arm64", id = "electron.capsule.build", identity = `sha256:${"a".repeat(64)}`;
-  const zip = new JSZip(); zip.file("capsule.cjs", "capsule");
-  const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const zip = {} as ZipFixtureEntries; zip["capsule.cjs"] = "capsule";
+  const bytes = await zipFixture(zip);
   const content = { schemaVersion: 1, protocol: "electron-capsule-v6", target, entrypoint: "capsule.cjs",
     archive: { sha256: digest(bytes), size: bytes.length,
       treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", size: 7, sha256: digest("capsule") }]) } };
@@ -33,12 +33,12 @@ async function fixture() {
     executionClass: { runnerClass: "capsule", labels: ["macos-15"] } } } });
   return { root, input, receipt, bytes };
 }
-async function cache(f: Awaited<ReturnType<typeof fixture>>, mutate?: (zip: JSZip) => void) {
+async function cache(f: Awaited<ReturnType<typeof fixture>>, mutate?: (zip: ZipFixtureEntries) => void) {
   await contributeCapsule(f.input);
-  const zip = new JSZip();
-  for (const name of await readdir(join(f.input.output, "artifact"))) zip.file(name, await readFile(join(f.input.output, "artifact", name)));
+  const zip = {} as ZipFixtureEntries;
+  for (const name of await readdir(join(f.input.output, "artifact"))) zip[name] = await readFile(join(f.input.output, "artifact", name));
   mutate?.(zip);
-  const body = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const body = await zipFixture(zip);
   await json(f.input.pending, { workloads: { [f.input.workload]: { run: false, resultHit: true,
     result: { products: { capsule: { type: "url", source: "https://cache.example/capsule.zip", data: { sha256: digest(body) } } } } } } });
   const fetch = vi.fn(async () => new Response(new Uint8Array(body))); vi.stubGlobal("fetch", fetch);
@@ -66,13 +66,13 @@ it.each(["identity", "target", "extra", "missing", "archive", "descriptor", "ove
     if (fault === "identity") receipt.planNode.identity = `sha256:${"d".repeat(64)}`;
     if (fault === "target") receipt.content.target = "darwin-x64";
     if (fault === "tree") receipt.content.archive.treeSha256 = "d".repeat(64);
-    zip.file("capsule-build-receipt.json", JSON.stringify(fault === "local paths" ? f.receipt : receipt));
-    if (fault === "tree") zip.file("capsule-content.json", JSON.stringify(receipt.content));
-    if (fault === "extra") zip.file("unexpected", "extra");
-    if (fault === "missing") zip.remove("capsule.zip");
-    if (fault === "archive") zip.file("capsule.zip", "tampered");
-    if (fault === "descriptor") zip.file("capsule-content.json", "{}");
-    if (fault === "oversized") zip.file("capsule-build-receipt.json", " ".repeat(65 * 1024));
+    zip["capsule-build-receipt.json"] = JSON.stringify(fault === "local paths" ? f.receipt : receipt);
+    if (fault === "tree") zip["capsule-content.json"] = JSON.stringify(receipt.content);
+    if (fault === "extra") zip["unexpected"] = "extra";
+    if (fault === "missing") delete zip["capsule.zip"];
+    if (fault === "archive") zip["capsule.zip"] = "tampered";
+    if (fault === "descriptor") zip["capsule-content.json"] = "{}";
+    if (fault === "oversized") zip["capsule-build-receipt.json"] = " ".repeat(65 * 1024);
   });
   await expect(restoreCapsule(hit.restore)).rejects.toThrow();
   expect((await readdir(f.root)).filter(name => name === "restored" || name.startsWith(".product-transport-"))).toEqual([]);

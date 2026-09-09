@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { lstat, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import JSZip from "jszip";
+import { extract, inspect, type ArchiveEntry } from "@open-design/archive";
 import { readObject, type JsonObject } from "./control-common.ts";
 
 const MAX_BYTES = 2 * 1024 ** 3; // Existing convergence transport bound.
+type ProductTree = Readonly<{ root: string; entries: readonly ArchiveEntry[] }>;
 
 export async function assertConvergedProductAbsent(path: string) {
   try { await lstat(path); }
@@ -30,9 +31,10 @@ export async function stageConvergedProduct(output: string, prepare: (stage: str
   } finally { await rm(scratch, { recursive: true, force: true }); }
 }
 
-/** Read only a planner-authorized immutable product. No cache publication,
- * fallback hit inference or product-specific extraction policy lives here. */
-export async function readConvergedProduct(input: Readonly<{ pending: string; workload: string; product: string }>) {
+/** Open a planner-authorized immutable product with `await using`. Its private
+ * tree lives through consumer validation and is always disposed afterward.
+ * No cache publication or fallback hit inference lives here. */
+export async function openConvergedProduct(input: Readonly<{ pending: string; workload: string; product: string }>) {
   const workload = (await readObject(input.pending)).workloads?.[input.workload];
   const product = workload?.result?.products?.[input.product];
   if (workload?.resultHit !== true || workload.run !== false || product?.type !== "url"
@@ -60,20 +62,25 @@ export async function readConvergedProduct(input: Readonly<{ pending: string; wo
     }
     await pipeline(Readable.from(chunks()), createWriteStream(downloaded, { flags: "wx" }));
     if (hash.digest("hex") !== product.data.sha256) throw new Error(`${input.product} cache digest mismatch`);
-    return { archive: await JSZip.loadAsync(await readFile(downloaded)), cache: { url: url.href, sha256: product.data.sha256, size } };
-  } finally { await rm(scratch, { recursive: true, force: true }); }
+    const options = { maxEntries: 10_000, maxExpandedBytes: MAX_BYTES, permissions: "portable" as const };
+    const entries = await inspect(downloaded, options), root = join(scratch, "content");
+    await extract(downloaded, root, options);
+    await rm(downloaded);
+    return { archive: { root, entries } satisfies ProductTree, cache: { url: url.href, sha256: product.data.sha256, size },
+      [Symbol.asyncDispose]: async () => { await rm(scratch, { recursive: true, force: true }); } };
+  } catch (error) { await rm(scratch, { recursive: true, force: true }); throw error; }
 }
 
 /** Write an explicitly selected opaque entry, never extract archive paths. */
-export async function writeConvergedEntry(archive: JSZip, name: string, destination: string, maxBytes = MAX_BYTES) {
-  const entry = archive.files[name];
-  if (entry == null || entry.dir || entry.unsafeOriginalName !== name) throw new Error(`invalid convergence payload: ${name}`);
+export async function writeConvergedEntry(archive: ProductTree, name: string, destination: string, maxBytes = MAX_BYTES) {
+  const entry = archive.entries.find(entry => entry.path === name);
+  if (entry == null || entry.kind !== "file") throw new Error(`invalid convergence payload: ${name}`);
   let expanded = 0;
   const limit = new Transform({ transform(chunk: Buffer, _encoding, callback) {
     expanded += chunk.length;
     callback(expanded > Math.min(maxBytes, MAX_BYTES) ? new Error("convergence payload expands beyond transport bound") : null, chunk);
   } });
-  await pipeline(entry.nodeStream(), limit, createWriteStream(destination, { flags: "wx" }));
+  await pipeline(createReadStream(join(archive.root, name)), limit, createWriteStream(destination, { flags: "wx" }));
 }
 
 /** Build an untrusted candidate using the existing planner identity. The caller

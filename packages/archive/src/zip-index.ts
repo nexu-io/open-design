@@ -2,7 +2,7 @@ import { open, type FileHandle } from "node:fs/promises";
 import { posix } from "node:path";
 import type { ArchiveEntry, ArchiveOptions } from "./contracts.js";
 export function safePath(path: string) {
-  if (!path || /[\\\\:\x00-\x1f\x7f*?\[\]]/u.test(path) || path.startsWith("/")
+  if (!path || /[\\\\:\x00-\x1f\x7f*?]/u.test(path) || path.startsWith("/")
     || path.split("/").some(part => !part || part === "." || part === ".."
       || /[. ]$/u.test(part) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(part))) throw new Error("unsafe or unsupported archive path");
 }

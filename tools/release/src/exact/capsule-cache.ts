@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { validateElectronCapsuleContent } from "@open-design/shell-electron/build/contracts";
 import { canonicalBytes, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { CAPSULE_RELEASE_BUDGET, verifyCapsuleReleaseBudget } from "./capsule-budget.ts";
-import { assertConvergedProductAbsent, convergenceProductCandidate, readConvergedProduct, stageConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
+import { assertConvergedProductAbsent, convergenceProductCandidate, openConvergedProduct, stageConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
 
 type Input = Readonly<{ plan: string; pending: string; workload: string; output: string }>;
 const RECEIPT = "capsule-build-receipt.json";
@@ -50,9 +50,10 @@ export async function contributeCapsule(input: Input & Readonly<{ buildReceipt: 
 export async function restoreCapsule(input: Input) {
   const expected = await binding(input), output = resolve(input.output);
   await assertConvergedProductAbsent(output);
-  const { archive, cache } = await readConvergedProduct({ ...input, product: "capsule" });
+  await using product = await openConvergedProduct({ ...input, product: "capsule" });
+  const { archive, cache } = product;
   await stageConvergedProduct(output, async stage => {
-    if (Object.keys(archive.files).sort().join(",") !== [RECEIPT, CONTENT, ARCHIVE].sort().join(",")) throw new Error("Capsule cache contains unexpected payloads");
+    if (archive.entries.map(entry => entry.path).sort().join(",") !== [RECEIPT, CONTENT, ARCHIVE].sort().join(",")) throw new Error("Capsule cache contains unexpected payloads");
     await writeConvergedEntry(archive, RECEIPT, join(stage, RECEIPT), 64 * 1024);
     const receipt = await readObject(join(stage, RECEIPT)), content = boundCapsule(receipt, expected);
     if (Object.keys(receipt).sort().join(",") !== "content,operation,planNode,schemaVersion") throw new Error("Capsule cache receipt is not portable");

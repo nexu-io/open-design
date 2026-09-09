@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { build } from "esbuild";
-import JSZip from "jszip";
+import { pack } from "@open-design/archive/build";
 import { closureNodeExternals } from "./node-externals.js";
 import { closureRuntimeDependencies as runtimeDependencies } from "./runtime-dependencies.js";
 
@@ -41,7 +41,9 @@ async function inventory(root: string, current = root): Promise<TreeEntry[]> {
     // Distribution resources are executable closure inputs, not debugging
     // archives. Source maps stay in CI/build outputs and never enter the exact
     // resource tree or its identity.
-    if (entry.isFile() && entry.name.endsWith(".map")) continue;
+    // This root is the producer-owned staging tree, never a workspace source.
+    // Remove excluded maps before native packing so bytes and inventory agree.
+    if (entry.isFile() && entry.name.endsWith(".map")) { await rm(path); continue; }
     if (entry.isSymbolicLink()) throw new Error(`Closure resource contains a symbolic link after normalization: ${path}`);
     if (entry.isDirectory()) entries.push(...await inventory(root, path));
     else if (entry.isFile()) {
@@ -76,14 +78,10 @@ async function copyTreeDereferenced(source: string, destination: string): Promis
 
 async function archive(root: string, outputPath: string): Promise<{ sha256: string; size: number; treeSha256: string }> {
   const entries = await inventory(root);
-  const zip = new JSZip();
-  for (const entry of entries) zip.file(entry.path, await readFile(join(root, entry.path)), { createFolders: true });
-  const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 }, platform: "UNIX" });
-  await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, bytes);
+  const packed = await pack(root, outputPath, { reproducible: true, permissions: "portable" });
   return Object.freeze({
-    sha256: createHash("sha256").update(bytes).digest("hex"),
-    size: bytes.byteLength,
+    sha256: packed.sha256,
+    size: packed.size,
     treeSha256: standaloneTreeSha256(entries),
   });
 }

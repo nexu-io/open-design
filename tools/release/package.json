@@ -21,7 +21,6 @@
     "@open-design/standalone": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
     "cac": "6.7.14",
-    "jszip": "3.10.1",
     "sharp": "0.35.3",
     "tar": "7.5.22",
     "yaml": "2.9.0"

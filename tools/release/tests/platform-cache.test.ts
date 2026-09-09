@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import JSZip from "jszip";
+import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import { contributePlatform, restorePlatform } from "@/exact/platform-cache.ts";
 import { preparePlatformProduct } from "@/exact/platform-product.ts";
@@ -30,12 +30,12 @@ async function fixture() {
     executionClass: { runnerClass: "platform", labels: ["macos-15"] } } } });
   return { root, input, receipt };
 }
-async function cache(f: Awaited<ReturnType<typeof fixture>>, mutate?: (zip: JSZip) => void) {
+async function cache(f: Awaited<ReturnType<typeof fixture>>, mutate?: (zip: ZipFixtureEntries) => void) {
   await contributePlatform(f.input);
-  const zip = new JSZip();
-  for (const name of await readdir(join(f.input.output, "artifact"))) zip.file(name, await readFile(join(f.input.output, "artifact", name)));
+  const zip = {} as ZipFixtureEntries;
+  for (const name of await readdir(join(f.input.output, "artifact"))) zip[name] = await readFile(join(f.input.output, "artifact", name));
   mutate?.(zip);
-  const body = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const body = await zipFixture(zip);
   await json(f.input.pending, { workloads: { [f.input.workload]: { run: false, resultHit: true,
     result: { products: { platform: { type: "url", source: "https://cache.example/platform.zip", data: { sha256: digest(body) } } } } } } });
   const fetch = vi.fn(async () => new Response(new Uint8Array(body))); vi.stubGlobal("fetch", fetch);
@@ -71,12 +71,12 @@ it.each(["identity", "target", "extra", "missing", "archive", "descriptor", "ove
     const cached = fault === "local paths" ? f.receipt : fault === "release source" ? { ...receipt,
       resource: { ...receipt.resource, blob: { ...receipt.resource.blob,
         sources: [{ kind: "remote", url: "https://release.example/platform.zip" }] } } } : receipt;
-    zip.file("platform-build-receipt.json", JSON.stringify(cached));
-    if (fault === "extra") zip.file("unexpected", "extra");
-    if (fault === "missing") zip.remove("platform.zip");
-    if (fault === "archive") zip.file("platform.zip", "tampered");
-    if (fault === "descriptor") zip.file("platform-resource.json", "{}");
-    if (fault === "oversized") zip.file("platform-build-receipt.json", " ".repeat(65 * 1024));
+    zip["platform-build-receipt.json"] = JSON.stringify(cached);
+    if (fault === "extra") zip["unexpected"] = "extra";
+    if (fault === "missing") delete zip["platform.zip"];
+    if (fault === "archive") zip["platform.zip"] = "tampered";
+    if (fault === "descriptor") zip["platform-resource.json"] = "{}";
+    if (fault === "oversized") zip["platform-build-receipt.json"] = " ".repeat(65 * 1024);
   });
   await expect(restorePlatform(hit.restore)).rejects.toThrow();
   expect((await readdir(f.root)).filter(name => name === "restored" || name.startsWith(".product-transport-"))).toEqual([]);

@@ -11,11 +11,14 @@ it("fails explicit configuration without falling back to PATH", async () => {
 });
 it.skipIf(process.platform === "win32")("round-trips native ZIP bytes, modes and internal links", async () => {
   const { root, source } = await fixture(); await symlink("valid", join(source, "link"));
+  await mkdir(join(source, "[id]"));
+  await writeFile(join(source, "[id]", "page.js"), "route");
   const archive = await pack(source, join(root, "base.zip"), { tool: { kind: "zip", executable: "zip" }, allowInternalLinks: true });
   await expect(inspect(archive.file)).rejects.toThrow("policy");
   const options = { tool: { kind: "unzip" as const, executable: "unzip" }, allowInternalLinks: true };
   await extract(archive.file, join(root, "restored"), options);
   expect(await readFile(join(root, "restored/link"), "utf8")).toBe("native");
+  expect(await readFile(join(root, "restored/[id]/page.js"), "utf8")).toBe("route");
   expect(await readlink(join(root, "restored/link"))).toBe("valid");
   expect((await stat(join(root, "restored/valid"))).mode & 0o777).toBe(0o755);
   await extract(archive.file, join(root, "portable"), { ...options, permissions: "portable" });

@@ -2,7 +2,7 @@ import { copyFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { validateNodePlatformResource } from "@open-design/standalone/packages";
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { assertConvergedProductAbsent, convergenceProductCandidate, readConvergedProduct, stageConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
+import { assertConvergedProductAbsent, convergenceProductCandidate, openConvergedProduct, stageConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
 
 type Input = Readonly<{ plan: string; pending: string; workload: string; output: string }>;
 const RECEIPT = "platform-build-receipt.json";
@@ -50,9 +50,10 @@ export async function contributePlatform(input: Input & Readonly<{ buildReceipt:
 export async function restorePlatform(input: Input) {
   const expected = await binding(input), output = resolve(input.output);
   await assertConvergedProductAbsent(output);
-  const { archive, cache } = await readConvergedProduct({ ...input, product: "platform" });
+  await using product = await openConvergedProduct({ ...input, product: "platform" });
+  const { archive, cache } = product;
   await stageConvergedProduct(output, async stage => {
-    if (Object.keys(archive.files).sort().join(",") !== [RECEIPT, RESOURCE, ARCHIVE].sort().join(",")) throw new Error("platform cache contains unexpected payloads");
+    if (archive.entries.map(entry => entry.path).sort().join(",") !== [RECEIPT, RESOURCE, ARCHIVE].sort().join(",")) throw new Error("platform cache contains unexpected payloads");
     await writeConvergedEntry(archive, RECEIPT, join(stage, RECEIPT), 64 * 1024);
     const receipt = await readObject(join(stage, RECEIPT)), resource = boundPlatform(receipt, expected);
     if (Object.keys(receipt).sort().join(",") !== "operation,planNode,resource,schemaVersion,target") throw new Error("platform cache receipt is not portable");

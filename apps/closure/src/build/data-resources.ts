@@ -1,7 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
-import { link, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
-import JSZip from "jszip";
+import { createHash } from "node:crypto";
+import { link, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
+import { pack } from "@open-design/archive/build";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { CLOSURE_DATA_RESOURCES, type ClosureDataResourceId } from "../data-resources.js";
 export { CLOSURE_DATA_RESOURCES } from "../data-resources.js";
@@ -44,23 +44,26 @@ async function buildResource(input: Readonly<{
     await visit(source, item.prefix);
   }
   entries.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-  const zip = new JSZip();
-  for (const entry of entries) zip.file(entry.path, entry.body, { createFolders: false, date: new Date("1980-01-01T00:00:00Z"), unixPermissions: 0o100644 });
-  const body = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 }, platform: "UNIX" });
-  const digest = sha256(body), file = `${input.resource.id}-${digest}.zip`, path = join(input.outputDirectory, file);
   await mkdir(input.outputDirectory, { recursive: true });
-  const temporary = join(input.outputDirectory, `.resource-${randomUUID()}.tmp`);
+  const temporary = await mkdtemp(join(input.outputDirectory, ".resource-"));
   try {
-    await writeFile(temporary, body, { flag: "wx" });
-    try { await link(temporary, path); }
+    const source = join(temporary, "source"); await mkdir(source);
+    for (const entry of entries) {
+      const target = join(source, entry.path);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, entry.body, { flag: "wx" });
+    }
+    const archive = await pack(source, join(temporary, "content.zip"), { reproducible: true, permissions: "portable" });
+    const digest = archive.sha256, file = `${input.resource.id}-${digest}.zip`, path = join(input.outputDirectory, file);
+    try { await link(archive.file, path); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const existing = await lstat(path);
-      if (!existing.isFile() || existing.isSymbolicLink() || !(await readFile(path)).equals(body)) throw new Error(`immutable resource collision: ${path}`);
+      if (!existing.isFile() || existing.isSymbolicLink() || existing.size !== archive.size || sha256(await readFile(path)) !== digest) throw new Error(`immutable resource collision: ${path}`);
     }
-  } finally { await rm(temporary, { force: true }); }
-  const treeSha256 = standaloneTreeSha256(entries.map(({ path, sha256, size }) => ({ path, sha256, size })));
-  return Object.freeze({ id: input.resource.id, file, path, sha256: digest, size: body.byteLength, treeSha256, entrypoint: "resource.json", sync: true });
+    const treeSha256 = standaloneTreeSha256(entries.map(({ path, sha256, size }) => ({ path, sha256, size })));
+    return Object.freeze({ id: input.resource.id, file, path, sha256: digest, size: archive.size, treeSha256, entrypoint: "resource.json", sync: true });
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 }
 
 /** Build inputs only; signing, cache selection, preparation and activation remain
