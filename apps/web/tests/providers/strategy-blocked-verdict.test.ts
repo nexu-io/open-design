@@ -69,15 +69,22 @@ function blockedEndFrame(input: {
   })}\n\n`;
 }
 
+/** An assistant text delta, so a turn under test can have actually replied. */
+function textFrame(text: string): string {
+  return `event: agent\ndata: ${JSON.stringify({ type: 'text_delta', delta: text })}\n\n`;
+}
+
 async function streamBlockedTurn(
   frame: string,
   runStatus: Record<string, unknown> = { deliverableValid: false },
+  reply = '已完成。交付物在项目根目录。',
 ) {
   const h = handlers();
+  const stream = reply ? `${textFrame(reply)}${frame}` : frame;
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-    if (url === '/api/runs/run-1/events') return sseResponse(frame);
+    if (url === '/api/runs/run-1/events') return sseResponse(stream);
     if (url === '/api/runs/run-1') return jsonResponse(runStatus);
     throw new Error(`unexpected fetch ${url}`);
   }));
@@ -182,6 +189,38 @@ describe('a blocked turn the user still has the deliverable for', () => {
         reasonCodes: ['od_next_protocol_runtime_state_missing'],
       }),
       { deliverableValid: true },
+    );
+
+    expect(h.onError).not.toHaveBeenCalled();
+  });
+
+  it('still fails when the turn produced no reply at all', async () => {
+    // The false-success half of the same conflation (#7564): a blank OD Next
+    // response into a project that already holds a prototype. The earlier
+    // turn's file is real, but the user asked for something and got a newline —
+    // going silent there would swap one wrong answer for the other.
+    const h = await streamBlockedTurn(
+      blockedEndFrame({
+        inputStage: 'request',
+        reasonCodes: ['od_next_protocol_runtime_state_missing'],
+      }),
+      { deliverableValid: false, projectDeliverableValid: true },
+      '\n',
+    );
+
+    expect(h.onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps crediting a run that wrote the entry even with no prose', async () => {
+    // The stricter field is unchanged: an artifact this run produced is
+    // delivery whether or not the agent narrated it.
+    const h = await streamBlockedTurn(
+      blockedEndFrame({
+        inputStage: 'request',
+        reasonCodes: ['od_next_protocol_runtime_state_missing'],
+      }),
+      { deliverableValid: true },
+      '',
     );
 
     expect(h.onError).not.toHaveBeenCalled();

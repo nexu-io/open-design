@@ -2216,12 +2216,25 @@ async function consumeDaemonPhysicalRun({
         // a finished 16-page deck the user could see rendered beside it. The
         // OR keeps the stricter field meaningful on its own — a run that did
         // deliver has obviously delivered.
+        //
+        // The looser field additionally requires that this turn actually SAID
+        // something. It credits a file an EARLIER turn wrote, and that only
+        // means "nothing was lost here" if the user got a reply to go with it.
+        // Without the guard, a turn that returned a bare newline into a project
+        // that already holds a prototype would go silent too — which is the
+        // false-success half of this same conflation (#7564), and swapping one
+        // wrong answer for the other is not a fix. The stricter field keeps its
+        // existing behaviour: a run that wrote the entry delivered, prose or no
+        // prose.
         const blockedRunStatus = endStatus === 'succeeded'
           ? await fetchChatRunStatus(runId, workspaceContext)
           : null;
         const deliveredDespiteBlock = blockedRunStatus !== null
-          && (blockedRunStatus.projectDeliverableValid === true
-            || blockedRunStatus.deliverableValid === true);
+          && (
+            (blockedRunStatus.projectDeliverableValid === true
+              && acc.trim().length > 0)
+            || blockedRunStatus.deliverableValid === true
+          );
         // A block the agent declared on itself is not a failure to report.
         // Asked for a prototype with nothing to build on, the agent answers in
         // the chat — "the requirement was skipped, so there is no runnable plan
