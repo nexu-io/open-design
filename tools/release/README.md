@@ -125,6 +125,22 @@ command succeeds. It refuses unsupported/unselected nodes, stale source plans,
 existing result files and mismatched native execution platforms. The pure
 contract tests may run on another platform; the receipt records that platform.
 These are local execution receipts, not self-authorized convergence cache hits.
+
+Coverage defaults to `architecture`. For `closure.test`, this runs Closure's
+package/resource tests plus focused daemon resource/startup/status and Web
+proxy/shutdown contracts. It does **not** run daemon or Web business aggregates.
+The recipe is owned by tools-release; release-exact explicitly selects this
+coverage and retains real installed/hot-update acceptance separately.
+
+Only a broad business change, insufficient focused evidence, or an explicitly
+required stage warrants `validate closure.test --coverage business --reason
+"<risk requiring full business validation>"`. This runs the full Closure,
+daemon and Web suites. Its `exact.business-validation` receipt records the
+reason, coverage, a distinct identity and underlying `planIdentity`; it is not
+an architecture-node cache result. Recipe changes invalidate prior identities.
+Do not rerun business aggregates merely because orchestration moved to another
+stage, or reinterpret a historical full-suite receipt as proof of new sources.
+
 `baseline stage --validation <receipt>` requires current successful native Shell
 test evidence even when a supplied plan claims that testing was already cached.
 A pending test action can be satisfied without rebuilding the physical carrier;

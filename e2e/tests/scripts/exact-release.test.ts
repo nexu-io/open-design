@@ -68,6 +68,8 @@ describe("exact Electron release topology", () => {
     expect(validation).toContain("needs: [plan]");
     expect(validation).toContain("matrix: ${{ fromJSON(needs.plan.outputs.validation_matrix) }}");
     expect(validation).not.toContain("needs.plan.outputs.run");
+    expect(validation).toContain('validate closure.test --coverage architecture');
+    expect(validation).not.toContain('--coverage business');
     expect(validation).not.toContain("scene-artifact");
     expect(scene).not.toContain('exact-release-control.mjs" validate');
     expect(scene).not.toContain("matrix.shell == 'electron' ||");

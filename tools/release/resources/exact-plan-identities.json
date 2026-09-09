@@ -108,6 +108,7 @@
         "apps/web/tsconfig.json",
         "apps/web/tsconfig.sidecar.json",
         "apps/web/src",
+        "apps/web/sidecar",
         "apps/web/app",
         "packages/agui-adapter/package.json",
         "packages/agui-adapter/src",

@@ -3,9 +3,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createExactPlanFromRegistryFile } from "../src/exact/plan.ts";
-import { validateExactPlanNode } from "../src/exact/validation.ts";
+import { resolveExactValidationRecipe, validateExactPlanNode } from "../src/exact/validation.ts";
 
 const roots: string[] = [];
+it("defaults Closure validation to architecture boundaries, not business aggregates", () => {
+  const recipe = resolveExactValidationRecipe("closure.test");
+  expect(recipe.coverage).toBe("architecture");
+  expect(recipe.commands.find(command => command.directory === "apps/closure")?.args).toEqual(["test"]);
+  for (const directory of ["apps/daemon", "apps/web"]) {
+    const command = recipe.commands.find(command => command.directory === directory)!;
+    expect(command.args.slice(0, 3)).toEqual(["exec", "vitest", "run"]);
+    expect(command.args.some(arg => arg.startsWith("tests/") && arg.endsWith(".test.ts"))).toBe(true);
+    expect(command.args).not.toEqual(["test"]);
+  }
+});
+
+it("requires an explicit reason for business coverage and rejects unsupported combinations", () => {
+  expect(() => resolveExactValidationRecipe("closure.test", "business")).toThrow("reason");
+  expect(() => resolveExactValidationRecipe("closure.test", "business", " ")).toThrow("reason");
+  expect(() => resolveExactValidationRecipe("electron.shell.test", "business", "risk")).toThrow("only Closure");
+  expect(() => resolveExactValidationRecipe("closure.test", "unknown", "risk")).toThrow("coverage");
+  const recipe = resolveExactValidationRecipe("closure.test", "business", "broad business change");
+  expect(recipe.commands.map(command => command.directory)).toEqual(["apps/closure", "apps/daemon", "apps/web"]);
+  expect(recipe.commands.every(command => JSON.stringify(command.args) === '["test"]')).toBe(true);
+});
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(script = 'node -e "console.log(\'executed contract test\')"') {
   const root = await mkdtemp(join(tmpdir(), "release-validation-")); roots.push(root);
@@ -34,6 +55,22 @@ it("executes the selected recipe and emits only its successful identity", async 
   const original = await readFile(input.receipt);
   await expect(validateExactPlanNode(input)).rejects.toThrow("receipt already exists");
   expect(await readFile(input.receipt)).toEqual(original);
+});
+
+it.runIf(process.platform === "darwin" && process.arch === "arm64")("keeps business receipts distinct using tiny fixture packages, never real business suites", async () => {
+  const input = await fixture();
+  const plan = JSON.parse(await readFile(input.plan, "utf8"));
+  plan.actions = [{ id: "closure.test" }];
+  await writeFile(input.plan, JSON.stringify(plan));
+  for (const directory of ["apps/closure", "apps/daemon", "apps/web"]) {
+    await mkdir(join(input.root, directory), { recursive: true });
+    await writeFile(join(input.root, directory, "package.json"), JSON.stringify({ name: "fixture", scripts: { test: 'node -e "console.log(\'fixture only\')"' } }));
+  }
+  const result = await validateExactPlanNode({ ...input, node: "closure.test", coverage: "business", reason: "fixture verifies explicit aggregate dispatch" });
+  expect(result).toMatchObject({ operation: "exact.business-validation", coverage: "business", planIdentity: plan.plan.nodes["closure.test"].identity,
+    reason: "fixture verifies explicit aggregate dispatch" });
+  expect(result.identity).not.toBe(result.planIdentity);
+  expect(result.commands).toHaveLength(3);
 });
 
 it("rejects unknown, unselected or stale plans before running commands", async () => {

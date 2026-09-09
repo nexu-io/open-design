@@ -233,7 +233,7 @@ jobs:
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.shell.test \
             --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
             --log "$RUNNER_TEMP/exact-validation/shell.log" --receipt "$RUNNER_TEMP/exact-validation/shell.json"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate closure.test \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate closure.test --coverage architecture \
             --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
             --log "$RUNNER_TEMP/exact-validation/closure.log" --receipt "$RUNNER_TEMP/exact-validation/closure.json"
 
