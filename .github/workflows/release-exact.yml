@@ -21,35 +21,6 @@ on:
         required: true
         default: 0.1.0
         type: string
-  workflow_call:
-    inputs:
-      source_sha:
-        required: true
-        type: string
-      source_ref:
-        required: true
-        type: string
-      profile:
-        required: true
-        type: string
-      channel:
-        required: true
-        type: string
-      release_version:
-        required: true
-        type: string
-      standalone_version:
-        required: true
-        type: string
-      release_environment:
-        required: true
-        type: string
-      end_user_distribution:
-        required: true
-        type: boolean
-      stable_authorized:
-        required: true
-        type: boolean
 
 permissions:
   actions: read
@@ -74,7 +45,7 @@ jobs:
       - name: Validate immutable inputs
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
-          SOURCE_REF: ${{ inputs.source_ref || github.ref }}
+          SOURCE_REF: ${{ github.ref }}
           CHANNEL: ${{ inputs.channel }}
           RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
@@ -90,7 +61,7 @@ jobs:
       - name: Verify checkout identity
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
-          SOURCE_REF: ${{ inputs.source_ref || github.ref }}
+          SOURCE_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
@@ -122,15 +93,15 @@ jobs:
       - name: Resolve tools-release validation profile
         env:
           CHANNEL: ${{ inputs.channel }}
-          END_USER_DISTRIBUTION: ${{ inputs.end_user_distribution || false }}
-          PROFILE: ${{ inputs.profile || 'exact-validation' }}
+          END_USER_DISTRIBUTION: "false"
+          PROFILE: exact-validation
           PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
           RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_SHA: ${{ inputs.source_sha }}
-          SOURCE_REF: ${{ inputs.source_ref || github.ref }}
+          SOURCE_REF: ${{ github.ref }}
           STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
           STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
-          STABLE_AUTHORIZED: ${{ inputs.stable_authorized || false }}
+          STABLE_AUTHORIZED: "false"
         run: |
           set -euo pipefail
           node tools/release/dist/exact-control.mjs policy resolve \
@@ -166,7 +137,7 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
         run: |
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" topology \
-            --declaration .github/config/exact-topology.json --plans "$RUNNER_TEMP/exact-plan" \
+            --declaration .github/config/plan/release-exact-topology.json --plans "$RUNNER_TEMP/exact-plan" \
             --output "$RUNNER_TEMP/exact-plan" --github-output "$GITHUB_OUTPUT"
 
       - name: Resolve reusable scene results
@@ -177,7 +148,7 @@ jobs:
           set -euo pipefail
           RUNNER_PLAN=$(cat "$RUNNER_TEMP/exact-plan/runners.json")
           python3 .github/scripts/convergence.py \
-            --config .github/config/convergence-exact.json \
+            --config .github/config/plan/release-exact.json \
             github-output \
             --workflow release-exact \
             --scope-plan "$RUNNER_TEMP/exact-plan/scope.json" \
@@ -713,7 +684,7 @@ jobs:
     name: Prepare signed exact content
     needs: [plan, scene, platform, capsule, data, validation]
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.release_environment || 'standalone-exact-release' }}
+    environment: standalone-exact-release
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.2
@@ -893,7 +864,7 @@ jobs:
     name: Finalize and publish exact channel
     needs: [plan, distribution]
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.release_environment || 'standalone-exact-release' }}
+    environment: standalone-exact-release
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6.0.2
@@ -980,12 +951,12 @@ jobs:
         continue-on-error: true
         run: >-
           python3 .github/scripts/convergence.py
-          --config .github/config/convergence-exact.json
+          --config .github/config/plan/release-exact.json
           handoff
           --pending "$RUNNER_TEMP/exact-plan/pending.json"
           --products-root "$RUNNER_TEMP/convergence-products"
           --handoff-root "$RUNNER_TEMP/handoff-convergence-exact-scenes"
-          --id exact-scenes
+          --id release-exact-results
 
       - name: Upload reusable scene handoff
         if: ${{ steps.convergence_handoff.outputs.name != '' }}
@@ -1218,7 +1189,7 @@ jobs:
     name: Activate accepted exact channel
     needs: [acceptance]
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.release_environment || 'standalone-exact-release' }}
+    environment: standalone-exact-release
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.2

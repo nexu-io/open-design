@@ -1,11 +1,11 @@
 name: convergence.atom
 
 # Atomic capability: publish immutable reusable workload results only after a
-# successful ci run. All validation and R2 writes execute trusted default-branch
+# successful admitted run. All validation and R2 writes execute trusted default-branch
 # Python; pull-request code is treated solely as data.
 on:
   workflow_run:
-    workflows: [ci]
+    workflows: [ci, release-exact, release-prerelease, release-stable]
     types: [completed]
 
 permissions:
@@ -22,12 +22,13 @@ jobs:
     if: >-
       ${{
         github.repository == 'nexu-io/open-design'
-        && github.event.workflow_run.name == 'ci'
         && github.event.workflow_run.conclusion == 'success'
         && github.event.workflow_run.head_repository.full_name == github.repository
         && (
-          github.event.workflow_run.event == 'pull_request'
-          || github.event.workflow_run.event == 'merge_group'
+          (github.event.workflow_run.name == 'ci'
+            && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'merge_group'))
+          || (contains(fromJSON('["release-exact","release-prerelease","release-stable"]'), github.event.workflow_run.name)
+            && github.event.workflow_run.event == 'workflow_dispatch')
         )
       }}
     runs-on: ubuntu-24.04
@@ -41,16 +42,36 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
 
+      - name: Select the producing workflow contract
+        env:
+          PRODUCER_WORKFLOW: ${{ github.event.workflow_run.name }}
+        run: |
+          set -euo pipefail
+          case "$PRODUCER_WORKFLOW" in
+            ci)
+              config=.github/config/convergence.json
+              handoff_id=ci-results
+              ;;
+            release-exact|release-prerelease|release-stable)
+              config=".github/config/plan/$PRODUCER_WORKFLOW.json"
+              handoff_id="$PRODUCER_WORKFLOW-results"
+              ;;
+            *) exit 1 ;;
+          esac
+          test -f "$config"
+          echo "CONVERGENCE_CONFIG=$config" >> "$GITHUB_ENV"
+          echo "CONVERGENCE_HANDOFF_ID=$handoff_id" >> "$GITHUB_ENV"
+
       - name: Check trusted convergence contracts
         run: |
           python3 .github/scripts/handoff.py self-check
-          python3 .github/scripts/convergence.py validate
+          python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" validate
 
       - name: Resolve convergence handoff
         id: artifact
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/handoff.py resolve-run-artifact convergence ci-results
+        run: python3 .github/scripts/handoff.py resolve-run-artifact convergence "$CONVERGENCE_HANDOFF_ID"
 
       - name: Download convergence handoff
         if: ${{ steps.artifact.outputs.found == 'true' }}
@@ -65,7 +86,7 @@ jobs:
         if: ${{ steps.artifact.outputs.found == 'true' }}
         id: trust
         run: >-
-          python3 .github/scripts/convergence.py admit
+          python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" admit
           --handoff-root "$RUNNER_TEMP/handoff-convergence"
 
       - name: Resolve publication configuration
@@ -77,14 +98,14 @@ jobs:
           OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
           CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
           CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
-        run: python3 .github/scripts/convergence.py storage-status
+        run: python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" storage-status
 
       - name: Download current-run product artifacts
         if: ${{ steps.storage.outputs.configured == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python3 .github/scripts/convergence.py stage-products
+          python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" stage-products
           --candidate "${{ steps.trust.outputs.candidate }}"
           --output-dir "$RUNNER_TEMP/convergence-products"
 
@@ -97,7 +118,7 @@ jobs:
           CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
           CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
         run: >-
-          python3 .github/scripts/convergence.py publish
+          python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" publish
           --candidate "${{ steps.trust.outputs.candidate }}"
           --output-dir "$RUNNER_TEMP/convergence-publication"
           --products-root "$RUNNER_TEMP/convergence-products"

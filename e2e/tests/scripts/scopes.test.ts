@@ -120,7 +120,6 @@ describe("workflow scope planner", () => {
       "shells/terminal/src/cli.ts",
       "tools/release/src/exact/control-cli.ts",
       "tools/release/src/exact/control-release.ts",
-      ".github/workflows/convergence-exact.atom.yml",
       ".github/workflows/release-exact.yml",
     ]) {
       const prPlan = plan("pr", [file]);

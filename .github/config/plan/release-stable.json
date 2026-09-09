@@ -4,17 +4,15 @@
   },
   "suites": {
     "convergence-control": [
-      ".github/config/convergence-exact.json",
-      ".github/config/exact-topology.json",
+      ".github/config/plan/release-stable.json",
+      ".github/config/plan/release-stable-topology.json",
+      ".github/workflows/release-stable.yml",
+      ".github/workflows/convergence.atom.yml",
       ".github/scripts/convergence.py",
       ".github/scripts/handoff.py",
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",
-      ".github/workflows/convergence-exact.atom.yml",
-      ".github/workflows/release-exact.yml",
-      ".github/workflows/release-prerelease.yml",
-      ".github/workflows/release-stable.yml",
       "tools/release/resources/exact-plan-identities.json",
       "tools/release/src/exact/plan.ts",
       "packages/metatool/",
@@ -168,17 +166,21 @@
     ]
   },
   "workflows": {
-    "release-exact": {
+    "release-stable": {
       "policy": "shell-scenes-v3",
       "workloads": {
         "electron_base_darwin_arm64": {
-          "inputs": ["suite://electron-base"],
+          "inputs": [
+            "suite://electron-base"
+          ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
           "reusable": true
         },
         "electron_base_win32_x64": {
-          "inputs": ["suite://electron-base"],
+          "inputs": [
+            "suite://electron-base"
+          ],
           "runnerClass": "electron_win32_x64",
           "products": "manifest",
           "reusable": false

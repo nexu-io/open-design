@@ -1,0 +1,319 @@
+{
+  "schema": {
+    "version": 1
+  },
+  "suites": {
+    "convergence-control": [
+      ".github/config/plan/release-exact.json",
+      ".github/config/plan/release-exact-topology.json",
+      ".github/workflows/release-exact.yml",
+      ".github/workflows/convergence.atom.yml",
+      ".github/scripts/convergence.py",
+      ".github/scripts/handoff.py",
+      ".github/scripts/lib/config.py",
+      ".github/scripts/lib/github.py",
+      ".github/scripts/lib/r2.py",
+      "tools/release/resources/exact-plan-identities.json",
+      "tools/release/src/exact/plan.ts",
+      "packages/metatool/",
+      "packages/archive/package.json",
+      "packages/archive/tsconfig.json",
+      "packages/archive/src/",
+      "tools/release/src/exact/scene-artifact.ts",
+      "tools/release/src/exact/scene-cache.ts",
+      "tools/release/src/exact/convergence-product.ts",
+      "tools/release/src/exact/resource-cache.ts",
+      "tools/release/src/exact/resource-build.ts",
+      "tools/release/src/exact/platform-cache.ts",
+      "tools/release/src/exact/resource-composition.ts",
+      "tools/release/src/exact/scene-contribution.ts",
+      "tools/release/src/exact/native-build.ts",
+      "tools/release/src/exact/topology.ts",
+      "tools/release/src/exact/commands.ts",
+      "tools/release/src/exact/control-cli.ts",
+      "tools/release/esbuild.config.mjs",
+      "tools/release/src/exact/capsule-cache.ts",
+      "tools/release/src/exact/base-cache.ts",
+      "tools/release/src/exact/capsule-budget.ts"
+    ],
+    "electron-platform": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "packages/standalone/",
+      "packages/platform/",
+      "packages/download/",
+      "shells/electron/package.json",
+      "shells/electron/tsconfig.build.json",
+      "shells/electron/src/build-api.ts",
+      "shells/electron/src/platform/",
+      "shells/electron/config/carriers/node-lock.json",
+      "shells/electron/resources/platform/",
+      "tools/pack/",
+      "tools/release/src/exact/control-common.ts"
+    ],
+    "terminal-scene": [
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "apps/closure/",
+      "packages/download/",
+      "packages/platform/",
+      "packages/sidecar/",
+      "packages/standalone/",
+      "shells/terminal/"
+    ],
+    "electron-scene": [
+      ".node-version",
+      "suite://closure-resources",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "apps/closure/",
+      "packages/download/",
+      "packages/electron-kit/",
+      "packages/electron-capsule/",
+      "packages/platform/",
+      "packages/sidecar/",
+      "packages/standalone/",
+      "shells/electron/"
+    ],
+    "closure-resources": [
+      "apps/daemon/",
+      "apps/web/",
+      "packages/agui-adapter/",
+      "packages/components/",
+      "packages/contracts/",
+      "packages/diagnostics/",
+      "packages/electron-contract/",
+      "packages/plugin-runtime/",
+      "packages/registry-protocol/",
+      "packages/release/",
+      "packages/sidecar-proto/"
+    ],
+    "closure-data-control": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "apps/closure/package.json",
+      "apps/closure/esbuild.config.ts",
+      "apps/closure/src/build/data-resources.ts",
+      "apps/closure/src/data-resources.ts",
+      "packages/standalone/",
+      "tools/release/src/exact/resource-build.ts"
+    ],
+    "closure-data-skills": [
+      "suite://closure-data-control",
+      "skills/"
+    ],
+    "closure-data-design-templates": [
+      "suite://closure-data-control",
+      "design-templates/"
+    ],
+    "closure-data-design-systems": [
+      "suite://closure-data-control",
+      "design-systems/"
+    ],
+    "closure-data-craft": [
+      "suite://closure-data-control",
+      "craft/"
+    ],
+    "closure-data-plugins": [
+      "suite://closure-data-control",
+      "plugins/_official/",
+      "plugins/registry/"
+    ],
+    "closure-data-frames": [
+      "suite://closure-data-control",
+      "assets/frames/"
+    ],
+    "closure-data-community-pets": [
+      "suite://closure-data-control",
+      "assets/community-pets/"
+    ],
+    "closure-data-prompt-templates": [
+      "suite://closure-data-control",
+      "prompt-templates/"
+    ],
+    "closure-data-plugin-previews": [
+      "suite://closure-data-control",
+      "data/plugin-previews/"
+    ],
+    "electron-base": [
+      "suite://electron-capsule"
+    ],
+    "electron-capsule": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "packages/contracts/",
+      "packages/download/",
+      "packages/electron-contract/",
+      "packages/electron-kit/",
+      "packages/electron-capsule/",
+      "packages/platform/",
+      "packages/release/",
+      "packages/sidecar/",
+      "packages/standalone/",
+      "shells/electron/",
+      "tools/release/src/exact/control-common.ts"
+    ]
+  },
+  "workflows": {
+    "release-exact": {
+      "policy": "shell-scenes-v3",
+      "workloads": {
+        "electron_base_darwin_arm64": {
+          "inputs": [
+            "suite://electron-base"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_base_win32_x64": {
+          "inputs": [
+            "suite://electron-base"
+          ],
+          "runnerClass": "electron_win32_x64",
+          "products": "manifest",
+          "reusable": false
+        },
+        "electron_platform_darwin_arm64": {
+          "inputs": [
+            "suite://electron-platform"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_platform_win32_x64": {
+          "inputs": [
+            "suite://electron-platform"
+          ],
+          "runnerClass": "electron_win32_x64",
+          "products": "manifest",
+          "reusable": false
+        },
+        "terminal_scene_darwin_arm64": {
+          "inputs": [
+            "suite://terminal-scene"
+          ],
+          "runnerClass": "terminal_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_scene_darwin_arm64": {
+          "inputs": [
+            "suite://electron-scene"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_scene_win32_x64": {
+          "inputs": [
+            "suite://electron-scene"
+          ],
+          "runnerClass": "electron_win32_x64",
+          "products": "manifest",
+          "reusable": false
+        },
+        "closure_data_skills_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-skills"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "closure_data_design_templates_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-design-templates"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "closure_data_design_systems_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-design-systems"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "closure_data_craft_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-craft"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "closure_data_plugins_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-plugins"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "closure_data_frames_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-frames"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "closure_data_community_pets_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-community-pets"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "closure_data_prompt_templates_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-prompt-templates"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "closure_data_plugin_previews_darwin_arm64": {
+          "inputs": [
+            "suite://closure-data-plugin-previews"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_capsule_darwin_arm64": {
+          "inputs": [
+            "suite://electron-capsule"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_capsule_win32_x64": {
+          "inputs": [
+            "suite://electron-capsule"
+          ],
+          "runnerClass": "electron_win32_x64",
+          "products": "manifest",
+          "reusable": false
+        }
+      }
+    }
+  }
+}

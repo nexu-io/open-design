@@ -50,6 +50,8 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 - `.github/actions/` contains reusable composite actions for workflow setup steps.
 - `.github/scripts/` contains workflow-owned scripts and contracts that are not general repo developer commands.
 - Release implementation and gates belong to `tools/release`; release workflows only compose typed requests, execution environments, and receipts.
+- `release-exact`, `release-prerelease`, and `release-stable` are independent entrypoints: no calls between them or through a shared release workflow. Each owns its atomic JSON declarations under `.github/config/plan/`; do not inherit another release lane's orchestration. Generic planner mechanisms and tools-release capabilities may be shared, not the release graph. Each lane's control identity includes its own declarations and actual control dependencies, never unrelated release configurations.
+- `convergence.atom.yml` is the only workload-result writer for CI and all three release entrypoints. Select the producer's explicit contract and handoff identity from trusted code, then retain the default-branch admission checks. Workload-result credentials must not enter release producer jobs.
 - Root `scripts/` remains for repo-level developer checks, product scripts, and guard/test logic. Do not move workflow-only handoff glue there just to make it look more general.
 
 New workflow-owned helpers should usually live under `.github/scripts/`. Prefer TypeScript for project-owned scripts in general, but Python is acceptable for small GitHub runner glue when stdlib portability and low setup cost matter. Keep such exceptions narrow and covered by `pnpm guard` policy.

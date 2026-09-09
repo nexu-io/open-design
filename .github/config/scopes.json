@@ -53,7 +53,7 @@
     },
     "shell-exact": {
       "prefixes": ["apps/closure/", "packages/electron-kit/", "packages/sidecar/", "packages/standalone/", "shells/electron/", "shells/terminal/", "tools/pack/src/exact/", "tools/release/src/exact/", "tools/release/src/policy/"],
-      "exact": [".github/workflows/convergence-exact.atom.yml", ".github/workflows/release-exact.yml", ".github/workflows/release-prerelease.yml", ".github/workflows/release-stable.yml"]
+      "exact": [".github/workflows/release-exact.yml", ".github/workflows/release-prerelease.yml", ".github/workflows/release-stable.yml"]
     },
     "medium-exempt": {
       "exact": [

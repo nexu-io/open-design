@@ -311,7 +311,13 @@ distinguished locally from repository-root reads.
 
 The general CI planner keeps a narrow `tools-pack-leaf` source unit for the
 thin macOS request/receipt CLI. Electron release reuse is owned separately by
-the exact plan registry and `convergence-exact.json`.
+the content identity registry and the independent release declarations in
+`.github/config/plan/release-{exact,prerelease,stable}.json`. Each release
+entrypoint owns its target topology and orchestration; release workflows do
+not invoke each other. The generic convergence calculator is shared, while
+workflow identity and each lane's control inputs keep result namespaces and
+configuration invalidation isolated. `convergence.atom.yml` selects and admits
+each producing workflow's own contract before publishing workload results.
 
 Exact identities split `electron.contract`, `electron.shell`, and `closure`
 build/test nodes. Distribution, signing, and installed acceptance bind exact

@@ -130,6 +130,38 @@ describe("workload convergence", () => {
     expect(arc).not.toBe(hosted);
   });
 
+  test("isolates atomic workflow policy changes through the actual calculator", () => {
+    const fixture = createRepository();
+    const original = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    const lanes = ["release-exact", "release-prerelease", "release-stable"];
+    for (const name of lanes) {
+      const declaration = {
+        schema: original.schema,
+        suites: { ...original.suites, "convergence-control": ["control.txt", `${name}.json`] },
+        workflows: { [name]: original.workflows.ci },
+      };
+      writeFileSync(path.join(fixture.root, `${name}.json`), JSON.stringify(declaration));
+    }
+    execFileSync("git", ["add", "."], { cwd: fixture.root });
+    const calculate = () => JSON.parse(execFileSync("python3", ["-c", [
+      "import json, sys", "from pathlib import Path", "sys.path.insert(0, sys.argv[1])",
+      "from convergence import ConvergenceContract, calculate",
+      "root = Path(sys.argv[2])",
+      "print(json.dumps({name: calculate(ConvergenceContract(root / (name + '.json')), root, name, {'worker': ['fixture']}) for name in sys.argv[3:]}))",
+    ].join("\n"), path.dirname(convergenceScript), fixture.root, ...lanes], { encoding: "utf8" }));
+    const before = calculate();
+    const changedPath = path.join(fixture.root, "release-exact.json");
+    const changed = JSON.parse(readFileSync(changedPath, "utf8"));
+    changed.workflows["release-exact"].policy = "test-v2";
+    writeFileSync(changedPath, JSON.stringify(changed));
+    execFileSync("git", ["add", "release-exact.json"], { cwd: fixture.root });
+    const after = calculate();
+    expect(after["release-exact"]).not.toEqual(before["release-exact"]);
+    expect(after["release-prerelease"]).toEqual(before["release-prerelease"]);
+    expect(after["release-stable"]).toEqual(before["release-stable"]);
+    expect(before["release-exact"].a.digest).not.toBe(before["release-stable"].a.digest);
+  });
+
   test("keeps broad test workloads on tracked-tree inputs until their closure is proven", () => {
     const config = JSON.parse(readFileSync(
       path.join(repoRoot, ".github", "config", "convergence.json"),

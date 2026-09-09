@@ -28,7 +28,7 @@ describe("exact Electron release topology", () => {
       "from convergence import ConvergenceContract",
       "contract = ConvergenceContract(Path(sys.argv[2]))",
       "print(json.dumps(contract.suite_paths(sys.argv[3]) + contract.suite_paths('convergence-control')))",
-    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/convergence-exact.json"), suite]);
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/plan/release-exact.json"), suite]);
     const inputs: string[] = JSON.parse(result.stdout);
     const registry = JSON.parse(await readFile(resolve(workspaceRoot, "tools/release/resources/exact-plan-identities.json"), "utf8"));
     const paths = new Set<string>();
@@ -51,7 +51,7 @@ describe("exact Electron release topology", () => {
 
   it("changes only the matching data workload digest through the real Git convergence calculator", async () => {
     const root = await mkdtemp(join(tmpdir(), "exact-data-digest-")); roots.push(root);
-    const config = JSON.parse(await readFile(join(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
+    const config = JSON.parse(await readFile(join(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
     const tokens = new Set<string>((Object.values(config.suites) as string[][]).flat().filter(token => !token.startsWith("suite://")));
     for (const token of tokens) {
       const directory = (await stat(join(workspaceRoot, token))).isDirectory();
@@ -65,7 +65,7 @@ describe("exact Electron release topology", () => {
       "contract=ConvergenceContract(Path(sys.argv[2]))",
       "runners={w.runner_class:['fixture'] for w in contract.workflow('release-exact').workloads.values()}",
       "print(json.dumps(calculate(contract,Path(sys.argv[3]),'release-exact',runners)))",
-    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/convergence-exact.json"), root])).stdout) as Record<string, { digest: string }>;
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/plan/release-exact.json"), root])).stdout) as Record<string, { digest: string }>;
     const before = await calculate();
     for (const id of dataIds) {
       const token = config.suites[`closure-data-${id}`].find((value: string) => !value.startsWith("suite://"));
@@ -87,14 +87,14 @@ describe("exact Electron release topology", () => {
       schemaVersion: 1, plan: { target: "darwin-arm64", nodes: { "electron.platform.build": {
         identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64" } } }, actions: [{ id: "electron.distribution" }],
     }));
-    await run(process.execPath, [cli, "topology", "--declaration", resolve(workspaceRoot, ".github/config/exact-topology.json"),
+    await run(process.execPath, [cli, "topology", "--declaration", resolve(workspaceRoot, ".github/config/plan/release-exact-topology.json"),
       "--plans", plans, "--output", root, "--github-output", join(root, "outputs")]);
     const outputLine = (await readFile(join(root, "outputs"), "utf8")).split("\n").find(line => line.startsWith("validation_matrix="))!;
     expect(JSON.parse(outputLine.slice("validation_matrix=".length)).include.map((entry: { shell: string; target: string }) => [entry.shell, entry.target]))
       .toEqual([["electron", "darwin-arm64"]]);
     const runners = await readFile(join(root, "runners.json"), "utf8");
     const common = [resolve(workspaceRoot, ".github/scripts/convergence.py"), "--root", workspaceRoot,
-      "--config", resolve(workspaceRoot, ".github/config/convergence-exact.json")];
+      "--config", resolve(workspaceRoot, ".github/config/plan/release-exact.json")];
     const env = { ...process.env, GITHUB_OUTPUT: join(root, "outputs"), GITHUB_STEP_SUMMARY: join(root, "summary") };
     await run("python3", [...common, "github-output", "--workflow", "release-exact", "--scope-plan", join(root, "scope.json"),
       "--runner-plan-json", runners, "--repository-id", "1", "--repository", "local/fixture", "--base-url", "http://invalid.local",
@@ -306,13 +306,13 @@ describe("exact Electron release topology", () => {
 
   it("runs the current release matrix on macOS while retaining the deferred Windows declaration", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
-    const convergence = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
+    const convergence = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
 
     expect(workflow).toContain("options: [betahyx]");
     expect(workflow).toContain('exact-release-control.mjs" topology');
-    expect(workflow).toContain('--declaration .github/config/exact-topology.json');
+    expect(workflow).toContain('--declaration .github/config/plan/release-exact-topology.json');
     expect(workflow).not.toContain("electron_actions =");
-    const topology = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/exact-topology.json"), "utf8"));
+    const topology = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact-topology.json"), "utf8"));
     expect(topology.active.map((value: { shell: string; target: string }) => [value.shell, value.target])).toEqual([["terminal", "darwin-arm64"], ["electron", "darwin-arm64"]]);
     expect(topology.active.every((value: { runs_on: string }) => value.runs_on === "macos-15")).toBe(true);
     expect(topology.deferred).toEqual([{ shell: "electron", target: "win32-x64", workload: "electron_scene_win32_x64", platform_workload: "electron_platform_win32_x64", runner_class: "electron_win32_x64", runs_on: "windows-2025" }]);
@@ -327,7 +327,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).toContain("tools/release/dist/exact-control.mjs");
     expect(workflow).not.toContain("exact-pack-control.mjs");
     expect(workflow).toContain('$RUNNER_TEMP/exact-plan/exact-release-control.mjs');
-    expect(workflow).toContain("PROFILE: ${{ inputs.profile || 'exact-validation' }}");
+    expect(workflow).toContain("PROFILE: exact-validation");
     expect(workflow).toContain('--endpoint-url "$STORAGE_ENDPOINT" --bucket "$STORAGE_BUCKET" --public-base-url "$PUBLIC_ORIGIN"');
     for (const capability of ["plan", "prepare", "finalize", "acceptance"]) {
       expect(workflow).toContain(`--capability ${capability}`);
@@ -368,7 +368,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toMatch(/node (?:-e |--input-type=module)/u);
     const acceptance = workflow.split("\n  acceptance:")[1]!.split("\n  activate:")[0]!;
     expect(acceptance.indexOf("node-version: 24.18.0")).toBeLessThan(acceptance.indexOf("- name: Authorize installed acceptance capability"));
-    const config = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
+    const config = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
     expect(config.suites["convergence-control"]).toContain("tools/release/src/exact/scene-artifact.ts");
   });
 
@@ -383,21 +383,37 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain('for release_field in (os.environ["RELEASE_VERSION"]');
   });
 
-  it("keeps formal distribution workflows as thin tools-release profile orchestration", async () => {
-    const prerelease = await readFile(resolve(workspaceRoot, ".github/workflows/release-prerelease.yml"), "utf8");
-    const stable = await readFile(resolve(workspaceRoot, ".github/workflows/release-stable.yml"), "utf8");
-
-    for (const workflow of [prerelease, stable]) {
-      expect(workflow).toContain("uses: ./.github/workflows/release-exact.yml");
-      expect(workflow).toContain("source_ref: ${{ inputs.source_ref }}");
-      expect(workflow).not.toContain("tools/release/");
-      expect(workflow).not.toContain("tools/pack/");
+  it("keeps release entrypoints and their plan contracts independent", async () => {
+    for (const lane of ["exact", "prerelease", "stable"]) {
+      const name = `release-${lane}`;
+      const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/${name}.yml`), "utf8");
+      const configPath = `.github/config/plan/${name}.json`;
+      const config = JSON.parse(await readFile(resolve(workspaceRoot, configPath), "utf8"));
+      expect(workflow).not.toMatch(/uses: .*\.github\/workflows\/release-/u);
+      expect(workflow).not.toContain("workflow_call:");
+      expect(workflow).toContain(`--config ${configPath}`);
+      expect(workflow).toContain(`--workflow ${name}`);
+      expect(workflow).toContain(`--id ${name}-results`);
+      expect(Object.keys(config.workflows)).toEqual([name]);
+      expect(config.suites["convergence-control"]).toContain(configPath);
+      for (const other of ["exact", "prerelease", "stable"].filter(value => value !== lane)) {
+        expect(config.suites["convergence-control"]).not.toContain(`.github/workflows/release-${other}.yml`);
+        expect(config.suites["convergence-control"]).not.toContain(`.github/config/plan/release-${other}.json`);
+      }
+      const profile = lane === "exact" ? "exact-validation" : `${lane}-distribution`;
+      expect(workflow).toContain(`PROFILE: ${profile}`);
+      if (lane !== "exact") expect(workflow).toContain(`CHANNEL: ${lane}`);
+      expect(workflow).toContain(`END_USER_DISTRIBUTION: "${lane === "stable"}"`);
+      expect(workflow).toContain(lane === "stable"
+        ? "STABLE_AUTHORIZED: ${{ inputs.confirm_end_user_distribution }}"
+        : 'STABLE_AUTHORIZED: "false"');
     }
-    expect(prerelease).toContain("profile: prerelease-distribution");
-    expect(prerelease).toContain("end_user_distribution: false");
-    expect(stable).toContain("profile: stable-distribution");
-    expect(stable).toContain("end_user_distribution: true");
-    expect(stable).toContain("stable_authorized: ${{ inputs.confirm_end_user_distribution }}");
+    const consumer = await readFile(resolve(workspaceRoot, ".github/workflows/convergence.atom.yml"), "utf8");
+    expect(consumer).toContain("workflows: [ci, release-exact, release-prerelease, release-stable]");
+    expect(consumer).toContain('convergence.py --config "$CONVERGENCE_CONFIG" admit');
+    expect(consumer).toContain('ref: ${{ github.event.repository.default_branch }}');
+    expect(consumer).not.toContain("CLOUDFLARE_R2_RELEASES_AK");
+    await expect(stat(resolve(workspaceRoot, ".github/workflows/convergence-exact.atom.yml"))).rejects.toThrow();
   });
 
   it("uses the TypeScript exact control plane with no temporary Python bridge", async () => {

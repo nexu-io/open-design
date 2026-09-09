@@ -30,16 +30,1213 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  distribute:
-    uses: ./.github/workflows/release-exact.yml
-    with:
-      source_sha: ${{ inputs.source_sha }}
-      source_ref: ${{ inputs.source_ref }}
-      profile: prerelease-distribution
-      channel: prerelease
-      release_version: ${{ inputs.release_version }}
-      standalone_version: ${{ inputs.standalone_version }}
-      release_environment: standalone-prerelease-release
-      end_user_distribution: false
-      stable_authorized: false
-    secrets: inherit
+  plan:
+    name: Plan release-neutral Shell scenes
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.convergence.outputs.run }}
+      shell_matrix: ${{ steps.topology.outputs.shell_matrix }}
+      validation_matrix: ${{ steps.topology.outputs.validation_matrix }}
+      platform_matrix: ${{ steps.topology.outputs.platform_matrix }}
+      capsule_matrix: ${{ steps.topology.outputs.capsule_matrix }}
+      data_matrix: ${{ steps.topology.outputs.data_matrix }}
+    steps:
+      - name: Validate immutable inputs
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          CHANNEL: prerelease
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checkout identity
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git ls-remote --refs origin "$SOURCE_REF" | cut -f1)" = "$SOURCE_SHA"
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: Build exact controls and content-identity planner
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @open-design/metatool build
+          pnpm --filter @open-design/electron-contract build
+          pnpm --filter @open-design/electron-kit build
+          pnpm --filter @open-design/shell-electron build
+          pnpm --filter @open-design/tools-pack build
+          pnpm --filter @open-design/tools-release build
+          node tools/release/dist/exact-control.mjs self-check
+          mkdir -p "$RUNNER_TEMP/exact-plan"
+          cp tools/release/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-release-control.mjs"
+
+      - name: Resolve tools-release validation profile
+        env:
+          CHANNEL: prerelease
+          END_USER_DISTRIBUTION: "false"
+          PROFILE: prerelease-distribution
+          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
+          STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
+          STABLE_AUTHORIZED: "false"
+        run: |
+          set -euo pipefail
+          node tools/release/dist/exact-control.mjs policy resolve \
+            --profile "$PROFILE" --channel "$CHANNEL" --release-version "$RELEASE_VERSION" \
+            --source-commit "$SOURCE_SHA" --source-ref "$SOURCE_REF" \
+            --endpoint-url "$STORAGE_ENDPOINT" --bucket "$STORAGE_BUCKET" --public-base-url "$PUBLIC_ORIGIN" \
+            --end-user-distribution "$END_USER_DISTRIBUTION" --stable-authorized "$STABLE_AUTHORIZED" \
+            --receipt "$RUNNER_TEMP/exact-plan/release-policy.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" policy authorize \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --capability plan \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --receipt "$RUNNER_TEMP/plan-authorization.json"
+
+      - name: Resolve canonical Electron release plans
+        env:
+          CHANNEL: prerelease
+          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/exact-plan"
+          for target in darwin-arm64 win32-x64; do
+            node tools/release/bin/tools-release.mjs exact-release-plan \
+              --root "$GITHUB_WORKSPACE" \
+              --channel "$CHANNEL" \
+              --target "$target" \
+              --accepted-pointer-url "${PUBLIC_ORIGIN%/}/$CHANNEL/accepted/electron/$target/latest.json" \
+              --output "$RUNNER_TEMP/exact-plan/electron-$target.json"
+          done
+
+      - name: Resolve Shell topology
+        id: topology
+        env:
+          CHANNEL: prerelease
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" topology \
+            --declaration .github/config/plan/release-prerelease-topology.json --plans "$RUNNER_TEMP/exact-plan" \
+            --output "$RUNNER_TEMP/exact-plan" --github-output "$GITHUB_OUTPUT"
+
+      - name: Resolve reusable scene results
+        id: convergence
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+        run: |
+          set -euo pipefail
+          RUNNER_PLAN=$(cat "$RUNNER_TEMP/exact-plan/runners.json")
+          python3 .github/scripts/convergence.py \
+            --config .github/config/plan/release-prerelease.json \
+            github-output \
+            --workflow release-prerelease \
+            --scope-plan "$RUNNER_TEMP/exact-plan/scope.json" \
+            --runner-plan-json "$RUNNER_PLAN" \
+            --mode enforce \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+          if-no-files-found: error
+          retention-days: 1
+
+  validation:
+    name: Exact validation (${{ matrix.target }})
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.validation_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: Prepare validation workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate exact Electron nodes
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/exact-validation"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.contract.test \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/contract.log" --receipt "$RUNNER_TEMP/exact-validation/contract.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.shell.test \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/shell.log" --receipt "$RUNNER_TEMP/exact-validation/shell.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate closure.test --coverage architecture \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/closure.log" --receipt "$RUNNER_TEMP/exact-validation/closure.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation
+          if-no-files-found: warn
+          retention-days: 30
+
+  scene:
+    name: ${{ matrix.shell }} scene (${{ matrix.target }})
+    needs: [plan, capsule]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.shell_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Restore converged scene
+        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          WORKLOAD: ${{ matrix.workload }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene restore \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --transport "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
+
+      - uses: pnpm/action-setup@v5
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: Prepare scene workspace
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Build release-neutral scene inputs
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          SHELL_TYPE: ${{ matrix.shell }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @open-design/platform build
+          pnpm --filter @open-design/sidecar build
+          pnpm --filter @open-design/standalone build
+          pnpm --filter @open-design/closure build
+          pnpm --filter @open-design/electron-contract build
+          pnpm --filter @open-design/electron-kit build
+          if [[ "$SHELL_TYPE" == "electron" ]]; then
+            node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build runtime-resources \
+              --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/exact-closure-resources" \
+              --receipt "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json"
+          fi
+
+      - uses: actions/download-artifact@v8
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-capsule-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/capsules
+
+      - name: Build native scene
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          SHELL_TYPE: ${{ matrix.shell }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          capsule_args=()
+          if [[ "$SHELL_TYPE" == "electron" ]]; then
+            capsule_args=(--capsule-content "$RUNNER_TEMP/capsules/$TARGET/capsule-content.json" --capsule-archive "$RUNNER_TEMP/capsules/$TARGET/capsule.zip")
+          fi
+          pnpm --filter @open-design/tools-release exec tools-release build scene \
+            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" "${capsule_args[@]}" \
+            --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
+
+      - name: Restore converged Electron base
+        if: ${{ matrix.shell == 'electron' && !fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.base_workload }}
+          ARCHIVE_ZIP_PATH: /usr/bin/zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base restore \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --output "$RUNNER_TEMP/exact-base"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base pack \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --build-receipt "$RUNNER_TEMP/exact-base/base-build-receipt.json" \
+            --output "$RUNNER_TEMP/base-contribution/artifact"
+
+      - name: Build and contribute Electron base
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.base_workload }}
+          ARTIFACT_NAME: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          ARCHIVE_ZIP_PATH: /usr/bin/zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @open-design/electron-kit build
+          pnpm --filter @open-design/shell-electron build
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build base \
+            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
+            --scene "$RUNNER_TEMP/exact-scene" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --output "$RUNNER_TEMP/exact-base" --receipt "$RUNNER_TEMP/base-build-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base contribute \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --build-receipt "$RUNNER_TEMP/base-build-receipt.json" \
+            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/base-contribution"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.shell == 'electron' }}
+        with:
+          name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/base-contribution/artifact
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
+        with:
+          name: exact-convergence-manifest-${{ matrix.base_workload }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/base-contribution/products
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Verify scene and prepare convergence product
+        env:
+          ARTIFACT_NAME: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.workload }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene contribute \
+            --scene "$RUNNER_TEMP/exact-scene" --target "$TARGET" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/convergence-products"
+
+      - name: Pack scene transport
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene pack \
+            --scene "$RUNNER_TEMP/exact-scene" --output "$RUNNER_TEMP/exact-scene-artifact/scene.tar"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-scene-artifact/scene.tar
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/convergence-products
+          if-no-files-found: error
+          retention-days: 1
+
+  platform:
+    name: Native platform (${{ matrix.target }})
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.platform_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Restore converged platform
+        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.workload }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" platform restore \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --output "$RUNNER_TEMP/exact-platform/$TARGET"
+
+      - uses: actions/checkout@v6.0.2
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v5
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          version: 10.33.2
+
+      - name: Build independent platform
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @open-design/standalone build
+          pnpm --filter @open-design/electron-contract build
+          pnpm --filter @open-design/electron-kit build
+          pnpm --filter @open-design/shell-electron build
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build platform \
+            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --output "$RUNNER_TEMP/exact-platform/$TARGET" \
+            --receipt "$RUNNER_TEMP/exact-platform/$TARGET/platform-build-receipt.json"
+
+      - name: Contribute verified platform
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.workload }}
+          ARTIFACT_NAME: exact-platform-cache-${{ matrix.target }}-${{ inputs.source_sha }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" platform contribute \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --build-receipt "$RUNNER_TEMP/exact-platform/$TARGET/platform-build-receipt.json" \
+            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/platform-contribution"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-platform-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-platform
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-platform-cache-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/platform-contribution/artifact
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/platform-contribution/products
+          if-no-files-found: error
+          retention-days: 1
+
+  capsule:
+    name: Capsule (${{ matrix.target }})
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Restore converged capsule
+        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.workload }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" capsule restore \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --output "$RUNNER_TEMP/exact-capsule/$TARGET"
+
+      - uses: actions/checkout@v6.0.2
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v5
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          version: 10.33.2
+
+      - name: Build independent capsule
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @open-design/standalone build
+          pnpm --filter @open-design/electron-contract build
+          pnpm --filter @open-design/electron-kit build
+          pnpm --filter @open-design/shell-electron build
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build capsule \
+            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --output "$RUNNER_TEMP/exact-capsule/$TARGET" \
+            --receipt "$RUNNER_TEMP/exact-capsule/$TARGET/capsule-build-receipt.json"
+
+      - name: Contribute verified capsule
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.workload }}
+          ARTIFACT_NAME: exact-capsule-cache-${{ matrix.target }}-${{ inputs.source_sha }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" capsule contribute \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --build-receipt "$RUNNER_TEMP/exact-capsule/$TARGET/capsule-build-receipt.json" \
+            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/capsule-contribution"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-capsule-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-capsule
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-capsule-cache-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/capsule-contribution/artifact
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/capsule-contribution/products
+          if-no-files-found: error
+          retention-days: 1
+
+  data:
+    name: Data resource (${{ matrix.resource_id }})
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.plan.outputs.data_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 15
+    env:
+      TARGET: ${{ matrix.target }}
+      RESOURCE_ID: ${{ matrix.resource_id }}
+      WORKLOAD: ${{ matrix.workload }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Restore converged data resource
+        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" resource restore \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" --resource-id "$RESOURCE_ID" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --output "$RUNNER_TEMP/exact-data/$RESOURCE_ID"
+
+      - uses: actions/checkout@v6.0.2
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v5
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          version: 10.33.2
+
+      - name: Build independent data resource
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @open-design/standalone build
+          pnpm --filter @open-design/closure build
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build resource \
+            --root "$GITHUB_WORKSPACE" --resource-id "$RESOURCE_ID" \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --output "$RUNNER_TEMP/exact-data/$RESOURCE_ID" \
+            --receipt "$RUNNER_TEMP/exact-data/$RESOURCE_ID/resource-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" resource contribute \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" --resource-id "$RESOURCE_ID" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --resource-receipt "$RUNNER_TEMP/exact-data/$RESOURCE_ID/resource-receipt.json" \
+            --artifact "exact-data-cache-$RESOURCE_ID-${{ inputs.source_sha }}" \
+            --output "$RUNNER_TEMP/data-contribution"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-data-product-${{ matrix.resource_id }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-data
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-data-cache-${{ matrix.resource_id }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/data-contribution/artifact
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/data-contribution/products
+          if-no-files-found: error
+          retention-days: 1
+
+  prepare:
+    name: Prepare signed exact content
+    needs: [plan, scene, platform, capsule, data, validation]
+    runs-on: ubuntu-24.04
+    environment: standalone-prerelease-release
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: exact-*-scene-*-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/scenes
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - name: Authorize prepare capability
+        env:
+          CHANNEL: prerelease
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" policy authorize \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --capability prepare \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --receipt "$RUNNER_TEMP/prepare-authorization.json"
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: exact-platform-product-*-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/platforms
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: exact-data-product-*-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/data-products
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: exact-capsule-product-*-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/capsules
+          merge-multiple: true
+
+      - name: Compose and sign content metadata
+        env:
+          CHANNEL: prerelease
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          STANDALONE_VERSION: ${{ inputs.standalone_version }}
+          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
+          OD_EXACT_SIGNING_KEY_ID: ${{ secrets.EXACT_SIGNING_KEY_ID }}
+          OD_EXACT_ED25519_PRIVATE_KEY: ${{ secrets.EXACT_ED25519_PRIVATE_KEY }}
+          OD_EXACT_SIGNING_KEY_ID_NEXT: ${{ secrets.EXACT_SIGNING_KEY_ID_NEXT }}
+          OD_EXACT_ED25519_PRIVATE_KEY_NEXT: ${{ secrets.EXACT_ED25519_PRIVATE_KEY_NEXT }}
+          SHELL_MATRIX: ${{ needs.plan.outputs.shell_matrix }}
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" prepare \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --channel "$CHANNEL" --release-version "$RELEASE_VERSION" \
+            --source-commit "$SOURCE_SHA" --root "$GITHUB_WORKSPACE" --standalone-version "$STANDALONE_VERSION" \
+            --topology "$RUNNER_TEMP/exact-plan/topology.json" --scenes "$RUNNER_TEMP/scenes" \
+            --capsules "$RUNNER_TEMP/capsules" --platforms "$RUNNER_TEMP/platforms" --data-resources "$RUNNER_TEMP/data-products" \
+            --output "$RUNNER_TEMP/exact-prepare" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-prepared-prerelease-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/exact-prepare
+          if-no-files-found: error
+          retention-days: 1
+
+  distribution:
+    name: ${{ matrix.shell }} distribution (${{ matrix.target }})
+    needs: [plan, prepare]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.shell_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/scene-artifact
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-prepared-prerelease-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/prepared
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: pnpm/action-setup@v5
+        if: ${{ matrix.shell == 'electron' }}
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Restore distribution scene
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene unpack \
+            --archive "$RUNNER_TEMP/scene-artifact/scene.tar" --output "$RUNNER_TEMP/scene"
+
+      - name: Prepare Electron distribution toolchain
+        if: ${{ matrix.shell == 'electron' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @open-design/standalone build
+          pnpm --filter @open-design/electron-kit build
+
+      - uses: actions/download-artifact@v8
+        if: ${{ matrix.shell == 'electron' }}
+        with:
+          name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/base-transport
+
+      - name: Restore distribution base
+        if: ${{ matrix.shell == 'electron' }}
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base unpack \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --source "$RUNNER_TEMP/base-transport" --output "$RUNNER_TEMP/base"
+
+      - name: Build native distribution
+        env:
+          CHANNEL: prerelease
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SHELL_TYPE: ${{ matrix.shell }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_args=()
+          if [[ "$SHELL_TYPE" == "electron" ]]; then
+            base_args=(--base-receipt "$RUNNER_TEMP/base/base-build-receipt.json")
+          fi
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build distribution \
+            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" "${base_args[@]}" \
+            --output "$RUNNER_TEMP/distribution" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-distribution-${{ matrix.shell }}-${{ matrix.target }}-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/distribution
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Finalize and publish exact channel
+    needs: [plan, distribution]
+    runs-on: ubuntu-24.04
+    environment: standalone-prerelease-release
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-prepared-prerelease-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/prepared
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: exact-distribution-*-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/distributions
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - name: Authorize finalize capability
+        env:
+          CHANNEL: prerelease
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" policy authorize \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --capability finalize \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --receipt "$RUNNER_TEMP/finalize-authorization.json"
+
+      - name: Finalize signed Shell sidecar and channel head
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SHELL_MATRIX: ${{ needs.plan.outputs.shell_matrix }}
+          OD_EXACT_SIGNING_KEY_ID: ${{ secrets.EXACT_SIGNING_KEY_ID }}
+          OD_EXACT_ED25519_PRIVATE_KEY: ${{ secrets.EXACT_ED25519_PRIVATE_KEY }}
+          OD_EXACT_SIGNING_KEY_ID_NEXT: ${{ secrets.EXACT_SIGNING_KEY_ID_NEXT }}
+          OD_EXACT_ED25519_PRIVATE_KEY_NEXT: ${{ secrets.EXACT_ED25519_PRIVATE_KEY_NEXT }}
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" finalize \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --prepared "$RUNNER_TEMP/prepared" \
+            --distributions "$RUNNER_TEMP/distributions" --output "$RUNNER_TEMP/exact-final" \
+            --receipt "$RUNNER_TEMP/exact-final/pack-receipt.json"
+
+      - name: Publish immutable release objects
+        env:
+          OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
+          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
+          STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
+          STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" publish \
+            --pack-receipt "$RUNNER_TEMP/exact-final/pack-receipt.json" --policy "$RUNNER_TEMP/exact-plan/release-policy.json" \
+            --endpoint-url "$STORAGE_ENDPOINT" --bucket "$STORAGE_BUCKET" --public-base-url "$PUBLIC_ORIGIN" \
+            --receipt "$RUNNER_TEMP/exact-final/publish-receipt.json"
+          cp "$RUNNER_TEMP/exact-plan/release-policy.json" "$RUNNER_TEMP/exact-final/release-policy.json"
+          cp "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" "$RUNNER_TEMP/exact-final/exact-release-control.mjs"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-published-prerelease-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/exact-final
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: exact-convergence-manifest-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/convergence-products
+          merge-multiple: true
+
+      - name: Create reusable scene handoff
+        id: convergence_handoff
+        continue-on-error: true
+        run: >-
+          python3 .github/scripts/convergence.py
+          --config .github/config/plan/release-prerelease.json
+          handoff
+          --pending "$RUNNER_TEMP/exact-plan/pending.json"
+          --products-root "$RUNNER_TEMP/convergence-products"
+          --handoff-root "$RUNNER_TEMP/handoff-convergence-exact-scenes"
+          --id release-prerelease-results
+
+      - name: Upload reusable scene handoff
+        if: ${{ steps.convergence_handoff.outputs.name != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.convergence_handoff.outputs.name }}
+          path: ${{ steps.convergence_handoff.outputs.path }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload exact release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-prerelease-${{ inputs.release_version }}-receipts
+          path: |
+            ${{ runner.temp }}/exact-final/*.json
+            ${{ runner.temp }}/exact-final/documents/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  acceptance:
+    name: Public installed acceptance (${{ matrix.shell }}/${{ matrix.target }})
+    needs: [plan, publish]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.shell_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-published-prerelease-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/published
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Authorize installed acceptance capability
+        env:
+          CHANNEL: prerelease
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" policy authorize \
+            --policy "$RUNNER_TEMP/published/release-policy.json" --capability acceptance \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --receipt "$RUNNER_TEMP/acceptance-authorization.json"
+
+      - name: Download accepted public artifact
+        env:
+          SHELL_TYPE: ${{ matrix.shell }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" acceptance fetch \
+            --publication "$RUNNER_TEMP/published/publish-receipt.json" \
+            --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --shell "$SHELL_TYPE" --target "$TARGET" --output "$RUNNER_TEMP" \
+            --receipt "$RUNNER_TEMP/required-acceptance.json" --github-env "$GITHUB_ENV"
+
+      - name: Install and exercise Darwin Shell lifecycle
+        if: ${{ matrix.shell == 'terminal' && startsWith(matrix.target, 'darwin-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/extracted"
+          tar -xzf "$RUNNER_TEMP/public-shell-artifact.tar.gz" -C "$RUNNER_TEMP/extracted"
+          sh "$RUNNER_TEMP/extracted/nexu-terminal/sh/install.sh" \
+            --source "$RUNNER_TEMP/extracted/nexu-terminal" \
+            --root "$RUNNER_TEMP/installed-shell" \
+            --channel "prerelease" \
+            --namespace exact-public-acceptance > "$RUNNER_TEMP/installed-proof.json"
+          run_terminal() {
+            operation=$1
+            shift
+            sh "$RUNNER_TEMP/installed-shell/sh/terminal.sh" \
+              --root "$RUNNER_TEMP/installed-shell" \
+              --store-root "$RUNNER_TEMP/acceptance-store" \
+              --channel "prerelease" \
+              --namespace exact-public-acceptance \
+              --operation "$operation" \
+              --result "$RUNNER_TEMP/runtime-$operation.json" \
+              "$@"
+          }
+          run_terminal start --attachment-id public-acceptance
+          run_terminal status
+          run_terminal stop
+
+      - name: Install and exercise macOS Electron Shell
+        if: ${{ matrix.shell == 'electron' && startsWith(matrix.target, 'darwin-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          volume="$RUNNER_TEMP/electron-volume"
+          app="$RUNNER_TEMP/installed-electron.app"
+          mkdir -p "$volume"
+          hdiutil attach "$RUNNER_TEMP/public-shell-artifact.dmg" -nobrowse -readonly -mountpoint "$volume"
+          trap 'hdiutil detach "$volume" >/dev/null 2>&1 || true' EXIT
+          source_app=$(find "$volume" -maxdepth 1 -type d -name '*.app' -print -quit)
+          test -n "$source_app"
+          ditto "$source_app" "$app"
+          hdiutil detach "$volume"
+          trap - EXIT
+          executable="$app/Contents/MacOS/$ELECTRON_EXECUTABLE"
+          test -x "$executable"
+          OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "$executable" --user-data-dir="$RUNNER_TEMP/electron-user-data"
+
+      - uses: actions/download-artifact@v8
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' }}
+        with:
+          name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation
+
+      - name: Fetch accepted baseline for upgrade acceptance
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' }}
+        env:
+          CHANNEL: prerelease
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" baseline fetch \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --validation "$RUNNER_TEMP/exact-validation/shell.json" \
+            --root "$GITHUB_WORKSPACE" --channel "$CHANNEL" --release-version "$RELEASE_VERSION" \
+            --source-commit "$SOURCE_SHA" --target "$TARGET" --output "$RUNNER_TEMP/baseline" \
+            --receipt "$RUNNER_TEMP/baseline/fetch-receipt.json"
+
+      - name: Exercise accepted macOS Shell through CDP hot update
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' && startsWith(matrix.target, 'darwin-') }}
+        env:
+          CHANNEL: prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          volume="$RUNNER_TEMP/electron-volume"
+          app="$RUNNER_TEMP/baseline-electron.app"
+          mkdir -p "$volume"
+          hdiutil attach "$RUNNER_TEMP/baseline/baseline-shell-artifact.dmg" -nobrowse -readonly -mountpoint "$volume"
+          trap 'hdiutil detach "$volume" >/dev/null 2>&1 || true' EXIT
+          source_app=$(find "$volume" -maxdepth 1 -type d -name '*.app' -print -quit)
+          test -n "$source_app"
+          ditto "$source_app" "$app"
+          hdiutil detach "$volume"
+          trap - EXIT
+          executable="$app/Contents/MacOS/$ELECTRON_EXECUTABLE"
+          OD_PACKAGED_E2E_HEADLESS=1 "$executable" \
+            --user-data-dir="$RUNNER_TEMP/baseline-user-data" \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=0 \
+            --od-channel-head-url="$ELECTRON_CANDIDATE_HEAD_URL" &
+          electron_pid=$!
+          trap 'kill "$electron_pid" >/dev/null 2>&1 || true; wait "$electron_pid" >/dev/null 2>&1 || true' EXIT
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" acceptance hot-update \
+            --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --shell electron --target "${{ matrix.target }}" --base-user-data-root "$RUNNER_TEMP/baseline-user-data" \
+            --receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
+          wait "$electron_pid"
+          trap - EXIT
+          OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "$executable" --user-data-dir="$RUNNER_TEMP/baseline-user-data"
+
+      - name: Install and exercise Windows Electron Shell
+        if: ${{ matrix.shell == 'electron' && startsWith(matrix.target, 'win32-') }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Join-Path $env:RUNNER_TEMP 'public-shell-artifact.exe'
+          $installRoot = Join-Path $env:RUNNER_TEMP 'installed-electron'
+          $install = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Electron installer exited with $($install.ExitCode)" }
+          $executable = Join-Path $installRoot "$env:ELECTRON_EXECUTABLE.exe"
+          if (-not (Test-Path $executable)) { throw 'installed Electron executable is missing' }
+          $env:OD_PACKAGED_E2E_HEADLESS = '1'
+          $env:ELECTRON_KIT_SMOKE_EXIT_MS = '3000'
+          $runtime = Start-Process -FilePath $executable -ArgumentList "--user-data-dir=$env:RUNNER_TEMP/electron-user-data" -Wait -PassThru
+          if ($runtime.ExitCode -ne 0) { throw "installed Electron exited with $($runtime.ExitCode)" }
+
+      - name: Bind installed acceptance credential
+        env:
+          SHELL_TYPE: ${{ matrix.shell }}
+          TARGET: ${{ matrix.target }}
+          CHANNEL: prerelease
+          ACCEPTANCE_MODE: ${{ matrix.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$SHELL_TYPE" == "electron" && "$TARGET" == darwin-* ]]; then
+            installed_root="$RUNNER_TEMP/installed-electron.app/Contents/Resources"
+          elif [[ "$SHELL_TYPE" == "electron" ]]; then
+            installed_root="$RUNNER_TEMP/installed-electron/resources"
+          else
+            installed_root="$RUNNER_TEMP/installed-shell"
+          fi
+          hot_args=()
+          user_data_root="$RUNNER_TEMP/electron-user-data"
+          if [[ "$ACCEPTANCE_MODE" == "hot" ]]; then
+            hot_args=(--hot-receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
+              --first-install-root "$installed_root" --first-install-user-data-root "$user_data_root")
+            installed_root="$RUNNER_TEMP/baseline-electron.app/Contents/Resources"
+            user_data_root="$RUNNER_TEMP/baseline-user-data"
+          fi
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" acceptance collect \
+            --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --shell "$SHELL_TYPE" --target "$TARGET" --installed-root "$installed_root" \
+            --runtime-proof-root "$RUNNER_TEMP" --base-user-data-root "$user_data_root" \
+            "${hot_args[@]}" --receipt "$RUNNER_TEMP/acceptance/$SHELL_TYPE-$TARGET.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-acceptance-${{ matrix.shell }}-${{ matrix.target }}-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/acceptance
+          if-no-files-found: error
+          retention-days: 30
+
+  activate:
+    name: Activate accepted exact channel
+    needs: [acceptance]
+    runs-on: ubuntu-24.04
+    environment: standalone-prerelease-release
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-published-prerelease-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/published
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: exact-acceptance-*-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/acceptances
+          merge-multiple: true
+
+      - name: Activate latest channel head after acceptance
+        env:
+          OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" activate \
+            --publish-receipt "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --channel-head "$RUNNER_TEMP/published/documents/channel-head.json" --acceptances "$RUNNER_TEMP/acceptances" \
+            --receipt "$RUNNER_TEMP/activate-receipt.json"
+
+      - name: Promote accepted Electron baseline snapshot
+        env:
+          OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" baseline promote \
+            --publish-receipt "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --channel-head "$RUNNER_TEMP/published/documents/channel-head.json" --activation-receipt "$RUNNER_TEMP/activate-receipt.json" \
+            --acceptance "$RUNNER_TEMP/acceptances/electron-darwin-arm64.json" --root "$GITHUB_WORKSPACE" \
+            --receipt "$RUNNER_TEMP/baseline-promote-receipt.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-activation-prerelease-${{ inputs.release_version }}
+          path: |
+            ${{ runner.temp }}/activate-receipt.json
+            ${{ runner.temp }}/baseline-promote-receipt.json
+          if-no-files-found: error
+          retention-days: 30
