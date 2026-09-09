@@ -439,6 +439,23 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  copy that the queue drain would then send twice. This flag is
    *  transport-only and is stripped before queue persistence. */
   acceptDurableQueue?: boolean;
+  /**
+   * 这一发的正文**此刻属于输入框**,而且输入框正等着知道要不要把它收回去。
+   *
+   * 只有 `handleComposerSend` 打这个标记。它是 OPEND-2719 那条「余额耗尽不代管、
+   * 把正文还给输入框」的**唯一**入场券:`handleSend` 还有十来个直接调用方
+   * (分享到社区、设计系统反馈、继续未完成任务、续跑、问答表单、首页自动发送、
+   * 重发失败的用户消息……),它们的正文不在输入框里,用户也没在等着编辑它 ——
+   * 对它们「不代管」等于悄悄取消了排队。
+   *
+   * ⚠️ 判据必须是**肯定式**。原来写成「不是重试、不是排空队列 ⇒ 就是输入框」,
+   * 而那份排除法把上面那十来个调用方全算成了输入框(PR #7927 评审)。
+   *
+   * ⚠️ 和 `acceptDurableQueue` 同类:**transport-only**,由
+   * `stripQueueOnlyFromMeta` 在入队前摘掉。一条排过队的输入框消息,它的正文已经
+   * 交给队列项保管了,回放时再声称「输入框在等它」就是撒谎。
+   */
+  composerOwnedDraft?: true;
   /** Stable task lineage for retries, resumes and clarification answers. */
   taskAnalytics?: ChatTaskExecutionAnalytics;
   /** Explicit daemon-issued OD Next continuation handle. */
@@ -8385,17 +8402,17 @@ export function ProjectView({
            * `handleComposerSend` 凭那个 id 认领回输入框 —— 队列不是保管处,输入框
            * 才是,而且那样用户下一步该干什么(充值 / 换 agent / 改需求)都还看得见。
            *
-           * ⚠️ 只有 `insufficient` 走这里。`signed_out` 同样是硬拦,但它的出路是
-           * 登录,登录完那一发确实还能跑 —— 那一档保留原来的排队 + 恢复路径。
+           * ⚠️ 两道收窄,缺一不可:
+           * ① 只有 `insufficient`。`signed_out` 同样是硬拦,但它的出路是登录,
+           *    登录完那一发确实还能跑 —— 那一档保留原来的排队 + 恢复路径。
+           * ② 只有 `composerOwnedDraft` 打过标记的那一发,也就是**真的从输入框
+           *    发出来的**。别的调用方的正文不在输入框里,取消它们的排队等于
+           *    把消息弄丢(PR #7927 评审)。
            */
           const rejectBlockedSend = (): false => {
             retractPaintedTurn();
             amrGatePausedQueueConversationsRef.current.add(gateConversationId);
-            // 认领只对 composer 那条路有意义 —— 和 `queueGateSend` 同一道判据:
-            // 重试的载体是报错卡,队列回放的载体是队列项,两者都没有正文要还。
-            if (!retryTarget && !meta?.queueDrain) {
-              amrGateBlockedRequestRef.current = clientRequestId;
-            }
+            amrGateBlockedRequestRef.current = clientRequestId;
             return false;
           };
           const acceptedDurableQueue = (queued: boolean): boolean => {
@@ -8459,9 +8476,10 @@ export function ProjectView({
                 amrBalanceCardCue(amrBalanceCardBalanceUsd(gate.snapshot), null),
               );
               setAmrBalanceCardProfile(gate.snapshot.profile ?? null);
-              // 余额耗尽:不进队列(OPEND-2719)。弹窗 + 卡就是这一发的答复,
-              // 正文回到输入框。
-              return rejectBlockedSend();
+              // 余额耗尽 **且这一发的正文归输入框**:不进队列(OPEND-2719)。
+              // 弹窗 + 卡就是这一发的答复,正文回到输入框。别的调用方掉到
+              // 下面那条原来的排队路上,行为一个字不变。
+              if (meta?.composerOwnedDraft) return rejectBlockedSend();
             }
             return acceptedDurableQueue(parkBlockedSend());
           }
@@ -10222,6 +10240,9 @@ export function ProjectView({
       const started = await handleSend(prompt, attachments, commentAttachments, {
         ...(meta ?? {}),
         clientRequestId,
+        // 这条路,而且只有这条路,的正文归输入框所有 —— 见
+        // `ProjectChatSendMeta.composerOwnedDraft`。
+        composerOwnedDraft: true,
       });
       if (started) return;
       // 认领必须按请求 id:同一条会话里可能有别的发送也在这段时间被拒。
@@ -14245,6 +14266,10 @@ function stripQueueOnlyFromMeta(
   const {
     queueOnly: _queueOnly,
     acceptDurableQueue: _acceptDurableQueue,
+    // 一旦排过队,正文的保管方就是队列项而不是输入框了 —— 这份认领不能跟着
+    // 回放走,否则一条排过队的输入框消息在回放时被拦下,会去撤一个早就清空的
+    // 草稿,而队列里那条反而被扔掉。见 `composerOwnedDraft` 的说明。
+    composerOwnedDraft: _composerOwnedDraft,
     ...rest
   } = meta as ProjectChatSendMeta;
   return Object.keys(rest).length > 0 ? rest : undefined;

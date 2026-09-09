@@ -50,6 +50,8 @@ const fetchBrands = vi.fn();
 
 /** What each composer send was told to do with its draft. */
 const sendOutcomes: unknown[] = [];
+/** What the non-composer hosts got back from their own `handleSend` calls. */
+const hostSendOutcomes: unknown[] = [];
 
 const workspaceScopeMocks = vi.hoisted(() => {
   const personalContext = (): WorkspaceCollabContext => ({
@@ -230,7 +232,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     activeConversationId?: string | null;
     messages?: ChatMessage[];
     sendDisabled?: boolean;
-    queuedItems?: Array<{ id: string; prompt: string }>;
+    queuedItems?: Array<{ id: string; prompt: string; meta?: Record<string, unknown> }>;
     recoveryActionsBlockedReason?: string | null;
     retryPendingAssistantId?: string | null;
     onRetry?: (message: ChatMessage, actionType?: string) => void;
@@ -239,6 +241,19 @@ vi.mock('../../src/components/ChatPane', () => ({
       attachments: unknown[],
       commentAttachments: unknown[],
       meta?: unknown,
+    ) => unknown;
+    onResumeRun?: (message: ChatMessage) => void;
+    onShareToOpenDesign?: (assistantMessageId: string) => void;
+    onContinueRemainingTasks?: (
+      message: ChatMessage,
+      todos: Array<{ content: string; status: string }>,
+    ) => unknown;
+    onSubmitQuestionForm?: (
+      text: string,
+      attachments?: unknown[],
+      context?: unknown,
+      sourceAssistantMessageId?: string,
+      formId?: string,
     ) => unknown;
   }) => {
     const failed = [...(props.messages ?? [])]
@@ -250,6 +265,12 @@ vi.mock('../../src/components/ChatPane', () => ({
         <output data-testid="queued-count">{props.queuedItems?.length ?? 0}</output>
         <output data-testid="queued-prompts">
           {(props.queuedItems ?? []).map((item) => item.prompt).join('|')}
+        </output>
+        {/* 队列项**落库**的 meta 键名 —— transport-only 的标记不许出现在这里。 */}
+        <output data-testid="queued-meta-keys">
+          {(props.queuedItems ?? [])
+            .map((item) => Object.keys(item.meta ?? {}).sort().join(','))
+            .join('|')}
         </output>
         {/* ① 宿主宣告的阻断原因。`none` = 宿主说这一刻可以动作。 */}
         <output data-testid="recovery-blocked-reason">
@@ -283,6 +304,54 @@ vi.mock('../../src/components/ChatPane', () => ({
           }}
         >
           send
+        </button>
+        {/*
+          * 四条**不是从输入框发出去**的 `handleSend` 调用方,用来钉住 2719 的
+          * 收窄:它们的正文不在输入框里,所以余额拦截对它们仍然走原来的排队。
+          */}
+        <button
+          type="button"
+          data-testid="share-to-open-design"
+          onClick={() => {
+            if (failed) props.onShareToOpenDesign?.(failed.id);
+          }}
+        >
+          share
+        </button>
+        <button
+          type="button"
+          data-testid="continue-remaining"
+          onClick={() => {
+            if (failed) {
+              void Promise.resolve(
+                props.onContinueRemainingTasks?.(failed, [
+                  { content: 'finish the hero section', status: 'in_progress' },
+                ]),
+              ).then((outcome) => hostSendOutcomes.push(outcome));
+            }
+          }}
+        >
+          continue remaining
+        </button>
+        <button
+          type="button"
+          data-testid="resume-run"
+          onClick={() => {
+            if (failed) props.onResumeRun?.(failed);
+          }}
+        >
+          resume
+        </button>
+        <button
+          type="button"
+          data-testid="submit-question-form"
+          onClick={() => {
+            void Promise.resolve(
+              props.onSubmitQuestionForm?.('Audience: designers', [], undefined, undefined, 'brief'),
+            ).then((outcome) => hostSendOutcomes.push(outcome));
+          }}
+        >
+          answer form
         </button>
       </section>
     );
@@ -398,6 +467,7 @@ let conversationMessages: ChatMessage[] = [];
 
 beforeEach(() => {
   sendOutcomes.length = 0;
+  hostSendOutcomes.length = 0;
   window.localStorage.clear();
   window.sessionStorage.clear();
   conversationMessages = [userMessage, failedAssistant];
@@ -696,5 +766,143 @@ describe('OPEND-2719 余额不足是终局:不进队列,不起任务,弹窗和�
     expect(screen.getByTestId('queued-count').textContent).toBe('0');
     expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
     await waitFor(() => expect(sendOutcomes).toEqual([undefined]));
+  });
+});
+
+/*
+ * OPEND-2719 的**收窄**(PR #7927 评审)。
+ *
+ * 「不代管、把正文还回输入框」这条路原来的判据是排除法:「不是重试、不是排空
+ * 队列 ⇒ 就是用户从输入框发的」。可 `handleSend` 还有十来个直接调用方 ——
+ * 分享到社区、设计系统反馈、继续未完成任务、续跑、问答表单、首页自动发送……
+ * 它们的正文压根不在输入框里,用户也没在等着编辑它,把它们一起拖上这条路
+ * 等于**悄悄取消了它们的排队**(问答表单更严重:它靠 `acceptDurableQueue`
+ * 才知道答案被durable接住了,收不到就会解锁表单并回滚已上传的文件)。
+ *
+ * 所以判据改成肯定式:只有 `handleComposerSend` 自己打上的标记才走这条路。
+ * 下面四条钉的是「别人的行为一个字没变」。
+ */
+describe('OPEND-2719 收窄:只有输入框那条路把正文要回去', () => {
+  const insufficient = {
+    kind: 'hard' as const,
+    reason: 'insufficient' as const,
+    snapshot: {
+      status: 'available' as const,
+      profile: 'prod',
+      user: { plan: 'free' },
+      balanceUsd: '0',
+      updatedAt: null,
+      fetchedAt: new Date().toISOString(),
+      stale: false,
+      source: 'vela_api' as const,
+    },
+  };
+
+  async function renderBlockedAmrProject() {
+    checkAmrBalanceGate.mockResolvedValue(insufficient);
+    renderProjectView(amrConfig);
+    await waitForConversation();
+    await waitFor(() =>
+      expect(screen.getByTestId('recovery-blocked-reason').textContent).toBe('none'),
+    );
+  }
+
+  it('分享到社区:余额不足时照旧进队列,不抢输入框', async () => {
+    await renderBlockedAmrProject();
+
+    fireEvent.click(screen.getByTestId('share-to-open-design'));
+
+    await waitFor(() => expect(screen.getByTestId('queued-count').textContent).toBe('1'));
+    expect(screen.getByTestId('queued-prompts').textContent).not.toBe('');
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    // 输入框那条路一次都没被叫到,自然也没有正文要还。
+    expect(sendOutcomes).toEqual([]);
+  });
+
+  it('继续未完成任务:余额不足时照旧进队列', async () => {
+    await renderBlockedAmrProject();
+
+    fireEvent.click(screen.getByTestId('continue-remaining'));
+
+    await waitFor(() => expect(screen.getByTestId('queued-count').textContent).toBe('1'));
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it('续跑:余额不足时照旧进队列', async () => {
+    await renderBlockedAmrProject();
+
+    fireEvent.click(screen.getByTestId('resume-run'));
+
+    await waitFor(() => expect(screen.getByTestId('queued-count').textContent).toBe('1'));
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  /*
+   * 问答表单是这一组里代价最高的一个:它把答案(和刚上传的文件)只留了一份,
+   * 靠 `acceptDurableQueue` 的 `true` 才敢释放表单。被误拖上「不代管」那条路
+   * 会让它收到 `false` —— 表单解锁、上传回滚,用户被要求重答一遍。
+   */
+  it('问答表单的答案:余额不足时进队列,而且要被告知「已durable接住」', async () => {
+    await renderBlockedAmrProject();
+
+    fireEvent.click(screen.getByTestId('submit-question-form'));
+
+    await waitFor(() => expect(screen.getByTestId('queued-count').textContent).toBe('1'));
+    await waitFor(() => expect(hostSendOutcomes).toEqual([true]));
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  /*
+   * 反向锚点:收窄之后输入框那条路必须还在。没有这一条,「谁都不走这条路」
+   * 也能让上面四条全绿 —— 而那等于把 2719 又改回去了。
+   */
+  it('反向锚点:输入框那条路仍然不进队列,正文仍然还回去', async () => {
+    conversationMessages = [];
+    await renderBlockedAmrProject();
+    await waitFor(() =>
+      expect((screen.getByTestId('send-message') as HTMLButtonElement).disabled).toBe(false),
+    );
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(sendOutcomes).toEqual(['restore-draft']));
+    expect(screen.getByTestId('queued-count').textContent).toBe('0');
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * `composerOwnedDraft` 是 **transport-only** 的,和 `acceptDurableQueue` 同类:
+ * 它说的是「此刻输入框正拿着这份正文等回信」,而一条消息**一旦排进队列**,
+ * 保管方就换成了队列项 —— 输入框早清空了。让这份认领跟着回放走,回放被余额
+ * 拦下时就会去撤一个不存在的草稿,而队列里那条真正的载体反倒没人管。
+ */
+describe('OPEND-2719:输入框认领不许落进队列', () => {
+  it('会话正忙时排队的那条输入框消息,落库的 meta 里没有这份认领', async () => {
+    conversationMessages = [];
+    checkAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
+    // 第一发跑起来就不结束 —— 会话进入 busy,第二发只能排队。
+    streamViaDaemon.mockImplementation(
+      async (options: { onRunCreated?: (runId: string) => void }) => {
+        options.onRunCreated?.('run-live');
+        return new Promise<void>(() => {});
+      },
+    );
+
+    renderProjectView(amrConfig);
+    await waitForConversation();
+    await waitFor(() =>
+      expect((screen.getByTestId('send-message') as HTMLButtonElement).disabled).toBe(false),
+    );
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(screen.getByTestId('queued-count').textContent).toBe('1'));
+    expect(screen.getByTestId('queued-meta-keys').textContent).not.toContain(
+      'composerOwnedDraft',
+    );
   });
 });
