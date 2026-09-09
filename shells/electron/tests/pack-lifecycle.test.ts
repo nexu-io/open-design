@@ -55,7 +55,6 @@ describe("Electron pack adapter contract", () => {
     expect(parseElectronPackRequest({
       schemaVersion: 2,
       operation: "electron.pack.build",
-      platformArchivePath: resolve(".tmp/node.tar.gz"),
       installationInput: { channel: "betahyx", releaseVersion: "0.1.0-betahyx.1", channelHeadUrl: "http://127.0.0.1/latest/channel-head.json", contentFile: resolve(".tmp/content.json"), trustFile: resolve(".tmp/trust.json"), seedFiles: [resolve(".tmp/seed.mjs")], capsule: { manifestFile: resolve(".tmp/capsule.json"), archiveFile: resolve(".tmp/capsule.zip") } },
       channel: "betahyx",
       installationRoot: resolve(".tmp/installation"),
@@ -69,7 +68,6 @@ describe("Electron pack adapter contract", () => {
     expect(() => parseElectronPackRequest({
       schemaVersion: 2,
       operation: "electron.pack.build",
-      platformArchivePath: resolve(".tmp/node.tar.gz"),
       installationInput: { channel: "betahyx", releaseVersion: "0.1.0-betahyx.1", channelHeadUrl: "http://127.0.0.1/latest/channel-head.json", contentFile: resolve(".tmp/content.json"), trustFile: resolve(".tmp/trust.json"), seedFiles: [resolve(".tmp/seed.mjs")], capsule: { manifestFile: resolve(".tmp/capsule.json"), archiveFile: resolve(".tmp/capsule.zip") } },
       channel: "betahyx",
       installationRoot: resolve(".tmp/installation"),
@@ -84,7 +82,6 @@ describe("Electron pack adapter contract", () => {
     const request = parseElectronPackRequest({
       schemaVersion: 2,
       operation: "electron.pack.build",
-      platformArchivePath: resolve(".tmp/node.tar.gz"),
       installationInput: { channel: "betahyx", releaseVersion: "0.1.0-betahyx.1", channelHeadUrl: "http://127.0.0.1/latest/channel-head.json", contentFile: resolve(".tmp/content.json"), trustFile: resolve(".tmp/trust.json"), seedFiles: [resolve(".tmp/seed.mjs")], capsule: { manifestFile: resolve(".tmp/capsule.json"), archiveFile: resolve(".tmp/capsule.zip") } },
       channel: "betahyx",
       installationRoot: resolve(".tmp/installation"),
@@ -104,7 +101,6 @@ describe("Electron pack adapter contract", () => {
     const request = parseElectronPackRequest({
       schemaVersion: 2,
       operation: "electron.pack.build",
-      platformArchivePath: resolve(".tmp/node.tar.gz"),
       installationInput: { channel: "betahyx", releaseVersion: "0.1.0-betahyx.1", channelHeadUrl: "http://127.0.0.1/latest/channel-head.json", contentFile: resolve(".tmp/content.json"), trustFile: resolve(".tmp/trust.json"), seedFiles: [resolve(".tmp/seed.mjs")], capsule: { manifestFile: resolve(".tmp/capsule.json"), archiveFile: resolve(".tmp/capsule.zip") } },
       channel: "unknown",
       installationRoot: resolve(".tmp/installation"),

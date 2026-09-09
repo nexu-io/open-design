@@ -16,7 +16,7 @@ export async function readElectronNodeArchive(target: ElectronExactTarget = curr
 }
 
 /** Build fresh; persistent download/cache ownership stays with the calling tool. */
-export async function withElectronPhysicalPlatform<T>(input: Readonly<{ archivePath: string; target: ElectronExactTarget }>, consume: (platformRoot: string) => Promise<T>): Promise<T> {
+async function withBuiltElectronPlatform<T>(input: Readonly<{ archivePath: string; target: ElectronExactTarget }>, consume: (platformRoot: string) => Promise<T>): Promise<T> {
   const scratch = await mkdtemp(join(tmpdir(), "electron-physical-platform-"));
   try {
     const platform = await buildNodePlatform({ lockPath, archivePath: input.archivePath, target: input.target, outputRoot: join(scratch, "platform"),
@@ -29,7 +29,7 @@ export async function withElectronPhysicalPlatform<T>(input: Readonly<{ archiveP
 export async function buildElectronPlatformResource(input: Readonly<{
   archivePath: string; target: ElectronExactTarget; outputArchivePath: string;
 }>) {
-  return withElectronPhysicalPlatform(input, async platformRoot => {
+  return withBuiltElectronPlatform(input, async platformRoot => {
     const executables = [input.target === "win32-x64" ? "node.exe" : "bin/node"];
     if (input.target.startsWith("darwin-")) {
       for (const path of [`node_modules/node-pty/prebuilds/${input.target}/spawn-helper`, "node_modules/node-pty/build/Release/spawn-helper"]) {

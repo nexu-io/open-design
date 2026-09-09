@@ -58,15 +58,12 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{
     const plan = await readObject(input.plan), identity = plan.plan?.nodes?.["electron.shell.build"]?.identity;
     if (plan.plan?.target !== buildTarget || typeof identity !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(identity)) throw new Error("Electron Shell plan identity is invalid");
     // Build dependencies load only when the native build command is executed.
-    const { buildElectronScene, buildElectronCapsuleContent, resolveElectronNodeArchive } = await electronBuilder(root);
-    const platformArchivePath = input.nodeArchive ? resolve(input.nodeArchive) : await (async () => {
-      const source = await resolveElectronNodeArchive(buildTarget);
-      return (await acquireBuildArchive({ cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: source.archive, url: source.url, sha256: source.sha256 })).path;
-    })();
+    if (input.nodeArchive != null) throw new Error("Electron scene does not consume --node-archive; use build platform");
+    const { buildElectronScene, buildElectronCapsuleContent } = await electronBuilder(root);
     const assemble = async (capsule: Readonly<{ contentPath: string; archivePath: string }>) => {
       const result = await buildElectronScene({ schemaVersion: 2, operation: "electron.scene.build", target: buildTarget,
         capsuleContentFile: capsule.contentPath, capsuleArchiveFile: capsule.archivePath,
-        buildHash: identity.slice(7), acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher, platformArchivePath,
+        buildHash: identity.slice(7), acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher,
         resourceReceiptFile, sceneDirectory: resolve(input.output) });
       await writeObject(input.receipt, result);
       return result;

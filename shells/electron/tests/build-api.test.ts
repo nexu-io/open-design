@@ -13,7 +13,7 @@ vi.mock("@open-design/electron-kit/distribution", () => ({ buildElectronCapsuleC
 vi.mock("@open-design/electron-kit/installation", () => ({ inspectMacElectronAppTrust: mock.trust }));
 vi.mock("@/adapters/standalone/build.ts", () => ({ buildElectronStandaloneAuthority: async () => ({ host: {}, updaterProvider: {}, supervisor: {} }) }));
 vi.mock("@/adapters/standalone/assemble-installation.ts", () => ({ withElectronInstallation: mock.install }));
-vi.mock("@/platform/build.ts", () => ({ withElectronPhysicalPlatform: async (_input: unknown, consume: (root: string) => Promise<unknown>) => consume("/physical-platform") }));
+vi.mock("@/platform/build.ts", () => { throw new Error("scene assembly must not load the native platform builder"); });
 
 const roots: string[] = [];
 afterEach(async () => { vi.resetAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -41,12 +41,11 @@ it("composes scene identity in memory and resolves source entries through the pa
   mock.assemble.mockResolvedValue({ sceneManifestPath, sceneRoot: join(root, "scene") });
   const result = await buildElectronScene({ schemaVersion: 2, operation: "electron.scene.build", target: "darwin-arm64",
     capsuleContentFile, capsuleArchiveFile: join(root, "capsule.zip"),
-    platformArchivePath: join(root, "node.tar.gz"),
     buildHash: "a".repeat(64), acceptedClosureBaselineFile: join(root, "closure.mjs"), standaloneLauncherFile: join(root, "launcher.mjs"), resourceReceiptFile, sceneDirectory: join(root, "scene") });
   expect(result.sceneManifestSha256).toBe(createHash("sha256").update("scene-bytes").digest("hex"));
   expect(mock.assemble).toHaveBeenCalledWith(expect.objectContaining({
     manifest: await resolveElectronSceneManifest("a".repeat(64)),
-    authorityResources: expect.arrayContaining([{ name: "platform", path: "/physical-platform" }]),
+    authorityResources: expect.not.arrayContaining([expect.objectContaining({ name: "platform" })]),
     entryPath: expect.stringMatching(/\/shells\/electron\/src\/main\.ts$/u),
     rendererPreloadEntryPath: expect.stringMatching(/\/shells\/electron\/src\/adapters\/renderer\/preload\.ts$/u),
   }));

@@ -14,7 +14,7 @@ vi.mock("@/adapters/standalone/assemble-installation.ts", () => ({
 }));
 vi.mock("@/adapters/standalone/installation.ts", () => ({ resolveElectronStandaloneTarget: () => "darwin-arm64", loadElectronStandaloneAuthorityResources: async () => [] }));
 vi.mock("@/adapters/tools/lifecycle/observation.ts", () => ({ waitForElectronGeneration: async () => ({ state: "running" }) }));
-vi.mock("@/platform/build.ts", () => ({ withElectronPhysicalPlatform: async (_input: unknown, consume: (root: string) => Promise<unknown>) => consume("/platform") }));
+vi.mock("@/platform/build.ts", () => { throw new Error("development must not load the native platform builder"); });
 
 const roots: string[] = [];
 afterEach(async () => { vi.clearAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -32,7 +32,6 @@ it("passes the caller log descriptor to the physical launch without closing or r
   });
   try {
     await controlElectronDevelopment({ schemaVersion: 2, operation: "electron.dev.start", channel: "dev", namespace: "public-api",
-      platformArchivePath: "/node.tar.gz",
       controlRuntimeRoot: root, installationRoot: join(root, "installation"), ownerPid: process.pid,
       installationInput: { channel: "dev", releaseVersion: "0.1.0", channelHeadUrl: "http://localhost/head", contentFile: "/content", trustFile: "/trust", seedFiles: ["/seed"], capsule: { manifestFile: "/capsule.json", archiveFile: "/capsule.zip" } } }, { logFd: log.fd });
     expect(mock.launch).toHaveBeenCalledWith(expect.objectContaining({ logFd: log.fd, resources: expect.objectContaining({ ownerPid: process.pid }) }));

@@ -41,6 +41,9 @@ Shell and the typed adapter boundary consumed by repository tools.
   Signed Capsule platform resources prepare through Standalone after the first
   screen; recovery verifies that same descriptor under the stopped-session guard.
   Normal startup never substitutes the installation's former platform tree.
+  Dev, pack and scene assembly do not accept a Node archive or build/embed a
+  platform tree. Independent platform production is exposed through `/build`;
+  tools-release owns its acquisition and release-neutral artifact receipt.
 - `config/appearance.json` owns Capsule window/loading declarations and channel
   title overrides. Physical manifest schema 2 excludes these presentation fields;
   keep OS product identity, icons and installer endpoints physical.

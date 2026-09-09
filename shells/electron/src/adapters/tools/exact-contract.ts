@@ -11,7 +11,6 @@ export type ElectronExactSceneRequest = Readonly<{
   capsuleArchiveFile: string;
   buildHash: string;
   operation: "electron.scene.build";
-  platformArchivePath: string;
   resourceReceiptFile: string;
   sceneDirectory: string;
   schemaVersion: typeof ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION;
@@ -56,7 +55,7 @@ function absolutePath(input: Record<string, unknown>, field: string, label: stri
 
 export function parseElectronExactSceneRequest(value: unknown): ElectronExactSceneRequest {
   const input = record(value, "Electron exact scene request");
-  exactKeys(input, ["acceptedClosureBaselineFile", "buildHash", "capsuleArchiveFile", "capsuleContentFile", "operation", "platformArchivePath", "resourceReceiptFile", "sceneDirectory", "schemaVersion", "standaloneLauncherFile", "target"], "Electron exact scene request");
+  exactKeys(input, ["acceptedClosureBaselineFile", "buildHash", "capsuleArchiveFile", "capsuleContentFile", "operation", "resourceReceiptFile", "sceneDirectory", "schemaVersion", "standaloneLauncherFile", "target"], "Electron exact scene request");
   if (input.schemaVersion !== ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION || input.operation !== "electron.scene.build") {
     throw new Error("Electron exact scene request identity is invalid");
   }
@@ -67,7 +66,6 @@ export function parseElectronExactSceneRequest(value: unknown): ElectronExactSce
     capsuleArchiveFile: absolutePath(input, "capsuleArchiveFile", "Electron exact scene"),
     buildHash: input.buildHash,
     operation: "electron.scene.build",
-    platformArchivePath: absolutePath(input, "platformArchivePath", "Electron exact scene"),
     resourceReceiptFile: absolutePath(input, "resourceReceiptFile", "Electron exact scene"),
     sceneDirectory: absolutePath(input, "sceneDirectory", "Electron exact scene"),
     schemaVersion: ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION,

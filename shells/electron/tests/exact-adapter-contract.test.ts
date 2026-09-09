@@ -11,7 +11,6 @@ describe("Electron exact Shell adapter contract", () => {
     const request = {
       acceptedClosureBaselineFile: absolute("closure.mjs"), operation: "electron.scene.build", sceneDirectory: absolute("scene"), schemaVersion: 2,
       capsuleContentFile: absolute("capsule-content.json"), capsuleArchiveFile: absolute("capsule.zip"),
-      platformArchivePath: absolute("node.tar.gz"),
       resourceReceiptFile: absolute("closure-resources.json"), buildHash: "a".repeat(64), standaloneLauncherFile: absolute("standalone-launcher.mjs"), target: "darwin-arm64",
     } as const;
     expect(parseElectronExactSceneRequest(request)).toEqual(request);

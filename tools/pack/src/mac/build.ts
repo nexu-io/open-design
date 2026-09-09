@@ -6,7 +6,6 @@ import { withStandaloneExactFixture } from "@open-design/tools-serve/standalone-
 
 import type { ToolPackConfig } from "../config/index.js";
 import type { buildElectronPackage } from "@open-design/shell-electron/build";
-import { acquireBuildArchive } from "../build-api.js";
 
 type ShellPackReceipt = Awaited<ReturnType<typeof buildElectronPackage>>;
 
@@ -27,14 +26,11 @@ export async function packMac(config: ToolPackConfig) {
   const receiptPath = join(config.roots.output.namespaceRoot, "shell-pack-receipt.json");
   await mkdir(config.roots.output.namespaceRoot, { recursive: true });
   const startedAt = Date.now();
-  const { buildElectronPackage, resolveElectronNodeArchive } = await import("@open-design/shell-electron/build");
-  const source = await resolveElectronNodeArchive();
-  const archive = await acquireBuildArchive({ cacheRoot: config.roots.cacheRoot, fileName: source.archive, url: source.url, sha256: source.sha256 });
+  const { buildElectronPackage } = await import("@open-design/shell-electron/build");
   const receipt = await buildElectronPackage({
     schemaVersion: 2,
     operation: "electron.pack.build",
     installationInput: { ...installationInput, capsule: installationInput.capsule },
-    platformArchivePath: archive.path,
     channel,
     installationRoot: join(config.roots.cacheRoot, "standalone", channel),
     namespace: config.namespace,

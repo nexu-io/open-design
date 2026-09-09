@@ -86,7 +86,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--resource-id <id>", "Closure data resource group (resource)")
     .option("--plan <file>", "Release plan (scene; optional identity binding for resource)")
     .option("--resources <file>", "Closure resource receipt (Electron scene)")
-    .option("--node-archive <file>", "Optional local locked official Node archive (scene/platform)")
+    .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
     .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
     .option("--scene <directory>", "Verified scene (distribution)")

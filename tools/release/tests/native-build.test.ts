@@ -22,15 +22,16 @@ async function fixture() {
 }
 
 it("resolves only the public build export in the selected workspace and passes typed scene inputs", async () => {
-  const f = await fixture(); await buildReleaseScene(f);
+  const f = await fixture(); await buildReleaseScene({ ...f, nodeArchive: undefined });
   const result = JSON.parse(await readFile(f.receipt, "utf8"));
   expect(result.request).toEqual({ schemaVersion: 2, operation: "electron.scene.build", target: f.target, buildHash: "a".repeat(64),
     capsuleContentFile: expect.stringMatching(/release-capsule-baseline-[^/]+\/content\/capsule-content\.json$/u),
     capsuleArchiveFile: expect.stringMatching(/release-capsule-baseline-[^/]+\/content\/capsule\.zip$/u),
     acceptedClosureBaselineFile: join(f.root, "apps/closure/dist/index.mjs"), standaloneLauncherFile: join(f.root, "apps/closure/dist/launcher.mjs"),
-    resourceReceiptFile: f.resources, sceneDirectory: f.output, platformArchivePath: f.nodeArchive });
-  await expect(buildReleaseScene({ ...f, target: "win32-x64" })).rejects.toThrow("plan identity is invalid");
-  await expect(buildReleaseScene({ ...f, shell: "linux" })).rejects.toThrow("electron or terminal");
+    resourceReceiptFile: f.resources, sceneDirectory: f.output });
+  await expect(buildReleaseScene({ ...f, nodeArchive: undefined, target: "win32-x64" })).rejects.toThrow("plan identity is invalid");
+  await expect(buildReleaseScene({ ...f, nodeArchive: undefined, shell: "linux" })).rejects.toThrow("electron or terminal");
+  await expect(buildReleaseScene(f)).rejects.toThrow("use build platform");
 });
 
 it("builds neutral Capsule content without Node archives, Closure inputs or version policy", async () => {
@@ -89,7 +90,7 @@ it("consumes a prebuilt Capsule without invoking its compiler or deleting caller
   await writeFile(capsuleContent, "content"); await writeFile(capsuleArchive, "archive");
   await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"),
     "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronCapsuleContent() { throw Error('Capsule must not be recompiled'); }\n");
-  await buildReleaseScene({ ...f, capsuleContent, capsuleArchive });
+  await buildReleaseScene({ ...f, nodeArchive: undefined, capsuleContent, capsuleArchive });
   expect(JSON.parse(await readFile(f.receipt, "utf8")).request).toMatchObject({ capsuleContentFile: capsuleContent, capsuleArchiveFile: capsuleArchive });
   expect(await readFile(capsuleContent, "utf8")).toBe("content");
   expect(await readFile(capsuleArchive, "utf8")).toBe("archive");
@@ -138,5 +139,5 @@ it.skipIf(process.platform !== "darwin")("rejects an invalid Terminal source loc
     "darwin-arm64": { archive: "node-v24.18.0-darwin-arm64.tar.gz", mediaType: "application/gzip",
       sha256: "a".repeat(64), url: "https://untrusted.example/node.tar.gz" },
   } });
-  await expect(buildReleaseScene({ ...f, shell: "terminal" })).rejects.toThrow("invalid official Node source");
+  await expect(buildReleaseScene({ ...f, nodeArchive: undefined, shell: "terminal" })).rejects.toThrow("invalid official Node source");
 });

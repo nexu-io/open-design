@@ -174,8 +174,8 @@ describe("Electron product shell", () => {
       readFile(new URL("../config/carriers/node-lock.json", import.meta.url), "utf8"),
       readFile(new URL("../../terminal/node-lock.json", import.meta.url), "utf8"),
     ]);
-    expect(dev).toContain("withElectronPhysicalPlatform");
-    expect(pack).toContain("withElectronPhysicalPlatform");
+    expect(dev).not.toContain("platform/build");
+    expect(pack).not.toContain("platform/build");
     expect(dev).toContain('join(electronShellRoot, "config/carrier.json"');
     expect(pack).toContain('new URL("../../../config/carrier.json"');
     expect(dev).not.toMatch(/node-v\d/u);

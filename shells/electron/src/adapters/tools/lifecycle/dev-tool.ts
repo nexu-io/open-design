@@ -25,7 +25,6 @@ export type ElectronDevLifecycleRequest = Readonly<RequestScope & {
   installationInput: ElectronInstallationInput;
   installationRoot: string;
   operation: "electron.dev.start";
-  platformArchivePath: string;
   ownerPid: number | null;
 }> | Readonly<RequestScope & { operation: "electron.dev.inspect" | "electron.dev.status" | "electron.dev.stop" }>;
 
@@ -52,7 +51,7 @@ export function parseElectronDevLifecycleRequest(value: unknown): ElectronDevLif
   const request = object(value, "Electron dev lifecycle request");
   const operation = request.operation;
   const baseKeys = ["channel", "controlRuntimeRoot", "namespace", "operation", "schemaVersion"];
-  if (operation === "electron.dev.start") exactKeys(request, [...baseKeys, "installationInput", "installationRoot", "ownerPid", "platformArchivePath"], "Electron dev start request");
+  if (operation === "electron.dev.start") exactKeys(request, [...baseKeys, "installationInput", "installationRoot", "ownerPid"], "Electron dev start request");
   else if (operation === "electron.dev.inspect" || operation === "electron.dev.status" || operation === "electron.dev.stop") exactKeys(request, baseKeys, "Electron dev lifecycle request");
   else throw new Error("Electron dev lifecycle operation is unsupported");
   if (request.schemaVersion !== 2) throw new Error("Electron dev lifecycle schema is unsupported");
@@ -71,7 +70,6 @@ export function parseElectronDevLifecycleRequest(value: unknown): ElectronDevLif
     operation,
     installationInput: parseElectronInstallationInput(request.installationInput),
     installationRoot: absolutePath(request.installationRoot, "Electron dev installation root"),
-    platformArchivePath: absolutePath(request.platformArchivePath, "Electron platform archive"),
     ownerPid: ownerPid as number | null,
   });
 }
@@ -82,20 +80,19 @@ function stamp(request: RequestScope): SidecarStamp {
 
 async function start(request: Extract<ElectronDevLifecycleRequest, { operation: "electron.dev.start" }>, logFd: number) {
   const { prepareElectronDevShell } = await import("@open-design/electron-kit/dev");
-  const { withElectronPhysicalPlatform } = await import("../../../platform/build.ts");
   const manifestPath = join(electronShellRoot, "config/shell.json");
   const baseManifest = validateElectronShellManifest(JSON.parse(await readFile(manifestPath, "utf8")) as ElectronShellManifest);
   if (baseManifest.channel !== request.channel) throw new Error("Electron dev request escaped the Shell channel");
   if (request.installationInput.channel !== request.channel) throw new Error("Electron dev installation input escaped the Shell channel");
   const prepared = await withElectronInstallation({ input: request.installationInput, outputDirectory: request.installationRoot, target: resolveElectronStandaloneTarget(), carrierVersion: baseManifest.shell.version }, async (installation) => {
-    return await withElectronPhysicalPlatform({ archivePath: request.platformArchivePath, target: resolveElectronStandaloneTarget() }, async platformRoot => prepareElectronDevShell({
-    authorityResources: [...await loadElectronStandaloneAuthorityResources(installation.resourceDirectory), { name: "platform", path: platformRoot }],
+    return await prepareElectronDevShell({
+    authorityResources: await loadElectronStandaloneAuthorityResources(installation.resourceDirectory),
     entryPath: electronShellSource("main.ts"),
     manifest: { ...baseManifest, namespace: request.namespace },
     projectRoot: electronShellRoot,
     rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
     carrierConfigPath: join(electronShellRoot, "config/carrier.json"),
-  }));
+  });
   });
   const resources = Object.freeze({ dataRoot: null, ownerPid: request.ownerPid, port: 0, runtimeRoot: request.controlRuntimeRoot });
   const environment: NodeJS.ProcessEnv = { ...process.env, OD_ELECTRON_CONTROL_RESOURCES: JSON.stringify(resources) };

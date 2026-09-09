@@ -10,7 +10,6 @@ import { createElectronReleaseManifest, type ElectronReleaseIdentityRegistry } f
 import { loadElectronStandaloneAuthorityResources } from "../standalone/installation.ts";
 import { withElectronInstallation, parseElectronInstallationInput, type ElectronInstallationInput } from "../standalone/assemble-installation.ts";
 import { electronShellSource } from "./resources.ts";
-import { withElectronPhysicalPlatform } from "../../platform/build.ts";
 
 export type ElectronPackRequest = Readonly<{
   schemaVersion: 2;
@@ -20,7 +19,6 @@ export type ElectronPackRequest = Readonly<{
   installationRoot: string;
   namespace: string;
   outputDirectory: string;
-  platformArchivePath: string;
   releaseVersion: string;
 }>;
 
@@ -41,7 +39,7 @@ function token(value: unknown, label: string): string {
 
 export function parseElectronPackRequest(value: unknown): ElectronPackRequest {
   const request = object(value, "Electron pack request");
-  const expected = ["channel", "installationInput", "installationRoot", "namespace", "operation", "outputDirectory", "platformArchivePath", "releaseVersion", "schemaVersion"];
+  const expected = ["channel", "installationInput", "installationRoot", "namespace", "operation", "outputDirectory", "releaseVersion", "schemaVersion"];
   if (JSON.stringify(Object.keys(request).sort()) !== JSON.stringify(expected)) throw new Error("Electron pack request fields are invalid");
   if (request.schemaVersion !== 2 || request.operation !== "electron.pack.build") throw new Error("Electron pack request schema or operation is unsupported");
   if (typeof request.releaseVersion !== "string" || !/^\d+\.\d+\.\d+(?:-[a-z0-9]+\.\d+)?$/u.test(request.releaseVersion)) throw new Error("Electron pack releaseVersion is invalid");
@@ -53,7 +51,6 @@ export function parseElectronPackRequest(value: unknown): ElectronPackRequest {
     namespace: token(request.namespace, "Electron pack namespace"),
     installationRoot: absolutePath(request.installationRoot, "Electron pack installation root"),
     outputDirectory: absolutePath(request.outputDirectory, "Electron pack output directory"),
-    platformArchivePath: absolutePath(request.platformArchivePath, "Electron platform archive"),
     releaseVersion: request.releaseVersion,
   });
 }
@@ -76,8 +73,8 @@ export async function executeElectronPack(request: ElectronPackRequest) {
   if (installation.channel !== request.channel || installation.releaseVersion !== request.releaseVersion) {
     throw new Error("Electron pack authority differs from its explicit channel release identity");
   }
-  return await withElectronPhysicalPlatform({ archivePath: request.platformArchivePath, target: resolveElectronStandaloneTarget() }, async platformRoot => packElectronShell({
-    authorityResources: [...await loadElectronStandaloneAuthorityResources(installation.resourceDirectory), { name: "platform", path: platformRoot }],
+  return await packElectronShell({
+    authorityResources: await loadElectronStandaloneAuthorityResources(installation.resourceDirectory),
     distributionPath: fileURLToPath(new URL("../../../config/distribution.json", import.meta.url)),
     entryPath: electronShellSource("main.ts"),
     manifest,
@@ -86,7 +83,7 @@ export async function executeElectronPack(request: ElectronPackRequest) {
     outputRoot: join(request.outputDirectory, "distribution"),
     projectRoot: fileURLToPath(new URL("../../..", import.meta.url)),
     rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
-  }));
+  });
   });
   return Object.freeze({
     schemaVersion: 2 as const,
