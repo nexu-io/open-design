@@ -1,7 +1,7 @@
-import { copyFile, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { copyFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { convergenceProductCandidate, readConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
+import { assertConvergedProductAbsent, stageConvergedProduct, convergenceProductCandidate, readConvergedProduct, writeConvergedEntry } from "./convergence-product.ts";
 import { EXACT_DATA_PLAN_NODE_IDS } from "./plan.ts";
 import { validateDataResourceReceipt } from "./resource-composition.ts";
 
@@ -20,24 +20,6 @@ function boundResource(receipt: JsonObject, expected: Awaited<ReturnType<typeof 
   if (resource.id !== resourceId || !canonicalBytes(receipt.planNode ?? null).equals(canonicalBytes(expected))) throw new Error("cached data resource plan binding mismatch");
   return resource;
 }
-async function absent(path: string) {
-  try { await lstat(path); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
-  throw new Error("resource destination already exists");
-}
-async function stageDirectory(output: string, prepare: (stage: string) => Promise<void>) {
-  const destination = resolve(output);
-  await absent(destination);
-  await mkdir(dirname(destination), { recursive: true });
-  const scratch = await mkdtemp(join(dirname(destination), ".resource-transport-"));
-  try {
-    const stage = join(scratch, "output"); await mkdir(stage);
-    await prepare(stage);
-    await absent(destination);
-    await rename(stage, destination);
-  } finally { await rm(scratch, { recursive: true, force: true }); }
-}
-
 /** Stage only verified neutral bytes plus a relocatable receipt. Emit the
  * existing untrusted handoff candidate, never publish cache state directly. */
 export async function contributeDataResource(input: Input & Readonly<{ resourceReceipt: string; artifact: string }>) {
@@ -46,7 +28,7 @@ export async function contributeDataResource(input: Input & Readonly<{ resourceR
   const source = await checkedFile(resource, "data contribution", resolve(dirname(input.resourceReceipt), resource.file));
   const manifest = await convergenceProductCandidate({ ...input, product: "resource", data: expected });
   if (manifest == null) return { contributed: false };
-  await stageDirectory(input.output, async stage => {
+  await stageConvergedProduct(input.output, async stage => {
     const artifact = join(stage, "artifact"); await mkdir(artifact);
     const destination = join(artifact, resource.file);
     await copyFile(source, destination);
@@ -65,9 +47,9 @@ export async function contributeDataResource(input: Input & Readonly<{ resourceR
  * download never becomes a visible resource directory or a success receipt. */
 export async function restoreDataResource(input: Input) {
   const expected = await binding(input);
-  await absent(resolve(input.output));
+  await assertConvergedProductAbsent(resolve(input.output));
   const { archive, cache } = await readConvergedProduct({ ...input, product: "resource" });
-  await stageDirectory(input.output, async stage => {
+  await stageConvergedProduct(input.output, async stage => {
     await writeConvergedEntry(archive, RECEIPT, join(stage, RECEIPT), 64 * 1024);
     const receipt = await readObject(join(stage, RECEIPT)), resource = boundResource(receipt, expected, input.resourceId);
     if (Object.keys(archive.files).length !== 2 || archive.files[resource.file] == null) throw new Error("resource cache contains unexpected payloads");

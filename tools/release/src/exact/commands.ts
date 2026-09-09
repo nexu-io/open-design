@@ -13,6 +13,7 @@ import { contributeScene } from "./scene-contribution.ts";
 import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "./native-build.ts";
 import { buildReleaseDataResource } from "./resource-build.ts";
 import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
+import { contributePlatform, restorePlatform } from "./platform-cache.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { validateExactPlanNode } from "./validation.ts";
@@ -240,6 +241,23 @@ export function registerExactCommands(cli: CAC): void {
         publishReceipt: required(options, "publishReceipt"), activationReceipt: required(options, "activationReceipt"),
         acceptanceCredential: required(options, "acceptance"), channelHeadFile: required(options, "channelHead") }, receipt);
       else throw new Error("baseline operation must be stage or promote");
+    });
+
+  cli.command("platform <operation>", "Restore or contribute an independently planned native platform")
+    .option("--plan <file>", "Exact release plan")
+    .option("--pending <file>", "Convergence planner receipt")
+    .option("--workload <name>", "Planner workload")
+    .option("--output <directory>", "New restored platform or contribution directory")
+    .option("--build-receipt <file>", "Plan-bound platform build receipt (contribute)")
+    .option("--artifact <name>", "Job artifact name (contribute)")
+    .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
+    .action(async (operation: string, options: Options) => {
+      const common = { plan: required(options, "plan"), pending: required(options, "pending"),
+        workload: required(options, "workload"), output: required(options, "output") };
+      const result = operation === "restore" ? await restorePlatform(common)
+        : operation === "contribute" ? await contributePlatform({ ...common, buildReceipt: required(options, "buildReceipt"), artifact: required(options, "artifact") })
+        : (() => { throw new Error("platform operation must be restore or contribute"); })();
+      await emit(options, { schemaVersion: 1, operation: `exact.platform.${operation}`, ...result });
     });
 
   cli.command("resource <operation>", "Restore or contribute an independently planned data resource")

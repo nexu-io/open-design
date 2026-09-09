@@ -1,14 +1,34 @@
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import JSZip from "jszip";
 import { readObject, type JsonObject } from "./control-common.ts";
 
 const MAX_BYTES = 2 * 1024 ** 3; // Existing convergence transport bound.
+
+export async function assertConvergedProductAbsent(path: string) {
+  try { await lstat(path); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+  throw new Error("convergence product destination already exists");
+}
+
+/** Publish a complete local projection only after every byte has been verified. */
+export async function stageConvergedProduct(output: string, prepare: (stage: string) => Promise<void>) {
+  const destination = resolve(output);
+  await assertConvergedProductAbsent(destination);
+  await mkdir(dirname(destination), { recursive: true });
+  const scratch = await mkdtemp(join(dirname(destination), ".product-transport-"));
+  try {
+    const stage = join(scratch, "output"); await mkdir(stage);
+    await prepare(stage);
+    await assertConvergedProductAbsent(destination);
+    await rename(stage, destination);
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+}
 
 /** Read only a planner-authorized immutable product. No cache publication,
  * fallback hit inference or product-specific extraction policy lives here. */
