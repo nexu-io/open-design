@@ -515,7 +515,6 @@ import {
 } from './strategies/od-next/native-build-package.js';
 import {
   resolveAutomaticContinuationEvidence,
-  rolloutStopSignalForBlockedContinuation,
   type OdNextComplexProductionResolver,
   type OdNextExecutionPreflightResolver,
 } from './strategies/od-next/automatic-continuation-service.js';
@@ -563,12 +562,7 @@ import {
   odNextTurnMayInferDirectEditCompletion,
   odNextTurnMayInferProductionCompletion,
 } from './strategies/od-next/automatic-simple-production.js';
-import {
-  odNextRolloutSignalForRun,
-  readOdNextRolloutPolicy,
-  stopModeForOdNextSignal,
-} from './strategies/od-next/rollout.js';
-import { latchOdNextRolloutStopOperationally } from './strategies/od-next/rollout-control-telemetry.js';
+import { readOdNextRolloutPolicy } from './strategies/od-next/rollout.js';
 import {
   getStrategyTaskExecutionByRunId,
   reconcileStrategyTaskRunTerminal,
@@ -7750,29 +7744,11 @@ export async function startServer({
     currentAppVersionInfo()?.version ?? UNKNOWN_APP_VERSION;
   const { analyticsService } = telemetry;
   registerStrategyRolloutRoutes(app, {
-    db,
-    analytics: analyticsService,
-    getAppVersion: currentAppVersion,
     requireLocalDaemonRequest,
     // Uncaught on purpose: an operator asking which mode is in effect must get
     // an error when the config cannot be read, never `off` / `default`.
     readOdNextPreference: () => readAppConfig(RUNTIME_DATA_DIR),
   });
-  const latchOdNextRolloutForRun = (run, mode, reasonCode) => {
-    latchOdNextRolloutStopOperationally({
-      db,
-      analytics: analyticsService,
-      analyticsContext: run.analyticsContext,
-      appVersion: currentAppVersion(),
-      mode,
-      reasonCode,
-      // A thunk, not a value: the latch is the safety action and must land
-      // even if this read fails. Sync because run-terminal bookkeeping cannot
-      // await, and read at all so the reported effective mode matches the mode
-      // the run was admitted under.
-      readAppConfig: () => readAppConfigSync(RUNTIME_DATA_DIR),
-    });
-  };
   workspaceAnalyticsService = analyticsService;
   console.info(
     '[telemetry] effective run sink',
@@ -12745,21 +12721,6 @@ export async function startServer({
       return 'unknown';
     };
     const finishStrategyAwarePhysicalRun = (status, code = null, signal = null) => {
-      const maxDurationRaw = Number(process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS);
-      const thresholdSignal = strategyTaskAtStart
-        ? odNextRolloutSignalForRun({
-            durationMs: Math.max(0, Date.now() - run.createdAt),
-            maxDurationMs: Number.isFinite(maxDurationRaw) ? maxDurationRaw : null,
-          })
-        : null;
-      if (thresholdSignal) {
-        latchOdNextRolloutForRun(run, 'observe', thresholdSignal);
-        design.runs.emit(run, 'diagnostic', {
-          type: 'od_next_rollout_stop',
-          mode: 'observe',
-          reason_code: thresholdSignal,
-        });
-      }
       const finished = finishRun(status, code, signal);
       return finished;
     };
@@ -15996,7 +15957,6 @@ export async function startServer({
         if (strategyTaskAtStart && strategyTaskAtStart.inputStage !== 'request') {
           const blocked = blockAutomaticContinuation(db, { runId: run.id });
           if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
-          latchOdNextRolloutForRun(run, 'observe', 'native_resume_failed');
           send('error', createSseErrorPayload(
             'AGENT_SESSION_RESUME_FAILED',
             'The locked OD Next native session is unavailable; the task was blocked without cold re-seeding.',
@@ -16842,15 +16802,6 @@ export async function startServer({
             return;
           }
           run.strategyTask = projectStrategyTask(transition.result.task, run.id);
-          if (transition.result.action === 'blocked') {
-            const signal = rolloutStopSignalForBlockedContinuation(
-              transition.result.reasonCodes,
-            );
-            const stopMode = signal ? stopModeForOdNextSignal(signal) : null;
-            if (signal && stopMode) {
-              latchOdNextRolloutForRun(run, stopMode, signal);
-            }
-          }
           if (transition.start && transition.prepared?.kind === 'ready') {
             const nextRun = transition.prepared.run;
             nextRun.strategyTask = projectStrategyTask(transition.result.task, nextRun.id);

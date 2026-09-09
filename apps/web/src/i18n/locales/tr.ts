@@ -5350,7 +5350,6 @@ export const tr: Dict = {
   'labs.harnessTooltip': "Open Design in tasarım işi için geliştirdiği agent harness a geçer. Çıktının yerleşimi, yapısı ve tamamlanmışlığı gözle görülür şekilde daha iyi olur.",
   'labs.harnessScope': "Şu anda prototipleri, slaytları, pazarlama içeriklerini ve Hyperframes i kapsıyor. Bazı agent lar henüz desteklenmiyor.",
   'labs.envOverrideNotice': "Bu ayarı bir ortam değişkeni yönetiyor, burada değiştirilemez.",
-  'labs.latchedNotice': "Bir sorun algılandıktan sonra otomatik olarak duraklatıldı. Üretim önceki yöntemi kullanıyor.",
   'labs.loadFailedNotice': "Bu ayar okunamadı. Yerel daemon un çalıştığını kontrol edin.",
   'labs.optOutPrompt': "Önceki yönteme geri dönüldü. Ne uymadı?",
   'labs.optOutWorseOutput': "Çıktı kötüleşti",

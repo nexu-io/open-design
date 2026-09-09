@@ -118,7 +118,6 @@ import {
   evaluateOdNextRollout,
   odNextTaskTypeForProjectScenarioBinding,
   readOdNextRolloutPolicy,
-  readOdNextRolloutStop,
   type OdNextRolloutDecision,
 } from '../strategies/od-next/rollout.js';
 import { odNextRolloutAnalyticsProperties } from '../strategies/od-next/rollout-analytics.js';
@@ -1824,8 +1823,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         || suppliedContextPluginWasNamed
       );
       // Read per request, not at boot: `odNextStrategyMode` is how a user opts
-      // this installation into OD Next, and "configure it and it takes effect"
-      // has to mean the next run, not the next daemon restart.
+      // this installation out of OD Next, and "configure it and it takes
+      // effect" has to mean the next run, not the next daemon restart.
       //
       // Deliberately uncaught. `readAppConfig` already answers `{}` for the
       // states that mean "nothing configured" — no file, unparseable file — and
@@ -1936,7 +1935,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         runtimeCapabilityReason: advertisedCapabilityReason
           ?? rolloutCapability?.reason
           ?? 'runtime_out_of_scope',
-        stoppedMode: readOdNextRolloutStop(db)?.mode ?? null,
         routeApplicability,
       });
       if (

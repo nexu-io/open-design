@@ -5635,7 +5635,6 @@ export interface Dict {
   'labs.harnessTooltip': string;
   'labs.harnessScope': string;
   'labs.envOverrideNotice': string;
-  'labs.latchedNotice': string;
   'labs.loadFailedNotice': string;
   'labs.optOutPrompt': string;
   'labs.optOutWorseOutput': string;

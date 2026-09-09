@@ -5350,7 +5350,6 @@ export const id: Dict = {
   'labs.harnessTooltip': "Beralih ke agent harness yang dibangun Open Design untuk pekerjaan desain. Tata letak, struktur, dan kelengkapan hasil terasa jauh lebih baik.",
   'labs.harnessScope': "Saat ini mencakup prototipe, slide, aset pemasaran, dan Hyperframes. Sebagian agent belum didukung.",
   'labs.envOverrideNotice': "Pengaturan ini dikendalikan variabel lingkungan, jadi tidak bisa diubah di sini.",
-  'labs.latchedNotice': "Dijeda otomatis setelah masalah terdeteksi. Generasi memakai cara sebelumnya.",
   'labs.loadFailedNotice': "Tidak bisa membaca pengaturan ini. Pastikan daemon lokal sedang berjalan.",
   'labs.optOutPrompt': "Kembali ke metode sebelumnya. Apa yang kurang pas?",
   'labs.optOutWorseOutput': "Hasil jadi lebih buruk",

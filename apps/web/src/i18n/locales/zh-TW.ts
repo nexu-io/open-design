@@ -5805,7 +5805,6 @@ export const zhTW: Dict = {
   'labs.harnessTooltip': "開啟後改用 Open Design 為設計場景打造的 agent harness，產物在版面、結構與完成度上會明顯更好。",
   'labs.harnessScope': "目前涵蓋原型、簡報、行銷素材與 Hyperframes；部分 agent 尚未支援。",
   'labs.envOverrideNotice': "目前由環境變數接管，無法在此修改。",
-  'labs.latchedNotice': "偵測到問題後已自動暫停，生成正在使用原本的方式。",
   'labs.loadFailedNotice': "讀取不到這項設定，請確認本機 daemon 正在執行。",
   'labs.optOutPrompt': "已切回原本的生成方式。哪裡不合適？",
   'labs.optOutWorseOutput': "產物變差",
