@@ -617,7 +617,7 @@ function emitOdNextPlanningRun(promptText, inputStage = 'request', taskTypeOverr
     taskProfile: {
       schemaVersion: '2', taskType: identity.taskType, taskProfileVersion: identity.taskProfileVersion,
       goal: 'Create an OD Next active canary artifact', contextAndAudience: 'Local rollout operators',
-      inputsAndReferences: ['user-request'], constraints: [],
+      inputsAndReferences: ['request'], constraints: [],
       canonicalDeliverable: { id: 'canary', kind: deliverableKind, format: 'html' },
       requiredDeliverables: [{ id: 'canary', kind: deliverableKind }],
       designSpec: { source: 'resolved-baseline', version: '1', decisions: { palette: 'neutral' } },
@@ -631,7 +631,7 @@ function emitOdNextPlanningRun(promptText, inputStage = 'request', taskTypeOverr
     },
     runManifest: {
       selectedAgentId: agentId, capabilitySnapshotHash: '0'.repeat(64),
-      inputRefs: ['user-request'], productionRoutes: ['html'],
+      inputRefs: ['request'], productionRoutes: ['html'],
       preflight: { intake: 'passed', execution: 'passed' },
     },
     decisionSummary: {

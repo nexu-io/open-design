@@ -10,6 +10,10 @@ import {
   PACKAGED_HOME_FIRST_RUN_PROMPT,
 } from '@/vitest/packaged-home-first-run';
 import { attachCodexAppServerSession } from '../../../apps/daemon/src/agent-protocol/codex-app-server/session.js';
+import {
+  resolveDaemonOwnedOdNextExecutionPreflight,
+  runExecutionPreflight,
+} from '../../../apps/daemon/src/strategies/od-next/resolver.js';
 
 describe('packaged Codex fixture transport', () => {
   it.each([null, 'resumed-smoke-thread'])(
@@ -98,8 +102,14 @@ describe('packaged Codex fixture transport', () => {
           expect(await closed).toEqual([0, null]);
           expect(session.completedSuccessfully()).toBe(true);
           const text = events.filter((event) => event.type === 'text_delta').map((event) => event.delta).join('');
-          if (index === 0) expect(text).toContain('<open-design-plan-contract>');
-          else {
+          if (index === 0) {
+            const contract = text.match(/<open-design-plan-contract>\s*([\s\S]*?)\s*<\/open-design-plan-contract>/)?.[1];
+            expect(contract).toBeTruthy();
+            // The packaged daemon admits the built-in request input. A fake
+            // plan must pass that real gate before its native continuation.
+            expect(runExecutionPreflight(resolveDaemonOwnedOdNextExecutionPreflight(JSON.parse(contract!))))
+              .toEqual({ status: 'passed', reasonCodes: [] });
+          } else {
             expect(text).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
             expect(text).toContain('"outcome":"completed"');
             expect(await readFile(join(root, 'od-next-active-canary.html'), 'utf8')).toContain('Delayed Daemon Smoke');
