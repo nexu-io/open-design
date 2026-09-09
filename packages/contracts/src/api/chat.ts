@@ -10,7 +10,7 @@ import type {
 } from './comments';
 import type { ResearchOptions } from './research';
 import type { RunContextSelection } from './context.js';
-import type { MediaExecutionPolicy } from './media.js';
+import type { MediaExecutionPolicy, RunMediaTaskFailure } from './media.js';
 import type { AppliedPluginSnapshot } from '../plugins/apply.js';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 import type {
@@ -788,6 +788,12 @@ export interface ChatRunStatusResponse {
    *  Judged by the canonical `todoSnapshotHasUnfinishedWork` predicate so it can
    *  never diverge from the chat footer's `unfinishedTodosFromEvents`. */
   endedWithUnfinishedWork?: boolean;
+  /** Media generations this run dispatched that the DAEMON itself recorded as
+   *  failed. Empty/absent means the host watched none fail — never that the
+   *  agent said so. Present so a terminal turn can render the real failure card
+   *  (with the task's own retryability verdict) instead of leaving the user with
+   *  a green check and an apology in prose. */
+  mediaTaskFailures?: RunMediaTaskFailure[];
   /** Authoritative artifact files created or modified by this run. Mirrors
    *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
   artifactCount?: number;
