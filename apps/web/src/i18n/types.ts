@@ -4419,6 +4419,12 @@ export interface Dict {
   'chat.runError.exportLogsCta': string;
   'chat.runError.switchModelCta': string;
   'chat.runError.openSettingsCta': string;
+  /* 恢复动作被挡住时,卡面上那一句「为什么现在动不了」(OPEND-2821)。
+     四句对应 `runtime/chat/recovery-gating.ts` 的四档,不是四个新的门。 */
+  'chat.runError.actionBlocked.readOnly': string;
+  'chat.runError.actionBlocked.messagesUnavailable': string;
+  'chat.runError.actionBlocked.billing': string;
+  'chat.runError.actionBlocked.busy': string;
   'chat.support.channel.feishu': string;
   'chat.support.channel.discord': string;
   'chat.amrBalanceOwner.title': string;

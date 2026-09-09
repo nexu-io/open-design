@@ -177,12 +177,17 @@ import {
   RunErrorCard,
   RunErrorCardAction,
   RunErrorCardActionGroup,
+  RunErrorCardBlockedNote,
 } from './chat/RunErrorCard';
 import { UpgradeCard } from './chat/UpgradeCard';
 import { SupportDialog } from './chat/SupportDialog';
 import { Toast } from './Toast';
 import { supportChannels } from './chat/support-channels';
 import { ExportLogsAction } from './chat/ExportLogsAction';
+import {
+  recoveryActionBlockMessageKey,
+  type RecoveryActionBlockReason,
+} from '../runtime/chat/recovery-gating';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
@@ -662,6 +667,25 @@ interface Props {
     assistantMessage: ChatMessage,
     recoveryActionType?: TrackingRunRecoveryActionType,
   ) => void;
+  /**
+   * 宿主这一刻**为什么**接不住报错卡上的恢复动作(OPEND-2821)。
+   *
+   * `null` = 接得住。非 null 的时候这一排按钮长成禁用态,卡面上多一句说明 ——
+   * 在此之前宿主的 `handleRetry` 在同样的六个条件下静默 `return`,而按钮
+   * 一直画成可点的样子。判据出自 `runtime/chat/recovery-gating.ts`,
+   * 宿主和按钮读的是同一个值。
+   */
+  recoveryActionsBlockedReason?: RecoveryActionBlockReason | null;
+  /**
+   * **哪一轮正在被重试**,而新的 run 还没得到服务端确认(OPEND-2758)。
+   *
+   * 宿主一按下重试就把这条失败助手消息的 id 挂在这里,直到 `POST /api/runs`
+   * 回来(或者这一发根本没起来)才撤掉。这段时间里报错卡**钉在这条消息上**:
+   * 提前上屏(OPEND-2614)已经把队尾换成了新的运行中助手消息,
+   * `retryableAssistantMessage` 会立刻返回 null,卡当场消失 —— 用户既看不到
+   * 重试有没有被接收,也没法再读一遍失败原因。
+   */
+  retryPendingAssistantId?: string | null;
   /** Retry a user message whose daemon run was never created. */
   onResendUserMessage?: (message: ChatMessage) => void;
   amrAuthRetryContinuation?: AmrAuthRetryContinuation | null;
@@ -1277,6 +1301,8 @@ export function ChatPane({
   onDeleteComment,
   onSend,
   onRetry,
+  recoveryActionsBlockedReason = null,
+  retryPendingAssistantId = null,
   onResendUserMessage,
   amrAuthRetryContinuation = null,
   amrAuthRetryMountId,
@@ -1990,12 +2016,52 @@ export function ChatPane({
    */
   const showJumpToLatest = scrolledFromBottom;
   const planPillVisible = planPillEligible && !scrolledFromBottom;
-  const retryAssistant = retryableAssistantMessage(
+  /**
+   * 重试在飞时,报错卡**钉在被重试的那一轮上**(OPEND-2758)。
+   *
+   * `retryableAssistantMessage` 的锚点是队尾且要求面板不在流式 —— 两个条件在
+   * 点下重试的同一帧里就同时失效了:提前上屏(OPEND-2614)把新的运行中助手
+   * 消息接在队尾,`markStreamingConversation` 把面板置成流式。于是卡在
+   * **服务端还没确认这一发**的时候就消失,单里说的「无法判断重试是否已被接收,
+   * 也无法继续查看原失败原因」正是这一段。
+   *
+   * 钉的是宿主点名的那条消息,而且**它必须仍然是一条终态失败的助手消息** ——
+   * 重试那一路会把它原样留在流水里(`resolveRetryTarget.preservedAttempts`),
+   * 所以这份查找是有主的;查不到就退回原来的判据,不硬造一张卡。
+   */
+  const pinnedRetryAssistant = retryPendingAssistantId
+    ? displayMessages.find(
+        (message) =>
+          message.id === retryPendingAssistantId
+          && message.role === 'assistant'
+          && isRetryableAssistantTerminalFailure(message),
+      ) ?? null
+    : null;
+  const retryAssistant = pinnedRetryAssistant ?? retryableAssistantMessage(
     displayMessages,
     lastAssistantId,
     streaming,
     lastTurnAssistantId,
   );
+  /** 这一轮的重试已经发出去,但还没有 run 可言 —— 按钮进加载态并锁住。 */
+  const retryInFlight = pinnedRetryAssistant !== null;
+  /**
+   * 报错卡上那一排恢复动作**这一刻能不能按**。
+   *
+   * 两个来源:宿主说它接不住(2821 的六个门控),或者这一轮的重试已经在飞
+   * (2758 的防重复提交)。两者都只影响**可用态**,不影响这一排出不出现 ——
+   * 用户仍要能读到失败原因和有哪些出路。
+   */
+  const recoveryActionsDisabled = recoveryActionsBlockedReason !== null || retryInFlight;
+  /**
+   * 〔重试〕这一颗在飞的时候改说「正在重试」。
+   *
+   * 复用 `chat.edge.retrying` —— 流水最后一行那枚重连行说的就是同一件事
+   * (`chat/Reconnect.tsx` 的 `agent-retry`),不另造一份措辞。
+   */
+  const retryLabelKey: keyof Dict = retryInFlight
+    ? 'chat.edge.retrying'
+    : 'promptTemplates.retry';
   // The failed run's error event lives on the (persisted) assistant message, so
   // the error card + AMR card survive a reload — unlike the ephemeral global
   // `error` state. Drive both off this event.
@@ -4572,6 +4638,10 @@ export function ChatPane({
                                 type="button"
                                 variant={errorActionVariant}
                                 data-testid="chat-error-switch-model"
+                                // 选完模型自动重跑那一半也走同一组门控
+                                // (`ProjectView` 的 rerun effect),挡住时这颗
+                                // 只会把选择器打开然后什么都不发生。
+                                disabled={recoveryActionsDisabled}
                                 onClick={() => {
                                   trackRecoveryClick(retryAssistant, 'switch_model_retry');
                                   if (onSwitchModel && retryAssistant) onSwitchModel(retryAssistant);
@@ -4687,6 +4757,7 @@ export function ChatPane({
                               <RunErrorCardAction
                                 type="button"
                                 variant={errorActionVariant}
+                                disabled={recoveryActionsDisabled}
                                 onClick={() =>
                                   {
                                     trackRecoveryClick(retryAssistant, 'resume_run');
@@ -4707,17 +4778,32 @@ export function ChatPane({
                                * 4px 11px)—— 排在一起圆角明显对不上(用户 2026-08-27)。
                                * 图标也照稿子补上:那一排三颗都带图标。
                                */
+                              /*
+                               * 可用态和标签都跟着**真实状态**走(OPEND-2821 / 2758)。
+                               *
+                               * ⚠️ 埋点语义在这里定了下来:**被挡住的点击不再算一次
+                               * recovery click**。禁用的按钮根本不触发 onClick,所以
+                               * `trackRecoveryClick` 只在真的会起一发的时候上报。
+                               * 这是有意的 —— `run_recovery_action` 的 click 事件靠
+                               * `recovery_action_instance_id` 和 `run_created` /
+                               * `run_finished` 对账,而在此之前这颗按钮在六种门控下
+                               * 静默 `return`,却照样上报了一次点击:那些是永远对不上
+                               * 账的孤儿,读起来像「用户试过重试然后凭空消失」。
+                               * 「这一档出现在屏幕上」仍由既有的 surface_view 记录,
+                               * 那一条不受这次改动影响。
+                               */
                               <RunErrorCardAction
                                 type="button"
                                 variant={errorActionVariant}
                                 data-testid="chat-error-retry"
+                                disabled={recoveryActionsDisabled}
                                 onClick={() => {
                                   trackRecoveryClick(retryAssistant, 'manual_retry');
                                   onRetry(retryAssistant, 'manual_retry');
                                 }}
                               >
                                 <Icon name="refresh" size={11} />
-                                {t('promptTemplates.retry')}
+                                {t(retryLabelKey)}
                               </RunErrorCardAction>
                             ) : null}
                           </RunErrorCardActionGroup>
@@ -4744,6 +4830,9 @@ export function ChatPane({
                             type="button"
                             variant="primary"
                             data-testid="chat-error-switch-to-cloud"
+                            // `handleSwitchToAmrAndRetry` 头一行就是同一道门控;
+                            // 挡住时这颗按钮点下去连设置面板都不会开。
+                            disabled={recoveryActionsDisabled}
                             onClick={() => {
                               trackRunFailedToastGoAmrClick(analytics.track, {
                                 page_name: 'chat_panel',
@@ -4772,7 +4861,18 @@ export function ChatPane({
                         ) : null}
                       </>
                     )}
-                  />
+                  >
+                    {/*
+                      * 「不能重试时说明阻断原因,不应静默无响应」(OPEND-2821)。
+                      * 只在**真有动作被挡住**时出现:一张本来就没有恢复动作的卡
+                      * (CPU 不支持、运行时定义非法)不该多一句和它无关的解释。
+                      */}
+                    {recoveryActionsBlockedReason && showErrorActions ? (
+                      <RunErrorCardBlockedNote>
+                        {t(recoveryActionBlockMessageKey(recoveryActionsBlockedReason))}
+                      </RunErrorCardBlockedNote>
+                    ) : null}
+                  </RunErrorCard>
                 ) : null}
                 {/*
                   * 升级卡(交付稿第 75 / 76 格)。**流水里的一张卡,不是弹窗** ——
