@@ -1,21 +1,21 @@
 {
   "fixtureKind": "sanitized_real_best_effort",
   "runtime": "vela-dsh",
-  "velaVersion": "0.0.1-test.matrix-six.g27f003483279",
+  "velaVersion": "0.0.1-test.matrix-six.g344e0f361ae6",
   "companionVersion": "0.1.2-rc.1",
   "modelEndpoint": "loopback_fixture",
   "executionSemantics": "agent_cli",
-  "recordingDigest": "sha256:404b1693e4ba39ebf69e2c5857fb49ccb4556a841e545be6fb138777d8d9e84e",
+  "recordingDigest": "sha256:f3f54a4b655f4dc57b66a48b60988f89f29515846216ca3f18f247e5282a2f9d",
   "observations": [
     {
       "channel": "acp_response",
       "stage": "initial",
-      "digest": "sha256:94b70919976b76ea8ce2adf7c2bf9b0b179975b56c5e455467ea0165b588ebf2"
+      "digest": "sha256:e2b17251e573a6ad3cf7104381c17d3834d389f6735e16ede1bec37e35e86f4c"
     },
     {
       "channel": "acp_response",
       "stage": "initial",
-      "digest": "sha256:29b9103d31abafc2358e1770b02534a4feb6fc54edb88762b73c050c8119c4d4"
+      "digest": "sha256:b761b9faee7f5336b026af298be1bae9c7ee7d41a55e98522376b111ed17651c"
     },
     {
       "channel": "acp_response",
@@ -25,27 +25,27 @@
     {
       "channel": "http_request",
       "stage": "initial",
-      "digest": "sha256:aa9936feab6b7d3f56c5e2c7c5bb28dc39c97930a1e7472545073e7400689d43"
+      "digest": "sha256:53b3164acd2a2c084fa72506d051f0a4f7254c5be20cabf5be04932881fe84fc"
     },
     {
       "channel": "acp_update",
       "stage": "initial",
-      "digest": "sha256:c3412ad9229ab358356a5db3a01469b7adbf2a989685c31e704162ad401da0b0"
+      "digest": "sha256:ad585b462de97452681f5e9965552af0c8a8d417009dfb1bd0d366f1439ceeab"
     },
     {
       "channel": "acp_update",
       "stage": "initial",
-      "digest": "sha256:084a6ca7d17c881159c0daccd6e6ec5c7bade1c0aafdcf5caf77f14b5798e615"
+      "digest": "sha256:eea3d673969367a7fd3732e91adf75c886cacca9a800bd03dbf55dad81f98d3a"
     },
     {
       "channel": "http_request",
       "stage": "initial",
-      "digest": "sha256:09ad855c795ff7e45b17194617f1c2883d75e32e9df926408fe496e959f6fcd8"
+      "digest": "sha256:48c4b9a5f467a355a8ded36a7f0e57843dc2344724c9950670a6052ccc883a68"
     },
     {
       "channel": "acp_update",
       "stage": "initial",
-      "digest": "sha256:bf8f8ec8afcbf9a8f22303691c70ad2494e47f82627c8d881b38906a7fdff9da"
+      "digest": "sha256:4001a3ddaa2cfa2eda5bec7c5904516cf4e533cbd3bea89f2bb883088cd9dfe8"
     },
     {
       "channel": "acp_response",
@@ -55,12 +55,12 @@
     {
       "channel": "acp_response",
       "stage": "resume",
-      "digest": "sha256:94b70919976b76ea8ce2adf7c2bf9b0b179975b56c5e455467ea0165b588ebf2"
+      "digest": "sha256:e2b17251e573a6ad3cf7104381c17d3834d389f6735e16ede1bec37e35e86f4c"
     },
     {
       "channel": "acp_response",
       "stage": "resume",
-      "digest": "sha256:29b9103d31abafc2358e1770b02534a4feb6fc54edb88762b73c050c8119c4d4"
+      "digest": "sha256:b761b9faee7f5336b026af298be1bae9c7ee7d41a55e98522376b111ed17651c"
     },
     {
       "channel": "acp_response",
@@ -70,12 +70,12 @@
     {
       "channel": "http_request",
       "stage": "resume",
-      "digest": "sha256:9bdb692a03ba91f75ce93ff75dd5a48ee53d7aa5db07789299ef70038ae2c4b1"
+      "digest": "sha256:31894d4719f94d1bc2a836e1a5bbc32670724efeb5f444b84f14ccf4d744ce02"
     },
     {
       "channel": "acp_update",
       "stage": "resume",
-      "digest": "sha256:bf8f8ec8afcbf9a8f22303691c70ad2494e47f82627c8d881b38906a7fdff9da"
+      "digest": "sha256:4001a3ddaa2cfa2eda5bec7c5904516cf4e533cbd3bea89f2bb883088cd9dfe8"
     },
     {
       "channel": "acp_response",
@@ -85,7 +85,7 @@
     {
       "channel": "http_request",
       "stage": "cancel",
-      "digest": "sha256:4eb4936a09e9d933ef7e47a70954c57de16f2ec044f0fb793420a150b63acdd8"
+      "digest": "sha256:578e63e592a5bf89207c8a7703bba228b9635ff7cb570c0164f1cde674df50be"
     },
     {
       "channel": "acp_response",
@@ -95,7 +95,7 @@
     {
       "channel": "http_request",
       "stage": "timeout",
-      "digest": "sha256:353bec92f49361d91d487a011d1ca957522e2e04dbf0fb9422e217c603d32f7e"
+      "digest": "sha256:64f2b6c5135d2946fde9fcc75e1eed84cf2e25fb110fc91a10f42d439ca85f66"
     },
     {
       "channel": "acp_response",
