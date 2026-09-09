@@ -15,7 +15,7 @@ import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resour
 import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
 import { contributePlatform, restorePlatform } from "./platform-cache.ts";
 import { contributeCapsule, restoreCapsule } from "./capsule-cache.ts";
-import { contributeBase, restoreBase } from "./base-cache.ts";
+import { contributeBase, packBase, restoreBase, unpackBase } from "./base-cache.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { validateExactPlanNode } from "./validation.ts";
@@ -259,15 +259,22 @@ export function registerExactCommands(cli: CAC): void {
     });
 
   for (const product of ["platform", "capsule", "base"] as const) {
-    cli.command(`${product} <operation>`, `Restore or contribute an independently planned ${product}`)
+    const command = cli.command(`${product} <operation>`, product === "base" ? "Pack, unpack, restore or contribute a planned base" : `Restore or contribute an independently planned ${product}`)
       .option("--plan <file>", "Exact release plan")
       .option("--pending <file>", "Convergence planner receipt")
       .option("--workload <name>", "Planner workload")
       .option("--output <directory>", "New restored product or contribution directory")
-      .option("--build-receipt <file>", "Plan-bound build receipt (contribute)")
+      .option("--build-receipt <file>", "Plan-bound build receipt (contribute or base pack)")
       .option("--artifact <name>", "Job artifact name (contribute)")
-      .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
-      .action(async (operation: string, options: Options) => {
+      .option("--receipt <file>", "Optional operation receipt; defaults to stdout");
+    if (product === "base") command.option("--source <directory>", "Portable base transport directory (unpack)");
+    command.action(async (operation: string, options: Options) => {
+        if (product === "base" && (operation === "pack" || operation === "unpack")) {
+          const input = { plan: required(options, "plan"), output: required(options, "output") };
+          const result = operation === "pack" ? await packBase({ ...input, buildReceipt: required(options, "buildReceipt") })
+            : await unpackBase({ ...input, source: required(options, "source") });
+          await emit(options, { schemaVersion: 1, operation: `exact.base.${operation}`, ...result }); return;
+        }
         const common = { plan: required(options, "plan"), pending: required(options, "pending"),
           workload: required(options, "workload"), output: required(options, "output") };
         const restore = product === "platform" ? restorePlatform : product === "capsule" ? restoreCapsule : restoreBase;

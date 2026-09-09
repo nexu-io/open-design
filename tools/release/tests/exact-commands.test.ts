@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -22,6 +23,27 @@ const identity = ["--channel", "betahyx", "--release-version", "0.1.0-betahyx.1"
 const policyArgs = ["policy", "resolve", ...identity, "--profile", "exact-validation", "--source-ref", "refs/heads/feat/test",
   "--endpoint-url", "https://storage.example", "--bucket", "release", "--public-base-url", "https://public.example",
   "--end-user-distribution", "false", "--stable-authorized", "false"];
+
+it("hands off a portable base without workspace packages or a convergence hit", async () => {
+  const f = await fixture(), base = join(f.root, "base"), plan = join(f.root, "plan.json"), buildReceipt = join(f.root, "build.json");
+  await mkdir(base);
+  const manifest = JSON.stringify({ schemaVersion: 1, operation: "electron.base.build", target: "darwin-arm64" });
+  const node = { id: "electron.base.build", target: "darwin-arm64", identity: `sha256:${"a".repeat(64)}` };
+  await writeFile(join(base, "base.json"), manifest); await writeFile(join(base, "native"), "native");
+  await writeFile(plan, JSON.stringify({ schemaVersion: 1, plan: { target: node.target, nodes: { [node.id]: node } } }));
+  await writeFile(buildReceipt, JSON.stringify({ schemaVersion: 1, operation: node.id, target: node.target, planNode: node,
+    base: { root: base, manifestSha256: createHash("sha256").update(manifest).digest("hex") } }));
+  const transport = join(f.root, "transport"), output = join(f.root, "restored");
+  await f.invoke(["base", "pack", "--plan", plan, "--build-receipt", buildReceipt, "--output", transport]);
+  const portable = JSON.parse(await readFile(join(transport, "base-build-receipt.json"), "utf8"));
+  expect(portable.base).not.toHaveProperty("root");
+  await rm(base, { recursive: true });
+  const result = JSON.parse((await f.invoke(["base", "unpack", "--plan", plan, "--source", transport, "--output", output])).stdout);
+  expect(result.operation).toBe("exact.base.unpack");
+  expect(await readFile(join(output, "base", "native"), "utf8")).toBe("native");
+  expect(JSON.parse(await readFile(result.buildReceipt, "utf8")).base.root).toBe(join(output, "base"));
+  await expect(f.invoke(["base", "unpack", "--plan", plan, "--source", transport, "--output", output])).rejects.toThrow("already exists");
+});
 
 it("runs scene commands without workspace packages or request files", async () => {
   const f = await fixture(); const scene = join(f.root, "source"), archive = join(f.root, "scene.tar");
