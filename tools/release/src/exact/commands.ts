@@ -16,7 +16,7 @@ import { exportCapsule, importCapsule } from "./capsule-artifact.ts";
 import { exportBase, packBase, importBase, unpackBase } from "./base-artifact.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
-import { validateExactPlanNode } from "./validation.ts";
+import { validateReleaseRecipe } from "./validation.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -42,17 +42,17 @@ export function registerExactCommands(cli: CAC): void {
     cli.outputHelp();
   });
   cli.command("self-check", "Verify exact channel transition algebra").action(() => selfCheckExactReleaseControl());
-  cli.command("validate <node>", "Execute one selected exact test node and retain its identity-bound result")
+  cli.command("validate <node>", "Execute a named validation recipe and retain its execution receipt")
     .option("--coverage <name>", "architecture (default), or explicit Closure business aggregate", { default: "architecture" })
     .option("--reason <text>", "Required risk reason for business coverage")
     .option("--root <directory>", "Checked-out workspace with built prerequisites")
-    .option("--registry <file>", "Identity registry relative to root", { default: "tools/release/resources/exact-plan-identities.json" })
-    .option("--plan <file>", "Exact release plan")
+    .option("--target <target>", "Expected native execution target")
+    .option("--source-commit <sha>", "Source checkout commit")
     .option("--log <file>", "Fresh test output file")
     .option("--receipt <file>", "Successful validation receipt")
     .action(async (node: string, options: Options) => {
-      await validateExactPlanNode({ node, root: required(options, "root"), registry: required(options, "registry"),
-        plan: required(options, "plan"), log: required(options, "log"), receipt: required(options, "receipt"),
+      await validateReleaseRecipe({ node, root: required(options, "root"), target: required(options, "target"),
+        sourceCommit: required(options, "sourceCommit"), log: required(options, "log"), receipt: required(options, "receipt"),
         coverage: required(options, "coverage"), ...(options.reason == null ? {} : { reason: required(options, "reason") }) });
     });
   cli.command("acceptance <operation>", "Acquire the exact published installer selected for acceptance")

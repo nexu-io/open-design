@@ -145,14 +145,14 @@ mark contract/Closure builds or any unit-test node as executed. Those results
 must come from their own verified convergence records; an installed artifact is
 not evidence that the current checkout's test suite ran.
 
-`validate <node> --root <workspace> --plan <release-plan> --log <fresh-file>
+`validate <node> --root <workspace> --target <target> --source-commit <sha> --log <fresh-file>
 --receipt <fresh-file>` executes the selected `electron.contract.test`,
 `electron.shell.test` or `closure.test` recipe. Build prerequisites first.
-The command recomputes the selected node and its recursive dependency identity
-before and after execution; unrelated node changes do not invalidate its result.
-It retains test output and writes a successful identity-bound receipt only after every
-command succeeds. It refuses unsupported/unselected nodes, stale source plans,
-existing result files and mismatched native execution platforms. The pure
+The workflow supplies the verified checkout commit; Python owns source identities
+and scheduling. This command neither reads a plan nor recomputes workload keys.
+It retains test output and writes an execution receipt only after every command
+succeeds. It refuses unsupported recipes, malformed source bindings, existing
+result files and mismatched native execution platforms. The pure
 contract tests may run on another platform; the receipt records that platform.
 These are local execution receipts, not self-authorized convergence cache hits.
 
@@ -166,8 +166,8 @@ Only a broad business change, insufficient focused evidence, or an explicitly
 required stage warrants `validate closure.test --coverage business --reason
 "<risk requiring full business validation>"`. This runs the full Closure,
 daemon and Web suites. Its `exact.business-validation` receipt records the
-reason, coverage, a distinct identity and underlying `planIdentity`; it is not
-an architecture-node cache result. Recipe changes invalidate prior identities.
+reason, coverage and source commit; it contains no workload or plan identity and
+is not an architecture-node cache result. Python binds recipe changes to results.
 Do not rerun business aggregates merely because orchestration moved to another
 stage, or reinterpret a historical full-suite receipt as proof of new sources.
 

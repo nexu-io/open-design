@@ -104,8 +104,8 @@ class Workload:
 class WorkflowContract:
     def __init__(self, name: str, raw: Any):
         value = object_value(raw, f"convergence.workflows.{name}")
-        if set(value) != {"policy", "workloads"}:
-            raise ConfigError(f"convergence.workflows.{name} keys must be policy and workloads")
+        if not {"policy", "workloads"} <= set(value) or set(value) - {"policy", "workloads", "execution"}:
+            raise ConfigError(f"convergence.workflows.{name} requires policy and workloads; optional execution")
         self.name = require_identity(name, "convergence workflow")
         self.policy = require_identity(value["policy"], f"convergence.workflows.{name}.policy")
         workloads = object_value(value["workloads"], f"convergence.workflows.{name}.workloads")
@@ -130,6 +130,34 @@ class WorkflowContract:
 
         for identity in sorted(self.workloads):
             visit(identity)
+        self.execution = None
+        if "execution" in value:
+            execution = object_value(value["execution"], f"workflow {name}.execution")
+            if set(execution) != {"enabled", "runners", "matrices"}:
+                raise ConfigError("execution requires enabled, runners and matrices")
+            enabled = execution["enabled"]
+            if (not isinstance(enabled, list) or any(not isinstance(item, str) for item in enabled)
+                    or len(set(enabled)) != len(enabled) or set(enabled) - set(self.workloads)):
+                raise ConfigError("execution enabled must name unique declared workloads")
+            for identity in enabled:
+                if set(self.workloads[identity].dependencies) - set(enabled):
+                    raise ConfigError("enabled workload depends on a disabled workload")
+            runners = object_value(execution["runners"], "execution runners")
+            if set(runners) != {item.runner_class for item in self.workloads.values()}:
+                raise ConfigError("execution runner inventory differs from workloads")
+            for labels in runners.values():
+                if not isinstance(labels, list) or not labels or any(not isinstance(label, str) or not label.strip() for label in labels):
+                    raise ConfigError("execution runner labels must be non-empty strings")
+            matrices = object_value(execution["matrices"], "execution matrices")
+            for matrix_name, matrix in matrices.items():
+                require_identity(matrix_name, "execution matrix name")
+                if not isinstance(matrix, dict) or set(matrix) != {"include"} or not isinstance(matrix["include"], list):
+                    raise ConfigError("execution matrices require include arrays")
+                for entry in matrix["include"]:
+                    entry = object_value(entry, "execution matrix entry")
+                    if not entry or any(not isinstance(key, str) or not key or not isinstance(item, (str, bool, int)) for key, item in entry.items()):
+                        raise ConfigError("execution matrix entries must contain scalar values")
+            self.execution = execution
 
 
 class ConvergenceContract:
@@ -627,6 +655,23 @@ def required_workloads(
             for dependency in workflow.workloads[identity].dependencies:
                 required[dependency] = True
     return required
+
+
+def execution_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
+    """Project a workflow's own declarations; never load a business CLI or package."""
+    workflow = contract.workflow(args.workflow)
+    if workflow.execution is None:
+        raise ConfigError("workflow has no execution declaration")
+    execution = workflow.execution
+    scope = {"enabled": {identity: identity in execution["enabled"] for identity in workflow.workloads}}
+    write_json_atomic(args.output / "scope.json", scope)
+    write_json_atomic(args.output / "runners.json", execution["runners"])
+    write_json_atomic(args.output / "matrices.json", execution["matrices"])
+    if args.github_output is not None:
+        with args.github_output.open("a", encoding="utf-8") as output:
+            for name, matrix in execution["matrices"].items():
+                output.write(f"{name}={json.dumps(matrix, separators=(',', ':'))}\n")
+    return 0
 
 
 def product_inputs(pending: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -1357,6 +1402,10 @@ def parse_args() -> argparse.Namespace:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("validate")
     sub.add_parser("control-paths")
+    execution = sub.add_parser("execution")
+    execution.add_argument("--workflow", required=True)
+    execution.add_argument("--output", type=Path, required=True)
+    execution.add_argument("--github-output", type=Path)
     plan = sub.add_parser("github-output")
     plan.add_argument("--workflow", required=True)
     plan.add_argument("--scope-plan", type=Path, required=True)
@@ -1429,6 +1478,8 @@ def main() -> int:
             calculate(contract, root, workflow, runner_plan)
         print("convergence configuration is valid")
         return 0
+    if args.command == "execution":
+        return execution_command(args, contract)
     if args.command == "github-output":
         return plan_command(args, contract, root)
     if args.command == "contribute":

@@ -219,7 +219,7 @@ export async function fetchAcceptedElectronBaseline(input: JsonObject, receiptPa
   if (typeof input.validationReceipt !== "string") throw new Error("accepted carrier reuse requires current Shell test validation");
   const validation = await readObject(input.validationReceipt);
   if (validation.schemaVersion !== 1 || validation.operation !== "exact.validation" || validation.status !== "passed"
-    || validation.node !== "electron.shell.test" || validation.identity !== expectedPlan.nodes["electron.shell.test"].identity
+    || validation.node !== "electron.shell.test" || validation.sourceCommit !== sourceCommit
     || validation.target !== input.target || validation.executionPlatform !== input.target) {
     throw new Error("accepted carrier Shell test validation binding mismatch");
   }

@@ -196,19 +196,20 @@ jobs:
 
       - name: Validate exact Electron nodes
         env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/exact-validation"
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.contract.test \
-            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --root "$GITHUB_WORKSPACE" --target "$TARGET" --source-commit "$SOURCE_SHA" \
             --log "$RUNNER_TEMP/exact-validation/contract.log" --receipt "$RUNNER_TEMP/exact-validation/contract.json"
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.shell.test \
-            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --root "$GITHUB_WORKSPACE" --target "$TARGET" --source-commit "$SOURCE_SHA" \
             --log "$RUNNER_TEMP/exact-validation/shell.log" --receipt "$RUNNER_TEMP/exact-validation/shell.json"
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate closure.test --coverage architecture \
-            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --root "$GITHUB_WORKSPACE" --target "$TARGET" --source-commit "$SOURCE_SHA" \
             --log "$RUNNER_TEMP/exact-validation/closure.log" --receipt "$RUNNER_TEMP/exact-validation/closure.json"
 
       - uses: actions/upload-artifact@v4

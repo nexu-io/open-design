@@ -182,8 +182,8 @@ describe("accepted Electron baseline promotion", () => {
     await expect(executeExactReleaseControl(stageRequest, stagedReceipt)).rejects.toThrow("requires current Shell test validation");
     const validationReceipt = join(input.root, "shell-test-result.json");
     const validation = { schemaVersion: 1, operation: "exact.validation", status: "passed", node: "electron.shell.test",
-      identity: releasePlan.plan.nodes["electron.shell.test"].identity, target: "darwin-arm64", executionPlatform: "darwin-arm64" };
-    for (const invalid of [{ status: "failed" }, { identity: `sha256:${"f".repeat(64)}` }, { node: "closure.test" }, { executionPlatform: "linux-x64" }]) {
+      sourceCommit, target: "darwin-arm64", executionPlatform: "darwin-arm64" };
+    for (const invalid of [{ status: "failed" }, { sourceCommit: "f".repeat(40) }, { node: "closure.test" }, { executionPlatform: "linux-x64" }]) {
       await writeFile(validationReceipt, JSON.stringify({ ...validation, ...invalid }));
       await expect(executeExactReleaseControl({ ...stageRequest, validationReceipt }, stagedReceipt)).rejects.toThrow("validation binding mismatch");
     }

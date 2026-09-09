@@ -1,9 +1,7 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import { lstat, mkdir, open, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { canonicalBytes, readObject } from "./control-common.ts";
-import { createExactPlanFromRegistryFile } from "./plan.ts";
+import { canonicalBytes } from "./control-common.ts";
 
 const recipes = {
   "electron.contract.test": [{ directory: "packages/electron-contract", args: ["test"] }],
@@ -40,21 +38,15 @@ export function resolveExactValidationRecipe(node: string, coverage = "architect
 
 /** Execute a selected test recipe, never a caller-provided command. A result is
  * local evidence only; convergence retains authority over reusable results. */
-export async function validateExactPlanNode(input: Readonly<{
-  root: string; registry: string; plan: string; node: string; log: string; receipt: string;
+export async function validateReleaseRecipe(input: Readonly<{
+  root: string; target: string; sourceCommit: string; node: string; log: string; receipt: string;
   coverage?: string; reason?: string;
 }>) {
   const recipe = resolveExactValidationRecipe(input.node, input.coverage, input.reason);
-  const node = recipe.node, root = resolve(input.root), releasePlan = await readObject(input.plan);
-  if (releasePlan.schemaVersion !== 1 || !Array.isArray(releasePlan.actions)
-    || !releasePlan.actions.some(action => action?.id === node)) throw new Error("validation node is not selected by the release plan");
-  if (node !== "electron.contract.test" && releasePlan.plan?.target !== `${process.platform}-${process.arch}`) throw new Error("validation target differs from the executing platform");
-  const current = () => createExactPlanFromRegistryFile({ root, registryPath: resolve(root, input.registry),
-    target: releasePlan.plan.target, acceptedShellBaseline: releasePlan.plan.acceptedShellBaseline });
-  // The composite node identity already binds its recursive dependencies.
-  // Unrelated nodes do not participate in this validation result.
-  const matches = async () => canonicalBytes((await current()).nodes[node]).equals(canonicalBytes(releasePlan.plan.nodes[node]));
-  if (!await matches()) throw new Error("validation plan binding mismatch");
+  const node = recipe.node, root = resolve(input.root);
+  if (!["darwin-arm64", "darwin-x64", "win32-x64"].includes(input.target)) throw new Error("unsupported validation target");
+  if (!/^[a-f0-9]{40}$/u.test(input.sourceCommit)) throw new Error("validation requires a full source commit");
+  if (node !== "electron.contract.test" && input.target !== process.platform + "-" + process.arch) throw new Error("validation target differs from the executing platform");
   try { await lstat(input.receipt); throw new Error("validation receipt already exists"); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const log = await open(resolve(input.log), "wx"), startedAt = new Date().toISOString();
@@ -70,14 +62,11 @@ export async function validateExactPlanNode(input: Readonly<{
           : reject(new Error(`validation failed in ${command.directory}: ${signal ?? code}`)));
       });
     }
-    if (!await matches()) throw new Error("validation source changed during execution");
-    const planIdentity = releasePlan.plan.nodes[node].identity;
     const receipt = { schemaVersion: 1,
       operation: recipe.coverage === "business" ? "exact.business-validation" : "exact.validation",
       status: "passed", node, coverage: recipe.coverage,
-      identity: recipe.coverage === "business"
-        ? `sha256:${createHash("sha256").update(canonicalBytes({ planIdentity, coverage: recipe.coverage })).digest("hex")}` : planIdentity,
-      ...(recipe.coverage === "business" ? { planIdentity, reason: recipe.reason } : {}), target: releasePlan.plan.target,
+      ...(recipe.coverage === "business" ? { reason: recipe.reason } : {}), target: input.target,
+      sourceCommit: input.sourceCommit,
       executionPlatform: `${process.platform}-${process.arch}`, startedAt,
       finishedAt: new Date().toISOString(), commands, log: resolve(input.log) };
     await mkdir(dirname(resolve(input.receipt)), { recursive: true });

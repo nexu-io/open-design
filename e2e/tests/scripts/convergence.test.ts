@@ -95,6 +95,41 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("projects execution declarations using only Python and the workflow JSON", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    const execution = {
+      enabled: ["a"], runners: { worker: ["ubuntu-24.04"] },
+      matrices: { tool_matrix: { include: [{ workload: "a", target: "neutral", runs_on: "ubuntu-24.04" }] } },
+    };
+    config.workflows.ci.execution = execution;
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const output = path.join(fixture.root, "execution"), githubOutput = path.join(fixture.root, "outputs");
+    const args = [convergenceScript, "--config", fixture.configPath, "execution", "--workflow", "ci",
+      "--output", output, "--github-output", githubOutput];
+    execFileSync("python3", args, { cwd: fixture.root });
+    expect(JSON.parse(readFileSync(path.join(output, "scope.json"), "utf8"))).toEqual({ enabled: { a: true, b: false } });
+    expect(JSON.parse(readFileSync(path.join(output, "runners.json"), "utf8"))).toEqual(execution.runners);
+    expect(JSON.parse(readFileSync(path.join(output, "matrices.json"), "utf8"))).toEqual(execution.matrices);
+    expect(readFileSync(githubOutput, "utf8")).toBe(`tool_matrix=${JSON.stringify(execution.matrices.tool_matrix)}\n`);
+    for (const mutate of [
+      (value: any) => { value.enabled.push("unknown"); },
+      (value: any) => { value.runners.worker = []; },
+      (value: any) => { value.matrices["invalid\noutput"] = { include: [] }; },
+      (value: any) => { value.matrices.tool_matrix.include = [null]; },
+    ]) {
+      const invalid = structuredClone(config);
+      mutate(invalid.workflows.ci.execution);
+      writeFileSync(fixture.configPath, JSON.stringify(invalid));
+      expect(spawnSync("python3", args).status).not.toBe(0);
+    }
+    config.workflows.ci.workloads.a.dependsOn = ["b"];
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const refused = spawnSync("python3", args, { encoding: "utf8" });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain("disabled workload");
+  });
+
   test("keeps shadow coverage while calculating stable workload identities", () => {
     const fixture = createRepository();
     const first = runPlan(fixture);
