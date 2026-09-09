@@ -22,7 +22,7 @@ from typing import Any
 from unittest.mock import patch
 
 import handoff as handoff_contract
-from lib.config import ConfigError, compact_json, load_json, object_value, repository_root, schema_v1
+from lib.config import ConfigError, compact_json, load_json, object_value, repository_root
 from lib.github import (
     GitHubError,
     append_outputs,
@@ -37,6 +37,9 @@ from lib.r2 import R2Client, R2Credentials, R2Error, R2PreconditionFailed, self_
 
 
 PROTOCOL = "nexu-workload-result-v1"
+# One plan schema owns declaration and identity semantics. Bump on changes to
+# hashing, normalization, or dependency interpretation; storage schemas differ.
+SCHEMA_VERSION = 2
 CONTROL_SUITE = "convergence-control"
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 IDENTITY_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,79}$")
@@ -161,6 +164,12 @@ class WorkflowContract:
                     entry = object_value(entry, "execution matrix entry")
                     if not entry or any(not isinstance(key, str) or not key or not isinstance(item, (str, bool, int)) for key, item in entry.items()):
                         raise ConfigError("execution matrix entries must contain scalar values")
+                    workload = self.workloads.get(entry.get("workload"))
+                    if workload is not None:
+                        for key, declared in workload.parameters.items():
+                            if key in entry and entry[key] != declared:
+                                raise ConfigError(f"matrix {key} differs from workload parameters")
+                            entry[key] = declared
             for batch_name, batch in object_value(execution.get("batches", {}), "execution batches").items():
                 require_identity(batch_name, "batch name")
                 batch = object_value(batch, "execution batch")
@@ -184,7 +193,10 @@ class ConvergenceContract:
         value = object_value(load_json(path), "convergence")
         if set(value) != {"schema", "suites", "workflows"}:
             raise ConfigError("convergence keys must be schema, suites, and workflows")
-        schema_v1(value, "convergence")
+        schema = object_value(value["schema"], "convergence.schema")
+        if set(schema) != {"version"} or type(schema["version"]) is not int or schema["version"] != SCHEMA_VERSION:
+            raise ConfigError(f"convergence requires schema.version {SCHEMA_VERSION}")
+        self.schema_version = schema["version"]
         suites = object_value(value["suites"], "convergence.suites")
         self.suites = {
             require_identity(name, "convergence suite"): self.tokens(tokens, f"convergence.suites.{name}")
@@ -322,7 +334,7 @@ def digest_tokens(
         return resolved[node]
     digest = hashlib.sha256()
     digest.update(f"{PROTOCOL}\0{node}\0".encode())
-    for token in tokens:
+    for token in sorted(set(tokens)):
         digest.update(f"token\0{token}\0".encode())
         if token.startswith("suite://"):
             name = token.removeprefix("suite://")
@@ -344,13 +356,6 @@ def calculate(
     workflow = contract.workflow(workflow_name)
     resolved: dict[str, str] = {}
     fingerprinter = GitFingerprinter(root)
-    control_digest = digest_tokens(
-        contract,
-        fingerprinter,
-        f"suite://{CONTROL_SUITE}",
-        contract.suites[CONTROL_SUITE],
-        resolved,
-    )
     results: dict[str, dict[str, Any]] = {}
     for identity in workflow.order:
         workload = workflow.workloads[identity]
@@ -367,20 +372,25 @@ def calculate(
             resolved,
         )
         execution_class = canonical_json({"runnerClass": workload.runner_class, "labels": labels})
-        digest = hashlib.sha256()
-        digest.update(f"{PROTOCOL}\0workload-result\0".encode())
-        for value in (workflow_name, workflow.policy, identity, input_digest, control_digest, execution_class, workload.products):
-            digest.update(value.encode())
-            digest.update(b"\0")
         # Only this control plane resolves dependency identities. Executors get
         # artifact inputs and emit business receipts, never planner state.
-        if workload.dependencies or workload.parameters or workload.artifact:
-            digest.update(canonical_json({
-                "dependencies": {name: results[name]["digest"] for name in workload.dependencies},
-                "parameters": workload.parameters,
-                "artifact": workload.artifact,
-            }).encode())
-            digest.update(b"\0")
+        # CONTROL_SUITE is exclusively a trusted-writer admission boundary.
+        # Runtime-affecting source and execution settings must be declared by
+        # the workload, not inherited from the entire workflow/config file.
+        digest = hashlib.sha256(canonical_json({
+            "schemaVersion": contract.schema_version,
+            "protocol": PROTOCOL,
+            "workflow": workflow_name,
+            "policy": workflow.policy,
+            "workload": identity,
+            "inputs": input_digest,
+            "executionClass": json.loads(execution_class),
+            "products": workload.products,
+            "reusable": workload.reusable,
+            "dependencies": {name: results[name]["digest"] for name in workload.dependencies},
+            "parameters": workload.parameters,
+            "artifact": workload.artifact,
+        }).encode())
         results[identity] = {
             "digest": digest.hexdigest(),
             "executionClass": json.loads(execution_class),

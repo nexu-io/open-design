@@ -123,8 +123,13 @@ directionality is the central fail-closed property of active omission.
 Scope answers whether a workload is relevant to the changed-file context.
 Convergence answers whether the same workload identity already has a validated,
 reusable successful result. A workload identity includes its declared Git
-inputs, execution class, product mode, workflow policy, and convergence control
-contract. Once enforcement is enabled, the execution predicate is:
+inputs, execution class, product mode, workflow policy, effective workload
+declarations and dependency identities, under the single plan `schema.version`.
+Algorithm and interpretation changes require a version bump. Complete workflow
+control paths remain a trusted publication admission boundary, not an implicit
+cache-key dependency. Result-affecting executor inputs must be declared; ordinary
+CI currently keeps its conservative control paths as explicit workload inputs.
+Once enforcement is enabled, the execution predicate is:
 
 ```text
 scope_enabled && !reusable_result_hit

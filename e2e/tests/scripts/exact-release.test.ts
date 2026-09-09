@@ -16,6 +16,31 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it("keeps notification edits out of product identities and scopes declaration changes", async () => {
+    const result = await run("python3", ["-c", [
+      "import json,sys,copy", "from pathlib import Path", "from unittest.mock import patch",
+      "sys.path.insert(0,sys.argv[1])",
+      "from convergence import ConvergenceContract, GitFingerprinter, calculate",
+      "root=Path(sys.argv[2])",
+      "contract=ConvergenceContract(root/'.github/config/plan/release-exact.json')",
+      "workflow=contract.workflow('release-exact')",
+      "runners=workflow.execution['runners']",
+      "def compute(): return calculate(contract,root,'release-exact',runners)",
+      "before=compute()",
+      "original=GitFingerprinter.records",
+      "def notify_changed(self,token):",
+      " return [(p,m,('f'*40 if p=='.github/workflows/release-exact.yml' else o),s) for p,m,o,s in original(self,token)]",
+      "with patch.object(GitFingerprinter,'records',notify_changed): assert compute()==before",
+      "selected='closure_data_skills_darwin_arm64'",
+      "workflow.workloads[selected].parameters['fixture']='changed'",
+      "after=compute()",
+      "changed=[name for name in before if before[name]['digest']!=after[name]['digest']]",
+      "assert changed==[selected], changed",
+      "print(json.dumps({'notificationChanged':0,'declarationChanged':changed}))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot]);
+    expect(JSON.parse(result.stdout)).toEqual({ notificationChanged: 0, declarationChanged: ["closure_data_skills_darwin_arm64"] });
+  });
+
   it.each([
     { suite: "electron-scene", nodes: ["electron.contract.build", "electron.shell.build", "closure.build"] },
     { suite: "electron-platform", nodes: ["electron.platform.build"] },
@@ -27,7 +52,7 @@ describe("exact Electron release topology", () => {
       "sys.path.insert(0, sys.argv[1])",
       "from convergence import ConvergenceContract",
       "contract = ConvergenceContract(Path(sys.argv[2]))",
-      "print(json.dumps(contract.suite_paths(sys.argv[3]) + contract.suite_paths('convergence-control')))",
+      "print(json.dumps(contract.suite_paths(sys.argv[3])))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/plan/release-exact.json"), suite]);
     const inputs: string[] = JSON.parse(result.stdout);
     const paths = new Set(suite === "electron-scene" ? ["packages/electron-kit/", "shells/electron/", "apps/closure/"]
@@ -348,9 +373,9 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain("acceptance-request.json");
     expect(workflow).not.toMatch(/node (?:-e |--input-type=module)/u);
     const acceptance = workflow.split("\n  acceptance:")[1]!.split("\n  activate:")[0]!;
-    expect(acceptance.indexOf("node-version: 24.18.0")).toBeLessThan(acceptance.indexOf("- name: Authorize installed acceptance capability"));
+    expect(acceptance.indexOf("node-version-file: .node-version")).toBeLessThan(acceptance.indexOf("- name: Authorize installed acceptance capability"));
     const config = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
-    expect(config.suites["convergence-control"]).toContain("tools/release/src/exact/scene-artifact.ts");
+    expect(config.suites["electron-scene"]).toContain("tools/release/src/exact/scene-artifact.ts");
   });
 
   it("checks release-neutral scenes by owned fields rather than coincidental version values", async () => {

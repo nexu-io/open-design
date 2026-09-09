@@ -117,7 +117,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - name: Acquire reusable release tool
         if: ${{ !fromJSON(needs.plan.outputs.run).release_tools }}
@@ -232,7 +232,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
           cache: pnpm
 
       - uses: ./.github/actions/configure-ci-parallelism
@@ -305,7 +305,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - name: Restore converged scene
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -325,7 +325,7 @@ jobs:
       - uses: actions/setup-node@v6
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
           cache: pnpm
 
       - uses: ./.github/actions/configure-ci-parallelism
@@ -468,7 +468,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - name: Restore converged scene
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -488,7 +488,7 @@ jobs:
       - uses: actions/setup-node@v6
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
           cache: pnpm
 
       - uses: ./.github/actions/configure-ci-parallelism
@@ -497,7 +497,7 @@ jobs:
       - name: Prepare scene workspace
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
-          OPEN_DESIGN_POSTINSTALL_LEVEL: terminal-build
+          OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}
         shell: bash
         run: pnpm install --frozen-lockfile
 
@@ -581,7 +581,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - name: Restore converged platform
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -612,7 +612,7 @@ jobs:
       - name: Build independent platform
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
-          OPEN_DESIGN_POSTINSTALL_LEVEL: electron-build
+          OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
@@ -682,7 +682,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - name: Restore converged capsule
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -712,7 +712,7 @@ jobs:
       - name: Build independent capsule
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
-          OPEN_DESIGN_POSTINSTALL_LEVEL: electron-build
+          OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
@@ -770,7 +770,7 @@ jobs:
           path: ${{ runner.temp }}/release-tools
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
       - name: Expose release tool
         run: |
           chmod +x "$RUNNER_TEMP/release-tools/tools-release"
@@ -794,7 +794,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - uses: actions/download-artifact@v8
         with:
@@ -931,7 +931,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - name: Restore distribution scene
         shell: bash
@@ -1010,7 +1010,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - uses: actions/download-artifact@v8
         with:
@@ -1177,7 +1177,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - name: Authorize installed acceptance capability
         env:
@@ -1336,7 +1336,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.18.0
+          node-version-file: .node-version
 
       - uses: actions/download-artifact@v8
         with:

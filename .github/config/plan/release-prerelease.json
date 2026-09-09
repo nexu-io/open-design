@@ -1,6 +1,6 @@
 {
   "schema": {
-    "version": 1
+    "version": 2
   },
   "suites": {
     "convergence-control": [
@@ -47,7 +47,10 @@
       "shells/electron/config/carriers/node-lock.json",
       "shells/electron/resources/platform/",
       "tools/pack/",
-      "tools/release/src/exact/control-common.ts"
+      "tools/release/src/exact/control-common.ts",
+      "suite://release-executor",
+      "tools/release/src/exact/platform-artifact.ts",
+      "tools/release/src/exact/native-build.ts"
     ],
     "terminal-scene": [
       "package.json",
@@ -59,7 +62,14 @@
       "packages/platform/",
       "packages/sidecar/",
       "packages/standalone/",
-      "shells/terminal/"
+      "shells/terminal/",
+      "suite://release-executor",
+      "tools/release/src/exact/scene-artifact.ts",
+      "tools/release/src/exact/resource-artifact.ts",
+      "tools/release/src/exact/resource-composition.ts",
+      "tools/release/src/exact/native-build.ts",
+      "tools/release/src/exact/resource-build.ts",
+      "tools/release/src/policy/"
     ],
     "electron-scene": [
       ".node-version",
@@ -75,7 +85,14 @@
       "packages/platform/",
       "packages/sidecar/",
       "packages/standalone/",
-      "shells/electron/"
+      "shells/electron/",
+      "suite://release-executor",
+      "tools/release/src/exact/scene-artifact.ts",
+      "tools/release/src/exact/resource-artifact.ts",
+      "tools/release/src/exact/resource-composition.ts",
+      "tools/release/src/exact/native-build.ts",
+      "tools/release/src/exact/resource-build.ts",
+      "tools/release/src/policy/"
     ],
     "closure-resources": [
       "apps/daemon/",
@@ -100,7 +117,10 @@
       "apps/closure/src/build/data-resources.ts",
       "apps/closure/src/data-resources.ts",
       "packages/standalone/",
-      "tools/release/src/exact/resource-build.ts"
+      "tools/release/src/exact/resource-build.ts",
+      "suite://release-executor",
+      "tools/release/src/exact/resource-artifact.ts",
+      ".github/actions/release-data/action.yml"
     ],
     "closure-data-skills": [
       "suite://closure-data-control",
@@ -140,7 +160,12 @@
       "data/plugin-previews/"
     ],
     "electron-base": [
-      "suite://electron-capsule"
+      "suite://electron-capsule",
+      "suite://release-executor",
+      "tools/release/src/exact/base-artifact.ts",
+      "tools/release/src/exact/native-build.ts",
+      "tools/release/src/exact/resource-build.ts",
+      "tools/release/src/policy/"
     ],
     "electron-capsule": [
       ".node-version",
@@ -158,7 +183,13 @@
       "packages/sidecar/",
       "packages/standalone/",
       "shells/electron/",
-      "tools/release/src/exact/control-common.ts"
+      "tools/release/src/exact/control-common.ts",
+      "suite://release-executor",
+      "tools/release/src/exact/capsule-artifact.ts",
+      "tools/release/src/exact/capsule-budget.ts",
+      "tools/release/src/exact/native-build.ts",
+      "tools/release/src/exact/resource-build.ts",
+      "tools/release/src/policy/"
     ],
     "release-tools": [
       ".node-version",
@@ -171,6 +202,19 @@
       "shells/electron/",
       "tools/pack/",
       "tools/release/"
+    ],
+    "release-executor": [
+      ".node-version",
+      "packages/metatool/",
+      "packages/archive/package.json",
+      "packages/archive/tsconfig.json",
+      "packages/archive/src/",
+      "tools/release/package.json",
+      "tools/release/esbuild.config.mjs",
+      "tools/release/src/index.ts",
+      "tools/release/src/exact/commands.ts",
+      "tools/release/src/exact/control-common.ts",
+      "tools/release/src/exact/artifact-product.ts"
     ]
   },
   "workflows": {
@@ -187,6 +231,10 @@
           "artifact": {
             "product": "base",
             "prefix": "exact-base-product-darwin-arm64"
+          },
+          "parameters": {
+            "target": "darwin-arm64",
+            "postinstall_level": "electron-build"
           }
         },
         "electron_base_win32_x64": {
@@ -199,6 +247,10 @@
           "artifact": {
             "product": "base",
             "prefix": "exact-base-product-win32-x64"
+          },
+          "parameters": {
+            "target": "win32-x64",
+            "postinstall_level": "electron-build"
           }
         },
         "electron_platform_darwin_arm64": {
@@ -211,6 +263,10 @@
           "artifact": {
             "product": "platform",
             "prefix": "exact-platform-cache-darwin-arm64"
+          },
+          "parameters": {
+            "target": "darwin-arm64",
+            "postinstall_level": "electron-build"
           }
         },
         "electron_platform_win32_x64": {
@@ -223,6 +279,10 @@
           "artifact": {
             "product": "platform",
             "prefix": "exact-platform-cache-win32-x64"
+          },
+          "parameters": {
+            "target": "win32-x64",
+            "postinstall_level": "electron-build"
           }
         },
         "terminal_scene_darwin_arm64": {
@@ -235,6 +295,10 @@
           "artifact": {
             "product": "scene",
             "prefix": "exact-terminal-scene-darwin-arm64"
+          },
+          "parameters": {
+            "target": "darwin-arm64",
+            "postinstall_level": "terminal-build"
           }
         },
         "electron_scene_darwin_arm64": {
@@ -247,6 +311,10 @@
           "artifact": {
             "product": "scene",
             "prefix": "exact-electron-scene-darwin-arm64"
+          },
+          "parameters": {
+            "target": "darwin-arm64",
+            "postinstall_level": "electron-build"
           }
         },
         "electron_scene_win32_x64": {
@@ -259,6 +327,10 @@
           "artifact": {
             "product": "scene",
             "prefix": "exact-electron-scene-win32-x64"
+          },
+          "parameters": {
+            "target": "win32-x64",
+            "postinstall_level": "electron-build"
           }
         },
         "closure_data_skills_darwin_arm64": {
@@ -271,6 +343,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-skills"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "closure_data_design_templates_darwin_arm64": {
@@ -283,6 +358,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-design-templates"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "closure_data_design_systems_darwin_arm64": {
@@ -295,6 +373,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-design-systems"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "closure_data_craft_darwin_arm64": {
@@ -307,6 +388,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-craft"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "closure_data_plugins_darwin_arm64": {
@@ -319,6 +403,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-plugins"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "closure_data_frames_darwin_arm64": {
@@ -331,6 +418,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-frames"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "closure_data_community_pets_darwin_arm64": {
@@ -343,6 +433,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-community-pets"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "closure_data_prompt_templates_darwin_arm64": {
@@ -355,6 +448,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-prompt-templates"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "closure_data_plugin_previews_darwin_arm64": {
@@ -367,6 +463,9 @@
           "artifact": {
             "product": "resource",
             "prefix": "exact-data-cache-plugin-previews"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
           }
         },
         "electron_capsule_darwin_arm64": {
@@ -379,6 +478,10 @@
           "artifact": {
             "product": "capsule",
             "prefix": "exact-capsule-cache-darwin-arm64"
+          },
+          "parameters": {
+            "target": "darwin-arm64",
+            "postinstall_level": "electron-build"
           }
         },
         "electron_capsule_win32_x64": {
@@ -391,6 +494,10 @@
           "artifact": {
             "product": "capsule",
             "prefix": "exact-capsule-cache-win32-x64"
+          },
+          "parameters": {
+            "target": "win32-x64",
+            "postinstall_level": "electron-build"
           }
         },
         "release_tools": {
@@ -403,7 +510,8 @@
           "artifact": {
             "product": "tool",
             "prefix": "release-tools"
-          }
+          },
+          "parameters": {}
         }
       },
       "execution": {

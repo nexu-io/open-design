@@ -64,8 +64,18 @@ entrypoints initialize metadata before workload runners start. A Windows job
 must never invoke these scripts. Keep runner placement, changed-file relevance,
 reusable-result convergence, and fine-grained commands inside a workload independent.
 
-`convergence.py` computes workload identities from declared Git inputs, the
-execution class, product mode, and the convergence control contract. Public
+`schema.version` is the sole plan declaration/identity version (currently 2).
+Hashing, normalization, or dependency-interpretation changes require a bump;
+do not introduce a separate identity version or silently accept older schemas.
+`convergence.py` computes workload identities from that version, each workload's
+effective declarations, declared Git inputs, execution class and dependency
+identities. The `convergence-control` suite retains complete trusted-writer
+admission paths, but is not implicitly hashed into every workload. Release
+executor source belongs in the corresponding declared input suites. Any change
+to commands, result-affecting environment or parameters must update those
+declarations; notification/display and unrelated workload edits must not alter
+product identities. Ordinary CI retains its broad boundary through explicit
+input references until a separate refinement is justified. Public
 result reads are credential-free and fail open to execution. Only a successful
 gate may produce a `handoff/convergence` candidate; only trusted
 `convergence.atom.yml` code may publish immutable results. `lib/r2.py` knows R2

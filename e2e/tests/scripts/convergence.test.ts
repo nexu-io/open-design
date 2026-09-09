@@ -18,7 +18,7 @@ function createRepository() {
   }
   const configPath = path.join(root, "convergence.json");
   writeFileSync(configPath, JSON.stringify({
-    schema: { version: 1 },
+    schema: { version: 2 },
     suites: { "convergence-control": ["control.txt"], web: ["a.txt"] },
     workflows: {
       ci: {
@@ -95,6 +95,48 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("pins the schema 2 identity algorithm independently of Git and platform", () => {
+    const digest = execFileSync("python3", ["-c", [
+      "import sys", "from pathlib import Path", "from unittest.mock import patch",
+      "sys.path.insert(0,sys.argv[1])",
+      "from convergence import ConvergenceContract, WorkflowContract, GitFingerprinter, calculate",
+      "c=ConvergenceContract.__new__(ConvergenceContract)",
+      "c.schema_version=2",
+      "c.suites={'source':['a.txt']}",
+      "c.workflows={'example':WorkflowContract('example',{'policy':'v1','workloads':{'unit':{'inputs':['suite://source'],'runnerClass':'worker','products':'none','reusable':True}}})}",
+      "with patch.object(GitFingerprinter,'records',return_value=[('a.txt','100644','a'*40,'0')]):",
+      " before=calculate(c,Path('.'),'example',{'worker':['ubuntu-24.04']})['unit']['digest']",
+      " c.schema_version=3",
+      " assert calculate(c,Path('.'),'example',{'worker':['ubuntu-24.04']})['unit']['digest'] != before",
+      " print(before)",
+    ].join("\n"), path.dirname(convergenceScript)], { encoding: "utf8" }).trim();
+    expect(digest).toBe("2e88f86aa13f43b0036a6f5c30d95becb0388d205f4ae51189bba9096c5cf28e");
+  });
+
+  test("isolates admission files and unrelated config while retaining versioned execution semantics", () => {
+    const fixture = createRepository();
+    const before = runPlan(fixture).pending.workloads;
+    writeFileSync(path.join(fixture.root, "control.txt"), "notification-only workflow change");
+    execFileSync("git", ["add", "control.txt"], { cwd: fixture.root });
+    expect(runPlan(fixture).pending.workloads).toEqual(before);
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.workflows.ci.workloads.b.parameters = { command: "test:new" };
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const changed = runPlan(fixture).pending.workloads;
+    expect(workload(changed, "a").digest).toBe(workload(before, "a").digest);
+    expect(workload(changed, "b").digest).not.toBe(workload(before, "b").digest);
+    config.workflows.ci.workloads.b.inputs.reverse();
+    writeFileSync(fixture.configPath, JSON.stringify(config, null, 4));
+    expect(runPlan(fixture).pending.workloads).toEqual(changed);
+    for (const version of [1, 3, true]) {
+      config.schema.version = version;
+      writeFileSync(fixture.configPath, JSON.stringify(config));
+      const result = spawnSync("python3", [convergenceScript, "--config", fixture.configPath, "validate"], { encoding: "utf8" });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("schema.version 2");
+    }
+  });
+
   test("admits manual bootstrap only for the pinned successful same-repository exact run", () => {
     const code = `
 import copy, os, sys
@@ -230,11 +272,17 @@ assert not (root / 'escape').exists()
     expect(JSON.parse(readFileSync(path.join(output, "matrices.json"), "utf8"))).toEqual(execution.matrices);
     expect(JSON.parse(readFileSync(path.join(output, "inputs/shells.json"), "utf8"))).toEqual(execution.inputs.shells);
     expect(readFileSync(githubOutput, "utf8")).toBe(`tool_matrix=${JSON.stringify(execution.matrices.tool_matrix)}\n`);
+    config.workflows.ci.workloads.a.parameters = { target: "neutral", postinstall_level: "fixture" };
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    execFileSync("python3", args, { cwd: fixture.root });
+    expect(JSON.parse(readFileSync(path.join(output, "matrices.json"), "utf8")).tool_matrix.include[0])
+      .toMatchObject({ target: "neutral", postinstall_level: "fixture" });
     for (const mutate of [
       (value: any) => { value.enabled.push("unknown"); },
       (value: any) => { value.runners.worker = []; },
       (value: any) => { value.matrices["invalid\noutput"] = { include: [] }; },
       (value: any) => { value.matrices.tool_matrix.include = [null]; },
+      (value: any) => { value.matrices.tool_matrix.include[0].target = "drift"; },
     ]) {
       const invalid = structuredClone(config);
       mutate(invalid.workflows.ci.execution);

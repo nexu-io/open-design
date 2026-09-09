@@ -1,5 +1,7 @@
 {
-  "schema": { "version": 1 },
+  "schema": {
+    "version": 2
+  },
   "suites": {
     "convergence-control": [
       ".github/config/convergence.json",
@@ -86,55 +88,77 @@
       "policy": "ci-v1",
       "workloads": {
         "static_gate": {
-          "inputs": ["*"],
+          "inputs": [
+            "*"
+          ],
           "runnerClass": "control",
           "products": "none",
           "reusable": false
         },
         "preflight": {
-          "inputs": ["*"],
+          "inputs": [
+            "*"
+          ],
           "runnerClass": "general_medium",
           "products": "none",
           "reusable": false
         },
         "workspace_unit_tests": {
-          "inputs": ["*"],
+          "inputs": [
+            "*"
+          ],
           "runnerClass": "workspace_unit",
           "products": "none",
           "reusable": false
         },
         "daemon_unit_tests": {
-          "inputs": ["*"],
+          "inputs": [
+            "*"
+          ],
           "runnerClass": "workspace_unit",
           "products": "none",
           "reusable": true
         },
         "web_workspace_tests": {
-          "inputs": ["suite://web"],
+          "inputs": [
+            "suite://web",
+            "suite://convergence-control"
+          ],
           "runnerClass": "js_hot",
           "products": "none",
           "reusable": true
         },
         "e2e_vitest": {
-          "inputs": ["*"],
+          "inputs": [
+            "*"
+          ],
           "runnerClass": "js_hot",
           "products": "none",
           "reusable": true
         },
         "playwright_critical": {
-          "inputs": ["suite://ui-runtime"],
+          "inputs": [
+            "suite://ui-runtime",
+            "suite://convergence-control"
+          ],
           "runnerClass": "ui_hot",
           "products": "none",
           "reusable": true
         },
         "ui_p0": {
-          "inputs": ["suite://ui-runtime"],
+          "inputs": [
+            "suite://ui-runtime",
+            "suite://convergence-control"
+          ],
           "runnerClass": "ui_p0",
           "products": "manifest",
           "reusable": false
         },
         "playwright_visual": {
-          "inputs": ["suite://ui-runtime"],
+          "inputs": [
+            "suite://ui-runtime",
+            "suite://convergence-control"
+          ],
           "runnerClass": "visual_hot",
           "products": "manifest",
           "reusable": false
