@@ -1,0 +1,129 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { OdCard } from '@open-design/contracts';
+import { ExecutionShell } from '../../../src/components/chat/ExecutionShell';
+import { AssistantMessage } from '../../../src/components/AssistantMessage';
+import { I18nProvider } from '../../../src/i18n';
+import type { ExecutionShell as Shell, ShellItem } from '../../../src/runtime/chat/contract';
+import type { ChatMessage } from '../../../src/types';
+
+const TASK_BRIEF = { kind: 'task-brief', summary: 'Keep <od-demo>brand wording</od-demo>', fields: [] } satisfies OdCard;
+const MEMORY_APPLIED = { kind: 'memory-applied', summary: 'Applied palette', used: [{ type: 'rule', name: 'Palette' }] } satisfies OdCard;
+const VERIFY_SCORECARD = { kind: 'verify-scorecard', status: 'pass', summary: 'Checks passed', rows: [{ rule: 'Palette', status: 'pass' }] } satisfies OdCard;
+const RULE_PROPOSAL = { kind: 'rule-proposal', name: 'Palette', assertion: 'Use palette', check: 'Check colors' } satisfies OdCard;
+const BROWSER_ASSIST = { kind: 'brand-browser-assist', brandId: 'brand-1', url: 'https://brand.test/', reason: 'Verification' } satisfies OdCard;
+const CARDS = [TASK_BRIEF, MEMORY_APPLIED, VERIFY_SCORECARD, RULE_PROPOSAL, BROWSER_ASSIST];
+
+function markup(card: OdCard): string {
+  return `<od-card type="${card.kind}">${JSON.stringify(card)}</od-card>`;
+}
+
+function shell(items: ShellItem[]): Shell {
+  return {
+    kind: 'shell', id: 'shell-1', status: 'running', stopped: false,
+    thinking: false, elapsedMs: null, quietMs: null, items, segments: [],
+  };
+}
+
+function show(items: ShellItem[], scope = 'project:conversation:run:message:shell') {
+  return (
+    <I18nProvider initial="en">
+      <ExecutionShell shell={shell(items)} odCardScope={scope} deferCollapsedBodies={false} />
+    </I18nProvider>
+  );
+}
+
+function todo(content: string, text: string): ShellItem {
+  return {
+    kind: 'todo', segment: {
+      content, status: 'in_progress', recalled: false, abandoned: false,
+      implicit: false, elapsedMs: null, items: [{ kind: 'text', text }],
+    },
+  };
+}
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  vi.unstubAllGlobals();
+});
+
+describe('execution shell card boundaries', () => {
+  it.each(CARDS)('renders $kind while preserving neighboring Markdown', (card) => {
+    const { container } = render(show([{ kind: 'text', text: `**Before**\n\n${markup(card)}\n\nAfter` }]));
+    expect(container.querySelector(`[data-od-card="${card.kind}"]`)).not.toBeNull();
+    expect(container.querySelector('strong')?.textContent).toBe('Before');
+    expect(container.textContent).toContain('After');
+    if (card.kind === 'task-brief') expect(container.textContent).toContain(card.summary);
+  });
+
+  it.each(['fenced', 'inline', 'unclosed fence'])('preserves a card quoted as %s code', (style) => {
+    const raw = markup(TASK_BRIEF);
+    const text = style === 'inline' ? `Example: \`${raw}\``
+      : style === 'fenced' ? `\`\`\`xml\n${raw}\n\`\`\`` : `\`\`\`xml\n${raw}`;
+    const { container } = render(show([{ kind: 'text', text }]));
+    expect(container.querySelector('[data-od-card]')).toBeNull();
+    expect(container.querySelector('code')?.textContent).toContain(raw);
+  });
+
+  it('keeps code examples and real cards in their original order', () => {
+    const raw = markup(TASK_BRIEF);
+    const { container } = render(show([{ kind: 'text', text: `\`${raw}\`\n\n${markup(MEMORY_APPLIED)}\n\nTail` }]));
+    const code = container.querySelector('code');
+    const card = container.querySelector('[data-od-card="memory-applied"]');
+    expect(code?.textContent).toBe(raw);
+    expect(card).not.toBeNull();
+    expect(code!.compareDocumentPosition(card!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(container.textContent).toContain('Tail');
+  });
+
+  it('reveals a streamed card only after it closes and preserves terminal malformed text', () => {
+    const raw = markup(TASK_BRIEF);
+    const { container, rerender } = render(show([{ kind: 'text', text: `Before\n${raw.slice(0, -10)}` }]));
+    expect(container.textContent).toContain('Before');
+    expect(container.textContent).not.toContain('<od-card');
+    rerender(show([{ kind: 'text', text: `Before\n${raw}\nAfter` }]));
+    expect(container.querySelector('[data-od-card="task-brief"]')).not.toBeNull();
+    expect(container.textContent).toContain('After');
+    const malformed = '<od-card type="task-brief">not JSON';
+    rerender(<I18nProvider initial="en"><ExecutionShell shell={{ ...shell([{ kind: 'text', text: malformed }]), status: 'done' }} deferCollapsedBodies={false} /></I18nProvider>);
+    expect(container.textContent).toContain(malformed);
+  });
+
+  it('keeps a discarded rule local to its todo across remounts', () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ entries: [] }))));
+    const raw = markup(RULE_PROPOSAL);
+    const items = [todo('First step', raw), todo('Second step', raw)];
+    const first = render(show(items));
+    const cards = first.container.querySelectorAll<HTMLElement>('[data-od-card="rule-proposal"]');
+    expect(cards).toHaveLength(2);
+    fireEvent.click(within(cards[0]!).getByRole('button', { name: 'View details' }));
+    fireEvent.click(within(cards[0]!).getByRole('button', { name: 'Discard' }));
+    first.unmount();
+    render(show(items));
+    expect(screen.getAllByRole('button', { name: 'Keep' })).toHaveLength(1);
+    cleanup();
+    render(show(items, 'another-conversation'));
+    expect(screen.getAllByRole('button', { name: 'Keep' })).toHaveLength(2);
+  });
+
+  it('wires browser assistance from AssistantMessage through a todo', async () => {
+    const card = BROWSER_ASSIST;
+    const onConfirm = vi.fn().mockResolvedValue({ ok: true, action: 'opened' });
+    const message: ChatMessage = {
+      id: 'message-1', role: 'assistant', content: '', createdAt: 1,
+      runId: 'run-1', runStatus: 'running', events: [
+        { kind: 'done_key', key: 'a7f3c91ed2b40561' },
+        { kind: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: { todos: [{ content: 'Verify brand', status: 'in_progress' }] } },
+        { kind: 'text', text: markup(card) },
+      ],
+    };
+    render(<I18nProvider initial="en"><AssistantMessage message={message} streaming projectId="project" conversationId="conversation" onBrandBrowserAssistConfirm={onConfirm} /></I18nProvider>);
+    const button = screen.getByRole('button', { name: 'Open browser assist' });
+    expect(button.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByText('Browser opened')).toBeTruthy());
+    expect(onConfirm).toHaveBeenCalledWith(card);
+  });
+});

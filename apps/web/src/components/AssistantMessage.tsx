@@ -1576,6 +1576,17 @@ function AssistantMessageImpl({
               imageSrc={imageSrc}
               /* done 一到就收起,不等 run 结束(产品 2026-09-04,见 `concludedAt`) */
               concluded={entry.concluded}
+              /* D43 把 done 之前的正文收进壳,里面可能夹着 `<od-card>`。壳内那条
+                 通道用的是**同一支** `splitOnOdCards`,这两样是卡片自己要的身份与
+                 回调(见 `chat/SayBlock.tsx`)。 */
+              odCardScope={[
+                projectId ?? "no-project",
+                conversationId ?? "no-conversation",
+                message.runId ?? "no-run",
+                message.id,
+                entry.key,
+              ].join(":")}
+              onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
             />
           ) : (
             <Fragment key={entry.key}>
