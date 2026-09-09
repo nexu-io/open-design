@@ -31,6 +31,7 @@ import type {
   OpenDesignHostUpdaterMenuLabels,
   OpenDesignHostUpdaterOpenDialogRequest,
 } from "@open-design/host";
+import { OPEN_DESIGN_PREVIEW_NAVIGATION_ATTEMPT_PARAM } from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
 import { renderDeterministicFrames } from "./frame-capture.js";
@@ -54,8 +55,39 @@ const PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL = "od:preview-navigation-failed";
 const ABORTED_NAVIGATION_ERROR_CODE = -3;
 let previewNavigationFailureEventSequence = 0;
 
-function isPreviewTransportNavigationUrl(url: string): boolean {
-  return url === "about:srcdoc" || url.startsWith("blob:od://app/");
+interface PreviewTransportNavigationIdentity {
+  navigationAttemptId?: string;
+}
+
+const SCOPED_PREVIEW_HOST_RE = /^(n|p)-([a-z0-9_-]{8,128})\.localhost$/u;
+const SCOPED_PREVIEW_NAVIGATION_ATTEMPT_RE = /^([a-z0-9_-]{8,128})\.(\d{1,10})$/u;
+
+function previewTransportNavigationIdentity(
+  url: string,
+): PreviewTransportNavigationIdentity | null {
+  if (url === "about:srcdoc" || url.startsWith("blob:od://app/")) return {};
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.protocol === "od:"
+      && parsed.hostname === "app"
+      && /^\/api\/projects\/[^/]+\/raw\/.+/.test(parsed.pathname)
+      && parsed.searchParams.has("odPreviewEpoch")
+    ) return {};
+
+    if (parsed.protocol !== "http:" || parsed.username || parsed.password) return null;
+    const hostMatch = SCOPED_PREVIEW_HOST_RE.exec(parsed.hostname);
+    if (!hostMatch) return null;
+    const navigationAttemptId = parsed.searchParams.get(
+      OPEN_DESIGN_PREVIEW_NAVIGATION_ATTEMPT_PARAM,
+    );
+    if (navigationAttemptId === null) return null;
+    const attemptMatch = SCOPED_PREVIEW_NAVIGATION_ATTEMPT_RE.exec(navigationAttemptId);
+    if (!attemptMatch || attemptMatch[1] !== hostMatch[2]) return null;
+    return { navigationAttemptId };
+  } catch {
+    return null;
+  }
 }
 
 export function previewNavigationFailureFromDidFailLoad(input: {
@@ -66,15 +98,17 @@ export function previewNavigationFailureFromDidFailLoad(input: {
   occurredAtMs: number;
   validatedUrl: string;
 }): OpenDesignHostPreviewNavigationFailure | null {
+  const navigationIdentity = previewTransportNavigationIdentity(input.validatedUrl);
   if (
     input.isMainFrame
     || input.errorCode !== ABORTED_NAVIGATION_ERROR_CODE
-    || !isPreviewTransportNavigationUrl(input.validatedUrl)
+    || !navigationIdentity
   ) return null;
   return {
     errorCode: input.errorCode,
     eventId: input.eventId,
     ...(input.frameName ? { frameName: input.frameName } : {}),
+    ...navigationIdentity,
     occurredAtMs: input.occurredAtMs,
     validatedUrl: input.validatedUrl,
   };
@@ -2314,7 +2348,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     frame.on("dom-ready", () => rememberPreviewFrameName(frame));
   });
   window.webContents.on("did-start-navigation", (details) => {
-    if (details.isMainFrame || !isPreviewTransportNavigationUrl(details.url)) return;
+    if (details.isMainFrame || !previewTransportNavigationIdentity(details.url)) return;
     // `did-fail-load` can arrive after Chromium has destroyed the frame, at
     // which point webFrameMain.fromId() and frame-created/dom-ready are too
     // late to recover its name. Snapshot the identity when navigation starts.

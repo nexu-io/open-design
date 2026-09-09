@@ -1613,8 +1613,81 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
 .viewer.is-tab-present .live-artifact-refresh-notice {
   display: none;
 }
+/*
+ * Presenting covers the workspace chrome, and this rule is the only reason it
+ * can. Without it the top strip of every presented document sits under the tab
+ * chrome — painted over and, worse, not clickable, because the chrome eats the
+ * pointer events.
+ *
+ * The reason is not the z-index below, which is why raising that number does
+ * nothing. `.app` carries the entrance fade (`entrance.css`: `animation:
+ * od-fade-in … both`). `od-fade-in` animates `opacity`, and
+ * `animation-fill-mode: both` keeps that animation in effect for the life of
+ * the element — so `.app` is permanently a stacking context, at `z-index:
+ * auto`. Everything inside it, the promoted `.viewer-body` included, is sorted
+ * *within* `.app`; its 1050 competes with its siblings inside `.app`, never
+ * with the chrome's `z-index: 120`, which lives in the root context as a
+ * sibling of `.app`'s ancestor.
+ *
+ * Measured, not reasoned: raising `.viewer-body` to 999999 changes nothing,
+ * and the chrome stops covering the slide only once its own z-index drops
+ * below 1 — it is competing against `.app`'s effective 0, not against 1050.
+ * Removing just `.app`'s animation also fixes it, and restoring it brings the
+ * bug back.
+ *
+ * So the surface to lift is `.app` itself. The promoted document cannot be
+ * moved out of it — that would re-mount the iframe and drop the running page,
+ * which is the whole point of promoting in place — so its stacking context is
+ * lifted for the duration of the presentation instead. 1050 slots deliberately
+ * between the letterbox ground (`.present-backdrop`, 1049) and the exit
+ * control (`.present-overlay`, 1060), both of which are portaled to <body> and
+ * so sit in the root context: the ground stays under the slide and the exit
+ * stays reachable above it.
+ */
+.workspace-shell:has(.viewer.is-tab-present) .app {
+  position: relative;
+  z-index: 1050;
+}
+/* Presenting promotes the document the user is already looking at, in place.
+   The alternative — a second iframe inside the overlay — would start a fresh
+   browsing context and drop the running page's JS heap, canvases and timers, so
+   the preview never moves and never renavigates; only its box changes. */
 .viewer.is-tab-present .viewer-body {
+  position: fixed;
   inset: 0;
+  z-index: 1050;
+  overflow: hidden;
+  /* The letterbox ground is NOT painted here, on purpose. Promotion changes
+     this element's layout, and an opaque ground in the same rule composites
+     before the document has repainted into its new box — measured as a
+     ~350 ms black flash, with zero navigations and zero frame loads. Timing
+     the ground against that reflow only lowers the odds: two rAFs survived
+     eight runs and still flashed on a busier one. The ground therefore lives
+     on its own layer below, whose box never changes, so it can never be the
+     only thing painted in a frame. See runtime/presentation-backdrop.ts. */
+  background: transparent;
+}
+
+/*
+ * The letterbox ground for slides that do not fill the window.
+ *
+ * Its own fixed layer, mounted and unmounted with the presentation, sitting
+ * directly beneath the promoted preview. Because this box is constant, it is
+ * never mid-reflow while opaque: on the way in it fades up once the document
+ * has painted, and on the way out it leaves with the presentation.
+ */
+.present-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1049;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.present-backdrop.is-present-settled {
+  opacity: 1;
 }
 .viewer .present-exit-btn {
   position: absolute;

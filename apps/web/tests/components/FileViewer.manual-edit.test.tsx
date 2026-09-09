@@ -1,15 +1,62 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import {
-  FileViewer,
+  FileViewer as ProductFileViewer,
   cancelManualEditPendingStyleSnapshot,
 } from '../../src/components/FileViewer';
 import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 import type { ProjectFile } from '../../src/types';
+import {
+  installFileViewerPreviewRuntimeHarness,
+  prepareSettledFileViewerFixture,
+  spyOnManualEditMirrors,
+  syntheticPreviewFileSource,
+  uninstallFileViewerPreviewRuntimeHarness,
+  useSyntheticProjectScopedPreviewNavigation,
+} from '../helpers/file-viewer-preview-runtime';
+
+vi.mock('../../src/providers/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/registry')>();
+  return {
+    ...actual,
+    fetchProjectFileText(
+      projectId: string,
+      name: string,
+      options?: Parameters<typeof actual.fetchProjectFileText>[2],
+    ) {
+      const source = syntheticPreviewFileSource(projectId, name);
+      return source === undefined
+        ? actual.fetchProjectFileText(projectId, name, options)
+        : Promise.resolve(source);
+    },
+  };
+});
+
+vi.mock('../../src/runtime/use-project-preview-session-navigation', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../src/runtime/use-project-preview-session-navigation')
+  >();
+  return {
+    ...actual,
+    useProjectScopedPreviewNavigation: (
+      options: Parameters<typeof actual.useProjectScopedPreviewNavigation>[0],
+    ) => useSyntheticProjectScopedPreviewNavigation(options),
+  };
+});
+
+function FileViewer(props: ComponentProps<typeof ProductFileViewer>) {
+  return <ProductFileViewer {...prepareSettledFileViewerFixture(props)} />;
+}
+
+beforeEach(() => {
+  installFileViewerPreviewRuntimeHarness();
+});
 
 afterEach(() => {
+  uninstallFileViewerPreviewRuntimeHarness();
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -64,7 +111,7 @@ describe('FileViewer manual edit regressions', () => {
       expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
       const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(activeFrame.getAttribute('data-od-active')).toBe('true');
-      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('runtime-url');
     });
   }
 
@@ -544,7 +591,7 @@ describe('FileViewer manual edit regressions', () => {
     await enterManualEditMode();
     await selectManualEditTarget();
     const frame = await previewFrame();
-    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const postMessage = spyOnManualEditMirrors(frame);
     const textarea = document.querySelector('.manual-edit-right textarea') as HTMLTextAreaElement;
 
     fireEvent.change(textarea, { target: { value: 'Hero edited' } });
@@ -555,11 +602,63 @@ describe('FileViewer manual edit regressions', () => {
         '/api/projects/project-1/files',
         expect.objectContaining({ method: 'POST' }),
       );
-      expect(postMessage).toHaveBeenCalledWith({
+      expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
         type: 'od-edit-preview-text',
         id: 'hero',
         value: 'Hero edited',
-      }, '*');
+      }), '*');
+    });
+  });
+
+  it('applies saved selected-element HTML to the retained iframe without navigating', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero"><span>Hero</span></main></body></html>';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget({
+      ...heroTarget(),
+      kind: 'container',
+      text: 'Hero',
+      isLayoutContainer: true,
+      outerHtml: '<main data-od-id="hero"><span>Hero</span></main>',
+    });
+    const frame = await previewFrame();
+    const postMessage = spyOnManualEditMirrors(frame);
+    const textarea = screen.getByLabelText('Selected element HTML');
+
+    fireEvent.change(textarea, {
+      target: {
+        value: '<main data-od-id="hero" data-edit-revision="fresh"><span>Hero</span></main>',
+      },
+    });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/projects/project-1/files',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'od-edit-preview-outer-html',
+        id: 'hero',
+        html: '<main data-od-id="hero" data-edit-revision="fresh"><span>Hero</span></main>',
+      }), '*');
     });
   });
 
@@ -724,13 +823,15 @@ describe('FileViewer manual edit regressions', () => {
       text: 'App',
       outerHtml: '<main data-od-id="app-root">App</main>',
     });
+    const frameBeforeDelete = await previewFrame();
 
     fireEvent.click(screen.getByLabelText('Delete element'));
 
     await waitFor(() => {
       expect(screen.getByText('Cannot remove the last rendered element in the document.')).toBeTruthy();
     });
-    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toContain('data-od-id="app-root"');
+    expect(await previewFrame()).toBe(frameBeforeDelete);
+    expect(frameBeforeDelete.getAttribute('data-od-render-mode')).toBe('runtime-url');
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/projects/project-1/files',
       expect.objectContaining({ method: 'POST' }),

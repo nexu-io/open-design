@@ -173,6 +173,13 @@ export function DesignSystemPreviewModal({
             />
           ),
         },
+        // NOT yet converged to the real-URL transport: these two views are
+        // fenced host-side by the resource read generation, and that fence has
+        // no representation in the document URL (a generation can advance while
+        // the workspace identity is unchanged). Deciding what a generation bump
+        // should mean for a navigated document is a product call, so the stage
+        // keeps rebuilding these from the fetched text for now. See
+        // runtime/preview-modal-transport and DesignSystemReadIdentity tests.
         { id: 'showcase', label: t('ds.showcase'), html: showcaseHtml },
         { id: 'tokens', label: t('ds.tokens'), html: tokensHtml },
       ]}

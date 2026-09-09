@@ -262,6 +262,10 @@ ipcRenderer.on(PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL, (
     || !Number.isFinite(failure.occurredAtMs)
     || typeof failure.validatedUrl !== 'string'
     || (failure.frameName !== undefined && typeof failure.frameName !== 'string')
+    || (
+      failure.navigationAttemptId !== undefined
+      && typeof failure.navigationAttemptId !== 'string'
+    )
   ) return;
   latestPreviewNavigationFailure = failure;
   for (const listener of previewNavigationFailureListeners) {

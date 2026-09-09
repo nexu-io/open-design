@@ -24,12 +24,48 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { CollabProvider, type CollabContextValue } from '../../src/collab/collab-context';
-import { FileViewer } from '../../src/components/FileViewer';
+import { FileViewer as ProductFileViewer } from '../../src/components/FileViewer';
 import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
 import type { ProjectFile } from '../../src/types';
+import {
+  installFileViewerPreviewRuntimeHarness,
+  prepareSettledFileViewerFixture,
+  syntheticPreviewFileSource,
+  uninstallFileViewerPreviewRuntimeHarness,
+  useSyntheticProjectScopedPreviewNavigation,
+} from '../helpers/file-viewer-preview-runtime';
 import { workspaceContextFixture } from '../helpers/workspace-context';
+
+vi.mock('../../src/providers/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/registry')>();
+  return {
+    ...actual,
+    fetchProjectFileText(
+      projectId: string,
+      name: string,
+      options?: Parameters<typeof actual.fetchProjectFileText>[2],
+    ) {
+      const source = syntheticPreviewFileSource(projectId, name);
+      return source === undefined
+        ? actual.fetchProjectFileText(projectId, name, options)
+        : Promise.resolve(source);
+    },
+  };
+});
+
+vi.mock('../../src/runtime/use-project-preview-session-navigation', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../src/runtime/use-project-preview-session-navigation')
+  >();
+  return {
+    ...actual,
+    useProjectScopedPreviewNavigation: (
+      options: Parameters<typeof actual.useProjectScopedPreviewNavigation>[0],
+    ) => useSyntheticProjectScopedPreviewNavigation(options),
+  };
+});
 
 const WORKSPACE_CONTEXT = workspaceContextFixture({
   workspaceId: 'ws-viewport-menu',
@@ -63,6 +99,10 @@ function collabValue(): CollabContextValue {
 
 function Wrap({ children }: { children: ReactNode }) {
   return <CollabProvider value={collabValue()}>{children}</CollabProvider>;
+}
+
+function FileViewer(props: ComponentProps<typeof ProductFileViewer>) {
+  return <ProductFileViewer {...prepareSettledFileViewerFixture(props)} />;
 }
 
 function pageFile(): ProjectFile {
@@ -107,9 +147,11 @@ function menuIsOpen(): boolean {
 
 beforeEach(() => {
   resetSharedCancellableGet();
+  installFileViewerPreviewRuntimeHarness();
 });
 
 afterEach(() => {
+  uninstallFileViewerPreviewRuntimeHarness();
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -122,7 +164,12 @@ describe('preview viewport menu dismissal (OPEND-2035)', () => {
 
     render(
       <Wrap>
-        <FileViewer projectId={projectId} projectKind="prototype" file={pageFile()} />
+        <FileViewer
+          projectId={projectId}
+          projectKind="prototype"
+          file={pageFile()}
+          liveHtml={PAGE_HTML}
+        />
       </Wrap>,
     );
 
@@ -132,10 +179,11 @@ describe('preview viewport menu dismissal (OPEND-2035)', () => {
 
     // A click that lands on the sandboxed preview: the host document sees no
     // pointerdown at all, only focus moving to the frame element.
-    const frame = document.querySelector('iframe');
-    expect(frame).not.toBeNull();
+    const frame = await screen.findByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(frame).toHaveAttribute('data-od-render-mode', 'runtime-url');
+    expect(frame).toHaveAttribute('data-od-runtime-protocol', 'universal');
     act(() => {
-      frame!.focus();
+      frame.focus();
       window.dispatchEvent(new Event('blur'));
     });
 
@@ -148,10 +196,16 @@ describe('preview viewport menu dismissal (OPEND-2035)', () => {
 
     render(
       <Wrap>
-        <FileViewer projectId={projectId} projectKind="prototype" file={pageFile()} />
+        <FileViewer
+          projectId={projectId}
+          projectKind="prototype"
+          file={pageFile()}
+          liveHtml={PAGE_HTML}
+        />
       </Wrap>,
     );
 
+    await screen.findByTestId('artifact-preview-frame');
     await waitFor(() => expect(document.querySelector('.viewer-viewport-trigger')).not.toBeNull());
     fireEvent.click(viewportTrigger());
     await waitFor(() => expect(menuIsOpen()).toBe(true));

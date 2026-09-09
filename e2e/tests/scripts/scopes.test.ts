@@ -97,6 +97,36 @@ describe("workflow scope planner", () => {
     });
   });
 
+  test("routes the shared preview-runtime package to both consuming apps", () => {
+    // `packages/preview-runtime` is the single implementation of every injected
+    // preview bridge. `apps/web` re-exports it for artifact rendering and
+    // `apps/daemon` imports it for HTML stream injection, so a change there is
+    // relevant to the web, daemon, and UI P0 test sets rather than to the
+    // fallback lanes alone.
+    for (const file of [
+      "packages/preview-runtime/src/srcdoc.ts",
+      "packages/preview-runtime/tests/manual-edit-source.test.ts",
+    ]) {
+      expect(plan("pr", [file]), file).toMatchObject({
+        scopes: {
+          daemon_tests_required: true,
+          web_tests_required: true,
+          ui_p0_validation_required: true,
+          workspace_validation_required: true,
+        },
+        enabled: {
+          workspace_unit_tests: true,
+          daemon_unit_tests: true,
+          web_workspace_tests: true,
+          e2e_vitest: true,
+          ui_p0: true,
+          playwright_critical: false,
+        },
+        trace: { escalations: [] },
+      });
+    }
+  });
+
   test("routes canonical DSH installer sources to E2E Vitest", () => {
     expect(plan("pr", ["tools/release/resources/dsh-bootstrap/install-dsh.sh"])).toMatchObject({
       scopes: { web_tests_required: true },

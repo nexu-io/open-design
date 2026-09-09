@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import type { ProjectFile } from '../../src/types';
+import {
+  installFileViewerPreviewRuntimeHarness,
+  prepareSettledFileViewerFixture,
+  syntheticPreviewFileSource,
+  uninstallFileViewerPreviewRuntimeHarness,
+  useSyntheticProjectScopedPreviewNavigation,
+} from '../helpers/file-viewer-preview-runtime';
 
 const {
   captureHostIframeSnapshotMock,
@@ -42,7 +50,36 @@ vi.mock('../../src/runtime/exports', async () => {
   };
 });
 
-import { FileViewer } from '../../src/components/FileViewer';
+vi.mock('../../src/providers/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/registry')>();
+  return {
+    ...actual,
+    fetchProjectFileText(
+      projectId: string,
+      name: string,
+      options?: Parameters<typeof actual.fetchProjectFileText>[2],
+    ) {
+      const source = syntheticPreviewFileSource(projectId, name);
+      return source === undefined
+        ? actual.fetchProjectFileText(projectId, name, options)
+        : Promise.resolve(source);
+    },
+  };
+});
+
+vi.mock('../../src/runtime/use-project-preview-session-navigation', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../src/runtime/use-project-preview-session-navigation')
+  >();
+  return {
+    ...actual,
+    useProjectScopedPreviewNavigation: (
+      options: Parameters<typeof actual.useProjectScopedPreviewNavigation>[0],
+    ) => useSyntheticProjectScopedPreviewNavigation(options),
+  };
+});
+
+import { FileViewer as ProductFileViewer } from '../../src/components/FileViewer';
 
 const CAPTURE_FAILED_TEXT =
   "Image capture failed. Please try again or use your browser's screenshot tool.";
@@ -67,9 +104,12 @@ function htmlFile(): ProjectFile {
   };
 }
 
-function renderHtmlPreview(
+function FileViewer(props: ComponentProps<typeof ProductFileViewer>) {
+  return <ProductFileViewer {...prepareSettledFileViewerFixture(props)} />;
+}
+
+async function renderHtmlPreview(
   liveHtml = '<html><body><main>Workspace</main></body></html>',
-  expectedRenderMode: 'url-load' | 'srcdoc' = 'url-load',
 ) {
   const view = render(
     <FileViewer
@@ -79,13 +119,11 @@ function renderHtmlPreview(
       liveHtml={liveHtml}
     />,
   );
-  const { container } = view;
-  const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-  expect(activeFrame.getAttribute('data-od-render-mode')).toBe(expectedRenderMode);
-  const srcDocFrame = container.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="srcdoc"]');
-  expect(srcDocFrame).toBeTruthy();
-  fireEvent.load(srcDocFrame as HTMLIFrameElement);
-  return { ...view, activeFrame, srcDocFrame: srcDocFrame as HTMLIFrameElement };
+  const activeFrame = await screen.findByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  expect(activeFrame).toHaveAttribute('data-od-render-mode', 'runtime-url');
+  expect(activeFrame).toHaveAttribute('data-od-runtime-protocol', 'universal');
+  expect(activeFrame.src).toMatch(/^http:\/\/[np]-fixture-scope-/);
+  return { ...view, activeFrame };
 }
 
 async function openImageExportDialog() {
@@ -110,7 +148,12 @@ async function clickSave() {
 }
 
 describe('FileViewer image export', () => {
+  beforeEach(() => {
+    installFileViewerPreviewRuntimeHarness();
+  });
+
   afterEach(() => {
+    uninstallFileViewerPreviewRuntimeHarness();
     cleanup();
     vi.resetAllMocks();
   });
@@ -123,7 +166,7 @@ describe('FileViewer image export', () => {
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
-    const { container } = renderHtmlPreview();
+    const { container } = await renderHtmlPreview();
     await openImageExportDialog();
 
     const backdrop = document.body.querySelector('.viewer-modal-backdrop');
@@ -150,7 +193,7 @@ describe('FileViewer image export', () => {
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
-    renderHtmlPreview();
+    await renderHtmlPreview();
     fireEvent.click(await screen.findByRole('button', { name: /export/i }));
     expect(screen.getByRole('menu')).toBeTruthy();
 
@@ -186,7 +229,7 @@ describe('FileViewer image export', () => {
       save: saveImageBlobMock,
     });
 
-    const { activeFrame } = renderHtmlPreview();
+    const { activeFrame } = await renderHtmlPreview();
     await openImageExportDialog();
     expect(screen.getByRole('radio', { name: 'PNG' })).toBeTruthy();
 
@@ -209,7 +252,7 @@ describe('FileViewer image export', () => {
     // The old modal captured a preview on open and re-rendered it on every format
     // switch (a "preparing" state that disabled Save). The new modal defers all
     // capture work to Save, so switching format is free and Save stays ready.
-    renderHtmlPreview();
+    await renderHtmlPreview();
     await openImageExportDialog();
 
     const save = await waitForSaveButton();
@@ -226,13 +269,12 @@ describe('FileViewer image export', () => {
     expect(screen.queryByRole('button', { name: /saving image/i })).toBeNull();
   });
 
-  it('retries the srcDoc snapshot bridge before giving up on URL-loaded previews', async () => {
+  it('retries the active Preview Runtime snapshot bridge before giving up', async () => {
     const pngBlob = new Blob(['png'], { type: 'image/png' });
-    let srcDocAttempts = 0;
-    requestPreviewSnapshotMock.mockImplementation(async (iframe: HTMLIFrameElement) => {
-      if (iframe.getAttribute('data-od-render-mode') === 'url-load') return null;
-      srcDocAttempts += 1;
-      if (srcDocAttempts === 1) return null;
+    let attempts = 0;
+    requestPreviewSnapshotMock.mockImplementation(async () => {
+      attempts += 1;
+      if (attempts === 1) return null;
       return {
         dataUrl: 'data:image/png;base64,recovered',
         w: 800,
@@ -241,32 +283,27 @@ describe('FileViewer image export', () => {
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(pngBlob);
 
-    const { srcDocFrame } = renderHtmlPreview();
+    const { activeFrame } = await renderHtmlPreview();
     await openImageExportDialog();
     await clickSave();
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 1500, undefined);
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 3000, undefined);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500, undefined);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 3000, undefined);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,recovered', 'png');
     }, { timeout: 4000 });
   });
 
-  it('captures the visible URL-loaded preview before falling back to the hidden srcDoc transport', async () => {
+  it('captures the visible real-URL Preview Runtime without a second document transport', async () => {
     const pngBlob = new Blob(['png'], { type: 'image/png' });
-    requestPreviewSnapshotMock.mockImplementation(async (iframe: HTMLIFrameElement) => {
-      if (iframe.getAttribute('data-od-render-mode') === 'url-load') {
-        return {
-          dataUrl: 'data:image/png;base64,visible',
-          w: 800,
-          h: 600,
-        };
-      }
-      return null;
+    requestPreviewSnapshotMock.mockResolvedValue({
+      dataUrl: 'data:image/png;base64,visible',
+      w: 800,
+      h: 600,
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(pngBlob);
 
-    const { activeFrame, srcDocFrame } = renderHtmlPreview();
+    const { activeFrame, container } = await renderHtmlPreview();
     await openImageExportDialog();
     await clickSave();
 
@@ -274,7 +311,8 @@ describe('FileViewer image export', () => {
       expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500, undefined);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,visible', 'png');
     });
-    expect(requestPreviewSnapshotMock).not.toHaveBeenCalledWith(srcDocFrame, 1500, undefined);
+    expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('iframe[data-od-render-mode="srcdoc"]')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -292,7 +330,7 @@ describe('FileViewer image export', () => {
       save: saveImageBlobMock,
     });
 
-    renderHtmlPreview();
+    await renderHtmlPreview();
     await openImageExportDialog();
     await clickSave();
 
@@ -321,7 +359,7 @@ describe('FileViewer image export', () => {
       save: saveImageBlobMock,
     });
 
-    renderHtmlPreview();
+    await renderHtmlPreview();
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
     fireEvent.click(screen.getByRole('option', { name: /mobile/i }));
     await openImageExportDialog();
@@ -350,7 +388,7 @@ describe('FileViewer image export', () => {
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
-    renderHtmlPreview();
+    await renderHtmlPreview();
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
     fireEvent.click(screen.getByRole('option', { name: /desktop/i }));
     await openImageExportDialog();
@@ -381,9 +419,8 @@ describe('FileViewer image export', () => {
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
-    renderHtmlPreview(
+    await renderHtmlPreview(
       '<html><body><div class="deck"><section class="slide">Cover</section></div></body></html>',
-      'srcdoc',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
     fireEvent.click(screen.getByRole('option', { name: /mobile/i }));
@@ -411,7 +448,7 @@ describe('FileViewer image export', () => {
       save: saveImageBlobMock,
     });
 
-    renderHtmlPreview();
+    await renderHtmlPreview();
     await openImageExportDialog();
     await clickSave();
 
@@ -436,7 +473,7 @@ describe('FileViewer image export', () => {
       save: saveImageBlobMock,
     });
 
-    renderHtmlPreview();
+    await renderHtmlPreview();
     await openImageExportDialog();
     await clickSave();
 
@@ -473,6 +510,8 @@ describe('FileViewer image export', () => {
         }
       />,
     );
+
+    await screen.findByTestId('artifact-preview-frame');
 
     fireEvent.click(screen.getByTestId('edit-screenshot-to-chat-button'));
 

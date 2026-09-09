@@ -2676,6 +2676,9 @@ describe('DesignSystemDetailView', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
     const workspace = await screen.findByTestId('design-system-files');
     await waitFor(() => expect(workspace.getAttribute('data-file-names')).toBe('initial.html'));
+    expect(mocks.fileWorkspaceProps.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+      'previewRuntimeConvergence',
+    );
     const initialGeneration = Number(workspace.getAttribute('data-files-generation'));
 
     const onRefreshFiles = mocks.fileWorkspaceProps.mock.calls.at(-1)?.[0]?.onRefreshFiles as

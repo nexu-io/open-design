@@ -11,16 +11,87 @@ export const PREVIEW_REDIRECT_GUARD_WINDOW_MS = 4000;
 export const PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS = 2000;
 export const PREVIEW_REDIRECT_LOOP_MESSAGE = 'od:redirect-loop-blocked';
 /**
- * URL preview responses above this size stay byte-for-byte streamable so the
- * daemon can honor Range requests and avoid buffering a very large document.
- * Callers must not claim URL guards are installed above this boundary.
+ * Above this size the daemon injects URL-preview bridges with a composite
+ * source-prefix/injection/source-suffix stream instead of buffering the HTML.
  */
 export const PREVIEW_URL_GUARD_MAX_HTML_BYTES = 2 * 1024 * 1024;
+
+export function previewHtmlNeedsFocusGuard(source: string): boolean {
+  if (/\.\s*focus\s*\(/i.test(source)) return true;
+  if (/\bautofocus\b/i.test(source)) return true;
+  if (/<script\b[^>]*\bsrc\s*=/i.test(source)) return true;
+  return false;
+}
+
+export function previewHtmlNeedsSandboxShim(source: string): boolean {
+  if (/<script\s[^>]*\btype\s*=\s*["']?text\/babel\b/i.test(source)) return true;
+  if (/\b(?:local|session)Storage\b/.test(source)) return true;
+  if (/<script\s[^>]*?\bsrc\s*=/i.test(source)) return true;
+  return false;
+}
 
 export function previewHtmlHasLoadTimeLocationNavigation(source: string): boolean {
   if (/\blocation\s*\.\s*(?:reload|replace|assign)\s*\(/i.test(source)) return true;
   if (/\blocation\s*\.\s*href\s*=[^=]/i.test(source)) return true;
   if (/\b(?:window|document|self|top|parent)\s*\.\s*location\s*=[^=]/i.test(source)) return true;
+  return false;
+}
+
+export function previewHtmlNeedsRedirectGuard(source: string | null | undefined): boolean {
+  if (!source) return false;
+  if (/<meta\b[^>]*\bhttp-equiv\s*=\s*["']?\s*refresh\b/i.test(source)) return true;
+  return previewHtmlHasLoadTimeLocationNavigation(source);
+}
+
+function htmlAttributeValue(tag: string, name: string): string | null {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(
+    `[\\t\\n\\f\\r ]${escapedName}[\\t\\n\\f\\r ]*=[\\t\\n\\f\\r ]*(?:"([^"]*)"|'([^']*)'|([^\\t\\n\\f\\r />]+))`,
+    'iu',
+  ).exec(tag);
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+function isRelativeModuleSpecifier(value: string): boolean {
+  const specifier = value.trim();
+  if (!specifier || specifier.startsWith('#') || specifier.startsWith('//')) return false;
+  return !/^[a-z][a-z0-9+.-]*:/iu.test(specifier);
+}
+
+function htmlHasRelativeEsModule(source: string): boolean {
+  for (const match of source.matchAll(/<script\b[^>]*>/giu)) {
+    const tag = match[0];
+    if (htmlAttributeValue(tag, 'type')?.trim().toLowerCase() !== 'module') continue;
+    const src = htmlAttributeValue(tag, 'src');
+    if (src !== null && isRelativeModuleSpecifier(src)) return true;
+  }
+
+  for (const match of source.matchAll(/\bimport\s*\(\s*(["'`])([^"'`]*)\1/gu)) {
+    if (!match[2]?.includes('${') && isRelativeModuleSpecifier(match[2] ?? '')) return true;
+  }
+  return false;
+}
+
+export function previewHtmlNeedsPoweredPreview(source: string | null | undefined): boolean {
+  if (!source) return false;
+  // Babel standalone resolves external text/babel modules with XHR. A normal
+  // sandbox intentionally gives the document an opaque origin, so those
+  // same-directory requests fail CORS even though classic script tags still
+  // load. The session-scoped powered origin restores same-origin XHR without
+  // granting the artifact the host application's origin.
+  if (/<script\b(?=[^>]*\bsrc\s*=)(?=[^>]*\btype\s*=\s*["']?text\/babel\b)[^>]*>/i.test(source)) return true;
+  // ES module graphs and dynamic imports fetch their dependencies in CORS
+  // mode. The normal preview sandbox has an opaque origin, so a relative
+  // module can only execute from the project-scoped same-origin profile.
+  if (htmlHasRelativeEsModule(source)) return true;
+  if (/\bSharedArrayBuffer\b/.test(source)) return true;
+  if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
+  if (/\bimportScripts\s*\(/.test(source)) return true;
+  if (/\bWebAssembly\s*\.\s*(?:instantiateStreaming|compileStreaming)\b/.test(source)) return true;
+  if (/\.wasm\b/.test(source)) return true;
+  if (/getContext\s*\(\s*["'`]webgl2["'`]/.test(source)) return true;
+  if (/\bOffscreenCanvas\b/.test(source)) return true;
+  if (/\bnavigator\s*\.\s*gpu\b/.test(source)) return true;
   return false;
 }
 

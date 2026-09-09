@@ -311,12 +311,18 @@
   right: 0;
   bottom: 0;
   left: 0;
-  /* Covers the whole window including the tab chrome (z-index 120), but
-     stays below transient popovers/toasts (1100+) so user-invoked UI can
-     still layer above a running presentation. */
-  z-index: 1050;
-  background: black;
+  /* Sits ABOVE the promoted preview (1050) but still below transient
+     popovers/toasts (1100+) so user-invoked UI can layer above a running
+     presentation. This layer carries only host-document chrome now — the exit
+     control and the Esc hint — so it must not swallow pointer events destined
+     for the slide underneath; its children opt back in. */
+  z-index: 1060;
+  background: transparent;
+  pointer-events: none;
   display: flex;
+}
+.present-overlay > * {
+  pointer-events: auto;
 }
 /* The presentation overlay is portaled to <body>, so the `.viewer`-scoped
    `.present-exit-btn` rules in shell.css never reach it. This is the user's

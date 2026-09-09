@@ -17,6 +17,7 @@ import type { SkillSummary } from '../../src/types';
 // and the misleading "Couldn't load this example" error state.
 
 vi.mock('../../src/providers/registry', () => ({
+  skillExampleDocumentUrl: (id: string) => `/api/skills/${encodeURIComponent(id)}/example`,
   fetchSkillExample: vi.fn(),
 }));
 

@@ -70,6 +70,23 @@ function postSlide(win: ReturnType<typeof setupDeckBridge>['win'], action: 'next
 }
 
 describe('deck bridge — nested slide markup (#1530)', () => {
+  it('reports current state on a promotion probe without navigating', () => {
+    const { win, parentPostMessage } = setupDeckBridge(
+      '<main class="deck"><section class="slide active">One</section>' +
+      '<section class="slide">Two</section></main>',
+    );
+    parentPostMessage.mockClear();
+
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide-state-probe' },
+    }));
+
+    expect(parentPostMessage).toHaveBeenCalledTimes(1);
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 2 });
+    expect(win.document.querySelectorAll('.slide.active')).toHaveLength(1);
+    expect(win.document.querySelector('.slide.active')?.textContent).toBe('One');
+  });
+
   it('does not claim ordinary prototype annotations as deck navigation state', async () => {
     const { win, parentPostMessage } = setupDeckBridge(
       '<main><h1 data-screen-label="Hero title">Prototype headline</h1>' +

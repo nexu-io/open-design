@@ -137,9 +137,13 @@ export type OpenDesignHostPreviewNavigationFailure = {
   errorCode: number;
   eventId: number;
   frameName?: string;
+  /** Exact scoped real-URL navigation attempt observed by Electron. */
+  navigationAttemptId?: string;
   occurredAtMs: number;
   validatedUrl: string;
 };
+
+export const OPEN_DESIGN_PREVIEW_NAVIGATION_ATTEMPT_PARAM = "odPreviewAttempt";
 
 export type OpenDesignHostPreviewNavigationFailureListener = (
   failure: OpenDesignHostPreviewNavigationFailure,

@@ -530,6 +530,7 @@ import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
+import { HtmlPreviewPolicyIndex } from './http/html-preview-policy-index.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
@@ -1166,6 +1167,7 @@ import {
   isZeroConfigClipperLibraryRequest,
   parseHostHeader,
 } from './origin-validation.js';
+import { parseProjectPreviewOriginAuthority } from './http/project-preview-origin.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import {
   libraryExtensionAllowedOrigins,
@@ -2546,6 +2548,12 @@ function createProjectPreviewScopeRegistry() {
       projectId: String(projectId),
       workspace,
       reusable,
+      // Carried through from `mint`'s options: the scoped-preview transport
+      // mints a scope bound to one (relPath, documentVersion) and reads it back
+      // through `resolveScope`. `acquire` never supplies one, and the entries it
+      // reuses are `reusable: true`, so a document-bound scope is never adopted
+      // by a live preview looking for a different document.
+      document: options.document,
       expiresAt,
       // The expiry this scope's DOCUMENTS report, frozen at creation.
       // `expiresAt` floats as the client renews; anything embedded in a served
@@ -2663,6 +2671,20 @@ function createProjectPreviewScopeRegistry() {
       }
       if (entry.projectId !== String(projectId)) return undefined;
       return entry.workspace ?? null;
+    },
+    resolveScope(scope) {
+      const key = String(scope || '');
+      const entry = scopes.get(key);
+      if (!entry) return undefined;
+      if (entry.expiresAt <= Date.now()) {
+        scopes.delete(key);
+        return undefined;
+      }
+      return {
+        projectId: entry.projectId,
+        workspace: entry.workspace ?? null,
+        ...(entry.document ? { document: entry.document } : {}),
+      };
     },
   };
 }
@@ -3160,6 +3182,7 @@ export async function startServer({
   app.use(CHAT_SCROLL_FORENSICS_PATH, chatScrollForensicsBodyParser);
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
+  const htmlPreviewPolicyIndex = new HtmlPreviewPolicyIndex();
 
   // Plan §3.K1 — API-token middleware.
   //
@@ -3357,6 +3380,15 @@ export async function startServer({
     // so the predicate matches `/library/ingest`, not `/api/library/ingest`.
     if (isZeroConfigClipperLibraryRequest(req.method, req.path, req.headers.origin)) {
       return next();
+    }
+
+    if (
+      resolvedPort
+      && parseProjectPreviewOriginAuthority(req.headers.host, resolvedPort)
+    ) {
+      return res.status(403).json({
+        error: 'Project preview origin cannot access daemon API routes',
+      });
     }
 
     const poweredHost = poweredPreviewHost();
@@ -3670,7 +3702,16 @@ export async function startServer({
   });
 
   if (fs.existsSync(staticDir)) {
-    app.use(express.static(staticDir));
+    const serveStatic = express.static(staticDir);
+    app.use((req, res, next) => {
+      if (
+        resolvedPort
+        && parseProjectPreviewOriginAuthority(req.headers.host, resolvedPort)
+      ) {
+        return next();
+      }
+      return serveStatic(req, res, next);
+    });
   }
 
   // ---- Projects (DB-backed) -------------------------------------------------
@@ -8548,6 +8589,7 @@ export async function startServer({
       ),
     },
     events: projectEventDeps,
+    htmlPreviewPolicyIndex,
     ids: idDeps,
     telemetry: {
       reportFinalizedMessage,
@@ -9063,6 +9105,8 @@ export async function startServer({
     documents: { buildDocumentPreview },
     artifacts: artifactDeps,
     projectPreviewScopes,
+    htmlPreviewPolicyIndex,
+    getResolvedPort: () => resolvedPort,
     verifyWorkspaceRequestAuthority,
   });
   // Immutable chat-artifact snapshot reads. Same read authority as /raw; see
@@ -17588,6 +17632,7 @@ export async function startServer({
 
   assertServerContextSatisfiesRoutes({
     db,
+    getResolvedPort: () => resolvedPort,
     design,
     http: httpDeps,
     paths: pathDeps,

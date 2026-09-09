@@ -1,14 +1,52 @@
 // @vitest-environment jsdom
+// File-watch recovery coverage for the converged real-URL Preview Runtime.
+// A refreshed file stages a versioned candidate while the previous document
+// remains current. If the candidate exhausts its settle budget, the viewer
+// stops exposing stale output and offers an explicit retry.
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { FileViewer } from '../../src/components/FileViewer';
-import {
-  clearExceptionTrackingContext,
-  setExceptionTrackingContext,
-} from '../../src/analytics/error-tracking';
+import { FileViewer as ProductFileViewer } from '../../src/components/FileViewer';
 import type { ProjectFile } from '../../src/types';
+import {
+  installFileViewerPreviewRuntimeHarness,
+  prepareSettledFileViewerFixture,
+  setFileViewerPreviewRuntimeAutoSettle,
+  settleFileViewerPreviewRuntimeStandby,
+  syntheticPreviewFileSource,
+  uninstallFileViewerPreviewRuntimeHarness,
+  useSyntheticProjectScopedPreviewNavigation,
+} from '../helpers/file-viewer-preview-runtime';
+
+vi.mock('../../src/providers/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/registry')>();
+  return {
+    ...actual,
+    fetchProjectFileText(
+      projectId: string,
+      name: string,
+      options?: Parameters<typeof actual.fetchProjectFileText>[2],
+    ) {
+      const fixture = syntheticPreviewFileSource(projectId, name);
+      return fixture === undefined
+        ? actual.fetchProjectFileText(projectId, name, options)
+        : Promise.resolve(fixture);
+    },
+  };
+});
+
+vi.mock('../../src/runtime/use-project-preview-session-navigation', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../src/runtime/use-project-preview-session-navigation')
+  >();
+  return {
+    ...actual,
+    useProjectScopedPreviewNavigation: (
+      options: Parameters<typeof actual.useProjectScopedPreviewNavigation>[0],
+    ) => useSyntheticProjectScopedPreviewNavigation(options),
+  };
+});
 
 function htmlFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
   return {
@@ -31,455 +69,170 @@ function htmlFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
   };
 }
 
-function srcDocHtml(label: string): string {
-  // localStorage forces the same sandbox-shim/srcDoc transport used by the
-  // artifact in the reported diagnostics bundle.
-  return `<html><body><main>${label}</main><script>localStorage.setItem('deepflow', 'monthly')</script></body></html>`;
+function source(label: string): string {
+  return `<!doctype html><html><body><main>${label}</main></body></html>`;
 }
 
-function transportGeneration(frame: HTMLIFrameElement): string {
-  const generation = frame.srcdoc.match(
-    /data-od-srcdoc-transport-activation>[\s\S]*?var generation = "([^"]+)";/,
-  )?.[1];
-  if (!generation) throw new Error('srcDoc transport generation missing');
-  return generation;
+function FileViewer(props: ComponentProps<typeof ProductFileViewer>) {
+  return <ProductFileViewer {...prepareSettledFileViewerFixture(props)} />;
+}
+
+function standbyFrame(): HTMLIFrameElement {
+  return screen.getByTestId('preview-runtime-frame-standby') as HTMLIFrameElement;
+}
+
+function currentFrame(): HTMLIFrameElement {
+  return (screen.queryByTestId('artifact-preview-frame')
+    ?? screen.getByTestId('preview-runtime-frame-current')) as HTMLIFrameElement;
+}
+
+async function promoteStandby(): Promise<HTMLIFrameElement> {
+  const frame = await waitFor(standbyFrame);
+  settleFileViewerPreviewRuntimeStandby(frame);
+  await waitFor(() => expect(currentFrame()).toBe(frame));
+  return frame;
 }
 
 beforeEach(() => {
-  setExceptionTrackingContext({
-    apiKey: 'phc_preview_test',
-    host: 'https://posthog.test',
-    distinctId: 'preview-test-user',
-  });
+  installFileViewerPreviewRuntimeHarness();
+  setFileViewerPreviewRuntimeAutoSettle(false);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(source('fixture'), { status: 200 })));
 });
 
 afterEach(() => {
+  uninstallFileViewerPreviewRuntimeHarness();
   cleanup();
-  clearExceptionTrackingContext();
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-describe('FileViewer srcDoc file-watch refresh recovery', () => {
-  it('remounts once when a refreshed srcDoc revision never acknowledges activation', () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
-
-    const { rerender } = render(
+describe('FileViewer real-URL file-watch recovery', () => {
+  it('offers retry instead of exposing stale output when a refreshed revision times out', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const view = render(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
         file={htmlFile()}
         filesRefreshKey={0}
-        liveHtml={srcDocHtml('version-one')}
+        liveHtml={source('version-one')}
       />,
     );
+    const current = await promoteStandby();
 
-    const initialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(initialFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-
-    rerender(
+    view.rerender(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
         file={htmlFile({ mtime: 1710000001, size: 1025 })}
         filesRefreshKey={1}
-        liveHtml={srcDocHtml('version-two')}
+        liveHtml={source('version-two')}
       />,
     );
+    const candidate = await waitFor(standbyFrame);
+    expect(candidate).not.toBe(current);
+    expect(currentFrame()).toBe(current);
+    expect(current.getAttribute('data-od-active')).toBe('true');
 
-    const refreshedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(refreshedFrame).toBe(initialFrame);
-    expect(refreshedFrame.srcdoc).toContain('version-two');
+    act(() => vi.advanceTimersByTime(5_000));
+    await waitFor(() => expect(screen.queryByTestId('preview-runtime-frame-standby')).toBeNull());
+    expect(screen.queryByTestId('preview-runtime-frame-current')).toBeNull();
+    expect(screen.getByTestId('preview-runtime-navigation-error')).toBeInTheDocument();
 
     act(() => {
-      vi.runAllTimers();
+      screen.getByTestId('preview-runtime-navigation-retry').click();
     });
-
-    const recoveredFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(recoveredFrame).not.toBe(refreshedFrame);
-    expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-
-    const postMessage = vi.spyOn(recoveredFrame.contentWindow!, 'postMessage');
-    fireEvent.load(recoveredFrame);
-    expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'od:srcdoc-transport-activate',
-        html: expect.stringContaining('version-two'),
-      }),
-      '*',
-    );
+    const retry = await waitFor(standbyFrame);
+    expect(retry).not.toBe(current);
+    settleFileViewerPreviewRuntimeStandby(retry);
+    await waitFor(() => expect(currentFrame()).toBe(retry));
+    expect(screen.queryByTestId('preview-runtime-navigation-error')).toBeNull();
   });
 
-  it('keeps the acknowledged refreshed srcDoc frame mounted', () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
-
-    const { rerender } = render(
+  it('fences a superseded file revision from the current document', async () => {
+    const view = render(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
         file={htmlFile()}
-        filesRefreshKey={0}
-        liveHtml={srcDocHtml('version-one')}
+        liveHtml={source('version-one')}
       />,
     );
+    const current = await promoteStandby();
 
-    rerender(
+    view.rerender(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
-        file={htmlFile({ mtime: 1710000001, size: 1025 })}
-        filesRefreshKey={1}
-        liveHtml={srcDocHtml('version-two')}
+        file={htmlFile({ mtime: 1710000001 })}
+        liveHtml={source('version-two')}
       />,
     );
-
-    const refreshedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    const postMessage = vi.spyOn(refreshedFrame.contentWindow!, 'postMessage');
-    act(() => {
-      // An eager head-script acknowledgement is provisional: Chromium can
-      // still abort the about:srcdoc navigation after this message.
-      fireEvent.load(refreshedFrame);
-      const probe = postMessage.mock.calls.find(
-        ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
-      )?.[0] as { generation?: string; probeId?: string } | undefined;
-      expect(probe?.probeId).toBeTruthy();
-      window.dispatchEvent(new MessageEvent('message', {
-        source: refreshedFrame.contentWindow,
-        data: {
-          type: 'od:srcdoc-transport-activated',
-          generation: transportGeneration(refreshedFrame),
-          probeId: probe!.probeId,
-          bodyComplete: true,
-        },
-      }));
-      vi.runAllTimers();
+    const staleCandidate = await waitFor(standbyFrame);
+    view.rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlFile({ mtime: 1710000002 })}
+        liveHtml={source('version-three')}
+      />,
+    );
+    const latestCandidate = await waitFor(() => {
+      const frame = standbyFrame();
+      expect(frame).not.toBe(staleCandidate);
+      return frame;
     });
 
-    expect(screen.getByTestId('artifact-preview-frame')).toBe(refreshedFrame);
+    expect(staleCandidate.isConnected).toBe(false);
+    settleFileViewerPreviewRuntimeStandby(staleCandidate);
+    expect(currentFrame()).toBe(current);
+
+    settleFileViewerPreviewRuntimeStandby(latestCandidate);
+    await waitFor(() => expect(currentFrame()).toBe(latestCandidate));
+    expect(latestCandidate.dataset.odDocumentVersion).not.toBe(
+      staleCandidate.dataset.odDocumentVersion,
+    );
   });
 
-  it('reuses an in-flight recovery probe when iframe load overlaps the recovery timer', () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
-
-    render(
+  it('does not promote Runtime readiness for the wrong document version', async () => {
+    const view = render(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
         file={htmlFile()}
-        filesRefreshKey={0}
-        liveHtml={srcDocHtml('overlapping-probes')}
+        liveHtml={source('version-one')}
       />,
     );
-
-    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
-    act(() => {
-      vi.advanceTimersByTime(1_500);
-    });
-
-    const firstProbe = postMessage.mock.calls.find(
-      ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
-    )?.[0] as { generation?: string; probeId?: string } | undefined;
-    expect(firstProbe?.probeId).toBeTruthy();
-
-    fireEvent.load(frame);
-    const probes = postMessage.mock.calls.filter(
-      ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
-    );
-    expect(probes).toHaveLength(1);
-
-    act(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        source: frame.contentWindow,
-        data: {
-          type: 'od:srcdoc-transport-activated',
-          generation: firstProbe!.generation,
-          probeId: firstProbe!.probeId,
-          bodyComplete: true,
-        },
-      }));
-      vi.runAllTimers();
-    });
-
-    expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
-  });
-
-  it('recovers when an eager activation acknowledgement is followed by an aborted navigation with no load', () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
-
-    render(
+    const current = await promoteStandby();
+    view.rerender(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
-        file={htmlFile()}
-        filesRefreshKey={0}
-        liveHtml={srcDocHtml('aborted-after-ack')}
+        file={htmlFile({ mtime: 1710000001 })}
+        liveHtml={source('version-two')}
       />,
     );
-
-    const abortedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    act(() => {
-      // This is the incident ordering: the injected head bridge runs, then
-      // Electron reports ERR_ABORTED for about:srcdoc and no iframe load event
-      // follows to invalidate the eager acknowledgement.
-      window.dispatchEvent(new MessageEvent('message', {
-        source: abortedFrame.contentWindow,
-        data: {
-          type: 'od:srcdoc-transport-activated',
-          generation: transportGeneration(abortedFrame),
-        },
-      }));
-      vi.runAllTimers();
-    });
-
-    const recoveredFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(recoveredFrame).not.toBe(abortedFrame);
-    expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-  });
-
-  it('recovers when a settled partial document answers the probe without completing its body', () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn(async (
-      input: RequestInfo | URL,
-      _init?: RequestInit,
-    ) => new Response('', {
-      status: String(input).includes('/i/v0/e/') ? 200 : 404,
-    }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={htmlFile()}
-        filesRefreshKey={0}
-        liveHtml={srcDocHtml('partial-document')}
-      />,
-    );
-
-    const partialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    const postMessage = vi.spyOn(partialFrame.contentWindow!, 'postMessage');
-    act(() => {
-      vi.advanceTimersByTime(1_500);
-    });
-    const probe = postMessage.mock.calls.find(
-      ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
-    )?.[0] as { generation?: string; probeId?: string } | undefined;
-    expect(probe?.probeId).toBeTruthy();
+    const candidate = await waitFor(standbyFrame);
 
     act(() => {
-      // Chromium can leave the head bridge alive after aborting the rest of
-      // about:srcdoc. It can answer the challenge, but it has not observed the
-      // body-end marker and therefore must remain provisional.
-      window.dispatchEvent(new MessageEvent('message', {
-        source: partialFrame.contentWindow,
-        data: {
-          type: 'od:srcdoc-transport-activated',
-          generation: probe!.generation,
-          probeId: probe!.probeId,
-          bodyComplete: false,
-          documentReadyState: 'complete',
-          bodyPresent: true,
-          bodyChildCount: 2,
-          documentElementChildCount: 2,
-        },
-      }));
-    });
-
-    const recoveredFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(recoveredFrame).not.toBe(partialFrame);
-    expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-
-    const postHogCalls = fetchMock.mock.calls.filter(([input]) =>
-      String(input).includes('/i/v0/e/'));
-    expect(postHogCalls).toHaveLength(1);
-    const [, postHogInit] = postHogCalls[0]!;
-    expect(postHogInit).toBeDefined();
-    const payload = JSON.parse(
-      String(postHogInit?.body),
-    ) as { event?: string; properties?: Record<string, unknown> };
-    expect(payload).toMatchObject({
-      event: 'client_preview_white_screen',
-      properties: {
-        reason: 'srcdoc_transport_unverified',
-        transport_signal: 'body_incomplete',
-        transport_stage: 'head_bridge_alive_body_tail_missing',
-        activation_acknowledged: true,
-        body_complete: false,
-        frame_ready_state: 'complete',
-        frame_body_present: true,
-        frame_body_child_count: 2,
-        frame_document_element_child_count: 2,
-        recovery_attempted: true,
-        recovery_path: 'lazy_shell_remount',
-      },
-    });
-    expect(JSON.stringify(payload)).not.toContain('partial-document');
-  });
-
-  it('does not remount a healthy document while a parser-blocking script is still loading', () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn(async (
-      _input: RequestInfo | URL,
-      _init?: RequestInit,
-    ) => new Response('', { status: 404 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={htmlFile()}
-        filesRefreshKey={0}
-        liveHtml={`<html><body>
-          <script>window.previewBootCount = (window.previewBootCount || 0) + 1;</script>
-          <script src="https://slow.example/parser-blocking.js"></script>
-          <main>Delayed but healthy</main>
-        </body></html>`}
-      />,
-    );
-
-    const parsingFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    const postMessage = vi.spyOn(parsingFrame.contentWindow!, 'postMessage');
-    act(() => {
-      vi.advanceTimersByTime(1_500);
-    });
-    const firstProbe = postMessage.mock.calls.find(
-      ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
-    )?.[0] as { generation?: string; probeId?: string } | undefined;
-    expect(firstProbe?.probeId).toBeTruthy();
-
-    act(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        source: parsingFrame.contentWindow,
-        data: {
-          type: 'od:srcdoc-transport-activated',
-          generation: firstProbe!.generation,
-          probeId: firstProbe!.probeId,
-          bodyComplete: false,
-          documentReadyState: 'loading',
-        },
-      }));
-    });
-    expect(screen.getByTestId('artifact-preview-frame')).toBe(parsingFrame);
-
-    fireEvent.load(parsingFrame);
-    const probes = postMessage.mock.calls.filter(
-      ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
-    );
-    const completionProbe = probes.at(-1)?.[0] as { generation?: string; probeId?: string };
-    expect(completionProbe.probeId).not.toBe(firstProbe!.probeId);
-    act(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        source: parsingFrame.contentWindow,
-        data: {
-          type: 'od:srcdoc-transport-activated',
-          generation: completionProbe.generation,
-          probeId: completionProbe.probeId,
-          bodyComplete: true,
-          documentReadyState: 'complete',
-        },
-      }));
-      vi.runAllTimers();
-    });
-
-    expect(screen.getByTestId('artifact-preview-frame')).toBe(parsingFrame);
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/i/v0/e/'))).toBe(false);
-  });
-
-  it('recovers when a truncated document stays loading through the parsing grace period', () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
-
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={htmlFile()}
-        filesRefreshKey={0}
-        liveHtml={srcDocHtml('stuck-loading-document')}
-      />,
-    );
-
-    const partialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    const postMessage = vi.spyOn(partialFrame.contentWindow!, 'postMessage');
-    act(() => {
-      vi.advanceTimersByTime(1_500);
-    });
-
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const probes = postMessage.mock.calls.filter(
-        ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
-      );
-      const probe = probes.at(-1)?.[0] as { generation?: string; probeId?: string };
-      expect(probe.probeId).toBeTruthy();
-      act(() => {
+      for (const type of ['od:preview:hello', 'od:preview:ready']) {
         window.dispatchEvent(new MessageEvent('message', {
-          source: partialFrame.contentWindow,
+          source: candidate.contentWindow,
           data: {
-            type: 'od:srcdoc-transport-activated',
-            generation: probe.generation,
-            probeId: probe.probeId,
-            bodyComplete: false,
-            documentReadyState: 'loading',
+            type,
+            protocolVersion: '1',
+            sessionId: candidate.dataset.odSessionId,
+            documentVersion: 'stale-document-version',
+            availableCapabilities: [],
           },
         }));
-        if (attempt < 7) vi.advanceTimersByTime(1_500);
-      });
-    }
-
-    const recoveredFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(recoveredFrame).not.toBe(partialFrame);
-    expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-  });
-
-  it('revalidates an early activation acknowledgement after the frame load completes', () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
-
-    const { rerender } = render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={htmlFile()}
-        filesRefreshKey={0}
-        liveHtml={srcDocHtml('version-one')}
-      />,
-    );
-
-    rerender(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={htmlFile({ mtime: 1710000001, size: 1025 })}
-        filesRefreshKey={1}
-        liveHtml={srcDocHtml('version-two')}
-      />,
-    );
-
-    const refreshedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    act(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        source: refreshedFrame.contentWindow,
-        data: {
-          type: 'od:srcdoc-transport-activated',
-          generation: transportGeneration(refreshedFrame),
-        },
-      }));
+      }
     });
+    expect(currentFrame()).toBe(current);
+    expect(candidate.getAttribute('data-od-active')).toBe('false');
 
-    fireEvent.load(refreshedFrame);
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    const recoveredFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(recoveredFrame).not.toBe(refreshedFrame);
-    expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+    settleFileViewerPreviewRuntimeStandby(candidate);
+    await waitFor(() => expect(currentFrame()).toBe(candidate));
   });
 });

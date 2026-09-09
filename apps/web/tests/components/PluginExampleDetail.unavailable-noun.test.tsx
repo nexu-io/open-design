@@ -21,6 +21,9 @@ import { PluginExampleDetail } from '../../src/components/plugin-details/PluginE
 vi.mock('../../src/providers/registry', () => ({
   fetchPluginPreviewHtml: vi.fn(async () => ({ unavailable: true, kind: 'html' })),
   fetchPluginExampleHtml: vi.fn(async () => ({ unavailable: true, kind: 'html' })),
+  pluginPreviewDocumentUrl: (id: string) => `/api/plugins/${encodeURIComponent(id)}/preview`,
+  pluginExampleDocumentUrl: (id: string, stem: string) =>
+    `/api/plugins/${encodeURIComponent(id)}/example/${encodeURIComponent(stem)}`,
 }));
 
 function make(overrides: {

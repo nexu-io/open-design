@@ -69,11 +69,13 @@ type ComparisonSummary = Omit<PixelComparison, 'diffPng'>;
 type CaseResult = {
   sampleId: string;
   bytes: number;
-  status: ParityClassification | 'failed' | 'skipped-not-url-load' | 'skipped-too-large';
+  status: ParityClassification | 'failed' | 'skipped-not-runtime-url' | 'skipped-too-large';
   initialMode?: string | null;
   editMode?: string | null;
-  editBootstrapHasDoctype?: boolean;
-  editBootstrapLength?: number;
+  editFrameReused?: boolean;
+  editUrlUnchanged?: boolean;
+  roundTripFrameReused?: boolean;
+  roundTripUrlUnchanged?: boolean;
   scrolled?: boolean;
   entryStatus?: ParityClassification;
   roundTripStatus?: ParityClassification;
@@ -240,15 +242,22 @@ async function runCase(input: {
 
     const initialFrame = await settledActivePreview(page, options.timeoutMs);
     const initialMode = await initialFrame.locator.getAttribute('data-od-render-mode');
-    if (initialMode !== 'url-load') {
+    if (initialMode !== 'runtime-url') {
       return withSignals({
-        ...emptyResult(sampleId, Buffer.byteLength(source), 'skipped-not-url-load'),
+        ...emptyResult(sampleId, Buffer.byteLength(source), 'skipped-not-runtime-url'),
         initialMode,
       }, signals);
     }
+    const runtimeFrame = initialFrame.frame;
+    const runtimeUrl = runtimeFrame.url();
 
     const scrolled = await scrollPrimarySurfaceSafely(page, options.timeoutMs);
-    const urlCapture = await captureStable(page, 'url-load', options.timeoutMs, options.settleMs);
+    const beforeEditCapture = await captureStable(
+      page,
+      'runtime-url',
+      options.timeoutMs,
+      options.settleMs,
+    );
 
     const editToggle = page.getByTestId('manual-edit-mode-toggle').filter({ visible: true }).last();
     await editToggle.click({ timeout: options.timeoutMs });
@@ -257,43 +266,62 @@ async function runCase(input: {
 
     const editFrame = await settledActivePreview(page, options.timeoutMs);
     const editMode = await editFrame.locator.getAttribute('data-od-render-mode');
-    if (editMode !== 'srcdoc') {
-      throw new Error(`Edit did not activate srcDoc transport (active mode: ${String(editMode)})`);
+    const editFrameReused = editFrame.frame === runtimeFrame;
+    const editUrlUnchanged = editFrame.frame.url() === runtimeUrl;
+    if (editMode !== 'runtime-url' || !editFrameReused || !editUrlUnchanged) {
+      throw new Error(
+        'Edit replaced or navigated the retained runtime '
+        + `(mode=${String(editMode)}, frameReused=${editFrameReused}, urlUnchanged=${editUrlUnchanged})`,
+      );
     }
-    const editBootstrap = await editFrame.locator.getAttribute('srcdoc') ?? '';
-    const srcDocCapture = await captureStable(page, 'srcdoc', options.timeoutMs, options.settleMs);
-    const entry = comparePngBuffers(urlCapture.second, srcDocCapture.second);
+    const editCapture = await captureStable(page, 'runtime-url', options.timeoutMs, options.settleMs);
+    const entry = comparePngBuffers(beforeEditCapture.second, editCapture.second);
     const entryStatus = classifyPixelParity({
       comparison: entry,
-      actualSelfDriftRatio: urlCapture.selfDrift.perceptualDiffRatio,
-      expectedSelfDriftRatio: srcDocCapture.selfDrift.perceptualDiffRatio,
+      actualSelfDriftRatio: beforeEditCapture.selfDrift.perceptualDiffRatio,
+      expectedSelfDriftRatio: editCapture.selfDrift.perceptualDiffRatio,
       maxPerceptualDiffRatio: options.maxPerceptualDiffRatio,
       maxSelfDriftRatio: options.maxSelfDriftRatio,
+      dynamicSurface: isDynamicSurfacePair(beforeEditCapture.snapshot, editCapture.snapshot),
     });
 
     await editToggle.click({ timeout: options.timeoutMs });
     await waitForPressed(editToggle, 'false', options.timeoutMs);
     await page.mouse.move(0, 0);
     const roundTripFrame = await settledActivePreview(page, options.timeoutMs);
-    await waitForRenderMode(roundTripFrame.locator, 'url-load', options.timeoutMs);
-    const roundTripCapture = await captureStable(page, 'url-load', options.timeoutMs, options.settleMs);
-    const roundTrip = comparePngBuffers(urlCapture.second, roundTripCapture.second);
+    await waitForRenderMode(roundTripFrame.locator, 'runtime-url', options.timeoutMs);
+    const roundTripFrameReused = roundTripFrame.frame === runtimeFrame;
+    const roundTripUrlUnchanged = roundTripFrame.frame.url() === runtimeUrl;
+    if (!roundTripFrameReused || !roundTripUrlUnchanged) {
+      throw new Error(
+        'Leaving Edit replaced or navigated the retained runtime '
+        + `(frameReused=${roundTripFrameReused}, urlUnchanged=${roundTripUrlUnchanged})`,
+      );
+    }
+    const roundTripCapture = await captureStable(
+      page,
+      'runtime-url',
+      options.timeoutMs,
+      options.settleMs,
+    );
+    const roundTrip = comparePngBuffers(beforeEditCapture.second, roundTripCapture.second);
     const roundTripStatus = classifyPixelParity({
       comparison: roundTrip,
-      actualSelfDriftRatio: urlCapture.selfDrift.perceptualDiffRatio,
+      actualSelfDriftRatio: beforeEditCapture.selfDrift.perceptualDiffRatio,
       expectedSelfDriftRatio: roundTripCapture.selfDrift.perceptualDiffRatio,
       maxPerceptualDiffRatio: options.maxPerceptualDiffRatio,
       maxSelfDriftRatio: options.maxSelfDriftRatio,
+      dynamicSurface: isDynamicSurfacePair(beforeEditCapture.snapshot, roundTripCapture.snapshot),
     });
     const status = combinePixelParityClassifications(entryStatus, roundTripStatus);
 
     const evidence = status === 'exact' && roundTrip.exactDiffPixels === 0
       ? []
       : await saveEvidence(options.outputDir, sampleId, {
-          url: urlCapture.second,
-          srcdoc: srcDocCapture.second,
+          beforeEdit: beforeEditCapture.second,
+          edit: editCapture.second,
           entryDiff: entry.diffPng,
-          roundTrip: roundTripCapture.second,
+          afterEdit: roundTripCapture.second,
           roundTripDiff: roundTrip.diffPng,
         });
 
@@ -303,18 +331,20 @@ async function runCase(input: {
       status,
       initialMode,
       editMode,
-      editBootstrapHasDoctype: /^\s*<!doctype\b/i.test(editBootstrap),
-      editBootstrapLength: editBootstrap.length,
+      editFrameReused,
+      editUrlUnchanged,
+      roundTripFrameReused,
+      roundTripUrlUnchanged,
       scrolled,
       entryStatus,
       roundTripStatus,
       entry: summarizeComparison(entry),
       roundTrip: summarizeComparison(roundTrip),
-      urlSelfDriftRatio: urlCapture.selfDrift.perceptualDiffRatio,
-      srcDocSelfDriftRatio: srcDocCapture.selfDrift.perceptualDiffRatio,
+      urlSelfDriftRatio: beforeEditCapture.selfDrift.perceptualDiffRatio,
+      srcDocSelfDriftRatio: editCapture.selfDrift.perceptualDiffRatio,
       roundTripSelfDriftRatio: roundTripCapture.selfDrift.perceptualDiffRatio,
-      urlState: urlCapture.snapshot,
-      srcDocState: srcDocCapture.snapshot,
+      urlState: beforeEditCapture.snapshot,
+      srcDocState: editCapture.snapshot,
       roundTripState: roundTripCapture.snapshot,
       consoleErrorHashes: [],
       failedRequestHashes: [],
@@ -327,6 +357,13 @@ async function runCase(input: {
       error: formatError(error),
     }, signals);
   }
+}
+
+function isDynamicSurfacePair(actual: RuntimeSnapshot, expected: RuntimeSnapshot): boolean {
+  return actual.elementCount === expected.elementCount
+    && actual.canvasCount === expected.canvasCount
+    && actual.videoCount === expected.videoCount
+    && (actual.canvasCount > 0 || actual.videoCount > 0);
 }
 
 async function createProject(
@@ -600,7 +637,7 @@ function emptyResult(sampleId: string, bytes: number, status: CaseResult['status
 async function writeReport(options: Options, results: CaseResult[], startedAt: number): Promise<void> {
   const counts = countStatuses(results);
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
     corpus: {
@@ -625,7 +662,7 @@ async function writeReport(options: Options, results: CaseResult[], startedAt: n
 
 function renderMarkdownSummary(results: CaseResult[], counts: Record<string, number>): string {
   const lines = [
-    '# Artifact URL/srcDoc render parity',
+    '# Artifact retained-runtime render parity',
     '',
     'Local-only black-box comparison. Sample IDs are SHA-256 prefixes; source paths and HTML are omitted.',
     '',
@@ -770,9 +807,9 @@ function usage(): string {
     [--output-dir /private/tmp/render-parity] [--limit 50] [--headed]
 
 The script starts a namespace- and data-root-isolated tools-dev runtime, creates
-temporary managed projects through its product API, captures the
-active URL-load iframe, enters Manual Edit to capture the real srcDoc transport,
-then exits Edit and captures URL-load again. The runtime and its projects are always
+temporary managed projects through its product API, captures the active real-URL
+runtime, enters and exits Manual Edit, and proves both transitions retain the
+same iframe and URL while preserving pixels and runtime state. The runtime and its projects are always
 stopped and removed when the audit completes. Every artifact runs in an isolated
 browser process with a 60-second hard timeout. Reports omit source paths and HTML content.`;
 }

@@ -3,7 +3,7 @@ import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 
 import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
-import { projectDir, resolveProjectDir } from './projects.js';
+import { RESERVED_PROJECT_FILE_SEGMENTS, projectDir, resolveProjectDir } from './projects.js';
 
 /**
  * Refcounted per-project file watcher registry.
@@ -18,10 +18,27 @@ import { projectDir, resolveProjectDir } from './projects.js';
 // against the path *relative to the watch root* so that ancestor directories
 // (e.g. the daemon's own `.od/` runtime dir, which contains every project) do
 // not accidentally match and silence every event in the tree.
-const WATCHER_ONLY_IGNORE_NAMES = new Set(['.ds_store']);
+// The daemon's own bookkeeping directories are in here for a second reason:
+// they are not user content. One save of one HTML file also writes a version
+// snapshot and its manifest, and announcing those as project file changes made
+// a single save look like a project-wide mutation — which the web app answers
+// by re-navigating every open preview, discarding the JS heap, timers, canvas
+// and scroll of documents the user never touched.
+const WATCHER_ONLY_IGNORE_NAMES = new Set([
+  '.ds_store',
+  ...RESERVED_PROJECT_FILE_SEGMENTS,
+]);
 export type ProjectWatchKind = 'add' | 'change' | 'unlink';
 export interface ProjectWatchEvent { type: 'file-changed'; path: string; kind: ProjectWatchKind }
-export type ProjectWatchCallback = (evt: ProjectWatchEvent) => void;
+export interface ProjectWatchFileIdentity {
+  filePath: string;
+  size: number;
+  mtime: number;
+}
+export type ProjectWatchCallback = (
+  evt: ProjectWatchEvent,
+  file?: ProjectWatchFileIdentity,
+) => void;
 type ProjectWatchIgnored = (absPath: string, stats?: Stats) => boolean;
 export interface ProjectWatcherOptions {
   ignored?: ProjectWatchIgnored;
@@ -80,6 +97,9 @@ function createWatcher(
     // path ignore predicate keeps emitted events project-scoped, an unhandled
     // symlink would still cost descriptors and surface external FS activity.
     followSymlinks: false,
+    // add/change subscribers use this exact settled size + mtime identity to
+    // start versioned background work before the UI reacts to the SSE event.
+    alwaysStat: true,
     usePolling,
     ...(usePolling ? { interval: 100, binaryInterval: 300 } : {}),
   };
@@ -107,13 +127,16 @@ function makeEntry(dir: string, opts: Required<Pick<ProjectWatcherOptions, 'igno
     resolveReady();
   };
 
-  const broadcast = (kind: ProjectWatchKind) => (absPath: string) => {
+  const broadcast = (kind: ProjectWatchKind) => (absPath: string, stats?: Stats) => {
     const rel = path.relative(dir, absPath);
     if (!rel || rel.startsWith('..')) return;
     const evt: ProjectWatchEvent = { type: 'file-changed', path: rel.split(path.sep).join('/'), kind };
+    const file = stats && kind !== 'unlink'
+      ? { filePath: absPath, size: stats.size, mtime: stats.mtimeMs }
+      : undefined;
     for (const cb of entry.subscribers) {
       try {
-        cb(evt);
+        cb(evt, file);
       } catch (err) {
         // A buggy subscriber must not poison siblings. Log in dev so the bug
         // doesn't go silent during local testing.

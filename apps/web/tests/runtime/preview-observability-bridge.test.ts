@@ -179,31 +179,27 @@ describe('preview observability white-screen bridge', () => {
     ]);
   });
 
-  it('nudges layout once and suppresses the report when visible paint recovers', () => {
-    const harness = createBridgeHarness('<main>Rendered after resize</main>');
+  it('reports a persistent blank without dispatching resize or mutating authored DOM', () => {
+    const harness = createBridgeHarness(
+      '<main data-authored="unchanged" style="display:none">Authored content</main>',
+    );
     harnesses.push(harness);
-    let layoutNudged = false;
-    const main = harness.window.document.querySelector('main');
-    if (!main) throw new Error('missing preview fixture');
-    main.getBoundingClientRect = () => ({
-      bottom: layoutNudged ? 100 : 0,
-      height: layoutNudged ? 100 : 0,
-      left: 0,
-      right: layoutNudged ? 100 : 0,
-      top: 0,
-      width: layoutNudged ? 100 : 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
+    const authoredBefore = harness.window.document.body.innerHTML;
+    let resizeCount = 0;
     harness.window.addEventListener('resize', () => {
-      layoutNudged = true;
+      resizeCount += 1;
     });
 
-    harness.advanceBy(20_000);
+    harness.advanceBy(6_500);
 
-    expect(layoutNudged).toBe(true);
-    expect(harness.events).toEqual([]);
+    expect(resizeCount).toBe(0);
+    expect(harness.window.document.body.innerHTML).toBe(authoredBefore);
+    expect(harness.events).toEqual([
+      expect.objectContaining({
+        event: 'white_screen',
+        blank_observation_count: 2,
+      }),
+    ]);
   });
 
   it('reports only after two blank observations and includes confirmation metadata', () => {

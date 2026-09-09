@@ -1,3 +1,5 @@
+import { MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR, MANUAL_EDIT_SOURCE_PATH_ATTR } from '@open-design/preview-runtime/manual-edit';
+import { annotateManualEditSourceOrdinals } from '@open-design/preview-runtime/manual-edit-source';
 import { emptyManualEditStyles, MANUAL_EDIT_STYLE_PROPS, type ManualEditFields, type ManualEditPatch, type ManualEditStyles } from './types';
 
 const MANUAL_EDIT_RUNTIME_OVERRIDES_ID = 'od-manual-edit-runtime-overrides';
@@ -104,34 +106,118 @@ export interface ManualEditPatchResult {
   ok: boolean;
   source: string;
   error?: string;
+  /**
+   * Whether this save moved the identities of elements it did not edit.
+   *
+   * Manual Edit addresses an element by `data-od-source-path`, a positional
+   * ordinal counted through the source in document order. That is an identity
+   * only while the document's shape holds still, and writing does not hold it
+   * still: the patch is applied by parsing and re-serializing, and an HTML
+   * parser is not a pass-through. It closes a `<p>` before a block child and
+   * leaves the stray `</p>` as an empty one, it materializes the `<tbody>` a
+   * table never wrote, it re-parents what was misplaced. Each of those adds or
+   * removes a discovery tag, and every ordinal after it shifts by one.
+   *
+   * The session cannot tell on its own. The document on screen was mirrored
+   * rather than replaced, so it still carries the ids it was served with, and
+   * the host's selection, history and live style map hold pre-save ids too. The
+   * next patch resolves one of those against the renumbered source and writes
+   * to the neighbouring element — the user picks one heading and another one
+   * changes, with nothing on screen to suggest it.
+   *
+   * So the save reports it, and the caller must treat every id it is holding as
+   * dead. This is the honest boundary: the ordinals cannot be kept stable
+   * without giving up the streaming annotator the daemon serves through, but a
+   * renumbering that is announced can no longer be silently written through.
+   */
+  identitiesRenumbered: boolean;
+}
+
+/**
+ * The tag carried by each source ordinal, in order. Two documents that agree
+ * here address the same elements by the same ids; the first index where they
+ * disagree is where every later id started pointing somewhere else.
+ */
+function sourcePathIdentitySignature(doc: Document): string[] {
+  return Array.from(doc.querySelectorAll(`[${MANUAL_EDIT_SOURCE_PATH_ATTR}]`)).map(
+    (el) => `${el.getAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR)}:${el.tagName.toLowerCase()}`,
+  );
+}
+
+/**
+ * Whether the ids in `saved` still address what they addressed in `before`.
+ *
+ * Compared against the document the patch was applied to rather than against
+ * the raw input, so an element the patch itself removed or replaced is the only
+ * legitimate difference the caller has to reason about.
+ */
+function identitiesRenumberedBySave(before: readonly string[], saved: string): boolean {
+  const reparsed = parseSource(saved);
+  if (!reparsed) return true;
+  const after = sourcePathIdentitySignature(reparsed);
+  if (after.length !== before.length) return true;
+  return after.some((entry, index) => entry !== before[index]);
+}
+
+/** Serialize the patched document and report whether it moved any identity. */
+function finishPatch(
+  doc: Document,
+  originalSource: string,
+  identitiesBefore: readonly string[],
+): ManualEditPatchResult {
+  const saved = serializeSource(doc, originalSource);
+  return {
+    ok: true,
+    source: saved,
+    identitiesRenumbered: identitiesRenumberedBySave(identitiesBefore, saved),
+  };
 }
 
 export function applyManualEditPatch(source: string, patch: ManualEditPatch): ManualEditPatchResult {
-  if (patch.kind === 'set-full-source') return { ok: true, source: patch.source };
+  // A whole-source replacement makes no claim about identities at all: the
+  // document it produces is not the one the ids were counted through.
+  if (patch.kind === 'set-full-source') {
+    return { ok: true, source: patch.source, identitiesRenumbered: true };
+  }
 
   const doc = parseSource(source);
-  if (!doc) return { ok: false, source, error: 'Could not parse source.' };
+  if (!doc) {
+    return { ok: false, source, error: 'Could not parse source.', identitiesRenumbered: false };
+  }
+  const identitiesBefore = sourcePathIdentitySignature(doc);
 
   if (patch.kind === 'set-token') {
     const changed = setCssToken(doc, patch.token, patch.value);
-    return changed
-      ? { ok: true, source: serializeSource(doc, source) }
-      : { ok: false, source, error: `Token not found: ${patch.token}` };
+    if (!changed) {
+      return {
+        ok: false,
+        source,
+        error: `Token not found: ${patch.token}`,
+        identitiesRenumbered: false,
+      };
+    }
+    return finishPatch(doc, source, identitiesBefore);
   }
 
   const el = findEditableElement(doc, patch.id);
   if (!el) {
     const dynamic = applyDynamicBrandKitPatch(doc, patch);
-    return dynamic.ok
-      ? { ok: true, source: serializeSource(doc, source) }
-      : { ok: false, source, error: `Target not found: ${patch.id}` };
+    if (!dynamic.ok) {
+      return {
+        ok: false,
+        source,
+        error: `Target not found: ${patch.id}`,
+        identitiesRenumbered: false,
+      };
+    }
+    return finishPatch(doc, source, identitiesBefore);
   }
 
   if (patch.kind === 'set-text') {
     if (hasElementChildren(el)) {
       const soleText = findSoleMeaningfulTextNode(el);
       if (!soleText) {
-        return { ok: false, source, error: 'This element contains nested markup. Use the HTML tab instead.' };
+        return { ok: false, source, error: 'This element contains nested markup. Use the HTML tab instead.', identitiesRenumbered: false };
       }
       soleText.nodeValue = patch.value;
     } else {
@@ -147,7 +233,7 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
         // outright — see findSoleMeaningfulTextNode for the safety bound.
         const soleText = findSoleMeaningfulTextNode(el);
         if (!soleText) {
-          return { ok: false, source, error: 'This link contains nested markup. Use the HTML tab to change its label.' };
+          return { ok: false, source, error: 'This link contains nested markup. Use the HTML tab to change its label.', identitiesRenumbered: false };
         }
         soleText.nodeValue = patch.text;
       }
@@ -169,19 +255,20 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
         ok: false,
         source,
         error: 'error' in replaced ? replaced.error : 'Could not replace element HTML.',
+        identitiesRenumbered: false,
       };
     }
   } else if (patch.kind === 'remove-element') {
     if (!el.parentElement) {
-      return { ok: false, source, error: 'Cannot remove the root element.' };
+      return { ok: false, source, error: 'Cannot remove the root element.', identitiesRenumbered: false };
     }
     if (el.parentElement === doc.body && isLastRenderableBodyChild(doc, el)) {
-      return { ok: false, source, error: 'Cannot remove the last rendered element in the document.' };
+      return { ok: false, source, error: 'Cannot remove the last rendered element in the document.', identitiesRenumbered: false };
     }
     el.remove();
   }
 
-  return { ok: true, source: serializeSource(doc, source) };
+  return finishPatch(doc, source, identitiesBefore);
 }
 
 export function readManualEditFields(source: string, id: string): ManualEditFields {
@@ -220,8 +307,11 @@ export function readManualEditAttributes(source: string, id: string): Record<str
   const el = doc ? findEditableElement(doc, id) : null;
   if (!el) return {};
   const attrs: Record<string, string> = {};
+  const generatedSourcePath = el.hasAttribute(MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR);
   Array.from(el.attributes).forEach((attr) => {
     if (attr.name === 'data-od-runtime-id') return;
+    if (attr.name === MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR) return;
+    if (generatedSourcePath && attr.name === MANUAL_EDIT_SOURCE_PATH_ATTR) return;
     attrs[attr.name] = attr.value;
   });
   return attrs;
@@ -229,24 +319,39 @@ export function readManualEditAttributes(source: string, id: string): Record<str
 
 export function readManualEditOuterHtml(source: string, id: string): string {
   const doc = parseSource(source);
-  return (doc ? findEditableElement(doc, id)?.outerHTML : '') ?? '';
+  const el = doc ? findEditableElement(doc, id) : null;
+  if (!el) return '';
+  const clone = el.cloneNode(true) as Element;
+  stripGeneratedManualEditSourcePaths(clone);
+  return clone.outerHTML;
 }
 
 function parseSource(source: string): Document | null {
+  const annotatedSource = annotateManualEditSourceOrdinals(source);
   if (typeof DOMParser !== 'undefined') {
-    return new DOMParser().parseFromString(source, 'text/html');
+    return new DOMParser().parseFromString(annotatedSource, 'text/html');
   }
   if (typeof document !== 'undefined') {
     const doc = document.implementation.createHTMLDocument('');
-    doc.documentElement.innerHTML = source;
+    doc.documentElement.innerHTML = annotatedSource;
     return doc;
   }
   return null;
 }
 
 function serializeSource(doc: Document, originalSource: string): string {
+  stripGeneratedManualEditSourcePaths(doc.documentElement);
   if (!isManualEditFullHtmlDocument(originalSource)) return doc.body.innerHTML;
   return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
+function stripGeneratedManualEditSourcePaths(root: Element): void {
+  const generated = [root, ...Array.from(root.querySelectorAll(`[${MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR}]`))];
+  generated.forEach((el) => {
+    if (!el.hasAttribute(MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR)) return;
+    el.removeAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR);
+    el.removeAttribute(MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR);
+  });
 }
 
 export function isManualEditFullHtmlDocument(source: string): boolean {

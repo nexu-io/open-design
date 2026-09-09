@@ -53,6 +53,7 @@ import { importGitHubDesignSystemProject } from '../design-systems/github-import
 import { importShadcnDesignSystemProject } from '../design-systems/shadcn-import.js';
 import { renderDesignSystemPreview } from '../design-systems/preview.js';
 import { renderDesignSystemShowcase } from '../design-systems/showcase.js';
+import { applyUrlPreviewBridgesToHtml } from './project/index.js';
 import { listPromptTemplates, readPromptTemplate } from '../media/prompt-templates.js';
 import { readAppConfig } from '../app-config.js';
 import {
@@ -938,6 +939,17 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         ? `?workspaceId=${encodeURIComponent(authority.workspaceId)}&workspaceMemberId=${encodeURIComponent(authority.workspaceMemberId)}`
         : '';
 
+      // Preview surfaces navigate a frame straight at this route rather than
+      // rebuilding the fetched HTML into a srcdoc copy, so the guards and
+      // bridges srcdoc used to inject host-side have to be installed here —
+      // and only when the navigation names them.
+      const previewDocument = (html: string, skillId: string): string | Buffer =>
+        applyUrlPreviewBridgesToHtml(
+          rewriteSkillAssetUrls(html, skillId, workspaceQuery),
+          'text/html',
+          req.query.odPreviewBridge,
+        );
+
       // 1. Derived `<parent>:<child>` id — resolve straight to the matching
       // file under <parentDir>/examples/. Done before findSkillById so the
       // parent's normal fallback chain never accidentally serves a stale
@@ -957,7 +969,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const html = await fs.promises.readFile(candidate, 'utf8');
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(html, parent.id, workspaceQuery));
+            .send(previewDocument(html, parent.id));
         }
         return res
           .status(404)
@@ -975,7 +987,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(baked, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
+          .send(previewDocument(html, skill.id));
       }
 
       const tpl = path.join(skill.dir, 'assets', 'template.html');
@@ -987,7 +999,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const assembled = assembleExample(tplHtml, slidesHtml, skill.name);
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(assembled, skill.id, workspaceQuery));
+            .send(previewDocument(assembled, skill.id));
         } catch {
           // Fall through to raw template on read failure.
         }
@@ -996,14 +1008,14 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(tpl, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
+          .send(previewDocument(html, skill.id));
       }
       const idx = path.join(skill.dir, 'assets', 'index.html');
       if (fs.existsSync(idx)) {
         const html = await fs.promises.readFile(idx, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
+          .send(previewDocument(html, skill.id));
       }
 
       // Friendly fallback for skills that aggregate examples in a sibling
@@ -1031,7 +1043,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
             const html = await fs.promises.readFile(direct, 'utf8');
             return res
               .type('text/html')
-              .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
+              .send(previewDocument(html, skill.id));
           } catch {
             continue;
           }

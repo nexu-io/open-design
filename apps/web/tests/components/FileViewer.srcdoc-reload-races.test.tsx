@@ -1,1348 +1,236 @@
 // @vitest-environment jsdom
-// Race condition regression tests for the prevSourceBeforeReloadRef approach
-// introduced in commit 65fe10d1a (PR #4652).
-//
-// Three distinct races are covered:
-//
-// Race 1 — double-click failure:
-//   The fallback ref is overwritten with null on the second click (because
-//   source is null after the first setSource(null) call), so when the first
-//   fetch fails there is nothing left to restore.  The user sees a blank
-//   preview instead of their last good HTML.
-//
-// Race 2 — file-switch contamination + loading state:
-//   The ref is not scoped to the current file, so when the user switches to a
-//   new file while a reload fetch is in flight, a failed fetch for the new
-//   file restores the *previous* file's HTML into the new preview.
-//   Additionally, the sourceEverLoadedRef sentinel stays true after a file
-//   switch when a reload snapshot is present, so the new file B never shows
-//   the loading skeleton while its fetch is in flight — it shows a blank
-//   iframe instead.
-//
-// Race 3 — stale snapshot leaked by identity-mismatched fetch:
-//   When the user switches to file B while a reload fetch is in flight,
-//   B's fetch returns null.  The identity check (snap.fileName='A',
-//   file.name='B') fails and the restore-branch returns without clearing
-//   prevSourceBeforeReloadRef.  The old snapshot stays armed, so navigating
-//   back to file A on a later normal failed load (no Reload click) wrongly
-//   restores the old A snapshot instead of showing the loading indicator.
-//
-// Race P3 (Codex P2 line 7377) — Manual Edit save silently fails during Reload:
-//   Reload now settles Manual Edit and hands off to the already-warm URL
-//   transport. A patch submitted while that asynchronous exit is in flight
-//   must still reach the file API; the handoff must not clear the active
-//   source or start the old srcDoc reload fetch window.
+// Reload and mode-switch race coverage for the converged real-URL Runtime.
+// There is no srcDoc recovery lane: the current document stays visible while
+// an exact replacement is pending, then an exhausted replacement becomes an
+// explicit retry state instead of silently leaving stale output interactive.
 
-import type { ComponentProps } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
+import { FileViewer as ProductFileViewer } from '../../src/components/FileViewer';
 import type { ProjectFile } from '../../src/types';
-import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
+import {
+  installFileViewerPreviewRuntimeHarness,
+  prepareSettledFileViewerFixture,
+  setFileViewerPreviewRuntimeAutoSettle,
+  settleFileViewerPreviewRuntimeStandby,
+  syntheticPreviewFileSource,
+  uninstallFileViewerPreviewRuntimeHarness,
+  useSyntheticProjectScopedPreviewNavigation,
+} from '../helpers/file-viewer-preview-runtime';
 
-// ---------------------------------------------------------------------------
-// ManualEditPanel mock — captures the props FileViewer passes so tests can
-// invoke onApplyPatch / onStyleChange without needing real iframe interaction.
-// The mock renders a lightweight sentinel so no real panel DOM is created.
-// ---------------------------------------------------------------------------
-const panelState = vi.hoisted(() => ({
-  props: null as ComponentProps<typeof import('../../src/components/ManualEditPanel').ManualEditPanel> | null,
-}));
-
-vi.mock('../../src/components/ManualEditPanel', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/components/ManualEditPanel')>();
+vi.mock('../../src/providers/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/registry')>();
   return {
     ...actual,
-    ManualEditPanel: (
-      props: ComponentProps<typeof actual.ManualEditPanel>,
-    ) => {
-      panelState.props = props;
-      return <div data-testid="mock-manual-edit-panel" />;
+    fetchProjectFileText(
+      projectId: string,
+      name: string,
+      options?: Parameters<typeof actual.fetchProjectFileText>[2],
+    ) {
+      const source = syntheticPreviewFileSource(projectId, name);
+      return source === undefined
+        ? actual.fetchProjectFileText(projectId, name, options)
+        : Promise.resolve(source);
     },
   };
 });
 
-// These tests exercise FileViewer's local-project preview path. Keep the
-// authorization scope resolved from the first render so cache assertions do
-// not depend on the asynchronous workspace-context probe.
-vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>();
+vi.mock('../../src/runtime/use-project-preview-session-navigation', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../src/runtime/use-project-preview-session-navigation')
+  >();
   return {
     ...actual,
-    useWorkspaceContext: () => ({ context: null, loading: false }),
+    useProjectScopedPreviewNavigation: (
+      options: Parameters<typeof actual.useProjectScopedPreviewNavigation>[0],
+    ) => useSyntheticProjectScopedPreviewNavigation(options),
   };
 });
 
-import { FileViewer } from '../../src/components/FileViewer';
-
-afterEach(() => {
-  cleanup();
-  panelState.props = null;
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-// ---------------------------------------------------------------------------
-// Shared fixture helpers
-// ---------------------------------------------------------------------------
-
-// A plain HTML file (not a deck) that supports Manual Edit (has data-od-id
-// elements).  The manifest marks it as an 'html' artifact so the component
-// uses the HTML preview path without needing deck logic.
-function manualEditFile(): ProjectFile {
+function htmlFile(name = 'preview.html', overrides: Partial<ProjectFile> = {}): ProjectFile {
   return {
-    name: 'preview.html',
-    path: 'preview.html',
+    name,
+    path: name,
     type: 'file',
-    size: 1024,
-    mtime: 1710000000,
+    size: 256,
+    mtime: 1,
     kind: 'html',
     mime: 'text/html',
     artifactManifest: {
       version: 1,
       kind: 'html',
-      title: 'Preview',
-      entry: 'preview.html',
+      title: name,
+      entry: name,
       renderer: 'html',
-      exports: ['html'],
-    },
-  };
-}
-
-// Minimal target shape that the component accepts via od-edit-select.
-function heroTarget(): ManualEditTarget {
-  return {
-    id: 'hero',
-    kind: 'text',
-    label: 'Hero',
-    tagName: 'h1',
-    className: '',
-    text: 'Hello',
-    rect: { x: 0, y: 0, width: 120, height: 40 },
-    fields: { text: 'Hello' },
-    attributes: { 'data-od-id': 'hero' },
-    styles: emptyManualEditStyles(),
-    isLayoutContainer: false,
-    outerHtml: '<h1 data-od-id="hero">Hello</h1>',
-  };
-}
-
-// Pins the inspector to a target by dispatching the od-edit-select message
-// that the edit-mode iframe bridge would normally send.  Returns the iframe
-// element so callers can inspect it or use it for further messages.
-async function selectManualEditTarget(target = heroTarget()): Promise<HTMLIFrameElement> {
-  const frame = await waitFor(() => {
-    const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    if (!node.contentWindow) throw new Error('Preview frame not ready');
-    return node;
-  });
-  act(() => {
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: { type: 'od-edit-select', target },
-        source: frame.contentWindow,
-      }),
-    );
-  });
-  await waitFor(() => expect(panelState.props).not.toBeNull());
-  return frame;
-}
-
-// Minimal deck file fixture that forces the srcDoc render path.
-function deckFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
-  return {
-    name: 'deck.html',
-    path: 'deck.html',
-    type: 'file',
-    size: 1024,
-    mtime: 1710000000,
-    kind: 'html',
-    mime: 'text/html',
-    artifactManifest: {
-      version: 1,
-      kind: 'deck',
-      title: 'Deck',
-      entry: 'deck.html',
-      renderer: 'deck-html',
       exports: ['html'],
     },
     ...overrides,
   };
 }
 
-// Embeds a label inside a minimal deck HTML body so the srcdoc can be
-// searched for it.
-function deckHtml(label: string): string {
-  return `<html><body><section class="slide"><h1>${label}</h1></section></body></html>`;
+function FileViewer(props: ComponentProps<typeof ProductFileViewer>) {
+  return <ProductFileViewer {...prepareSettledFileViewerFixture(props)} />;
 }
 
-const RAW_URL_PREFIX = '/api/projects/project-1/raw/';
-
-// Returns the srcdoc iframe rendered for the deck (srcDoc) path.
-function srcDocFrame(): HTMLIFrameElement {
-  return screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+function standbyFrame(): HTMLIFrameElement {
+  return screen.getByTestId('preview-runtime-frame-standby') as HTMLIFrameElement;
 }
 
-// A controllable fetch stub — callers resolve or reject each queued request
-// individually by calling the returned handle.
-type FetchHandle = {
-  resolve: (html: string | null, status?: number) => void;
-};
-
-function deferredFetch(): { handle: FetchHandle; stub: typeof fetch } {
-  let resolveRequest!: (resp: Response) => void;
-  const handle: FetchHandle = {
-    resolve: (html, status = 200) => {
-      resolveRequest(
-        html !== null
-          ? new Response(html, { status })
-          : new Response('', { status: 500 }),
-      );
-    },
-  };
-  const stub = vi.fn(async (input: string | URL | Request) => {
-    const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof Request
-          ? input.url
-          : String(input);
-    if (url.startsWith(RAW_URL_PREFIX)) {
-      return new Promise<Response>((ok) => {
-        resolveRequest = ok;
-      });
-    }
-    return new Response('', { status: 404 });
-  });
-  return { handle, stub };
+function currentFrame(): HTMLIFrameElement {
+  return (screen.queryByTestId('artifact-preview-frame')
+    ?? screen.getByTestId('preview-runtime-frame-current')) as HTMLIFrameElement;
 }
 
-// Fetches that resolve immediately with a fixed response.
-function fetchReturning(html: string) {
-  return vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
-    const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof Request
-          ? input.url
-          : String(input);
-    if (url.startsWith(RAW_URL_PREFIX)) {
-      return new Response(html, { status: 200 });
-    }
-    return new Response('', { status: 404 });
-  });
+async function promoteStandby(): Promise<HTMLIFrameElement> {
+  const frame = await waitFor(standbyFrame);
+  settleFileViewerPreviewRuntimeStandby(frame);
+  await waitFor(() => expect(currentFrame()).toBe(frame));
+  return frame;
 }
 
-describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions', () => {
-  it('seeds a same-version remount from the settled source without a redundant background read', async () => {
-    const v1 = deckHtml('REVISIT-CACHED-V1');
-    vi.stubGlobal('fetch', fetchReturning(v1));
+beforeEach(() => {
+  installFileViewerPreviewRuntimeHarness();
+  setFileViewerPreviewRuntimeAutoSettle(false);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(
+    '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>',
+    { status: 200 },
+  )));
+});
 
-    const first = render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={deckFile({ name: 'revisit.html', path: 'revisit.html' })}
-        isDeck
-      />,
-    );
+afterEach(() => {
+  uninstallFileViewerPreviewRuntimeHarness();
+  cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('REVISIT-CACHED-V1');
-    });
-    first.unmount();
+describe('FileViewer real-URL reload race conditions', () => {
+  it('offers retry when a reload Runtime handshake times out', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlFile()} />);
+    const current = await promoteStandby();
 
-    const remountFetch = fetchReturning(deckHtml('UNEXPECTED-REMOTE-V2'));
-    vi.stubGlobal('fetch', remountFetch);
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={deckFile({ name: 'revisit.html', path: 'revisit.html' })}
-        isDeck
-      />,
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Reload Preview' }));
+    const candidate = await waitFor(standbyFrame);
+    expect(candidate).not.toBe(current);
 
-    expect(srcDocFrame().getAttribute('srcDoc')).toContain('REVISIT-CACHED-V1');
-    // This source-cache regression deliberately does not forge the iframe's
-    // exact paint-probe acknowledgement. The first-load cover and its
-    // paint-verified remount behavior are exercised in FileViewer.test.tsx.
-    expect(
-      remountFetch.mock.calls.some(([input]) => String(input).startsWith(RAW_URL_PREFIX)),
-    ).toBe(false);
+    act(() => vi.advanceTimersByTime(5_000));
+    await waitFor(() => expect(screen.queryByTestId('preview-runtime-frame-standby')).toBeNull());
+    expect(screen.queryByTestId('preview-runtime-frame-current')).toBeNull();
+    expect(screen.getByTestId('preview-runtime-navigation-error')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('preview-runtime-navigation-retry'));
+    const retry = await waitFor(standbyFrame);
+    expect(retry).not.toBe(current);
+    settleFileViewerPreviewRuntimeStandby(retry);
+    await waitFor(() => expect(currentFrame()).toBe(retry));
+    expect(screen.queryByTestId('preview-runtime-navigation-error')).toBeNull();
   });
 
-  it('invalidates a cached v1 after a file event and loads v2 even when metadata is unchanged', async () => {
-    const file = deckFile({ name: 'remote-update.html', path: 'remote-update.html' });
-    vi.stubGlobal('fetch', fetchReturning(deckHtml('REMOTE-CACHED-V1')));
+  it('settles only the latest candidate when Reload is clicked twice', async () => {
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlFile()} />);
+    const current = await promoteStandby();
 
-    const first = render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={file}
-        isDeck
-      />,
-    );
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('REMOTE-CACHED-V1');
-    });
-    first.unmount();
-
-    const { handle: v2Handle, stub: v2Fetch } = deferredFetch();
-    const v2FetchMock = vi.mocked(v2Fetch);
-    vi.stubGlobal('fetch', v2Fetch);
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={file}
-        filesRefreshKey={1}
-        isDeck
-      />,
-    );
-
-    expect(screen.queryByTestId('artifact-preview-frame')).not.toBeInTheDocument();
-    expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(
-        v2FetchMock.mock.calls.some(([input]) => String(input).startsWith(RAW_URL_PREFIX)),
-      ).toBe(true);
+    const reload = screen.getByRole('button', { name: 'Reload Preview' });
+    fireEvent.click(reload);
+    const firstCandidate = await waitFor(standbyFrame);
+    fireEvent.click(reload);
+    const secondCandidate = await waitFor(() => {
+      const frame = standbyFrame();
+      expect(frame).not.toBe(firstCandidate);
+      return frame;
     });
 
-    await act(async () => {
-      v2Handle.resolve(deckHtml('REMOTE-ORIGIN-V2'));
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('REMOTE-ORIGIN-V2');
-    });
-    expect(srcDocFrame().getAttribute('srcDoc')).not.toContain('REMOTE-CACHED-V1');
-
-    const rawCall = v2FetchMock.mock.calls.find(([input]) =>
-      String(input).startsWith(RAW_URL_PREFIX),
-    );
-    expect(rawCall?.[1]).toMatchObject({ cache: 'no-store' });
+    expect(currentFrame()).toBe(current);
+    expect(firstCandidate.isConnected).toBe(false);
+    settleFileViewerPreviewRuntimeStandby(secondCandidate);
+    await waitFor(() => expect(currentFrame()).toBe(secondCandidate));
   });
 
-  it('does not seed a changed-version remount with the previous HTML', async () => {
-    const v1 = deckHtml('VERSION-BEFORE-MTIME-CHANGE');
-    vi.stubGlobal('fetch', fetchReturning(v1));
-
-    const first = render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={deckFile({ name: 'versioned.html', path: 'versioned.html', mtime: 1 })}
-        isDeck
-      />,
+  it('cannot promote a reload candidate after the user switches files', async () => {
+    const view = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlFile('a.html')} />,
     );
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('VERSION-BEFORE-MTIME-CHANGE');
-    });
-    first.unmount();
+    await promoteStandby();
+    fireEvent.click(screen.getByRole('button', { name: 'Reload Preview' }));
+    const staleCandidate = await waitFor(standbyFrame);
 
-    const { stub: heldChangedVersion } = deferredFetch();
-    vi.stubGlobal('fetch', heldChangedVersion);
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={deckFile({ name: 'versioned.html', path: 'versioned.html', mtime: 2 })}
-        isDeck
-      />,
+    view.rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlFile('b.html')} />,
     );
-
-    expect(screen.queryByTestId('artifact-preview-frame')).not.toBeInTheDocument();
-    expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain('VERSION-BEFORE-MTIME-CHANGE');
-  });
-
-  it('invalidates the settled snapshot when Reload is requested', async () => {
-    const v1 = deckHtml('BEFORE-EXPLICIT-RELOAD');
-    vi.stubGlobal('fetch', fetchReturning(v1));
-
-    const first = render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={deckFile({ name: 'reload-invalidates.html', path: 'reload-invalidates.html' })}
-        isDeck
-      />,
-    );
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('BEFORE-EXPLICIT-RELOAD');
+    const fileBCandidate = await waitFor(() => {
+      const frame = standbyFrame();
+      expect(frame).not.toBe(staleCandidate);
+      expect(frame.title).toBe('b.html');
+      return frame;
     });
 
-    const { stub: heldReload } = deferredFetch();
-    vi.stubGlobal('fetch', heldReload);
-    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    first.unmount();
-
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={deckFile({ name: 'reload-invalidates.html', path: 'reload-invalidates.html' })}
-        isDeck
-      />,
-    );
-
-    expect(screen.queryByTestId('artifact-preview-frame')).not.toBeInTheDocument();
-    expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain('BEFORE-EXPLICIT-RELOAD');
-  });
-
-  // ---------------------------------------------------------------------------
-  // Race 1: double-click wipes the fallback ref before the first fetch fails
-  // ---------------------------------------------------------------------------
-  it('restores the last good preview when a second Reload click fires before the first fetch resolves and that first fetch fails', async () => {
-    // Step 1: initial render — file content "V1" lands in the iframe srcdoc.
-    const v1 = deckHtml('version-one');
-    vi.stubGlobal('fetch', fetchReturning(v1));
-
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={deckFile()}
-        isDeck
-      />,
-    );
-
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('version-one');
-    });
-
-    // Step 2: first Reload click — source goes null, fetch1 is in flight.
-    const { handle: fetch1Handle, stub: fetch1Stub } = deferredFetch();
-    vi.stubGlobal('fetch', fetch1Stub);
-
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    });
-
-    // At this point source === null, so the ref (if re-captured unconditionally
-    // on every reload) would be overwritten with null on the next click.
-
-    // Step 3: second Reload click fires BEFORE fetch1 resolves.
-    // source is still null here (fetch1 has not resolved yet).
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    });
-
-    // Step 4: resolve fetch1 with a non-2xx to trigger the restore path.
-    await act(async () => {
-      fetch1Handle.resolve(null, 500);
-      await Promise.resolve();
-    });
-
-    // Also drain any queued microtasks from the second click's pending fetch.
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // --- KEY ASSERTION ---
-    // The iframe must still display "version-one".  On the buggy branch the
-    // ref was overwritten with null by the second click (source was null when
-    // the second click captured it), so the restore path has nothing to set
-    // and the preview goes blank.
-    await waitFor(() => {
-      const srcdoc = srcDocFrame().getAttribute('srcDoc') ?? '';
-      expect(srcdoc).toContain('version-one');
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // Race 2: file-switch shows loading state, not blank iframe or old HTML
-  // ---------------------------------------------------------------------------
-  it('shows the loading indicator for File B (not a blank iframe or File A HTML) when the user switches files while a reload fetch is in flight and File B source is unavailable', async () => {
-    // Build two distinct deck files rooted at different raw URLs so fetch
-    // mocks can distinguish them.
-    const fileA = deckFile({ name: 'deck-a.html', path: 'deck-a.html' });
-    const fileB = deckFile({ name: 'deck-b.html', path: 'deck-b.html' });
-
-    const RAW_A = `/api/projects/project-1/raw/deck-a.html`;
-    const RAW_B = `/api/projects/project-1/raw/deck-b.html`;
-
-    const htmlA = deckHtml('FILE-A-HTML');
-    const htmlB = deckHtml('file-b-html');
-
-    // Step 1: mount with File A and wait for it to load.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_A)) return new Response(htmlA, { status: 200 });
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    const { rerender } = render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={fileA}
-        isDeck
-      />,
-    );
-
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('FILE-A-HTML');
-    });
-
-    // Step 2: click Reload on File A — ref captures "FILE-A-HTML", source goes
-    // null, fetch for File A is now in flight (deferred).
-    let resolveFileAFetch!: (resp: Response) => void;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_A)) {
-          return new Promise<Response>((ok) => {
-            resolveFileAFetch = ok;
-          });
-        }
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    });
-
-    // Step 3: switch to File B BEFORE the File A fetch resolves.
-    // A fresh fetch for File B immediately returns null (non-2xx) to trigger
-    // whatever fallback logic exists.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_B)) {
-          // Initial load for File B also fails so we can observe the srcdoc
-          // state without a successful fetch masking the contamination.
-          return new Response('', { status: 500 });
-        }
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    act(() => {
-      rerender(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={fileB}
-          isDeck
-        />,
-      );
-    });
-
-    // Step 4: drain microtasks so React processes the file-switch re-render
-    // and any pending fetch callbacks.
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // --- KEY ASSERTIONS ---
-    //
-    // 1. File B's source is null and has never been loaded, so the loading
-    //    skeleton must be visible.  On the buggy branch sourceEverLoadedRef
-    //    is still true from File A (the if-guard at ~5436 skips the reset
-    //    when a reload snapshot is present), so the component skips the
-    //    skeleton and renders the iframe instead — with File A's HTML if the
-    //    restore-branch fires, or a blank srcdoc otherwise.
-    expect(screen.getByRole('status', { name: 'Loading…' })).toBeInTheDocument();
-
-    // 2. The srcdoc iframe itself must NOT be present while the loading state
-    //    is active — a blank <iframe srcDoc=""> is not an acceptable stand-in
-    //    for the loading indicator.
+    settleFileViewerPreviewRuntimeStandby(staleCandidate);
     expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
-
-    // 3. The loading indicator text must not contain File A's HTML content.
-    expect(screen.queryByText(/FILE-A-HTML/)).toBeNull();
-
-    // Resolve the stale File A fetch last (it should be discarded, not applied
-    // to the now-File-B viewer).
-    if (resolveFileAFetch) {
-      act(() => {
-        resolveFileAFetch(new Response(htmlA, { status: 200 }));
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-      // After the stale resolution, File A's HTML must still not appear in
-      // any rendered element.
-      expect(screen.queryByText(/FILE-A-HTML/)).toBeNull();
-    }
+    settleFileViewerPreviewRuntimeStandby(fileBCandidate);
+    await waitFor(() => expect(currentFrame()).toBe(fileBCandidate));
+    expect(currentFrame().title).toBe('b.html');
   });
 
-  // ---------------------------------------------------------------------------
-  // Settled sandbox-shim artifacts now use the daemon-guarded URL path. A
-  // reload must keep that transport stable while the source probe is pending.
-  // ---------------------------------------------------------------------------
-  it('keeps the guarded URL iframe active while source is null after Reload', async () => {
-    // localStorage requires the sandbox shim, but settled on-disk HTML can now
-    // receive that shim from the daemon without taking the srcDoc transport.
-    const shimFile: ProjectFile = {
-      name: 'app.html',
-      path: 'app.html',
-      type: 'file',
-      size: 512,
-      mtime: 1710000001,
-      kind: 'html',
-      mime: 'text/html',
-    };
-    const shimHtml =
-      '<html><body><script>localStorage.setItem("key","val");</script><p>loaded</p></body></html>';
-
-    // Step 1: mount with shimHtml and wait for the guarded URL lane.
-    vi.stubGlobal('fetch', fetchReturning(shimHtml));
-
+  it('keeps a multi-file Babel prototype on the powered real-URL transport', async () => {
+    const source = '<!doctype html><script src="https://cdn.example.test/babel.js"></script>'
+      + '<script type="text/babel" src="./app.jsx"></script>';
     render(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
-        file={shimFile}
-        isDeck={false}
+        file={htmlFile('index.html')}
+        liveHtml={source}
       />,
     );
 
-    // Wait for the source fetch to resolve so the component has non-null source.
-    await waitFor(() => {
-      const frame = screen.queryByTestId('artifact-preview-frame');
-      expect(frame).not.toBeNull();
-      expect((frame as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
-      expect((frame as HTMLIFrameElement).getAttribute('src')).toContain('odPreviewBridge=sandbox');
-    });
-
-    // Step 2: click Reload. The source probe is deferred so we observe the
-    // intermediate source=null window.
-    const { handle: reloadHandle, stub: reloadStub } = deferredFetch();
-    vi.stubGlobal('fetch', reloadStub);
-
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    });
-
-    // Step 3: the same URL transport remains active; it must not fall through
-    // to the dormant srcDoc/bootstrap iframe while the probe is pending.
-    const activeFrame = screen.getByTestId('artifact-preview-frame');
-    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
-    expect(activeFrame.getAttribute('data-od-active')).toBe('true');
-    expect(activeFrame.getAttribute('src')).toContain('odPreviewBridge=sandbox');
-
-    const srcDocFrame = screen.queryByTestId('artifact-preview-frame-srcdoc');
-    expect(srcDocFrame?.getAttribute('data-od-active')).toBe('false');
-
-    // Drain the deferred fetch so it doesn't leak into subsequent tests.
-    await act(async () => {
-      reloadHandle.resolve(shimHtml);
-      await Promise.resolve();
-    });
+    const frame = await promoteStandby();
+    expect(frame.getAttribute('data-od-render-mode')).toBe('runtime-url');
+    expect(frame.getAttribute('data-od-powered')).toBe('true');
+    expect(new URL(frame.src).hostname).toMatch(/^p-fixture-scope-/);
+    expect(frame.getAttribute('srcdoc')).toBeNull();
   });
 
-  it('keeps a 43-file Babel prototype on the guarded real-URL transport', async () => {
-    const externalScripts = Array.from(
-      { length: 43 },
-      (_, index) => `<script type="text/babel" src="./components/screen-${index + 1}.jsx"></script>`,
-    ).join('');
-    const html = [
-      '<!doctype html><html><head>',
-      '<link rel="stylesheet" href="./styles/app.css">',
-      '<script src="./scripts/support.js"></script>',
-      externalScripts,
-      '<script type="module" src="./scripts/module.js"></script>',
-      '</head><body>',
-      '<img src="./assets/card.svg" srcset="./assets/card.svg 1x, ./assets/card@2x.svg 2x">',
-      '<main id="root"></main>',
-      '</body></html>',
-    ].join('');
-    vi.stubGlobal('fetch', fetchReturning(html));
-
+  it('enables and disables Manual Edit without navigating the document', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     render(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
-        file={{
-          name: 'prototypes/booking/index.html',
-          path: 'prototypes/booking/index.html',
-          type: 'file',
-          size: 64 * 1024,
-          mtime: 1710000002,
-          kind: 'html',
-          mime: 'text/html',
-        }}
+        file={htmlFile()}
+        liveHtml={source}
       />,
     );
+    const frame = await promoteStandby();
+    const runtimeUrl = frame.src;
 
-    await waitFor(() => {
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
-      expect(frame.getAttribute('data-od-active')).toBe('true');
-      const src = new URL(frame.getAttribute('src') ?? '', 'http://localhost');
-      expect(src.pathname).toBe('/api/projects/project-1/raw/prototypes/booking/index.html');
-      expect(src.searchParams.getAll('odPreviewBridge')).toEqual([
-        'scroll',
-        'selection',
-        'snapshot',
-        'observability',
-        'sandbox',
-        'focus',
-      ]);
-      expect(src.searchParams.getAll('odPreviewBridge')).not.toContain('redirect');
-    });
-
-    expect(screen.getByTestId('artifact-preview-frame-srcdoc').getAttribute('data-od-active')).toBe('false');
-  });
-
-  // ---------------------------------------------------------------------------
-  // Race 3: stale snapshot must not survive an identity-mismatched fetch
-  // ---------------------------------------------------------------------------
-  it('does not restore the reload snapshot on a later normal failed load after an identity-mismatched fetch left the ref un-cleared', async () => {
-    const fileA = deckFile({ name: 'deck-a.html', path: 'deck-a.html' });
-    const fileB = deckFile({ name: 'deck-b.html', path: 'deck-b.html' });
-
-    const RAW_A = `/api/projects/project-1/raw/deck-a.html`;
-    const RAW_B = `/api/projects/project-1/raw/deck-b.html`;
-
-    const htmlA = deckHtml('V1-CONTENT');
-
-    // Step 1: mount with File A and wait for "V1-CONTENT" to appear.
-    vi.stubGlobal('fetch', fetchReturning(htmlA));
-
-    const { rerender } = render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={fileA}
-        isDeck
-      />,
-    );
-
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('V1-CONTENT');
-    });
-
-    // Step 2: click Reload on File A.
-    // prevSourceBeforeReloadRef is now { source: htmlA, projectId, fileName: 'deck-a.html' }.
-    // source goes null; fetch for A is in flight (deferred).
-    let resolveFileAReloadFetch!: (resp: Response) => void;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_A)) {
-          return new Promise<Response>((ok) => {
-            resolveFileAReloadFetch = ok;
-          });
-        }
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    });
-
-    // Step 3: switch to File B while the File A reload fetch is still in
-    // flight.  File B's fetch returns null (500) immediately, triggering the
-    // identity-mismatch branch.  On the buggy implementation the mismatch
-    // branch returns early WITHOUT clearing prevSourceBeforeReloadRef, leaving
-    // the stale snapshot armed.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_B)) {
-          return new Response('', { status: 500 });
-        }
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    act(() => {
-      rerender(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={fileB}
-          isDeck
-        />,
-      );
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // Step 4: switch back to File A.  File A's fetch returns null (500) — a
-    // normal failed load, NOT a Reload click.  On the buggy implementation
-    // prevSourceBeforeReloadRef is still non-null (leaked from step 2),
-    // the identity check passes (projectId + fileName both match A again),
-    // and the snapshot "V1-CONTENT" is incorrectly restored into the srcdoc.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_A)) {
-          return new Response('', { status: 500 });
-        }
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    act(() => {
-      rerender(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={fileA}
-          isDeck
-        />,
-      );
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // --- KEY ASSERTION ---
-    // The stale snapshot must NOT be restored. Revisiting a file that loaded
-    // earlier deliberately skips the loading skeleton, but its old iframe must
-    // still stay empty after the new read fails.
-    // On the buggy branch the leaked ref satisfies the identity check and
-    // setSource(snap.source) is called, surfacing "V1-CONTENT" instead of the
-    // empty preview.
-    expect(screen.getByTestId('artifact-preview-frame')).toHaveAttribute('srcdoc', '');
-
-    // Also confirm the stale HTML is not present anywhere in the rendered DOM.
-    expect(screen.queryByText(/V1-CONTENT/)).toBeNull();
-
-    // Drain the in-flight File A reload fetch so it doesn't leak into other
-    // tests (it was started in step 2 and never resolved).
-    if (resolveFileAReloadFetch) {
-      act(() => {
-        resolveFileAReloadFetch(new Response('', { status: 500 }));
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-    }
-  });
-
-  // ---------------------------------------------------------------------------
-  // Annotation-freeze stale: Reload while Draw mode is active must update the
-  // visible iframe to the freshly-fetched content, not stay frozen on the
-  // snapshot captured at mode entry.
-  //
-  // Sequence:
-  //   1. Mount deck, wait for "V1-HTML" to load in the srcdoc iframe.
-  //   2. Click the Mark (Draw) button — drawOverlayOpen=true →
-  //      annotationFreezeActive=true → annotationFrozenSource="V1-HTML".
-  //   3. Click Reload — source cleared, fetch deferred (in flight).
-  //   4. Resolve fetch with "V2-NEW-HTML".
-  //   5. Assert: while still in Draw mode the srcdoc iframe shows "V2-NEW-HTML",
-  //      NOT "V1-HTML".  On the current buggy branch previewSource is selected
-  //      from annotationFrozenSource (line 5352 of FileViewer.tsx) whenever
-  //      annotationFreezeActive && annotationFrozenSource !== null, so the reload
-  //      lands in `source` / `livePreviewSource` but is never forwarded to the
-  //      iframe because annotationFrozenSource still holds the stale V1 snapshot.
-  // ---------------------------------------------------------------------------
-  it('updates the srcdoc iframe to the reloaded content when Draw mode is active while Reload resolves', async () => {
-    const v1 = deckHtml('V1-HTML');
-    const v2 = deckHtml('V2-NEW-HTML');
-
-    // Step 1: initial render — "V1-HTML" lands in the iframe srcdoc.
-    vi.stubGlobal('fetch', fetchReturning(v1));
-
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={deckFile()}
-        isDeck
-      />,
-    );
-
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('V1-HTML');
-    });
-
-    // Step 2: enter Draw (Mark) mode — drawOverlayOpen becomes true, which
-    // sets annotationFreezeActive=true and captures annotationFrozenSource="V1".
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /^mark$/i }));
-    });
-
-    // Step 3: click Reload while Draw mode is active.
-    // source goes null; the deferred fetch is now in flight.
-    const { handle: reloadHandle, stub: reloadStub } = deferredFetch();
-    vi.stubGlobal('fetch', reloadStub);
-
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    });
-
-    // Step 4: resolve fetch with V2 content.
-    await act(async () => {
-      reloadHandle.resolve(v2);
-      await Promise.resolve();
-    });
-
-    // Step 5: KEY ASSERTION — the active srcdoc iframe must show V2 content.
-    // On the buggy branch previewSource is pinned to annotationFrozenSource
-    // ("V1-HTML") while annotationFreezeActive is true, so the iframe never
-    // receives the new source even though `source` state was updated.
-    await waitFor(() => {
-      const srcdoc = srcDocFrame().getAttribute('srcDoc') ?? '';
-      expect(srcdoc).toContain('V2-NEW-HTML');
-    });
-    // Confirm the stale snapshot is not what the user sees.
-    expect(srcDocFrame().getAttribute('srcDoc') ?? '').not.toContain('V1-HTML');
-  });
-
-  // ---------------------------------------------------------------------------
-  // Race P2 (Codex P2 #5): canceled-fetch ref leak
-  //
-  // Sequence:
-  //   1. Mount file A ("A-V1"), wait for it to load.
-  //   2. Click Reload on A — prevSourceBeforeReloadRef captures {A, A-V1},
-  //      source goes null, A-reload fetch is in flight (deferred).
-  //   3. Switch to file B — A's in-flight fetch is canceled (cancelled=true);
-  //      the .then() callback returns early without touching the ref, so
-  //      prevSourceBeforeReloadRef remains armed with the A-V1 snapshot.
-  //   4. Switch back to A before B's fetch resolves (B fetch also deferred) —
-  //      B's fetch is also canceled (cancelled=true), ref still armed.
-  //   5. A's new fetch returns null (500) — a normal failed load, NOT a
-  //      Reload click.  On the buggy build the identity check passes
-  //      (snap.fileName='deck-a.html' === file.name='deck-a.html') and
-  //      setSource(snap.source) restores "A-V1" from the stale snapshot.
-  //
-  // The fix: clear prevSourceBeforeReloadRef in the [projectId, file.name]
-  // effect (the per-file reset that also clears sourceEverLoadedRef), so the
-  // ref cannot outlive a file-identity change regardless of fetch-cancel order.
-  // ---------------------------------------------------------------------------
-  it('does not restore the reload snapshot on a normal failed load after B fetch was canceled and the ref was never cleared by a callback', async () => {
-    const fileA = deckFile({ name: 'deck-a.html', path: 'deck-a.html' });
-    const fileB = deckFile({ name: 'deck-b.html', path: 'deck-b.html' });
-
-    const RAW_A = `/api/projects/project-1/raw/deck-a.html`;
-    const RAW_B = `/api/projects/project-1/raw/deck-b.html`;
-
-    const htmlA = deckHtml('A-V1-CONTENT');
-
-    // Step 1: mount with File A and wait for "A-V1-CONTENT" to appear.
-    vi.stubGlobal('fetch', fetchReturning(htmlA));
-
-    const { rerender } = render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={fileA}
-        isDeck
-      />,
-    );
-
-    await waitFor(() => {
-      expect(srcDocFrame().getAttribute('srcDoc')).toContain('A-V1-CONTENT');
-    });
-
-    // Step 2: click Reload on File A.
-    // prevSourceBeforeReloadRef now = { source: htmlA, projectId, fileName: 'deck-a.html' }.
-    // source goes null; A-reload fetch deferred (in flight, never resolved).
-    let resolveAReloadFetch!: (resp: Response) => void;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_A)) {
-          return new Promise<Response>((ok) => {
-            resolveAReloadFetch = ok;
-          });
-        }
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    });
-
-    // Step 3: switch to file B while A-reload fetch is still in flight.
-    // B's fetch is also deferred — it will never resolve in this test.
-    // Switching files sets cancelled=true for A's fetch; the .then() callback
-    // skips all branches (returns at "if (cancelled) return") so the ref stays
-    // armed.  The [projectId, file.name] effect runs and resets
-    // sourceEverLoadedRef (and lastGoodSourceForRoutingRef) — but on the buggy
-    // build it does NOT clear prevSourceBeforeReloadRef.
-    let resolveBFetch!: (resp: Response) => void;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_B)) {
-          return new Promise<Response>((ok) => {
-            resolveBFetch = ok;
-          });
-        }
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    act(() => {
-      rerender(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={fileB}
-          isDeck
-        />,
-      );
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // Step 4: switch back to File A before B's fetch resolves.
-    // B's fetch is canceled (cancelled=true for B's effect cleanup).
-    // A's new fetch returns null (500) immediately — this is a NORMAL failed
-    // load, not a Reload-triggered fetch.  The Reload button was NOT clicked.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url =
-          typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-        if (url.startsWith(RAW_A)) {
-          return new Response('', { status: 500 });
-        }
-        return new Response('', { status: 404 });
-      }),
-    );
-
-    act(() => {
-      rerender(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={fileA}
-          isDeck
-        />,
-      );
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // --- KEY ASSERTION ---
-    // No Reload click happened for this A load.  prevSourceBeforeReloadRef
-    // must have been invalidated when the file identity changed (A→B step 3
-    // or B→A step 4).  A normal 500 response must NOT restore "A-V1-CONTENT".
-    //
-    // On the buggy build: the ref was left armed by the canceled-fetch path
-    // (B's .then() never ran), the identity check passes (A===A), and
-    // setSource(snap.source) wrongly surfaces "A-V1-CONTENT" in the srcdoc.
-    // Revisiting A does not flash the loading skeleton, so the invariant here
-    // is that the iframe stays empty and its stale content does not return.
-    expect(screen.getByTestId('artifact-preview-frame')).toHaveAttribute('srcdoc', '');
-    expect(screen.queryByText(/A-V1-CONTENT/)).toBeNull();
-
-    // Drain deferred fetches so they don't leak into subsequent tests.
-    if (resolveAReloadFetch) {
-      act(() => {
-        resolveAReloadFetch(new Response('', { status: 500 }));
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-    }
-    if (resolveBFetch) {
-      act(() => {
-        resolveBFetch(new Response('', { status: 500 }));
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-    }
-  });
-
-  // ---------------------------------------------------------------------------
-  // Race P3 (Codex P2 line 7377): Manual Edit save silently fails during Reload
-  //
-  // Sequence:
-  //   1. Mount preview.html, wait for source V1 to load into the iframe.
-  //   2. Enter Manual Edit mode — manualEditFrozenSource captures V1,
-  //      sourceRef.current = V1.
-  //   3. Select a target via od-edit-select postMessage (opens the panel so
-  //      onApplyPatch is reachable).
-  //   4. Click Reload — setSource(null) fires.  The [source] effect then sets
-  //      sourceRef.current = null.  The reload fetch is deferred (in flight).
-  //   5. BEFORE the fetch resolves: call panelState.props!.onApplyPatch(…).
-  //      On the buggy build applyManualEdit returns false immediately because
-  //      sourceRef.current == null — no file-write API call is made.
-  //
-  // Fix: either skip the setSource(null) when manualEditFrozenSource !== null,
-  // or keep sourceRef.current pointed at the last-good source across the
-  // reload window so applyManualEdit can still operate.
-  //
-  // Observable assertion: the file-write API is called, confirming the edit
-  // was not silently dropped.
-  // ---------------------------------------------------------------------------
-  it('saves a Manual Edit patch while Reload exits through the URL standby', async () => {
-    const initialSource =
-      '<!doctype html><html><body>' +
-      '<script>localStorage.setItem("k","v");</script>' +
-      '<h1 data-od-id="hero">Hello</h1>' +
-      '</body></html>';
-
-    const savedSources: string[] = [];
-    let reloadFetchStarted = false;
-    let reloadEffectFetches = 0;
-
-    // Initial and confirm-source reads resolve immediately. Reload while Edit
-    // is active should refresh the hidden URL iframe instead of starting the
-    // old srcDoc source reload effect.
-    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof Request
-            ? input.url
-            : String(input);
-
-      // File-write (save) POST — record and return success.
-      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
-        const payload = JSON.parse(String(init.body)) as { content: string };
-        savedSources.push(payload.content);
-        return new Response(
-          JSON.stringify({ file: manualEditFile() }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      // Deployments — not relevant but FileViewer fetches this on mount.
-      if (url.includes('/api/projects/project-1/deployments')) {
-        return new Response(
-          JSON.stringify({ deployments: [] }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      // Raw source GET — the same URL may be used by three distinct callers:
-      //   (a) Initial load effect: cacheBust=<mtime>-<reloadKey>-<filesRefreshKey>
-      //       → resolve immediately before reloadFetchStarted.
-      //   (b) Legacy reload effect: cacheBust=<mtime>-<N>-<N>. It must not run
-      //       when Reload exits Edit through the warm URL standby.
-      //   (c) confirmManualEditHistorySource: cacheBust=<Date.now() timestamp>
-      //       → pure 13-digit integer, no dashes; resolve immediately with
-      //       initialSource so applyManualEdit can proceed without blocking on
-      //       the deferred reload fetch (avoids test deadlock after revert of
-      //       the sourceMatchesFrozen shortcut, PR #4652 8th-pass review).
-      if (url.includes('/api/projects/project-1/raw/preview.html')) {
-        if (!reloadFetchStarted) {
-          // (a) Initial load: resolve immediately.
-          return new Response(initialSource, { status: 200 });
-        }
-        // Distinguish reload-effect fetch (cacheBust contains dashes, e.g.
-        // "1710000000-1-0") from confirm-source fetch (cacheBust is a pure
-        // integer timestamp, e.g. "1750800000000").
-        const cacheBustParam = new URL(url, 'http://x').searchParams.get('cacheBust') ?? '';
-        const isConfirmSourceFetch = /^\d+$/.test(cacheBustParam);
-        if (isConfirmSourceFetch) {
-          // (c) confirmManualEditHistorySource: resolve immediately so it can
-          // return true and let applyManualEdit proceed to the file-write call.
-          return new Response(initialSource, { status: 200 });
-        }
-        // (b) Record an unintended legacy reload-effect fetch without hanging
-        // the test, so the assertion below reports the actual regression.
-        reloadEffectFetches += 1;
-        return new Response(initialSource, { status: 200 });
-      }
-
-      return new Response('{}', {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    // Step 1: settled source starts on the daemon-guarded URL lane.
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={manualEditFile()}
-      />,
-    );
-
-    await waitFor(() => {
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
-      expect(frame.getAttribute('src')).toContain('odPreviewBridge=sandbox');
-    });
-
-    // Step 2: enter Manual Edit mode — manualEditFrozenSource captures V1.
-    act(() => {
-      fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
-    });
-
-    await waitFor(() => {
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(frame.srcdoc).toContain('Hello');
-    });
-
-    // Step 3: select a target so the panel (and onApplyPatch) is available.
-    await selectManualEditTarget();
-
-    // Step 4: mark subsequent raw reads, then click Reload. The handler first
-    // settles Manual Edit and primes the hidden URL frame; it intentionally
-    // does not bump reloadKey or clear the srcDoc source.
-    reloadFetchStarted = true;
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
-    });
-
-    // Drain one microtask tick so React flushes the Reload render and any
-    // synchronous state updates from the click handler settle.
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // Step 5: attempt to save a Manual Edit patch while the asynchronous
-    // Reload exit is in flight. confirmManualEditHistorySource uses a pure
-    // integer cacheBust and resolves immediately in this mock.
-    act(() => {
-      panelState.props!.onApplyPatch(
-        { id: 'hero', kind: 'set-text', value: 'Updated text' },
-        'Content: Hero',
-      );
-    });
-
-    // --- KEY ASSERTION ---
-    // The file-write API must have been called.  The pre-fix regression was
-    // applyManualEdit returning false at the sourceRef.current == null guard
-    // before reaching writeProjectTextFileDetailed (savedSources stays empty).
-    // The fix (reloadHtmlPreview skipping setSource(null) when Manual Edit is
-    // active) keeps sourceRef.current non-null throughout the reload window.
-    await waitFor(() => {
-      expect(savedSources).toHaveLength(1);
-    });
-
-    // The written content must contain the user's edit.
-    expect(savedSources[0]).toContain('Updated text');
-    await waitFor(() => {
-      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
-      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('url-load');
-    });
-    expect(reloadEffectFetches).toBe(0);
-  });
-
-  it('reloads fresh bytes when Edit exits without an eligible URL standby', async () => {
-    window.history.replaceState({}, '', '/?forceInline=1');
-    const initialSource =
-      '<!doctype html><html><body>'
-      + '<img src="/assets/hero.png" alt="Hero">'
-      + '<h1 data-od-id="hero">Before reload</h1>'
-      + '</body></html>';
-    const reloadedSource = initialSource.replace('Before reload', 'After reload');
-    let rawReads = 0;
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === 'string'
-        ? input
-        : input instanceof Request
-          ? input.url
-          : String(input);
-      if (url.includes('/api/projects/project-1/raw/preview.html')) {
-        rawReads += 1;
-        return new Response(rawReads === 1 ? initialSource : reloadedSource, { status: 200 });
-      }
-      if (url.includes('/api/projects/project-1/deployments')) {
-        return new Response(JSON.stringify({ deployments: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response('{}', {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <FileViewer
-        projectId="project-1"
-        projectKind="prototype"
-        file={manualEditFile()}
-      />,
-    );
-    await waitFor(() => {
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(frame.srcdoc).toContain('Before reload');
-    });
-
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    fireEvent.click(await screen.findByTestId('manual-edit-mode-toggle'));
     await waitFor(() => {
       expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
     });
-    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    expect(currentFrame()).toBe(frame);
+    expect(frame.src).toBe(runtimeUrl);
 
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     await waitFor(() => {
       expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(frame.srcdoc).toContain('After reload');
     });
-    expect(rawReads).toBeGreaterThanOrEqual(2);
-    window.history.replaceState({}, '', '/');
+    expect(currentFrame()).toBe(frame);
+    expect(frame.src).toBe(runtimeUrl);
+  });
+
+  it('enables Draw without replacing the retained Runtime', async () => {
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlFile()} />);
+    const frame = await promoteStandby();
+    const runtimeUrl = frame.src;
+
+    fireEvent.click(await screen.findByTestId('draw-overlay-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('true');
+    });
+    expect(currentFrame()).toBe(frame);
+    expect(frame.src).toBe(runtimeUrl);
   });
 });

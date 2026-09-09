@@ -327,6 +327,10 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
   } catch (_) {}
 })();</script>`;
 
+export function buildDeckStageFallbackScript(): string {
+  return DECK_STAGE_FALLBACK_SCRIPT;
+}
+
 export function htmlUsesDeckStageElement(html: string): boolean {
   return DECK_STAGE_OPEN_TAG_RE.test(html);
 }

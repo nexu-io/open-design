@@ -1304,6 +1304,15 @@
   visibility: hidden;
   pointer-events: none;
 }
+/* A terminal-runtime standby must finish layout and compositor paint before
+   atomic promotion. Keep it visually transparent and non-interactive instead
+   of visibility:hidden, which pauses child-frame animation frames and can
+   leave Electron with a blank surface when the same iframe becomes current. */
+.artifact-preview-transport-stack iframe[data-od-active='false'][data-od-standby='true'] {
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+}
 /* Manual Edit hands ownership between the canonical URL document and its
    bridge-enabled srcDoc twin. Keep the outgoing frame painted until the
    incoming frame reports its exact document revision ready. `opacity: 0`
@@ -1331,6 +1340,16 @@
   display: grid;
   place-items: center;
   background: var(--bg-panel);
+}
+.preview-runtime-navigation-error {
+  align-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.preview-runtime-navigation-error p {
+  margin: 0;
+  font-size: 13px;
 }
 .preview-asset-warning {
   position: absolute;

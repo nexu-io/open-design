@@ -1,7 +1,8 @@
 import type { Frame, FrameLocator, Locator, Page } from '@playwright/test';
 
 export const ACTIVE_ARTIFACT_PREVIEW_SELECTOR =
-  '[data-testid="artifact-preview-frame"]:not([data-od-handoff-pending]):visible, '
+  '[data-testid="preview-runtime-frame-current"][data-od-active="true"]:visible, '
+  + '[data-testid="artifact-preview-frame"]:not([data-od-handoff-pending]):visible, '
   + '[data-testid="live-artifact-preview-frame"]:visible';
 
 export function activeArtifactPreview(page: Page): Locator {

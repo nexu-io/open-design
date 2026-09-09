@@ -11,6 +11,7 @@ import {
 import type { Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { T } from '@/timeouts';
+import { PREVIEW_URL_GUARD_MAX_HTML_BYTES } from '@open-design/contracts/runtime/preview-guards';
 
 const STORAGE_KEY = 'open-design:config';
 test.describe.configure({ timeout: T.xlong });
@@ -126,14 +127,20 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
 
   const preview = artifactPreviewFrame(page);
   await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
+  await preview.locator('body').evaluate(() => {
+    (window as Window & typeof globalThis & { __odCodeToggleMarker?: string })
+      .__odCodeToggleMarker = 'home-retained';
+  });
 
   await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Code', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Preview', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
-  const prewarmedSrcDoc = page.frameLocator('iframe[data-testid="artifact-preview-frame-srcdoc"]');
-  await expect(prewarmedSrcDoc.getByTestId('mobile-page-home')).toBeAttached();
-  await waitForUrlPreviewRefreshToSettle(page);
+  await expect(preview.getByTestId('mobile-page-home')).toBeAttached();
+  expect(await preview.locator('body').evaluate(() =>
+    (window as Window & typeof globalThis & { __odCodeToggleMarker?: string })
+      .__odCodeToggleMarker,
+  )).toBe('home-retained');
 
   await preview.getByRole('button', { name: 'Profile' }).click();
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
@@ -176,8 +183,9 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
   await selectedHtml.fill(editedHtml);
   await inspectSaveButton(page).click();
 
-  // Saving rebuilds the srcDoc transport. The consumed Profile snapshot must
-  // not replay over the newer Home navigation when that later load completes.
+  // Saving stages the refreshed document behind the retained preview. The
+  // consumed Profile snapshot must not replay over the newer Home navigation
+  // when the candidate is promoted.
   await expectFileSource(page, projectId, 'mobile-app.html', ['data-edit-revision="fresh"']);
   await expect(preview.locator('[data-edit-revision="fresh"]')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
@@ -193,11 +201,17 @@ test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async
 
   const preview = artifactPreviewFrame(page);
   await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
+  await preview.locator('body').evaluate(() => {
+    (window as Window & typeof globalThis & { __odCodeToggleMarker?: string })
+      .__odCodeToggleMarker = 'today-retained';
+  });
   await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await page.getByRole('tab', { name: 'Preview', exact: true }).click();
-  await expect(page.frameLocator('iframe[data-testid="artifact-preview-frame-srcdoc"]')
-    .getByTestId('mobile-page-today')).toBeAttached();
-  await waitForUrlPreviewRefreshToSettle(page);
+  await expect(preview.getByTestId('mobile-page-today')).toBeAttached();
+  expect(await preview.locator('body').evaluate(() =>
+    (window as Window & typeof globalThis & { __odCodeToggleMarker?: string })
+      .__odCodeToggleMarker,
+  )).toBe('today-retained');
 
   await preview.getByRole('button', { name: 'Profile' }).click();
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
@@ -236,7 +250,7 @@ test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 });
 
-test('[P0] srcDoc page navigation keeps manual edit hover guides across files and re-entry', async ({ page }) => {
+test('[P0] preview page navigation keeps manual edit hover guides across files and re-entry', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Cross-file mobile edit');
   await seedHtmlArtifact(
@@ -281,26 +295,6 @@ test('[P0] srcDoc page navigation keeps manual edit hover guides across files an
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 });
 
-async function waitForUrlPreviewRefreshToSettle(page: Page) {
-  const frame = page.locator(
-    'iframe[data-od-render-mode="url-load"][data-od-active="true"]',
-  );
-  let observedSrc: string | null = null;
-  let unchangedSince = Date.now();
-  await expect.poll(async () => {
-    const currentSrc = await frame.getAttribute('data-od-loaded-src');
-    if (!currentSrc || currentSrc === 'about:blank') return 0;
-    if (currentSrc !== observedSrc) {
-      observedSrc = currentSrc;
-      unchangedSince = Date.now();
-    }
-    return Date.now() - unchangedSince;
-  }, {
-    message: 'URL preview should stop reloading before the runtime-state interaction',
-    timeout: 5_000,
-  }).toBeGreaterThanOrEqual(400);
-}
-
 async function selectPreviewElementThroughBridge(
   page: Page,
   frame: ReturnType<Page['frameLocator']>,
@@ -310,7 +304,7 @@ async function selectPreviewElementThroughBridge(
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
   // Entering manual-edit mode re-injects the edit bridge and re-emits its targets
   // for a beat (`setTimeout(postTargets, 0)` in edit-mode/bridge.ts), and the
-  // preview iframe can still settle (srcDoc swap / target re-emit) at the moment we
+  // preview iframe can still settle (candidate promotion / target re-emit) at the moment we
   // click. That occasionally swallows the first click, which then hangs on
   // Playwright's post-click stability check until the 30s test timeout. Retry the
   // click until the element is actually marked selected, with a short per-attempt
@@ -332,6 +326,7 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
     .replace(
       '</body>',
       '<img id="offline-image" src="assets/offline.svg">' +
+        '<script src="scripts/support.js"></script>' +
         '<script type="module" src="scripts/main.js"></script></body>',
     );
   await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', entryHtml);
@@ -340,6 +335,12 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
     projectId,
     'styles/offline.css',
     'body{--offline-export-proof:ready;background-image:url("../assets/offline.svg")}',
+  );
+  await seedProjectFile(
+    page,
+    projectId,
+    'scripts/support.js',
+    'document.body.dataset.offlineSupport = "ready";',
   );
   await seedProjectFile(
     page,
@@ -362,7 +363,13 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await page.goto(`/projects/${projectId}/files/toolbar-preview.html`);
   await openDesignFile(page, 'toolbar-preview.html');
 
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(artifactPreview(page)).toBeVisible();
+  const previewFrame = artifactPreviewFrame(page);
+  await expect(previewFrame.locator('body')).toHaveAttribute('data-offline-support', 'ready');
+  await expect(previewFrame.locator('body')).toHaveAttribute('data-offline-motion', 'ready');
+  await expect.poll(() => previewFrame.locator('body').evaluate((body) => (
+    getComputedStyle(body).getPropertyValue('--offline-export-proof').trim()
+  ))).toBe('ready');
   const viewMode = page.getByRole('tablist', { name: 'View mode' });
   await expect(viewMode).toBeVisible();
   await expect(viewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -530,7 +537,7 @@ test('[P1] powered WebGL HTML artifacts open through the isolated preview route'
   const preview = artifactPreview(page);
   await expect(preview).toBeVisible();
   await expect(preview).toHaveAttribute('data-od-powered', 'true');
-  await expect(preview).toHaveAttribute('data-od-render-mode', 'url-load');
+  await expect(preview).toHaveAttribute('data-od-render-mode', 'runtime-url');
   await expect(preview).toHaveAttribute('src', new RegExp(`/api/projects/${projectId}/powered/powered-webgl\\.html`));
 
   const frame = artifactPreviewFrame(page);
@@ -783,6 +790,65 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
   await expect(frame.getByText('Slide One')).toBeVisible();
   await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
+
+  // Opening a preview tool must leave the preview viewport the same size it
+  // was. A deck lays its slides out against that viewport — a scroll-snap deck
+  // sizes each slide `flex: 0 0 100vw` — so a viewport that changes width
+  // under a settled document re-anchors it partway between two slides while
+  // the host keeps reporting the slide index it last chose. The user sees the
+  // deck jump to a different page with nothing in the product's own state
+  // saying it moved.
+  await expect(page.locator('.deck-thumbnail-rail')).toBeVisible();
+  const anchoredWidth = (await artifactPreview(page).boundingBox())?.width ?? 0;
+  expect(anchoredWidth).toBeGreaterThan(0);
+
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
+  await expect(artifactPreviewFrame(page).locator('html[data-od-edit-mode]')).toHaveCount(1);
+  await expect
+    .poll(async () => (await artifactPreview(page).boundingBox())?.width ?? 0)
+    .toBe(anchoredWidth);
+});
+
+test('[P0] manual edit mode withholds mouse events from the artifact', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Manual edit pointer ownership');
+  await seedHtmlArtifact(page, projectId, 'pointer-owner.html', artifactMouseCounterHtml());
+  await page.goto(`/projects/${projectId}/files/pointer-owner.html`);
+  await openDesignFile(page, 'pointer-owner.html');
+
+  const frame = artifactPreviewFrame(page);
+  const target = frame.locator('#target');
+  const all = frame.locator('#all');
+  const whileEditing = frame.locator('#editing');
+  await expect(target).toBeVisible();
+
+  // Control. Outside edit mode the artifact owns its own interactions. An
+  // artifact whose handlers stop firing in preview is a dead artifact, which
+  // would be a worse regression than the bug being fixed here.
+  await target.click();
+  await expect(all).not.toHaveText('0');
+
+  // In edit mode a mouse event means "act on this element as an editor". The
+  // artifact's own handlers must not also run: the framework deck registers a
+  // capture-phase document click that turns the page, so the click that was
+  // only meant to select something navigates away underneath it. Hover is
+  // withheld for the same reason — an authored hover effect restyles or moves
+  // the element out from under the pointer that is about to click it.
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
+  await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
+
+  await target.click();
+  await expect(page.locator('.manual-edit-modal')).toBeVisible();
+  await expect(whileEditing).toHaveText('0');
+
+  // And the artifact gets its interactions back on the way out, so this is a
+  // loan for the duration of edit mode rather than a permanent confiscation.
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
+  await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  const beforeExitClick = await all.textContent();
+  await target.click();
+  await expect(all).not.toHaveText(String(beforeExitClick));
+  await expect(whileEditing).toHaveText('0');
 });
 
 test('[P0] deck presentation host exit remains usable after the sandboxed slide takes focus', async ({ page }) => {
@@ -799,11 +865,95 @@ test('[P0] deck presentation host exit remains usable after the sandboxed slide 
 
   const overlay = page.locator('.present-overlay');
   await expect(overlay).toBeVisible();
-  const presentedSlide = overlay.frameLocator('iframe[title="present"]');
+  // Presenting is a view change, not a navigation. The document the user was
+  // already looking at is promoted to fill the window and the overlay carries
+  // only host chrome above it, so the overlay owning no browsing context of
+  // its own is part of the invariant rather than an implementation detail: a
+  // second iframe here — even at the same URL — would drop the JS heap,
+  // timers and canvas contexts the running deck is holding.
+  await expect(overlay.locator('iframe')).toHaveCount(0);
+  await expect(page.locator('.html-viewer.is-tab-present')).toBeVisible();
+  const presentedSlide = artifactPreviewFrame(page);
   const slideHeading = presentedSlide.getByRole('heading', { name: 'Slide One' });
   await expect(slideHeading).toBeVisible();
   await slideHeading.click();
   await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+
+  const presenterClosed = presenter.waitForEvent('close');
+  await overlay.getByRole('button', { name: 'Exit presentation' }).click();
+  await expect(overlay).toHaveCount(0);
+  await presenterClosed;
+  expect(presenter.isClosed()).toBe(true);
+});
+
+/**
+ * The transport this branch is named after, end to end.
+ *
+ * Every other presentation spec uses a deck small enough for the daemon to
+ * buffer. A document over `PREVIEW_URL_GUARD_MAX_HTML_BYTES` takes a different
+ * branch: the scoped preview origin streams it and injects the runtime
+ * bootstrap on the way past, rather than assembling the response in memory.
+ * Nothing covered that combination — scoped origin *and* streaming *and*
+ * presentation — which is where both of this branch's red jobs turned out to
+ * live. That is not a coincidence worth leaving uncovered.
+ *
+ * Deliberately not covered here, because the daemon-side unit specs already
+ * own them and duplicating them through the UI would only make this slower and
+ * flakier: which capabilities the bootstrap advertises, and whether the
+ * presentation bridge is injected exactly once. This spec asserts only what the
+ * UI can actually observe — that the document really did arrive over the
+ * streaming path, and that presenting it works.
+ */
+test('[P0] a deck too large to buffer presents, advances and exits on the scoped origin', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Streaming deck presentation');
+  await seedDeckArtifact(
+    page,
+    projectId,
+    'streaming-deck.html',
+    'Streaming Deck',
+    ['Slide One', 'Slide Two'],
+    { padBytes: PREVIEW_URL_GUARD_MAX_HTML_BYTES + 4096 },
+  );
+  await page.goto(`/projects/${projectId}/files/streaming-deck.html`);
+  await openDesignFile(page, 'streaming-deck.html');
+
+  const frame = artifactPreviewFrame(page);
+  await expect(frame.getByRole('heading', { name: 'Slide One' })).toBeVisible();
+
+  // Prove the transport rather than assuming it: the document has to have come
+  // from the scoped preview origin (`n-<session>` / `p-<session>`), and to be
+  // over the threshold that makes the daemon stream it instead of buffering.
+  // `location.origin` is "null" in this sandbox, so read the URL itself.
+  const served = await frame.locator('body').evaluate(() => ({
+    href: location.href,
+    bytes: document.documentElement.outerHTML.length,
+  }));
+  expect(served.href).toMatch(/^https?:\/\/[np]-[^./]+\.localhost(?::\d+)?\//u);
+  expect(served.bytes).toBeGreaterThan(PREVIEW_URL_GUARD_MAX_HTML_BYTES);
+
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByRole('menuitem', { name: /^In this tab/i }).click();
+  const presenter = await popupPromise;
+
+  const overlay = page.locator('.present-overlay');
+  await expect(overlay).toBeVisible();
+  await expect(frame.getByRole('heading', { name: 'Slide One' })).toBeVisible();
+
+  // Advance while presenting. It has to come from inside the document: the
+  // product hides both host slide controls in this mode — the inline one lives
+  // in `.viewer-toolbar` (`display: none` under `.is-tab-present`) and the
+  // floating one is gated on `!inTabPresent`. So this is the real presenter
+  // gesture, and it exercises the streamed document's own deck runtime.
+  const frameBox = await artifactPreview(page).boundingBox();
+  expect(frameBox).not.toBeNull();
+  await page.mouse.click(
+    Math.round(frameBox!.x + frameBox!.width / 2),
+    Math.round(frameBox!.y + frameBox!.height / 2),
+  );
+  await page.keyboard.press('ArrowRight');
+  await expect(frame.getByRole('heading', { name: 'Slide Two' })).toBeVisible();
 
   const presenterClosed = presenter.waitForEvent('close');
   await overlay.getByRole('button', { name: 'Exit presentation' }).click();
@@ -1126,6 +1276,13 @@ async function seedDeckArtifact(
     stopsSlideMessagePropagation?: boolean;
     handlesKeyboard?: boolean;
     frameworkDeck?: boolean;
+    /**
+     * Pad the document past `PREVIEW_URL_GUARD_MAX_HTML_BYTES` so the daemon
+     * serves it through the streaming branch of the scoped preview origin
+     * instead of buffering it. The padding is an HTML comment, so it changes
+     * the transport without changing what the deck renders.
+     */
+    padBytes?: number;
   } = {},
 ) {
   const slideHtml = slides
@@ -1193,7 +1350,8 @@ async function seedDeckArtifact(
     {
       data: {
         name: fileName,
-        content: `<!doctype html><html><body>${deckChrome}${deckHtml}${protocolText}${slideScript}</body></html>`,
+        content: `<!doctype html><html><body>${deckChrome}${deckHtml}${protocolText}${slideScript}`
+          + `${options.padBytes ? `<!-- ${'x'.repeat(options.padBytes)} -->` : ''}</body></html>`,
         artifactManifest: {
           version: 1,
           kind: 'deck',
@@ -1438,6 +1596,45 @@ function deckHtml(): string {
       });
       render();
       window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');
+    </script>
+  </body>
+</html>`;
+}
+
+// Mirrors the shape the framework deck ships (`deck-framework.ts`): a
+// document-level listener registered in capture at parse time, i.e. before the
+// host's edit bridge is installed and on the same node, so `stopPropagation`
+// from the bridge cannot reach it.
+function artifactMouseCounterHtml(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Pointer Owner</title>
+  </head>
+  <body style="font-family: system-ui, sans-serif;">
+    <p data-od-id="target" id="target" style="font-size:32px;padding:40px;">Click target</p>
+    <p>all: <span data-od-id="all" id="all">0</span></p>
+    <p>while-editing: <span data-od-id="editing" id="editing">0</span></p>
+    <script>
+      (function () {
+        var all = 0;
+        var editing = 0;
+        // Recorded against the document's own edit-mode marker rather than as
+        // a delta, so the assertion cannot be confused by pointer transitions
+        // that land either side of entering edit mode.
+        function record() {
+          all += 1;
+          document.getElementById('all').textContent = String(all);
+          if (document.documentElement.hasAttribute('data-od-edit-mode')) {
+            editing += 1;
+            document.getElementById('editing').textContent = String(editing);
+          }
+        }
+        document.addEventListener('click', record, true);
+        document.addEventListener('mouseover', record, true);
+        document.addEventListener('mousedown', record, true);
+      })();
     </script>
   </body>
 </html>`;

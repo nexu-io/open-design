@@ -6,6 +6,7 @@ import {
   createCollabCluster,
   type CollabCluster,
 } from '@/playwright/collab-cluster';
+import { activeArtifactPreviewFrame } from '@/playwright/artifact-preview';
 import { startFakeCollabHub } from '@/playwright/fake-collab-hub';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
@@ -15,11 +16,8 @@ import { T } from '@/timeouts';
 
 const WORKSPACE_ID = 'ws-multi-client';
 const PROJECT_NAME = 'Realtime shared workspace';
-// A freshly pulled read-only mirror uses the compact design-file iframe before
-// the richer FileViewer test-id variants mount. There is exactly one visible
-// artifact iframe in this flow.
-const PREVIEW_SELECTOR = 'iframe:visible';
 const COLLAB_COMMENT_NOTE = 'Member asks for a clearer shared headline.';
+const TEAM_PREVIEW_SYNC_BUDGET_MS = 8_000;
 const COLLAB_COMMENT_TARGET = {
   filePath: 'index.html',
   elementId: 'shared-heading',
@@ -35,6 +33,13 @@ const OWNER = {
   memberId: 'mem-multi-owner',
   name: 'Olivia Owner',
   role: 'owner' as const,
+};
+
+type TeamPreviewSyncWitness = {
+  loadingSeen: boolean;
+  minCurrentCount: number;
+  observer: MutationObserver;
+  versions: string[];
 };
 const MEMBER = {
   controlKey: 'multi-client-member-key',
@@ -420,7 +425,7 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
     await expect(memberPage).toHaveURL(new RegExp(`/projects/${projectId}`), {
       timeout: T.long,
     });
-    const memberPreview = memberPage.frameLocator(PREVIEW_SELECTOR);
+    const memberPreview = activeArtifactPreviewFrame(memberPage);
     const initialMemberPull = await hub.waitForCommand(
       (entry) =>
         entry.memberId === MEMBER.memberId &&
@@ -606,6 +611,141 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
     expect(memberFile.ok(), memberFileBody).toBeTruthy();
     expect(memberFileBody).toContain('Owner version 2');
     expect(contentEvent.workspaceId).toBe(WORKSPACE_ID);
+
+    await test.step('sync an owner UI edit into the open member preview without a blank gap', async () => {
+      await ownerPage.bringToFront();
+      const ownerPreview = activeArtifactPreviewFrame(ownerPage);
+      await expect(
+        ownerPreview.getByRole('heading', { name: 'Owner version 2' }),
+      ).toBeVisible({ timeout: T.long });
+
+      // Observe the member host, not authored DOM paint. A healthy document
+      // replacement may legitimately change the iframe node, but it must
+      // always retain one current Runtime until the exact candidate settles.
+      await memberPage.evaluate(() => {
+        const target = window as Window & typeof globalThis & {
+          __teamPreviewSyncWitness?: TeamPreviewSyncWitness;
+        };
+        function sample() {
+          const current = Array.from(document.querySelectorAll<HTMLIFrameElement>(
+            '[data-testid="preview-runtime-frame-current"][data-od-active="true"]',
+          ));
+          const witness = target.__teamPreviewSyncWitness;
+          if (!witness) return;
+          witness.minCurrentCount = Math.min(witness.minCurrentCount, current.length);
+          witness.loadingSeen ||= document.querySelector(
+            '[data-testid="artifact-preview-first-load"]',
+          ) !== null;
+          for (const frame of current) {
+            const version = frame.dataset.odDocumentVersion;
+            if (version && witness.versions.at(-1) !== version) witness.versions.push(version);
+          }
+        }
+        const observer = new MutationObserver(sample);
+        target.__teamPreviewSyncWitness = {
+          loadingSeen: false,
+          minCurrentCount: Number.POSITIVE_INFINITY,
+          observer,
+          versions: [],
+        };
+        observer.observe(document.body, {
+          attributes: true,
+          attributeFilter: ['data-od-active', 'data-od-document-version', 'data-testid'],
+          childList: true,
+          subtree: true,
+        });
+        sample();
+      });
+
+      // The preceding comment relay leaves the Comments side panel active.
+      // Close it through the panel-owned collapse control: the floating panel
+      // intentionally sits above the toolbar and can intercept a second click
+      // on the toolbar toggle.
+      const commentPanelToggle = ownerPage.getByTestId('comment-panel-toggle');
+      if (await commentPanelToggle.getAttribute('aria-pressed') === 'true') {
+        const commentPanel = ownerPage.getByTestId('comment-side-panel');
+        await commentPanel.getByRole('button', { name: 'Hide Comments' })
+          .click({ timeout: T.medium });
+        await expect(commentPanel).toHaveCount(0, { timeout: T.medium });
+      } else if (
+        await ownerPage.getByTestId('board-mode-toggle').getAttribute('aria-pressed') === 'true'
+      ) {
+        await clickPreviewToolbarAction(ownerPage, 'board-mode-toggle', /^Comment$/);
+      }
+      const manualEditToggle = ownerPage.getByTestId('manual-edit-mode-toggle');
+      await expect(manualEditToggle).toBeEnabled({ timeout: T.medium });
+      // The preview toolbar collapses actions into a "more" menu when they do
+      // not fit, so the inline button can be present and enabled while not
+      // being visible. `clickPreviewToolbarAction` takes the inline control
+      // when it is on screen and the overflow item otherwise; a raw click on
+      // the test id waits forever on the hidden inline copy.
+      await clickPreviewToolbarAction(ownerPage, 'manual-edit-mode-toggle', /^Edit$/);
+      await expect(manualEditToggle).toHaveAttribute('aria-pressed', 'true', {
+        timeout: T.medium,
+      });
+      await expect(ownerPreview.locator('html[data-od-edit-mode]')).toHaveCount(1, {
+        timeout: T.medium,
+      });
+      const ownerHeading = ownerPreview.locator('[data-od-id="shared-heading"]');
+      await expect(async () => {
+        await ownerHeading.click({ timeout: T.short });
+        await expect(ownerHeading).toHaveAttribute('data-od-edit-selected', 'true', {
+          timeout: T.short,
+        });
+      }).toPass({ timeout: T.long });
+      const contentSection = ownerPage.locator('.manual-edit-modal .cc-section')
+        .filter({ hasText: 'CONTENT' })
+        .first();
+      await expect(contentSection).toBeVisible({ timeout: T.medium });
+      const textInput = contentSection.getByRole('textbox', { name: 'Text' });
+      await expect(textInput).toBeEditable({ timeout: T.medium });
+      await textInput.fill('Owner UI version 3', { timeout: T.medium });
+
+      const saveCompleted = ownerPage.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === 'POST'
+          && url.pathname === `/api/projects/${projectId}/files`;
+      }, { timeout: T.medium });
+      const syncStartedAt = Date.now();
+      await ownerPage.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ })
+        .click({ timeout: T.medium });
+      const saveResponse = await saveCompleted;
+      expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+      await expect(
+        memberPreview.getByRole('heading', { name: 'Owner UI version 3' }),
+      ).toBeVisible({ timeout: T.medium });
+      const syncDurationMs = Date.now() - syncStartedAt;
+      expect(syncDurationMs).toBeLessThan(TEAM_PREVIEW_SYNC_BUDGET_MS);
+      await expect(
+        memberPreview.getByRole('heading', { name: 'Owner version 2' }),
+      ).toHaveCount(0);
+
+      const witness = await memberPage.evaluate(() => {
+        const target = window as Window & typeof globalThis & {
+          __teamPreviewSyncWitness?: TeamPreviewSyncWitness;
+        };
+        const value = target.__teamPreviewSyncWitness;
+        value?.observer.disconnect();
+        delete target.__teamPreviewSyncWitness;
+        return value ? {
+          loadingSeen: value.loadingSeen,
+          minCurrentCount: value.minCurrentCount,
+          versions: value.versions,
+        } : null;
+      });
+      expect(witness).not.toBeNull();
+      expect(witness?.loadingSeen).toBe(false);
+      expect(witness?.minCurrentCount).toBeGreaterThanOrEqual(1);
+      expect(witness?.versions).toHaveLength(2);
+
+      // Leaving edit mode goes through the same overflow-aware accessor as
+      // entering it: the toolbar can collapse this action either way round.
+      await clickPreviewToolbarAction(ownerPage, 'manual-edit-mode-toggle', /^Edit$/);
+      await expect(manualEditToggle).toHaveAttribute('aria-pressed', 'false', {
+        timeout: T.medium,
+      });
+    });
 
     const unshare = await ownerPage.request.post(
       `/api/workspaces/${WORKSPACE_ID}/projects/${projectId}/move`,
