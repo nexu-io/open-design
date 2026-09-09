@@ -133,9 +133,33 @@ describe("exact release plan", () => {
     const closurePaths = resolveContentIdentityDeclaration(registry, "closure.build").sources.map(({ path }) => path);
     expect(closurePaths).toContain("apps/closure/src");
     expect(closurePaths).toContain("apps/web/sidecar");
-    expect(closurePaths).toEqual(expect.arrayContaining(["skills", "design-templates", "design-systems", "craft", "plugins/_official", "plugins/registry", "assets/frames", "assets/community-pets", "prompt-templates", "data/plugin-previews"]));
+    for (const resource of CLOSURE_DATA_RESOURCES) for (const input of resource.inputs) expect(closurePaths).not.toContain(input.source);
     expect(closurePaths).not.toContain("shells/electron/src");
     expect(closurePaths).not.toContain("packages/electron-kit/src");
+  });
+
+  it("isolates each data-only change using the real registry without rebuilding runtime, carrier or tests", async () => {
+    const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+    const registry = parseContentIdentityRegistry(JSON.parse(await readFile(join(repositoryRoot, "tools/release/resources/exact-plan-identities.json"), "utf8")));
+    const root = await mkdtemp(join(tmpdir(), "od-exact-data-plan-")); roots.push(root);
+    const paths = new Set(Object.keys(registry.identities).flatMap(id => resolveContentIdentityDeclaration(registry, id).sources.map(source => source.path)));
+    for (const path of paths) {
+      const directory = (await stat(join(repositoryRoot, path))).isDirectory();
+      const file = join(root, path, ...(directory ? ["fixture.ts"] : []));
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, path.endsWith("package.json") ? '{"name":"fixture","version":"1.0.0"}' : "baseline\n");
+    }
+    const input = { root, registry, acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" as const };
+    const before = await createExactPlan(input);
+    for (const resource of CLOSURE_DATA_RESOURCES) {
+      const path = join(root, resource.inputs[0]!.source, "fixture.ts");
+      await writeFile(path, "changed data\n");
+      const after = await createExactPlan(input);
+      expect(selectExactPlanActions(after, identities(before)).map(action => action.id), resource.id).toEqual([
+        `closure.data.${resource.id}.build`, "closure.acceptance.hot", "exact.compose", "exact.publish", "exact.activate",
+      ]);
+      await writeFile(path, "baseline\n");
+    }
   });
 
   it.each([

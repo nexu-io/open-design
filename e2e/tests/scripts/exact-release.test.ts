@@ -37,8 +37,8 @@ describe("exact Electron release topology", () => {
       for (const parent of source.inherits ?? []) collect(parent);
       for (const entry of source.paths ?? []) paths.add(typeof entry === "string" ? entry : entry.path);
     }
-    // Until independent producers replace the aggregate scene, every bundled
-    // Capsule, Closure and resource input must invalidate that aggregate.
+    // Every actual producer input must be covered; data payloads now belong to
+    // independent producers rather than the runtime-only scene collection.
     for (const name of nodes) collect(name);
     paths.add("tools/release/resources/exact-plan-identities.json");
     paths.add("tools/release/src/exact/plan.ts");
@@ -46,6 +46,35 @@ describe("exact Electron release topology", () => {
     expect(uncovered).toEqual([]);
     if (suite === "electron-platform") {
       expect(inputs.some(input => input.startsWith("apps/daemon/") || input.startsWith("apps/web/") || input.startsWith("packages/electron-capsule/"))).toBe(false);
+    }
+  });
+
+  it("changes only the matching data workload digest through the real Git convergence calculator", async () => {
+    const root = await mkdtemp(join(tmpdir(), "exact-data-digest-")); roots.push(root);
+    const config = JSON.parse(await readFile(join(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
+    const tokens = new Set<string>((Object.values(config.suites) as string[][]).flat().filter(token => !token.startsWith("suite://")));
+    for (const token of tokens) {
+      const directory = (await stat(join(workspaceRoot, token))).isDirectory();
+      const path = join(root, token, ...(directory ? ["fixture"] : []));
+      await mkdir(dirname(path), { recursive: true }); await writeFile(path, "baseline");
+    }
+    await run("git", ["init", "-q", root]); await run("git", ["-C", root, "add", "."]);
+    const calculate = async () => JSON.parse((await run("python3", ["-c", [
+      "import json, sys", "from pathlib import Path", "sys.path.insert(0,sys.argv[1])",
+      "from convergence import ConvergenceContract, calculate",
+      "contract=ConvergenceContract(Path(sys.argv[2]))",
+      "runners={w.runner_class:['fixture'] for w in contract.workflow('release-exact').workloads.values()}",
+      "print(json.dumps(calculate(contract,Path(sys.argv[3]),'release-exact',runners)))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/convergence-exact.json"), root])).stdout) as Record<string, { digest: string }>;
+    const before = await calculate();
+    for (const id of dataIds) {
+      const token = config.suites[`closure-data-${id}`].find((value: string) => !value.startsWith("suite://"));
+      const path = join(root, token, "fixture");
+      await writeFile(path, "changed data"); await run("git", ["-C", root, "add", path]);
+      const after = await calculate();
+      expect(Object.keys(after).filter(key => after[key]!.digest !== before[key]!.digest), id)
+        .toEqual([`closure_data_${id.replaceAll("-", "_")}_darwin_arm64`]);
+      await writeFile(path, "baseline"); await run("git", ["-C", root, "add", path]);
     }
   });
 

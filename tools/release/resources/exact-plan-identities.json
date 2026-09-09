@@ -158,7 +158,6 @@
       ]
     },
     "closure.build": {
-      "inherits": ["closure.data"],
       "normalizePackageVersion": true,
       "paths": [
         ".node-version",
@@ -206,13 +205,6 @@
           "path": "packages/standalone/src",
           "excludePaths": ["packages"]
         }
-      ]
-    },
-    "closure.data": {
-      "paths": [
-        "skills", "design-templates", "design-systems", "craft",
-        "plugins/_official", "plugins/registry", "assets/frames",
-        "assets/community-pets", "prompt-templates", "data/plugin-previews"
       ]
     },
     "closure.test": {
