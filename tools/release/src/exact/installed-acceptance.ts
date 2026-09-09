@@ -165,7 +165,18 @@ export async function readPublishedAcceptance(input: JsonObject): Promise<{ publ
 export async function collectInstalledAcceptance(input: JsonObject): Promise<{ credential: JsonObject; policy: ReleasePolicyReceipt }> {
   if (!nonempty(input.installedRoot)) throw new Error("installed acceptance target is invalid");
   const { published, required, policy } = await readPublishedAcceptance(input);
-  const installed = input.shellType === "electron" ? await electronProof(input, published, required) : await terminalProof(input, required);
+  let installed = input.shellType === "electron" ? await electronProof(input, published, required) : await terminalProof(input, required);
+  if (input.hotAcceptanceReceipt != null && !nonempty(input.firstInstallRoot)) throw new Error("hot acceptance requires current first-install evidence");
+  if (input.firstInstallRoot != null) {
+    if (input.shellType !== "electron" || !input.hotAcceptanceReceipt || !nonempty(input.firstInstallRuntimeLog)
+      || await realpath(input.firstInstallRoot) === await realpath(input.installedRoot)
+      || await realpath(input.firstInstallRuntimeLog) === await realpath(input.runtimeLog)
+      || installed.proof.baselineReleaseVersion === published.releaseVersion) throw new Error("first-install and hot-update evidence must be independent");
+    const first = await electronProof({ ...input, installedRoot: input.firstInstallRoot,
+      runtimeLog: input.firstInstallRuntimeLog, hotAcceptanceReceipt: undefined }, published, required);
+    installed = { ...first, proof: { ...first.proof,
+      hotUpdate: { ...installed.proof.hotUpdate, baseline: installed } } };
+  }
   return { policy, credential: {
     schemaVersion: 1, operation: "exact.acceptance", status: "accepted",
     channel: published.channel, releaseVersion: published.releaseVersion, sourceCommit: published.sourceCommit,

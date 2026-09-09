@@ -222,16 +222,25 @@ it("requires a mounted hot renderer followed by a separate cold start of the sam
     { attemptId: "cold", event: "shutdown.complete" },
   ];
   await f.log([...hot, ...cold]);
-  await executeExactReleaseControl(input, f.output);
-  expect(JSON.parse(await readFile(f.output, "utf8")).installed.proof.hotUpdate).toMatchObject({ rendererAttemptId: "hot", rendererBindingDigest: bindingDigest, coldAttemptId: "cold" });
+  await expect(executeExactReleaseControl(input, f.output)).rejects.toThrow("requires current first-install evidence");
   // Hot delivery may reuse a physical baseline from an earlier release of the
   // same channel, but its own manifest must still match that installation.
   const baselineReleaseVersion = "1.2.3-betahyx.3";
   await f.save("standalone-installation.json", { ...f.installation, releaseVersion: baselineReleaseVersion });
   await expect(executeExactReleaseControl(input, f.output)).rejects.toThrow("physical Shell identity mismatch");
   await f.archive({ ...f.physical, version: baselineReleaseVersion });
-  await executeExactReleaseControl(input, f.output);
-  expect(JSON.parse(await readFile(f.output, "utf8")).installed.proof.baselineReleaseVersion).toBe(baselineReleaseVersion);
+  await expect(executeExactReleaseControl(input, f.output)).rejects.toThrow("requires current first-install evidence");
+  const first = await fixture();
+  const combined = { ...input, firstInstallRoot: first.root, firstInstallRuntimeLog: first.input.runtimeLog };
+  await executeExactReleaseControl(combined, f.output);
+  const credential = JSON.parse(await readFile(f.output, "utf8"));
+  expect(credential.installed.proof.baselineReleaseVersion).toBe(f.published.releaseVersion);
+  expect(credential.installed.proof.hotUpdate.baseline.proof.baselineReleaseVersion).toBe(baselineReleaseVersion);
+  expect(credential.installed.proof.physical.manifest.version).toBe(f.published.releaseVersion);
+  await expect(executeExactReleaseControl({ ...combined, firstInstallRoot: f.root }, f.output)).rejects.toThrow("must be independent");
+  await expect(executeExactReleaseControl({ ...combined, firstInstallRuntimeLog: f.input.runtimeLog }, f.output)).rejects.toThrow("must be independent");
+  await first.save("standalone-installation.json", { ...first.installation, releaseVersion: baselineReleaseVersion });
+  await expect(executeExactReleaseControl(combined, f.output)).rejects.toThrow("release identity mismatch");
   for (const invalid of [
     [...hot.filter((event) => event.event !== "renderer.generation.committed"), ...cold],
     hot,

@@ -15,12 +15,19 @@ export async function updateAcceptanceClosure(input: AcceptanceInput): Promise<v
   await writeObject(input.receipt, await updateElectronClosureThroughCdp(await session(input)));
 }
 
-export async function collectReleaseAcceptance(input: AcceptanceInput & Readonly<{ installedRoot: string; runtimeProofRoot: string; hotAcceptanceReceipt?: string }>): Promise<void> {
+export async function collectReleaseAcceptance(input: AcceptanceInput & Readonly<{
+  installedRoot: string; runtimeProofRoot: string; hotAcceptanceReceipt?: string;
+  firstInstallRoot?: string; firstInstallUserDataRoot?: string;
+}>): Promise<void> {
   if (input.hotAcceptanceReceipt != null && input.shell !== "electron") throw new Error("hot acceptance requires Electron");
+  if ((input.firstInstallRoot != null || input.firstInstallUserDataRoot != null)
+    && (!input.hotAcceptanceReceipt || !input.firstInstallRoot || !input.firstInstallUserDataRoot)) throw new Error("first-install evidence requires both roots and a hot receipt");
   const diagnostics = input.shell === "electron" ? describeElectronRuntimeDiagnostics(await session(input)) : undefined;
+  const first = input.firstInstallRoot == null ? undefined : describeElectronRuntimeDiagnostics(await session({ ...input, baseUserDataRoot: input.firstInstallUserDataRoot }));
   await acceptInstalledRelease({ installedRoot: input.installedRoot, runtimeProofRoot: input.runtimeProofRoot,
     publishReceipt: input.publication, policyReceipt: input.policy, shellType: input.shell, target: input.target,
     ...(diagnostics == null ? {} : { runtimeLog: diagnostics.runtimeLog }),
+    ...(first == null ? {} : { firstInstallRoot: input.firstInstallRoot, firstInstallRuntimeLog: first.runtimeLog }),
     ...(input.hotAcceptanceReceipt == null ? {} : { hotAcceptanceReceipt: input.hotAcceptanceReceipt,
       standaloneState: diagnostics!.standaloneState, standaloneGenerationsRoot: diagnostics!.standaloneGenerationsRoot }) }, input.receipt);
 }

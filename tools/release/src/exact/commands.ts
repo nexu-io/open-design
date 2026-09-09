@@ -5,7 +5,7 @@ import { exactStorageObject } from "@open-design/release";
 import { authorizeReleaseCapability, resolveReleasePolicy } from "../policy/release-profile.ts";
 import { writeObject } from "./control-common.ts";
 import { packSceneArtifact, unpackSceneArtifact } from "./scene-artifact.ts";
-import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, stageAcceptedElectronContribution, selfCheckExactReleaseControl } from "./control-release.ts";
+import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
@@ -69,6 +69,8 @@ export function registerExactCommands(cli: CAC): void {
     .option("--installed-root <directory>", "Installed resource root (collect)")
     .option("--runtime-proof-root <directory>", "Terminal lifecycle receipts (collect)")
     .option("--hot-receipt <file>", "Completed CDP hot-update receipt (collect)")
+    .option("--first-install-root <directory>", "Current release installed resources, separate from upgraded baseline (collect)")
+    .option("--first-install-user-data-root <directory>", "Current release first-install runtime evidence (collect)")
     .action(async (operation: string, options: Options) => {
       const common = { publication: required(options, "publication"), policy: required(options, "policy"),
         shell: required(options, "shell"), target: required(options, "target"), receipt: required(options, "receipt"),
@@ -76,6 +78,8 @@ export function registerExactCommands(cli: CAC): void {
       if (operation === "fetch") await fetchAcceptanceArtifact({ ...common, output: required(options, "output"), ...(options.githubEnv == null ? {} : { githubEnv: required(options, "githubEnv") }) });
       else if (operation === "hot-update") await updateAcceptanceClosure(common);
       else if (operation === "collect") await collectReleaseAcceptance({ ...common, installedRoot: required(options, "installedRoot"), runtimeProofRoot: required(options, "runtimeProofRoot"),
+        ...(options.firstInstallRoot == null ? {} : { firstInstallRoot: required(options, "firstInstallRoot") }),
+        ...(options.firstInstallUserDataRoot == null ? {} : { firstInstallUserDataRoot: required(options, "firstInstallUserDataRoot") }),
         ...(options.hotReceipt == null ? {} : { hotAcceptanceReceipt: required(options, "hotReceipt") }) });
       else throw new Error("acceptance operation must be fetch or hot-update or collect");
     });
@@ -228,7 +232,7 @@ export function registerExactCommands(cli: CAC): void {
         channelHeadFile: required(options, "channelHead"), acceptanceCredentials }, required(options, "receipt"));
     });
 
-  cli.command("baseline <operation>", "Stage an accepted Shell or promote a newly accepted baseline")
+  cli.command("baseline <operation>", "Fetch an upgrade-test baseline or promote a newly accepted baseline")
     .option("--publish-receipt <file>", "Publication receipt (promote)")
     .option("--activation-receipt <file>", "Activation receipt (promote)")
     .option("--acceptance <file>", "Installed Electron acceptance (promote)")
@@ -236,26 +240,26 @@ export function registerExactCommands(cli: CAC): void {
     .option("--policy <file>", "Release policy receipt")
     .option("--root <directory>", "Checked-out source root")
     .option("--registry <file>", "Identity registry relative to root", { default: "tools/release/resources/exact-plan-identities.json" })
-    .option("--plan <file>", "Accepted release plan (stage)")
-    .option("--validation <file>", "Current successful Shell test result (stage)")
-    .option("--channel <name>", "Release channel (stage)")
-    .option("--release-version <version>", "Release version (stage)")
-    .option("--source-commit <sha>", "Source commit (stage)")
-    .option("--target <target>", "Platform architecture (stage)")
-    .option("--output <directory>", "Staged distribution (stage)")
+    .option("--plan <file>", "Accepted release plan (fetch)")
+    .option("--validation <file>", "Current successful Shell test result (fetch)")
+    .option("--channel <name>", "Release channel (fetch)")
+    .option("--release-version <version>", "Release version (fetch)")
+    .option("--source-commit <sha>", "Source commit (fetch)")
+    .option("--target <target>", "Platform architecture (fetch)")
+    .option("--output <directory>", "Baseline installer for upgrade acceptance (fetch)")
     .option("--receipt <file>", "Result receipt")
     .action(async (operation: string, options: Options) => {
       const root = resolve(required(options, "root"));
       const shared = { root, registry: resolve(root, required(options, "registry")), policyReceipt: required(options, "policy") };
       const receipt = required(options, "receipt");
-      if (operation === "stage") await stageAcceptedElectronContribution({ ...shared,
+      if (operation === "fetch") await fetchAcceptedElectronBaseline({ ...shared,
         releasePlan: required(options, "plan"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"),
         sourceCommit: required(options, "sourceCommit"), target: required(options, "target"), outputDirectory: required(options, "output"),
         validationReceipt: required(options, "validation") }, receipt);
       else if (operation === "promote") await promoteAcceptedElectronBaseline({ ...shared,
         publishReceipt: required(options, "publishReceipt"), activationReceipt: required(options, "activationReceipt"),
         acceptanceCredential: required(options, "acceptance"), channelHeadFile: required(options, "channelHead") }, receipt);
-      else throw new Error("baseline operation must be stage or promote");
+      else throw new Error("baseline operation must be fetch or promote");
     });
 
   for (const product of ["platform", "capsule", "base"] as const) {

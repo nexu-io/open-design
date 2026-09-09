@@ -169,7 +169,7 @@ describe("accepted Electron baseline promotion", () => {
     await writeFile(releasePlanPath, JSON.stringify(releasePlan));
     const stagedDirectory = join(input.root, "staged"), stagedReceipt = join(stagedDirectory, "shell-contribution.json");
     const stageRequest = {
-      schemaVersion: 1, operation: "exact.baseline.stage", policyReceipt: input.policyReceipt, releasePlan: releasePlanPath,
+      schemaVersion: 1, operation: "exact.baseline.fetch", policyReceipt: input.policyReceipt, releasePlan: releasePlanPath,
       registry: input.registry, root: input.repository, channel: "betahyx", releaseVersion, sourceCommit, target: "darwin-arm64",
       outputDirectory: stagedDirectory,
     };
@@ -196,7 +196,7 @@ describe("accepted Electron baseline promotion", () => {
     await writeFile(releasePlanPath, JSON.stringify(releasePlan));
     await executeExactReleaseControl({ ...stageRequest, validationReceipt }, stagedReceipt);
     const staged = JSON.parse(await readFile(stagedReceipt, "utf8"));
-    expect(staged).toMatchObject({ operation: "shell.distribution.contribute", artifact: { sha256: snapshot.acceptance.artifact.sha256 } });
+    expect(staged).toMatchObject({ operation: "electron.baseline.fetch", artifact: { sha256: snapshot.acceptance.artifact.sha256 } });
     expect(await readFile(staged.artifact.file)).toEqual(input.artifactBody);
 
     objects.set(pointerStorageUrl, {

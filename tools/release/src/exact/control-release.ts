@@ -180,7 +180,7 @@ async function validatedElectronAcceptance(published: JsonObject, path: unknown)
   return credential;
 }
 
-export async function stageAcceptedElectronContribution(input: JsonObject, receiptPath: string): Promise<void> {
+export async function fetchAcceptedElectronBaseline(input: JsonObject, receiptPath: string): Promise<void> {
   const channel = String(input.channel ?? ""), releaseVersion = String(input.releaseVersion ?? ""), sourceCommit = String(input.sourceCommit ?? "");
   const policy = await readReleasePolicyReceipt(input.policyReceipt, { capability: "reuse", channel, releaseVersion, sourceCommit });
   const releasePlan = await readObject(String(input.releasePlan ?? ""));
@@ -226,11 +226,11 @@ export async function stageAcceptedElectronContribution(input: JsonObject, recei
   }
   const output = resolve(String(input.outputDirectory ?? ""));
   await mkdir(output, { recursive: true });
-  const archiveFile = join(output, basename(decodeURIComponent(artifactUrl.pathname)));
+  const archiveFile = join(output, input.target.startsWith("darwin-") ? "baseline-shell-artifact.dmg" : "baseline-shell-artifact.exe");
   await writeFile(archiveFile, body);
   await writeObject(receiptPath, {
     schemaVersion: 1,
-    operation: "shell.distribution.contribute",
+    operation: "electron.baseline.fetch",
     shell: credential.shell,
     target: credential.target,
     installIdentity: credential.installIdentity,
@@ -393,7 +393,7 @@ export async function executeExactReleaseControl(requestValue: JsonObject, recei
   if (requestValue.operation === "exact.publish") return await publishExactRelease(requestValue, receiptPath);
   if (requestValue.operation === "exact.activate") return await activateExactRelease(requestValue, receiptPath);
   if (requestValue.operation === "exact.baseline.promote") return await promoteAcceptedElectronBaseline(requestValue, receiptPath);
-  if (requestValue.operation === "exact.baseline.stage") return await stageAcceptedElectronContribution(requestValue, receiptPath);
+  if (requestValue.operation === "exact.baseline.fetch") return await fetchAcceptedElectronBaseline(requestValue, receiptPath);
   throw new Error("unsupported exact release operation");
 }
 

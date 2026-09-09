@@ -246,9 +246,15 @@ describe("exact Electron release topology", () => {
     expect(validation).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
     expect(validation).toContain("if: always()");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
-    expect(distribution).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
-    const stage = distribution.split("- name: Stage accepted Electron distribution")[1]!;
+    expect(distribution).not.toContain("matrix.mode");
+    expect(distribution).not.toContain("baseline stage");
+    const acceptance = workflow.split("\n  acceptance:")[1]!.split("\n  activate:")[0]!;
+    expect(acceptance).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
+    const stage = acceptance.split("- name: Fetch accepted baseline for upgrade acceptance")[1]!;
     expect(stage).toContain('--validation "$RUNNER_TEMP/exact-validation/shell.json"');
+    expect(stage).toContain('exact-release-control.mjs" baseline fetch');
+    expect(stage).toContain('--first-install-root "$installed_root"');
+    expect(stage).toContain('--first-install-user-data-root "$user_data_root"');
   });
 
   it("preserves native scene inputs through the actual convergence ZIP normalizer", async () => {
@@ -279,7 +285,9 @@ describe("exact Electron release topology", () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     const hot = workflow.split("- name: Exercise accepted macOS Shell through CDP hot update")[1]?.split("- name: Install and exercise Windows Electron Shell")[0];
     expect(hot).toBeDefined();
-    expect(hot).toMatch(/wait "\$electron_pid"\s+trap - EXIT\s+OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "\$executable" --user-data-dir="\$RUNNER_TEMP\/electron-user-data"/u);
+    expect(hot).toMatch(/wait "\$electron_pid"\s+trap - EXIT\s+OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "\$executable" --user-data-dir="\$RUNNER_TEMP\/baseline-user-data"/u);
+    expect(hot).toContain('app="$RUNNER_TEMP/baseline-electron.app"');
+    expect(hot).not.toContain('"$RUNNER_TEMP/public-shell-artifact.dmg"');
     expect(hot).not.toContain("python3");
     expect(hot).not.toContain("candidateVersion");
     expect(hot).toContain('CHANNEL: ${{ inputs.channel }}');
@@ -397,7 +405,7 @@ describe("exact Electron release topology", () => {
 
     expect(workflow).not.toContain('"operation": "exact.prepare"');
     expect(workflow).not.toContain('"operation": "exact.finalize"');
-    for (const command of ["prepare", "finalize", "publish", "activate", "baseline promote", "baseline stage"]) {
+    for (const command of ["prepare", "finalize", "publish", "activate", "baseline promote", "baseline fetch"]) {
       expect(workflow).toContain(`exact-release-control.mjs" ${command}`);
     }
     expect(workflow).not.toContain("relocated-publish-receipt.json");
@@ -492,11 +500,15 @@ describe("exact Electron release topology", () => {
       { attemptId: "acceptance-attempt", event: "shutdown.complete" },
     ].map((event) => JSON.stringify(event)).join("\n"));
 
+    const firstInstallRoot = join(root, "first-installed"), firstInstallUserDataRoot = join(root, "first-user-data");
+    await cp(installedRoot, firstInstallRoot, { recursive: true });
+    await cp(baseUserDataRoot, firstInstallUserDataRoot, { recursive: true });
     const collect = async (hotReceipt?: string) => {
       await run(process.execPath, [resolve(workspaceRoot, "tools/release/dist/exact-control.mjs"), "acceptance", "collect",
         "--publication", publishReceipt, "--policy", policyReceipt, "--installed-root", installedRoot, "--runtime-proof-root", root,
         "--shell", "electron", "--target", "darwin-arm64", "--base-user-data-root", baseUserDataRoot,
-        ...(hotReceipt == null ? [] : ["--hot-receipt", hotReceipt]), "--receipt", join(acceptanceRoot, "electron-darwin-arm64.json")]);
+        ...(hotReceipt == null ? [] : ["--hot-receipt", hotReceipt, "--first-install-root", firstInstallRoot,
+          "--first-install-user-data-root", firstInstallUserDataRoot]), "--receipt", join(acceptanceRoot, "electron-darwin-arm64.json")]);
     };
     await collect();
     const credential = JSON.parse(await readFile(join(acceptanceRoot, "electron-darwin-arm64.json"), "utf8"));
@@ -539,8 +551,9 @@ describe("exact Electron release topology", () => {
     await collect(hotReceipt);
     const hotCredential = JSON.parse(await readFile(join(acceptanceRoot, "electron-darwin-arm64.json"), "utf8"));
     expect(hotCredential.installed.proof).toMatchObject({
-      baselineReleaseVersion: "1.2.3-betahyx.3",
-      hotUpdate: { releaseVersion: "1.2.3-betahyx.4", discoveryUrl: "http://127.0.0.1:9222", generationId },
+      baselineReleaseVersion: "1.2.3-betahyx.4",
+      hotUpdate: { releaseVersion: "1.2.3-betahyx.4", discoveryUrl: "http://127.0.0.1:9222", generationId,
+        baseline: { proof: { baselineReleaseVersion: "1.2.3-betahyx.3" } } },
     });
   });
 });

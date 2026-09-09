@@ -52,7 +52,7 @@ an acceptance path.
 
 The workspace CLI and the relocatable `dist/exact-control.mjs` share the
 `topology`, `scene pack|unpack|restore`, `policy resolve|authorize`, `prepare`, `finalize`, `publish`, `activate`, and
-`baseline stage|promote` commands. Use explicit flags and consume their receipts;
+`baseline fetch|promote` commands. Use explicit flags and consume their receipts;
 workflows must not construct transient JSON requests for these operations.
 The relocatable build runs with Node 24 without a workspace install. Credentials
 remain environment inputs, never command-line arguments or receipt fields.
@@ -180,10 +180,17 @@ an architecture-node cache result. Recipe changes invalidate prior identities.
 Do not rerun business aggregates merely because orchestration moved to another
 stage, or reinterpret a historical full-suite receipt as proof of new sources.
 
-`baseline stage --validation <receipt>` requires current successful native Shell
+`baseline fetch --validation <receipt>` requires current successful native Shell
 test evidence even when a supplied plan claims that testing was already cached.
 A pending test action can be satisfied without rebuilding the physical carrier;
-build/distribution/full-installed actions still prohibit that reuse path.
+build/distribution/full-installed actions still prohibit that hot baseline path.
+The fetched installer is only an upgrade-test fixture, never a distribution
+contribution. Every release assembles a new installer with its current Capsule.
+Hot acceptance collects the upgraded baseline with `--hot-receipt` and requires
+separate `--first-install-root` and `--first-install-user-data-root` evidence for
+the current installer. The resulting credential retains current first-install
+proof as its primary installation and nests the old installation under
+`installed.proof.hotUpdate.baseline`.
 
 `prepare` and `finalize` authorize the bound policy and execute release-owned
 content assembly and signing in-process. Cross-job collection and relocation
