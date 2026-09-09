@@ -24,7 +24,10 @@ describe("exact Electron release topology", () => {
       schemaVersion: 1, plan: { target: "darwin-arm64" }, actions: [{ id: "electron.distribution" }],
     }));
     await run(process.execPath, [cli, "topology", "--declaration", resolve(workspaceRoot, ".github/config/exact-topology.json"),
-      "--plans", plans, "--output", root]);
+      "--plans", plans, "--output", root, "--github-output", join(root, "outputs")]);
+    const outputLine = (await readFile(join(root, "outputs"), "utf8")).split("\n").find(line => line.startsWith("validation_matrix="))!;
+    expect(JSON.parse(outputLine.slice("validation_matrix=".length)).include.map((entry: { shell: string; target: string }) => [entry.shell, entry.target]))
+      .toEqual([["electron", "darwin-arm64"]]);
     const runners = await readFile(join(root, "runners.json"), "utf8");
     const common = [resolve(workspaceRoot, ".github/scripts/convergence.py"), "--root", workspaceRoot,
       "--config", resolve(workspaceRoot, ".github/config/convergence-exact.json")];
@@ -60,15 +63,20 @@ describe("exact Electron release topology", () => {
   it("requires native validation independently of scene cache reuse and transports its receipt to baseline staging", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     const scene = workflow.split("\n  scene:")[1]!.split("\n  prepare:")[0]!;
-    const validation = scene.split("- name: Validate exact Electron nodes")[1]?.split("- name: Verify scene")[0];
+    const validation = workflow.split("\n  validation:")[1]?.split("\n  scene:")[0];
     expect(validation).toBeDefined();
-    expect(validation).toContain("if: ${{ matrix.shell == 'electron' }}");
+    expect(validation).toContain("needs: [plan]");
+    expect(validation).toContain("matrix: ${{ fromJSON(needs.plan.outputs.validation_matrix) }}");
     expect(validation).not.toContain("needs.plan.outputs.run");
+    expect(validation).not.toContain("scene-artifact");
+    expect(scene).not.toContain('exact-release-control.mjs" validate');
+    expect(scene).not.toContain("matrix.shell == 'electron' ||");
+    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, validation]");
     for (const node of ["electron.contract.test", "electron.shell.test", "closure.test"]) {
       expect(validation).toContain(`exact-release-control.mjs" validate ${node}`);
     }
-    expect(scene).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
-    expect(scene).toContain("if: ${{ always() && matrix.shell == 'electron' }}");
+    expect(validation).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
+    expect(validation).toContain("if: always()");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
     expect(distribution).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
     const stage = distribution.split("- name: Stage accepted Electron distribution")[1]!;

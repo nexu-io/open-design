@@ -24,6 +24,8 @@ it.each([false, true])("projects full/hot=%s without activating deferred Windows
   expect(result.scope.enabled).toEqual({ terminal_scene: true, electron_scene: true, electron_win: false });
   expect(result.runners).toEqual({ terminal_mac: ["macos-15"], electron_mac: ["macos-15"], electron_win: ["windows-2025"] });
   expect(result.topology.deferred).toHaveLength(1);
+  expect(result.validationMatrix.include.map(value => value.target)).toEqual(["darwin-arm64"]);
+  expect(result.validationMatrix.include.every(value => value.shell === "electron")).toBe(true);
   expect(JSON.parse(await readFile(join(f.output, "topology.json"), "utf8"))).toEqual(result.topology);
 });
 

@@ -124,7 +124,8 @@ export function registerExactCommands(cli: CAC): void {
     .option("--receipt <file>", "Optional receipt; defaults to stdout")
     .action(async (options: Options) => {
       const result = await projectReleaseTopology({ declaration: required(options, "declaration"), plans: required(options, "plans"), output: required(options, "output") });
-      if (options.githubOutput != null) await appendFile(required(options, "githubOutput"), `shell_matrix=${JSON.stringify(result.matrix)}\n`);
+      if (options.githubOutput != null) await appendFile(required(options, "githubOutput"),
+        `shell_matrix=${JSON.stringify(result.matrix)}\nvalidation_matrix=${JSON.stringify(result.validationMatrix)}\n`);
       await emit(options, result);
     });
 

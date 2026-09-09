@@ -52,5 +52,6 @@ export async function projectReleaseTopology(input: Readonly<{ declaration: stri
   await writeObject(join(input.output, "topology.json"), topology);
   await writeObject(join(input.output, "scope.json"), scope);
   await writeObject(join(input.output, "runners.json"), runnerPlan);
-  return { schemaVersion: 1, operation: "release.topology", matrix: { include: resolved }, topology, scope, runners: runnerPlan };
+  const validationMatrix = { include: resolved.filter(entry => entry.shell === "electron") };
+  return { schemaVersion: 1, operation: "release.topology", matrix: { include: resolved }, validationMatrix, topology, scope, runners: runnerPlan };
 }

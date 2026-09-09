@@ -66,6 +66,7 @@ jobs:
     outputs:
       run: ${{ steps.convergence.outputs.run }}
       shell_matrix: ${{ steps.topology.outputs.shell_matrix }}
+      validation_matrix: ${{ steps.topology.outputs.validation_matrix }}
     steps:
       - name: Validate immutable inputs
         env:
@@ -188,6 +189,62 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  validation:
+    name: Exact validation (${{ matrix.target }})
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.validation_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: Prepare validation workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate exact Electron nodes
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/exact-validation"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.contract.test \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/contract.log" --receipt "$RUNNER_TEMP/exact-validation/contract.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.shell.test \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/shell.log" --receipt "$RUNNER_TEMP/exact-validation/shell.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate closure.test \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/closure.log" --receipt "$RUNNER_TEMP/exact-validation/closure.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation
+          if-no-files-found: warn
+          retention-days: 30
+
   scene:
     name: ${{ matrix.shell }} scene (${{ matrix.target }})
     needs: [plan]
@@ -222,18 +279,18 @@ jobs:
             --transport "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
 
       - uses: pnpm/action-setup@v5
-        if: ${{ matrix.shell == 'electron' || fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         with:
           version: 10.33.2
 
       - uses: actions/setup-node@v6
-        if: ${{ matrix.shell == 'electron' || fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         with:
           node-version: 24.18.0
           cache: pnpm
 
-      - name: Prepare scene and validation workspace
-        if: ${{ matrix.shell == 'electron' || fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+      - name: Prepare scene workspace
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         shell: bash
         run: pnpm install --frozen-lockfile
 
@@ -267,32 +324,6 @@ jobs:
             --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
             --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" \
             --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
-
-      - name: Validate exact Electron nodes
-        if: ${{ matrix.shell == 'electron' }}
-        env:
-          TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/exact-validation"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.contract.test \
-            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --log "$RUNNER_TEMP/exact-validation/contract.log" --receipt "$RUNNER_TEMP/exact-validation/contract.json"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.shell.test \
-            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --log "$RUNNER_TEMP/exact-validation/shell.log" --receipt "$RUNNER_TEMP/exact-validation/shell.json"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate closure.test \
-            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --log "$RUNNER_TEMP/exact-validation/closure.log" --receipt "$RUNNER_TEMP/exact-validation/closure.json"
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ always() && matrix.shell == 'electron' }}
-        with:
-          name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/exact-validation
-          if-no-files-found: warn
-          retention-days: 30
 
       - name: Verify scene and prepare convergence product
         env:
@@ -331,7 +362,7 @@ jobs:
 
   prepare:
     name: Prepare signed exact content
-    needs: [plan, scene]
+    needs: [plan, scene, validation]
     runs-on: ubuntu-24.04
     environment: ${{ inputs.release_environment || 'standalone-exact-release' }}
     timeout-minutes: 10
