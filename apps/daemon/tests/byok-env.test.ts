@@ -278,6 +278,41 @@ describe('proxy fallback (integration)', () => {
     expect(JSON.stringify(body)).not.toContain('sk-host-managed-secret');
   });
 
+  it('a provider-less byok-opencode run passes run-create validation when the env default is set', async () => {
+    // Given the host default is configured (unreachable loopback — no real
+    // network)
+    process.env.OD_BYOK_PROTOCOL = 'openai';
+    process.env.OD_BYOK_BASE_URL = 'http://127.0.0.1:9';
+    process.env.OD_BYOK_API_KEY = 'sk-host-managed-secret';
+    process.env.OD_BYOK_MODEL = 'host-model';
+
+    // When a browser with NO local BYOK config starts a byok-opencode run
+    const res = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId: 'byok-opencode', message: 'hello', model: 'host-model' }),
+    });
+
+    // Then the run-create gate lets it through to the run path (which the
+    // env default arms) instead of 400ing on the absent browser provider.
+    // The run's later fate against the unreachable endpoint is not this
+    // test's concern — the gate is.
+    expect(res.status).not.toBe(400);
+    expect([200, 202]).toContain(res.status);
+  });
+
+  it('a provider-less byok-opencode run still 400s when no env default is set', async () => {
+    for (const key of ENV_KEYS) delete process.env[key];
+    const res = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId: 'byok-opencode', message: 'hello', model: 'some-model' }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe('VALIDATION_FAILED');
+  });
+
   it('the openai proxy no longer 400s for a field-less body when the env default is set', async () => {
     // Given the env default pointing at an unreachable loopback (no real
     // network in tests)
