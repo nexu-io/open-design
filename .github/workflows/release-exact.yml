@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v6.0.2
         with:
           ref: ${{ inputs.source_sha }}
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
 
       - name: Verify checkout identity

@@ -4,6 +4,16 @@ name: convergence.atom
 # successful admitted run. All validation and R2 writes execute trusted default-branch
 # Python; pull-request code is treated solely as data.
 on:
+  workflow_dispatch:
+    inputs:
+      producer_run_id:
+        description: Successful betahyx release-exact run to admit
+        required: true
+        type: string
+      trusted_sha:
+        description: Explicitly authorized task-branch SHA (must match producer and dispatch)
+        required: true
+        type: string
   workflow_run:
     workflows: [ci, release-exact, release-prerelease, release-stable]
     types: [completed]
@@ -13,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: convergence-${{ github.event.workflow_run.id }}
+  group: convergence-${{ inputs.producer_run_id || github.event.workflow_run.id }}
   cancel-in-progress: false
 
 jobs:
@@ -22,45 +32,52 @@ jobs:
     if: >-
       ${{
         github.repository == 'nexu-io/open-design'
-        && github.event.workflow_run.conclusion == 'success'
+        && ((github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/feat/electron-shell-exact-delivery')
+        || (github.event.workflow_run.conclusion == 'success'
         && github.event.workflow_run.head_repository.full_name == github.repository
         && (
           (github.event.workflow_run.name == 'ci'
             && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'merge_group'))
           || (contains(fromJSON('["release-exact","release-prerelease","release-stable"]'), github.event.workflow_run.name)
             && github.event.workflow_run.event == 'workflow_dispatch')
-        )
+        )))
       }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
       - name: Checkout trusted convergence code
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         uses: actions/checkout@v6.0.2
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
 
+      - name: Checkout explicitly authorized convergence code
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.trusted_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve and verify the producing run
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/convergence.py source
+
       - name: Select the producing workflow contract
         env:
-          PRODUCER_WORKFLOW: ${{ github.event.workflow_run.name }}
+          CONFIG: ${{ steps.source.outputs.config }}
+          HANDOFF_ID: ${{ steps.source.outputs.handoff_id }}
         run: |
           set -euo pipefail
-          case "$PRODUCER_WORKFLOW" in
-            ci)
-              config=.github/config/convergence.json
-              handoff_id=ci-results
-              ;;
-            release-exact|release-prerelease|release-stable)
-              config=".github/config/plan/$PRODUCER_WORKFLOW.json"
-              handoff_id="$PRODUCER_WORKFLOW-results"
-              ;;
-            *) exit 1 ;;
-          esac
-          test -f "$config"
-          echo "CONVERGENCE_CONFIG=$config" >> "$GITHUB_ENV"
-          echo "CONVERGENCE_HANDOFF_ID=$handoff_id" >> "$GITHUB_ENV"
+          test -f "$CONFIG"
+          echo "CONVERGENCE_CONFIG=$CONFIG" >> "$GITHUB_ENV"
+          echo "CONVERGENCE_HANDOFF_ID=$HANDOFF_ID" >> "$GITHUB_ENV"
 
       - name: Check trusted convergence contracts
         run: |
@@ -71,23 +88,36 @@ jobs:
         id: artifact
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/handoff.py resolve-run-artifact convergence "$CONVERGENCE_HANDOFF_ID"
+          PRODUCER_RUN_ID: ${{ steps.source.outputs.run_id }}
+        run: python3 .github/scripts/handoff.py resolve-run-artifact convergence "$CONVERGENCE_HANDOFF_ID" --run-id "$PRODUCER_RUN_ID"
 
       - name: Download convergence handoff
         if: ${{ steps.artifact.outputs.found == 'true' }}
         uses: actions/download-artifact@v8
         with:
           name: ${{ steps.artifact.outputs.name }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.source.outputs.run_id }}
           path: ${{ runner.temp }}/handoff-convergence
+          github-token: ${{ github.token }}
+
+      - name: Download authorized release policy
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: release-policy-${{ steps.source.outputs.run_id }}-${{ steps.source.outputs.run_attempt }}
+          run-id: ${{ steps.source.outputs.run_id }}
+          path: ${{ runner.temp }}/release-policy
           github-token: ${{ github.token }}
 
       - name: Validate producing run and control plane
         if: ${{ steps.artifact.outputs.found == 'true' }}
         id: trust
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >-
           python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" admit
           --handoff-root "$RUNNER_TEMP/handoff-convergence"
+          --release-policy "$RUNNER_TEMP/release-policy/release-policy.json"
 
       - name: Resolve publication configuration
         if: ${{ steps.trust.outputs.publish == 'true' }}
@@ -104,10 +134,12 @@ jobs:
         if: ${{ steps.storage.outputs.configured == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          PRODUCER_RUN_ID: ${{ steps.source.outputs.run_id }}
         run: >-
           python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" stage-products
           --candidate "${{ steps.trust.outputs.candidate }}"
           --output-dir "$RUNNER_TEMP/convergence-products"
+          --run-id "$PRODUCER_RUN_ID"
 
       - name: Publish immutable workload results
         if: ${{ steps.storage.outputs.configured == 'true' }}

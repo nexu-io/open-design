@@ -407,6 +407,9 @@ describe("exact Electron release topology", () => {
     expect(consumer).toContain("workflows: [ci, release-exact, release-prerelease, release-stable]");
     expect(consumer).toContain('convergence.py --config "$CONVERGENCE_CONFIG" admit');
     expect(consumer).toContain('ref: ${{ github.event.repository.default_branch }}');
+    expect(consumer).toContain('ref: ${{ inputs.trusted_sha }}');
+    expect(consumer).toContain('python3 .github/scripts/convergence.py source');
+    expect(consumer).toContain('--release-policy "$RUNNER_TEMP/release-policy/release-policy.json"');
     expect(consumer).not.toContain("CLOUDFLARE_R2_RELEASES_AK");
     await expect(stat(resolve(workspaceRoot, ".github/workflows/convergence-exact.atom.yml"))).rejects.toThrow();
   });

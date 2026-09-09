@@ -95,6 +95,51 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("admits manual bootstrap only for the pinned successful same-repository exact run", () => {
+    const code = `
+import copy, os, sys
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import convergence as c
+sha = 'a' * 40
+branch = 'feat/electron-shell-exact-delivery'
+payload = {'repository': {'id': 42, 'full_name': 'nexu-io/open-design'},
+           'inputs': {'trusted_sha': sha, 'producer_run_id': '12'}}
+run = {'id': 12, 'name': 'release-exact', 'event': 'workflow_dispatch',
+       'path': '.github/workflows/release-exact.yml', 'status': 'completed',
+       'conclusion': 'success', 'head_branch': branch, 'head_sha': sha,
+       'head_repository': {'full_name': 'nexu-io/open-design'}}
+env = {'GITHUB_EVENT_NAME': 'workflow_dispatch', 'GITHUB_REF': 'refs/heads/' + branch, 'GITHUB_SHA': sha}
+with patch.dict(os.environ, env), patch.object(c, 'event_payload', return_value=payload), patch.object(c.subprocess, 'check_output', return_value=sha):
+    with patch.object(c, 'api_json', return_value=run) as api:
+        assert c.admitted_source()['workflow_run'] == run
+        api.assert_called_once_with('/repos/nexu-io/open-design/actions/runs/12')
+    for key, value in [('id', 13), ('name', 'release-stable'), ('event', 'pull_request'),
+                       ('path', '.github/workflows/other.yml'), ('status', 'in_progress'),
+                       ('conclusion', 'failure'), ('head_branch', 'main'), ('head_sha', 'b' * 40),
+                       ('head_repository', {'full_name': 'fork/open-design'})]:
+        invalid = copy.deepcopy(run)
+        invalid[key] = value
+        with patch.object(c, 'api_json', return_value=invalid):
+            try: c.admitted_source()
+            except c.ConfigError: pass
+            else: raise AssertionError('accepted invalid ' + key)
+    for key, value in [('GITHUB_REF', 'refs/heads/main'), ('GITHUB_SHA', 'b' * 40)]:
+        with patch.dict(os.environ, {key: value}), patch.object(c, 'api_json') as api:
+            try: c.admitted_source()
+            except c.ConfigError: pass
+            else: raise AssertionError('accepted invalid ' + key)
+            api.assert_not_called()
+    with patch.object(c.subprocess, 'check_output', return_value='b' * 40):
+        try: c.admitted_source()
+        except c.ConfigError: pass
+        else: raise AssertionError('accepted mismatched checkout')
+print('manual admission verified')
+`;
+    expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript)], { encoding: "utf8" }))
+      .toContain("manual admission verified");
+  });
+
   test("projects a mixed batch without leaking identities or changing independent decisions", () => {
     const fixture = createRepository();
     const code = `

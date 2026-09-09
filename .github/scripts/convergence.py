@@ -27,6 +27,7 @@ from lib.github import (
     GitHubError,
     append_outputs,
     append_summary,
+    api_json,
     download_artifact,
     event_payload,
     unique_run_artifact,
@@ -1186,8 +1187,58 @@ def git_differs(left: str, right: str, paths: list[str]) -> bool:
     return result.returncode == 1
 
 
+def admitted_source() -> dict[str, Any]:
+    payload = event_payload()
+    if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
+        return payload
+    # Temporary maintainer-authorized bootstrap, not a general branch trust switch.
+    repository = object_value(payload.get("repository"), "event repository")
+    inputs = object_value(payload.get("inputs"), "dispatch inputs")
+    sha = handoff_contract.require_sha(inputs.get("trusted_sha"), "trusted_sha")
+    run_id = handoff_contract.require_int(inputs.get("producer_run_id"), "producer_run_id")
+    branch = "feat/electron-shell-exact-delivery"
+    if repository.get("full_name") != "nexu-io/open-design":
+        raise ConfigError("manual convergence repository is not authorized")
+    if os.environ.get("GITHUB_REF") != f"refs/heads/{branch}" or os.environ.get("GITHUB_SHA") != sha:
+        raise ConfigError("manual convergence dispatch must pin the authorized branch SHA")
+    checkout = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    if checkout != sha:
+        raise ConfigError("manual convergence checkout differs from trusted SHA")
+    run = object_value(api_json(f"/repos/nexu-io/open-design/actions/runs/{run_id}"), "producing run")
+    expected = {"id": run_id, "name": "release-exact", "event": "workflow_dispatch",
+                "path": ".github/workflows/release-exact.yml", "status": "completed",
+                "conclusion": "success", "head_branch": branch, "head_sha": sha}
+    if any(run.get(key) != value for key, value in expected.items()):
+        raise ConfigError("manual convergence requires a successful exact run at the trusted SHA")
+    if object_value(run.get("head_repository"), "head repository").get("full_name") != repository["full_name"]:
+        raise ConfigError("manual convergence head repository is not authorized")
+    return {"repository": repository, "workflow_run": run}
+
+
+def source_command() -> int:
+    context = workflow_run_context(admitted_source())
+    workflow = context["workflow"]
+    if workflow not in {"ci", "release-exact", "release-prerelease", "release-stable"}:
+        raise ConfigError("unsupported convergence source workflow")
+    append_outputs({
+        "run_id": str(context["run_id"]),
+        "run_attempt": str(context["run_attempt"]),
+        "config": ".github/config/convergence.json" if workflow == "ci" else f".github/config/plan/{workflow}.json",
+        "handoff_id": "ci-results" if workflow == "ci" else f"{workflow}-results",
+    })
+    return 0
+
+
 def admit_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
-    context = workflow_run_context(event_payload())
+    context = workflow_run_context(admitted_source())
+    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
+        if args.release_policy is None:
+            raise ConfigError("manual convergence requires a release policy artifact")
+        policy = object_value(load_json(args.release_policy), "release policy")
+        if (policy.get("operation") != "release.policy" or policy.get("channel") != "betahyx"
+                or policy.get("sourceCommit") != context["head_sha"]
+                or policy.get("sourceRef") != "refs/heads/feat/electron-shell-exact-delivery"):
+            raise ConfigError("manual convergence requires the authorized betahyx release policy")
     if context["head_repository"] != context["repository"]:
         raise ConfigError("workflow_run head repository is not trusted")
     entries = handoff_contract.candidate_entry_dirs(args.handoff_root, "convergence")
@@ -1540,6 +1591,8 @@ def parse_args() -> argparse.Namespace:
     handoff.add_argument("--id", default="ci-results")
     admit = sub.add_parser("admit")
     admit.add_argument("--handoff-root", type=Path, required=True)
+    admit.add_argument("--release-policy", type=Path)
+    sub.add_parser("source")
     publication = sub.add_parser("prepare-publication")
     publication.add_argument("--candidate", type=Path, required=True)
     publication.add_argument("--output-dir", type=Path, required=True)
@@ -1559,6 +1612,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     root = args.root.resolve() if args.root else repository_root(__file__)
+    if args.command == "source":
+        return source_command()
     if args.command == "prepare-publication":
         return prepare_publication_command(args)
     if args.command == "storage-status":
