@@ -176,6 +176,7 @@ function runFixturePostinstall(sandbox: string, env: Record<string, string | und
     encoding: "utf8",
     env: {
       ...process.env,
+      OPEN_DESIGN_POSTINSTALL_LEVEL: "",
       npm_execpath: join(sandbox, "pnpm-stub.mjs"),
       ...env,
     },
@@ -197,6 +198,33 @@ function eventIndex(events: StubEvent[], event: StubEvent["event"], target: stri
 }
 
 describe("postinstall script contract", () => {
+  it("[P2] selects the resource dependency closure without unrelated builds or native verification", () => {
+    const sandbox = createSandbox();
+    try {
+      writeTarget(sandbox, "packages/release", { name: "@open-design/release" });
+      writeTarget(sandbox, "packages/standalone", { name: "@open-design/standalone", dependencies: { "@open-design/release": "workspace:*" } });
+      writeTarget(sandbox, "apps/closure", { name: "@open-design/closure", dependencies: { "@open-design/standalone": "workspace:*" } });
+      writeTarget(sandbox, "tools/dev", { name: "@open-design/tools-dev" });
+      const log = writePnpmStub(sandbox);
+      const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_LEVEL: "resource-build", OPEN_DESIGN_POSTINSTALL_CONCURRENCY: "2" });
+      expect(result.status, String(result.stderr)).toBe(0);
+      expect(readStubEvents(log).filter(event => event.event === "start").map(event => event.target))
+        .toEqual(["packages/release", "packages/standalone", "apps/closure"]);
+      expect(result.stdout).toContain("skipping native addon verification for level=resource-build");
+    } finally { rmSync(sandbox, { recursive: true, force: true }); }
+  });
+
+  it.each(["unknown", "constructor", "__proto__", "release-prepare"])("[P2] rejects invalid or unavailable level %s before building", (level) => {
+    const sandbox = createSandbox();
+    try {
+      const log = writePnpmStub(sandbox);
+      const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_LEVEL: level });
+      expect(result.status).toBe(1);
+      expect(readStubEvents(log)).toEqual([]);
+      expect(result.stderr).toMatch(/must be one of|requires unavailable build target/);
+    } finally { rmSync(sandbox, { recursive: true, force: true }); }
+  });
+
   it("[P2] keeps consumed workspace bin entries linkable before postinstall", () => {
     const manifests = new Map(workspacePackageDirectories().map((directory) => [directory, readJson(`${directory}/package.json`)]));
     const consumedWorkspacePackages = new Set<string>();
