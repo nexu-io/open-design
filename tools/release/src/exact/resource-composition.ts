@@ -2,6 +2,16 @@ import { dirname, resolve } from "node:path";
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 import { checkedFile, readObject, type JsonObject } from "./control-common.ts";
 
+export function validateDataResourceReceipt(receipt: JsonObject): JsonObject {
+  const resource = receipt.resource;
+  if (receipt.schemaVersion !== 1 || receipt.operation !== "closure.data-resource.build" || resource == null
+    || !CLOSURE_DATA_RESOURCES.some(({ id }) => id === resource.id) || resource.entrypoint !== "resource.json" || resource.sync !== true
+    || !/^[a-f0-9]{64}$/u.test(resource.sha256 ?? "") || !/^[a-f0-9]{64}$/u.test(resource.treeSha256 ?? "")
+    || !Number.isSafeInteger(resource.size) || resource.size <= 0
+    || resource.file !== `${resource.id}-${resource.sha256}.zip`) throw new Error("invalid single data resource receipt");
+  return resource;
+}
+
 /** Replace the complete data selection, retaining runtime products. Selection
  * never builds missing inputs or confers convergence/result-cache authority.
  * A relocated single-product receipt travels beside its archive; its original
@@ -23,12 +33,7 @@ export async function composeReleaseDataResources(collection: JsonObject, receip
   if (runtime.length !== runtimeIds.size) throw new Error("incomplete runtime resource set");
   const selected = new Map<string, JsonObject>();
   for (const file of receiptFiles) {
-    const receipt = await readObject(file), resource = receipt.resource;
-    if (receipt.schemaVersion !== 1 || receipt.operation !== "closure.data-resource.build" || resource == null
-      || !expected.has(resource.id) || resource.entrypoint !== "resource.json" || resource.sync !== true
-      || !/^[a-f0-9]{64}$/u.test(resource.sha256 ?? "") || !/^[a-f0-9]{64}$/u.test(resource.treeSha256 ?? "")
-      || !Number.isSafeInteger(resource.size) || resource.size <= 0
-      || resource.file !== `${resource.id}-${resource.sha256}.zip`) throw new Error("invalid single data resource receipt");
+    const resource = validateDataResourceReceipt(await readObject(file));
     if (selected.has(resource.id)) throw new Error("duplicate data resource receipt");
     const path = await checkedFile(resource, `data resource ${resource.id}`, resolve(dirname(file), resource.file));
     selected.set(resource.id, { ...resource, path });

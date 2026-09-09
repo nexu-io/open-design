@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { build } from "esbuild";
 import { afterEach, expect, it } from "vitest";
 import { resolveExactDataPlanNode } from "../src/exact/plan.ts";
+import { buildClosureDataResource } from "@open-design/closure/build-resources";
 
 const run = promisify(execFile);
 const roots: string[] = [];
@@ -114,6 +115,22 @@ it("binds a selected data build without needing other plan nodes or resource dir
   await writeFile(join(pkg, "build.mjs"), "import {writeFile} from 'node:fs/promises'; export async function buildClosureDataResource(request) { await writeFile(request.workspaceRoot + '/craft/dist/input.txt', 'changed during build'); return {}; }\n");
   await expect(f.invoke(failedArgs)).rejects.toThrow("source changed during execution");
   await expect(readFile(join(f.root, "failed.json"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("stages a real data product through the public convergence command", async () => {
+  const f = await fixture();
+  await mkdir(join(f.root, "craft")); await writeFile(join(f.root, "craft/input.txt"), "resource bytes");
+  const resource = await buildClosureDataResource({ id: "craft", workspaceRoot: f.root, outputDirectory: join(f.root, "built") });
+  const planNode = { id: "closure.data.craft.build", identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64" };
+  const plan = join(f.root, "plan.json"), pending = join(f.root, "pending.json"), receipt = join(f.root, "built/receipt.json");
+  await writeFile(plan, JSON.stringify({ schemaVersion: 1, plan: { target: planNode.target, nodes: { [planNode.id]: planNode } } }));
+  await writeFile(pending, JSON.stringify({ workloads: { data_craft: { run: true, digest: "b".repeat(64), executionClass: { runnerClass: "data", labels: ["macos-15"] } } } }));
+  await writeFile(receipt, JSON.stringify({ schemaVersion: 1, operation: "closure.data-resource.build", planNode, resource }));
+  const args = ["resource", "contribute", "--plan", plan, "--pending", pending, "--workload", "data_craft", "--resource-id", "craft", "--output", join(f.root, "contribution")];
+  const result = JSON.parse((await f.invoke([...args, "--resource-receipt", receipt, "--artifact", "craft-artifact"])).stdout);
+  expect(result).toMatchObject({ operation: "exact.resource.contribute", contributed: true });
+  expect(await readFile(join(result.artifactDirectory, resource.file))).toEqual(await readFile(resource.path));
+  await expect(f.invoke(args.map(arg => arg === "contribute" ? "restore" : arg))).rejects.toThrow("planner cache hit");
 });
 
 it("keeps workspace command names distinct from the relocatable exact grammar", async () => {

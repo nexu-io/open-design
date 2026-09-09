@@ -107,6 +107,22 @@ The old aggregate scene/Closure dependencies remain in place until independent
 build, restore and composition are wired end to end; these nodes alone do not
 enable workflow skips.
 
+`resource contribute --plan <file> --resource-id <id> --pending <file>
+--workload <name> --resource-receipt <file> --artifact <name> --output <directory>`
+verifies the planned resource and stages `artifact/` (one archive plus portable
+`resource-receipt.json`) and `products/` (the existing convergence handoff
+manifest). It emits no candidate for a planner cache hit and publishes nothing
+to R2. The job artifact uses the existing convergence ZIP normalization.
+`resource restore --plan <file> --resource-id <id> --pending <file>
+--workload <name> --output <new-directory>` accepts only a complete planner hit,
+credential-free HTTPS and verified transport bytes. It checks the exact plan
+identity, resource ID, archive size/digest and payload allowlist before exposing
+the directory. Pass its `resource-receipt.json` directly to `prepare
+--data-resource`; restoration never executes a compiler or reads the original
+machine's paths. Scene and resource acquisition share one convergence transport
+implementation. These commands do not yet replace the workflow's aggregate
+scene execution.
+
 Scene cache transport uses an opaque `scene.tar` inside the existing GitHub
 artifact / convergence ZIP. It preserves native executable permissions,
 read-only files and hidden inputs, while convergence retains ownership of

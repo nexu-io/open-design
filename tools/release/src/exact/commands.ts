@@ -12,6 +12,7 @@ import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
 import { buildReleaseCapsule, buildReleaseDistribution, buildReleaseScene } from "./native-build.ts";
 import { buildReleaseDataResource } from "./resource-build.ts";
+import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { validateExactPlanNode } from "./validation.ts";
@@ -228,6 +229,24 @@ export function registerExactCommands(cli: CAC): void {
         publishReceipt: required(options, "publishReceipt"), activationReceipt: required(options, "activationReceipt"),
         acceptanceCredential: required(options, "acceptance"), channelHeadFile: required(options, "channelHead") }, receipt);
       else throw new Error("baseline operation must be stage or promote");
+    });
+
+  cli.command("resource <operation>", "Restore or contribute an independently planned data resource")
+    .option("--plan <file>", "Exact release plan")
+    .option("--resource-id <id>", "Public Closure data resource group")
+    .option("--pending <file>", "Convergence planner receipt")
+    .option("--workload <name>", "Planner workload")
+    .option("--output <directory>", "New restored resource or contribution directory")
+    .option("--resource-receipt <file>", "Plan-bound build receipt (contribute)")
+    .option("--artifact <name>", "Job artifact name (contribute)")
+    .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
+    .action(async (operation: string, options: Options) => {
+      const common = { plan: required(options, "plan"), resourceId: required(options, "resourceId"),
+        pending: required(options, "pending"), workload: required(options, "workload"), output: required(options, "output") };
+      const result = operation === "restore" ? await restoreDataResource(common)
+        : operation === "contribute" ? await contributeDataResource({ ...common, resourceReceipt: required(options, "resourceReceipt"), artifact: required(options, "artifact") })
+        : (() => { throw new Error("resource operation must be restore or contribute"); })();
+      await emit(options, { schemaVersion: 1, operation: `exact.resource.${operation}`, ...result });
     });
 
   cli.command("scene <operation>", "Transport scenes or contribute a release-neutral convergence candidate")
