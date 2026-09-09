@@ -809,6 +809,48 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
     .toBe(anchoredWidth);
 });
 
+test('[P0] manual edit mode withholds mouse events from the artifact', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Manual edit pointer ownership');
+  await seedHtmlArtifact(page, projectId, 'pointer-owner.html', artifactMouseCounterHtml());
+  await page.goto(`/projects/${projectId}/files/pointer-owner.html`);
+  await openDesignFile(page, 'pointer-owner.html');
+
+  const frame = artifactPreviewFrame(page);
+  const target = frame.locator('#target');
+  const all = frame.locator('#all');
+  const whileEditing = frame.locator('#editing');
+  await expect(target).toBeVisible();
+
+  // Control. Outside edit mode the artifact owns its own interactions. An
+  // artifact whose handlers stop firing in preview is a dead artifact, which
+  // would be a worse regression than the bug being fixed here.
+  await target.click();
+  await expect(all).not.toHaveText('0');
+
+  // In edit mode a mouse event means "act on this element as an editor". The
+  // artifact's own handlers must not also run: the framework deck registers a
+  // capture-phase document click that turns the page, so the click that was
+  // only meant to select something navigates away underneath it. Hover is
+  // withheld for the same reason — an authored hover effect restyles or moves
+  // the element out from under the pointer that is about to click it.
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
+  await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
+
+  await target.click();
+  await expect(page.locator('.manual-edit-modal')).toBeVisible();
+  await expect(whileEditing).toHaveText('0');
+
+  // And the artifact gets its interactions back on the way out, so this is a
+  // loan for the duration of edit mode rather than a permanent confiscation.
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
+  await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  const beforeExitClick = await all.textContent();
+  await target.click();
+  await expect(all).not.toHaveText(String(beforeExitClick));
+  await expect(whileEditing).toHaveText('0');
+});
+
 test('[P0] deck presentation host exit remains usable after the sandboxed slide takes focus', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Deck presentation exit smoke');
@@ -1554,6 +1596,45 @@ function deckHtml(): string {
       });
       render();
       window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');
+    </script>
+  </body>
+</html>`;
+}
+
+// Mirrors the shape the framework deck ships (`deck-framework.ts`): a
+// document-level listener registered in capture at parse time, i.e. before the
+// host's edit bridge is installed and on the same node, so `stopPropagation`
+// from the bridge cannot reach it.
+function artifactMouseCounterHtml(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Pointer Owner</title>
+  </head>
+  <body style="font-family: system-ui, sans-serif;">
+    <p data-od-id="target" id="target" style="font-size:32px;padding:40px;">Click target</p>
+    <p>all: <span data-od-id="all" id="all">0</span></p>
+    <p>while-editing: <span data-od-id="editing" id="editing">0</span></p>
+    <script>
+      (function () {
+        var all = 0;
+        var editing = 0;
+        // Recorded against the document's own edit-mode marker rather than as
+        // a delta, so the assertion cannot be confused by pointer transitions
+        // that land either side of entering edit mode.
+        function record() {
+          all += 1;
+          document.getElementById('all').textContent = String(all);
+          if (document.documentElement.hasAttribute('data-od-edit-mode')) {
+            editing += 1;
+            document.getElementById('editing').textContent = String(editing);
+          }
+        }
+        document.addEventListener('click', record, true);
+        document.addEventListener('mouseover', record, true);
+        document.addEventListener('mousedown', record, true);
+      })();
     </script>
   </body>
 </html>`;

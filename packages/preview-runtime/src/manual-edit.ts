@@ -89,9 +89,57 @@ export function manualEditKindForElement(el: Element): ManualEditKind {
 export function buildManualEditKeyboardGuard(): string {
   return `<script data-od-edit-keyboard-guard>(function(){
   window.__odEditGuard = window.__odEditGuard || { editingEl: null };
+  var guard = window.__odEditGuard;
+  if (guard.editMode == null) guard.editMode = false;
+  if (guard.installing == null) guard.installing = false;
+  // While edit mode is on, mouse and pointer input belongs to the editor, not
+  // to the artifact. An authored document-level click handler would otherwise
+  // act on the same click that was only meant to select something — the
+  // framework deck ships exactly that shape (a capture-phase document click
+  // that turns the page), and it registers at parse time, before the edit
+  // bridge exists, so it is on the same node and ahead of it in the same
+  // phase. Neither stopPropagation nor stopImmediatePropagation from the
+  // bridge can reach a sibling that already ran. Wrapping the artifact's own
+  // registration is order-independent, so it does.
+  //
+  // Authored hover handlers are withheld for the same reason: they restyle or
+  // move the element out from under the pointer at the moment it is clicked.
+  //
+  // Withholding a 'wheel' listener never disables scrolling — scrolling is the
+  // browser's default action and only preventDefault suppresses it. Authored
+  // wheel handlers in this catalogue are overwhelmingly page-turn triggers
+  // registered { passive: true }, which cannot preventDefault at all.
+  // 'scroll' is deliberately absent: it is not cancelable, so withholding it
+  // would only break scroll-driven effects while preventing nothing.
+  var GUARDED_POINTER_TYPES = {
+    click: 1, dblclick: 1, auxclick: 1, contextmenu: 1,
+    mousedown: 1, mouseup: 1, mousemove: 1,
+    mouseover: 1, mouseout: 1, mouseenter: 1, mouseleave: 1,
+    pointerdown: 1, pointerup: 1, pointermove: 1, pointercancel: 1,
+    pointerover: 1, pointerout: 1, pointerenter: 1, pointerleave: 1,
+    wheel: 1,
+    touchstart: 1, touchmove: 1, touchend: 1, touchcancel: 1
+  };
+  function isGuardedType(type){
+    return type === 'keydown' || GUARDED_POINTER_TYPES[type] === 1;
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (data && data.type === 'od-edit-mode') guard.editMode = !!data.enabled;
+  }, true);
   function shouldBlock(){
     var el = window.__odEditGuard && window.__odEditGuard.editingEl;
     return el && el.isConnected;
+  }
+  function blocksEvent(type, ev, editorOwned){
+    // The editor registers through the same patched addEventListener, so its
+    // own listeners must stay live or edit mode would have no way to select.
+    if (editorOwned) return false;
+    if (type === 'keydown') {
+      return shouldBlock()
+        && (guard.editingEl === ev.target || guard.editingEl.contains(ev.target));
+    }
+    return !!guard.editMode;
   }
   function captureFromOptions(options){
     if (options == null) return false;
@@ -121,7 +169,7 @@ export function buildManualEditKeyboardGuard(): string {
     var originalRemove = target.removeEventListener.bind(target);
     var wrapped = []; // [{ original, handler, capture }] so removeEventListener can map back to the registered wrapper
     target.addEventListener = function(type, listener, options){
-      if (type === 'keydown' && typeof listener === 'function') {
+      if (isGuardedType(type) && typeof listener === 'function') {
         var capture = captureFromOptions(options);
         for (var i = 0; i < wrapped.length; i++) {
           if (wrapped[i].original === listener && wrapped[i].capture === capture) return;
@@ -132,9 +180,10 @@ export function buildManualEditKeyboardGuard(): string {
           // Already aborted — browser will not register the listener; skip bookkeeping entirely
           return originalAdd(type, listener, options);
         }
+        var editorOwned = !!guard.installing;
         var handler = function(ev){
           if (once) removeWrappedEntry(wrapped, handler);
-          if (shouldBlock() && (window.__odEditGuard.editingEl === ev.target || window.__odEditGuard.editingEl.contains(ev.target))) {
+          if (blocksEvent(type, ev, editorOwned)) {
             return;
           }
           return listener.call(this, ev);
@@ -150,7 +199,7 @@ export function buildManualEditKeyboardGuard(): string {
       return originalAdd(type, listener, options);
     };
     target.removeEventListener = function(type, listener, options){
-      if (type === 'keydown' && typeof listener === 'function') {
+      if (isGuardedType(type) && typeof listener === 'function') {
         var capture = captureFromOptions(options);
         for (var i = wrapped.length - 1; i >= 0; i--) {
           var entry = wrapped[i];
@@ -172,6 +221,15 @@ export function buildManualEditKeyboardGuard(): string {
 export function buildManualEditBridge(enabled: boolean): string {
   return `<script data-od-edit-bridge>(function(){
   var enabled = ${JSON.stringify(enabled)};
+  // The interaction guard withholds mouse input from the artifact while edit
+  // mode is on. It patches addEventListener, and this bridge registers through
+  // the same patched function, so it marks its own registrations as the
+  // editor's — otherwise the guard would withhold the very events selection
+  // depends on. Restored rather than cleared: the bridge can be installed from
+  // inside another install on the srcDoc path.
+  var odGuard = window.__odEditGuard = window.__odEditGuard || { editingEl: null };
+  var odGuardInstallingBefore = odGuard.installing;
+  odGuard.installing = true;
   var discoverySelector = ${JSON.stringify(MANUAL_EDIT_DISCOVERY_SELECTOR)};
   var hostNodeSelector = ${JSON.stringify(MANUAL_EDIT_HOST_NODE_SELECTOR)};
   var sourcePathAttr = ${JSON.stringify(MANUAL_EDIT_SOURCE_PATH_ATTR)};
@@ -1416,6 +1474,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootEditBridge);
   else setTimeout(bootEditBridge, 0);
   document.documentElement.toggleAttribute('data-od-edit-mode', enabled);
+  odGuard.installing = odGuardInstallingBefore;
 })();</script>`;
 }
 
