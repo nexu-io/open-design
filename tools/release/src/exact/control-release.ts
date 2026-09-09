@@ -186,7 +186,7 @@ export async function stageAcceptedElectronContribution(input: JsonObject, recei
   const releasePlan = await readObject(String(input.releasePlan ?? ""));
   if (releasePlan.schemaVersion !== 1 || releasePlan.baseline?.mode !== "accepted" || releasePlan.baseline?.requiredAcceptance !== "hot"
     || releasePlan.plan?.target !== input.target || !Array.isArray(releasePlan.actions)) throw new Error("exact accepted contribution plan is invalid");
-  const forbidden = new Set(["electron.shell.build", "electron.shell.test", "electron.distribution", "electron.acceptance.full"]);
+  const forbidden = new Set(["electron.shell.build", "electron.distribution", "electron.acceptance.full"]);
   if (releasePlan.actions.some((action: JsonObject) => forbidden.has(String(action.id)))) throw new Error("exact accepted contribution plan requires a fresh Electron distribution");
   const credential = releasePlan.baseline?.acceptance;
   if (credential == null || credential.schemaVersion !== 1 || credential.operation !== "exact.acceptance" || credential.status !== "accepted"
@@ -202,6 +202,13 @@ export async function stageAcceptedElectronContribution(input: JsonObject, recei
     target: input.target,
   });
   if (!canonicalBytes(expectedPlan).equals(canonicalBytes(releasePlan.plan))) throw new Error("exact accepted Electron contribution plan binding mismatch");
+  if (typeof input.validationReceipt !== "string") throw new Error("accepted carrier reuse requires current Shell test validation");
+  const validation = await readObject(input.validationReceipt);
+  if (validation.schemaVersion !== 1 || validation.operation !== "exact.validation" || validation.status !== "passed"
+    || validation.node !== "electron.shell.test" || validation.identity !== expectedPlan.nodes["electron.shell.test"].identity
+    || validation.target !== input.target || validation.executionPlatform !== input.target) {
+    throw new Error("accepted carrier Shell test validation binding mismatch");
+  }
   const artifact = credential.artifact;
   if (artifact == null || typeof artifact.url !== "string" || typeof artifact.sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(artifact.sha256)
     || !Number.isSafeInteger(artifact.size) || artifact.size < 0 || typeof artifact.mediaType !== "string") {

@@ -14,6 +14,7 @@
       ]
     },
     "electron.contract.test": {
+      "inherits": ["release.validation.control"],
       "paths": [
         "packages/electron-contract/tests",
         "packages/electron-contract/tsconfig.tests.json",
@@ -71,7 +72,7 @@
       ]
     },
     "electron.shell.test": {
-      "inherits": ["electron.lifecycle.control", "shell.packages.test"],
+      "inherits": ["electron.lifecycle.control", "shell.packages.test", "release.validation.control"],
       "paths": [
         "packages/electron-kit/tests",
         "packages/electron-kit/tsconfig.tests.json",
@@ -144,6 +145,7 @@
       ]
     },
     "closure.test": {
+      "inherits": ["release.validation.control"],
       "paths": [
         "apps/closure/tests",
         "apps/closure/tsconfig.tests.json",
@@ -181,6 +183,9 @@
         "shells/terminal/tests/bootloader-handoff.test.ts",
         "shells/terminal/tests/sidecar.test.ts"
       ]
+    },
+    "release.validation.control": {
+      "paths": ["tools/release/src/exact/validation.ts"]
     },
     "release.acceptance.control": {
       "paths": [

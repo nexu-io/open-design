@@ -14,6 +14,7 @@ import { buildReleaseCapsule, buildReleaseDistribution, buildReleaseScene } from
 import { buildReleaseDataResource } from "./resource-build.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
+import { validateExactPlanNode } from "./validation.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -39,6 +40,16 @@ export function registerExactCommands(cli: CAC): void {
     cli.outputHelp();
   });
   cli.command("self-check", "Verify exact channel transition algebra").action(() => selfCheckExactReleaseControl());
+  cli.command("validate <node>", "Execute one selected exact test node and retain its identity-bound result")
+    .option("--root <directory>", "Checked-out workspace with built prerequisites")
+    .option("--registry <file>", "Identity registry relative to root", { default: "tools/release/resources/exact-plan-identities.json" })
+    .option("--plan <file>", "Exact release plan")
+    .option("--log <file>", "Fresh test output file")
+    .option("--receipt <file>", "Successful validation receipt")
+    .action(async (node: string, options: Options) => {
+      await validateExactPlanNode({ node, root: required(options, "root"), registry: required(options, "registry"),
+        plan: required(options, "plan"), log: required(options, "log"), receipt: required(options, "receipt") });
+    });
   cli.command("acceptance <operation>", "Acquire the exact published installer selected for acceptance")
     .option("--publication <file>", "Publication receipt")
     .option("--policy <file>", "Release policy")
@@ -193,6 +204,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--root <directory>", "Checked-out source root")
     .option("--registry <file>", "Identity registry relative to root", { default: "tools/release/resources/exact-plan-identities.json" })
     .option("--plan <file>", "Accepted release plan (stage)")
+    .option("--validation <file>", "Current successful Shell test result (stage)")
     .option("--channel <name>", "Release channel (stage)")
     .option("--release-version <version>", "Release version (stage)")
     .option("--source-commit <sha>", "Source commit (stage)")
@@ -205,7 +217,8 @@ export function registerExactCommands(cli: CAC): void {
       const receipt = required(options, "receipt");
       if (operation === "stage") await stageAcceptedElectronContribution({ ...shared,
         releasePlan: required(options, "plan"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"),
-        sourceCommit: required(options, "sourceCommit"), target: required(options, "target"), outputDirectory: required(options, "output") }, receipt);
+        sourceCommit: required(options, "sourceCommit"), target: required(options, "target"), outputDirectory: required(options, "output"),
+        validationReceipt: required(options, "validation") }, receipt);
       else if (operation === "promote") await promoteAcceptedElectronBaseline({ ...shared,
         publishReceipt: required(options, "publishReceipt"), activationReceipt: required(options, "activationReceipt"),
         acceptanceCredential: required(options, "acceptance"), channelHeadFile: required(options, "channelHead") }, receipt);

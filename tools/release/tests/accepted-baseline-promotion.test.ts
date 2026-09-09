@@ -171,7 +171,7 @@ describe("accepted Electron baseline promotion", () => {
       registry: input.registry, root: input.repository, channel: "betahyx", releaseVersion, sourceCommit, target: "darwin-arm64",
       outputDirectory: stagedDirectory,
     };
-    await expect(executeExactReleaseControl(stageRequest, stagedReceipt)).rejects.toThrow("requires a fresh Electron distribution");
+    await expect(executeExactReleaseControl(stageRequest, stagedReceipt)).rejects.toThrow("requires current Shell test validation");
     // A separately supplied test result can satisfy the existing test gate;
     // installed acceptance alone must not manufacture that result.
     const testedPlan = await createExactReleasePlanFromRegistryFile({
@@ -180,7 +180,19 @@ describe("accepted Electron baseline promotion", () => {
       channel: "betahyx", registryPath: input.registry, root: input.repository, target: "darwin-arm64",
     });
     await writeFile(releasePlanPath, JSON.stringify(testedPlan));
-    await executeExactReleaseControl(stageRequest, stagedReceipt);
+    await expect(executeExactReleaseControl(stageRequest, stagedReceipt)).rejects.toThrow("requires current Shell test validation");
+    const validationReceipt = join(input.root, "shell-test-result.json");
+    const validation = { schemaVersion: 1, operation: "exact.validation", status: "passed", node: "electron.shell.test",
+      identity: releasePlan.plan.nodes["electron.shell.test"].identity, target: "darwin-arm64", executionPlatform: "darwin-arm64" };
+    for (const invalid of [{ status: "failed" }, { identity: `sha256:${"f".repeat(64)}` }, { node: "closure.test" }, { executionPlatform: "linux-x64" }]) {
+      await writeFile(validationReceipt, JSON.stringify({ ...validation, ...invalid }));
+      await expect(executeExactReleaseControl({ ...stageRequest, validationReceipt }, stagedReceipt)).rejects.toThrow("validation binding mismatch");
+    }
+    await writeFile(validationReceipt, JSON.stringify(validation));
+    // Pending test actions do not require rebuilding physical bytes when their
+    // independently executed current result has now been supplied.
+    await writeFile(releasePlanPath, JSON.stringify(releasePlan));
+    await executeExactReleaseControl({ ...stageRequest, validationReceipt }, stagedReceipt);
     const staged = JSON.parse(await readFile(stagedReceipt, "utf8"));
     expect(staged).toMatchObject({ operation: "shell.distribution.contribute", artifact: { sha256: snapshot.acceptance.artifact.sha256 } });
     expect(await readFile(staged.artifact.file)).toEqual(input.artifactBody);

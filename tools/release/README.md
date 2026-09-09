@@ -115,6 +115,20 @@ mark contract/Closure builds or any unit-test node as executed. Those results
 must come from their own verified convergence records; an installed artifact is
 not evidence that the current checkout's test suite ran.
 
+`validate <node> --root <workspace> --plan <release-plan> --log <fresh-file>
+--receipt <fresh-file>` executes the selected `electron.contract.test`,
+`electron.shell.test` or `closure.test` recipe. Build prerequisites first.
+The command recomputes the declared plan before and after execution, retains
+test output, and writes a successful identity-bound receipt only after every
+command succeeds. It refuses unsupported/unselected nodes, stale source plans,
+existing result files and mismatched native execution platforms. The pure
+contract tests may run on another platform; the receipt records that platform.
+These are local execution receipts, not self-authorized convergence cache hits.
+`baseline stage --validation <receipt>` requires current successful native Shell
+test evidence even when a supplied plan claims that testing was already cached.
+A pending test action can be satisfied without rebuilding the physical carrier;
+build/distribution/full-installed actions still prohibit that reuse path.
+
 `prepare` and `finalize` authorize the bound policy and execute release-owned
 content assembly and signing in-process. Cross-job collection and relocation
 share that implementation; tools-pack has no exact signing API or request CLI.
