@@ -20,6 +20,15 @@ export async function resolveElectronNodeArchive(target?: ElectronExactSceneRequ
   return readElectronNodeArchive(target);
 }
 
+/** Independently distributable Node/native resource; tools own plan/cache and
+ * publication, while Standalone owns verified package assembly and archiving. */
+export async function buildElectronPlatformResource(input: Readonly<{
+  archivePath: string; target: ElectronExactSceneRequest["target"]; outputArchivePath: string;
+}>) {
+  const { buildElectronPlatformResource: buildResource } = await import("./platform/build.ts");
+  return buildResource(input);
+}
+
 /** Build-only product composition. Runtime observation never imports this entry. */
 export async function buildElectronPackage(request: ElectronPackRequest) {
   const { parseElectronPackRequest, executeElectronPack } = await import("./adapters/tools/pack-tool.ts");

@@ -38,11 +38,17 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
   verification and Node runtime binding) and `/packages/build` (locked Node and
   native package assembly). The runtime entry must not load build dependencies.
   Shells supply product dependency locks/probes and installation composition;
-  tools retain persistent build-cache policy. Physical packages remain bound to
-  the Shell installation, not hot-update blobs or a new release component.
+  tools retain persistent build-cache policy. Shells choose installation-bound
+  packages or an independently authenticated exact platform resource. The latter
+  uses `/packages/resource`, separate from the lightweight `/packages` leaf;
+  it never defines a channel, latest feed, updater, or Closure business resource.
+  Resource callers authenticate the descriptor before acquisition and own
+  explicit-recovery authorization. Normal preparation rejects damaged cache;
+  executable permissions and native probes follow complete tree verification.
 - Expose domain types and pure/library APIs only. Concrete pack, scene, cache,
   materialize, promote, release, workflow, and argv handling belongs elsewhere.
-- Every resource explicitly declared `sync` materializes before generation preparation; Node remains the Shell-owned cold-start anchor and never enters the blob catalogue.
+- Every resource explicitly declared `sync` materializes before generation preparation;
+  Node remains Shell-owned and never enters Closure's business blob catalogue.
 - Keep `packages/download` as an atomic transport primitive. Blob identity, global CAS, Shell-carried candidates, materialized trees, quarantine, reachability, and bounded cleanup belong here.
 - Shell compatibility is intentionally visible to Closure through shell-neutral updater and lifecycle-transition ports; concrete installer and renderer behavior remains Shell-owned.
 - Shell-updater snapshot/capability v4 distinguishes restart activation from

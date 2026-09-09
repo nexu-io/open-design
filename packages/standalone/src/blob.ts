@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { managedDownload } from "@open-design/download";
@@ -15,6 +15,8 @@ export type StandaloneBlobCandidate = Readonly<{
 }>;
 
 export type StandaloneBlobOptions = Readonly<{
+  /** Callers with explicit-recovery semantics must not silently replace damage. */
+  invalidCache?: "repair" | "reject";
   candidates?: readonly StandaloneBlobCandidate[];
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -48,7 +50,7 @@ async function fileSha256(path: string): Promise<string> {
 
 async function validBlob(path: string, blob: StandaloneBlob): Promise<boolean> {
   try {
-    const info = await stat(path);
+    const info = await lstat(path);
     return info.isFile() && info.size === blob.size && await fileSha256(path) === blob.sha256;
   } catch {
     return false;
@@ -102,7 +104,10 @@ export async function ensureStandaloneBlob(root: string, blob: StandaloneBlob, o
     event("reused", { source: "cas" });
     return { path: destination, reused: true, source: "cas" };
   }
-  if (await stat(destination).catch(() => null) != null) await discardStandaloneStoreEntry(root, destination);
+  if (await lstat(destination).catch(() => null) != null) {
+    if (options.invalidCache === "reject") throw new Error("cached blob is damaged; explicit recovery required");
+    await discardStandaloneStoreEntry(root, destination);
+  }
 
   for (const candidate of options.candidates ?? []) {
     if (!await validBlob(candidate.path, blob)) continue;
@@ -165,7 +170,7 @@ export async function materializeStandaloneBlob(
   blob: StandaloneBlob,
   blobPath: string,
   materialization: StandaloneMaterialization,
-  options: Pick<StandaloneBlobOptions, "feedback" | "resourceId"> = {},
+  options: Pick<StandaloneBlobOptions, "feedback" | "resourceId" | "invalidCache"> = {},
 ): Promise<Readonly<{ path: string; entrypoint: string; reused: boolean }>> {
   if (materialization.type === "file") return { path: blobPath, entrypoint: blobPath, reused: true };
   const key = createHash("sha256").update(canonicalJson({ blob: blob.sha256, materialization })).digest("hex");
@@ -173,6 +178,7 @@ export async function materializeStandaloneBlob(
   const resolvedEntrypoint = join(destination, materialization.entrypoint);
   const verifyTree = async () => {
     try {
+      if (!(await lstat(destination)).isDirectory()) return false;
       return standaloneTreeSha256(await inventory(destination)) === materialization.treeSha256
         && (await stat(resolvedEntrypoint)).isFile();
     } catch {
@@ -184,7 +190,10 @@ export async function materializeStandaloneBlob(
     options.feedback?.emit({ phase: "blob-materialization", state: "reused", resourceId: options.resourceId, blobSha256: blob.sha256 });
     return { path: destination, entrypoint: resolvedEntrypoint, reused: true };
   }
-  if (await stat(destination).catch(() => null) != null) await discardStandaloneStoreEntry(root, destination);
+  if (await lstat(destination).catch(() => null) != null) {
+    if (options.invalidCache === "reject") throw new Error("cached materialization is damaged; explicit recovery required");
+    await discardStandaloneStoreEntry(root, destination);
+  }
   const stage = join(root, "staging", `${key}.${randomUUID()}.tree`);
   await mkdir(stage, { recursive: true });
   try {
