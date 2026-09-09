@@ -982,6 +982,7 @@ export const HU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'energetic': 'Dinamikus, élénk stílus vastag keretekkel, geometrikus formákkal, nagy kontrasztú színekkel és kifejező tipográfiával, amely mozgást és életerőt közvetít.',
   'enterprise': 'Letisztult, nagy kontrasztú vállalati dizájn adatvezérelt munkafolyamatokhoz, intuitív fogd és vidd mintázatokkal és strukturált elrendezésekkel.',
   'expo': 'React Native platform. Sötét téma, szoros betűközök, kódközpontú.',
+  'ezoic': 'Termék-UI kiadóknak és operátoroknak. Szerep-token döntések, beleértve a $green használatát futó sider számlálókon. Nem marketing paletta.',
   'expressive': 'Élénk, egyéniségközpontú dizájn merész színekkel, játékos grafikákkal és dinamikus elrendezésekkel, amelyek egyensúlyban tartják a kreativitást és a struktúrát.',
   'fantasy': 'Játék által inspirált fantasy esztétika merész, prémium vizuális megoldásokkal, gazdag színpalettákkal és magával ragadó tematikus elemekkel.',
   'ferrari': 'Luxusautók. Chiaroscuro szerkesztői stílus, Ferrari Red kiemelések, filmes fekete.',

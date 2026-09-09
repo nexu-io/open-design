@@ -982,6 +982,7 @@ export const TR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'energetic': 'Kalın kenarlıklar, geometrik şekiller, yüksek kontrastlı renkler ve hareket ile canlılık aktaran anlatımcı tipografiyle dinamik, canlı stil.',
   'enterprise': 'Sezgisel sürükle-bırak kalıpları ve yapılandırılmış düzenlerle veri odaklı iş akışları için temiz, yüksek kontrastlı kurumsal tasarım.',
   'expo': 'React Native platformu. Koyu tema, dar harf aralığı, kod odaklı.',
+  'ezoic': 'Yayıncılar ve operatörler için ürün UI. Rol-token kararları, devam eden sider sayıları için $green dahil. Pazarlama paleti değil.',
   'expressive': 'Cesur renkler, eğlenceli grafikler ve yaratıcılığı yapıyla dengeleyen dinamik düzenlerle canlı, kişilik odaklı tasarım.',
   'fantasy': 'Cesur, premium görseller, zengin renk paletleri ve sürükleyici tematik öğelerle oyundan ilham alan fantastik estetik.',
   'ferrari': 'Lüks otomotiv. Chiaroscuro editöryal, Ferrari Red vurguları, sinematik siyah.',

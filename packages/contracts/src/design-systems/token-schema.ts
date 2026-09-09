@@ -210,23 +210,35 @@ export const TOKEN_SCHEMA: readonly TokenSpec[] = [
  */
 export const BRAND_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
   default: [
-    "--space-20", // 80px — used as section-y-desktop's twin; only default needs it
+    "--space-20", // 80px: used as section-y-desktop's twin; only default needs it
+  ],
+  ezoic: [
+    "--green", // product $green: primary, success, in-flight sider pills
+    "--green-darken", // hover/pressed and selected-row pills
+    "--blue", // links and informational; never the primary CTA
+    "--orange", // caution / waiting; binds --warn
+    "--red", // destructive / unread-alert only; binds --danger
+    "--header-bg", // dark app top bar; local chrome, not a theme
+    "--header-secondary", // inset segments inside the top bar
+    "--header-height", // 64px top bar
+    "--sider-bg", // product sider #001529
+    "--control-height", // 32px default control
   ],
   openai: [
-    "--space-16", // 64px — major section gap in OpenAI's DESIGN.md §5 spacing scale
+    "--space-16", // 64px: major section gap in OpenAI's DESIGN.md §5 spacing scale
   ],
   kami: [
     "--accent-light", // brighter ink-blue for links on dark surfaces
     "--text-md", // 15px lede tier between --text-base and --text-lg
-    "--leading-display", // 1.10 — only kami needs this tier
-    "--leading-dense", // 1.40 — resume / one-pager rhythm
+    "--leading-display", // 1.10: only kami needs this tier
+    "--leading-dense", // 1.40: resume / one-pager rhythm
     "--tracking-eyebrow", // uppercase eyebrow tracking
     "--tracking-label", // small uppercase label tracking
-    "--space-7", // 28px — kami's card interior
-    "--space-18", // 72px — section gap (web)
-    "--space-22", // 88px — page top padding (web)
-    "--radius-xs", // 2px — kami tags
-    "--radius-xl", // 16px — kami hero containers
+    "--space-7", // 28px: kami's card interior
+    "--space-18", // 72px: section gap (web)
+    "--space-22", // 88px: page top padding (web)
+    "--radius-xs", // 2px: kami tags
+    "--radius-xl", // 16px: kami hero containers
     "--elev-ring-accent", // 1px brand ring used as primary-button edge
   ],
   "tom-modern": [

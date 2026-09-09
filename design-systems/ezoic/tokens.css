@@ -1,0 +1,93 @@
+/* design-systems/ezoic/tokens.css
+ *
+ * Product UI bindings for Ezoic. DESIGN.md is the decision record;
+ * this file is the machine form agents paste into the first <style>.
+ *
+ * $green stays $green: --green is the product token, --accent and
+ * --success alias to it. Do not rename it to a semantic role.
+ */
+
+:root {
+  /* Product names first so schema slots can alias them. */
+  --green: #5fa624;
+  --green-darken: #376611;
+  --blue: #4c91f7;
+  --orange: #ff9d00;
+  --red: #da3335;
+  --header-bg: #03080b;
+  --header-secondary: #1d2427;
+  --header-height: 64px;
+  --sider-bg: #001529;
+  --control-height: 32px;
+
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface-warm: var(--surface);
+
+  --fg: #03080b;
+  --fg-2: rgba(0, 0, 0, 0.65);
+  --muted: #908e9b;
+  --meta: rgba(0, 0, 0, 0.45);
+
+  --border: #d9d9d9;
+  --border-soft: var(--border);
+
+  --accent: var(--green);
+  --accent-on: #ffffff;
+  --accent-hover: var(--green-darken);
+  --accent-active: var(--green-darken);
+
+  --success: var(--green);
+  --warn: var(--orange);
+  --danger: var(--red);
+
+  --font-display: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  --text-4xl: 38px;
+
+  --leading-body: 1.5715;
+  --leading-tight: 1.2;
+  --tracking-display: 0;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 24px;
+  --section-y-tablet: 16px;
+  --section-y-phone: 12px;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px rgba(0, 0, 0, 0.15);
+
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --container-max: 1120px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

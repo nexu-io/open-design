@@ -982,6 +982,7 @@ export const ID_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'energetic': 'Gaya dinamis dan hidup dengan border tebal, bentuk geometris, warna kontras tinggi, dan tipografi ekspresif yang menyampaikan gerak dan vitalitas.',
   'enterprise': 'Desain enterprise yang bersih dan kontras tinggi untuk alur kerja berbasis data dengan pola drag-and-drop yang intuitif dan tata letak terstruktur.',
   'expo': 'Platform React Native. Tema gelap, jarak antarhuruf yang rapat, berpusat pada kode.',
+  'ezoic': 'UI produk untuk publisher dan operator. Keputusan peran ke token, termasuk $green untuk hitungan sider yang sedang berjalan. Bukan palet pemasaran.',
   'expressive': 'Desain hidup yang berkarakter dengan warna berani, grafis ceria, dan tata letak dinamis yang menyeimbangkan kreativitas dengan struktur.',
   'fantasy': 'Estetika fantasi bernuansa game dengan visual berani dan premium, palet warna yang kaya, dan elemen tematik yang imersif.',
   'ferrari': 'Otomotif mewah. Editorial chiaroscuro, aksen Ferrari Red, hitam sinematik.',

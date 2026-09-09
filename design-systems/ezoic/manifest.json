@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "ezoic",
+  "name": "Ezoic",
+  "category": "Productivity & SaaS",
+  "description": "Publisher and operator product UI. Recorded role-to-token decisions, including $green for in-flight sider pills. Not a marketing palette.",
+  "source": {
+    "type": "bundled",
+    "origin": "Ezoic product UI decision record"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css",
+    "components": "components.html"
+  },
+  "importMode": "normalized",
+  "craft": {
+    "applies": [],
+    "suggested": [
+      "color",
+      "accessibility-baseline"
+    ],
+    "exemptions": []
+  }
+}

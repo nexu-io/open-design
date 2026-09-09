@@ -387,6 +387,8 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
     'Sauberer, produktorientierter Standard. Nutzen, wenn der Brief keine bestimmte Stimmung verlangt — gut für B2B-Tools, Dashboards und Utility-Pages.',
   elevenlabs: 'AI-Voice-Plattform. Dunkle filmische UI, Audio-Waveform-Ästhetik.',
   expo: 'React-Native-Plattform. Dunkles Theme, enge Laufweite, codezentriert.',
+  ezoic:
+    'Produkt-UI für Publisher und Operatoren. Rollen-zu-Token-Entscheidungen, inklusive $green für laufende Sider-Zähler. Keine Marketing-Palette.',
   ferrari: 'Luxusautomobil. Chiaroscuro-Editorial, Ferrari-Red-Akzente, filmisches Schwarz.',
   figma: 'Kollaboratives Design-Tool. Lebendige Mehrfarbigkeit, spielerisch und professionell.',
   framer: 'Website-Builder. Mutiges Schwarz und Blau, motion-first, designorientiert.',

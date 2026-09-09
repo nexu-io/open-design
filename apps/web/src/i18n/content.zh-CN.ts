@@ -982,6 +982,7 @@ export const ZH_CN_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'energetic': '动感鲜明的风格，采用粗描边、几何造型、高对比配色和富有表现力的字体，传递动感与活力。',
   'enterprise': '简洁、高对比的企业级设计，面向数据驱动的工作流，采用直观的拖放模式和结构化布局。',
   'expo': 'React Native 平台。深色主题，紧凑的字间距，以代码为中心。',
+  'ezoic': '面向发布商与运营工具的产品 UI。已记录角色到 token 的决策，含进行中 sider 计数的 $green。不是营销色板。',
   'expressive': '鲜艳、个性鲜明的设计，采用醒目的色彩、俏皮的图形和动感的布局，在创意与结构之间取得平衡。',
   'fantasy': '以游戏为灵感的奇幻美学，采用醒目的高级视觉、丰富的配色和沉浸式的主题元素。',
   'ferrari': '豪华汽车。明暗对照的编辑式风格，Ferrari Red 点缀，电影感的黑色。',

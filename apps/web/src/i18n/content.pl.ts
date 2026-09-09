@@ -982,6 +982,7 @@ export const PL_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'energetic': 'Dynamiczny, żywy styl z grubymi obramowaniami, geometrycznymi kształtami, wysokokontrastowymi kolorami i ekspresyjną typografią oddającą ruch i witalność.',
   'enterprise': 'Czysty, wysokokontrastowy projekt korporacyjny do przepływów pracy opartych na danych, z intuicyjnymi wzorcami przeciągnij i upuść oraz strukturalnymi układami.',
   'expo': 'Platforma React Native. Ciemny motyw, ciasny odstęp między literami, ukierunkowanie na kod.',
+  'ezoic': 'UI produktu dla wydawców i operatorów. Decyzje rola-token, w tym $green dla liczników sider w toku. To nie paleta marketingowa.',
   'expressive': 'Żywy, oparty na charakterze projekt z odważnymi kolorami, figlarną grafiką i dynamicznymi układami równoważącymi kreatywność ze strukturą.',
   'fantasy': 'Estetyka fantasy inspirowana grami, z odważną, ekskluzywną oprawą wizualną, bogatymi paletami kolorów i wciągającymi elementami tematycznymi.',
   'ferrari': 'Motoryzacja klasy premium. Redakcyjne chiaroscuro, akcenty Ferrari Red, kinowa czerń.',

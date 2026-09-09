@@ -235,6 +235,8 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
     'Défaut propre et orienté produit. À utiliser quand le brief ne demande pas d’ambiance précise — bon pour outils B2B, dashboards et pages utility.',
   elevenlabs: 'Plateforme IA voice. UI sombre cinématique, esthétique waveform audio.',
   expo: 'Plateforme React Native. Thème sombre, tracking serré, centré code.',
+  ezoic:
+    'UI produit éditeur et opérateur. Décisions rôle vers jeton, dont $green pour les compteurs sider en cours. Pas une palette marketing.',
   ferrari: 'Automobile de luxe. Éditorial chiaroscuro, accents Ferrari Red, noir cinématique.',
   figma: 'Outil de design collaboratif. Multicolore vif, joueur et professionnel.',
   framer: 'Website builder. Noir et bleu audacieux, motion-first, orienté design.',
