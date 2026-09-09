@@ -105,6 +105,7 @@ import type {
   TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { setChatCorrelation } from '../observability/chat-context';
 import {
   trackByokPreflightBlocked,
   trackComposerBarClick,
@@ -3931,6 +3932,15 @@ export function ProjectView({
             : normalizeConversationMessageOrder(list),
         );
         setMessagesInitialized(true);
+        // The conversation the chat panel is actually showing, stamped only
+        // once its transcript has landed. Every `client_chat_*` event spreads
+        // this block, and without it a slow-open or a memory-pressure report
+        // names no conversation and no project — which is the difference
+        // between "P95 first paint is 9s" and a row a triager can pull up.
+        setChatCorrelation({
+          conversation_id: activeConversationId,
+          project_id: project.id,
+        });
         setAttachedComments([]);
         setArtifact(null);
         setError(null);

@@ -86,8 +86,37 @@ import {
   type PersistedArtifactFileRef,
 } from '../artifacts/strip';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
+import { setChatCorrelation } from '../observability/chat-context';
 import { markUpstreamActivity } from '../runtime/chat/upstream-activity';
 import { IN_FLIGHT_TOOL_INPUT_MARKER, IN_FLIGHT_TOOL_OUTPUT_KEY } from '../runtime/tool-events';
+
+/**
+ * A run is streaming into the chat panel exactly between these two calls.
+ *
+ * Every `client_chat_*` event spreads `chatCorrelation()`, and
+ * `chat-interaction.ts` derives its whole `streaming` breakdown from whether
+ * that block carries a `run_id` — it maintains no second flag precisely so
+ * the two can never disagree. That makes this pair load-bearing rather than
+ * decorative: with no opener, `streaming` is false for the entire life of the
+ * page and `client_chat_interaction_latency` reports every stall as happening
+ * at rest; with no closer it would stay true forever and report the mirror
+ * image. Neither call may be added without the other.
+ *
+ * `agent_id` rides along on the opener because it is the one dimension the
+ * run-creation sites actually hold. `model_id` is deliberately absent: it is
+ * not in scope at either call, and stamping a guess would be worse than the
+ * gap. An absent `agentId` CLEARS the field rather than leaving the previous
+ * run's agent standing (see `setChatCorrelation`'s merge rule) — a reattach
+ * whose message never persisted a runtime must not inherit an identity.
+ */
+function openChatRunCorrelation(runId: string, agentId: string | undefined): void {
+  setChatCorrelation({ run_id: runId, agent_id: agentId });
+}
+
+/** Closes the window opened by `openChatRunCorrelation`. */
+function closeChatRunCorrelation(): void {
+  setChatCorrelation({ run_id: undefined });
+}
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
@@ -1135,6 +1164,7 @@ export async function streamViaDaemon({
       conversation_id: conversationId ?? undefined,
       client_type: detectClientType(),
     });
+    openChatRunCorrelation(runId, agentId);
     notifyRunsChanged();
     emitRunStatus('queued');
     await consumeDaemonRun({
@@ -1163,6 +1193,13 @@ export async function streamViaDaemon({
 }
 
 export async function reattachDaemonRun(options: DaemonReattachOptions): Promise<void> {
+  // Reattach is a run start as far as the chat panel is concerned — it is the
+  // path a page refresh takes back onto a run that is still in flight, and the
+  // jank it is about to stream in is exactly the jank worth correlating. This
+  // path has never had a run-start signal of its own (no `trackRunStart`
+  // either); only the correlation is being closed here, deliberately, so this
+  // change adds no new event.
+  openChatRunCorrelation(options.runId, options.agentId);
   await consumeDaemonRun({
     ...options,
     onRunStatus: (status) => {
@@ -1673,6 +1710,11 @@ async function consumeDaemonRun(options: DaemonReattachOptions): Promise<void> {
       conversation_id: options.conversationId ?? undefined,
       client_type: detectClientType(),
     });
+    // The next physical run of a strategy-task chain is a run start like any
+    // other. Skipping it here would leave the correlation block pointing at
+    // the run that just ended, so every stall in the rest of the chain would
+    // be filed under the wrong run id.
+    openChatRunCorrelation(runId, options.agentId);
     options.onRunCreated?.(runId, result.strategyTask);
   }
 }
@@ -2330,6 +2372,7 @@ async function consumeDaemonPhysicalRun({
     // hit the daemon for an already-finished run), trackRunTerminal
     // is a no-op for unknown runIds.
     trackRunTerminal(runId, endStatus ?? (canceled ? 'canceled' : 'unknown'));
+    closeChatRunCorrelation();
   }
 }
 
