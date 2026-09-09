@@ -13,7 +13,18 @@ const execute = promisify(execFile);
 type ExerciseInput = Input & Readonly<{ artifact: string; mode: string; baselineReceipt?: string }>;
 
 export async function exerciseReleaseInstallation(input: ExerciseInput) {
+  if (!["first", "hot"].includes(input.mode)) throw new Error("Installation mode must be first or hot");
   try { return await executeReleaseInstallation(input); }
+  catch (error) {
+    const failure = error as Error & { code?: unknown; signal?: unknown; killed?: boolean; stdout?: string; stderr?: string };
+    try {
+      await writeObject(join(resolve(input.workRoot), "diagnostics", `${input.mode}-failure.json`), {
+        message: failure.message, code: failure.code, signal: failure.signal, killed: failure.killed,
+        stdout: failure.stdout, stderr: failure.stderr,
+      });
+    } catch (diagnosticError) { console.error("Could not retain installation failure:", diagnosticError); }
+    throw error;
+  }
   finally {
     if (input.shell === "electron" && ["first", "hot"].includes(input.mode)) {
       try {
@@ -28,12 +39,19 @@ export async function exerciseReleaseInstallation(input: ExerciseInput) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error("Could not retain installation diagnostics:", error);
       }
     }
+    if (input.shell === "terminal" && input.mode === "first") {
+      const output = join(resolve(input.workRoot), "diagnostics");
+      await mkdir(output, { recursive: true });
+      for (const name of ["installed-proof", "runtime-start", "runtime-status", "runtime-stop"]) {
+        try { await copyFile(join(resolve(input.workRoot), "first", `${name}.json`), join(output, `${name}.json`)); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error("Could not retain Terminal diagnostics:", error); }
+      }
+    }
   }
 }
 
 /** Execution products belong to this invocation, never to the workflow's directory layout. */
 async function executeReleaseInstallation(input: ExerciseInput) {
-  if (!["first", "hot"].includes(input.mode)) throw new Error("Installation mode must be first or hot");
   if (!input.target.startsWith("darwin-") || process.platform !== "darwin") throw new Error("Installed execution currently requires macOS");
   if (input.mode === "hot" && input.shell !== "electron") throw new Error("Hot execution requires Electron");
   const { required, published, policy } = await readPublishedAcceptance({
@@ -91,7 +109,7 @@ async function executeReleaseInstallation(input: ExerciseInput) {
     const lifecycle = async (operation: string) => execute("/bin/sh", [join(installedRoot, "sh/terminal.sh"),
       "--root", installedRoot, "--store-root", join(root, "store"), "--channel", policy.channel, "--namespace", namespace,
       "--operation", operation, "--result", join(root, `runtime-${operation}.json`),
-      ...(operation === "start" ? ["--attachment-id", "public-acceptance"] : [])], { timeout: 180_000 });
+      ...(operation === "start" ? ["--attachment-id", "public-acceptance"] : [])], { timeout: operation === "start" ? 600_000 : 180_000 });
     try { await lifecycle("start"); await lifecycle("status"); } finally { await lifecycle("stop"); }
   } else throw new Error("Unsupported acceptance Shell");
   await writeObject(join(root, "execution.json"), {

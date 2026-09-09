@@ -1278,9 +1278,9 @@ jobs:
           --artifact "$env:RUNNER_TEMP/public-shell-artifact.exe" --work-root "$env:RUNNER_TEMP/installed-acceptance"
 
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && matrix.shell == 'electron' }}
+        if: ${{ always() }}
         with:
-          name: exact-installation-diagnostics-${{ matrix.target }}-${{ inputs.release_version }}
+          name: exact-installation-diagnostics-${{ matrix.shell }}-${{ matrix.target }}-${{ inputs.release_version }}
           path: ${{ runner.temp }}/installed-acceptance/diagnostics
           if-no-files-found: ignore
           retention-days: 1
