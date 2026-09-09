@@ -1,9 +1,9 @@
 import { access, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-import { Arch, build as electronBuild, Platform } from "electron-builder";
+import { Arch, build as electronBuild, Platform, type Configuration } from "electron-builder";
 
 import { validateElectronShellManifest, type ElectronShellManifest } from "../contracts/index.js";
 import {
@@ -44,6 +44,22 @@ export async function resolveElectronDistributionResourceFiles(resources: BuildE
   return resources.map(resource => ({ from: resource.path, to: resource.name }));
 }
 
+/** Native assembly owns signing. Prepackaged targets only wrap its unchanged
+ * result; they must never receive a base modified after its signing boundary. */
+export async function buildElectronDistributionStages(input: Readonly<{
+  projectDir: string; appPath: string; platform: "mac" | "win"; arch: Arch;
+  targets: readonly string[]; config: Configuration;
+}>) {
+  const platform = input.platform === "mac" ? Platform.MAC : Platform.WINDOWS;
+  await electronBuild({ projectDir: input.projectDir,
+    targets: platform.createTarget(["dir"], input.arch), config: input.config });
+  await access(input.appPath);
+  return electronBuild({ projectDir: input.projectDir,
+    prepackaged: input.platform === "mac" ? input.appPath : dirname(input.appPath),
+    targets: platform.createTarget(input.targets.filter(target => target !== "dir"), input.arch),
+    config: input.config });
+}
+
 export async function buildElectronDistribution(input: BuildElectronDistributionInput): Promise<ElectronDistributionReceipt> {
   const scene = await loadElectronScene(input.scene.sceneRoot, input.scene.sceneManifestSha256);
   const manifest = validateElectronShellManifest(input.manifest);
@@ -53,9 +69,10 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   const platform: ElectronDistributionReceipt["platform"] = resolveElectronDistributionPlatform(process.platform);
   await rm(input.outputRoot, { force: true, recursive: true });
   await mkdir(input.outputRoot, { recursive: true });
-  const targets = platform === "win"
-    ? Platform.WINDOWS.createTarget([...policy.windows.targets], Arch.x64)
-    : Platform.MAC.createTarget([...policy.mac.targets], process.arch === "arm64" ? Arch.arm64 : Arch.x64);
+  const arch = platform === "win" ? Arch.x64 : process.arch === "arm64" ? Arch.arm64 : Arch.x64;
+  const appPath = platform === "mac"
+    ? join(input.outputRoot, `mac-${process.arch}`, `${input.manifest.executableName}.app`)
+    : join(input.outputRoot, "win-unpacked", `${input.manifest.executableName}.exe`);
   const require = createRequire(import.meta.url);
   const electronPackage = JSON.parse(await readFile(require.resolve("electron/package.json"), "utf8")) as { version: string };
   const scratchRoot = await mkdtemp(join(tmpdir(), "electron-kit-distribution-"));
@@ -86,9 +103,10 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
         path: windowsNsisIncludePath,
       });
     }
-    built = await electronBuild({
+    built = await buildElectronDistributionStages({
       projectDir: projectRoot,
-      targets,
+      appPath, platform, arch,
+      targets: platform === "mac" ? policy.mac.targets : policy.windows.targets,
       config: {
         ...resolveElectronDistributionConfiguration({
           manifest: input.manifest,
@@ -105,9 +123,6 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   } finally {
     await rm(scratchRoot, { force: true, recursive: true });
   }
-  const appPath = platform === "mac"
-    ? join(input.outputRoot, `mac-${process.arch}`, `${input.manifest.executableName}.app`)
-    : join(input.outputRoot, "win-unpacked", `${input.manifest.executableName}.exe`);
   await access(appPath);
 
   const artifacts = [resolve(appPath), ...built.map((path) => resolve(path))];
