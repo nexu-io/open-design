@@ -2745,12 +2745,13 @@ export function ProjectView({
     runId: string | null;
     detached: boolean;
     files: Map<string, ProjectFile>;
-    dispose: () => void;
+    dispose: (force?: boolean) => void;
+    retain: () => () => void;
   }>());
   useEffect(() => () => {
     for (const run of manualFileWritesByRunRef.current.values()) {
       if (run.projectId === project.id && run.authorityKey === projectRunAuthorityKey) {
-        run.dispose();
+        run.dispose(true);
       }
     }
   }, [project.id, projectRunAuthorityKey]);
@@ -4538,21 +4539,50 @@ export function ProjectView({
       for (const [name, file] of previous.files) files.set(name, file);
       previous.dispose();
     }
-    const dispose = () => {
+    let retained = 0;
+    let generation = 0;
+    let disposalRequested = false;
+    let disposed = false;
+    const onAbort = () => dispose(true);
+    const dispose = (force = false) => {
+      if (disposed) return;
+      if (!force && retained > 0) {
+        disposalRequested = true;
+        return;
+      }
+      disposed = true;
       manualFileWritesByRunRef.current.delete(controller);
-      controller.signal.removeEventListener('abort', dispose);
+      controller.signal.removeEventListener('abort', onAbort);
     };
     const entry = {
       projectId: project.id, authorityKey: projectRunAuthorityKey,
       conversationId, runId, detached: false, files, dispose,
+      retain: () => {
+        if (disposed) return () => {};
+        const retainedGeneration = generation;
+        retained += 1;
+        let released = false;
+        return () => {
+          if (released || generation !== retainedGeneration) return;
+          released = true;
+          retained -= 1;
+          if (retained === 0 && disposalRequested) dispose();
+        };
+      },
     };
     manualFileWritesByRunRef.current.set(controller, entry);
-    controller.signal.addEventListener('abort', dispose, { once: true });
+    controller.signal.addEventListener('abort', onAbort, { once: true });
     return {
       bindRun: (nextRunId: string) => {
         // A strategy successor can reuse the assistant and transport, but its
         // physical run must not inherit a predecessor's ownership receipts.
-        if (entry.runId && entry.runId !== nextRunId) files.clear();
+        if (entry.runId && entry.runId !== nextRunId) {
+          files.clear();
+          // An older recovery's finally must not dispose a successor's writer.
+          generation += 1;
+          retained = 0;
+          disposalRequested = false;
+        }
         entry.runId = nextRunId;
       },
       release: (recoverable = false) => {
@@ -4560,7 +4590,7 @@ export function ProjectView({
           // Keep observing real writes between transports, including during
           // the status probe/backoff. Only the same scoped physical run adopts it.
           entry.detached = true;
-          controller.signal.removeEventListener('abort', dispose);
+          controller.signal.removeEventListener('abort', onAbort);
         } else dispose();
       },
     };
@@ -7881,7 +7911,25 @@ export function ProjectView({
     const recoverArtifacts = async () => {
       if (recovering) return;
       recovering = true;
+      const retainedReceipts = new Map<string, NonNullable<ReturnType<typeof findDetachedManualFileWrites>>>();
+      const releaseReceipts: Array<() => void> = [];
+      const retainReceipt = (runId: string) => {
+        const existing = retainedReceipts.get(runId);
+        if (existing) return existing;
+        const receipt = findDetachedManualFileWrites(activeConversationId, runId);
+        if (receipt) {
+          retainedReceipts.set(runId, receipt);
+          releaseReceipts.push(receipt.retain());
+        }
+        return receipt;
+      };
       try {
+        // Pin the live writer before the first HTTP await. A sibling terminal
+        // finalizer may accept an earlier output meanwhile; late manual saves
+        // still have to update this same run's proof until recovery finishes.
+        for (const message of messagesRef.current) {
+          if (message.runId && hasRecoverableArtifactMessage(message)) retainReceipt(message.runId);
+        }
         const serverMessages = await listMessages(
           project.id,
           activeConversationId,
@@ -7897,6 +7945,7 @@ export function ProjectView({
           if (recoveredArtifactMessagesRef.current.has(message.id)) continue;
           const runId = message.runId;
           if (!runId) continue;
+          retainReceipt(runId);
           const recoveryAuthority = canonicalProjectRunWorkspaceContextRef.current;
           const latestAssistantMessage = () => {
             for (let index = messagesRef.current.length - 1; index >= 0; index -= 1) {
@@ -8005,7 +8054,7 @@ export function ProjectView({
           // cleans up this effect, but the successful write still belongs to
           // this same scoped run and must finish its message projection.
           if (!recoveryTargetIsCurrent() || (cancelled && !recoveredExistingArtifact)) return;
-          const recoveredManualFileWrites = findDetachedManualFileWrites(activeConversationId, runId);
+          const recoveredManualFileWrites = retainReceipt(runId);
           const manualWrites = recoveredManualFileWrites?.files ?? new Map<string, ProjectFile>();
           const agentPaths = [
             ...extractTouchedFilePathsFromEvents(message.events),
@@ -8067,6 +8116,7 @@ export function ProjectView({
           onProjectsRefresh();
         }
       } finally {
+        for (const release of releaseReceipts) release();
         recovering = false;
       }
     };

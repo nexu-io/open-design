@@ -4309,6 +4309,7 @@ describe('ProjectView daemon cleanup', () => {
     render(
       <ProjectView
         project={{ id: 'project-recover-failed', name: 'Project', skillId: null, designSystemId: null } as never}
+        initialWorkspaceScope={{ kind: 'unbound', projectId: 'project-recover-failed', workspaceId: null, context: null }}
         routeFileName={null}
         config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
         agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
@@ -4395,6 +4396,7 @@ describe('ProjectView daemon cleanup', () => {
     render(
       <ProjectView
         project={{ id: 'project-css-recover', name: 'Project', skillId: null, designSystemId: null } as never}
+        initialWorkspaceScope={{ kind: 'unbound', projectId: 'project-css-recover', workspaceId: null, context: null }}
         routeFileName={null}
         config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
         agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
