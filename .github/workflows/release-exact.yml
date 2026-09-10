@@ -1012,6 +1012,7 @@ jobs:
   distribution:
     name: ${{ matrix.shell }} distribution (${{ matrix.target }})
     needs: [tools, plan, prepare]
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.prepare.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.shell_matrix) }}
@@ -1133,6 +1134,7 @@ jobs:
   publish:
     name: Finalize and publish exact channel
     needs: [tools, plan, distribution]
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.distribution.result == 'success' }}
     runs-on: ubuntu-24.04
     environment: standalone-exact-release
     timeout-minutes: 15
@@ -1224,7 +1226,9 @@ jobs:
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: exact-published-${{ inputs.channel }}-${{ inputs.release_version }}
-          path: ${{ runner.temp }}/exact-final
+          path: |
+            ${{ runner.temp }}/exact-final/*.json
+            ${{ runner.temp }}/exact-final/documents/*.json
           if-no-files-found: error
           retention-days: 1
 
@@ -1272,6 +1276,7 @@ jobs:
   acceptance:
     name: Public installed acceptance (${{ matrix.shell }}/${{ matrix.target }})
     needs: [tools, plan, publish]
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.publish.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.shell_matrix) }}
@@ -1444,6 +1449,7 @@ jobs:
   activate:
     name: Activate accepted exact channel
     needs: [tools, acceptance]
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.acceptance.result == 'success' }}
     runs-on: ubuntu-24.04
     environment: standalone-exact-release
     timeout-minutes: 10

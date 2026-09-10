@@ -16,6 +16,17 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("continues mandatory delivery past intentionally skipped producers in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    for (const [job, dependencies] of Object.entries({ distribution: ["tools", "plan", "prepare"], publish: ["tools", "plan", "distribution"],
+      acceptance: ["tools", "plan", "publish"], activate: ["tools", "acceptance"] })) {
+      const body = workflow.split(`\n  ${job}:`)[1]!.split(/\n  [a-z_]+:/u)[0]!;
+      const condition = body.split("\n").find(line => line.startsWith("    if:")) ?? "";
+      expect(condition).toContain("!cancelled()");
+      expect(condition).toContain("!failure()");
+      for (const dependency of dependencies) expect(condition).toContain(`needs.${dependency}.result == 'success'`);
+    }
+  });
   it.each(["exact", "stable", "prerelease"])("declares lean scene preparation and installer-only transport in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
