@@ -658,8 +658,15 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     } = {},
   ): Promise<AuthorizedExportRead | null> {
     const authorization = req.get('authorization');
+    // Only Bearer credentials can be run-scoped tool tokens: that is the sole
+    // shape `bearerTokenFromRequest` parses. A reverse proxy that authenticates
+    // browsers itself (Coolify/Traefik basic auth) forwards its own
+    // `Authorization: Basic ...` header, and claiming those for the tool lane
+    // fails every browser export with TOOL_TOKEN_MISSING. Foreign Bearer
+    // tokens still fail closed inside the registry.
     if (
       typeof authorization === 'string'
+      && /^Bearer\s+/i.test(authorization.trim())
       && !ctx.isApiTokenAuthorization(authorization)
     ) {
       const grant = ctx.auth.authorizeToolRequest(
