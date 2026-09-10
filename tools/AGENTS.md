@@ -24,6 +24,15 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - Exact content preparation, metadata signing and final composition live in
   tools-release behind its policy-bound commands. Do not restore tools-pack
   exact-control or a separate pack signing API/binary.
+- `prepare --native-output` projects only bound metadata, trust and Capsule
+  payloads for native assembly; the publisher retains the full resource set.
+  `prepare --freeze-storage true` freezes the exact selection, public signing
+  keys and compatibility baseline at `<channel>/<version>/version-input.json`
+  in policy-bound release storage. This is an immutable release input, not a
+  workload cache record or an activation marker. Fresh-runner retries restore
+  it before reading `latest`; changed selections and readback collisions fail.
+  Never persist private keys. A frozen version cannot be reassigned to another
+  source commit after a failed attempt.
 - `resource acquire` assembles the complete nine data inputs; `runtime build`
   produces an explicit miss-only web/daemon selection and `runtime acquire`
   assembles the complete native runtime pair. Acquisition never builds or

@@ -70,6 +70,19 @@ it("prepares and finalizes signed content within release ownership, with no requ
   await command([...prepare, "--native-output", nativeInput]);
   expect(await readFile(join(nativeInput, "prepare-receipt.json"))).toEqual(await readFile(prepareReceipt));
   await expect(readFile(join(nativeInput, "artifacts", `closure-${sha("closure")}.mjs`))).rejects.toThrow();
+  // Recreate only ephemeral transport/execution directories. The original
+  // version selection survives, including the absence of a prior channel head.
+  const retryScenes = join(root, "retry-scenes"), retryOutput = join(root, "retry-output");
+  for (const item of active) await packSceneArtifact(join(root, `source-${item.shell}`),
+    join(retryScenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
+  const retry = [...prepare.map(value => value === scenes ? retryScenes : value === prepared ? retryOutput
+    : value === prepareReceipt ? join(retryOutput, "prepare-receipt.json") : value), "--version-input", join(prepared, "version-input")];
+  fetch.mockClear(); fetch.mockRejectedValue(new Error("channel head has moved"));
+  await command(retry);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(await readFile(join(retryOutput, "documents/content-metadata.json"))).toEqual(await readFile(join(prepared, "documents/content-metadata.json")));
+  await expect(command(retry.map(value => value === "0.1.0" ? "0.1.1" : value))).rejects.toThrow("Frozen version input differs");
+  fetch.mockImplementation(async () => new Response(null, { status: 404 }));
   const finalize = ["finalize", "--policy", policy, "--prepared", prepared, "--distributions", distributions, "--output", final, "--receipt", join(final, "pack-receipt.json")];
   await writeFile(join(distributions, "electron/installer.bin"), "tampered");
   await expect(command(finalize)).rejects.toThrow("binding verification failed");

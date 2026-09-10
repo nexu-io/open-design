@@ -102,6 +102,8 @@ export function registerExactCommands(cli: CAC): void {
     .option("--scenes <directory>", "Downloaded scene artifacts")
     .option("--standalone-version <version>", "Standalone runtime version")
     .option("--previous-content <file>", "Optional verified previous content envelope")
+    .option("--version-input <directory>", "Frozen version input directory; retained across preparation retries")
+    .option("--freeze-storage <boolean>", "Freeze/recover this version's input snapshot in policy-bound release storage")
     .option("--closure-artifact <file>", "Current Closure artifact; defaults to the scene seed")
     .option("--standalone-artifact <file>", "Current Standalone launcher; defaults to the scene seed")
     .option("--resource-receipt <file>", "Current complete Closure resource collection; defaults to the scene seed")
@@ -116,6 +118,8 @@ export function registerExactCommands(cli: CAC): void {
       await prepareReleaseContent({ policy: required(options, "policy"), channel: required(options, "channel"),
         releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit"), sourceRoot: required(options, "root"),
         shellInputs: required(options, "shells"), scenesRoot: required(options, "scenes"), standaloneVersion: required(options, "standaloneVersion"),
+        ...(options.versionInput == null ? {} : { versionInputDirectory: required(options, "versionInput") }),
+        ...(options.freezeStorage == null ? {} : { freezeStorage: boolean(options, "freezeStorage") }),
         ...(options.previousContent == null ? {} : { previousContentMetadataFile: required(options, "previousContent") }),
         ...(options.closureArtifact == null ? {} : { closureArtifactFile: required(options, "closureArtifact") }),
         ...(options.standaloneArtifact == null ? {} : { standaloneArtifactFile: required(options, "standaloneArtifact") }),

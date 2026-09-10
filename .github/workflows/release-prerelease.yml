@@ -976,6 +976,11 @@ jobs:
 
       - name: Compose and sign content metadata
         env:
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
           CHANNEL: prerelease
           RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_SHA: ${{ inputs.source_sha }}
@@ -994,7 +999,7 @@ jobs:
             --shells "$RUNNER_TEMP/exact-plan/inputs/shells.json" --scenes "$RUNNER_TEMP/scenes" \
             --capsules "$RUNNER_TEMP/capsules" --platforms "$RUNNER_TEMP/platforms" --data-resources "$RUNNER_TEMP/data-products" \
             --output "$RUNNER_TEMP/exact-prepare" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json" \
-            --native-output "$RUNNER_TEMP/exact-installation-input"
+            --native-output "$RUNNER_TEMP/exact-installation-input" --freeze-storage true
 
       - uses: actions/upload-artifact@v7.0.1
         with:

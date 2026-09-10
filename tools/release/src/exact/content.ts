@@ -71,6 +71,12 @@ async function signingKeys(): Promise<SigningKey[]> {
   return keys;
 }
 
+/** Public signing identity may be frozen with release inputs; private material
+ * remains confined to the signing operation. */
+export async function preparationTrust() {
+  return (await signingKeys()).map(({ keyId, publicKey }) => ({ keyId, publicKey }));
+}
+
 function signatures(value: unknown, keys: readonly SigningKey[]) {
   const body = canonicalBytes(value);
   return keys.map(({ keyId, privateKey }) => ({ algorithm: "Ed25519", keyId, value: sign(null, body, privateKey).toString("base64") }));
