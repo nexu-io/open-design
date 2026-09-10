@@ -18,6 +18,21 @@ export function resolveBedrockAuthMode(
   return awsAuthMode === 'profile' ? 'profile' : 'api_key';
 }
 
+/**
+ * The AWS profile a Bedrock request should carry: the configured profile when
+ * the protocol is Bedrock in profile mode, otherwise empty. Callers send it to
+ * the daemon (connection test, model discovery) and omit the API key with it.
+ */
+export function bedrockActiveProfile(config: {
+  apiProtocol?: ApiProtocol | undefined;
+  awsAuthMode?: BedrockAuthMode | undefined;
+  awsProfile?: string | undefined;
+}): string {
+  if (config.apiProtocol !== 'bedrock') return '';
+  if (resolveBedrockAuthMode(config.awsAuthMode) !== 'profile') return '';
+  return (config.awsProfile ?? '').trim();
+}
+
 export function byokProviderRequiresApiKey(
   protocol: ApiProtocol,
   provider: KnownProvider | undefined,

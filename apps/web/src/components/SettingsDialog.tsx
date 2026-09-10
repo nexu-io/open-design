@@ -143,7 +143,7 @@ import {
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
-import { byokProviderRequiresApiKey, resolveBedrockAuthMode } from '../utils/byokProvider';
+import { bedrockActiveProfile, byokProviderRequiresApiKey, resolveBedrockAuthMode } from '../utils/byokProvider';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -1881,6 +1881,7 @@ export function SettingsDialog({
         initial.baseUrl,
         initial.apiKey,
         initial.apiVersion ?? '',
+        bedrockActiveProfile({ apiProtocol: protocol, awsAuthMode: initial.awsAuthMode, awsProfile: initial.awsProfile }),
       );
     });
   const agentTestAbortRef = useRef<AbortController | null>(null);
@@ -2862,6 +2863,7 @@ export function SettingsDialog({
       cfg.baseUrl,
       cfg.apiKey,
       cfg.apiVersion ?? '',
+      bedrockActiveProfile({ apiProtocol, awsAuthMode: cfg.awsAuthMode, awsProfile: cfg.awsProfile }),
     );
     const cachedModels = activeProviderModelsCache[cacheKey];
     if (cachedModels) {
@@ -2896,11 +2898,17 @@ export function SettingsDialog({
       }
     };
     try {
+      const fetchProfile = bedrockActiveProfile({
+        apiProtocol,
+        awsAuthMode: cfg.awsAuthMode,
+        awsProfile: cfg.awsProfile,
+      });
       const result = await fetchProviderModels(
         {
           protocol: apiProtocol,
           baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
+          apiKey: fetchProfile ? '' : cleanByokApiKey(cfg.apiKey),
+          ...(fetchProfile ? { awsProfile: fetchProfile } : {}),
         },
         controller.signal,
       );
@@ -3627,8 +3635,9 @@ export function SettingsDialog({
       cfg.baseUrl,
       cfg.apiKey,
       cfg.apiVersion ?? '',
+      bedrockActiveProfile({ apiProtocol, awsAuthMode: cfg.awsAuthMode, awsProfile: cfg.awsProfile }),
     ),
-    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
+    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion, cfg.awsAuthMode, cfg.awsProfile],
   );
   const providerModelDiscoveryUnavailable =
     apiProtocol !== 'azure' &&

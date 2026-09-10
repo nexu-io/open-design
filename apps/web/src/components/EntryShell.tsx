@@ -236,6 +236,7 @@ import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
+import { bedrockActiveProfile } from '../utils/byokProvider';
 import {
   ENTRY_RAIL_STATE_EVENT,
   ENTRY_RAIL_TOGGLE_EVENT,
@@ -2234,11 +2235,17 @@ function OnboardingView({
     config.apiKey.trim(),
     config.apiVersion?.trim() ?? '',
   ].join('\n');
+  const byokAwsProfile = bedrockActiveProfile({
+    apiProtocol,
+    awsAuthMode: config.awsAuthMode,
+    awsProfile: config.awsProfile,
+  });
   const providerModelsInputKey = providerModelsCacheKey(
     apiProtocol,
     config.baseUrl,
     config.apiKey,
     config.apiVersion ?? '',
+    byokAwsProfile,
   );
   providerModelAutoSelectRef.current = {
     model: config.model,
@@ -3463,7 +3470,8 @@ function OnboardingView({
       const result = await fetchProviderModels({
         protocol: apiProtocol,
         baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
+        apiKey: byokAwsProfile ? '' : config.apiKey,
+        ...(byokAwsProfile ? { awsProfile: byokAwsProfile } : {}),
       });
       if (result.ok && result.models?.length) {
         selectPreferredProviderModelWhenEmpty(result.models, inputKey);

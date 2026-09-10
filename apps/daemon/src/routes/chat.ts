@@ -252,6 +252,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           apiKey: body.apiKey,
           apiVersion:
             typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+          ...(protocol === 'bedrock' && typeof body.awsProfile === 'string' && body.awsProfile.trim()
+            ? { awsProfile: body.awsProfile.trim() }
+            : {}),
           signal: controller.signal,
           requestInit: proxyDispatcher.requestInit,
         });

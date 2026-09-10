@@ -12,6 +12,8 @@ import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { redactSecrets, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
+import { resolveBedrockRegion } from '@open-design/contracts';
+import { listBedrockModels } from './bedrock-models.js';
 
 type ProviderModelsInput = ProviderModelsRequest & {
   signal?: AbortSignal;
@@ -19,12 +21,10 @@ type ProviderModelsInput = ProviderModelsRequest & {
 };
 
 const PROVIDER_MODELS_TIMEOUT_MS = 12_000;
-// Static seed for Bedrock: discovery (`ListFoundationModels`) needs SigV4,
-// which the daemon deliberately does not implement (OpenCode signs on the
-// run path). `global.` cross-region inference profile ids work from any
-// commercial region; the bare Nova ids are mapped to the regional profile by
-// `bedrockInferenceModelId`. Users can still type any model id or an
-// application inference profile ARN as a custom model.
+// Curated Bedrock seed shown before any credential is saved (discovery needs a
+// Bedrock API key or an AWS profile, see `bedrock-models.ts`). `global.`
+// cross-region inference profile ids work from any commercial region; the
+// bare Nova ids are mapped to the regional profile by `bedrockInferenceModelId`.
 const BEDROCK_MODEL_OPTIONS: ProviderModelOption[] = [
   { id: 'global.anthropic.claude-sonnet-5', label: 'Claude Sonnet 5' },
   { id: 'global.anthropic.claude-opus-5', label: 'Claude Opus 5' },
@@ -323,13 +323,25 @@ export async function listProviderModels(
     };
   }
   if (input.protocol === 'bedrock') {
-    return {
-      ok: true,
-      kind: 'success',
-      latencyMs: Date.now() - start,
-      models: BEDROCK_MODEL_OPTIONS,
-      detail: 'Amazon Bedrock model discovery needs SigV4; this is a curated list. Type any model id or application inference profile ARN as a custom model.',
-    };
+    const awsProfile = typeof input.awsProfile === 'string' ? input.awsProfile.trim() : '';
+    if (!input.apiKey.trim() && !awsProfile) {
+      // No credentials yet: the curated list lets the user pick a model before
+      // pasting a key; discovery replaces it as soon as credentials are saved.
+      return {
+        ok: true,
+        kind: 'success',
+        latencyMs: Date.now() - start,
+        models: BEDROCK_MODEL_OPTIONS,
+        detail: 'Curated list; add a Bedrock API key or an AWS profile to load the models available to your account.',
+      };
+    }
+    return listBedrockModels({
+      region: resolveBedrockRegion(input.baseUrl),
+      apiKey: input.apiKey,
+      awsProfile,
+      signal: input.signal,
+      requestInit: input.requestInit,
+    });
   }
 
   let url: string;
