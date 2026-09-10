@@ -37,5 +37,5 @@ it("keeps Shell preparation separate from explicit apply and lets the runtime ow
       { path: ["updater", "download"], args: ["shell"] }, { path: ["updater", "status"], args: [] }] });
   await applyElectronShellThroughCdp(session);
   expect(mock.invoke).toHaveBeenLastCalledWith({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session, close: false, timeoutMs: 120_000,
-    invocations: [{ path: ["updater", "apply"], args: ["shell", { force: true }], settleOnContextDestroyed: true }] });
+    invocations: [{ path: ["updater", "apply"], args: ["shell", { force: false }], settleOnContextDestroyed: true }] });
 });

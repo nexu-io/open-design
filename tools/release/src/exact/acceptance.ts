@@ -34,12 +34,24 @@ export async function updateAcceptanceSameCarrier(input: AcceptanceInput & Reado
   // supplies logical Shell identity; release control never recomputes it.
   if (before.shell.buildHash === first.shell.buildHash && before.shell.version === first.shell.version) return updateAcceptanceClosure(input);
   const prepared = await prepareElectronShellThroughCdp(diagnosticSession);
-  const ready = prepared.results.at(-1) as { lines?: { shell?: { state?: string } } } | undefined;
+  const stages: Record<string, unknown> = { schemaVersion: 1, operation: "electron.capsule.upgrade.stages", before, prepared };
+  const stageReceipt = input.receipt + ".stages.json";
+  await writeObject(stageReceipt, stages);
+  const ready = prepared.results.at(-1) as { lines?: { shell?: { state?: string; blockedBy?: number } } } | undefined;
   if (ready?.lines?.shell?.state !== "ready") throw new Error("Shell updater did not prepare the candidate Capsule");
+  if ((ready.lines.shell.blockedBy ?? 0) > 0) throw new Error("Isolated Shell acceptance has unexpected blockers");
   const startedAfter = Date.now();
   try {
     const applied = await applyElectronShellThroughCdp(diagnosticSession);
-    const restarted = await inspectElectronStartupThroughCdp(diagnosticSession, startedAfter);
+    stages.applied = applied;
+    await writeObject(stageReceipt, stages);
+    const result = applied.results.at(-1) as { outcome?: string; lines?: { shell?: { state?: string } } } | undefined;
+    if (result?.outcome !== "context-destroyed" && result?.lines?.shell?.state !== "applying") {
+      throw new Error("Shell updater did not start Capsule replacement");
+    }
+    const restarted = await inspectElectronStartupThroughCdp(diagnosticSession, startedAfter, 180_000);
+    stages.restarted = restarted;
+    await writeObject(stageReceipt, stages);
     await waitForElectronShutdown(diagnosticSession, startedAfter);
     const after = await inspectElectronSelectedCapsule(diagnosticSession, input.installedRoot);
     if (!canonicalBytes(after.envelope).equals(canonicalBytes(expected)) || after.revision <= before.revision

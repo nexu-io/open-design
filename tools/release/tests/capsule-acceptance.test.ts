@@ -49,6 +49,15 @@ it("does not authorize apply when Shell preparation is blocked", async () => {
   const f = await fixture(); calls.prepare.mockResolvedValue({ results: [{ lines: { shell: { state: "blocked" } } }] });
   await expect(updateAcceptanceSameCarrier(f.input)).rejects.toThrow("did not prepare"); expect(calls.apply).not.toHaveBeenCalled();
 });
+it("rejects a no-op apply before waiting for a restart and retains its response", async () => {
+  const f = await fixture();
+  calls.apply.mockResolvedValue({ results: [{ lines: { shell: { state: "ready" } } }] });
+  await expect(updateAcceptanceSameCarrier(f.input)).rejects.toThrow("did not start");
+  expect(calls.startup).not.toHaveBeenCalled();
+  const stages = JSON.parse(await readFile(f.input.receipt + ".stages.json", "utf8"));
+  expect(stages.applied.results[0].lines.shell.state).toBe("ready");
+  await expect(readFile(f.input.receipt)).rejects.toThrow();
+});
 it.each(["startup", "shutdown", "wrong-capsule", "unchanged-generation"])("fails %s and closes the caller-owned relaunch without writing success", async fault => {
   const f = await fixture();
   if (fault === "startup") calls.startup.mockRejectedValue(new Error("startup failed"));

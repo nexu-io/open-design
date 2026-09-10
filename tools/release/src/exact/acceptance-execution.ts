@@ -26,6 +26,13 @@ export async function exerciseReleaseInstallation(input: ExerciseInput) {
     throw error;
   }
   finally {
+    if (input.shell === "electron" && input.mode === "hot") {
+      try {
+        const output = join(resolve(input.workRoot), "diagnostics");
+        await mkdir(output, { recursive: true });
+        await copyFile(join(resolve(input.workRoot), "hot", "hot.json.stages.json"), join(output, "hot-stages.json"));
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error("Could not retain Capsule stages:", error); }
+    }
     if (input.shell === "electron" && ["first", "hot"].includes(input.mode)) {
       try {
         const { required, policy } = await readPublishedAcceptance({ publishReceipt: input.publication,

@@ -41,11 +41,12 @@ export async function prepareElectronShellThroughCdp(session: ElectronDiagnostic
   return Object.freeze({ schemaVersion: 1, operation: "electron.cdp.contract.invoked", ...result });
 }
 
-/** Authorization is explicit; transport loss is not proof that replacement completed. */
+/** Apply the ordinary restart action. Force actions exist only with blockers;
+ * transport loss is not proof that replacement completed. */
 export async function applyElectronShellThroughCdp(session: ElectronDiagnosticSession) {
   describeElectronRuntimeDiagnostics(session);
   const result = await executeElectronCdpContractControl({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session, timeoutMs: 120_000, close: false,
-    invocations: [{ path: ["updater", "apply"], args: ["shell", { force: true }], settleOnContextDestroyed: true }] });
+    invocations: [{ path: ["updater", "apply"], args: ["shell", { force: false }], settleOnContextDestroyed: true }] });
   return Object.freeze({ schemaVersion: 1, operation: "electron.cdp.contract.invoked", ...result });
 }
 
