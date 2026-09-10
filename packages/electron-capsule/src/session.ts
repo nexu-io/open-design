@@ -12,6 +12,7 @@ import {
   type ElectronRendererLease, type ElectronShellDefinition, type ElectronStartupPresentation,
   type ElectronStandaloneAuthority, type ElectronStandalonePreparedRuntime,
   type ElectronStandaloneContentUpdaterPort,
+  type ElectronStartupProgress,
 } from "@open-design/electron-kit/contracts";
 import {
   completeElectronShutdown, observeElectronUpdateHandoff, resolveElectronInstallerRecovery,
@@ -213,11 +214,26 @@ export async function runElectronCapsule(
     startupPresentation = await context.startupQuit.guard(definition.createStartupPresentation());
     splash = startupPresentation.window;
   }
-  startupPresentation?.setStage(appearance.splash.initialLabel);
+  let lastProgressAt = 0;
+  let lastProgressKey = "";
+  let progressMode: ElectronStartupProgress["mode"] = "startup";
+  let startupProgressComplete = false;
+  const observeProgress = (progress: ElectronStartupProgress) => {
+    if (context.startupQuit.cancelled) return;
+    const now = Date.now(), key = `${progress.label}:${progress.resourceId ?? ""}`;
+    if (progress.state === "progress" && key === lastProgressKey && now - lastProgressAt < 250) return;
+    lastProgressAt = now; lastProgressKey = key;
+    progressMode = progress.mode ?? progressMode;
+    if (!startupProgressComplete) startupPresentation?.setProgress({ ...progress, mode: progressMode });
+    context.log?.write(startupProgressComplete ? "updater.progress" : "startup.progress", {
+      ...progress, mode: startupProgressComplete ? "update" : progressMode, elapsedMs: now - splashStartedAt,
+    });
+  };
+  observeProgress({ label: appearance.splash.initialLabel });
 
   // The local Capsule owns the first screen. Node/native preparation may need
   // I/O and must not precede that screen or escape the carrier's quit barrier.
-  platformAcquisition = definition.prepareNodeRuntime({ runtimeRoot, platform: context.platform, signal: rendererShutdown.signal });
+  platformAcquisition = definition.prepareNodeRuntime({ runtimeRoot, platform: context.platform, signal: rendererShutdown.signal, scope, observeProgress });
   const nodeRuntime = await context.startupQuit.guard(platformAcquisition);
   context.log.write("platform.ready", { command: nodeRuntime.command });
 
@@ -235,9 +251,9 @@ export async function runElectronCapsule(
           runtimeRoot,
           observeFeedback(event) {
             if (!context.startupQuit?.cancelled) {
-              startupPresentation?.setStage(event.phase === "generation-prepared" ? "Preparing generation…" : event.phase);
+              observeProgress(definition.describeStartupFeedback(event));
             }
-            context.log?.write("standalone.feedback", { event });
+            if (event.state !== "progress") context.log?.write("standalone.feedback", { event });
           },
         });
         preparationAcquisition = authority.prepare({
@@ -332,7 +348,7 @@ export async function runElectronCapsule(
       },
     },
     onEvent(event) {
-      if (!context.startupQuit?.cancelled && event.state === "running") startupPresentation?.setStage(event.node.label ?? event.node.id);
+      if (!context.startupQuit?.cancelled && event.state === "running") observeProgress({ label: event.node.label ?? event.node.id });
       context.log?.write("warmup.node", {
         blocking: event.node.blocking,
         error: event.error,
@@ -355,7 +371,8 @@ export async function runElectronCapsule(
   requireWarmupState(status as StandaloneRuntimeStatus | null, "Standalone readiness");
   const runtimeUpdaterRevisionAtStart = requireWarmupState(updaterRevisionAtStart as number | null, "the updater revision");
   const runtimeRendererLease = requireWarmupState(rendererLease as ElectronRendererLease | null, "a renderer lease");
-  startupPresentation?.setStage(appearance.splash.readyLabel);
+  observeProgress({ label: appearance.splash.readyLabel, state: "complete" });
+  startupProgressComplete = true;
   const remaining = presentation === "headless" ? 0 : appearance.splash.minimumVisibleMs - (Date.now() - splashStartedAt);
   if (remaining > 0) await context.startupQuit.guard(new Promise((resolve) => setTimeout(resolve, remaining)));
   const pendingHandoffs = handoffs.drain();

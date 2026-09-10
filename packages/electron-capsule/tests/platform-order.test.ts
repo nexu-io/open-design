@@ -25,7 +25,7 @@ it.each(["interactive", "headless"] as const)("prepares Node after presentation 
   const createStartupPresentation = vi.fn(async () => {
     events.push("presentation.begin"); started(); await mounting;
     events.push("presentation.mounted");
-    return { window: {}, setStage: () => events.push("presentation.stage") };
+    return { window: {}, setProgress: () => events.push("presentation.stage") };
   });
   const prepareNodeRuntime = vi.fn(async () => { events.push("platform.prepare"); throw new Error("platform unavailable"); });
   const authority = vi.fn();
@@ -48,7 +48,8 @@ it.each(["interactive", "headless"] as const)("prepares Node after presentation 
     ? ["cleanup.registered", "presentation.begin", "presentation.mounted", "presentation.stage", "platform.prepare"]
     : ["cleanup.registered", "platform.prepare"]);
   expect(authority).not.toHaveBeenCalled();
-  expect(prepareNodeRuntime).toHaveBeenCalledWith({ runtimeRoot: "/runtime", platform, signal: expect.any(AbortSignal) });
+  expect(prepareNodeRuntime).toHaveBeenCalledWith({ runtimeRoot: "/runtime", platform, signal: expect.any(AbortSignal),
+    scope: { channel: "test", namespace: "test" }, observeProgress: expect.any(Function) });
   if (presentation === "headless") expect(createStartupPresentation).not.toHaveBeenCalled();
 });
 
@@ -71,4 +72,26 @@ it("aborts and settles an in-flight platform preparation during startup cleanup"
   await cleanup.settleRendererMount();
   await failed;
   expect(prepareNodeRuntime.mock.calls[0]![0].signal.aborted).toBe(true);
+});
+
+it("samples byte updates while retaining completion and failure in headless diagnostics", async () => {
+  const write = vi.fn();
+  const definition = { appearance: { splash: { initialLabel: "Starting" } },
+    prepareNodeRuntime: async ({ observeProgress }: Parameters<ElectronShellDefinition["prepareNodeRuntime"]>[0]) => {
+      for (let receivedBytes = 0; receivedBytes < 100; receivedBytes++) observeProgress({
+        mode: "first-install", label: "Downloading", resourceId: "runtime", state: "progress", receivedBytes, totalBytes: 100,
+      });
+      observeProgress({ label: "Downloaded", state: "complete" });
+      observeProgress({ label: "Could not unpack", state: "failed", detail: "Disk full" });
+      throw new Error("fixture complete");
+    } } as unknown as ElectronShellDefinition;
+  const session = { manifest: { channel: "test" }, shell: {}, presentation: "headless", namespace: "test",
+    paths: { runtimeRoot: "/runtime" }, resourceRoot: "/installed", ingress: { bindReceiver() {} },
+    startupQuit: { guard: <T>(promise: Promise<T>) => promise }, registerCleanup() {}, log: { write },
+  } as unknown as ElectronCapsuleSession;
+  const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+  try { await expect(runElectronCapsule(definition, session)).rejects.toThrow("fixture complete"); }
+  finally { clock.mockRestore(); }
+  expect(write).toHaveBeenCalledTimes(4);
+  expect(write.mock.lastCall).toEqual(["startup.progress", expect.objectContaining({ state: "failed", mode: "first-install", detail: "Disk full" })]);
 });

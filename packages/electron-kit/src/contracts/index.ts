@@ -179,9 +179,19 @@ export type ElectronStandaloneAuthorityFactory = (input: Readonly<{
   observeFeedback?(event: StandaloneFeedbackEvent): void | Promise<void>;
 }>) => ElectronStandaloneAuthority;
 
+export type ElectronStartupProgress = Readonly<{
+  mode?: "first-install" | "update" | "startup" | "recovery";
+  label: string;
+  detail?: string;
+  receivedBytes?: number;
+  totalBytes?: number;
+  resourceId?: string;
+  state?: "begin" | "progress" | "reused" | "complete" | "failed";
+}>;
+
 export type ElectronStartupPresentation = Readonly<{
   window: BrowserWindow;
-  setStage(stage: string): void;
+  setProgress(progress: ElectronStartupProgress): void;
 }>;
 
 export type ElectronBackgroundUpdatePolicy = Readonly<{
@@ -200,7 +210,9 @@ export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
   appearance: ElectronShellAppearance;
   createStartupPresentation(): Promise<ElectronStartupPresentation>;
-  prepareNodeRuntime(input: Readonly<{ runtimeRoot: string; platform: NodePlatformResource; signal: AbortSignal }>): Promise<NodeRuntimeBinding>;
+  prepareNodeRuntime(input: Readonly<{ runtimeRoot: string; platform: NodePlatformResource; signal: AbortSignal;
+    scope: StandaloneScope; observeProgress(progress: ElectronStartupProgress): void }>): Promise<NodeRuntimeBinding>;
+  describeStartupFeedback(event: StandaloneFeedbackEvent): ElectronStartupProgress;
   mac: ElectronMacRuntimePolicy;
   warmup: ElectronWarmupTopology;
   headless?: boolean;
