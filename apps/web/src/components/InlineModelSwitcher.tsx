@@ -102,6 +102,8 @@ import {
 import {
   mergeProviderModelOptions,
   providerModelsCacheKey,
+  setProviderModelsDiscovery,
+  setProviderModelsSeed,
   type ProviderModelsCache,
 } from './providerModelsCache';
 import { isDeepSeekV4FlashCampaignModel } from '../campaigns/deepseek-v4-flash';
@@ -1013,21 +1015,33 @@ export function InlineModelSwitcher({
     if (providerModelsFetchingRef.current.has(key)) return;
     providerModelsFetchingRef.current.add(key);
     let active = true;
+    setProviderModelsDiscovery(key, 'loading');
     void fetchProviderModels({
       protocol: apiProtocol,
       baseUrl,
       apiKey: config.apiKey,
     })
       .then((result) => {
-        if (active && result.ok && result.models?.length) {
+        if (!active) return;
+        // A successful answer is authoritative even when it is empty, so the
+        // picker must not keep offering the seed on top of it.
+        setProviderModelsDiscovery(key, result.ok ? 'ready' : 'degraded');
+        if (result.ok && result.models?.length) {
           onProviderModelsCacheChange((current) => ({
             ...current,
             [key]: result.models ?? [],
           }));
         }
+        // On the degraded path the daemon hands back a metadata-preserving
+        // fallback; keeping it lets the attachment filter reason about the seed
+        // instead of dropping every row for want of modality evidence.
+        if (!result.ok && result.seedModels?.length) {
+          setProviderModelsSeed(key, result.seedModels);
+        }
       })
       .catch(() => {
         // Non-fatal: the picker falls back to the static seed list.
+        if (active) setProviderModelsDiscovery(key, 'degraded');
       })
       .finally(() => {
         providerModelsFetchingRef.current.delete(key);
@@ -1059,10 +1073,13 @@ export function InlineModelSwitcher({
   );
   // Attachments narrow the list: a staged image means only models whose
   // catalogue metadata declares an image input are offered. The rule lives in
-  // `useNarrowedModelOptions` so this picker and Settings cannot drift.
+  // `useNarrowedModelOptions` so this picker and Settings cannot drift. The
+  // discovery key lets a live catalogue stand alone and reserves the seed for
+  // the degraded path.
   const apiModelOptions = useNarrowedModelOptions({
     protocol: apiProtocol,
     fetchedModels: fetchedApiModelOptions,
+    ...(providerModelsKey ? { discoveryKey: providerModelsKey } : {}),
     suggestedModelIds: suggestedApiModelIds,
   });
   const apiModelIds = useMemo(
@@ -1071,7 +1088,11 @@ export function InlineModelSwitcher({
   );
   // Narrowing the list can strand the current choice on a model the staged
   // attachments rule out. Clear it rather than keep sending an incompatible id.
+  // Scoped to OrcaRouter inside the hook: this effect would otherwise discard a
+  // custom OpenAI-compatible selection the user made deliberately.
   useClearedInvalidSelection({
+    protocol: apiProtocol,
+    ...(providerModelsKey ? { discoveryKey: providerModelsKey } : {}),
     options: apiModelOptions,
     selected: config.mode === 'api' ? config.model : '',
     ...(onApiModelChange ? { onModelChange: onApiModelChange } : {}),

@@ -58,6 +58,10 @@ import {
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
+  ORCAROUTER_PROVIDER_ID,
+  attachOrcaRouterDaemonCredential,
+} from '../integrations/orcarouter-credentials.js';
+import {
   ensureDetectedRuntimeCapabilities,
   ensureDetectedRuntimeVersions,
   getDetectedRuntimeVersions,
@@ -877,10 +881,32 @@ function externalPluginAttributionMismatch(
   );
 }
 
-function hasCompleteByokOpenCodeConfig(meta: JsonRecord): boolean {
+/**
+ * Is this run's BYOK provider complete enough to start?
+ *
+ * OrcaRouter is the one protocol whose credential may live only in the
+ * daemon's own store: both of its acquisition paths (a pasted key, or the PKCE
+ * connect flow) can persist `orcarouter-credentials.json` without ever
+ * populating the run body's `apiKey`. A client that sends the named provider
+ * with no key is therefore complete when the daemon holds a usable one, which
+ * is exactly what the runtime will consume. Every other protocol still has to
+ * carry its own key in the request.
+ */
+async function hasCompleteByokOpenCodeConfig(
+  meta: JsonRecord,
+  dataDir: string,
+): Promise<boolean> {
   if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return true;
+  let provider = meta.byokProvider as ByokChatProviderConfig | null | undefined;
+  if (
+    provider
+    && provider.protocol === ORCAROUTER_PROVIDER_ID
+    && !(typeof provider.apiKey === 'string' && provider.apiKey.trim())
+  ) {
+    provider = (await attachOrcaRouterDaemonCredential(provider, dataDir)) ?? provider;
+  }
   return buildOpenCodeByokProviderConfig(
-    meta.byokProvider as ByokChatProviderConfig | null | undefined,
+    provider,
     typeof meta.model === 'string' ? meta.model : null,
   ) !== null;
 }
@@ -1561,7 +1587,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
     }
-    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
+    if (!(await hasCompleteByokOpenCodeConfig(requestBody, RUNTIME_DATA_DIR))) {
       return sendApiError(
         res,
         400,
@@ -2187,12 +2213,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] agent id fallback failed', err);
       }
     }
-    if (!hasCompleteByokOpenCodeConfig({
+    if (!(await hasCompleteByokOpenCodeConfig({
       ...meta,
       ...(requestBody.byokProvider !== undefined
         ? { byokProvider: requestBody.byokProvider }
         : {}),
-    })) {
+    }, RUNTIME_DATA_DIR))) {
       return sendApiError(
         res,
         400,
@@ -3648,10 +3674,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       ? clarificationResolution.value
       : null;
     const clarificationTask = clarificationContinuation?.task ?? null;
-    if (!hasCompleteByokOpenCodeConfig({
+    if (!(await hasCompleteByokOpenCodeConfig({
       ...requestBody,
       ...(clarificationTask ? { agentId: clarificationTask.selectedAgentId } : {}),
-    })) {
+    }, RUNTIME_DATA_DIR))) {
       return sendApiError(
         res,
         400,

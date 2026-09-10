@@ -1,13 +1,39 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   __forTestHasCompleteByokOpenCodeConfig,
   __forTestWithoutSensitiveRunInput,
 } from '../../src/routes/runs.js';
 
+// A daemon data root with no OrcaRouter credential: the OrcaRouter cases below
+// assert the client must carry its own key when neither the environment nor the
+// daemon store holds one.
+const EMPTY_DATA_DIR = '/nonexistent-open-design-data-root';
+
+const ORCA_KEY_ENV = ['ORCA_API_KEY', 'OD_ORCAROUTER_API_KEY', 'ORCAROUTER_API_KEY'];
+
 describe('BYOK run input boundary', () => {
-  it('accepts a complete run-scoped Local BYOK provider', () => {
-    expect(__forTestHasCompleteByokOpenCodeConfig({
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    // The host environment exports one of these names (the daemon reads it for
+    // a self-hosted/CI deployment), and an env key legitimately wins over the
+    // store. Clear it so the store/absence is what each case exercises.
+    for (const name of ORCA_KEY_ENV) {
+      saved[name] = process.env[name];
+      delete process.env[name];
+    }
+  });
+
+  afterEach(() => {
+    for (const name of ORCA_KEY_ENV) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  });
+
+  it('accepts a complete run-scoped Local BYOK provider', async () => {
+    await expect(__forTestHasCompleteByokOpenCodeConfig({
       agentId: 'byok-opencode',
       model: 'gpt-5.4-mini',
       byokProvider: {
@@ -15,17 +41,17 @@ describe('BYOK run input boundary', () => {
         apiKey: 'local-only-secret',
         baseUrl: 'https://api.openai.com/v1',
       },
-    })).toBe(true);
+    }, EMPTY_DATA_DIR)).resolves.toBe(true);
   });
 
-  it('rejects a BYOK run without a run-scoped provider', () => {
-    expect(__forTestHasCompleteByokOpenCodeConfig({
+  it('rejects a BYOK run without a run-scoped provider', async () => {
+    await expect(__forTestHasCompleteByokOpenCodeConfig({
       agentId: 'byok-opencode',
-    })).toBe(false);
+    }, EMPTY_DATA_DIR)).resolves.toBe(false);
   });
 
-  it('accepts a keyless run-scoped provider when the protocol permits it', () => {
-    expect(__forTestHasCompleteByokOpenCodeConfig({
+  it('accepts a keyless run-scoped provider when the protocol permits it', async () => {
+    await expect(__forTestHasCompleteByokOpenCodeConfig({
       agentId: 'byok-opencode',
       model: 'local-model',
       byokProvider: {
@@ -33,7 +59,32 @@ describe('BYOK run input boundary', () => {
         baseUrl: 'http://127.0.0.1:1234/v1',
         requiresApiKey: false,
       },
-    })).toBe(true);
+    }, EMPTY_DATA_DIR)).resolves.toBe(true);
+  });
+
+  it('still requires the key when neither env nor store holds an OrcaRouter credential', async () => {
+    await expect(__forTestHasCompleteByokOpenCodeConfig({
+      agentId: 'byok-opencode',
+      model: 'openai/gpt-5.5',
+      byokProvider: {
+        protocol: 'orcarouter',
+        apiKey: '',
+        baseUrl: 'https://api.orcarouter.ai/v1',
+      },
+    }, EMPTY_DATA_DIR)).resolves.toBe(false);
+  });
+
+  it('accepts the named OrcaRouter provider keyless when the environment supplies the key', async () => {
+    process.env.ORCA_API_KEY = 'sk-orca-env-not-a-real-key';
+    await expect(__forTestHasCompleteByokOpenCodeConfig({
+      agentId: 'byok-opencode',
+      model: 'openai/gpt-5.5',
+      byokProvider: {
+        protocol: 'orcarouter',
+        apiKey: '',
+        baseUrl: 'https://api.orcarouter.ai/v1',
+      },
+    }, EMPTY_DATA_DIR)).resolves.toBe(true);
   });
 
   it('removes credential-bearing and server-owned fields before persistence', () => {

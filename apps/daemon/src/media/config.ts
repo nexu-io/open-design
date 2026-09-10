@@ -41,6 +41,16 @@ import path from 'node:path';
 import { MEDIA_PROVIDERS } from './models.js';
 import { expandHomePrefix } from '../home-expansion.js';
 import { resolveXAIBearer } from '../integrations/xai-credentials.js';
+import {
+  ORCAROUTER_ENV_API_KEY,
+  ORCAROUTER_ENV_API_KEY_LEGACY,
+  ORCAROUTER_ENV_API_KEY_PREFIXED,
+  ORCAROUTER_PROVIDER_ID,
+} from '../integrations/orcarouter.js';
+import {
+  resolveOrcaRouterDataDir,
+  resolveOrcaRouterOAuthCredential,
+} from '../integrations/orcarouter-credentials.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
@@ -91,10 +101,14 @@ const ENV_KEYS: Record<string, string[]> = {
   openrouter: ['OD_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
   // OrcaRouter's inference credential. `ORCA_API_KEY` is the canonical name the
   // docs use; the OD_-prefixed pair follows this daemon's per-provider
-  // convention. OD_ORCAROUTER_API_KEY and ORCAROUTER_API_KEY are ALSO the names
-  // the connect flow's credential resolver reads, so one env var lights up both
-  // the media dispatcher and the BYOK chat path.
-  orcarouter: ['OD_ORCAROUTER_API_KEY', 'ORCA_API_KEY', 'ORCAROUTER_API_KEY'],
+  // convention. All three names are read from one place — the credential module
+  // owns the list — so the media dispatcher and the BYOK chat path cannot drift
+  // apart about which variable lights them up. See `orcaRouterEnvApiKey`.
+  orcarouter: [
+    ORCAROUTER_ENV_API_KEY,
+    ORCAROUTER_ENV_API_KEY_PREFIXED,
+    ORCAROUTER_ENV_API_KEY_LEGACY,
+  ],
   'custom-image': ['OD_CUSTOM_IMAGE_API_KEY', 'CUSTOM_IMAGE_API_KEY'],
   bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
   fal: ['OD_FAL_KEY', 'FAL_KEY'],
@@ -369,7 +383,11 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
       ? await resolveOpenAIAuthFileCredential()
       : providerId === 'grok'
         ? await resolveXAIOAuthCredential(projectRoot)
-        : null
+        : providerId === ORCAROUTER_PROVIDER_ID
+          ? await resolveOrcaRouterOAuthCredential(
+              resolveOrcaRouterDataDir(projectRoot),
+            ).catch(() => null)
+          : null
     : null;
   return {
     apiKey: envKey || entry.apiKey || externalCredential?.apiKey || '',

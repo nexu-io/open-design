@@ -17,18 +17,24 @@
 // failure from a request issued before a re-login must not poison the fresh
 // credential.
 
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
-import { mediaConfigDir, resolveProviderConfig } from '../media/config.js';
 import {
-  ORCAROUTER_ENV_API_BASE,
-  ORCAROUTER_ENV_SHARED_BASE,
+  ORCAROUTER_ENV_API_KEY,
+  ORCAROUTER_ENV_API_KEY_LEGACY,
+  ORCAROUTER_ENV_API_KEY_PREFIXED,
   ORCAROUTER_KEY_PREFIX,
   ORCAROUTER_PROVIDER_ID,
   resolveOrcaRouterApiBase,
 } from './orcarouter.js';
+import type { ByokChatProviderConfig } from '@open-design/contracts';
+
+type Env = Record<string, string | undefined>;
+
+/** Re-exported so consumers of the credential seam need one import, not two. */
+export { ORCAROUTER_PROVIDER_ID };
 
 /** Which adapter produced a credential. Downstream code must not branch on it. */
 export type OrcaRouterCredentialSource = 'api-key' | 'pkce';
@@ -64,13 +70,89 @@ export interface OrcaRouterCredentialsFile {
 
 export const ORCAROUTER_SCOPE_API = 'api';
 
-/** The only accessor downstream code should use to get a usable key. */
+export const ORCAROUTER_CREDENTIALS_FILENAME = 'orcarouter-credentials.json';
+
+/**
+ * The key the environment hands this provider, or an empty string.
+ *
+ * Exported so `resolveProviderConfig` can fold it into the single provider
+ * chain every other consumer reads, instead of each surface calling this
+ * directly and drifting. The variable names are declared in `orcarouter.ts`,
+ * the module that owns OrcaRouter's configuration surface.
+ */
+export function orcaRouterEnvApiKey(env: Env = process.env): string {
+  return cleanOrcaRouterKey(
+    env[ORCAROUTER_ENV_API_KEY]
+    ?? env[ORCAROUTER_ENV_API_KEY_PREFIXED]
+    ?? env[ORCAROUTER_ENV_API_KEY_LEGACY]
+    ?? '',
+  );
+}
+
+/**
+ * The only accessor downstream code should use to get a usable key.
+ *
+ * A `needsReauth` credential is terminal: the relay rejected this exact key, so
+ * returning it would make every consumer replay a request the provider has
+ * already refused, and would make catalogue discovery re-issue the rejected
+ * credential on each poll. The record stays on disk (and is reported through
+ * status) with its key intact so reconnection can replace it — it simply
+ * resolves to no usable key in the meantime.
+ */
 export function credentialApiKey(credential: OrcaRouterCredential | null): string {
-  return credential?.apiKey ?? '';
+  if (!isCredentialUsable(credential)) return '';
+  return credential!.apiKey;
 }
 
 export function isCredentialUsable(credential: OrcaRouterCredential | null): boolean {
   return Boolean(credential && credential.apiKey && credential.authState === 'active');
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// In-flight authorization attempts.
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * A monotonic counter over authorization attempts, shared by the route that
+ * owns the loopback listener and the exchange that runs off it.
+ *
+ * Cancel and Disconnect must be able to say "the attempt that was running is
+ * over". The listener alone cannot carry that: `stopActiveListener()` releases
+ * the port, but the PKCE state stays valid in `PendingAuthCache`, so a paste-back
+ * with that state would still exchange and store a credential the user just
+ * abandoned — and an exchange already awaiting the provider would finish after
+ * a Disconnect and restore the account.
+ *
+ * Every state-changing entry point (start, cancel, disconnect, and a successful
+ * persistence) bumps the generation. An exchange captures it before its first
+ * await and refuses to commit unless the generation is unchanged, so a
+ * superseded attempt becomes a no-op instead of a race.
+ */
+export class OrcaRouterAuthAttempts {
+  private generation = 0;
+
+  /** Invalidate every attempt that came before; returns the new generation. */
+  bump(): number {
+    this.generation += 1;
+    return this.generation;
+  }
+
+  current(): number {
+    return this.generation;
+  }
+
+  /** False once any newer attempt has superseded `generation`. */
+  isCurrent(generation: number): boolean {
+    return generation === this.generation;
+  }
+}
+
+/** Thrown when an exchange loses the race against a cancel, disconnect, or newer login. */
+export class OrcaRouterAttemptSupersededError extends Error {
+  constructor() {
+    super('OrcaRouter authorization was cancelled or replaced before it completed.');
+    this.name = 'OrcaRouterAttemptSupersededError';
+  }
 }
 
 /** Next generation for a replacement credential. */
@@ -250,8 +332,36 @@ export function isTerminalAuthFailure(status: number): boolean {
 // Storage — the daemon's existing owner-only JSON store pattern.
 // ───────────────────────────────────────────────────────────────────────
 
+/**
+ * The one file holding the OrcaRouter account, under an explicit daemon data
+ * root.
+ *
+ * The root is passed in rather than recomputed: `OD_MEDIA_CONFIG_DIR` is a
+ * narrow override for `media-config.json` only, so deriving this path from the
+ * media-config directory would let two daemons that share a media config also
+ * share — and overwrite — one account. A caller that only holds a project root
+ * passes `resolveOrcaRouterDataDir(projectRoot)`.
+ */
 function credentialsFile(dataDir: string): string {
-  return path.join(dataDir, 'orcarouter-credentials.json');
+  return path.join(dataDir, ORCAROUTER_CREDENTIALS_FILENAME);
+}
+
+/**
+ * The daemon data root for a caller that was not handed `RUNTIME_DATA_DIR`.
+ *
+ * Mirrors `resolveDataDir` (daemon-paths.ts) closely enough for a workspace-root
+ * caller: an `OD_DATA_DIR` override wins, otherwise `<projectRoot>/.od`. The
+ * daemon itself passes its already-resolved root explicitly; this is the
+ * fallback for the media resolver, which reaches OrcaRouter through
+ * `resolveProviderConfig(projectRoot, …)`.
+ */
+export function resolveOrcaRouterDataDir(
+  projectRoot: string,
+  env: Env = process.env,
+): string {
+  const raw = (env.OD_DATA_DIR ?? '').trim();
+  if (!raw) return path.join(projectRoot, '.od');
+  return path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw);
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -328,9 +438,23 @@ async function writeCredentialsFile(
   const file = credentialsFile(dataDir);
   await mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.${randomBytes(4).toString('hex')}.tmp`;
-  await writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
-  await rename(tmp, file);
-  // Owner-only, best-effort. This file holds a live bearer key.
+  // Owner-only from the moment the bytes exist. `writeFile`'s default creation
+  // mode is 0666 & ~umask, so a normal 022 umask would leave the temporary file
+  // — and the renamed file, until the chmod below lands — readable by every OS
+  // user. The mode is set at open() so there is no window in which the live
+  // bearer key is group/world readable, and the rename does not widen it.
+  try {
+    await writeFile(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await rename(tmp, file);
+  } catch (err) {
+    // A failed write or rename must not leave a half-written secret behind for
+    // the next reader to trip over.
+    await unlink(tmp).catch(() => {});
+    throw err;
+  }
+  // Belt-and-braces for a pre-existing file whose mode the rename could not
+  // narrow (rename keeps the temp file's mode, but an exotic filesystem may not
+  // honour the creation mode).
   try {
     await chmod(file, 0o600);
   } catch (err: unknown) {
@@ -385,7 +509,7 @@ export async function clearOrcaRouterCredential(dataDir: string): Promise<void> 
 export interface ResolvedOrcaRouterCredential {
   apiKey: string;
   baseUrl: string;
-  source: string;
+  source: 'env' | 'oauth-orcarouter-api-key' | 'oauth-orcarouter-pkce' | 'none';
   authState: OrcaRouterAuthState;
   accountId?: string;
   generation?: number;
@@ -394,60 +518,96 @@ export interface ResolvedOrcaRouterCredential {
 }
 
 /**
+ * The credential the daemon would use right now for OrcaRouter inference.
+ *
+ * `resolveOrcaRouterCredential` already checks the environment first and the
+ * connect-flow store second, and reports `needsReauth` as an empty key. This
+ * wrapper adds nothing but the `OAuthCredential` shape `resolveProviderConfig`
+ * already returns, so a PKCE login and a pasted key reach the renderer and the
+ * media dispatcher through one code path rather than two that can disagree.
+ */
+export async function resolveOrcaRouterOAuthCredential(
+  dataDir: string,
+  env: Env = process.env,
+): Promise<{ apiKey: string; source: string } | null> {
+  const resolved = await resolveOrcaRouterCredential(dataDir, env);
+  if (!resolved.apiKey) return null;
+  return { apiKey: resolved.apiKey, source: resolved.source };
+}
+
+/**
+ * Fill in the daemon-held credential for a run whose provider config arrived
+ * without one.
+ *
+ * The browser never receives the key — a PKCE account never puts one in the
+ * form at all — so a run started from the named OrcaRouter provider reaches the
+ * daemon with an empty `apiKey`. The daemon owns the credential; this is the
+ * single place it hands it to a runtime. Every other field, including
+ * `requiresApiKey`, is preserved, so the runtime still sends the key as a
+ * bearer token rather than treating the provider as credential-free.
+ *
+ * A provider for any other protocol, or one that already carries a key, is
+ * returned untouched.
+ */
+export async function attachOrcaRouterDaemonCredential(
+  provider: ByokChatProviderConfig | null | undefined,
+  dataDir: string,
+): Promise<ByokChatProviderConfig | null | undefined> {
+  if (!provider || provider.protocol !== ORCAROUTER_PROVIDER_ID) return provider;
+  if (typeof provider.apiKey === 'string' && provider.apiKey.trim()) return provider;
+  const resolved = await resolveOrcaRouterCredential(dataDir).catch(() => null);
+  if (!resolved?.apiKey) return provider;
+  return {
+    ...provider,
+    apiKey: resolved.apiKey,
+    baseUrl: (provider.baseUrl ?? '').trim() || resolved.baseUrl,
+  };
+}
+
+/**
  * Resolve the credential the daemon should use for OrcaRouter inference, in
  * precedence order:
  *
  *   1. `ORCA_API_KEY` / `OD_ORCAROUTER_API_KEY` / `ORCAROUTER_API_KEY`
  *   2. the `orcarouter` entry in the provider secret store
- *   3. the PKCE credential issued by the in-app connect flow
+ *   3. the credential issued by the in-app connect flow (PKCE or pasted key)
  *
- * Mirrors `resolveXAIOAuthCredential` so OrcaRouter lights up the same way
- * every other gateway with a browser flow does.
+ * The third step is why this exists as a separate function: the connect flow
+ * writes `orcarouter-credentials.json`, not the provider map, so a caller that
+ * only read `resolveProviderConfig` would report the account connected and load
+ * its catalogue while every inference request went out with no credential.
+ *
+ * A credential the relay has rejected (`needsReauth`) resolves to an empty
+ * `apiKey` — see `credentialApiKey`. Its account/generation/reason are still
+ * reported so the UI can offer a reconnect.
+ *
+ * `dataDir` is the resolved daemon data root (`RUNTIME_DATA_DIR`); callers that
+ * only hold a project root pass `resolveOrcaRouterDataDir(projectRoot)`.
  */
 export async function resolveOrcaRouterCredential(
-  projectRoot: string,
-  env: Record<string, string | undefined> = process.env,
+  dataDir: string,
+  env: Env = process.env,
 ): Promise<ResolvedOrcaRouterCredential> {
   const apiBase = resolveOrcaRouterApiBase(env);
-  const fromEnv = cleanOrcaRouterKey(
-    env.ORCA_API_KEY ?? env.OD_ORCAROUTER_API_KEY ?? env.ORCAROUTER_API_KEY ?? '',
-  );
+  const fromEnv = orcaRouterEnvApiKey(env);
   if (fromEnv) {
     return { apiKey: fromEnv, baseUrl: apiBase, source: 'env', authState: 'active' };
   }
 
-  const stored = await resolveProviderConfig(projectRoot, ORCAROUTER_PROVIDER_ID);
-  if (stored.apiKey) {
+  const credential = await readOrcaRouterCredential(dataDir);
+  if (credential) {
+    const usableKey = credentialApiKey(credential);
     return {
-      apiKey: stored.apiKey,
-      baseUrl: stored.baseUrl || apiBase,
-      source: 'stored',
-      authState: 'active',
-    };
-  }
-
-  const credential = await readOrcaRouterCredential(mediaConfigDir(projectRoot));
-  if (credential?.apiKey) {
-    const out: ResolvedOrcaRouterCredential = {
-      apiKey: credentialApiKey(credential),
+      apiKey: usableKey,
       baseUrl: apiBase,
       source: `oauth-orcarouter-${credential.source}`,
       authState: credential.authState,
       accountId: credential.accountId,
       generation: credential.generation,
+      ...(credential.scope ? { scope: credential.scope } : {}),
+      ...(credential.reauthReason ? { reauthReason: credential.reauthReason } : {}),
     };
-    if (credential.scope) out.scope = credential.scope;
-    if (credential.reauthReason) out.reauthReason = credential.reauthReason;
-    return out;
   }
 
   return { apiKey: '', baseUrl: apiBase, source: 'none', authState: 'active' };
 }
-
-/** Base URL for a media/BYOK call, honouring an explicit provider override. */
-export function orcaRouterBaseUrlFor(override: string | undefined, env = process.env): string {
-  const trimmed = (override ?? '').trim();
-  return trimmed || resolveOrcaRouterApiBase(env);
-}
-
-export { ORCAROUTER_ENV_API_BASE, ORCAROUTER_ENV_SHARED_BASE };

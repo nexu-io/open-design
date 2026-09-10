@@ -6,13 +6,32 @@
 // makes one path behave differently from the other shows up here rather than in
 // production as "works when I paste a key, breaks when I sign in".
 
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// `rename` is replaced by a passthrough that runs a test-supplied hook first.
+// The permission guarantee this file asserts is about the window BETWEEN the
+// secret's bytes reaching disk and the rename that publishes it, and no test
+// can observe that window from outside the module — the hook is how the
+// assertion lands inside it.
+const renameHook = vi.hoisted(() => ({ impl: null as null | ((from: string, to: string) => Promise<void>) }));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    rename: async (from: string, to: string) => {
+      if (renameHook.impl) await renameHook.impl(from, to);
+      return actual.rename(from, to);
+    },
+  };
+});
 
 import {
   ORCAROUTER_SCOPE_API,
+  OrcaRouterAttemptSupersededError,
+  OrcaRouterAuthAttempts,
   OrcaRouterScopeDowngradeError,
   acquireApiKeyCredential,
   acquirePkceCredential,
@@ -26,6 +45,8 @@ import {
   markCredentialNeedsReauth,
   nextCredentialGeneration,
   readOrcaRouterCredential,
+  resolveOrcaRouterCredential,
+  resolveOrcaRouterDataDir,
   sanitizeCredentialsFile,
   setOrcaRouterCredential,
   type OrcaRouterCredential,
@@ -289,6 +310,139 @@ describe('OrcaRouter credential adapters', () => {
       await setOrcaRouterCredential(dataDir, credential);
       const raw = await readFile(path.join(dataDir, 'orcarouter-credentials.json'), 'utf8');
       expect(raw).not.toMatch(/verifier|code_challenge|challenge/i);
+    });
+
+    it('creates the temporary credential file owner-only, before it is renamed', async () => {
+      // The interval that matters is between "bytes hit disk" and "chmod runs".
+      // The hook lands the assertion inside it: with writeFile's default
+      // 0666 & ~umask the temp file would be group/world readable here.
+      const modes: number[] = [];
+      renameHook.impl = async (from) => {
+        modes.push((await stat(from)).mode & 0o777);
+      };
+      try {
+        await setOrcaRouterCredential(dataDir, acquireApiKeyCredential({ apiKey: FAKE_KEY }));
+      } finally {
+        renameHook.impl = null;
+      }
+
+      expect(modes).toHaveLength(1);
+      if (process.platform !== 'win32') expect(modes[0]).toBe(0o600);
+    });
+
+    it('leaves no temporary file behind when the rename fails', async () => {
+      renameHook.impl = async () => {
+        throw new Error('EXDEV: cross-device link not permitted');
+      };
+      try {
+        await expect(
+          setOrcaRouterCredential(dataDir, acquireApiKeyCredential({ apiKey: FAKE_KEY })),
+        ).rejects.toThrow(/EXDEV/);
+      } finally {
+        renameHook.impl = null;
+      }
+
+      const leftovers = (await readdir(dataDir)).filter((name) => name.endsWith('.tmp'));
+      expect(leftovers).toEqual([]);
+      // The secret must not survive as an orphaned temp file either.
+      expect(await readOrcaRouterCredential(dataDir)).toBeNull();
+    });
+  });
+
+  describe('resolver', () => {
+    const clearOrcaEnv = () => {
+      for (const name of ['ORCA_API_KEY', 'OD_ORCAROUTER_API_KEY', 'ORCAROUTER_API_KEY']) {
+        delete process.env[name];
+      }
+    };
+
+    it('reads the credential the connect flow stored, not just the provider map', async () => {
+      clearOrcaEnv();
+      await setOrcaRouterCredential(
+        dataDir,
+        acquirePkceCredential({
+          exchange: { key: FAKE_KEY, user_id: 'acct-1', scope: ORCAROUTER_SCOPE_API },
+        }),
+      );
+
+      const resolved = await resolveOrcaRouterCredential(dataDir);
+      // This is the blocking bug in one assertion: before the fix the resolver
+      // never looked in this file, so a PKCE account reported Connected and
+      // loaded models while every inference request went out unauthenticated.
+      expect(resolved.apiKey).toBe(FAKE_KEY);
+      expect(resolved.source).toBe('oauth-orcarouter-pkce');
+      expect(resolved.authState).toBe('active');
+    });
+
+    it('lets the environment win over the stored credential', async () => {
+      process.env.ORCA_API_KEY = 'sk-orca-from-the-environment';
+      try {
+        await setOrcaRouterCredential(dataDir, acquireApiKeyCredential({ apiKey: FAKE_KEY }));
+        const resolved = await resolveOrcaRouterCredential(dataDir);
+        expect(resolved.source).toBe('env');
+        expect(resolved.apiKey).toBe('sk-orca-from-the-environment');
+      } finally {
+        clearOrcaEnv();
+      }
+    });
+
+    it('returns no usable key — but keeps the record — while needsReauth', async () => {
+      clearOrcaEnv();
+      const credential = acquirePkceCredential({
+        exchange: { key: FAKE_KEY, user_id: 'acct-2', scope: ORCAROUTER_SCOPE_API },
+      });
+      await setOrcaRouterCredential(dataDir, credential);
+      await markOrcaRouterCredentialNeedsReauth(dataDir, {
+        accountId: 'acct-2',
+        generation: credential.generation,
+        reason: 'revoked',
+      });
+
+      const resolved = await resolveOrcaRouterCredential(dataDir);
+      // Terminal: no second request is issued with the rejected key.
+      expect(resolved.apiKey).toBe('');
+      expect(resolved.authState).toBe('needsReauth');
+      expect(resolved.reauthReason).toBe('revoked');
+      // The record survives so reconnecting can replace it.
+      expect((await readOrcaRouterCredential(dataDir))?.apiKey).toBe(FAKE_KEY);
+    });
+
+    it('resolves an empty key when nothing is stored', async () => {
+      clearOrcaEnv();
+      const resolved = await resolveOrcaRouterCredential(dataDir);
+      expect(resolved.apiKey).toBe('');
+      expect(resolved.source).toBe('none');
+    });
+
+    it('derives its data root from OD_DATA_DIR, never from the media-config override', () => {
+      // Two daemons sharing OD_MEDIA_CONFIG_DIR must not share one account.
+      expect(resolveOrcaRouterDataDir('/workspace', { OD_DATA_DIR: '/srv/od-a' }))
+        .toBe('/srv/od-a');
+      expect(resolveOrcaRouterDataDir('/workspace', { OD_DATA_DIR: 'rel/od' }))
+        .toBe('/workspace/rel/od');
+      expect(resolveOrcaRouterDataDir('/workspace', {})).toBe('/workspace/.od');
+    });
+  });
+
+  describe('in-flight attempt fencing', () => {
+    it('invalidates the attempt generation on every state change', () => {
+      const attempts = new OrcaRouterAuthAttempts();
+      const started = attempts.bump();
+      expect(attempts.isCurrent(started)).toBe(true);
+      attempts.bump();
+      expect(attempts.isCurrent(started)).toBe(false);
+    });
+
+    it('refuses to commit an exchange whose attempt was superseded', () => {
+      // Mirrors the route's fence: persistExchange captures the generation
+      // before its await and re-checks it before writing.
+      const attempts = new OrcaRouterAuthAttempts();
+      const attempt = attempts.current();
+      attempts.bump(); // a Cancel, Disconnect, or newer Start landed mid-exchange
+      expect(attempts.isCurrent(attempt)).toBe(false);
+      expect(() => {
+        if (!attempts.isCurrent(attempt)) throw new OrcaRouterAttemptSupersededError();
+      }).toThrow(OrcaRouterAttemptSupersededError);
     });
   });
 });

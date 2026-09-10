@@ -6,7 +6,7 @@
 // prefix is stripped before the wire call, and the request carries the user's
 // credential to the inference origin.
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -121,6 +121,37 @@ describe('orcarouter media generation', () => {
     expect(result.mime).toBe('video/mp4');
   });
 
+  it('carries a staged reference image to the i2v model instead of sending a text-only job', async () => {
+    // Kling v3 advertises i2v, so a supplied image must reach the wire. Before
+    // this was wired, the request body held only the prompt and a text-to-video
+    // job was billed for an image-to-video request.
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      data: [{ b64_json: FAKE_MP4.toString('base64') }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const reference = `data:image/png;base64,${FAKE_PNG.toString('base64')}`;
+    // `--image` takes a path relative to the project directory generateMedia
+    // resolves (projectsRoot/<projectId>); it is read into a data URL there.
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(path.join(projectsRoot, 'p1'), { recursive: true });
+    await writeFile(path.join(projectsRoot, 'p1', 'ref.png'), FAKE_PNG);
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'p1',
+      surface: 'video',
+      model: 'orcarouter/kling/kling-v3',
+      prompt: 'the camera pushes in',
+      image: 'ref.png',
+    } as Parameters<typeof generateMedia>[0]);
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body.input_reference).toBe(reference);
+    expect(result.providerNote).toContain('i2v');
+  });
+
   it('fails with an actionable message when no credential is configured', async () => {
     clearCredentialEnv();
     await expect(generateMedia({
@@ -131,6 +162,79 @@ describe('orcarouter media generation', () => {
       model: 'orcarouter/gpt-image-2',
       prompt: 'x',
     })).rejects.toThrow(/OrcaRouter credential/i);
+  });
+
+  it('uses the credential the connect flow saved, with no env key and no media key', async () => {
+    // The blocking gap in one test: the UI can report Connected and load models
+    // from a PKCE login, yet neither a pasted key nor the PKCE account populated
+    // the provider map `resolveProviderConfig` reads. Generation then failed
+    // with "no credential". The daemon-held store is now part of that chain.
+    clearCredentialEnv();
+    process.env.OD_DATA_DIR = path.join(root, 'data');
+    const { acquirePkceCredential, setOrcaRouterCredential } =
+      await import('../src/integrations/orcarouter-credentials.js');
+    await setOrcaRouterCredential(
+      process.env.OD_DATA_DIR,
+      acquirePkceCredential({
+        exchange: { key: 'sk-orca-from-the-connect-flow', user_id: 'acct', scope: 'api' },
+      }),
+    );
+
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      data: [{ b64_json: FAKE_PNG.toString('base64') }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      await generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: 'p1',
+        surface: 'image',
+        model: 'orcarouter/gpt-image-2',
+        prompt: 'x',
+      });
+      const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect((init.headers as Record<string, string>).authorization)
+        .toBe('Bearer sk-orca-from-the-connect-flow');
+    } finally {
+      delete process.env.OD_DATA_DIR;
+    }
+  });
+
+  it('rejects rather than replaying a credential the relay already revoked', async () => {
+    clearCredentialEnv();
+    process.env.OD_DATA_DIR = path.join(root, 'data-revoked');
+    const {
+      acquirePkceCredential,
+      markOrcaRouterCredentialNeedsReauth,
+      setOrcaRouterCredential,
+    } = await import('../src/integrations/orcarouter-credentials.js');
+    const credential = acquirePkceCredential({
+      exchange: { key: 'sk-orca-revoked', user_id: 'acct', scope: 'api' },
+    });
+    await setOrcaRouterCredential(process.env.OD_DATA_DIR, credential);
+    await markOrcaRouterCredentialNeedsReauth(process.env.OD_DATA_DIR, {
+      accountId: 'acct',
+      generation: credential.generation,
+    });
+
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await expect(generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: 'p1',
+        surface: 'image',
+        model: 'orcarouter/gpt-image-2',
+        prompt: 'x',
+      })).rejects.toThrow(/OrcaRouter credential/i);
+      // Nothing was sent with the terminal credential.
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.OD_DATA_DIR;
+    }
   });
 
   it('writes the generated bytes to disk', async () => {

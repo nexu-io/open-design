@@ -24,7 +24,6 @@
 import type { Express } from 'express';
 
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
-import { mediaConfigDir } from '../media/config.js';
 import { PendingAuthCache } from '../mcp-oauth.js';
 import {
   ORCAROUTER_PROVIDER_ID,
@@ -38,6 +37,8 @@ import {
   type OrcaRouterInputModality,
 } from '../integrations/orcarouter.js';
 import {
+  OrcaRouterAttemptSupersededError,
+  OrcaRouterAuthAttempts,
   OrcaRouterScopeDowngradeError,
   acquireApiKeyCredential,
   acquirePkceCredential,
@@ -99,15 +100,22 @@ export function registerOrcaRouterRoutes(
   ctx: RegisterOrcaRouterRoutesDeps,
 ) {
   const { isLocalSameOrigin, resolvedPortRef } = ctx.http;
-  const { PROJECT_ROOT } = ctx.paths;
+  const { RUNTIME_DATA_DIR } = ctx.paths;
   const getResolvedPort = () => resolvedPortRef.current;
-  const dataDir = () => mediaConfigDir(PROJECT_ROOT);
+  // The credential store derives from the resolved daemon data root, not from
+  // the media-config directory: `OD_MEDIA_CONFIG_DIR` is a narrow override for
+  // media-config.json only, and two daemons that share a media config must not
+  // share (and overwrite) one OrcaRouter account.
+  const dataDir = () => RUNTIME_DATA_DIR;
 
   // The relay expires an auth code after 10 minutes; the listener, the pending
   // state, and the paste-back affordance all share that window so they cannot
   // drift out of step.
   const pendingAuth = new PendingAuthCache(10 * 60 * 1000);
   let activeListener: OrcaRouterCallbackListener | null = null;
+  // Which authorization attempt is live. Cancel, Disconnect, and a new Start all
+  // bump it; an exchange that reads a superseded generation refuses to store.
+  const authAttempts = new OrcaRouterAuthAttempts();
 
   const stopActiveListener = async () => {
     const current = activeListener;
@@ -121,13 +129,30 @@ export function registerOrcaRouterRoutes(
   };
 
   /**
+   * Release the in-flight attempt: stop listening AND invalidate its pending
+   * state so a late callback or paste-back cannot still exchange. The stored
+   * credential is untouched — Cancel is not Disconnect.
+   */
+  const releaseActiveAttempt = async () => {
+    authAttempts.bump();
+    pendingAuth.clear();
+    await stopActiveListener();
+  };
+
+  /**
    * Persist whatever the exchange produced. Shared by the loopback callback and
    * the paste-back path so both land identical credential records.
+   *
+   * The attempt generation is captured before the first await and re-checked
+   * before the write, so an exchange that finishes after a Cancel, a Disconnect,
+   * or a newer Start commits nothing: without that fence a delayed provider
+   * response would restore an account the user just removed.
    */
   const persistExchange = async (
     state: string,
     code: string,
   ): Promise<{ ok: true } | { ok: false; status: number; error: string }> => {
+    const attempt = authAttempts.current();
     const previous = await readOrcaRouterCredential(dataDir());
     const dispatcher = proxyDispatcherRequestInit(process.env);
     try {
@@ -137,13 +162,22 @@ export function registerOrcaRouterRoutes(
         code,
         fetchImpl: fetchWithRequestInit(dispatcher.requestInit),
       });
+      if (!authAttempts.isCurrent(attempt)) {
+        throw new OrcaRouterAttemptSupersededError();
+      }
       const credential = acquirePkceCredential({ exchange, previous });
       await setOrcaRouterCredential(dataDir(), credential);
+      // A completed exchange is itself a state change: a callback still queued
+      // behind this one belongs to the attempt that just ended.
+      authAttempts.bump();
       console.log(
         `[orcarouter-oauth] credential stored source=pkce generation=${credential.generation}`,
       );
       return { ok: true };
     } catch (err: unknown) {
+      if (err instanceof OrcaRouterAttemptSupersededError) {
+        return { ok: false, status: 409, error: err.message };
+      }
       if (err instanceof OrcaRouterScopeDowngradeError) {
         return { ok: false, status: 403, error: err.message };
       }
@@ -174,8 +208,9 @@ export function registerOrcaRouterRoutes(
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     // One dance at a time: a second Start (user clicked twice, or closed the tab
-    // and came back) must not leave two listeners racing for one callback.
-    await stopActiveListener();
+    // and came back) must not leave two listeners racing for one callback, nor
+    // leave the previous attempt's state exchangeable.
+    await releaseActiveAttempt();
 
     try {
       const authBase = resolveOrcaRouterAuthBase();
@@ -240,7 +275,7 @@ export function registerOrcaRouterRoutes(
     // credential: a user cancelling a Reconnect would otherwise lose a working
     // grant. Disconnect is the destructive path.
     try {
-      await stopActiveListener();
+      await releaseActiveAttempt();
       res.json({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -253,10 +288,10 @@ export function registerOrcaRouterRoutes(
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const resolved = await resolveOrcaRouterCredential(PROJECT_ROOT);
+      const resolved = await resolveOrcaRouterCredential(RUNTIME_DATA_DIR);
       const stored = await readOrcaRouterCredential(dataDir());
       res.json({
-        connected: isCredentialUsable(stored) || resolved.source === 'env' || resolved.source === 'stored',
+        connected: isCredentialUsable(stored) || resolved.source === 'env',
         source: resolved.source,
         authState: resolved.authState,
         needsReauth: resolved.authState === 'needsReauth',
@@ -265,6 +300,15 @@ export function registerOrcaRouterRoutes(
         savedAt: stored?.savedAt ?? null,
         reauthReason: resolved.reauthReason ?? null,
         listening: activeListener !== null,
+        // Which credential generation the daemon currently holds, and which
+        // authorization attempt is live. The connect control cannot tell
+        // "reconnected" from "still the old, working credential" by
+        // `connected` alone — a Reconnect leaves the previous credential in
+        // place while the user authorizes — so it captures `generation` before
+        // Start and waits for it to change instead of clearing its paste-back
+        // input on the first poll.
+        generation: stored?.generation ?? resolved.generation ?? null,
+        attempt: authAttempts.current(),
         // The origin the browser will be sent to, so the UI can show it rather
         // than making the user trust an invisible redirect.
         authBase: resolveOrcaRouterAuthBase(),
@@ -281,7 +325,10 @@ export function registerOrcaRouterRoutes(
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      await stopActiveListener();
+      // Invalidate the in-flight attempt FIRST: an exchange already awaiting
+      // the provider must not resolve later and restore the account this call
+      // is removing.
+      await releaseActiveAttempt();
       await clearOrcaRouterCredential(dataDir());
       res.json({ ok: true });
     } catch (err: unknown) {
@@ -300,6 +347,7 @@ export function registerOrcaRouterRoutes(
     // `clear` lets the UI remove a pasted key without leaving the connect flow.
     if (req.body?.clear === true) {
       try {
+        authAttempts.bump();
         await clearOrcaRouterCredential(dataDir());
         return res.json({ ok: true, cleared: true });
       } catch (err: unknown) {
@@ -318,6 +366,9 @@ export function registerOrcaRouterRoutes(
       const previous = await readOrcaRouterCredential(dataDir());
       const credential = acquireApiKeyCredential({ apiKey, previous });
       await setOrcaRouterCredential(dataDir(), credential);
+      // Adopting a key replaces whatever the account was; any authorization
+      // still in flight is now stale and must not overwrite it on arrival.
+      authAttempts.bump();
       console.log(`[orcarouter] API key stored generation=${credential.generation}`);
       res.json({ ok: true, prefixOk, generation: credential.generation });
     } catch (err: unknown) {
@@ -334,14 +385,19 @@ export function registerOrcaRouterRoutes(
     const requiredModalities = readModalities(req.body?.requiredModalities);
     // The key is read here, server-side, and never travels to the browser. A
     // caller that names an override base URL still fetches with our credential.
-    const resolved = await resolveOrcaRouterCredential(PROJECT_ROOT);
+    // A `needsReauth` credential resolves to an empty key, so a revoked
+    // credential stops re-issuing the request the relay already rejected.
+    const resolved = await resolveOrcaRouterCredential(RUNTIME_DATA_DIR);
     if (!resolved.apiKey) {
       return res.json({
         ok: false,
         capability,
         degraded: true,
-        reason: 'no OrcaRouter credential — connect an account or paste an API key',
-        source: 'none',
+        reason: resolved.authState === 'needsReauth'
+          ? (resolved.reauthReason
+            ?? 'OrcaRouter rejected this credential. Sign in again or paste a new API key.')
+          : 'no OrcaRouter credential — connect an account or paste an API key',
+        source: resolved.source,
         models: [],
         seed: false,
       });

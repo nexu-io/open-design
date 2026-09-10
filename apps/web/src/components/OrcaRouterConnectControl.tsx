@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useI18n } from '../i18n';
+import { setOrcaRouterAccountConnected } from '../state/orcarouterAccount';
 import styles from './OrcaRouterConnectControl.module.css';
 
 interface OrcaRouterAuthStatus {
@@ -44,6 +45,14 @@ interface OrcaRouterAuthStatus {
   listening?: boolean;
   authBase?: string;
   apiBase?: string;
+  /**
+   * Which credential generation the daemon holds. A Reconnect deliberately
+   * leaves the previous credential usable, so `connected` stays true while the
+   * user authorizes. Comparing this against the value captured before Start is
+   * how the poll tells "the new credential landed" from "the old one is still
+   * there".
+   */
+  generation?: number | null;
 }
 
 interface StartResponse {
@@ -152,14 +161,29 @@ export function OrcaRouterConnectControl({
     setPasteCode('');
   }, []);
 
-  const refresh = useCallback(async () => {
+  /**
+   * Read the daemon's current status.
+   *
+   * `attempt` is the attempt this read belongs to. When it is supplied, a
+   * response that arrives after a newer attempt has taken over is dropped
+   * instead of being applied: the mount-time read in particular can be held
+   * open by a slow daemon and land after the user has already started a login,
+   * where a stale "connected: false" would misrepresent the newer attempt.
+   */
+  const refresh = useCallback(async (attempt?: number) => {
     const data = await fetchStatus();
-    if (data) setStatus(data);
+    if (attempt !== undefined && attempt !== attemptRef.current) return data;
+    if (data) {
+      setStatus(data);
+      // Publish to the run preflight: a PKCE account never puts a key in the
+      // browser, so `connected` is the only thing that lets a send through.
+      setOrcaRouterAccountConnected(data.connected === true);
+    }
     return data;
   }, []);
 
   const startPoll = useCallback(
-    (attempt: number) => {
+    (attempt: number, baselineGeneration: number | null) => {
       stopPoll();
       let elapsed = 0;
       pollTimer.current = setInterval(() => {
@@ -169,8 +193,18 @@ export function OrcaRouterConnectControl({
           // A response that belongs to a superseded attempt must not touch
           // state — this is the whole point of the generation counter.
           if (attempt !== attemptRef.current) return;
-          if (data) setStatus(data);
-          if (data?.connected) {
+          if (data) {
+            setStatus(data);
+            setOrcaRouterAccountConnected(data.connected === true);
+          }
+          // Success is a NEW credential, not merely "connected": a Reconnect
+          // starts while the previous credential is still valid, so the first
+          // poll would otherwise clear pendingState and the paste-back input
+          // and stop polling before the user had anywhere to submit the code.
+          const generationAdvanced =
+            typeof data?.generation === 'number'
+            && data.generation !== baselineGeneration;
+          if (data?.connected && generationAdvanced) {
             setBusyState('idle');
             setError(null);
             clearPending();
@@ -186,7 +220,9 @@ export function OrcaRouterConnectControl({
 
   // Invalidate on unmount so no in-flight continuation writes into a dead tree.
   useEffect(() => {
-    void refresh();
+    // Pinned to the attempt live at mount: this read must not apply once the
+    // user has started an authorization of their own.
+    void refresh(attemptRef.current);
     return () => {
       attemptRef.current += 1;
       stopPoll();
@@ -220,6 +256,13 @@ export function OrcaRouterConnectControl({
     setError(null);
     clearPending();
     setBusyState('starting');
+    // Capture the credential the daemon holds BEFORE starting. Reconnect keeps
+    // it usable while the user authorizes, so the poll compares against this
+    // rather than against `connected`.
+    const before = await refresh(attempt);
+    if (attempt !== attemptRef.current) return;
+    const baselineGeneration =
+      typeof before?.generation === 'number' ? before.generation : null;
     const result = await postJson('/api/orcarouter/oauth/start');
     if (attempt !== attemptRef.current) return;
     if (!result.ok) {
@@ -231,7 +274,7 @@ export function OrcaRouterConnectControl({
     setBusyState('awaiting');
     setPendingAuthUrl(started.authorizeUrl);
     setPendingState(started.state);
-    startPoll(attempt);
+    startPoll(attempt, baselineGeneration);
     try {
       window.open(started.authorizeUrl, '_blank', 'noopener,noreferrer');
     } catch {
@@ -258,6 +301,8 @@ export function OrcaRouterConnectControl({
     setBusyState('idle');
     clearPending();
     stopPoll();
+    // The exchanged credential is what the daemon now reports; read it without
+    // the attempt guard, since this attempt intentionally just completed.
     await refresh();
     onCredentialChange?.();
   }, [clearPending, onCredentialChange, pasteCode, pendingState, refresh, setBusyState, stopPoll]);
@@ -282,6 +327,9 @@ export function OrcaRouterConnectControl({
       setError(null);
       clearPending();
       setStatus({ connected: false });
+      // The run preflight must stop treating the removed credential as usable
+      // the moment the daemon confirms it is gone.
+      setOrcaRouterAccountConnected(false);
       onCredentialChange?.();
     } else {
       setError(result.message);
@@ -304,14 +352,18 @@ export function OrcaRouterConnectControl({
 
   const connected = Boolean(status?.connected);
   const needsReauth = Boolean(status?.needsReauth);
+  // An authorization in flight outranks "connected": during a Reconnect the
+  // previous credential is still usable, so a plain `connected` render would
+  // announce success while the user is still authorizing — and the paste-back
+  // input would be hidden behind the connected branch.
   const isAwaiting =
     busy === 'awaiting' || busy === 'submitting'
-    || (Boolean(pendingState) && !connected)
-    || (Boolean(pendingAuthUrl) && !connected);
+    || Boolean(pendingState)
+    || Boolean(pendingAuthUrl);
 
   return (
     <div
-      className={`mcp-oauth-control${connected ? ' connected' : ''}`}
+      className={`mcp-oauth-control${connected && !isAwaiting ? ' connected' : ''}`}
       data-testid="orcarouter-connect-control"
     >
       <div className="mcp-oauth-status" aria-live="polite">
@@ -323,6 +375,14 @@ export function OrcaRouterConnectControl({
               <span className="hint">
                 {status?.reauthReason ?? t('settings.orcaRouterNeedsReauth')}
               </span>
+            </span>
+          </>
+        ) : isAwaiting ? (
+          <>
+            <span className="mcp-oauth-dot mcp-oauth-dot-pending" aria-hidden />
+            <span>
+              <strong>{t('settings.orcaRouterWaiting')}</strong>{' '}
+              <span className="hint">{t('settings.orcaRouterWaitingHint')}</span>
             </span>
           </>
         ) : connected ? (
@@ -359,7 +419,7 @@ export function OrcaRouterConnectControl({
       {/* Entry 2 — account login. OAuth 2.0 + PKCE, no client secret. */}
       <div className={styles.oauthEntry} data-testid="orcarouter-oauth-entry">
         <div className="mcp-oauth-actions">
-          {connected ? (
+          {connected && !isAwaiting ? (
             <>
               <button
                 type="button"
@@ -369,7 +429,10 @@ export function OrcaRouterConnectControl({
                 title={t('settings.orcaRouterReconnectHint')}
                 onClick={() => void onConnect()}
               >
-                {busy === 'starting' || busy === 'awaiting'
+                {/* `isAwaiting` is false here by construction: authorizing
+                    renders the awaiting branch, not this one. Only the
+                    starting sub-state is reachable. */}
+                {busy === 'starting'
                   ? t('settings.orcaRouterConnecting')
                   : t('settings.orcaRouterReconnect')}
               </button>
@@ -393,9 +456,14 @@ export function OrcaRouterConnectControl({
                 disabled={busy !== 'idle'}
                 onClick={() => void onConnect()}
               >
+                {/* During a Reconnect the previous credential is still
+                    connected, so this branch renders while authorizing. The
+                    label must still read as in-progress. */}
                 {busy === 'starting'
                   ? t('settings.orcaRouterOpeningBrowser')
-                  : t('settings.orcaRouterConnect')}
+                  : busy === 'awaiting'
+                    ? t('settings.orcaRouterConnecting')
+                    : t('settings.orcaRouterConnect')}
               </button>
               {isAwaiting ? (
                 <button
@@ -410,7 +478,10 @@ export function OrcaRouterConnectControl({
           )}
         </div>
 
-        {pendingAuthUrl && !connected ? (
+        {/* The manual link is part of authorizing, so it stays visible while an
+            attempt is in flight even if the previous credential is still
+            connected (a Reconnect). */}
+        {pendingAuthUrl && (!connected || isAwaiting) ? (
           <div className="mcp-oauth-fallback hint">
             {t('settings.orcaRouterOpenManually')}{' '}
             <a

@@ -1173,6 +1173,18 @@ async function renderOrcaRouterMedia(
         seconds: typeof ctx.length === 'number' ? ctx.length : 'auto',
         response_format: 'b64_json',
       };
+  // Image-to-video. The video rows advertise `i2v`, so a staged reference must
+  // actually reach the gateway — otherwise choosing image-to-video silently
+  // sends a text-only job and spends the user's credits on the wrong result.
+  // OrcaRouter routes these through the same OpenAI-standard `/videos` contract
+  // the AIHubMix renderer uses, where the first frame travels as
+  // `input_reference` (a data URL).
+  if (surface === 'video') {
+    const reference = ctx.imageRefs[0] ?? ctx.imageRef;
+    if (reference?.dataUrl) {
+      body.input_reference = reference.dataUrl;
+    }
+  }
 
   const resp = await fetch(url, withMediaRequestInit(ctx, {
     method: 'POST',
@@ -1186,7 +1198,7 @@ async function renderOrcaRouterMedia(
   const bytes = await bytesFromOpenAICompatibleData(data, `orcarouter ${surface}`, ctx.requestInit);
   return {
     bytes,
-    providerNote: `orcarouter/${wireModel} · ${size}${surface === 'video' ? ' · auto' : ''} · ${bytes.length} bytes`,
+    providerNote: `orcarouter/${wireModel} · ${size}${surface === 'video' ? ` · ${ctx.imageRef || ctx.imageRefs.length ? 'i2v' : 't2v'}` : ''} · ${bytes.length} bytes`,
     suggestedExt: surface === 'image' ? sniffImageExt(bytes) : '.mp4',
   };
 }

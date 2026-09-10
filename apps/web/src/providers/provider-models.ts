@@ -86,16 +86,27 @@ async function postOrcaRouterModels(
       reason?: string;
       degraded?: boolean;
       status?: number;
+      seed?: boolean;
+      verifiedSeed?: string[];
     };
     if (!payload?.ok) {
       // A revoked credential is a terminal state the UI must surface, so the
       // status is carried through rather than flattened into a generic failure.
+      //
+      // The daemon's degraded rows are the metadata-rich seed, so they ride
+      // `seedModels` rather than `models`: a caller that saw them in `models`
+      // with `ok:false` would have to guess whether they were live, and the
+      // picker's merge step would drop them for lacking modality metadata
+      // anyway. `degraded` tells it which list to filter against.
       return {
         ok: false,
         kind: payload?.status === 401 ? 'auth_failed' : 'unknown',
         latencyMs: Date.now() - start,
         ...(payload?.status !== undefined && payload.status !== null
           ? { status: payload.status }
+          : {}),
+        ...(payload?.seed === true
+          ? { degraded: true, seedModels: payload.models ?? [] }
           : {}),
         detail: payload?.reason ?? 'OrcaRouter catalogue unavailable',
       };
@@ -104,7 +115,11 @@ async function postOrcaRouterModels(
       ok: true,
       kind: 'success',
       latencyMs: Date.now() - start,
+      // A successful answer is authoritative, empty included: the account is
+      // restricted, and offering it the seed would advertise models it cannot
+      // call.
       models: payload.models ?? [],
+      degraded: false,
     };
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;

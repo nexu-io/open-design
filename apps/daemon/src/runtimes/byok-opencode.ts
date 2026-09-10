@@ -16,6 +16,9 @@ const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], s
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
+  // Inference origin only. OrcaRouter's auth origin is a different host and is
+  // never derived from this value (see integrations/orcarouter.ts).
+  orcarouter: 'https://api.orcarouter.ai/v1',
 };
 
 type ProviderPackage =
@@ -111,6 +114,12 @@ function normalizeProviderBaseUrl(
   }
   if (protocol === 'google' && isExactOrigin(trimmed, 'https://generativelanguage.googleapis.com')) {
     return 'https://generativelanguage.googleapis.com/v1beta';
+  }
+  if (protocol === 'orcarouter' && !hasVersionedApiPath(trimmed)) {
+    // A self-hosted origin may be handed over bare; the gateway's OpenAI wire
+    // paths hang off `/v1`, so the canonical version segment is appended here
+    // exactly as the origin resolver does for media and catalogue calls.
+    return appendVersionedApiPath(trimmed);
   }
   if (protocol === 'ollama') {
     if (isExactOrigin(trimmed, 'https://ollama.com')) return 'https://ollama.com/v1';
@@ -239,6 +248,7 @@ function buildProviderEntry(
       };
     case 'senseaudio':
     case 'aihubmix':
+    case 'orcarouter':
       return {
         npm: '@ai-sdk/openai-compatible',
         options: {

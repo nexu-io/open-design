@@ -39,6 +39,14 @@ export const ORCAROUTER_APP_NAME = 'OpenDesign';
 export const ORCAROUTER_ENV_AUTH_BASE = 'ORCA_AUTH_BASE_URL';
 export const ORCAROUTER_ENV_API_BASE = 'ORCA_API_BASE_URL';
 export const ORCAROUTER_ENV_SHARED_BASE = 'ORCA_BASE_URL';
+// The inference credential. `ORCA_API_KEY` is the canonical name the docs use;
+// the OD_-prefixed pair follows this daemon's per-provider convention. All three
+// are declared here — the one module that owns OrcaRouter's configuration
+// surface — so the media dispatcher and the BYOK chat path cannot drift about
+// which variable lights them up.
+export const ORCAROUTER_ENV_API_KEY = 'ORCA_API_KEY';
+export const ORCAROUTER_ENV_API_KEY_PREFIXED = 'OD_ORCAROUTER_API_KEY';
+export const ORCAROUTER_ENV_API_KEY_LEGACY = 'ORCAROUTER_API_KEY';
 
 type Env = Record<string, string | undefined>;
 

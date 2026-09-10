@@ -125,6 +125,10 @@ import {
 } from '../analytics/events';
 import { byokPreflightBlockReason } from './byok/preflight';
 import {
+  orcaRouterAccountConnected,
+  refreshOrcaRouterAccountStatus,
+} from '../state/orcarouterAccount';
+import {
   clearOnboardingSessionId,
   peekOnboardingSessionId,
 } from '../analytics/onboarding-session';
@@ -1970,9 +1974,25 @@ function byokOpenCodeProviderFromConfig(
   if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
   const selectedProvider = selectedKnownProviderForConfig(config);
   const model = config.model.trim();
+  const requiresApiKey = byokProviderRequiresApiKey(
+    config.apiProtocol,
+    selectedProvider,
+    config.baseUrl,
+  );
+  // The daemon holds the OrcaRouter credential for a PKCE account (and for a
+  // pasted key it mirrored into the same store), so an empty `apiKey` here does
+  // not mean the run is unauthenticated. The request carries the provider with
+  // no key and the daemon fills it in server-side — see
+  // `attachOrcaRouterDaemonCredential`. An unknown status still blocks, so a
+  // genuinely unconfigured account fails with an actionable preflight reason
+  // rather than at the daemon.
+  const keySatisfiedByDaemon =
+    requiresApiKey
+    && !config.apiKey.trim()
+    && config.apiProtocol === 'orcarouter'
+    && orcaRouterAccountConnected() === true;
   if (
-    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl)
-      && !config.apiKey.trim())
+    (requiresApiKey && !config.apiKey.trim() && !keySatisfiedByDaemon)
     || !model
     || model.toLowerCase() === 'default'
     || (config.apiProtocol === 'azure' && !config.baseUrl.trim())
@@ -1987,11 +2007,7 @@ function byokOpenCodeProviderFromConfig(
     ...(config.apiProtocol === 'azure' && config.apiVersion?.trim()
       ? { apiVersion: config.apiVersion.trim() }
       : {}),
-    requiresApiKey: byokProviderRequiresApiKey(
-      config.apiProtocol,
-      selectedProvider,
-      config.baseUrl,
-    ),
+    requiresApiKey,
   };
 }
 
@@ -2018,7 +2034,8 @@ function isOpenCodeByokChatProtocol(
     protocol === 'google' ||
     protocol === 'ollama' ||
     protocol === 'senseaudio' ||
-    protocol === 'aihubmix'
+    protocol === 'aihubmix' ||
+    protocol === 'orcarouter'
   );
 }
 
@@ -8119,6 +8136,13 @@ export function ProjectView({
           chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
         ),
       );
+      // A PKCE OrcaRouter account keeps its key in the daemon, so read the
+      // daemon's verdict before deciding whether this run is configured. An
+      // unknown status still blocks (the daemon would fail the run anyway), so
+      // this only ever turns a false block into a real send.
+      if (config.apiProtocol === 'orcarouter' && !config.apiKey.trim()) {
+        await refreshOrcaRouterAccountStatus();
+      }
       const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
       const requiresByokPreflight =
         (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||

@@ -19,6 +19,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   filterOptionsForModalities,
   mergeProviderModelOptions,
+  resetProviderModelsDiscovery,
+  resolveProviderModelOptions,
+  setProviderModelsDiscovery,
 } from '../../src/components/providerModelsCache';
 import {
   modalitiesForFiles,
@@ -219,5 +222,171 @@ describe('model selector options under an attachment', () => {
     await waitFor(() => {
       expect(onModelChange).toHaveBeenCalledWith('');
     });
+  });
+
+  it('clears the selection when NO offered model can accept the attachment', async () => {
+    // The options.length guard kept the current model precisely in the case
+    // that most needs it cleared: a catalogue where attachment filtering
+    // removes every row. A text-only account with an audio attachment retains
+    // its selected text model even though nothing on offer can receive audio.
+    const textOnlyCatalogue: ProviderModelOption[] = [
+      option('deepseek/deepseek-v4-pro', ['text']),
+      option('openai/gpt-5.5-no-audio', ['text', 'image']),
+    ];
+    const onModelChange = vi.fn();
+    render(
+      <SelectorProbe
+        protocol="orcarouter"
+        fetchedModels={textOnlyCatalogue}
+        selected="deepseek/deepseek-v4-pro"
+        onModelChange={onModelChange}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('option-ids').textContent).toContain('deepseek/deepseek-v4-pro');
+    });
+
+    act(() => setStagedModalities(['audio']));
+    await waitFor(() => {
+      // The filtered list is genuinely empty…
+      expect(screen.getByTestId('option-ids').textContent).toBe('');
+      // …and the incompatible selection does not survive it.
+      expect(onModelChange).toHaveBeenCalledWith('');
+    });
+  });
+
+  it('does not clear a selection while discovery is still in flight', async () => {
+    // An empty filtered list means two opposite things. While discovery is
+    // loading it is "not yet"; treating that as "nothing qualifies" would wipe
+    // the user's model on every mount.
+    const onModelChange = vi.fn();
+    render(
+      <SelectorProbe
+        protocol="orcarouter"
+        fetchedModels={[]}
+        discoveryKey="orcarouter"
+        selected="openai/gpt-5.5"
+        onModelChange={onModelChange}
+      />,
+    );
+    act(() => {
+      setProviderModelsDiscovery('orcarouter', 'loading');
+      setStagedModalities(['image']);
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(onModelChange).not.toHaveBeenCalled();
+  });
+
+  it('clears once discovery settles with nothing modality-compatible', async () => {
+    const onModelChange = vi.fn();
+    render(
+      <SelectorProbe
+        protocol="orcarouter"
+        fetchedModels={[option('deepseek/deepseek-v4-pro', ['text'])]}
+        discoveryKey="orcarouter-settled"
+        selected="deepseek/deepseek-v4-pro"
+        onModelChange={onModelChange}
+      />,
+    );
+    act(() => {
+      setProviderModelsDiscovery('orcarouter-settled', 'ready');
+      setStagedModalities(['image']);
+    });
+    await waitFor(() => {
+      expect(onModelChange).toHaveBeenCalledWith('');
+    });
+  });
+});
+
+describe('selection provenance', () => {
+  afterEach(() => {
+    cleanup();
+    resetStagedModalities();
+  });
+
+  it('does not discard a custom selection made under another protocol', async () => {
+    // The effect is invoked for EVERY API protocol, although only OrcaRouter's
+    // options are narrowed. With an OpenAI-compatible custom model that is
+    // absent from the suggested/catalogue rows, staging an image used to call
+    // onModelChange('') and throw away the user's explicit choice.
+    const onModelChange = vi.fn();
+    render(
+      <SelectorProbe
+        protocol="openai"
+        fetchedModels={[option('gpt-5.5', ['text', 'image'])]}
+        suggestedModelIds={['gpt-5.5']}
+        selected="my-custom-vllm-model"
+        onModelChange={onModelChange}
+      />,
+    );
+    act(() => setStagedModalities(['image']));
+    await act(async () => { await Promise.resolve(); });
+    expect(onModelChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('live catalogue authority', () => {
+  afterEach(() => {
+    resetStagedModalities();
+    resetProviderModelsDiscovery();
+  });
+
+  it('uses a successful live catalogue alone, seed never merged in', () => {
+    // A restricted account that can call one model must offer that one model —
+    // not that model plus five unrelated seeds.
+    const options = resolveProviderModelOptions({
+      protocol: 'orcarouter',
+      discovery: 'ready',
+      fetchedModels: [option('orcarouter/only-model', ['text', 'image'])],
+      suggestedModelIds: [
+        'openai/gpt-5.5',
+        'anthropic/claude-opus-4.8',
+        'google/gemini-3.5-flash',
+        'deepseek/deepseek-v4-pro',
+        'orcarouter/auto',
+      ],
+    });
+    expect(options.map((m) => m.id)).toEqual(['orcarouter/only-model']);
+  });
+
+  it('treats a successful EMPTY catalogue as the answer, not as a fallback trigger', () => {
+    const options = resolveProviderModelOptions({
+      protocol: 'orcarouter',
+      discovery: 'ready',
+      fetchedModels: [],
+      suggestedModelIds: ['openai/gpt-5.5'],
+    });
+    expect(options).toEqual([]);
+  });
+
+  it('falls back to the metadata-preserving seed only when discovery degraded', () => {
+    const seed = [option('openai/gpt-5.5', ['text', 'image', 'file'])];
+    const options = resolveProviderModelOptions({
+      protocol: 'orcarouter',
+      discovery: 'degraded',
+      fetchedModels: [],
+      seedOptions: seed,
+      suggestedModelIds: ['openai/gpt-5.5'],
+    });
+    expect(options).toEqual(seed);
+    // The metadata survives, so an image attachment still narrows correctly:
+    // plain suggested ids would all disappear instead.
+    expect(filterOptionsForModalities(options, 'orcarouter', ['image']))
+      .toEqual(seed);
+  });
+
+  it('keeps the degraded seed usable under an attachment instead of emptying the list', () => {
+    // postOrcaRouterModels drops the metadata-rich fallback on failure, so the
+    // seed ids arrive with no metadata and every one of them disappears under
+    // attachment filtering. The metadata-preserving seed is what prevents that.
+    const plainSeedIds = ['openai/gpt-5.5', 'anthropic/claude-opus-4.8'];
+    const withoutMetadata = resolveProviderModelOptions({
+      protocol: 'orcarouter',
+      discovery: 'degraded',
+      fetchedModels: [],
+      suggestedModelIds: plainSeedIds,
+    });
+    expect(filterOptionsForModalities(withoutMetadata, 'orcarouter', ['image']))
+      .toEqual([]);
   });
 });

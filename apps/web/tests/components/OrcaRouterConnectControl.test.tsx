@@ -197,8 +197,9 @@ describe('OrcaRouterConnectControl', () => {
   });
 
   it('discards a stale status response that would overwrite a newer login', async () => {
-    // The first status poll is held open until after a second attempt has
-    // started. Its "connected: false" must not land on the newer attempt.
+    // The first status poll is held open until after the attempt has started.
+    // Its "connected: false" must not land on the newer attempt and pull the
+    // control back to a disconnected render.
     let resolveFirst: ((value: FakeResponse) => void) | null = null;
     let statusCall = 0;
     installFetch({
@@ -207,7 +208,14 @@ describe('OrcaRouterConnectControl', () => {
         if (statusCall === 1) {
           return new Promise<FakeResponse>((resolve) => { resolveFirst = resolve; });
         }
-        return { body: { connected: true, source: 'oauth-orcarouter-pkce', scope: 'api' } };
+        return {
+          body: {
+            connected: true,
+            source: 'oauth-orcarouter-pkce',
+            generation: statusCall <= 2 ? 1 : 2,
+            scope: 'api',
+          },
+        };
       },
       '/api/orcarouter/oauth/start': {
         body: {
@@ -218,21 +226,31 @@ describe('OrcaRouterConnectControl', () => {
       },
     });
     vi.stubGlobal('open', vi.fn());
+    vi.useFakeTimers();
 
     renderControl();
     await settle();
     fireEvent.click(screen.getByTestId('orcarouter-connect'));
-    await waitFor(() => {
-      expect(screen.getByTestId('orcarouter-connect').textContent).toMatch(/reconnect/i);
-    });
+    // Let onConnect's baseline status read and the start request settle.
+    await settle();
+    await settle();
+    // The attempt is in flight and the paste-back affordance is available.
+    expect(screen.getByTestId('orcarouter-paste-code')).toBeTruthy();
+
+    // Poll once so the advanced generation lands and the attempt completes.
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(screen.queryByTestId('orcarouter-paste-code')).toBeNull();
 
     // Release the stale first response now that a newer attempt owns the state.
     await act(async () => {
       resolveFirst?.({ body: { connected: false, source: 'none' } });
     });
-    // The newer, connected status still wins.
+    // The stale "connected: false" must not pull the control back to a
+    // disconnected render or raise an error.
     expect(screen.getByTestId('orcarouter-oauth-entry')).toBeTruthy();
+    expect(screen.getByTestId('orcarouter-connect').textContent).toMatch(/reconnect/i);
     expect(screen.queryByTestId('orcarouter-error')).toBeNull();
+    vi.useRealTimers();
   });
 
   it('clears busy state on pagehide and allows a second login without remounting', async () => {
@@ -315,5 +333,89 @@ describe('OrcaRouterConnectControl', () => {
     for (const el of Array.from(container.querySelectorAll('[value]'))) {
       expect(el.getAttribute('value')).not.toBe(secret);
     }
+  });
+
+  it('waits for the NEW credential before calling a Reconnect complete', async () => {
+    // A Reconnect deliberately leaves the old credential usable, so
+    // `connected` is true from the first poll. Treating that as success clears
+    // pendingState and the paste-back input, and the user choosing the
+    // advertised code-paste flow then has nowhere to submit the new code.
+    let statusCall = 0;
+    installFetch({
+      '/api/orcarouter/auth/status': () => {
+        statusCall += 1;
+        // Call 1 is the mount poll, call 2 the baseline captured by Start (both
+        // see the old credential, generation 1); call 3 is the first poll after
+        // authorizing. The daemon has stored the new credential by then.
+        const generation = statusCall <= 2 ? 1 : 2;
+        return {
+          body: {
+            connected: true,
+            source: 'oauth-orcarouter-pkce',
+            generation,
+            scope: 'api',
+          },
+        };
+      },
+      '/api/orcarouter/oauth/start': {
+        body: {
+          authorizeUrl: 'https://www.orcarouter.ai/auth?state=abc',
+          state: 'abc',
+          callback: { host: '127.0.0.1', port: 1 },
+        },
+      },
+      '/api/orcarouter/oauth/complete': { body: { ok: true } },
+    });
+    vi.stubGlobal('open', vi.fn());
+    vi.useFakeTimers();
+
+    renderControl();
+    await settle();
+    fireEvent.click(screen.getByTestId('orcarouter-connect'));
+    await settle();
+
+    // The attempt is still awaiting: the paste-back input must remain reachable
+    // even though the control reports a connection.
+    expect(screen.getByTestId('orcarouter-paste-code')).toBeTruthy();
+
+    // Advance past two polls; the second carries the advanced generation.
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(screen.queryByTestId('orcarouter-paste-code')).toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it('submits a pasted code even while the previous credential is still connected', async () => {
+    // The paste-back UI must not be suppressed by `connected`.
+    const { calls } = installFetch({
+      '/api/orcarouter/auth/status': {
+        body: { connected: true, source: 'oauth-orcarouter-pkce', generation: 1, scope: 'api' },
+      },
+      '/api/orcarouter/oauth/start': {
+        body: {
+          authorizeUrl: 'https://www.orcarouter.ai/auth?state=abc',
+          state: 'abc',
+          callback: { host: '127.0.0.1', port: 1 },
+        },
+      },
+      '/api/orcarouter/oauth/complete': { body: { ok: true } },
+    });
+    renderControl();
+    await settle();
+    fireEvent.click(screen.getByTestId('orcarouter-connect'));
+    await settle();
+
+    fireEvent.change(screen.getByTestId('orcarouter-paste-code'), {
+      target: { value: 'the-code-from-the-consent-screen' },
+    });
+    fireEvent.click(screen.getByTestId('orcarouter-paste-submit'));
+    await settle();
+
+    const complete = calls.find((c) => c.url.startsWith('/api/orcarouter/oauth/complete'));
+    expect(complete).toBeTruthy();
+    expect(JSON.parse(String(complete?.init?.body))).toEqual({
+      state: 'abc',
+      code: 'the-code-from-the-consent-screen',
+    });
   });
 });
