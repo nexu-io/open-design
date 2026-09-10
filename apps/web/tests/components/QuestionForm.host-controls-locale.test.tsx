@@ -88,7 +88,7 @@ describe('OPEND-2951 reachable host controls keep the application locale', () =>
     (c) => {
       vi.useFakeTimers();
       const onSubmit = vi.fn();
-      const { container } = render(
+      render(
         <I18nProvider initial={c.ui}>
           <QuestionFormView
             form={basicForm(c)}
@@ -99,7 +99,7 @@ describe('OPEND-2951 reachable host controls keep the application locale', () =>
         </I18nProvider>,
       );
       expect(screen.getByRole('button', { name: c.own })).toBeEnabled();
-      const countdown = container.querySelector('time.qf-auto-continue');
+      const countdown = screen.getByTitle(c.autoHint, { exact: true });
       expect(countdown).toHaveTextContent('10:00');
       expect(countdown).toHaveAttribute('dateTime', 'PT600S');
       expect(countdown).toHaveAttribute('title', c.autoHint);
@@ -115,7 +115,7 @@ describe('OPEND-2951 reachable host controls keep the application locale', () =>
     'uses $ui for an unanswered previous form without claiming it was answered',
     (c) => {
       const onSubmit = vi.fn();
-      const { container } = render(
+      render(
         <I18nProvider initial={c.ui}>
           <QuestionFormView form={basicForm(c)} interactive={false} onSubmit={onSubmit} />
         </I18nProvider>,
@@ -124,9 +124,11 @@ describe('OPEND-2951 reachable host controls keep the application locale', () =>
       expect(option).toBeDisabled();
       expect(option).toHaveAttribute('aria-checked', 'false');
       expect(screen.getByRole('button', { name: c.own })).toBeDisabled();
-      expect(container.querySelector('.question-form-pill')).toBeNull();
-      expect(container.querySelector('.answered')).toBeNull();
-      expect(container.querySelector('.qf-locked-note')).toHaveTextContent(c.locked);
+      // Neither locale may claim this unanswered form was answered/confirmed.
+      for (const claim of ['answered', '已回答', 'Confirmed', '已确认']) {
+        expect(screen.queryByText(claim, { exact: true })).not.toBeInTheDocument();
+      }
+      expect(screen.getByText(c.locked, { exact: true })).toBeVisible();
       fireEvent.click(option);
       expect(onSubmit).not.toHaveBeenCalled();
     },

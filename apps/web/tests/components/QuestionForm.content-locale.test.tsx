@@ -59,7 +59,7 @@ describe('OPEND-2951 explicit question content language and UI controls', () => 
           },
         ],
       };
-      const { container } = render(
+      render(
         <I18nProvider initial={c.ui}>
           <QuestionFormView form={form} interactive onSubmit={onSubmit} />
         </I18nProvider>,
@@ -74,7 +74,7 @@ describe('OPEND-2951 explicit question content language and UI controls', () => 
 
       // On main the content translator also translates required/navigation:
       // this is the intended business red, after the content guard succeeded.
-      expect(container.querySelector('.qf-required')).toHaveTextContent(c.required);
+      expect(screen.getByText(c.required, { exact: true })).toBeVisible();
       expect(screen.getByRole('button', { name: c.skip })).toBeEnabled();
       const next = screen.getByRole('button', { name: c.next });
       expect(next).toBeDisabled();
