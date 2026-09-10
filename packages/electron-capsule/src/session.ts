@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import { startElectronUpdateScheduler } from "./update-scheduler.js";
+import { createCommittedQuitHandler } from "./quit.js";
 import type {
   GenerationRecord, StandaloneGenerationBinding, StandaloneHandoffAttachment,
   StandaloneRuntimeHandle, StandaloneRuntimeStatus, StandaloneShellCapabilityRequest,
@@ -404,20 +405,18 @@ export async function runElectronCapsule(
       processErrors.dispose();
     }
   };
-  const beforeQuit = (event: { preventDefault(): void }) => {
-    // Until the fixed carrier commits, its startup cancellation owns teardown.
-    if (context.startup.phase !== "committed") return;
-    event.preventDefault();
-    if (closing) return;
-    void installerArming.catch((error: unknown) => {
-      console.error("[electron-kit] installer arming failed", error);
-    }).then(close).catch((error: unknown) => {
+  const beforeQuit = createCommittedQuitHandler({
+    committed: () => context.startup.phase === "committed",
+    waitForHandoff: () => installerArming,
+    close,
+    report(error) {
       console.error("[electron-kit] shutdown or installer handoff failed", error);
-    }).finally(() => {
+    },
+    finish() {
       app.removeListener("before-quit", beforeQuit);
       app.quit();
-    });
-  };
+    },
+  });
   app.on("before-quit", beforeQuit);
   removeQuitListener = () => app.removeListener("before-quit", beforeQuit);
   void observeElectronRuntimeTerminal({
