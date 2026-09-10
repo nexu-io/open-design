@@ -285,6 +285,29 @@ describe("cut-patch-release pre-flight", () => {
     expect(result.ghCalls).toEqual([]);
   });
 
+  it("[P2] gates a back-fill below every branch on the newest release instead of nothing", async () => {
+    // A manual version under every existing branch has no release beneath it.
+    // The guard must still land on a real release rather than fall open.
+    const result = await preflight({
+      branches: ["0.22.0", "0.22.1"],
+      inputVersion: "0.20.9",
+      releases: { "open-design-v0.22.0": { isDraft: false, isPrerelease: false } },
+    });
+
+    expect(result.version).toBe("0.20.9");
+    expect(result.gateVersion).toBe("0.22.1");
+    expect(result.cut).toBe(false);
+  });
+
+  it("[P2] fails rather than cuts when a manual version has no release branch to gate on", async () => {
+    const remote = await remoteWithBranches([]);
+    const result = await run("resolve", { env: { RELEASE_REMOTE: remote, INPUT_VERSION: "0.22.3" } });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("No release/vX.Y.Z branch found to gate the patch cut on.");
+    expect(result.outputs.gate_tag).toBeUndefined();
+  });
+
   it("[P2] rejects a manual version that is not plain x.y.z", async () => {
     const remote = await remoteWithBranches(["0.22.0"]);
     const result = await run("resolve", {

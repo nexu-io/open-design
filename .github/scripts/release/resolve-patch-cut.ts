@@ -75,6 +75,33 @@ function releaseBranchVersions(): ReleaseVersion[] {
     .sort(compareVersions);
 }
 
+/**
+ * The release a cut of `version` stacks on, and therefore the one that must
+ * already have shipped stable before the cut is allowed: the highest
+ * `release/vX.Y.Z` below it.
+ *
+ * Not the minor base X.Y.0. Gating on the base stops guarding anything after
+ * the line's first patch — once X.Y.0 ships, X.Y.2, X.Y.3, ... all pass while
+ * the releases directly beneath them may never have shipped. That is how
+ * release/v0.22.3 got cut on 2026-09-10 while release/v0.22.2 was unshipped and
+ * still taking backports; nothing looked at 0.22.2 at any point.
+ *
+ * This is the same target cut-release.yml gates the Tuesday minor on, and it
+ * still gives the answer the old minor-base rule was written for: cutting
+ * 0.15.1 checks open-design-v0.15.0 rather than the 0.14.x line it just left,
+ * because 0.15.0 is the branch directly below it.
+ *
+ * A manual `version=` below every existing branch has nothing beneath it; fall
+ * back to the highest branch so a back-fill still gates on a real release
+ * instead of on nothing.
+ */
+function previousRelease(branches: readonly ReleaseVersion[], version: ReleaseVersion): ReleaseVersion {
+  const below = branches.filter((branch) => compareVersions(branch, version) < 0).at(-1);
+  const previous = below ?? branches.at(-1);
+  if (previous == null) fail("No release/vX.Y.Z branch found to gate the patch cut on.");
+  return previous;
+}
+
 function resolve(): void {
   const branches = releaseBranchVersions();
   const input = env("INPUT_VERSION");
@@ -98,10 +125,7 @@ function resolve(): void {
     };
   }
 
-  // Gate on the minor base of the FINAL V — never the highest branch — so a
-  // manual `version=` on a different line is checked against ITS own minor
-  // (e.g. version=0.15.1 gates open-design-v0.15.0, not the latest 0.14.0).
-  const gate = `${version.major}.${version.minor}.0`;
+  const gate = previousRelease(branches, version).text;
 
   setOutput("version", version.text);
   setOutput("branch", `release/v${version.text}`);
