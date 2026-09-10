@@ -43,8 +43,8 @@ export const WHATS_NEW_DOCUMENT_PATH = "docs/whats-new.json";
 // typo (`imageURL`, `link_url`, `locale`) that the parser would drop without
 // complaint, which is exactly the silent-no-card failure this guard exists
 // to catch.
-const KNOWN_TOP_LEVEL_KEYS = new Set(["id", "title", "body", "imageUrl", "linkUrl", "locales"]);
-const KNOWN_LOCALE_KEYS = new Set(["title", "body", "linkUrl"]);
+const KNOWN_TOP_LEVEL_KEYS = new Set(["id", "title", "body", "imageUrl", "linkUrl", "ctaLabel", "locales"]);
+const KNOWN_LOCALE_KEYS = new Set(["title", "body", "linkUrl", "ctaLabel"]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -112,6 +112,10 @@ export async function checkWhatsNewDocument(root: string = repoRoot): Promise<bo
       violations.push("`linkUrl` is present but the parser dropped it; it must be a non-empty https: URL");
     }
 
+    if (payload.ctaLabel !== undefined && content.ctaLabel == null) {
+      violations.push("`ctaLabel` is present but the parser dropped it; it must be a non-empty string");
+    }
+
     const rawLocales = payload.locales;
     if (rawLocales !== undefined) {
       if (!isObject(rawLocales)) {
@@ -119,7 +123,7 @@ export async function checkWhatsNewDocument(root: string = repoRoot): Promise<bo
       } else {
         for (const [locale, entry] of Object.entries(rawLocales)) {
           if (!isObject(entry)) {
-            violations.push(`locale ${JSON.stringify(locale)} must be an object of title/body/linkUrl overrides`);
+            violations.push(`locale ${JSON.stringify(locale)} must be an object of title/body/linkUrl/ctaLabel overrides`);
             continue;
           }
           for (const key of Object.keys(entry)) {
@@ -134,7 +138,7 @@ export async function checkWhatsNewDocument(root: string = repoRoot): Promise<bo
           }
           for (const key of Object.keys(entry)) {
             if (!KNOWN_LOCALE_KEYS.has(key)) continue;
-            if (overrides[key as "title" | "body" | "linkUrl"] == null) {
+            if (overrides[key as "title" | "body" | "linkUrl" | "ctaLabel"] == null) {
               violations.push(
                 `locale ${JSON.stringify(locale)} declares ${JSON.stringify(key)} but the parser dropped it; strings must be non-empty and linkUrl must be https:`,
               );

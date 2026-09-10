@@ -697,6 +697,10 @@ interface Props {
   amrAuthRetryContinuation?: AmrAuthRetryContinuation | null;
   amrAuthRetryMountId?: string;
   amrAuthRetryWorkspaceIdentityKey?: string;
+  /** A same-principal directory projection awaits the authoritative scope. */
+  amrAuthRetryAuthorityPending?: boolean;
+  /** The host can accept a retry against the current authoritative transcript. */
+  amrAuthRetryReady?: boolean;
   amrAuthRetryPersonalAdoptionWitness?: AmrAuthRetryPersonalAdoptionWitness | null;
   onArmAmrAuthRetryContinuation?: (
     continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
@@ -1347,6 +1351,8 @@ export function ChatPane({
   amrAuthRetryContinuation = null,
   amrAuthRetryMountId,
   amrAuthRetryWorkspaceIdentityKey,
+  amrAuthRetryAuthorityPending = false,
+  amrAuthRetryReady = true,
   amrAuthRetryPersonalAdoptionWitness = null,
   onArmAmrAuthRetryContinuation,
   onConsumeAmrAuthRetryContinuation,
@@ -2175,6 +2181,7 @@ export function ChatPane({
         && amrAuthRetryContinuation.workspaceIdentityKey
           !== amrAuthRetryWorkspaceIdentityKey
         && !personalAdoptionAuthorityTransition
+        && !amrAuthRetryAuthorityPending
       );
     if (mismatched) {
       onDiscardAmrAuthRetryContinuation(amrAuthRetryContinuation);
@@ -2182,6 +2189,7 @@ export function ChatPane({
   }, [
     activeConversationId,
     amrAuthRetryContinuation,
+    amrAuthRetryAuthorityPending,
     amrAuthRetryMountId,
     amrAuthRetryPersonalAdoptionWitness,
     amrAuthRetryWorkspaceIdentityKey,
@@ -2206,6 +2214,9 @@ export function ChatPane({
     if (
       !isAmrSessionAuthenticated(status)
       || !amrAuthRetryContinuation
+      || !amrAuthRetryReady
+      || loading
+      || recoveryActionsDisabled
       || !amrAuthRetryMountId
       || !amrAuthRetryWorkspaceIdentityKey
       || !projectId
@@ -2247,6 +2258,7 @@ export function ChatPane({
   }, [
     activeConversationId,
     amrAuthRetryContinuation,
+    amrAuthRetryReady,
     amrAuthRetryMountId,
     amrAuthRetryPersonalAdoptionWitness,
     amrAuthRetryWorkspaceIdentityKey,
@@ -2254,6 +2266,8 @@ export function ChatPane({
     onRetry,
     projectId,
     retryAssistant,
+    loading,
+    recoveryActionsDisabled,
   ]);
   useEffect(() => {
     if (!amrAuthRetryContinuation || !isAmrSessionAuthenticated(inlineAmrLoginStatus)) return;

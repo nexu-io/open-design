@@ -82,6 +82,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'chat-health-surface-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   __resetChatHealthForTest();
 });
