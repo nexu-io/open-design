@@ -18,7 +18,7 @@ overrides:
   undici@^6: 6.28.0
   undici@^7: 7.29.0
   yaml: 2.9.0
-  '@powerformer/vela-cli-darwin-arm64': file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.gd468a2e3c544.tgz
+  '@powerformer/vela-cli-darwin-arm64': file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g4c276a423de5.tgz
   '@deepseek-ai/dsh-llm-pi-ai>@earendil-works/pi-ai': 0.85.1
   '@deepseek-ai/dsh-subprocess-local>koffi': 3.2.1
 
@@ -912,8 +912,8 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: file:../../vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.gd468a2e3c544.tgz
-        version: file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.gd468a2e3c544.tgz(33407bcecf845d02be1d6c6a5c000c56)
+        specifier: file:../../vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g4c276a423de5.tgz
+        version: file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g4c276a423de5.tgz(33407bcecf845d02be1d6c6a5c000c56)
 
   tools/release:
     dependencies:
@@ -5109,15 +5109,15 @@ packages:
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
 
-  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.gd468a2e3c544.tgz':
-    resolution: {integrity: sha512-8ABZTOOir65OTJs/qITBGjsxpoutJFkH4aoa45zOM/N9SP/zjoGzZHnxweZpiuMw8T32UQg6Sn6dPSN2ANvQNg==, tarball: file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.gd468a2e3c544.tgz}
-    version: 0.0.1-test.latest-frozen.gd468a2e3c544
+  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g4c276a423de5.tgz':
+    resolution: {integrity: sha512-9k+QmRu9hjHeDL+R5xGfZpNa4hdrEZJ1Z1XAPKOLvHptbXS5uyIft7CIbI7dB/ycxAtz0wDHS7a14yf3lIhh0A==, tarball: file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g4c276a423de5.tgz}
+    version: 0.0.1-test.latest-frozen.g4c276a423de5
     cpu: [arm64]
     os: [darwin]
 
-  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.gd468a2e3c544.tgz':
-    resolution: {integrity: sha512-YjgAhTN4BS0hqkeLiuNT+qcehEFUUH3juh0+iXj2Pqy2SS5UagXasK+387/0zsgHYQze2LRavsfGPrP7h/0pYg==, tarball: file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.gd468a2e3c544.tgz}
-    version: 0.0.1-test.latest-frozen.gd468a2e3c544
+  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g4c276a423de5.tgz':
+    resolution: {integrity: sha512-hpkSfJg5oAUu/78xifwwRT5p6vFFOZMkXARy3xXeyJl1a/FaxlXB5g+WgmRKnZyOI4mlF4IP++d2A4GoH35l2Q==, tarball: file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g4c276a423de5.tgz}
+    version: 0.0.1-test.latest-frozen.g4c276a423de5
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -14388,10 +14388,10 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.gd468a2e3c544.tgz':
+  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g4c276a423de5.tgz':
     optional: true
 
-  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.gd468a2e3c544.tgz(33407bcecf845d02be1d6c6a5c000c56)':
+  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g4c276a423de5.tgz(33407bcecf845d02be1d6c6a5c000c56)':
     dependencies:
       '@anthropic-ai/claude-code': 2.1.267
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
@@ -14431,7 +14431,7 @@ snapshots:
       '@earendil-works/pi-coding-agent': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
       '@openai/codex': 0.154.0
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.gd468a2e3c544.tgz'
+      '@powerformer/vela-cli-darwin-arm64': '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g4c276a423de5.tgz'
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@deepseek-ai/cordis-plugin-group'
