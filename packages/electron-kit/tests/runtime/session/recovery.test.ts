@@ -80,6 +80,9 @@ describe("durable exact startup recovery", () => {
     // filesystem exception or an in-process release masquerading as a crash.
     const child = spawn(process.execPath, ["--input-type=module", "-e", `
       import { recoverElectronStartup } from "@open-design/electron-kit";
+      // Keep the fixture alive independently of its lock backend. A pending
+      // Promise or file descriptor does not retain Node's event loop.
+      process.on("message", () => {});
       await recoverElectronStartup({
         runtimeRoot: ${JSON.stringify(runtimeRoot)},
         selectTarget: async () => (${JSON.stringify(target)}),

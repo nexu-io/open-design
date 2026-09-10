@@ -13,7 +13,7 @@ it("keeps installed release identity out of the independent Capsule content", as
   expect(Object.keys(result.metafile.inputs).some(path => /(?:^|\/)config\/appearance\.json$/u.test(path))).toBe(true);
   expect(Object.keys(result.metafile.inputs).some(path => /release-identities\.json$/u.test(path))).toBe(false);
   expect(result.outputFiles[0]!.contents.byteLength).toBeGreaterThan(0);
-  expect(result.outputFiles[0]!.text).toContain("@keyframes slide");
+  expect(result.outputFiles[0]!.text.includes("Current download progress")).toBe(true);
   expect(result.outputFiles[0]!.text).toContain("createElectronStartupPresentation");
   expect(result.outputFiles[0]!.text).toContain("runElectronCapsule");
   expect(result.outputFiles[0]!.text).toContain("renderer.recovery.committed");
@@ -32,7 +32,7 @@ it("keeps Capsule session orchestration out of the reusable carrier entry", asyn
   expect(code).toContain("startup.cancellation.failed");
   expect(code).not.toContain("renderer.recovery.committed");
   expect(code).not.toContain("warmup.ready");
-  expect(code).not.toContain("@keyframes slide");
+  expect(code.includes("Current download progress")).toBe(false);
 });
 
 it("loads product Capsule bytes independently of the physical main bundle", async () => {

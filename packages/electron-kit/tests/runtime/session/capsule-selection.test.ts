@@ -63,6 +63,7 @@ it("preserves the committed Capsule but blocks startup after SIGKILL between car
       await acquireElectronSessionLease(root);
       await ElectronActivationAttempt.begin(root);
       await commitElectronCapsuleSelection(root, ${JSON.stringify({ ...armed.pending, revision: armed.revision })}, ${JSON.stringify(input.closureGenerationId)});
+      process.on("message", () => {});
       process.send("capsule-committed");
       await new Promise(() => {});
     `, resolveDir: process.cwd() },
