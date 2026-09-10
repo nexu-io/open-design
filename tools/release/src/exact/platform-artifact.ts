@@ -36,8 +36,8 @@ export async function exportPlatform(input: Input & Readonly<{ buildReceipt: str
 }
 
 /** Import an exact artifact and rebind verified local paths. */
-export async function importPlatform(input: Input & Readonly<{ descriptor: string }>) {
-  const target = input.target, output = resolve(input.output), descriptor = await readObject(input.descriptor);
+export async function importPlatform(input: Input & Readonly<{ descriptor: string | Readonly<{ url: string; sha256: string }> }>) {
+  const target = input.target, output = resolve(input.output), descriptor = typeof input.descriptor === "string" ? await readObject(input.descriptor) : input.descriptor;
   await assertArtifactDestinationAbsent(output);
   await using product = await openArtifactProduct({ url: descriptor.url, sha256: descriptor.sha256 });
   const { archive, acquisition } = product;

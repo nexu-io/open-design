@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { zipFixture } from "./archive-fixture.ts";
-import { bindReleaseValidation, materializeReleaseValidations, resolveExactValidationRecipe, validateReleaseRecipe } from "@/exact/validation.ts";
+import { acquireReleaseValidations, bindReleaseValidation, materializeReleaseValidations, resolveExactValidationRecipe, validateReleaseRecipe } from "@/exact/validation.ts";
 
 const roots: string[] = [];
 it("defaults Closure validation to architecture boundaries, not business aggregates", () => {
@@ -88,13 +88,33 @@ it("restores verified execution evidence without requiring a workspace or rerunn
   const sources = join(input.root, "cached.json"), output = join(input.root, "restored");
   const artifact = { url: "https://cache.example/validation.zip", sha256: createHash("sha256").update(body).digest("hex") };
   await writeFile(sources, JSON.stringify({ sources: [{ id: "contract", node: input.node, target: input.target, artifact }] }));
-  const result = await materializeReleaseValidations({ sources, output, root: join(input.root, "absent-workspace"), sourceCommit: "b".repeat(40) });
+  const result = await acquireReleaseValidations({ sources, output, products: join(input.root, "absent-products"), sourceCommit: "b".repeat(40) });
   expect(result.bindings[0]).toMatchObject({ sourceCommit: "b".repeat(40), execution });
   expect(await readFile(join(output, "products/contract/test.log"), "utf8")).toBe("original log");
   await writeFile(sources, JSON.stringify({ sources: [{ id: "contract", node: input.node, target: input.target,
     artifact: { ...artifact, sha256: "0".repeat(64) } }] }));
   await expect(materializeReleaseValidations({ sources, output: join(input.root, "corrupt"), root: input.root, sourceCommit: input.sourceCommit }))
     .rejects.toThrow("digest mismatch");
+});
+
+it("requires every selected fresh test receipt, without implicit execution or stale-subject reuse", async () => {
+  const input = await fixture(), sources = join(input.root, "sources.json"), output = join(input.root, "bindings");
+  const products = join(input.root, "products"), product = join(products, "contract");
+  await writeFile(sources, JSON.stringify({ sources: [{ id: "contract", node: input.node, target: input.target }] }));
+  const acquisition = { sources, output, products, sourceCommit: input.sourceCommit };
+  await expect(acquireReleaseValidations(acquisition)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(readFile(input.log)).rejects.toMatchObject({ code: "ENOENT" });
+  const execution = await validateReleaseRecipe(input);
+  await mkdir(product, { recursive: true });
+  await writeFile(join(product, "result.json"), JSON.stringify({ ...execution, sourceCommit: "b".repeat(40) }));
+  await expect(acquireReleaseValidations(acquisition)).rejects.toThrow("source commit mismatch");
+  await writeFile(join(product, "result.json"), JSON.stringify(execution));
+  expect((await acquireReleaseValidations(acquisition)).bindings).toHaveLength(1);
+  await writeFile(sources, JSON.stringify({ sources: [
+    { id: "contract", node: input.node, target: input.target },
+    { id: "shell", node: "electron.shell.test", target: input.target },
+  ] }));
+  await expect(acquireReleaseValidations({ ...acquisition, output: join(input.root, "incomplete") })).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it.runIf(process.platform === "darwin" && process.arch === "arm64")("keeps business receipts distinct using tiny fixture packages, never real business suites", async () => {

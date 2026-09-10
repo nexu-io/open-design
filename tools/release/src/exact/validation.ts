@@ -104,27 +104,46 @@ export function bindReleaseValidation(execution: Record<string, any>, subject: R
 export async function materializeReleaseValidations(input: Readonly<{
   sources: string; root: string; sourceCommit: string; output: string;
 }>) {
+  return consumeReleaseValidations(input, { kind: "execute", root: input.root });
+}
+
+/** Consumer completeness is independent of whether a producer job ran.
+ * A selected miss without its current execution receipt must fail, never rebuild. */
+export async function acquireReleaseValidations(input: Readonly<{
+  sources: string; products: string; sourceCommit: string; output: string;
+}>) {
+  return consumeReleaseValidations(input, { kind: "acquire", products: input.products });
+}
+
+async function consumeReleaseValidations(input: Readonly<{
+  sources: string; sourceCommit: string; output: string;
+}>, mode: Readonly<{ kind: "execute"; root: string }> | Readonly<{ kind: "acquire"; products: string }>) {
   const declaration = await readObject(input.sources);
   if (!Array.isArray(declaration.sources) || declaration.sources.length === 0) throw new Error("validation sources are required");
   const ids = new Set<string>();
   for (const source of declaration.sources) {
-    if (typeof source.id !== "string" || !/^[a-z]+$/u.test(source.id) || ids.has(source.id)) throw new Error("invalid or duplicate validation id");
+    if (source == null || typeof source.id !== "string" || !/^[a-z]+$/u.test(source.id) || ids.has(source.id)
+      || (Object.hasOwn(source, "artifact") && source.artifact == null)) throw new Error("invalid or duplicate validation id");
     ids.add(source.id);
     resolveExactValidationRecipe(source.node);
   }
   const bindings = [];
   for (const source of declaration.sources) {
     const output = resolve(input.output), product = join(output, "products", source.id);
-    const receipt = join(product, "result.json");
+    let receipt = join(product, "result.json");
     if (source.artifact != null) {
       const descriptor = join(output, "descriptors", `${source.id}.json`);
       await writeObject(descriptor, source.artifact);
       await acquireArtifactProduct({ descriptor, output: product });
-    } else {
-      await validateReleaseRecipe({ root: input.root, sourceCommit: input.sourceCommit,
+    } else if (mode.kind === "execute") {
+      await validateReleaseRecipe({ root: mode.root, sourceCommit: input.sourceCommit,
         node: source.node, target: source.target, log: join(product, "test.log"), receipt });
+    } else {
+      receipt = join(resolve(mode.products), source.id, "result.json");
     }
-    const binding = bindReleaseValidation(await readObject(receipt), {
+    const execution = await readObject(receipt);
+    if (source.artifact == null && execution.sourceCommit !== input.sourceCommit) throw new Error("fresh validation source commit mismatch");
+    const binding = bindReleaseValidation(execution, {
       node: source.node, target: source.target, sourceCommit: input.sourceCommit,
     });
     await writeObject(join(output, `${source.id}.json`), binding);

@@ -36,8 +36,8 @@ export async function exportCapsule(input: Input & Readonly<{ buildReceipt: stri
 }
 
 /** Rebind local paths only after identity, inventory, bytes and release budgets pass. */
-export async function importCapsule(input: Input & Readonly<{ descriptor: string }>) {
-  const output = resolve(input.output), descriptor = await readObject(input.descriptor);
+export async function importCapsule(input: Input & Readonly<{ descriptor: string | Readonly<{ url: string; sha256: string }> }>) {
+  const output = resolve(input.output), descriptor = typeof input.descriptor === "string" ? await readObject(input.descriptor) : input.descriptor;
   await assertArtifactDestinationAbsent(output);
   await using product = await openArtifactProduct({ url: descriptor.url, sha256: descriptor.sha256 });
   const { archive, acquisition } = product;

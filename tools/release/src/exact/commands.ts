@@ -6,6 +6,7 @@ import { authorizeReleaseCapability, resolveReleasePolicy } from "../policy/rele
 import { writeObject } from "./control-common.ts";
 import { importSceneArtifact, packSceneArtifact, unpackSceneArtifact, verifySceneArtifact } from "./scene-artifact.ts";
 import { acquireSceneArtifacts } from "./scene-acquisition.ts";
+import { acquireNativeArtifacts } from "./native-acquisition.ts";
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, inspectAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 import { registerResourceCommands } from "./resource-commands.ts";
@@ -206,6 +207,7 @@ export function registerExactCommands(cli: CAC): void {
 
   for (const product of ["capsule", "platform", "base"] as const) {
     const command = cli.command(product + " <operation>", "Export or import a verified portable " + product + " artifact")
+      .option("--sources <file>", "Complete native source set (capsule/platform acquire)")
       .option("--target <target>", "Expected native target")
       .option("--output <directory>", "New product directory")
       .option("--build-receipt <file>", "Business build receipt (export or pack)")
@@ -213,6 +215,9 @@ export function registerExactCommands(cli: CAC): void {
       .option("--receipt <file>", "Optional operation receipt; defaults to stdout");
     if (product === "base") command.option("--source <directory>", "Portable base transport directory (unpack)");
     command.action(async (operation: string, options: Options) => {
+      if (operation === "acquire" && (product === "capsule" || product === "platform")) {
+        await acquireNativeArtifacts({ product, sources: required(options, "sources"), output: required(options, "output") }); return;
+      }
       const common = { target: required(options, "target"), output: required(options, "output") };
       if (product === "base" && (operation === "pack" || operation === "unpack")) {
         const result = operation === "pack" ? await packBase({ ...common, buildReceipt: required(options, "buildReceipt") })
@@ -253,7 +258,7 @@ export function registerExactCommands(cli: CAC): void {
       const result = operation === "pack" ? await packSceneArtifact(required(options, "scene"), output)
         : operation === "unpack" ? await unpackSceneArtifact(required(options, "archive"), output)
         : operation === "import" ? await importSceneArtifact({ descriptor: required(options, "descriptor"), transport: required(options, "transport"), output })
-        : (() => { throw new Error("scene operation must be pack, unpack, import or verify"); })();
+        : (() => { throw new Error("scene operation must be acquire, pack, unpack, import or verify"); })();
       await emit(options, { schemaVersion: 1, operation: "exact.scene." + operation, ...result });
     });
 

@@ -948,6 +948,16 @@
           }
         },
         "batches": {
+          "capsules": {
+            "matrix": "capsule_matrix",
+            "fields": { "target": "target" },
+            "product": "capsule"
+          },
+          "platforms": {
+            "matrix": "platform_matrix",
+            "fields": { "target": "target" },
+            "product": "platform"
+          },
           "bases": {
             "matrix": "base_matrix",
             "fields": { "target": "target" },

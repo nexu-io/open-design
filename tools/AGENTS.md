@@ -45,6 +45,12 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   contributes cache results. Ordinary URL+SHA descriptors are business inputs,
   not permission to interpret workload identities. User-facing CDN objects
   remain complete per-version immutable copies, even for reused bytes.
+- `scene acquire`, `capsule acquire`, `platform acquire` and
+  `validation acquire` consume complete selected business inputs without
+  implicit builds or tests. Validation acquisition requires current-commit
+  execution receipts for fresh inputs, while verified cached executions retain
+  original provenance and bind to the current subject. Only the producer's
+  `validation materialize` operation may execute missing test recipes.
 - Same-carrier installed acceptance chooses isolated Closure hot update or
   public Shell updater Capsule+Closure replacement using verified logical Shell
   identity, not per-version metadata URLs. Capsule proof requires sealed baseline

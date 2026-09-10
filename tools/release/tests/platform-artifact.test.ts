@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import { exportPlatform, importPlatform } from "@/exact/platform-artifact.ts";
+import { acquireNativeArtifacts } from "@/exact/native-acquisition.ts";
 import { preparePlatformProduct } from "@/exact/platform-product.ts";
 
 const roots: string[] = [];
@@ -44,6 +45,10 @@ it("restores a portable platform with local paths rebound after the producer dis
   expect(Object.keys(portable).sort()).toEqual(["operation", "resource", "schemaVersion", "target"]);
   expect(await readdir(f.input.output)).toEqual(["artifact"]);
   await rm(f.receipt.archivePath); await rm(f.receipt.resourcePath); await rm(f.input.buildReceipt);
+  const sources = join(f.root, "sources.json"), acquired = join(f.root, "consumer");
+  await json(sources, { sources: [{ target: f.input.target, artifact: JSON.parse(await readFile(f.input.descriptor, "utf8")) }] });
+  await acquireNativeArtifacts({ product: "platform", sources, output: acquired });
+  expect(await readFile(join(acquired, f.input.target, "platform.zip"))).toEqual(await readFile(join(f.input.output, "artifact/platform.zip")));
   const result = await importPlatform(hit.restore);
   expect(await readFile(result.archivePath, "utf8")).toBe("platform");
   expect(JSON.parse(await readFile(result.buildReceipt, "utf8"))).toEqual({ ...portable,

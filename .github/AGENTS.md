@@ -27,6 +27,15 @@ relays; consumers acquire cached inputs directly. A runtime producer uploads
 each executed product once, shared by scene composition and workload result
 publication. Workload reuse does not remove per-version user CDN copies.
 
+Release consumer readiness is defined by complete verified products and test
+evidence, not by enumerating each producer's success/skipped status in YAML.
+Keep failure/cancellation and control-plane guards short. Consumers acquire
+the complete plan-projected business input set; an expected fresh product or
+test receipt missing after an accidental skip fails without implicit execution.
+Validation producers execute only the miss batch; prepare acquires all bound
+evidence before signing. Cache-hit producers (including validation) skip jobs
+entirely. Do not add relay/gate jobs to reconstruct producer status expressions.
+
 ## Architecture
 
 GitHub automation uses two layers.

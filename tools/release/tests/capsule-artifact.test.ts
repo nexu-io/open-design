@@ -6,6 +6,7 @@ import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { afterEach, expect, it, vi } from "vitest";
 import { exportCapsule, importCapsule } from "@/exact/capsule-artifact.ts";
+import { acquireNativeArtifacts } from "@/exact/native-acquisition.ts";
 
 const roots: string[] = [];
 const digest = (body: string | Buffer) => createHash("sha256").update(body).digest("hex");
@@ -47,6 +48,10 @@ it("restores a portable Capsule after producer paths disappear", async () => {
   expect(Object.keys(portable).sort()).toEqual(["content", "operation", "schemaVersion"]);
   expect(await readdir(f.input.output)).toEqual(["artifact"]);
   await rm(f.receipt.archivePath); await rm(f.receipt.contentPath); await rm(f.input.buildReceipt);
+  const sources = join(f.root, "sources.json"), acquired = join(f.root, "consumer");
+  await json(sources, { sources: [{ target: f.input.target, artifact: JSON.parse(await readFile(f.input.descriptor, "utf8")) }] });
+  await acquireNativeArtifacts({ product: "capsule", sources, output: acquired });
+  expect(await readFile(join(acquired, f.input.target, "capsule.zip"))).toEqual(await readFile(join(f.input.output, "artifact/capsule.zip")));
   const result = await importCapsule(hit.restore);
   expect(await readFile(result.archivePath)).toEqual(f.bytes);
   expect(JSON.parse(await readFile(result.buildReceipt, "utf8"))).toEqual({ ...portable,

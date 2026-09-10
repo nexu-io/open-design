@@ -203,8 +203,9 @@ jobs:
           retention-days: 1
 
   validation:
-    name: Exact validation (${{ matrix.target }})
+    name: Execute selected validation (${{ matrix.target }})
     needs: [tools, plan]
+    if: ${{ fromJSON(needs.plan.outputs.batch_run).validation }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.validation_matrix) }}
@@ -261,17 +262,17 @@ jobs:
         run: >-
           tools-release validation materialize
           --root "$GITHUB_WORKSPACE" --source-commit "$SOURCE_SHA"
-          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/validation.json"
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/validation.execution.json"
           --output "$RUNNER_TEMP/exact-validation"
           --receipt "$RUNNER_TEMP/validation-materialization.json"
 
       - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
-          name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/exact-validation
-          if-no-files-found: warn
-          retention-days: 30
+          name: exact-validation-diagnostics-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation/products/*/test.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - uses: actions/upload-artifact@v7.0.1
         if: ${{ success() && fromJSON(needs.plan.outputs.run).validation_contract_darwin_arm64 }}
@@ -362,7 +363,7 @@ jobs:
   scene:
     name: ${{ matrix.shell }} scene (${{ matrix.target }})
     needs: [tools, plan, capsule, runtime]
-    if: ${{ (fromJSON(needs.plan.outputs.batch_run).electron_scenes || fromJSON(needs.plan.outputs.batch_run).bases) && !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.capsule.result == 'success' && (needs.runtime.result == 'success' || (needs.runtime.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).runtime)) }}
+    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && (fromJSON(needs.plan.outputs.batch_run).electron_scenes || fromJSON(needs.plan.outputs.batch_run).bases) }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.electron_matrix) }}
@@ -452,10 +453,17 @@ jobs:
           --receipt "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json"
 
       - uses: actions/download-artifact@v8
-        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.workload] && fromJSON(needs.plan.outputs.batch_run).capsules }}
         with:
           name: exact-capsule-product-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/capsules
+
+      - name: Acquire scene Capsule inputs
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        run: >-
+          tools-release capsule acquire
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/capsules.json"
+          --output "$RUNNER_TEMP/capsules"
 
       - name: Build native scene
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -642,6 +650,7 @@ jobs:
   platform:
     name: Native platform (${{ matrix.target }})
     needs: [tools, plan]
+    if: ${{ fromJSON(needs.plan.outputs.batch_run).platforms }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.platform_matrix) }}
@@ -672,18 +681,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ needs.plan.outputs.node_version }}
-
-      - name: Restore converged platform
-        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          WORKLOAD: ${{ matrix.workload }}
-        shell: bash
-        run: |
-          tools-release platform import \
-            --target "$TARGET" \
-            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/platform.json" \
-            --output "$RUNNER_TEMP/exact-platform/$TARGET"
 
       - uses: actions/checkout@v6.0.2
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -751,6 +748,7 @@ jobs:
   capsule:
     name: Capsule (${{ matrix.target }})
     needs: [tools, plan]
+    if: ${{ fromJSON(needs.plan.outputs.batch_run).capsules }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}
@@ -781,17 +779,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ needs.plan.outputs.node_version }}
-
-      - name: Restore converged capsule
-        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          WORKLOAD: ${{ matrix.workload }}
-        shell: bash
-        run: |
-          tools-release capsule import \
-            --target "$TARGET" --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/capsule.json" \
-            --output "$RUNNER_TEMP/exact-capsule/$TARGET"
 
       - uses: actions/checkout@v6.0.2
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -890,7 +877,7 @@ jobs:
   prepare:
     name: Prepare signed exact content
     needs: [tools, plan, scene, terminal_scene, platform, capsule, data, validation]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && (needs.scene.result == 'success' || (needs.scene.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).electron_scenes && !fromJSON(needs.plan.outputs.batch_run).bases)) && (needs.terminal_scene.result == 'success' || (needs.terminal_scene.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).terminal_scenes)) && needs.platform.result == 'success' && needs.capsule.result == 'success' && needs.validation.result == 'success' && (needs.data.result == 'success' || (needs.data.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).data)) }}
+    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && needs.tools.result == 'success' }}
     runs-on: ubuntu-24.04
     environment: standalone-stable-release
     timeout-minutes: 10
@@ -943,10 +930,17 @@ jobs:
             --receipt "$RUNNER_TEMP/prepare-authorization.json"
 
       - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.batch_run).platforms }}
         with:
           pattern: exact-platform-product-*-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/platforms
           merge-multiple: true
+
+      - name: Acquire complete platform inputs
+        run: >-
+          tools-release platform acquire
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/platforms.json"
+          --output "$RUNNER_TEMP/platforms"
 
       - uses: actions/download-artifact@v8
         if: ${{ fromJSON(needs.plan.outputs.batch_run).data }}
@@ -964,10 +958,17 @@ jobs:
           --receipt "$RUNNER_TEMP/data-acquisition.json"
 
       - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.batch_run).capsules }}
         with:
           pattern: exact-capsule-product-*-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/capsules
           merge-multiple: true
+
+      - name: Acquire complete capsule inputs
+        run: >-
+          tools-release capsule acquire
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/capsules.json"
+          --output "$RUNNER_TEMP/capsules"
 
       - name: Acquire complete scene inputs
         env:
@@ -976,6 +977,40 @@ jobs:
           tools-release scene acquire
           --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/scenes.json"
           --source-commit "$SOURCE_SHA" --output "$RUNNER_TEMP/scenes"
+
+      - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run).validation_contract_darwin_arm64 }}
+        with:
+          name: exact-validation-contract-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/validation-products/contract
+
+      - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run).validation_shell_darwin_arm64 }}
+        with:
+          name: exact-validation-shell-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/validation-products/shell
+
+      - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run).validation_closure_darwin_arm64 }}
+        with:
+          name: exact-validation-closure-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/validation-products/closure
+
+      - name: Acquire complete validation evidence
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: >-
+          tools-release validation acquire
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/validation.json"
+          --products "$RUNNER_TEMP/validation-products" --source-commit "$SOURCE_SHA"
+          --output "$RUNNER_TEMP/exact-validation"
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: exact-validation-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation/*.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Compose and sign content metadata
         env:
