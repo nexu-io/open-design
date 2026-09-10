@@ -949,6 +949,8 @@ async function centralDirectoryIsIntact(
  *
  *   1. scan back from the end for the EOCD signature (bounded by the maximum
  *      comment length, so the window is at most 64 KiB + 22 bytes),
+ *   1a. require the single-volume form: both disk fields zero, and the
+ *      per-disk entry count equal to the total,
  *   2. require the declared comment length to account for every remaining
  *      byte, so nothing is missing after the record,
  *   3. walk the central directory it points at and require exactly the
@@ -972,7 +974,22 @@ async function looksLikeZip(blob: Blob): Promise<boolean> {
     if (!ZIP_EOCD_SIGNATURE.every((b, k) => tail[i + k] === b)) continue;
     // Every byte after the record must be accounted for by its comment.
     if (ZIP_EOCD_SIZE + view.getUint16(i + 20, true) !== tail.length - i) continue;
+    // Only the single-volume form is supported, so require the disk
+    // identifiers to say so. A record advertising a multi-volume archive
+    // passes every other check unchanged while the response carries one
+    // volume, and this guard has no multi-volume handling to fall back on.
+    //
+    // Note this is a metadata-consistency check, not a readability one:
+    // JSZip 3.10.1 and Python's zipfile both still open an archive whose
+    // disk number has been flipped. Nothing in the real path produces one —
+    // the daemon builds these with JSZip, which always writes zero — so
+    // rejecting an unsupported shape costs nothing and beats guessing.
+    const thisDisk = view.getUint16(i + 4, true);
+    const centralDirStartDisk = view.getUint16(i + 6, true);
+    const entriesOnThisDisk = view.getUint16(i + 8, true);
     const declaredEntries = view.getUint16(i + 10, true);
+    if (thisDisk !== 0 || centralDirStartDisk !== 0) continue;
+    if (entriesOnThisDisk !== declaredEntries) continue;
     const centralDirSize = view.getUint32(i + 12, true);
     const centralDirOffset = view.getUint32(i + 16, true);
     const eocdAt = blob.size - (tail.length - i);

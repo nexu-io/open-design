@@ -33,7 +33,7 @@ import { workspaceContextFixture } from '../helpers/workspace-context';
  * A genuine ZIP built by the app's own writer, so archive fixtures carry a
  * real central directory and EOCD rather than a hand-written signature
  * prefix. `exportProjectAsZip` validates archive structure, and a prefix
- * alone is an unreadable archive.
+ * alone is not a valid archive.
  */
 async function realZipBytes(name = 'index.html', content = 'archive-bytes'): Promise<ArrayBuffer> {
   return buildZip([{ path: name, content }]).arrayBuffer();
@@ -1884,6 +1884,42 @@ describe('exportProjectAsZip degraded-archive reporting (#8005)', () => {
       }
       throw new Error('fixture has no central-directory record to damage');
     }],
+    ['the EOCD advertises a multi-volume archive', (bytes: Uint8Array) => {
+      // Flip "number of this disk" to 1. Every other field — entry count,
+      // directory range, each central header — is untouched, so only a disk
+      // check catches it. The archive stays readable in practice (JSZip and
+      // Python's zipfile both open it); the point is that the metadata
+      // declares a form this guard does not support, and no real producer
+      // emits it.
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let i = bytes.length - 22; i >= 0; i -= 1) {
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+          view.setUint16(i + 4, 1, true);
+          return;
+        }
+      }
+      throw new Error('fixture has no EOCD to edit');
+    }],
+    ['the EOCD central directory starts on another disk', (bytes: Uint8Array) => {
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let i = bytes.length - 22; i >= 0; i -= 1) {
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+          view.setUint16(i + 6, 1, true);
+          return;
+        }
+      }
+      throw new Error('fixture has no EOCD to edit');
+    }],
+    ['the per-disk entry count disagrees with the total', (bytes: Uint8Array) => {
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let i = bytes.length - 22; i >= 0; i -= 1) {
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+          view.setUint16(i + 8, 2, true);
+          return;
+        }
+      }
+      throw new Error('fixture has no EOCD to edit');
+    }],
     ['the EOCD over-declares its entry count', (bytes: Uint8Array) => {
       // Claim two records where the directory holds one.
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -1913,7 +1949,7 @@ describe('exportProjectAsZip degraded-archive reporting (#8005)', () => {
       fallbackTitle: 'Damaged Directory',
     });
 
-    // Then: an unreadable archive is not reported as a successful export.
+    // Then: an invalid or unsupported archive is not reported as a successful export.
     expect(result).toBe('degraded');
   });
 
