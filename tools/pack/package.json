@@ -25,7 +25,7 @@
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "file:../../vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g0968d3835a8e.tgz"
+    "@powerformer/vela-cli": "file:../../vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.gf03eef8342f9.tgz"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
