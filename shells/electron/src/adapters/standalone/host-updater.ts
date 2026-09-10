@@ -19,6 +19,7 @@ const result = (outcome: StandaloneShellUpdaterActionResult["outcome"], snapshot
 
 export class ElectronStandaloneHostUpdater {
   #tail: Promise<void> = Promise.resolve();
+  #pendingOperations = 0;
 
   constructor(
     readonly shellType: string,
@@ -33,15 +34,20 @@ export class ElectronStandaloneHostUpdater {
   ) {}
 
   async #serialize<T>(operation: () => Promise<T>): Promise<T> {
+    this.#pendingOperations++;
     const previous = this.#tail;
     let release!: () => void;
     this.#tail = new Promise<void>((resolve) => { release = resolve; });
     await previous;
     try { return await operation(); }
-    finally { release(); }
+    finally { this.#pendingOperations--; release(); }
   }
 
-  readSnapshot(): Promise<StandaloneShellUpdaterSnapshot> { return this.#serialize(() => this.#reconcile()); }
+  readSnapshot(): Promise<StandaloneShellUpdaterSnapshot> {
+    // The ledger publishes atomic progress. Observation must not queue behind
+    // network/download work; state-changing reconciliation remains serialized.
+    return this.#pendingOperations > 0 ? this.ledger.read() : this.#serialize(() => this.#reconcile());
+  }
 
   async #reconcile(): Promise<StandaloneShellUpdaterSnapshot> {
     let snapshot = await this.ledger.read();

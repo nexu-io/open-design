@@ -44,6 +44,29 @@ async function readyLedger(root: string, selectedHandoff: StandaloneShellUpdateH
 }
 
 describe("Electron Standalone host updater", () => {
+  it("keeps published status readable while a background check is suspended", async () => {
+    let state = SHELL_UPDATE_ALGEBRA.initial("electron");
+    const ledger = { scope, read: async () => state,
+      update: async (command: Parameters<typeof SHELL_UPDATE_ALGEBRA.reduce>[1]) => {
+        state = SHELL_UPDATE_ALGEBRA.reduce(state, command); return state;
+      } } as unknown as ElectronStandaloneShellUpdaterLedger;
+    let entered!: () => void, resume!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const blocked = new Promise<void>(resolve => { resume = resolve; });
+    const release = { feed: { check: async () => { entered(); await blocked; return null; } } } as unknown as
+      NonNullable<ConstructorParameters<typeof ElectronStandaloneHostUpdater>[3]>;
+    const updater = new ElectronStandaloneHostUpdater("electron", publicLifecycle(new StandaloneHostLifecycle(scope)), ledger, release);
+    const checking = updater.invoke("check");
+    await started;
+    let observed = false;
+    const reading = updater.readSnapshot().then(value => { observed = value.state === "checking"; });
+    try {
+      // Drain in-memory promises, not a wall-clock timeout or real network operation.
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(observed).toBe(true);
+    } finally { resume(); await Promise.all([checking, reading]); }
+    expect((await updater.readSnapshot()).state).toBe("idle");
+  });
   it.each([false, true])("reserves restart without installer authority and respects other Shell occupants (terminal=%s)", async terminal => {
     const root = await mkdtemp(join(tmpdir(), "electron-host-restart-")); roots.push(root);
     const shell = { ...handoff.shell, digest: "c".repeat(64) };
