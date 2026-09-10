@@ -142,6 +142,7 @@ jobs:
         if: ${{ fromJSON(needs.plan.outputs.run).release_tools }}
         env:
           OPEN_DESIGN_POSTINSTALL_LEVEL: release-prepare
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
@@ -420,7 +421,7 @@ jobs:
       - name: Prepare scene workspace
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
         env:
-          OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
+          OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}
         shell: bash
         run: pnpm install --frozen-lockfile
 
@@ -1111,12 +1112,14 @@ jobs:
             --policy "$RUNNER_TEMP/release-policy/release-policy.json" \
             --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
             --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" --base-directory "$RUNNER_TEMP/base" \
-            --output "$RUNNER_TEMP/distribution" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json"
+            --output "$RUNNER_TEMP/distribution" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json" \
+            --transport-output "$RUNNER_TEMP/distribution-transport"
 
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: exact-distribution-${{ matrix.shell }}-${{ matrix.target }}-${{ inputs.release_version }}
-          path: ${{ runner.temp }}/distribution
+          path: ${{ runner.temp }}/distribution-transport
+          compression-level: 0
           if-no-files-found: error
           retention-days: 1
 

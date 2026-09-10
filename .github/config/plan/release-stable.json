@@ -425,7 +425,7 @@
           },
           "parameters": {
             "target": "darwin-arm64",
-            "postinstall_level": "electron-build"
+            "postinstall_level": "scene-build"
           },
           "dependsOn": [
             "closure_runtime_daemon_darwin_arm64",
@@ -445,7 +445,7 @@
           },
           "parameters": {
             "target": "win32-x64",
-            "postinstall_level": "electron-build"
+            "postinstall_level": "scene-build"
           }
         },
         "closure_data_skills_darwin_arm64": {

@@ -198,7 +198,7 @@ function eventIndex(events: StubEvent[], event: StubEvent["event"], target: stri
 }
 
 describe("postinstall script contract", () => {
-  it.each(["release-smoke", "runtime-build"])("[P2] bootstraps %s dependencies without compiling daemon or Web", level => {
+  it.each(["release-smoke", "runtime-build", "scene-build"])("[P2] bootstraps %s dependencies without compiling daemon or Web", level => {
     const sandbox = createSandbox();
     try {
       for (const target of [...postinstallBuildTargetList(), "apps/web"]) {
@@ -210,7 +210,10 @@ describe("postinstall script contract", () => {
       const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_LEVEL: level, OPEN_DESIGN_POSTINSTALL_CONCURRENCY: "2" });
       expect(result.status, String(result.stderr)).toBe(0);
       const targets = readStubEvents(log).filter(event => event.event === "start").map(event => event.target);
-      expect(targets).toEqual(expect.arrayContaining(["packages/plugin-runtime", "packages/registry-protocol", "packages/agui-adapter", "packages/components"]));
+      if (level === "scene-build") {
+        expect(targets).toEqual(expect.arrayContaining(["apps/closure", "shells/electron"]));
+        for (const target of ["tools/pack", "tools/release", "tools/serve", "packages/plugin-runtime", "packages/components"]) expect(targets).not.toContain(target);
+      } else expect(targets).toEqual(expect.arrayContaining(["packages/plugin-runtime", "packages/registry-protocol", "packages/agui-adapter", "packages/components"]));
       expect(targets).not.toContain("apps/daemon");
       expect(targets).not.toContain("apps/web");
     } finally { rmSync(sandbox, { recursive: true, force: true }); }

@@ -16,6 +16,17 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("declares lean scene preparation and installer-only transport in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
+    const scene = workflow.split("\n  scene:")[1]!.split("\n  terminal_scene:")[0]!;
+    expect(scene).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}");
+    expect(JSON.stringify(config)).toContain('"postinstall_level":"scene-build"');
+    expect(workflow).toContain("ONNXRUNTIME_NODE_INSTALL_CUDA: skip");
+    expect(workflow).toContain('--transport-output "$RUNNER_TEMP/distribution-transport"');
+    expect(workflow).toContain("path: ${{ runner.temp }}/distribution-transport");
+    expect(workflow).not.toContain("path: ${{ runner.temp }}/distribution\n");
+  });
   it.each(["exact", "stable", "prerelease"])("keeps independent runtime producers out of Capsule-only work in release-%s", async lane => {
     const result = await run("python3", ["-c", [
       "import json,sys", "from pathlib import Path", "from functools import lru_cache", "from unittest.mock import patch",
@@ -116,17 +127,18 @@ describe("exact Electron release topology", () => {
   });
   it.each(["release-exact", "release-prerelease", "release-stable"])("isolates CLI registration from product recipes in %s", async lane => {
     const result = await run("python3", ["-c", [
-      "import json,sys", "from pathlib import Path", "from unittest.mock import patch",
+      "import json,sys", "from pathlib import Path", "from functools import lru_cache", "from unittest.mock import patch",
       "sys.path.insert(0,sys.argv[1])",
       "from convergence import ConvergenceContract, GitFingerprinter, calculate",
       "root=Path(sys.argv[2]); lane=sys.argv[3]",
       "contract=ConvergenceContract(root/('.github/config/plan/'+lane+'.json'))",
       "workflow=contract.workflow(lane)",
       "def compute(): return calculate(contract,root,lane,workflow.execution['runners'])",
-      "before=compute(); original=GitFingerprinter.records",
+      "before=compute(); original=GitFingerprinter.records; baseline=GitFingerprinter(root)",
+      "@lru_cache(None)", "def baseline_records(token): return original(baseline,token)",
       "def changed(path):",
       " def records(self,token):",
-      "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in original(self,token)]",
+      "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in baseline_records(token)]",
       " with patch.object(GitFingerprinter,'records',records): after=compute()",
       " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
       "print(json.dumps({path:changed('tools/release/src/'+path) for path in ['index.ts','exact/commands.ts','exact/build-commands.ts','exact/resource-commands.ts']}))",

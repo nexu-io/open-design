@@ -2,6 +2,7 @@ import type { CAC } from "cac";
 import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene, buildReleaseSceneInputs } from "./native-build.ts";
 import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { required, type Options } from "./command-input.ts";
+import { exportReleaseDistribution } from "./distribution-artifact.ts";
 
 /** Result-affecting build grammar belongs to the build recipe, not release control. */
 export function registerBuildCommands(cli: CAC): void {
@@ -10,6 +11,7 @@ export function registerBuildCommands(cli: CAC): void {
     .option("--shell <name>", "electron or terminal")
     .option("--target <target>", "Native platform architecture")
     .option("--output <directory>", "Build output")
+    .option("--transport-output <directory>", "Fresh installer-only publication transport (distribution)")
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
     .option("--resource-ids <json>", "Explicit runtime resource selection (runtime-resources)")
@@ -45,6 +47,7 @@ export function registerBuildCommands(cli: CAC): void {
         return;
       }
       if (options.resourceIds != null) throw new Error("--resource-ids is only supported by build runtime-resources");
+      if (options.transportOutput != null && operation !== "distribution") throw new Error("--transport-output is only supported by build distribution");
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
       if (options.runtimeArchive != null && operation !== "base") throw new Error("--runtime-archive is only supported by build base");
       if (options.baseReceipt != null && operation !== "distribution") throw new Error("--base-receipt is only supported by build distribution");
@@ -74,9 +77,12 @@ export function registerBuildCommands(cli: CAC): void {
         ...(options.runtimeArchive == null ? {} : { runtimeArchive: required(options, "runtimeArchive") }) });
       else if (operation === "platform") await buildReleasePlatform({ ...common,
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
-      else if (operation === "distribution") await buildReleaseDistribution({ ...common, ...(options.baseReceipt == null ? {} : { baseReceipt: required(options, "baseReceipt") }), scene: required(options, "scene"), prepared: required(options, "prepared"),
+      else if (operation === "distribution") {
+        await buildReleaseDistribution({ ...common, ...(options.baseReceipt == null ? {} : { baseReceipt: required(options, "baseReceipt") }), scene: required(options, "scene"), prepared: required(options, "prepared"),
         ...(options.baseDirectory == null ? {} : { baseDirectory: required(options, "baseDirectory") }),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
+        if (options.transportOutput != null) await exportReleaseDistribution({ source: common.output, output: required(options, "transportOutput") });
+      }
       else throw new Error("build operation must be resource, runtime-resources, platform, capsule, base, scene-inputs, scene or distribution");
     });
 }

@@ -44,6 +44,7 @@ const postinstallLevels = {
   "release-smoke": { roots: ["apps/closure", "tools/pack", "tools/release", "tools/serve"], dependencyRoots: ["apps/daemon", "apps/web"], verifyNativeAddon: true },
   "resource-build": { roots: ["apps/closure"], verifyNativeAddon: false },
   "runtime-build": { roots: ["apps/closure"], dependencyRoots: ["apps/daemon", "apps/web"], verifyNativeAddon: false },
+  "scene-build": { roots: ["apps/closure", "shells/electron"], verifyNativeAddon: false },
   "electron-build": { roots: ["shells/electron"], verifyNativeAddon: false },
   "terminal-build": { roots: ["apps/closure"], verifyNativeAddon: false },
 };
