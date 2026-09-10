@@ -53,14 +53,15 @@ function seedTaskAndMessage(
   db: Db,
   outcome: Outcome,
   ids = { taskId: TASK_ID, runId: RUN_ID, messageId: MESSAGE_ID },
+  scope = { projectId: PROJECT_ID, conversationId: CONVERSATION_ID, visibleText: REPLY },
 ) {
   const assetDigests = [
     { path: './SKILL.md', sha256: 'a'.repeat(64) },
     { path: './assets/task-profiles/prototype.md', sha256: 'b'.repeat(64) },
   ];
   const snapshot = createSnapshot(db, {
-    projectId: PROJECT_ID,
-    conversationId: CONVERSATION_ID,
+    projectId: scope.projectId,
+    conversationId: scope.conversationId,
     runId: null,
     pluginId: 'od-next-strategy',
     pluginVersion: '2.0.0',
@@ -92,8 +93,8 @@ function seedTaskAndMessage(
   });
   const task = createStrategyTaskExecution(db, {
     taskExecutionId: ids.taskId,
-    projectId: PROJECT_ID,
-    conversationId: CONVERSATION_ID,
+    projectId: scope.projectId,
+    conversationId: scope.conversationId,
     snapshotId: snapshot.snapshotId,
     selectedAgentId: 'codex',
     initialRunId: ids.runId,
@@ -117,15 +118,15 @@ function seedTaskAndMessage(
         outcome,
       },
       ...(outcome === 'blocked'
-        ? { blockedContext: { reasonCodes: [REASON], visibleText: REPLY } }
+        ? { blockedContext: { reasonCodes: [REASON], visibleText: scope.visibleText } }
         : {}),
       updatedAt: 200,
     });
   }
-  upsertMessage(db, CONVERSATION_ID, {
+  upsertMessage(db, scope.conversationId, {
     id: ids.messageId,
     role: 'assistant',
-    content: REPLY,
+    content: scope.visibleText,
     runId: ids.runId,
     runStatus: outcome === 'canceled' ? 'canceled' : 'succeeded',
     startedAt: 100,
@@ -190,8 +191,16 @@ function planContract(snapshot: AppliedPluginSnapshot): OpenDesignPlanContractV2
 
 // Mount only the production conversation registrar; no agent or full daemon
 // starts. Each request sees actual SQLite rows and crosses JSON serialization.
-async function readHistory(db: Db, dataDir: string): Promise<ChatMessage[]> {
+async function readHistory(
+  db: Db,
+  dataDir: string,
+  options: {
+    beforeRead?: (origin: string) => Promise<void>;
+    authorizeProjectRequest?: RegisterProjectConversationRoutesDeps['authorizeProjectRequest'];
+  } = {},
+): Promise<ChatMessage[]> {
   const app = express();
+  app.use(express.json());
   registerProjectConversationRoutes(app, {
     db,
     http: {
@@ -208,13 +217,15 @@ async function readHistory(db: Db, dataDir: string): Promise<ChatMessage[]> {
     appConfig: { readAppConfig: async () => ({}) },
     agents: { getAgentDef: () => null },
     design: { runs: {} },
-    // This narrow unbound-project fixture uses the registrar's documented
-    // read-only authority fallback; it does not claim Workspace coverage.
+    // Most fixtures are unbound local projects. Scope cases explicitly inject
+    // a project-authority boundary; neither claims live Workspace coverage.
+    authorizeProjectRequest: options.authorizeProjectRequest,
   } as unknown as RegisterProjectConversationRoutesDeps);
   const server = app.listen(0, '127.0.0.1');
   try {
     await once(server, 'listening');
     const { port } = server.address() as AddressInfo;
+    await options.beforeRead?.(`http://127.0.0.1:${port}`);
     const response = await fetch(
       `http://127.0.0.1:${port}/api/projects/${PROJECT_ID}/conversations/${CONVERSATION_ID}/messages`,
     );
@@ -279,6 +290,98 @@ describe('persisted strategy verdict in conversation history', () => {
       expect(messages[0]?.strategyTaskDelivered).not.toBe(true);
     }
     expect(getMessage(db, MESSAGE_ID)?.runStatus).toBe('succeeded');
+  });
+
+  it.each([
+    { label: 'another conversation in the same project', foreignProjectId: PROJECT_ID },
+    { label: 'a project the caller cannot read', foreignProjectId: 'foreign-history-project' },
+  ])('does not disclose task metadata through a caller-written runId from $label', async ({ foreignProjectId }) => {
+    const foreignConversationId = 'foreign-history-conversation';
+    const foreignTaskId = 'foreign-history-task';
+    const foreignRunId = 'foreign-history-run';
+    const foreignText = 'Foreign task attribution must remain in its own conversation.';
+    const importedMessageId = 'caller-written-assistant';
+    const importedContent = 'Caller-owned imported placeholder.';
+    seedTaskAndMessage(db, 'blocked');
+    if (foreignProjectId !== PROJECT_ID) {
+      insertProject(db, {
+        id: foreignProjectId, name: 'Foreign history fixture', createdAt: 1, updatedAt: 1,
+      });
+    }
+    insertConversation(db, {
+      id: foreignConversationId, projectId: foreignProjectId,
+      title: 'Foreign history', createdAt: 1, updatedAt: 1,
+    });
+    seedTaskAndMessage(db, 'blocked', {
+      taskId: foreignTaskId, runId: foreignRunId, messageId: 'foreign-history-assistant',
+    }, {
+      projectId: foreignProjectId, conversationId: foreignConversationId, visibleText: foreignText,
+    });
+    expect(getStrategyTaskExecution(db, foreignTaskId)).toMatchObject({
+      projectId: foreignProjectId, conversationId: foreignConversationId,
+      outcome: 'blocked', blockedContext: { visibleText: foreignText },
+    });
+    const authorizeProjectRequest: NonNullable<
+      RegisterProjectConversationRoutesDeps['authorizeProjectRequest']
+    > = async (_req, res, projectId) => {
+      if (projectId === PROJECT_ID) return true;
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Fixture project denied.' } });
+      return false;
+    };
+    const warm = await readHistory(db, dataDir, {
+      authorizeProjectRequest,
+      beforeRead: async (origin) => {
+        if (foreignProjectId !== PROJECT_ID) {
+          const denied = await fetch(
+            `${origin}/api/projects/${foreignProjectId}/conversations/${foreignConversationId}/messages`,
+          );
+          expect(denied.status).toBe(403);
+          await denied.json();
+        }
+        // Exercise the actual new-message write path. There is no stored row
+        // for the daemon-backed merge guard to preserve, so the supplied runId
+        // is currently accepted. Do not seed the forged message directly in DB.
+        expect(getMessage(db, importedMessageId)).toBeNull();
+        const written = await fetch(
+          `${origin}/api/projects/${PROJECT_ID}/conversations/${CONVERSATION_ID}/messages/${importedMessageId}`,
+          {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              id: importedMessageId, role: 'assistant', content: importedContent,
+              runId: foreignRunId, runStatus: 'succeeded',
+            }),
+          },
+        );
+        expect(written.status).toBe(200);
+        expect(await written.json()).toMatchObject({ message: {
+          id: importedMessageId, runId: foreignRunId, content: importedContent,
+        } });
+        expect(getMessage(db, importedMessageId, CONVERSATION_ID)).toMatchObject({
+          runId: foreignRunId, content: importedContent,
+        });
+      },
+    });
+    closeDatabase();
+    db = openDatabase(dataDir, { dataDir });
+    const cold = await readHistory(db, dataDir, { authorizeProjectRequest });
+    for (const messages of [warm, cold]) {
+      expect(messages).toHaveLength(2);
+      // Preserve the intended same-project, same-conversation restoration.
+      expect(messages.find((message) => message.id === MESSAGE_ID)).toMatchObject({
+        strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0,
+        strategyTaskBlocked: true, strategyTaskBlockedText: REPLY, runStatus: 'succeeded',
+      });
+      const imported = messages.find((message) => message.id === importedMessageId);
+      expect(imported).toMatchObject({
+        content: importedContent, runId: foreignRunId, runStatus: 'succeeded',
+      });
+      expect.soft(imported?.strategyTaskExecutionId).toBeUndefined();
+      expect.soft(imported?.strategyTaskRunIndex).toBeUndefined();
+      expect.soft(imported?.strategyTaskBlocked).toBeUndefined();
+      expect.soft(imported?.strategyTaskBlockedText).toBeUndefined();
+      expect.soft(imported?.strategyTaskDelivered).toBeUndefined();
+    }
   });
 
   it('returns the blocked task verdict for request and production runs without changing either process status', async () => {
