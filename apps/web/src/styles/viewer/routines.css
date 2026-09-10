@@ -2,7 +2,7 @@
 /* Project-scoped actions live in their own bar between the chrome header
  * and the chat/workspace split. File-scoped actions stay inside
  * FileViewer's share menu. */
-.project-actions-toolbar {
+.project-actions-toolbar:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -12,7 +12,7 @@
   min-height: 40px;
   flex-wrap: wrap;
 }
-.project-actions-button {
+.project-actions-button:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -25,27 +25,27 @@
   color: var(--text-strong, var(--text));
   cursor: pointer;
 }
-.project-actions-button:hover:not(:disabled) {
+.project-actions-button:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle, var(--bg));
 }
-.project-actions-button:disabled {
+.project-actions-button:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.project-actions-button-primary {
+.project-actions-button-primary:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--accent);
   color: var(--accent-text, white);
   border-color: var(--accent);
 }
-.project-actions-button-primary:hover:not(:disabled) {
+.project-actions-button-primary:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   filter: brightness(0.95);
   background: var(--accent);
 }
-.project-actions-button-warning {
+.project-actions-button-warning:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--warning, #d97706);
   color: var(--warning, #d97706);
 }
-.project-actions-button-pending {
+.project-actions-button-pending:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -54,7 +54,7 @@
   border: 1px solid var(--border);
   background: var(--bg);
 }
-.project-actions-spinner {
+.project-actions-spinner:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -67,11 +67,11 @@
     transform: rotate(360deg);
   }
 }
-.project-actions-label {
+.project-actions-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
   color: var(--text-strong, var(--text));
 }
-.project-actions-link {
+.project-actions-link:where(:not([data-chat-root], [data-chat-root] *)) {
   background: none;
   border: none;
   color: var(--accent);
@@ -81,19 +81,19 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.project-actions-button-group {
+.project-actions-button-group:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.project-actions-chip {
+.project-actions-chip:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--warning, #d97706) 14%, transparent);
   color: var(--warning, #d97706);
 }
-.project-actions-disabled-hint {
+.project-actions-disabled-hint:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-muted);
   font-style: italic;
@@ -101,7 +101,7 @@
 
 /* ----- Toast (#451) ---------------------------------------------------- */
 /* Single transient bottom-center toast for project-scoped actions. */
-.od-toast {
+.od-toast:where(:not([data-chat-root], [data-chat-root] *)) {
   position: fixed;
   bottom: 24px;
   left: 50%;
@@ -130,20 +130,20 @@
   z-index: 1000;
   pointer-events: auto;
 }
-.workspace.has-browser-snapshot-toast {
+.workspace.has-browser-snapshot-toast:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
 }
-.workspace-toast-anchor {
+.workspace-toast-anchor:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   inset: 0;
   z-index: 1000;
   overflow: hidden;
   pointer-events: none;
 }
-.workspace-toast-anchor .od-toast {
+.workspace-toast-anchor .od-toast:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
 }
-.od-toast.od-toast-browser-snapshot {
+.od-toast.od-toast-browser-snapshot:where(:not([data-chat-root], [data-chat-root] *)) {
   bottom: 34px;
   width: min(460px, calc(100vw - 48px));
   max-width: calc(100vw - 48px);
@@ -155,23 +155,23 @@
     0 18px 52px rgba(15, 23, 42, 0.18),
     0 0 0 1px rgba(255, 255, 255, 0.58);
 }
-.workspace-toast-anchor .od-toast.od-toast-browser-snapshot {
+.workspace-toast-anchor .od-toast.od-toast-browser-snapshot:where(:not([data-chat-root], [data-chat-root] *)) {
   width: min(460px, calc(100% - 48px));
   max-width: calc(100% - 48px);
 }
-.od-toast.placement-top {
+.od-toast.placement-top:where(:not([data-chat-root], [data-chat-root] *)) {
   top: 64px;
   bottom: auto;
   z-index: 1800;
 }
 /* Toasts that stack extra blocks (details / code / browser snapshot) can't
    wear the capsule radius — their tall rectangular content would clip. */
-.od-toast:has(.od-toast-details),
-.od-toast:has(.od-toast-code),
-.od-toast:has(.od-toast-browser-snapshot) {
+.od-toast:has(.od-toast-details):where(:not([data-chat-root], [data-chat-root] *)),
+.od-toast:has(.od-toast-code):where(:not([data-chat-root], [data-chat-root] *)),
+.od-toast:has(.od-toast-browser-snapshot):where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: var(--radius, 12px);
 }
-.project-actions-toast-anchor {
+.project-actions-toast-anchor:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   z-index: 60;
   flex: 0 0 auto;
@@ -180,10 +180,10 @@
   margin: 0 auto 12px;
   pointer-events: none;
 }
-.chat-log-wrap.has-chat-log-tray {
+.chat-log-wrap.has-chat-log-tray:where(:not([data-chat-root], [data-chat-root] *)) {
   flex-direction: column;
 }
-.project-actions-toast-anchor .od-toast {
+.project-actions-toast-anchor .od-toast:where(:not([data-chat-root], [data-chat-root] *)) {
   position: static;
   inset: auto;
   width: 100%;
@@ -192,12 +192,12 @@
   animation: none;
   pointer-events: auto;
 }
-.project-actions-toast-anchor .od-toast.placement-top {
+.project-actions-toast-anchor .od-toast.placement-top:where(:not([data-chat-root], [data-chat-root] *)) {
   top: auto;
   bottom: auto;
   z-index: 1000;
 }
-.project-actions-toast-anchor .od-toast.leaving {
+.project-actions-toast-anchor .od-toast.leaving:where(:not([data-chat-root], [data-chat-root] *)) {
   animation: none;
 }
 /* Workspace-owned toasts (Download Page snapshot progress/result, tab
@@ -205,7 +205,7 @@
    the viewport's, so they never drift over the chat pane or the composer
    send area in split view. Requires `.workspace` to be the
    containing block — see `position: relative` in workspace/drawer.css. */
-.workspace-toast-anchor {
+.workspace-toast-anchor:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   inset: auto 24px 24px;
   display: flex;
@@ -213,7 +213,7 @@
   z-index: 60;
   pointer-events: none;
 }
-.workspace-toast-anchor .od-toast {
+.workspace-toast-anchor .od-toast:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Relative (not static) so the absolutely-positioned close/action controls
      keep the toast itself as their containing block. */
   position: relative;
@@ -226,22 +226,22 @@
    near the pane's TOP edge as a pill, success wearing the light-green /
    medium-green palette. Browser-snapshot toasts keep the bottom anchor —
    their card carries actions and previews sized for the bottom edge. */
-.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) {
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)):where(:not([data-chat-root], [data-chat-root] *)) {
   inset: 24px 24px auto;
 }
-.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast {
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast:where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: var(--radius-pill, 999px);
 }
-.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast.tone-success {
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast.tone-success:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 30%, transparent);
   background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg, #fff));
   color: var(--success, #2da44e);
 }
-.workspace-toast-anchor .od-toast.od-toast-browser-snapshot {
+.workspace-toast-anchor .od-toast.od-toast-browser-snapshot:where(:not([data-chat-root], [data-chat-root] *)) {
   width: min(460px, 100%);
   max-width: 100%;
 }
-.workspace-toast-anchor .od-toast.leaving {
+.workspace-toast-anchor .od-toast.leaving:where(:not([data-chat-root], [data-chat-root] *)) {
   animation: none;
 }
 /* Design systems tab (home/entry surface, not the project viewer) reuses the
@@ -252,7 +252,7 @@
    already `position: relative` and is the tab's scroll pane, so anchoring
    there — same shape as `.workspace-toast-anchor` above — centers the toast
    on that column regardless of the pane's own scroll position. */
-.design-systems-toast-anchor {
+.design-systems-toast-anchor:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   /* Pinned near the pane's TOP edge (product ask): feedback shows where the
      eye already is after clicking a card action, clear of the footer. */
@@ -262,7 +262,7 @@
   z-index: 60;
   pointer-events: none;
 }
-.design-systems-toast-anchor .od-toast {
+.design-systems-toast-anchor .od-toast:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   inset: auto;
   transform: none;
@@ -279,18 +279,18 @@
 /* Keep every glyph on the green pill green: out-specify the dark-toast close
    disc (.od-toast:not(...):not(...) .od-toast-close) and the tone-loading
    muted spinner, both of which assume the base dark scrim. */
-.design-systems-toast-anchor .od-toast.tone-loading .od-toast-icon {
+.design-systems-toast-anchor .od-toast.tone-loading .od-toast-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   color: inherit;
 }
-.design-systems-toast-anchor .od-toast:not(.tone-success):not(.tone-error) .od-toast-close {
+.design-systems-toast-anchor .od-toast:not(.tone-success):not(.tone-error) .od-toast-close:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--success, #2da44e) 26%, transparent);
   background: color-mix(in srgb, var(--success, #2da44e) 10%, transparent);
   color: inherit;
 }
-.design-systems-toast-anchor .od-toast.leaving {
+.design-systems-toast-anchor .od-toast.leaving:where(:not([data-chat-root], [data-chat-root] *)) {
   animation: none;
 }
-.od-toast.tone-success {
+.od-toast.tone-success:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
   background: color-mix(in srgb, var(--success, #2da44e) 14%, var(--bg));
   color: var(--text);
@@ -298,7 +298,7 @@
     0 4px 14px rgba(0, 0, 0, 0.14),
     0 0 0 1px color-mix(in srgb, var(--success, #2da44e) 12%, transparent);
 }
-.od-toast.tone-error {
+.od-toast.tone-error:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 1px solid color-mix(in srgb, var(--danger, #cf222e) 42%, var(--border));
   background: color-mix(in srgb, var(--danger, #cf222e) 13%, var(--bg));
   color: var(--text);
@@ -306,33 +306,33 @@
     0 4px 14px rgba(0, 0, 0, 0.14),
     0 0 0 1px color-mix(in srgb, var(--danger, #cf222e) 12%, transparent);
 }
-.od-toast-body {
+.od-toast-body:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.od-toast-icon {
+.od-toast-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
 }
-.od-toast.tone-success .od-toast-icon {
+.od-toast.tone-success .od-toast-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--success, #2da44e);
 }
-.od-toast.tone-error .od-toast-icon {
+.od-toast.tone-error .od-toast-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--danger, #cf222e);
 }
-.od-toast.tone-loading .od-toast-icon {
+.od-toast.tone-loading .od-toast-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted, #6e7781);
 }
 /* Entrance: gentle rise + fade (ease-out per the UI animation philosophy).
    Exit: the .leaving class plays a faster fade-out before onDismiss unmounts
    the toast, so confirmations like "copied to clipboard" don't blink away. */
-.od-toast {
+.od-toast:where(:not([data-chat-root], [data-chat-root] *)) {
   animation: od-toast-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.od-toast.leaving {
+.od-toast.leaving:where(:not([data-chat-root], [data-chat-root] *)) {
   animation: od-toast-out 140ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 @keyframes od-toast-in {
@@ -356,28 +356,28 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .od-toast,
-  .od-toast.leaving {
+  .od-toast:where(:not([data-chat-root], [data-chat-root] *)),
+  .od-toast.leaving:where(:not([data-chat-root], [data-chat-root] *)) {
     animation: none;
   }
 }
-.od-toast-message {
+.od-toast-message:where(:not([data-chat-root], [data-chat-root] *)) {
   font-weight: 600;
 }
-.od-toast.od-toast-browser-snapshot .od-toast-message {
+.od-toast.od-toast-browser-snapshot .od-toast-message:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13.5px;
   font-weight: 600;
 }
-.od-toast.od-toast-browser-snapshot.tone-success .od-toast-icon {
+.od-toast.od-toast-browser-snapshot.tone-success .od-toast-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
-.od-toast-details {
+.od-toast-details:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 4px;
   font-size: 12px;
   opacity: 0.85;
   font-weight: 600;
 }
-.od-toast-code {
+.od-toast-code:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 8px 0 0;
   padding: 8px 10px;
   border-radius: var(--radius-sm, 4px);
@@ -391,7 +391,7 @@
   overflow: auto;
   user-select: text;
 }
-.od-toast-close {
+.od-toast-close:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   top: 50%;
   right: 8px;
@@ -420,16 +420,16 @@
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.od-toast:not(.tone-success):not(.tone-error) .od-toast-close {
+.od-toast:not(.tone-success):not(.tone-error) .od-toast-close:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.16);
   color: var(--bg, #fff);
 }
-.od-toast.od-toast-browser-snapshot .od-toast-close {
+.od-toast.od-toast-browser-snapshot .od-toast-close:where(:not([data-chat-root], [data-chat-root] *)) {
   top: 8px;
   transform: none;
 }
-.od-toast-close svg {
+.od-toast-close svg:where(:not([data-chat-root], [data-chat-root] *)) {
   /* flex-shrink:0 so the glyph can never be crushed to 0 width by the
      flex button even if the content box gets tight again. */
   flex: 0 0 auto;
@@ -437,16 +437,16 @@
   height: 13px;
   stroke-width: 2.4;
 }
-.od-toast-close:hover {
+.od-toast-close:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
   background: color-mix(in srgb, currentColor 8%, transparent);
   opacity: 1;
 }
-.od-toast:not(.tone-success):not(.tone-error) .od-toast-close:hover {
+.od-toast:not(.tone-success):not(.tone-error) .od-toast-close:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: rgba(255, 255, 255, 0.34);
   background: rgba(255, 255, 255, 0.24);
 }
-.od-toast-dismiss {
+.od-toast-dismiss:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 8px;
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -456,19 +456,19 @@
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
 }
-.od-toast-dismiss:hover {
+.od-toast-dismiss:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: rgba(255, 255, 255, 0.18);
 }
 
 /* ---------------- Routines (Settings → Automations) ---------------- */
 
-.routines-section .section-head { align-items: flex-start; }
-.routines-section .section-head > .btn {
+.routines-section .section-head:where(:not([data-chat-root], [data-chat-root] *)) { align-items: flex-start; }
+.routines-section .section-head > .btn:where(:not([data-chat-root], [data-chat-root] *)) {
   flex-shrink: 0;
   white-space: nowrap;
 }
 
-.routines-card {
+.routines-card:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -478,9 +478,9 @@
   gap: 14px;
 }
 
-.routines-form { margin-top: 4px; }
+.routines-form:where(:not([data-chat-root], [data-chat-root] *)) { margin-top: 4px; }
 
-.routines-empty {
+.routines-empty:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-lg);
   padding: 24px;
@@ -488,24 +488,24 @@
   color: var(--text-muted);
   background: var(--bg-subtle);
 }
-.routines-empty strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 14px; }
-.routines-empty p { margin: 0; font-size: 13px; }
-.routines-empty em { color: var(--text); font-style: normal; font-weight: 600; }
+.routines-empty strong:where(:not([data-chat-root], [data-chat-root] *)) { color: var(--text); display: block; margin-bottom: 4px; font-size: 14px; }
+.routines-empty p:where(:not([data-chat-root], [data-chat-root] *)) { margin: 0; font-size: 13px; }
+.routines-empty em:where(:not([data-chat-root], [data-chat-root] *)) { color: var(--text); font-style: normal; font-weight: 600; }
 
-.routines-field { display: flex; flex-direction: column; gap: 6px; }
-.routines-field > span {
+.routines-field:where(:not([data-chat-root], [data-chat-root] *)) { display: flex; flex-direction: column; gap: 6px; }
+.routines-field > span:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.01em;
 }
-.routines-field input[type="text"],
-.routines-field input[type="time"],
-.routines-field input[type="number"],
-.routines-field input:not([type]),
-.routines-field textarea,
-.routines-field select,
-.routines-project-select {
+.routines-field input[type="text"]:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-field input[type="time"]:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-field input[type="number"]:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-field input:not([type]):where(:not([data-chat-root], [data-chat-root] *)),
+.routines-field textarea:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-field select:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-project-select:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
@@ -520,8 +520,8 @@
 /* Restore custom dropdown chevron for select elements in routines form.
    The appearance:none above removes the native chevron, so we paint our own
    via background-image (matching the global select styling). */
-.routines-field select,
-.routines-project-select {
+.routines-field select:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-project-select:where(:not([data-chat-root], [data-chat-root] *)) {
   padding-right: 32px;
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -529,38 +529,38 @@
   background-size: 12px 12px;
 }
 
-[data-theme='dark'] .routines-field select,
-[data-theme='dark'] .routines-project-select {
+[data-theme='dark'] .routines-field select:where(:not([data-chat-root], [data-chat-root] *)),
+[data-theme='dark'] .routines-project-select:where(:not([data-chat-root], [data-chat-root] *)) {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
 }
 
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .routines-field select,
-  html:not([data-theme]) .routines-project-select {
+  html:not([data-theme]) .routines-field select:where(:not([data-chat-root], [data-chat-root] *)),
+  html:not([data-theme]) .routines-project-select:where(:not([data-chat-root], [data-chat-root] *)) {
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   }
 }
-.routines-field input:focus,
-.routines-field textarea:focus,
-.routines-field select:focus,
-.routines-project-select:focus {
+.routines-field input:focus:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-field textarea:focus:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-field select:focus:where(:not([data-chat-root], [data-chat-root] *)),
+.routines-project-select:focus:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: none;
   border-color: var(--text);
 }
-.routines-field textarea { resize: vertical; min-height: 80px; }
+.routines-field textarea:where(:not([data-chat-root], [data-chat-root] *)) { resize: vertical; min-height: 80px; }
 
-.routines-field-label {
+.routines-field-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.01em;
 }
 
-.routines-fieldrow { display: flex; gap: 12px; flex-wrap: wrap; }
-.routines-fieldrow > .routines-field { flex: 1 1 180px; min-width: 0; }
-.routines-fieldrow-2col > .routines-field { flex: 1 1 240px; }
+.routines-fieldrow:where(:not([data-chat-root], [data-chat-root] *)) { display: flex; gap: 12px; flex-wrap: wrap; }
+.routines-fieldrow > .routines-field:where(:not([data-chat-root], [data-chat-root] *)) { flex: 1 1 180px; min-width: 0; }
+.routines-fieldrow-2col > .routines-field:where(:not([data-chat-root], [data-chat-root] *)) { flex: 1 1 240px; }
 
-.routines-schedule-editor {
+.routines-schedule-editor:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -569,14 +569,14 @@
   border-radius: var(--radius);
 }
 
-.routines-kind-pills { align-self: flex-start; }
+.routines-kind-pills:where(:not([data-chat-root], [data-chat-root] *)) { align-self: flex-start; }
 
-.routines-weekday-row {
+.routines-weekday-row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
-.routines-weekday {
+.routines-weekday:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -587,20 +587,20 @@
   cursor: pointer;
   transition: all 120ms var(--ease-out);
 }
-.routines-weekday:hover { color: var(--text); border-color: var(--text-soft); }
-.routines-weekday.active {
+.routines-weekday:hover:where(:not([data-chat-root], [data-chat-root] *)) { color: var(--text); border-color: var(--text-soft); }
+.routines-weekday.active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--text);
   color: var(--bg);
   border-color: var(--text);
 }
 
-.routines-schedule-hint {
+.routines-schedule-hint:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 0;
   font-size: 13px;
   color: var(--text-muted);
 }
 
-.routines-fieldset {
+.routines-fieldset:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 14px;
@@ -610,14 +610,14 @@
   gap: 8px;
 }
 
-.routines-fieldset legend {
+.routines-fieldset legend:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   padding: 0 6px;
 }
 
-.routines-radio {
+.routines-radio:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -629,17 +629,17 @@
   transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 
-.routines-radio:hover {
+.routines-radio:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   border-color: var(--border-strong);
 }
 
-.routines-radio:has(input:focus-visible) {
+.routines-radio:has(input:focus-visible):where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.routines-radio input[type="radio"] {
+.routines-radio input[type="radio"]:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -651,33 +651,33 @@
   border: 0;
 }
 
-.routines-radio:has(input[type="radio"]:checked) {
+.routines-radio:has(input[type="radio"]:checked):where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--accent);
   background: var(--accent-tint);
 }
 
-.routines-radio:has(input[type="radio"]:checked) strong {
+.routines-radio:has(input[type="radio"]:checked) strong:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--accent-strong);
 }
 
-.routines-radio span {
+.routines-radio span:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 2px;
   flex: 1;
 }
 
-.routines-radio strong {
+.routines-radio strong:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
 
-.routines-radio small {
+.routines-radio small:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-muted);
 }
-.routines-form-actions {
+.routines-form-actions:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
@@ -686,7 +686,7 @@
 }
 
 /* List of existing routines */
-.routines-list {
+.routines-list:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -695,20 +695,20 @@
   margin: 0;
 }
 
-.routines-item.is-disabled { opacity: 0.7; }
+.routines-item.is-disabled:where(:not([data-chat-root], [data-chat-root] *)) { opacity: 0.7; }
 
-.routines-item-head {
+.routines-item-head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   gap: 14px;
   align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
 }
-.routines-item-main { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.routines-item-title { display: flex; align-items: center; gap: 8px; }
-.routines-item-title strong { font-size: 16px; color: var(--text); font-weight: 600; }
-.routines-item-line { font-size: 13px; color: var(--text); }
-.routines-item-meta {
+.routines-item-main:where(:not([data-chat-root], [data-chat-root] *)) { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.routines-item-title:where(:not([data-chat-root], [data-chat-root] *)) { display: flex; align-items: center; gap: 8px; }
+.routines-item-title strong:where(:not([data-chat-root], [data-chat-root] *)) { font-size: 16px; color: var(--text); font-weight: 600; }
+.routines-item-line:where(:not([data-chat-root], [data-chat-root] *)) { font-size: 13px; color: var(--text); }
+.routines-item-meta:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-muted);
   display: flex;
@@ -716,13 +716,13 @@
   gap: 6px;
   align-items: center;
 }
-.routines-item-error {
+.routines-item-error:where(:not([data-chat-root], [data-chat-root] *)) {
   color: #b3382b;
   font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-.routines-tag {
+.routines-tag:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   background: var(--bg-muted);
   color: var(--text-muted);
@@ -733,17 +733,17 @@
   font-weight: 600;
 }
 
-.routines-item-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.routines-item-actions:where(:not([data-chat-root], [data-chat-root] *)) { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
-.routines-item-history {
+.routines-item-history:where(:not([data-chat-root], [data-chat-root] *)) {
   border-top: 1px solid var(--border);
   padding-top: 12px;
   margin-top: 4px;
 }
 
-.routines-history { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.routines-history-empty { font-size: 12px; color: var(--text-muted); padding: 6px 0; }
-.routines-history-row {
+.routines-history:where(:not([data-chat-root], [data-chat-root] *)) { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.routines-history-empty:where(:not([data-chat-root], [data-chat-root] *)) { font-size: 12px; color: var(--text-muted); padding: 6px 0; }
+.routines-history-row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   grid-template-columns: auto 1fr auto auto;
   gap: 10px;
@@ -753,20 +753,20 @@
   font-size: 12px;
   color: var(--text-muted);
 }
-.routines-history-row:hover { background: var(--bg-subtle); }
-.routines-history-time { color: var(--text); }
-.routines-history-trigger {
+.routines-history-row:hover:where(:not([data-chat-root], [data-chat-root] *)) { background: var(--bg-subtle); }
+.routines-history-time:where(:not([data-chat-root], [data-chat-root] *)) { color: var(--text); }
+.routines-history-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.routines-history-error {
+.routines-history-error:where(:not([data-chat-root], [data-chat-root] *)) {
   grid-column: 1 / -1;
   color: #b3382b;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-.routines-history-link {
+.routines-history-link:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -779,20 +779,20 @@
   gap: 4px;
   font-weight: 600;
 }
-.routines-history-link:hover {
+.routines-history-link:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--text);
   color: var(--bg-panel);
   border-color: var(--text);
 }
-.routines-history-link:focus-visible {
+.routines-history-link:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid var(--selected);
   outline-offset: 1px;
 }
-.routines-history-link:active {
+.routines-history-link:active:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0.85;
 }
 
-.routines-status {
+.routines-status:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-block;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
@@ -803,11 +803,11 @@
   background: var(--bg-muted);
   color: var(--text-muted);
 }
-.routines-status-running { background: #f3eddc; color: #8a6a1a; }
-.routines-status-queued { background: #ece9e2; color: var(--text-muted); }
-.routines-status-succeeded { background: #e3efe6; color: #2e7d5b; }
-.routines-status-failed { background: #f6dfdc; color: #b3382b; }
-.routines-status-canceled { background: #ece9e2; color: var(--text-muted); }
+.routines-status-running:where(:not([data-chat-root], [data-chat-root] *)) { background: #f3eddc; color: #8a6a1a; }
+.routines-status-queued:where(:not([data-chat-root], [data-chat-root] *)) { background: #ece9e2; color: var(--text-muted); }
+.routines-status-succeeded:where(:not([data-chat-root], [data-chat-root] *)) { background: #e3efe6; color: #2e7d5b; }
+.routines-status-failed:where(:not([data-chat-root], [data-chat-root] *)) { background: #f6dfdc; color: #b3382b; }
+.routines-status-canceled:where(:not([data-chat-root], [data-chat-root] *)) { background: #ece9e2; color: var(--text-muted); }
 
 /* ============================================================
    New Project — Media tab additions (Media tab + segmented inner
@@ -816,7 +816,7 @@
    ============================================================ */
 /* Media surface picker — mirror .subtab-pill / .ds-picker-mode so all
    segmented controls in the panel share one visual language. */
-.newproj-media-segmented {
+.newproj-media-segmented:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-self: flex-start;
   padding: 3px;
@@ -825,7 +825,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-.newproj-media-surface {
+.newproj-media-surface:where(:not([data-chat-root], [data-chat-root] *)) {
   border: none;
   background: transparent;
   padding: 3px 12px;
@@ -835,19 +835,19 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.newproj-media-surface:hover:not(.active) { color: var(--text); }
-.newproj-media-surface.active {
+.newproj-media-surface:hover:not(.active):where(:not([data-chat-root], [data-chat-root] *)) { color: var(--text); }
+.newproj-media-surface.active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
   color: var(--text);
   box-shadow: var(--shadow-xs);
 }
 
-.newproj-aspect-segmented {
+.newproj-aspect-segmented:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-.newproj-aspect-pill {
+.newproj-aspect-pill:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -861,36 +861,36 @@
   cursor: pointer;
   transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out), color 140ms var(--ease-out);
 }
-.newproj-aspect-pill:hover { color: var(--text); background: var(--bg-subtle); }
-.newproj-aspect-pill.active {
+.newproj-aspect-pill:hover:where(:not([data-chat-root], [data-chat-root] *)) { color: var(--text); background: var(--bg-subtle); }
+.newproj-aspect-pill.active:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-tint);
 }
-.newproj-aspect-icon {
+.newproj-aspect-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-block;
   border: 1.5px solid currentColor;
   border-radius: 2px;
   flex: none;
   opacity: 0.85;
 }
-.newproj-aspect-icon-1-1   { width: 12px;  height: 12px;   }
-.newproj-aspect-icon-16-9  { width: 16px;  height: 9px;    }
-.newproj-aspect-icon-9-16  { width: 9px;   height: 16px;   }
-.newproj-aspect-icon-4-3   { width: 14px;  height: 10.5px; }
-.newproj-aspect-icon-3-4   { width: 10.5px; height: 14px;  }
-.newproj-aspect-ratio {
+.newproj-aspect-icon-1-1:where(:not([data-chat-root], [data-chat-root] *))   { width: 12px;  height: 12px;   }
+.newproj-aspect-icon-16-9:where(:not([data-chat-root], [data-chat-root] *))  { width: 16px;  height: 9px;    }
+.newproj-aspect-icon-9-16:where(:not([data-chat-root], [data-chat-root] *))  { width: 9px;   height: 16px;   }
+.newproj-aspect-icon-4-3:where(:not([data-chat-root], [data-chat-root] *))   { width: 14px;  height: 10.5px; }
+.newproj-aspect-icon-3-4:where(:not([data-chat-root], [data-chat-root] *))   { width: 10.5px; height: 14px;  }
+.newproj-aspect-ratio:where(:not([data-chat-root], [data-chat-root] *)) {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   letter-spacing: 0.02em;
 }
 
-.ds-picker-group + .ds-picker-group {
+.ds-picker-group + .ds-picker-group:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 4px;
   padding-top: 4px;
   border-top: 1px solid var(--border);
 }
-.ds-picker-group-head {
+.ds-picker-group-head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -902,13 +902,13 @@
   text-transform: uppercase;
   color: var(--text-muted);
 }
-.model-picker .ds-picker-trigger { min-height: 44px; }
-.model-picker .ds-picker-popover { min-width: 320px; }
-.model-picker .ds-picker-list { padding: 6px; }
-.model-picker .ds-picker-item { padding: 8px 10px; }
-.model-picker .ds-picker-item-title { font-size: 13px; font-weight: 600; }
-.model-picker .ds-picker-item-sub { font-size: 12px; }
-.model-picker .ds-picker-item .ds-picker-item-badge {
+.model-picker .ds-picker-trigger:where(:not([data-chat-root], [data-chat-root] *)) { min-height: 44px; }
+.model-picker .ds-picker-popover:where(:not([data-chat-root], [data-chat-root] *)) { min-width: 320px; }
+.model-picker .ds-picker-list:where(:not([data-chat-root], [data-chat-root] *)) { padding: 6px; }
+.model-picker .ds-picker-item:where(:not([data-chat-root], [data-chat-root] *)) { padding: 8px 10px; }
+.model-picker .ds-picker-item-title:where(:not([data-chat-root], [data-chat-root] *)) { font-size: 13px; font-weight: 600; }
+.model-picker .ds-picker-item-sub:where(:not([data-chat-root], [data-chat-root] *)) { font-size: 12px; }
+.model-picker .ds-picker-item .ds-picker-item-badge:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   padding: 1px 5px;
   background: var(--accent-tint);
@@ -916,7 +916,7 @@
   border-radius: var(--radius-xs);
   margin-left: 6px;
 }
-.model-picker .ds-picker-group-head {
+.model-picker .ds-picker-group-head:where(:not([data-chat-root], [data-chat-root] *)) {
   position: sticky;
   top: 0;
   background: var(--bg-panel);
@@ -926,41 +926,41 @@
   border-bottom: 1px solid var(--border);
 }
 
-.palette-tweaks-anchor { position: relative; display: inline-flex; }
-.palette-tweaks-badge {
+.palette-tweaks-anchor:where(:not([data-chat-root], [data-chat-root] *)) { position: relative; display: inline-flex; }
+.palette-tweaks-badge:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 8px; height: 8px; border-radius: var(--radius-pill); margin-left: 4px;
   box-shadow: 0 0 0 1px var(--bg-panel);
 }
-.palette-tweaks {
+.palette-tweaks:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
   min-width: 240px; background: var(--bg-panel); border: 1px solid var(--border);
   border-radius: var(--radius-md, 10px);
   box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
   padding: 8px; display: flex; flex-direction: column; gap: 6px; user-select: none;
 }
-.palette-tweaks-header {
+.palette-tweaks-header:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex; flex-direction: column; gap: 1px;
   padding: 4px 6px 6px;
   border-bottom: 1px solid var(--border-subtle, var(--border));
 }
-.palette-tweaks-title { font-size: 12px; font-weight: 600; color: var(--text); }
-.palette-tweaks-sub { font-size: 12px; color: var(--text-muted); }
-.palette-tweaks-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.palette-tweaks-item {
+.palette-tweaks-title:where(:not([data-chat-root], [data-chat-root] *)) { font-size: 12px; font-weight: 600; color: var(--text); }
+.palette-tweaks-sub:where(:not([data-chat-root], [data-chat-root] *)) { font-size: 12px; color: var(--text-muted); }
+.palette-tweaks-list:where(:not([data-chat-root], [data-chat-root] *)) { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.palette-tweaks-item:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex; align-items: center; gap: 10px;
   padding: 6px 8px; border-radius: var(--radius-sm, 6px);
   cursor: pointer; font-size: 13px; color: var(--text);
   transition: background 100ms var(--ease-out);
 }
-.palette-tweaks-item:hover, .palette-tweaks-item.hovered { background: var(--bg-subtle); }
-.palette-tweaks-item.selected { background: var(--bg-muted); }
-.palette-tweaks-stripe {
+.palette-tweaks-item:hover:where(:not([data-chat-root], [data-chat-root] *)), .palette-tweaks-item.hovered:where(:not([data-chat-root], [data-chat-root] *)) { background: var(--bg-subtle); }
+.palette-tweaks-item.selected:where(:not([data-chat-root], [data-chat-root] *)) { background: var(--bg-muted); }
+.palette-tweaks-stripe:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex; border-radius: var(--radius-xs); overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); flex-shrink: 0;
 }
-.palette-tweaks-chip { width: 14px; height: 18px; display: inline-block; }
-.palette-tweaks-stripe-original { box-shadow: none; background: transparent; }
-.palette-tweaks-chip-original {
+.palette-tweaks-chip:where(:not([data-chat-root], [data-chat-root] *)) { width: 14px; height: 18px; display: inline-block; }
+.palette-tweaks-stripe-original:where(:not([data-chat-root], [data-chat-root] *)) { box-shadow: none; background: transparent; }
+.palette-tweaks-chip-original:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 56px; height: 18px;
   background: linear-gradient(
     to top right,
@@ -971,12 +971,12 @@
   );
   border: 1px dashed var(--border-strong, var(--border)); border-radius: var(--radius-xs);
 }
-.palette-tweaks-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.palette-tweaks-check { display: inline-flex; align-items: center; color: var(--text-muted); }
+.palette-tweaks-label:where(:not([data-chat-root], [data-chat-root] *)) { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-tweaks-check:where(:not([data-chat-root], [data-chat-root] *)) { display: inline-flex; align-items: center; color: var(--text-muted); }
 
 /* Project page audit pass: one final rule set for the active project shell.
    Keep the outer panes flat; only controls and repeated items get radius. */
-.workspace-shell {
+.workspace-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   /* 52px tab-bar row: 10px above + 32px tab + 10px below, so the tabs get 10px
      top/bottom breathing room and the row below (sidebar) keeps its own 10px
      top margin — one consistent 10px rhythm around the strip. */
@@ -990,14 +990,14 @@
    cluster rides the window's top-right on its own. No dock registered
    (home / marketplace, workspace-focused mode) → the strip renders in the
    classic full-width chrome row again. */
-.split-chat-tabs-dock {
+.split-chat-tabs-dock:where(:not([data-chat-root], [data-chat-root] *)) {
+  position: relative;
   display: flex;
-  /* Top-aligned, not centered: the 36px dropdown hugs the row's top edge —
-     no headroom above it — leaving only the 4px below to the chat card. */
-  align-items: flex-start;
+  /* Match the preview toolbar centre, including its 1px pane border. */
+  align-items: center;
   gap: 8px;
-  height: 40px;
-  min-height: 40px;
+  height: 48px;
+  min-height: 48px;
   flex: 0 0 auto;
   min-width: 0;
 }
@@ -1007,17 +1007,18 @@
    (they are the tab machinery's state/measurement/drag DOM), so this is
    presentation-only. Only the undocked strip can match: the docked strip is
    portaled into .split-chat-tabs-dock, outside .workspace-tabs-chrome. */
-.workspace-tabs-chrome .workspace-tab:not(.is-pinned) {
+.workspace-tabs-chrome .workspace-tab:not(.is-pinned):where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
 /* With the active project row hidden the glide pill has nothing to hug —
    hide it rather than let it collapse onto a zero-rect. */
-.workspace-tabs-chrome:has(.workspace-tab.is-active:not(.is-pinned)) .workspace-tabs-glide {
+.workspace-tabs-chrome:has(.workspace-tab.is-active:not(.is-pinned)) .workspace-tabs-glide:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
 /* Collapse-chat control, lifted from the chat card header into the dock row
    (left of the white tab dropdown). */
-.split-chat-collapse {
+.split-chat-collapse:where(:not([data-chat-root], [data-chat-root] *)) {
+  order: 2;
   appearance: none;
   cursor: pointer;
   display: grid;
@@ -1025,28 +1026,26 @@
   flex: 0 0 auto;
   width: 32px;
   height: 32px;
-  /* Dock is top-aligned; re-center this 32px button on the 36px dropdown. */
-  margin-top: 2px;
+  margin-top: 0;
   padding: 0;
   border: 0;
   border-radius: 10px;
-  /* White seat matching the dropdown beside it. */
-  background: #fff;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  background: transparent;
+  box-shadow: none;
   color: var(--text);
   -webkit-app-region: no-drag;
 }
-.split-chat-collapse:hover {
+.split-chat-collapse:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
 }
-.split-chat-tabs-dock .workspace-tabs-strip {
+.split-chat-tabs-dock .workspace-tabs-strip:where(:not([data-chat-root], [data-chat-root] *)) {
   align-items: center;
 }
 /* Inside either dock the strip's pinned entry tab hides — Home stays up in
    the chrome row as .workspace-tabs-home-chrome. */
-.split-chat-tabs-dock .workspace-tab.is-pinned,
-.ws-tabs-project-dock .workspace-tab.is-pinned {
+.split-chat-tabs-dock .workspace-tab.is-pinned:where(:not([data-chat-root], [data-chat-root] *)),
+.ws-tabs-project-dock .workspace-tab.is-pinned:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
 /* Focus-mode dock: it still OWNS the strip (registering here is what keeps
@@ -1054,22 +1053,22 @@
    workspace tab row keeps its own controls only (per product: 收起侧边栏后不要
    把项目 tab / 项目下拉带到这一行). The strip stays mounted for its
    measurement and drag hooks. */
-.ws-tabs-project-dock {
+.ws-tabs-project-dock:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
 /* Docked mode swaps the pill strip for the white dropdown below. The strip
    stays mounted (its measurement/drag hooks keep their DOM) but invisible. */
-.split-chat-tabs-dock .workspace-tabs-strip {
+.split-chat-tabs-dock .workspace-tabs-strip:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
 /* ── Docked tab dropdown: one pure-white select spanning the chat column ── */
-.workspace-tabs-dropdown {
+.workspace-tabs-dropdown:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
   -webkit-app-region: no-drag;
 }
-.workspace-tabs-dropdown__trigger {
+.workspace-tabs-dropdown__trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
   cursor: pointer;
   display: flex;
@@ -1080,35 +1079,35 @@
   padding: 0 10px 0 12px;
   border: 0;
   border-radius: 12px;
-  background: #fff;
+  background: transparent;
   color: var(--text);
   font-family: inherit;
   font-size: 13px;
   text-align: left;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  box-shadow: none;
 }
 
-.workspace-tabs-dropdown__icon {
+.workspace-tabs-dropdown__icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   flex: 0 0 auto;
   color: var(--text-muted);
 }
-.workspace-tabs-dropdown__label {
+.workspace-tabs-dropdown__label:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 auto;
   min-width: 0;
   font-weight: 600;
   color: var(--text-strong);
 }
-.workspace-tabs-dropdown__trigger > svg:last-child {
+.workspace-tabs-dropdown__trigger > svg:last-child:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   color: var(--text-soft);
 }
-.workspace-tabs-dropdown__backdrop {
+.workspace-tabs-dropdown__backdrop:where(:not([data-chat-root], [data-chat-root] *)) {
   position: fixed;
   inset: 0;
   z-index: 59;
 }
-.workspace-tabs-dropdown__menu {
+.workspace-tabs-dropdown__menu:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   z-index: 60;
   top: calc(100% + 6px);
@@ -1132,7 +1131,7 @@
    everything right of it is canvas, so the panel never covers the list.
    `pointer-events: none` keeps it out of the way of the row it describes —
    without it the panel's own edge could steal the hover that spawned it. */
-.workspace-tabs-dropdown__preview {
+.workspace-tabs-dropdown__preview:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Portaled to <body>, so `fixed` with the coordinates the component measured
      off the open menu (see PREVIEW_WIDTH_PX / PREVIEW_GAP_PX there — the width
      below is the same number). It cannot be `absolute` inside the dropdown:
@@ -1151,7 +1150,7 @@
   box-shadow: var(--shadow-lg);
   pointer-events: none;
 }
-.workspace-tabs-dropdown__preview-art {
+.workspace-tabs-dropdown__preview-art:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   overflow: hidden;
   width: 100%;
@@ -1170,7 +1169,7 @@
   align-items: center;
   justify-content: center;
 }
-.workspace-tabs-dropdown__preview-name {
+.workspace-tabs-dropdown__preview-name:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 0 2px 2px;
   font-size: 12px;
   font-weight: 600;
@@ -1179,16 +1178,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.workspace-tabs-dropdown__row {
+.workspace-tabs-dropdown__row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 2px;
   border-radius: 8px;
 }
-.workspace-tabs-dropdown__row:hover {
+.workspace-tabs-dropdown__row:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
 }
-.workspace-tabs-dropdown__row-main {
+.workspace-tabs-dropdown__row-main:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
   cursor: pointer;
   display: flex;
@@ -1212,7 +1211,7 @@
    Explicit classes rather than the `svg:first-child` / `svg:last-child` pair
    that used to paint these — the slot's content is now sometimes a nested
    element and sometimes nothing, so position stopped identifying the glyph. */
-.workspace-tabs-dropdown__row-lead {
+.workspace-tabs-dropdown__row-lead:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 14px;
   width: 14px;
   height: 14px;
@@ -1221,20 +1220,20 @@
   justify-content: center;
   color: var(--text-muted);
 }
-.workspace-tabs-dropdown__row.is-active .workspace-tabs-dropdown__row-label {
+.workspace-tabs-dropdown__row.is-active .workspace-tabs-dropdown__row-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-weight: 600;
 }
-.workspace-tabs-dropdown__row-check {
+.workspace-tabs-dropdown__row-check:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   color: var(--accent);
 }
 /* Clipping/truncation comes from `.od-marquee` (primitives.css) — this class
    only places the slot in the row. */
-.workspace-tabs-dropdown__row-label {
+.workspace-tabs-dropdown__row-label:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 auto;
   min-width: 0;
 }
-.workspace-tabs-home-chrome {
+.workspace-tabs-home-chrome:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Same leading inset AND width as the strip's pinned entry tab, so the Home
      icon lands on the IDENTICAL x in both chrome states — docked (this
      button) and undocked (the pinned tab) — and on the same axis as the rail's
@@ -1264,18 +1263,18 @@
    `:not(:disabled)` is load-bearing — see the note in home/entry-layout.css
    beside the search/collapse pair: it is what lifts this past
    primitives.css's `button:hover:not(:disabled)`. */
-.workspace-tabs-home-chrome:hover:not(:disabled) {
+.workspace-tabs-home-chrome:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-strong) 10%, transparent);
 }
-.app .split-chat-slot {
+.app .split-chat-slot:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Column: the docked strip sits above the chat card. */
   flex-direction: column;
 }
-.app .split-chat-slot > .pane {
+.app .split-chat-slot > .pane:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 auto;
   min-height: 0;
 }
-.workspace-shell .workspace-tabs-chrome.app-chrome-header {
+.workspace-shell .workspace-tabs-chrome.app-chrome-header:where(:not([data-chat-root], [data-chat-root] *)) {
   --workspace-tabs-chrome-height: 52px;
   /* Flush with the page below it — the bar shares the app surface. */
   --workspace-tab-bar-bg: var(--bg);
@@ -1287,15 +1286,15 @@
   border-bottom: 0;
   box-shadow: none;
 }
-.workspace-shell .workspace-tabs-traffic {
+.workspace-shell .workspace-tabs-traffic:where(:not([data-chat-root], [data-chat-root] *)) {
   align-self: stretch;
 }
-.workspace-shell .workspace-tabs-strip {
+.workspace-shell .workspace-tabs-strip:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 2px;
   align-items: center;
   padding-top: 0;
 }
-.workspace-shell .workspace-tab {
+.workspace-shell .workspace-tab:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 156px;
   height: 32px;
   min-height: 32px;
@@ -1320,7 +1319,7 @@
    its pill reads as one uninterrupted shape. A prior pass here removed this
    to "stay separator-free" — that reading was wrong, not a real product
    decision; #5517's own tab strip has always drawn this divider. */
-.workspace-shell .workspace-tab + .workspace-tab::before {
+.workspace-shell .workspace-tab + .workspace-tab:where(:not([data-chat-root], [data-chat-root] *))::before {
   content: '';
   display: block;
   position: absolute;
@@ -1333,14 +1332,14 @@
   pointer-events: none;
   transition: opacity 100ms var(--ease-out);
 }
-.workspace-shell .workspace-tab.is-active::before,
-.workspace-shell .workspace-tab.is-active + .workspace-tab::before,
-.workspace-shell .workspace-tab:hover::before,
-.workspace-shell .workspace-tab:hover + .workspace-tab::before,
-.workspace-shell .workspace-tab:focus-within::before,
-.workspace-shell .workspace-tab:focus-within + .workspace-tab::before,
-.workspace-shell .workspace-tab.is-dragging::before,
-.workspace-shell .workspace-tab.is-dragging + .workspace-tab::before {
+.workspace-shell .workspace-tab.is-active:where(:not([data-chat-root], [data-chat-root] *))::before,
+.workspace-shell .workspace-tab.is-active + .workspace-tab:where(:not([data-chat-root], [data-chat-root] *))::before,
+.workspace-shell .workspace-tab:hover:where(:not([data-chat-root], [data-chat-root] *))::before,
+.workspace-shell .workspace-tab:hover + .workspace-tab:where(:not([data-chat-root], [data-chat-root] *))::before,
+.workspace-shell .workspace-tab:focus-within:where(:not([data-chat-root], [data-chat-root] *))::before,
+.workspace-shell .workspace-tab:focus-within + .workspace-tab:where(:not([data-chat-root], [data-chat-root] *))::before,
+.workspace-shell .workspace-tab.is-dragging:where(:not([data-chat-root], [data-chat-root] *))::before,
+.workspace-shell .workspace-tab.is-dragging + .workspace-tab:where(:not([data-chat-root], [data-chat-root] *))::before {
   opacity: 0;
 }
 /* The pinned Home tab is fixed: it never shrinks with the project tabs and
@@ -1348,7 +1347,7 @@
    overflow into horizontal scroll. The opaque tab-bar background keeps scrolled
    tabs from showing through it. Declared before .is-active so an active Home
    tab still picks up the active highlight. */
-.workspace-shell .workspace-tab.is-pinned {
+.workspace-shell .workspace-tab.is-pinned:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Single-icon pill: the Home button on a project page, or the sidebar
      toggle on the Home page. Width is not free — the pill starts at the
      strip's 10px edge inset (same x as the rail card's left edge) and centers
@@ -1368,7 +1367,7 @@
 }
 /* Active Home tab now shows only the sidebar toggle (no icon + divider), so it
    is a single centered column. */
-.workspace-shell .workspace-tab.is-pinned:has(.workspace-tab__rail-toggle) {
+.workspace-shell .workspace-tab.is-pinned:has(.workspace-tab__rail-toggle):where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   align-items: center;
   grid-template-columns: minmax(0, 1fr);
@@ -1382,11 +1381,11 @@
    selector does not reach it). The row stays in the DOM — it is the tab
    machinery's measurement/drag anchor. Both selectors are needed: the second
    out-ranks the `:has()` display rule directly above. */
-.workspace-shell .workspace-tabs-chrome .workspace-tab.is-pinned,
-.workspace-shell .workspace-tabs-chrome .workspace-tab.is-pinned:has(.workspace-tab__rail-toggle) {
+.workspace-shell .workspace-tabs-chrome .workspace-tab.is-pinned:where(:not([data-chat-root], [data-chat-root] *)),
+.workspace-shell .workspace-tabs-chrome .workspace-tab.is-pinned:has(.workspace-tab__rail-toggle):where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
-.workspace-shell .workspace-tab.is-pinned .workspace-tab__rail-toggle {
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__rail-toggle:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Fill the whole pinned tab so the hover target is a full tab-sized box
      (matching the Home button / a normal tab hover) instead of a cramped 20px
      icon square. The glyph stays centered via the button's own flex centering. */
@@ -1406,12 +1405,12 @@
    focus-visible. Around this corner pill that rectangle read as permanent
    chrome rather than a focus state, so drop it and let the same soft fill the
    pill already uses for hover carry keyboard focus instead. */
-.workspace-shell .workspace-tab.is-pinned .workspace-tab__rail-toggle:focus-visible,
-.workspace-shell .workspace-tab.is-pinned .workspace-tab__main:focus-visible {
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__rail-toggle:focus-visible:where(:not([data-chat-root], [data-chat-root] *)),
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__main:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: none;
   background: var(--bg-fill-secondary);
 }
-.workspace-shell .workspace-tab.is-active {
+.workspace-shell .workspace-tab.is-active:where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: 12px;
   background: #ffffff;
   border-color: var(--workspace-active-tab-border);
@@ -1424,13 +1423,13 @@
    white "active pill" fill / border / shadow) so it sits like the other tabs
    on the bar rather than a filled button. Uses the opaque bar fill so scrolled
    tabs can't bleed through; the toggle's own ghost hover is the affordance. */
-.workspace-shell .workspace-tab.is-pinned.is-active:has(.workspace-tab__rail-toggle) {
+.workspace-shell .workspace-tab.is-pinned.is-active:has(.workspace-tab__rail-toggle):where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--workspace-tab-bar-bg);
   border-color: transparent;
   box-shadow: none;
 }
-.workspace-shell .workspace-tab:not(.is-active):hover,
-.workspace-shell .workspace-tab:not(.is-active):focus-within {
+.workspace-shell .workspace-tab:not(.is-active):hover:where(:not([data-chat-root], [data-chat-root] *)),
+.workspace-shell .workspace-tab:not(.is-active):focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
   border-color: transparent;
@@ -1443,8 +1442,8 @@
    scrolled project tabs bleed through the pinned tab when the strip is crowded.
    Re-lay the opaque tab-bar background under that same wash so the hover/focus
    affordance is preserved while the tab keeps blocking what scrolls behind it. */
-.workspace-shell .workspace-tab.is-pinned:not(.is-active):hover,
-.workspace-shell .workspace-tab.is-pinned:not(.is-active):focus-within {
+.workspace-shell .workspace-tab.is-pinned:not(.is-active):hover:where(:not([data-chat-root], [data-chat-root] *)),
+.workspace-shell .workspace-tab.is-pinned:not(.is-active):focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   background:
     linear-gradient(
       color-mix(in srgb, var(--bg-panel) 78%, transparent),
@@ -1452,7 +1451,7 @@
     ),
     var(--workspace-tab-bar-bg);
 }
-.workspace-shell .workspace-tab.is-dragging {
+.workspace-shell .workspace-tab.is-dragging:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
   box-shadow: 0 14px 30px color-mix(in srgb, var(--text) 16%, transparent);
   z-index: 4;
@@ -1463,27 +1462,27 @@
    on Chromium, refracts its backdrop via useLiquidGlass (SDF displacement).
    The un-gated .is-active rule above stays as the SSR / pre-hydration
    fallback until the hook stamps data-glide-ready on the strip. */
-.workspace-shell .workspace-tabs-chrome {
+.workspace-shell .workspace-tabs-chrome:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Light mode leans whiter than raw --glass-regular so the pill reads as
      "the active tab", close to the solid #fff it replaces. Dark mode uses
      the glass token as-is (also fixes the old hardcoded-#fff dark pill). */
   --workspace-glide-frost: color-mix(in srgb, #ffffff 34%, var(--glass-regular));
 }
-[data-theme="dark"] .workspace-shell .workspace-tabs-chrome {
+[data-theme="dark"] .workspace-shell .workspace-tabs-chrome:where(:not([data-chat-root], [data-chat-root] *)) {
   --workspace-glide-frost: var(--glass-regular);
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .workspace-shell .workspace-tabs-chrome {
+  html:not([data-theme]) .workspace-shell .workspace-tabs-chrome:where(:not([data-chat-root], [data-chat-root] *)) {
     --workspace-glide-frost: var(--glass-regular);
   }
 }
-.workspace-shell .workspace-tabs-glide {
+.workspace-shell .workspace-tabs-glide:where(:not([data-chat-root], [data-chat-root] *)) {
   top: calc(50% - 16px);
   height: 32px; /* matches .workspace-shell .workspace-tab */
   /* 12px (not a full pill) so the active tab reads as a rounded rect. */
   border-radius: 12px;
 }
-.workspace-shell .workspace-tabs-glide__pill {
+.workspace-shell .workspace-tabs-glide__pill:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 1px solid var(--workspace-active-tab-border);
   background: var(--workspace-glide-frost);
   box-shadow:
@@ -1494,7 +1493,7 @@
    ring, and replace material.css's heavy 0 6px 18px shadow — wrong scale for
    a 32px pill. (routines.css imports after material.css; the attribute
    selector also out-specifies the base .od-glass-refract rule.) */
-.workspace-shell .workspace-tabs-glide__pill[data-od-glass-sdf] {
+.workspace-shell .workspace-tabs-glide__pill[data-od-glass-sdf]:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--workspace-glide-frost);
   -webkit-backdrop-filter: var(--flt) blur(12px) saturate(1.35);
   backdrop-filter: var(--flt) blur(12px) saturate(1.35);
@@ -1506,13 +1505,13 @@
 /* Liquid stretch: the pill elongates toward the travel direction and settles.
    data-dir is stamped per activation by useGlideIndicator, which also replays
    the animation (style.animation reset), so it fires once per switch. */
-.workspace-shell .workspace-tabs-glide[data-dir="right"] .workspace-tabs-glide__pill {
+.workspace-shell .workspace-tabs-glide[data-dir="right"] .workspace-tabs-glide__pill:where(:not([data-chat-root], [data-chat-root] *)) {
   transform-origin: left center;
 }
-.workspace-shell .workspace-tabs-glide[data-dir="left"] .workspace-tabs-glide__pill {
+.workspace-shell .workspace-tabs-glide[data-dir="left"] .workspace-tabs-glide__pill:where(:not([data-chat-root], [data-chat-root] *)) {
   transform-origin: right center;
 }
-.workspace-shell .workspace-tabs-glide[data-dir] .workspace-tabs-glide__pill {
+.workspace-shell .workspace-tabs-glide[data-dir] .workspace-tabs-glide__pill:where(:not([data-chat-root], [data-chat-root] *)) {
   animation: od-glide-stretch 300ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 @keyframes od-glide-stretch {
@@ -1531,7 +1530,7 @@
 }
 /* Once the indicator is live the active tab stops painting its own pill —
    the glass pill underneath is now the active marker. */
-.workspace-shell .workspace-tabs-strip[data-glide-ready] .workspace-tab.is-active {
+.workspace-shell .workspace-tabs-strip[data-glide-ready] .workspace-tab.is-active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
@@ -1539,57 +1538,57 @@
 /* Reduced transparency: our skin rule above would out-cascade material.css's
    token-level fallback, so pin an explicit solid pill here. */
 @media (prefers-reduced-transparency: reduce) {
-  .workspace-shell .workspace-tabs-glide__pill {
+  .workspace-shell .workspace-tabs-glide__pill:where(:not([data-chat-root], [data-chat-root] *)) {
     background: var(--bg-elevated);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
 }
-.workspace-shell .workspace-tab__main {
+.workspace-shell .workspace-tab__main:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   z-index: 2;
   gap: 5px;
   padding-inline: 9px 3px;
 }
-.workspace-shell .workspace-tab.is-pinned .workspace-tab__main {
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__main:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
   padding-inline: 0;
   justify-content: center;
 }
-.workspace-shell .workspace-tab__close {
+.workspace-shell .workspace-tab__close:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   z-index: 2;
 }
-.workspace-shell .workspace-tab__label {
+.workspace-shell .workspace-tab__label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
   font-weight: 600;
 }
-.workspace-shell .workspace-tab.is-active .workspace-tab__label {
+.workspace-shell .workspace-tab.is-active .workspace-tab__label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: var(--font-size-13, 13px);
 }
-.workspace-shell .workspace-tab__close {
+.workspace-shell .workspace-tab__close:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 18px;
   height: 18px;
   border-radius: var(--radius-circular, 50%);
 }
-.workspace-shell .workspace-tab__close:hover {
+.workspace-shell .workspace-tab__close:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: var(--radius-circular, 50%);
 }
-.workspace-shell .workspace-tabs-new-btn,
-.workspace-shell .workspace-tabs-icon-btn {
+.workspace-shell .workspace-tabs-new-btn:where(:not([data-chat-root], [data-chat-root] *)),
+.workspace-shell .workspace-tabs-icon-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 24px;
   height: 24px;
   border-radius: var(--radius-sm);
 }
 
-.app {
+.app:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Transparent like the home page's containers — the project view rides
      the same shared ground (app-wash / wallpaper vibrancy) instead of
      re-painting a solid panel over it. Restores --bg-app under reduced
      transparency via the veil token (app-wash.css). */
   background: var(--veil-shell, var(--bg-panel));
 }
-.app > .app-chrome-header {
+.app > .app-chrome-header:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 44px;
   min-height: 44px;
   padding: 0 18px;
@@ -1598,40 +1597,40 @@
   border-bottom: 1px solid var(--border);
   box-shadow: none;
 }
-.app .app-chrome-back,
-.app .settings-icon-btn,
-.app .avatar-btn {
+.app .app-chrome-back:where(:not([data-chat-root], [data-chat-root] *)),
+.app .settings-icon-btn:where(:not([data-chat-root], [data-chat-root] *)),
+.app .avatar-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 30px;
   height: 30px;
   border-radius: var(--radius);
 }
-.app .app-chrome-content {
+.app .app-chrome-content:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
 }
-.app .app-project-title {
+.app .app-project-title:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 0;
 }
-.app .app-project-title-line {
+.app .app-project-title-line:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
 }
-.app .app-project-title .title {
+.app .app-project-title .title:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 16px;
   font-weight: 600;
   line-height: 18px;
   letter-spacing: 0;
 }
-.app .app-project-title .meta {
+.app .app-project-title .meta:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   line-height: 18px;
   color: var(--text-soft);
 }
 
-.app .split {
+.app .split:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Same material as the tab strip above: nothing painted here, the app
      wash / window vibrancy shows through (veil tokens in app-wash.css). */
   background: var(--veil-page, transparent);
 }
-.app .split-chat-slot {
+.app .split-chat-slot:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Inset the pane so it reads as a floating card (same treatment as the home
      sidebar's .entry-nav-rail__panel). Top inset is 0 so the card sits 8px
      higher — the tab strip's own 10px bottom breathing is the only gap to it,
@@ -1642,7 +1641,7 @@
   padding: 0 0 8px 8px;
   background: var(--veil-page, transparent);
 }
-.app .split-chat-slot > .pane {
+.app .split-chat-slot > .pane:where(:not([data-chat-root], [data-chat-root] *)) {
   /* overflow:hidden still rounds the content (the composer is a separate
      fixed/portaled layer, so it isn't clipped and auto-follows the inset via
      composerPortalRect). */
@@ -1673,47 +1672,47 @@
   }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .app .split-chat-slot > .pane {
+  .app .split-chat-slot > .pane:where(:not([data-chat-root], [data-chat-root] *)) {
     background: var(--bg-elevated);
   }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .app .split-chat-slot > .pane {
+  .app .split-chat-slot > .pane:where(:not([data-chat-root], [data-chat-root] *)) {
     background: var(--bg-elevated);
   }
 }
-.app .split-resize-handle {
+.app .split-resize-handle:where(:not([data-chat-root], [data-chat-root] *)) {
   --split-resize-gradient-surface: #fff;
   width: 8px;
   min-width: 8px;
   background: transparent;
 }
 
-.app .split-resize-handle::after {
+.app .split-resize-handle:where(:not([data-chat-root], [data-chat-root] *))::after {
   /* No painted strip in any state (rest, hover, or drag) — the gutter always
      shows the shared ground. The col-resize cursor on the handle remains the
      drag affordance. */
   display: none;
 }
 
-.app .split-resize-handle:hover,
-.app .split-resize-handle:focus-visible,
-.app .split.is-resizing-chat .split-resize-handle {
+.app .split-resize-handle:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.app .split-resize-handle:focus-visible:where(:not([data-chat-root], [data-chat-root] *)),
+.app .split.is-resizing-chat .split-resize-handle:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
 }
 
-[data-theme="dark"] .app .split-resize-handle {
+[data-theme="dark"] .app .split-resize-handle:where(:not([data-chat-root], [data-chat-root] *)) {
   --split-resize-gradient-surface: var(--bg-panel);
 }
 
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .app .split-resize-handle {
+  html:not([data-theme]) .app .split-resize-handle:where(:not([data-chat-root], [data-chat-root] *)) {
     --split-resize-gradient-surface: var(--bg-panel);
   }
 }
 
-.app .chat-header,
-.app .ws-tabs-shell {
+.app .chat-header:where(:not([data-chat-root], [data-chat-root] *)),
+.app .ws-tabs-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 44px;
   min-height: 44px;
   border-radius: 0;
@@ -1724,32 +1723,32 @@
   background: var(--glass-regular);
   box-shadow: none;
 }
-.app .chat-header {
+.app .chat-header:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 0 12px 0 14px;
 }
-.app .chat-header-tabs {
+.app .chat-header-tabs:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 4px;
   padding: 0;
   border: 0;
   background: transparent;
 }
-.app .chat-header-tab {
+.app .chat-header-tab:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 28px;
   padding: 0 10px;
   border-radius: var(--radius);
   font-size: 13px;
 }
-.app .chat-header-tab.active {
+.app .chat-header-tab.active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   border-color: transparent;
   box-shadow: none;
 }
-.app .chat-header-actions .icon-only {
+.app .chat-header-actions .icon-only:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px;
   height: 28px;
   border-radius: var(--radius);
 }
-.app .chat-log {
+.app .chat-log:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 14px;
   padding: 18px 18px 20px;
   /* Let the pane's clear glass show — the card material stays uniform with
@@ -1757,27 +1756,27 @@
   background: transparent;
 }
 /* Cancel the 14px flex gap so the idle spacer adds no trailing space. */
-.app .chat-log-tail-spacer {
+.app .chat-log-tail-spacer:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: -14px;
 }
-.app .msg {
+.app .msg:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 100%;
 }
-.app .msg.user {
+.app .msg.user:where(:not([data-chat-root], [data-chat-root] *)) {
   width: fit-content;
   max-width: min(88%, 520px);
 }
-.app .msg.user .user-text-wrap {
+.app .msg.user .user-text-wrap:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 100%;
 }
-.app .msg.user .user-text {
+.app .msg.user .user-text:where(:not([data-chat-root], [data-chat-root] *)) {
   width: max-content;
   max-width: 100%;
 }
-.app .msg.assistant {
+.app .msg.assistant:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: min(100%, 620px);
 }
-.app .msg .role {
+.app .msg .role:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-bottom: 5px;
   gap: 7px;
   font-size: 12px;
@@ -1785,30 +1784,30 @@
   color: var(--text-muted);
   font-weight: 600;
 }
-.app .msg .role > span:first-child,
-.app .msg .role .role-name {
+.app .msg .role > span:first-child:where(:not([data-chat-root], [data-chat-root] *)),
+.app .msg .role .role-name:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
   font-weight: 600;
 }
-.app .msg.assistant .role {
+.app .msg.assistant .role:where(:not([data-chat-root], [data-chat-root] *)) {
   align-items: center;
   gap: 8px;
   font-size: 14px;
   color: var(--text-soft);
 }
-.app .msg.assistant .role .role-name {
+.app .msg.assistant .role .role-name:where(:not([data-chat-root], [data-chat-root] *)) {
   font-weight: 600;
 }
-.app .msg.assistant .role .role-agent-icon {
+.app .msg.assistant .role .role-agent-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   border-radius: var(--radius-sm);
 }
-.app .msg-time {
+.app .msg-time:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-soft);
   font-weight: 600;
 }
-.app .msg.user .user-text {
+.app .msg.user .user-text:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 8px 12px;
   border: 0;
   border-radius: var(--radius-lg) var(--radius-none) var(--radius-lg) var(--radius-lg);
@@ -1818,40 +1817,40 @@
   font-size: 13px;
   box-shadow: none;
 }
-.app .msg.user .user-copy-btn {
+.app .msg.user .user-copy-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-soft);
 }
-.app .msg.user .user-copy-btn:hover {
+.app .msg.user .user-copy-btn:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   color: var(--text);
 }
-.app .msg.assistant .assistant-flow {
+.app .msg.assistant .assistant-flow:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 14px;
 }
-.app .msg.assistant .prose-block {
+.app .msg.assistant .prose-block:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 68ch;
   color: var(--text);
   font-size: var(--prose-font-size, 15px);
   line-height: var(--prose-line-height, 1.75);
 }
-.app .msg.assistant .prose-block .md-p + .md-p {
+.app .msg.assistant .prose-block .md-p + .md-p:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 14px;
 }
-.app .status-pill,
-.app .op-waiting,
-.app .assistant-footer {
+.app .status-pill:where(:not([data-chat-root], [data-chat-root] *)),
+.app .op-waiting:where(:not([data-chat-root], [data-chat-root] *)),
+.app .assistant-footer:where(:not([data-chat-root], [data-chat-root] *)) {
   border: none;
   border-radius: 0;
   box-shadow: none;
   background: none;
 }
-.app .status-pill {
+.app .status-pill:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
   padding: 6px 14px;
   font-size: 12px;
   font-weight: 600;
 }
-.app .assistant-footer {
+.app .assistant-footer:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px 0;
   gap: 6px;
   font-size: 12px;
@@ -1859,75 +1858,75 @@
   opacity: 0;
   transition: opacity 150ms var(--ease-out);
 }
-.app .msg.assistant:hover .assistant-footer,
-.app .msg.assistant:focus-within .assistant-footer,
-.app .assistant-footer[data-streaming="true"],
-.app .assistant-footer[data-last="true"] { opacity: 1; }
+.app .msg.assistant:hover .assistant-footer:where(:not([data-chat-root], [data-chat-root] *)),
+.app .msg.assistant:focus-within .assistant-footer:where(:not([data-chat-root], [data-chat-root] *)),
+.app .assistant-footer[data-streaming="true"]:where(:not([data-chat-root], [data-chat-root] *)),
+.app .assistant-footer[data-last="true"]:where(:not([data-chat-root], [data-chat-root] *)) { opacity: 1; }
 @media (hover: none) {
-  .app .assistant-footer { opacity: 1; }
+  .app .assistant-footer:where(:not([data-chat-root], [data-chat-root] *)) { opacity: 1; }
 }
-.app .assistant-footer .dot {
+.app .assistant-footer .dot:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 5px;
   height: 5px;
   background: var(--text-faint);
 }
-.app .assistant-footer .dot[data-active="true"] {
+.app .assistant-footer .dot[data-active="true"]:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--green);
   box-shadow: none;
 }
-.app .assistant-footer .assistant-label {
+.app .assistant-footer .assistant-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-weight: 600;
   font-size: 12px;
   color: var(--text-faint);
 }
-.app .assistant-footer .assistant-stats {
+.app .assistant-footer .assistant-stats:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-muted);
 }
-.app .op-waiting {
+.app .op-waiting:where(:not([data-chat-root], [data-chat-root] *)) {
   width: fit-content;
   padding: 7px 14px;
   font-size: 12px;
 }
-.app .op-waiting-dot {
+.app .op-waiting-dot:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 7px;
   height: 7px;
   margin-top: 1px;
 }
-.app .action-card {
+.app .action-card:where(:not([data-chat-root], [data-chat-root] *)) {
   border: none;
   border-radius: 0;
   background: none;
   box-shadow: none;
 }
-.app .action-card:hover {
+.app .action-card:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: none;
 }
-.app .action-card-toggle {
+.app .action-card-toggle:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 36px;
   padding: 4px;
   gap: 6px;
   border-radius: var(--radius);
   font-size: 13px;
 }
-.app .action-card-toggle:hover {
+.app .action-card-toggle:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
 }
-.app .action-card-status {
+.app .action-card-status:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 24px;
   height: 24px;
   border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
-.app .action-card-toggle .summary {
+.app .action-card-toggle .summary:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
 }
-.app .action-card-body {
+.app .action-card-body:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 8px 0 8px 32px;
   border-top: none;
 }
-.app .task-activity .action-card-toggle {
+.app .task-activity .action-card-toggle:where(:not([data-chat-root], [data-chat-root] *)) {
   width: fit-content;
   min-height: 32px;
   padding: 4px 0;
@@ -1937,58 +1936,58 @@
   color: var(--text-muted);
   transition: color 200ms var(--ease-out);
 }
-.app .task-activity .action-card-toggle:hover {
+.app .task-activity .action-card-toggle:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
 }
-.app .task-activity .action-card-toggle.task-state-completed {
+.app .task-activity .action-card-toggle.task-state-completed:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted);
 }
-.app .task-activity .action-card-toggle .summary {
+.app .task-activity .action-card-toggle .summary:where(:not([data-chat-root], [data-chat-root] *)) {
   color: currentColor;
   font-weight: 600;
 }
-.app .task-activity .task-activity-elapsed {
+.app .task-activity .task-activity-elapsed:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted);
 }
-.app .task-activity .action-card-toggle .chev {
+.app .task-activity .action-card-toggle .chev:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-faint);
 }
-.app .task-activity .action-card-body {
+.app .task-activity .action-card-body:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 8px 0;
 }
-.app .op-card {
+.app .op-card:where(:not([data-chat-root], [data-chat-root] *)) {
   border: none;
   border-radius: 0;
   background: none;
   box-shadow: none;
   transition: background 160ms var(--ease-out);
 }
-.app .op-card:hover {
+.app .op-card:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: none;
 }
-.app .op-card-head {
+.app .op-card-head:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px;
   gap: 6px;
   border-radius: var(--radius);
 }
-.app .op-card-head:hover {
+.app .op-card-head:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
 }
 /* `.app .op-card` above resets border/background to none; re-assert the live
    code box framing inside the app scope so the streaming panel stays boxed. */
-.app .live-code-box {
+.app .live-code-box:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-fill-secondary);
 }
-.app .live-code-box .live-code-head {
+.app .live-code-box .live-code-head:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: default;
   border-radius: 0;
 }
-.app .live-code-box .live-code-head:hover {
+.app .live-code-box .live-code-head:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
 }
-.app .op-status {
+.app .op-status:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 24px;
   height: 24px;
   padding: 0;
@@ -1996,7 +1995,7 @@
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
-.app .op-status.op-status-category {
+.app .op-status.op-status-category:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
   background: var(--bg-panel);
 }
@@ -2010,17 +2009,17 @@
     transform: translateY(0);
   }
 }
-.app .task-activity-current {
+.app .task-activity-current:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 36px;
   overflow: hidden;
 }
-.app .task-activity-current-row {
+.app .task-activity-current-row:where(:not([data-chat-root], [data-chat-root] *)) {
   width: fit-content;
   max-width: 100%;
   animation: task-activity-current-enter 200ms var(--ease-out);
 }
-.app .task-activity-current-row .op-card,
-.app .task-activity-current-row .live-code-box {
+.app .task-activity-current-row .op-card:where(:not([data-chat-root], [data-chat-root] *)),
+.app .task-activity-current-row .live-code-box:where(:not([data-chat-root], [data-chat-root] *)) {
   width: fit-content;
   max-width: 100%;
   padding: 0;
@@ -2028,7 +2027,7 @@
   background: transparent;
   pointer-events: none;
 }
-.app .task-activity-current-row .op-card-head {
+.app .task-activity-current-row .op-card-head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   min-height: 36px;
@@ -2036,60 +2035,60 @@
   padding: 4px 0;
   background: transparent;
 }
-.app .task-activity-current-row .op-card-head:hover {
+.app .task-activity-current-row .op-card-head:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
 }
-.app .task-activity-current-row .op-status-running,
-.app .task-activity-current-row .op-status-category,
-.app .task-activity-current-row .op-title,
-.app .task-activity-current-row .op-meta {
+.app .task-activity-current-row .op-status-running:where(:not([data-chat-root], [data-chat-root] *)),
+.app .task-activity-current-row .op-status-category:where(:not([data-chat-root], [data-chat-root] *)),
+.app .task-activity-current-row .op-title:where(:not([data-chat-root], [data-chat-root] *)),
+.app .task-activity-current-row .op-meta:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted);
 }
 /* Strip tool-card disclosures from the compact current row, but keep the
    thinking block's accordion: streamed reasoning must stay expandable while
    the run is in progress (incident recvqgLmAkUM6G). */
-.app .task-activity-current-row .op-expand-chev,
-.app .task-activity-current-row .op-card .accordion-collapsible,
-.app .task-activity-current-row .live-code-pre,
-.app .task-activity-current-row .op-output {
+.app .task-activity-current-row .op-expand-chev:where(:not([data-chat-root], [data-chat-root] *)),
+.app .task-activity-current-row .op-card .accordion-collapsible:where(:not([data-chat-root], [data-chat-root] *)),
+.app .task-activity-current-row .live-code-pre:where(:not([data-chat-root], [data-chat-root] *)),
+.app .task-activity-current-row .op-output:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .app .task-activity-current-row {
+  .app .task-activity-current-row:where(:not([data-chat-root], [data-chat-root] *)) {
     animation: none;
   }
 }
-.app .thinking-block {
+.app .thinking-block:where(:not([data-chat-root], [data-chat-root] *)) {
   background: none;
   border: none;
   border-radius: 0;
   box-shadow: none;
 }
-.app .thinking-toggle {
+.app .thinking-toggle:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 36px;
   padding: 4px;
   gap: 6px;
   border-radius: var(--radius);
   font-size: 13px;
 }
-.app .thinking-toggle:hover {
+.app .thinking-toggle:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
 }
-.app .thinking-status {
+.app .thinking-status:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 24px;
   height: 24px;
   border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
-.app .task-activity .thinking-status {
+.app .task-activity .thinking-status:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
   background: var(--bg-panel);
 }
-.app .thinking-label {
+.app .thinking-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
 }
-.app .thinking-body {
+.app .thinking-body:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px 8px 8px 32px;
   font-size: 13px;
   line-height: 1.7;
@@ -2098,19 +2097,19 @@
   max-height: min(40vh, 320px);
   overflow-y: auto;
 }
-.app .produced-files {
+.app .produced-files:where(:not([data-chat-root], [data-chat-root] *)) {
   border: none;
   border-radius: 0;
   padding: 0;
   background: none;
   box-shadow: none;
 }
-.app .produced-files-label {
+.app .produced-files-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   margin-bottom: 10px;
   color: var(--text-muted);
 }
-.app .produced-file {
+.app .produced-file:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 6px 10px;
   border-radius: var(--radius);
   gap: 10px;
@@ -2119,10 +2118,10 @@
   box-shadow: none;
   transition: background 160ms var(--ease-out);
 }
-.app .produced-file:hover {
+.app .produced-file:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
 }
-.app .produced-file-icon {
+.app .produced-file-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 20px;
   height: 20px;
   display: inline-flex;
@@ -2133,14 +2132,14 @@
   font-size: 13px;
   color: var(--text-muted);
 }
-.app .produced-file-name {
+.app .produced-file-name:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
 }
-.app .produced-file-size {
+.app .produced-file-size:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
 }
-.app .produced-file-actions .ghost,
-.app .produced-file-actions .ghost-link {
+.app .produced-file-actions .ghost:where(:not([data-chat-root], [data-chat-root] *)),
+.app .produced-file-actions .ghost-link:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -2148,12 +2147,12 @@
   background: none;
   color: var(--text-muted);
 }
-.app .produced-file-actions .ghost:hover,
-.app .produced-file-actions .ghost-link:hover {
+.app .produced-file-actions .ghost:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.app .produced-file-actions .ghost-link:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
   color: var(--text);
 }
-.app .status-detail {
+.app .status-detail:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 0;
   border-radius: 0;
   background: none;
@@ -2161,7 +2160,7 @@
   font-size: 12px;
   font-family: var(--mono);
 }
-.app .chat-empty-wrap {
+.app .chat-empty-wrap:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   align-items: stretch;
   justify-content: flex-start;
@@ -2169,24 +2168,24 @@
   min-height: 0;
   padding: 16px 12px 6px;
 }
-.app .chat-empty {
+.app .chat-empty:where(:not([data-chat-root], [data-chat-root] *)) {
   align-items: flex-start;
   max-width: none;
   gap: 5px;
   text-align: left;
 }
-.app .chat-empty-title {
+.app .chat-empty-title:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
 }
-.app .chat-empty-hint {
+.app .chat-empty-hint:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
   line-height: 1.45;
 }
-.app .chat-examples {
+.app .chat-examples:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: none;
   gap: 8px;
 }
-.app .chat-example {
+.app .chat-example:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 0;
   padding: 10px 12px;
   gap: 10px;
@@ -2195,39 +2194,39 @@
   animation: none;
   opacity: 1;
 }
-.app .chat-example:hover {
+.app .chat-example:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   transform: none;
   box-shadow: none;
 }
-.app .chat-example::before {
+.app .chat-example:where(:not([data-chat-root], [data-chat-root] *))::before {
   display: none;
 }
-.app .chat-example-icon {
+.app .chat-example-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px;
   height: 28px;
   border-radius: var(--radius);
   background: var(--bg-fill-secondary);
   box-shadow: none;
 }
-.app .chat-example-title {
+.app .chat-example-title:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
 }
-.app .chat-example-prompt {
+.app .chat-example-prompt:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   line-height: 1.35;
   -webkit-line-clamp: 1;
 }
-.app .chat-example-cta {
+.app .chat-example-cta:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 22px;
   height: 22px;
 }
-.app .chat-design-artifacts {
+.app .chat-design-artifacts:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: 10px;
   width: 100%;
 }
-.app .chat-design-artifact {
+.app .chat-design-artifact:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -2240,18 +2239,18 @@
     border-color 120ms var(--ease-out),
     background 120ms var(--ease-out);
 }
-.app .chat-design-artifact[role='button'] {
+.app .chat-design-artifact[role='button']:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: pointer;
 }
-.app .chat-design-artifact:hover {
+.app .chat-design-artifact:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--border-strong);
   background: var(--bg-subtle);
 }
-.app .chat-design-artifact:focus-visible {
+.app .chat-design-artifact:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.app .chat-design-artifact-more {
+.app .chat-design-artifact-more:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 100%;
   display: grid;
   place-items: center;
@@ -2260,10 +2259,10 @@
   border-style: dashed;
   color: var(--text-muted);
 }
-.app .chat-design-artifact-more:hover {
+.app .chat-design-artifact-more:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
 }
-.app .chat-design-artifact-more-icon {
+.app .chat-design-artifact-more-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 34px;
   height: 34px;
   display: grid;
@@ -2276,20 +2275,20 @@
   line-height: 1;
   font-weight: 600;
 }
-.app .chat-design-artifact-more-count {
+.app .chat-design-artifact-more-count:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   font-weight: 600;
 }
-.app .chat-design-artifact-preview {
+.app .chat-design-artifact-preview:where(:not([data-chat-root], [data-chat-root] *)) {
   aspect-ratio: 16 / 10;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
   position: relative;
 }
-.app .chat-design-artifact-preview iframe,
-.app .chat-design-artifact-preview img,
-.app .chat-design-artifact-preview video {
+.app .chat-design-artifact-preview iframe:where(:not([data-chat-root], [data-chat-root] *)),
+.app .chat-design-artifact-preview img:where(:not([data-chat-root], [data-chat-root] *)),
+.app .chat-design-artifact-preview video:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
   height: 100%;
   display: block;
@@ -2298,14 +2297,14 @@
   background: #fff;
   pointer-events: none;
 }
-.app .chat-design-artifact-preview .sketch-preview,
-.app .chat-design-artifact-preview .sketch-preview svg {
+.app .chat-design-artifact-preview .sketch-preview:where(:not([data-chat-root], [data-chat-root] *)),
+.app .chat-design-artifact-preview .sketch-preview svg:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
   height: 100%;
   display: block;
   pointer-events: none;
 }
-.app .chat-design-artifact-fallback {
+.app .chat-design-artifact-fallback:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
   height: 100%;
   display: grid;
@@ -2316,12 +2315,12 @@
   font-weight: 600;
   letter-spacing: 0.08em;
 }
-.app .chat-design-artifact-meta {
+.app .chat-design-artifact-meta:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   gap: 3px;
   padding: 8px 9px 9px;
 }
-.app .chat-design-artifact-name {
+.app .chat-design-artifact-name:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2330,7 +2329,7 @@
   font-weight: 600;
   color: var(--text);
 }
-.app .chat-design-artifact-kind {
+.app .chat-design-artifact-kind:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2338,7 +2337,7 @@
   font-size: 12px;
   color: var(--text-muted);
 }
-.app .chat-design-artifacts-empty {
+.app .chat-design-artifacts-empty:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
   min-height: 96px;
   display: grid;
@@ -2349,7 +2348,7 @@
   color: var(--text-muted);
   font-size: 13px;
 }
-.app .chat-connect-repo {
+.app .chat-connect-repo:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: none;
   padding: 10px 12px;
   gap: 10px;
@@ -2359,28 +2358,28 @@
   opacity: 1;
   width: auto;
 }
-.app .chat-connect-repo-icon {
+.app .chat-connect-repo-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 30px;
   height: 30px;
   border-radius: var(--radius);
 }
-.app .chat-connect-repo-title {
+.app .chat-connect-repo-title:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
 }
-.app .chat-connect-repo-text {
+.app .chat-connect-repo-text:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   line-height: 1.35;
 }
 
-.app .split-chat-slot > .pane {
+.app .split-chat-slot > .pane:where(:not([data-chat-root], [data-chat-root] *)) {
   --chat-composer-inline-inset: 10px;
 }
 
-.app .composer {
+.app .composer:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 9px 10px 11px;
   background: transparent;
 }
-.chat-composer-fixed-layer .composer {
+.chat-composer-fixed-layer .composer:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 5px;
   padding: 8px;
   /* Bottommost gray card removed — the white shell sits directly on the chat
@@ -2389,14 +2388,14 @@
   background: transparent;
   border-radius: var(--radius-lg);
 }
-.app .composer-shell {
+.app .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 7px;
   border-color: color-mix(in srgb, var(--border) 84%, var(--border-strong));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
   box-shadow: var(--shadow-sm);
 }
-.chat-composer-fixed-layer .composer-shell {
+.chat-composer-fixed-layer .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 5px;
   gap: 8px;
   border-color: var(--border-soft);
@@ -2410,42 +2409,42 @@
   box-shadow: none;
 }
 
-[data-theme="dark"] .app .chat-log,
-[data-theme="dark"] .chat-composer-fixed-layer .composer,
-[data-theme="dark"] .chat-composer-fixed-layer .composer-shell {
+[data-theme="dark"] .app .chat-log:where(:not([data-chat-root], [data-chat-root] *)),
+[data-theme="dark"] .chat-composer-fixed-layer .composer:where(:not([data-chat-root], [data-chat-root] *)),
+[data-theme="dark"] .chat-composer-fixed-layer .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
 }
 
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .app .chat-log,
-  html:not([data-theme]) .chat-composer-fixed-layer .composer,
-  html:not([data-theme]) .chat-composer-fixed-layer .composer-shell {
+  html:not([data-theme]) .app .chat-log:where(:not([data-chat-root], [data-chat-root] *)),
+  html:not([data-theme]) .chat-composer-fixed-layer .composer:where(:not([data-chat-root], [data-chat-root] *)),
+  html:not([data-theme]) .chat-composer-fixed-layer .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
     background: var(--bg-panel);
   }
 }
-.chat-composer-fixed-layer .composer-shell > * {
+.chat-composer-fixed-layer .composer-shell > *:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-left: 0;
   margin-right: 0;
 }
-.app .composer-shell:focus-within {
+.app .composer-shell:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 34%, var(--border-strong));
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
     0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent);
 }
-.chat-composer-fixed-layer .composer-shell:focus-within {
+.chat-composer-fixed-layer .composer-shell:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--border-soft);
   box-shadow: none;
 }
-.app .composer.drag-active .composer-shell {
+.app .composer.drag-active .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
-.chat-composer-fixed-layer .composer.drag-active .composer-shell {
+.chat-composer-fixed-layer .composer.drag-active .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
-.chat-composer-fixed-layer .composer-input-wrap {
+.chat-composer-fixed-layer .composer-input-wrap:where(:not([data-chat-root], [data-chat-root] *)) {
   background: #fff;
   /* No inner frame — the input sits directly on the shell surface. The shell
      keeps its own outer border (see .composer-shell above). */
@@ -2453,46 +2452,46 @@
   border-radius: var(--radius-xl);
   overflow: hidden;
 }
-.chat-composer-fixed-layer .composer-input-wrap:focus-within {
+.chat-composer-fixed-layer .composer-input-wrap:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
 }
-.chat-composer-fixed-layer .composer-input-editor,
-.chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
-.chat-composer-fixed-layer .composer-input-editor .composer-editable {
+.chat-composer-fixed-layer .composer-input-editor:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-input-editor [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-input-editor .composer-editable:where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: inherit;
 }
-.chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
-.chat-composer-fixed-layer .composer-input-editor .composer-editable {
+.chat-composer-fixed-layer .composer-input-editor [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-input-editor .composer-editable:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
   font-weight: 600;
 }
-.chat-composer-fixed-layer .composer-input-placeholder,
-.chat-composer-fixed-layer .composer-input-wrap .home-hero__carousel {
+.chat-composer-fixed-layer .composer-input-placeholder:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-input-wrap .home-hero__carousel:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
 }
-.app .composer textarea {
+.app .composer textarea:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 56px;
   max-height: min(184px, 34vh);
   /* Font size lives on .composer-textarea-layer so the textarea and its
      mention-highlight overlay share one value. Re-pinning it here would
      only set the textarea, drifting the overlay glyphs off the caret. */
 }
-.chat-composer-fixed-layer .composer textarea {
+.chat-composer-fixed-layer .composer textarea:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 56px;
   max-height: min(184px, 34vh);
 }
-.app .composer.composer-active-file-mode textarea,
-.chat-composer-fixed-layer .composer.composer-active-file-mode textarea {
+.app .composer.composer-active-file-mode textarea:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer.composer-active-file-mode textarea:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: clamp(150px, 20vh, 210px);
   max-height: min(300px, 32vh);
 }
-.app .composer-row {
+.app .composer-row:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 30px;
   padding-top: 6px;
   margin-top: 1px;
   gap: 4px;
 }
-.chat-composer-fixed-layer .composer-row {
+.chat-composer-fixed-layer .composer-row:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 28px;
   margin-top: 0;
   padding: 0 4px;
@@ -2500,25 +2499,25 @@
   gap: 4px;
   border-top: none;
 }
-.chat-composer-fixed-layer .composer-row > * {
+.chat-composer-fixed-layer .composer-row > *:where(:not([data-chat-root], [data-chat-root] *)) {
   align-self: center;
 }
-.app .composer-row .icon-btn,
-.app .composer-import,
-.app .composer-research,
-.app .composer-send {
+.app .composer-row .icon-btn:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-import:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-research:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-send:where(:not([data-chat-root], [data-chat-root] *)) {
   /* radius-sm to match the unified 28px composer-row control system; this is
      the later/winning stylesheet, so it owns the + and Send radius. */
   border-radius: var(--radius-sm);
 }
-.chat-composer-fixed-layer .composer-row .icon-btn,
-.chat-composer-fixed-layer .composer-import,
-.chat-composer-fixed-layer .composer-research,
-.chat-composer-fixed-layer .composer-send {
+.chat-composer-fixed-layer .composer-row .icon-btn:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-import:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-research:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-send:where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: var(--radius-sm);
 }
-.app .composer-row .icon-btn,
-.chat-composer-fixed-layer .composer-row .icon-btn {
+.app .composer-row .icon-btn:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .icon-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Clear the 32px min-width/min-height that leaks from chat.css's base
      `.composer-row .icon-btn`; without these, width/height: 28px is floored
      back up to 32px and the + drifts taller than the rest of the toolbar. */
@@ -2528,7 +2527,7 @@
   min-height: 28px;
   box-sizing: border-box;
 }
-.app .composer-send {
+.app .composer-send:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 36px;
   height: 36px;
   min-width: 36px;
@@ -2542,7 +2541,7 @@
   font-weight: 600;
   box-shadow: var(--shadow-xs);
 }
-.chat-composer-fixed-layer .composer-send {
+.chat-composer-fixed-layer .composer-send:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 36px;
   height: 36px;
   min-width: 36px;
@@ -2562,18 +2561,18 @@
    normalization never reaches them and they drift taller than the + and the
    working-dir pill. Pin both to the same 28px control height here — this is the
    last-loaded stylesheet, so it wins — so the toolbar reads as one row. */
-.app .composer-row .session-mode-toggle,
-.app .composer-row .session-mode-toggle__trigger,
-.app .composer-row .avatar-agent-trigger,
-.chat-composer-fixed-layer .composer-row .session-mode-toggle,
-.chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger,
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+.app .composer-row .session-mode-toggle:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-row .session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .session-mode-toggle:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 28px;
   min-height: 28px;
   box-sizing: border-box;
 }
-.app .composer-row .avatar-agent-trigger,
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+.app .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Width hugs the content: agent mark + the selected-model readout, so the
      current model reads right next to the Send button. */
   width: auto;
@@ -2591,8 +2590,8 @@
   background: transparent;
   box-shadow: none;
 }
-.app .composer-row .avatar-agent-trigger .avatar-agent-trigger__model,
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger .avatar-agent-trigger__model {
+.app .composer-row .avatar-agent-trigger .avatar-agent-trigger__model:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger .avatar-agent-trigger__model:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-block;
   max-width: 148px;
   overflow: hidden;
@@ -2602,10 +2601,10 @@
   font-weight: 600;
   color: var(--text-muted);
 }
-.app .composer-row .avatar-agent-trigger:hover:not(:disabled),
-.app .composer-row .avatar-agent-trigger:focus-visible,
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:hover:not(:disabled),
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:focus-visible {
+.app .composer-row .avatar-agent-trigger:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-row .avatar-agent-trigger:focus-visible:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
@@ -2619,8 +2618,8 @@
    The trigger never paints its hitbox (hover stays transparent above), so ink
    distance is the only spacing the eye can see; this margin makes the right
    ink gap match the left one (17px ↔ 17px). */
-.app .composer-row .avatar-agent-trigger,
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+.app .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-inline-end: 8px;
 }
 /* Hide the dropdown chevron so only the agent mark / model name shows. The
@@ -2630,17 +2629,17 @@
    `display: inline-block` style. Inline styles beat any non-`!important`
    stylesheet rule, so plain `display: none` here was a silent no-op — the
    chevron rendered right next to the model name. */
-.app .composer-row .avatar-agent-trigger > svg:last-child,
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger > svg:last-child {
+.app .composer-row .avatar-agent-trigger > svg:last-child:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger > svg:last-child:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none !important;
 }
 /* When the selected-model readout is shown, drop the leading agent mark so the
    trigger reads as just the model name (icon-only mode, with no readout, keeps
    the mark). */
-.app .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .avatar-agent-mark,
-.app .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .agent-icon,
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .avatar-agent-mark,
-.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .agent-icon {
+.app .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .avatar-agent-mark:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .agent-icon:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .avatar-agent-mark:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .agent-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
 /* The project composer's send IS the Home composer's send mark (Group
@@ -2652,8 +2651,8 @@
    with the arrow taken out, and the green matrix loader runs on it. Hence no
    `:not(.stop)` — the run button is not a different button, it is this one
    with a different glyph. */
-.app .composer-send,
-.chat-composer-fixed-layer .composer-send {
+.app .composer-send:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-send:where(:not([data-chat-root], [data-chat-root] *)) {
   --composer-send-bg: var(--send-ink);
   --composer-send-fg: var(--send-ground);
 
@@ -2673,18 +2672,18 @@
    The executing button keeps its ground flat on hover — Group 2147224570.svg
    draws the hovered run state on the same #202020 — and swaps its glyph for
    the stop square instead (chat.css). */
-.app .composer-send:not(.stop):hover:not(:disabled),
-.app .composer-send:not(.stop):active:not(:disabled),
-.chat-composer-fixed-layer .composer-send:not(.stop):hover:not(:disabled),
-.chat-composer-fixed-layer .composer-send:not(.stop):active:not(:disabled) {
+.app .composer-send:not(.stop):hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-send:not(.stop):active:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-send:not(.stop):hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-send:not(.stop):active:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   /* Same hover as Home: the disc lifts toward its own glyph colour. */
   background: color-mix(in srgb, var(--composer-send-bg) 88%, var(--send-ground));
   color: var(--composer-send-fg);
   box-shadow: none;
   transform: none;
 }
-.app .composer-send:not(.stop):disabled,
-.chat-composer-fixed-layer .composer-send:not(.stop):disabled {
+.app .composer-send:not(.stop):disabled:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-send:not(.stop):disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Idle (nothing typed) reads identical to the active state, as on Home — the
      button never shifts colour when the user starts typing. */
   opacity: 1;
@@ -2693,7 +2692,7 @@
   color: var(--composer-send-fg);
   box-shadow: none;
 }
-.composer-send:not(.stop) .od-icon {
+.composer-send:not(.stop) .od-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   z-index: 1;
   color: currentColor;
@@ -2704,15 +2703,15 @@
    Paired selectors cover both contexts — matching the `.icon-btn` convention
    above — instead of `:is(.app, .chat-composer-fixed-layer)`, whose inner
    comma would also break selector-literal style tests. */
-.app .working-dir-pill,
-.chat-composer-fixed-layer .working-dir-pill {
+.app .working-dir-pill:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   display: inline-flex;
   margin-top: 0;
   font-size: 12px;
 }
-.app .working-dir-pill-trigger,
-.chat-composer-fixed-layer .working-dir-pill-trigger {
+.app .working-dir-pill-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2725,24 +2724,24 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.app .working-dir-pill-trigger:hover,
-.chat-composer-fixed-layer .working-dir-pill-trigger:hover {
+.app .working-dir-pill-trigger:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-trigger:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 6%, var(--bg-panel));
   border-color: var(--border-strong, var(--border));
 }
-.app .working-dir-pill-trigger:disabled,
-.chat-composer-fixed-layer .working-dir-pill-trigger:disabled {
+.app .working-dir-pill-trigger:disabled:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-trigger:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.app .working-dir-pill-label,
-.chat-composer-fixed-layer .working-dir-pill-label {
+.app .working-dir-pill-label:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-label:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .working-dir-pill-menu,
-.chat-composer-fixed-layer .working-dir-pill-menu {
+.app .working-dir-pill-menu:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
@@ -2755,15 +2754,15 @@
   background: var(--bg-panel);
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
 }
-.app .working-dir-pill-menu-path,
-.chat-composer-fixed-layer .working-dir-pill-menu-path {
+.app .working-dir-pill-menu-path:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-path:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px 10px;
   color: var(--text-muted);
   font-size: 12px;
   word-break: break-all;
 }
-.app .working-dir-pill-menu-item,
-.chat-composer-fixed-layer .working-dir-pill-menu-item {
+.app .working-dir-pill-menu-item:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-item:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2778,31 +2777,31 @@
   font-size: 12px;
   text-align: left;
 }
-.app .working-dir-pill-menu-item.small,
-.chat-composer-fixed-layer .working-dir-pill-menu-item.small {
+.app .working-dir-pill-menu-item.small:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-item.small:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
 }
-.app .working-dir-pill-menu-item:hover,
-.chat-composer-fixed-layer .working-dir-pill-menu-item:hover {
+.app .working-dir-pill-menu-item:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-item:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 8%, transparent);
 }
-.app .working-dir-pill-menu-item:disabled,
-.chat-composer-fixed-layer .working-dir-pill-menu-item:disabled {
+.app .working-dir-pill-menu-item:disabled:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-item:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-faint);
   cursor: not-allowed;
 }
-.app .working-dir-pill-menu-item:disabled:hover,
-.chat-composer-fixed-layer .working-dir-pill-menu-item:disabled:hover {
+.app .working-dir-pill-menu-item:disabled:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-item:disabled:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
 }
-.app .working-dir-pill-menu-divider,
-.chat-composer-fixed-layer .working-dir-pill-menu-divider {
+.app .working-dir-pill-menu-divider:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-divider:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 1px;
   margin: 4px 0;
   background: var(--border);
 }
-.app .working-dir-pill-menu-section,
-.chat-composer-fixed-layer .working-dir-pill-menu-section {
+.app .working-dir-pill-menu-section:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-section:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px 10px;
   color: var(--text-muted);
   font-size: 12px;
@@ -2810,15 +2809,15 @@
   letter-spacing: 0;
   text-transform: uppercase;
 }
-.app .working-dir-pill-menu-recent,
-.chat-composer-fixed-layer .working-dir-pill-menu-recent {
+.app .working-dir-pill-menu-recent:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-recent:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .working-dir-pill-menu-error,
-.chat-composer-fixed-layer .working-dir-pill-menu-error {
+.app .working-dir-pill-menu-error:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .working-dir-pill-menu-error:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px 10px 6px;
   color: var(--red, #c0392b);
   font-size: 12px;
@@ -2826,8 +2825,8 @@
 /* Hosted in the composer's bottom toolbar (left of the spacer): flip the menu
    to open upward and anchor it left so it neither drops below the viewport nor
    overflows the composer's left edge. */
-.app .composer-row .working-dir-pill-menu,
-.chat-composer-fixed-layer .composer-row .working-dir-pill-menu {
+.app .composer-row .working-dir-pill-menu:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .working-dir-pill-menu:where(:not([data-chat-root], [data-chat-root] *)) {
   top: auto;
   right: auto;
   bottom: calc(100% + 6px);
@@ -2835,15 +2834,15 @@
 }
 /* The toolbar is a flex row; without this the pill gets squeezed below its
    content width and the trailing chevron wraps to a second line. */
-.app .composer-row .working-dir-pill,
-.chat-composer-fixed-layer .composer-row .working-dir-pill {
+.app .composer-row .working-dir-pill:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .working-dir-pill:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
 }
-.app .composer-row .working-dir-pill-trigger,
-.chat-composer-fixed-layer .composer-row .working-dir-pill-trigger {
+.app .composer-row .working-dir-pill-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .working-dir-pill-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   flex-wrap: nowrap;
 }
-.app .composer-hint {
+.app .composer-hint:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 4px 8px 0;
   font-size: 12px;
   line-height: 1.35;
@@ -2852,10 +2851,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .split-chat-slot .composer {
+.app .split-chat-slot .composer:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 5px;
 }
-.app .split-chat-slot .composer-hint {
+.app .split-chat-slot .composer-hint:where(:not([data-chat-root], [data-chat-root] *)) {
   order: -1;
   margin: 0 8px 1px;
   color: color-mix(in srgb, var(--text-muted) 64%, transparent);
@@ -2863,7 +2862,7 @@
   text-overflow: clip;
   white-space: normal;
 }
-.chat-composer-fixed-layer .composer-hint {
+.chat-composer-fixed-layer .composer-hint:where(:not([data-chat-root], [data-chat-root] *)) {
   order: -1;
   margin: 0 8px 1px;
   color: color-mix(in srgb, var(--text-muted) 64%, transparent);
@@ -2872,7 +2871,7 @@
   white-space: normal;
 }
 
-.app .workspace {
+.app .workspace:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Matches the top tab strip's effect exactly, same as the chat card
      (.split-chat-slot > .pane). Inset 8px keeps the ground gutter between
      the cards; overflow:hidden rounds the content and the toolbar dropdowns
@@ -2900,10 +2899,10 @@
 /* Focus mode hides the chat card, so the workspace is the only card — give it
    the 8px left gap back (in split mode the left is 0 to keep the inter-card gap
    at 8px). */
-.app .split.split-focus .workspace {
+.app .split.split-focus .workspace:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-left: 8px;
 }
-.app .ws-tabs-shell {
+.app .ws-tabs-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 6px 14px;
   border-bottom: none;
   /* Match the solid panel below instead of the shared chat-header glass. */
@@ -2911,22 +2910,22 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
-.app .ws-focus-expand {
+.app .ws-focus-expand:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 32px;
   height: 32px;
   border-radius: var(--radius);
 }
-.app .ws-tabs-bar {
+.app .ws-tabs-bar:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 6px;
   height: auto;
   min-height: 38px;
   padding-block: 4px;
   scrollbar-width: none;
 }
-.app .ws-tabs-bar::-webkit-scrollbar {
+.app .ws-tabs-bar:where(:not([data-chat-root], [data-chat-root] *))::-webkit-scrollbar {
   display: none;
 }
-.app .ws-tab {
+.app .ws-tab:where(:not([data-chat-root], [data-chat-root] *)) {
   box-sizing: border-box;
   height: 30px;
   min-height: 30px;
@@ -2940,15 +2939,15 @@
 }
 /* Design Files tab keeps only its fill/text change on hover — no stroke (the
    global `button:hover` border-strong rule would otherwise ring it). */
-.app .ws-tab.design-files-tab:hover {
+.app .ws-tab.design-files-tab:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
 }
-.app .ws-tab.active {
+.app .ws-tab.active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   border-color: transparent;
   box-shadow: none;
 }
-.app .ws-tab.design-files-tab.active {
+.app .ws-tab.design-files-tab.active:where(:not([data-chat-root], [data-chat-root] *)) {
   box-shadow: none;
 }
 /* Light separator between adjacent unselected tabs (Chrome tab-strip
@@ -2956,7 +2955,7 @@
    line only ever appears BETWEEN two tabs, and faded out whenever either
    neighbour shows a pill background (active / hover / drag) so it never
    abuts a pill. */
-.app .ws-tab + .ws-tab::before {
+.app .ws-tab + .ws-tab:where(:not([data-chat-root], [data-chat-root] *))::before {
   content: '';
   position: absolute;
   left: -3.5px;
@@ -2968,55 +2967,55 @@
   pointer-events: none;
   transition: opacity 120ms var(--ease-out);
 }
-.app .ws-tab.active::before,
-.app .ws-tab:hover::before,
-.app .ws-tab.dragging::before,
-.app .ws-tab.drag-over-before::before,
-.app .ws-tab.drag-over-after::before,
-.app .ws-tab.active + .ws-tab::before,
-.app .ws-tab:hover + .ws-tab::before,
-.app .ws-tab.dragging + .ws-tab::before,
-.app .ws-tab.drag-over-before + .ws-tab::before,
-.app .ws-tab.drag-over-after + .ws-tab::before {
+.app .ws-tab.active:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab:hover:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab.dragging:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab.drag-over-before:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab.drag-over-after:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab.active + .ws-tab:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab:hover + .ws-tab:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab.dragging + .ws-tab:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab.drag-over-before + .ws-tab:where(:not([data-chat-root], [data-chat-root] *))::before,
+.app .ws-tab.drag-over-after + .ws-tab:where(:not([data-chat-root], [data-chat-root] *))::before {
   opacity: 0;
 }
-.app .ws-tab .tab-icon,
-.app .ws-tab.active .tab-icon {
+.app .ws-tab .tab-icon:where(:not([data-chat-root], [data-chat-root] *)),
+.app .ws-tab.active .tab-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--accent);
 }
-.app .ws-body {
+.app .ws-body:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 0;
   border-radius: 0;
   background: var(--bg-panel);
   box-shadow: none;
 }
 
-.app .df-panel,
-.app .df-main {
+.app .df-panel:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-main:where(:not([data-chat-root], [data-chat-root] *)) {
   background: #fff;
 }
-.app .df-main {
+.app .df-main:where(:not([data-chat-root], [data-chat-root] *)) {
   border-right-color: var(--border);
 }
-.app .df-body {
+.app .df-body:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px 20px 20px;
   background: #fff;
 }
-.app .df-controls-row {
+.app .df-controls-row:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 0 0 14px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px 14px;
 }
-.app .df-controls-primary {
+.app .df-controls-primary:where(:not([data-chat-root], [data-chat-root] *)) {
   grid-template-columns: 31px minmax(220px, 340px) minmax(0, auto);
   gap: 10px;
 }
-.app .df-controls-toggles {
+.app .df-controls-toggles:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
 }
-.app .df-refresh-control {
+.app .df-refresh-control:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 31px;
   height: 31px;
   border: 1px solid var(--border);
@@ -3025,15 +3024,15 @@
   box-shadow: none;
   flex: 0 0 auto;
 }
-.app .df-refresh-control:hover:not(:disabled) {
+.app .df-refresh-control:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   border-color: var(--border-strong);
 }
-.app .df-controls-row .df-actions {
+.app .df-controls-row .df-actions:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-left: 0;
   gap: 8px;
 }
-.app .df-controls-row .df-actions button {
+.app .df-controls-row .df-actions button:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 31px;
   padding: 0 12px;
   border: 1px solid var(--border);
@@ -3041,11 +3040,11 @@
   background: var(--bg-panel);
   box-shadow: none;
 }
-.app .df-controls-row .df-actions button:hover:not(:disabled) {
+.app .df-controls-row .df-actions button:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   border-color: var(--border-strong);
 }
-.app .df-group-toggle {
+.app .df-group-toggle:where(:not([data-chat-root], [data-chat-root] *)) {
   align-self: flex-start;
   margin: 0;
   padding: 2px;
@@ -3054,157 +3053,157 @@
   background: var(--bg-subtle);
   box-shadow: none;
 }
-.app .df-group-toggle > span {
+.app .df-group-toggle > span:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 0 8px;
 }
-.app .df-group-toggle button {
+.app .df-group-toggle button:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 26px;
   padding: 2px 11px;
   border-radius: var(--radius);
 }
-.app .df-group-toggle button.active {
+.app .df-group-toggle button.active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
   box-shadow: none;
 }
 @media (max-width: 1180px) {
-  .app .df-controls-row {
+  .app .df-controls-row:where(:not([data-chat-root], [data-chat-root] *)) {
     grid-template-columns: minmax(0, 1fr);
   }
-  .app .df-controls-primary {
+  .app .df-controls-primary:where(:not([data-chat-root], [data-chat-root] *)) {
     grid-template-columns: 31px minmax(180px, 1fr);
   }
 }
 @media (max-width: 720px) {
-  .app .df-controls-primary {
+  .app .df-controls-primary:where(:not([data-chat-root], [data-chat-root] *)) {
     grid-template-columns: 31px minmax(0, 1fr);
   }
 }
-.app .df-pagination {
+.app .df-pagination:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
   padding: 0 0 12px;
   color: var(--text-muted);
 }
-.app .df-pagination-start {
+.app .df-pagination-start:where(:not([data-chat-root], [data-chat-root] *)) {
   border-bottom: 1px solid var(--border-soft);
 }
-.app .df-pagination-center {
+.app .df-pagination-center:where(:not([data-chat-root], [data-chat-root] *)) {
   justify-content: center;
   padding: 14px 0 10px;
 }
-.app .df-pagination select,
-.app .df-page-btn {
+.app .df-pagination select:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-page-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 28px;
   border-radius: var(--radius);
   background-color: var(--bg-panel);
   box-shadow: none;
 }
-.app .df-select-all {
+.app .df-select-all:where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: var(--radius);
 }
-.app .df-table {
+.app .df-table:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
   padding: 0;
   border-collapse: collapse;
   border-spacing: 0;
   table-layout: fixed;
 }
-.app .df-table thead {
+.app .df-table thead:where(:not([data-chat-root], [data-chat-root] *)) {
   border-bottom: 1px solid var(--border-soft);
 }
-.app .df-th-check,
-.app .df-cell-check {
+.app .df-th-check:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-cell-check:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px;
   padding-left: 8px;
 }
-.app .df-th-icon,
-.app .df-cell-icon {
+.app .df-th-icon:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-cell-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 40px;
 }
-.app .df-th-kind {
+.app .df-th-kind:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 128px;
 }
-.app .df-th-time {
+.app .df-th-time:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 126px;
 }
-.app .df-th-menu,
-.app .df-cell-menu {
+.app .df-th-menu:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-cell-menu:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 34px;
   padding-right: 6px;
 }
-.app .df-th-sortable {
+.app .df-th-sortable:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 10px 8px 8px;
   font-size: 12px;
 }
-.app .df-section-row td {
+.app .df-section-row td:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 14px 8px 7px;
   border-top: 0;
 }
-.app .df-section-label {
+.app .df-section-label:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 0;
   /* Match the "项目" breadcrumb header size so section titles read as one
      heading family. */
   font-size: 14px;
 }
-.app .df-cell-name,
-.app .df-cell-kind,
-.app .df-cell-time {
+.app .df-cell-name:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-cell-kind:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-cell-time:where(:not([data-chat-root], [data-chat-root] *)) {
   padding-top: 8px;
   padding-bottom: 8px;
 }
-.app .df-cell-name {
+.app .df-cell-name:where(:not([data-chat-root], [data-chat-root] *)) {
   padding-right: 14px;
 }
-.app .df-file-row + .df-file-row .df-cell-check,
-.app .df-file-row + .df-file-row .df-cell-icon,
-.app .df-file-row + .df-file-row .df-cell-name,
-.app .df-file-row + .df-file-row .df-cell-kind,
-.app .df-file-row + .df-file-row .df-cell-time,
-.app .df-file-row + .df-file-row .df-cell-menu {
+.app .df-file-row + .df-file-row .df-cell-check:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-file-row + .df-file-row .df-cell-icon:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-file-row + .df-file-row .df-cell-name:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-file-row + .df-file-row .df-cell-kind:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-file-row + .df-file-row .df-cell-time:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-file-row + .df-file-row .df-cell-menu:where(:not([data-chat-root], [data-chat-root] *)) {
   border-top: 1px solid var(--border-soft);
 }
-.app .df-file-row:hover {
+.app .df-file-row:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
 }
 /* A selected row must keep its blue fill on hover — otherwise the generic
    hover background wins (higher specificity) and the white selected text
    lands on a light fill and "disappears". Darken slightly for feedback. */
-.app .df-file-row.selected:hover {
+.app .df-file-row.selected:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--blue) 90%, #000);
 }
-.app .df-row-icon {
+.app .df-row-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 30px;
   height: 30px;
   border-radius: var(--radius);
 }
-.app .df-row-name {
+.app .df-row-name:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
 }
-.app .df-row-name-wrap {
+.app .df-row-name-wrap:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 0;
 }
-.app .df-row-size,
-.app .df-row-sub,
-.app .df-row-meta,
-.app .df-cell-kind,
-.app .df-cell-time,
-.app .df-kind-label {
+.app .df-row-size:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-row-sub:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-row-meta:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-cell-kind:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-cell-time:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-kind-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
 }
-.app .df-cell-time,
-.app .df-page-info {
+.app .df-cell-time:where(:not([data-chat-root], [data-chat-root] *)),
+.app .df-page-info:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-soft);
 }
 /* -- Hand-off button in ChatPane header (paseo-style open-in-editor) -- */
-.app .handoff-wrap {
+.app .handoff-wrap:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   display: inline-flex;
 }
 /* Split container — the labeled left button + caret button share a
    single rounded pill border. Borders on the inner buttons are
    removed; the wrapper carries the visible chrome. */
-.app .handoff-split {
+.app .handoff-split:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: stretch;
   border-radius: var(--radius);
@@ -3213,10 +3212,10 @@
   overflow: hidden;
   transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.app .handoff-split:hover {
+.app .handoff-split:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 6%, transparent);
 }
-.app .handoff-trigger {
+.app .handoff-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3233,14 +3232,14 @@
   cursor: pointer;
   transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.app .handoff-trigger:hover {
+.app .handoff-trigger:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 8%, transparent);
 }
-.app .handoff-trigger:disabled {
+.app .handoff-trigger:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.app .handoff-trigger--solo {
+.app .handoff-trigger--solo:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -3253,16 +3252,16 @@
   font-size: 12px;
   cursor: pointer;
 }
-.app .handoff-trigger--solo:hover {
+.app .handoff-trigger--solo:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 6%, transparent);
 }
-.app .handoff-trigger-label {
+.app .handoff-trigger-label:where(:not([data-chat-root], [data-chat-root] *)) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
 }
-.app .handoff-caret {
+.app .handoff-caret:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3283,17 +3282,17 @@
   transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
     color 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.app .handoff-caret:hover {
+.app .handoff-caret:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 10%, transparent);
   color: var(--text);
 }
-.app .handoff-caret:disabled {
+.app .handoff-caret:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0.6;
   cursor: not-allowed;
 }
 /* Editor-icon tile — small rounded square with brand-tinted bg. Used
    both in the trigger and in the picker menu items. */
-.app .editor-icon {
+.app .editor-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3304,14 +3303,14 @@
 }
 /* Bundled brand artwork (public/editor-icons/*.png) paints its own tile —
    no tinted bg or inset ring on top of it. */
-.app .editor-icon-img {
+.app .editor-icon-img:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   box-shadow: none;
   object-fit: contain;
 }
 /* Bare single-color marks (e.g. Windsurf's wave) follow the theme's text
    color through a mask, same pattern as .agent-icon-mono. */
-.app .editor-icon-mask {
+.app .editor-icon-mask:where(:not([data-chat-root], [data-chat-root] *)) {
   background-color: currentColor;
   box-shadow: none;
   -webkit-mask-size: contain;
@@ -3321,7 +3320,7 @@
   -webkit-mask-position: center;
   mask-position: center;
 }
-.app .handoff-menu {
+.app .handoff-menu:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
@@ -3338,7 +3337,7 @@
   flex-direction: column;
   gap: 7px;
 }
-.app .handoff-menu-tabs {
+.app .handoff-menu-tabs:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 3px;
@@ -3347,7 +3346,7 @@
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--text-muted) 5%, transparent);
 }
-.app .handoff-menu-tab {
+.app .handoff-menu-tab:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 28px;
   padding: 0 10px;
   border: 0;
@@ -3362,21 +3361,21 @@
     color 200ms cubic-bezier(0.23, 1, 0.32, 1),
     box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.app .handoff-menu-tab:hover {
+.app .handoff-menu-tab:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
   background: color-mix(in srgb, var(--text-muted) 7%, transparent);
 }
-.app .handoff-menu-tab.active {
+.app .handoff-menu-tab.active:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
   background: var(--bg-panel);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
-.app .handoff-path-row {
+.app .handoff-path-row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   gap: 8px;
   min-width: 0;
 }
-.app .handoff-path-button {
+.app .handoff-path-button:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3398,29 +3397,29 @@
     border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
     color 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.app .handoff-path-button:hover:not(:disabled) {
+.app .handoff-path-button:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
 }
-.app .handoff-path-button:disabled {
+.app .handoff-path-button:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: not-allowed;
   opacity: 0.55;
 }
-.app .handoff-path-button.copied {
+.app .handoff-path-button.copied:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
 }
-.app .handoff-path-button-main,
-.app .handoff-path-button-icon {
+.app .handoff-path-button-main:where(:not([data-chat-root], [data-chat-root] *)),
+.app .handoff-path-button-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-.app .handoff-path-button-main {
+.app .handoff-path-button-main:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
   min-width: 0;
 }
-.app .handoff-path-button-icon {
+.app .handoff-path-button-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 20px;
   height: 20px;
   flex: 0 0 20px;
@@ -3428,19 +3427,19 @@
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--text);
 }
-.app .handoff-path-button-label {
+.app .handoff-path-button-label:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .handoff-menu-block {
+.app .handoff-menu-block:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
 }
-.app .handoff-menu-title {
+.app .handoff-menu-title:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 0 2px;
   margin: 0;
   color: var(--text);
@@ -3448,7 +3447,7 @@
   line-height: 16px;
   font-weight: 600;
 }
-.app .handoff-menu-item {
+.app .handoff-menu-item:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -3462,38 +3461,38 @@
   text-align: left;
   width: 100%;
 }
-.app .handoff-menu-item:hover {
+.app .handoff-menu-item:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 8%, transparent);
 }
-.app .handoff-menu-item.active {
+.app .handoff-menu-item.active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.app .handoff-menu-item.dim {
+.app .handoff-menu-item.dim:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0.62;
 }
-.app .handoff-target-rail {
+.app .handoff-target-rail:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 6px;
   padding: 1px;
 }
-.app .handoff-editor-rail {
+.app .handoff-editor-rail:where(:not([data-chat-root], [data-chat-root] *)) {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: none;
 }
-.app .handoff-cli-rail {
+.app .handoff-cli-rail:where(:not([data-chat-root], [data-chat-root] *)) {
   grid-template-rows: none;
 }
-.app .handoff-target-group {
+.app .handoff-target-group:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 5px;
   min-width: 0;
 }
-.app .handoff-target-group + .handoff-target-group {
+.app .handoff-target-group + .handoff-target-group:where(:not([data-chat-root], [data-chat-root] *)) {
   padding-top: 2px;
 }
-.app .handoff-target-group-title {
+.app .handoff-target-group-title:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   align-self: flex-start;
@@ -3504,11 +3503,11 @@
   line-height: 18px;
   font-weight: 600;
 }
-.app .handoff-target-rail--unavailable .handoff-target-card {
+.app .handoff-target-rail--unavailable .handoff-target-card:where(:not([data-chat-root], [data-chat-root] *)) {
   border-style: dashed;
   background: color-mix(in srgb, var(--bg-panel) 88%, var(--text-muted) 5%);
 }
-.app .handoff-target-card {
+.app .handoff-target-card:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -3522,32 +3521,32 @@
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--text) 4%);
 }
-.app .handoff-target-card:hover {
+.app .handoff-target-card:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
 }
-.app .handoff-target-card.active,
-.app .handoff-target-card.copied {
+.app .handoff-target-card.active:where(:not([data-chat-root], [data-chat-root] *)),
+.app .handoff-target-card.copied:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
 }
-.app .handoff-target-card .agent-icon {
+.app .handoff-target-card .agent-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
 }
-.app .handoff-target-arrow {
+.app .handoff-target-arrow:where(:not([data-chat-root], [data-chat-root] *)) {
   justify-self: end;
   color: var(--text-muted);
 }
-.app .handoff-target-card:hover .handoff-target-arrow {
+.app .handoff-target-card:hover .handoff-target-arrow:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
 }
-.app .handoff-target-copy {
+.app .handoff-target-copy:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
-.app .handoff-target-label {
+.app .handoff-target-label:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3556,7 +3555,7 @@
   line-height: 14px;
   font-weight: 600;
 }
-.app .handoff-target-meta {
+.app .handoff-target-meta:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3565,7 +3564,7 @@
   font-size: 12px;
   line-height: 12px;
 }
-.app .handoff-amr-link {
+.app .handoff-amr-link:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   align-self: flex-start;
@@ -3582,35 +3581,35 @@
   transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.app .handoff-amr-link:hover {
+.app .handoff-amr-link:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
 }
-.app .handoff-amr-link .agent-icon {
+.app .handoff-amr-link .agent-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
 }
 /* Framework picker: label above a balanced 3-column grid of tag buttons
    (top/bottom composition) so chips never rag-wrap into orphans. */
-.app .handoff-framework-block {
+.app .handoff-framework-block:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
   padding: 2px 0;
 }
-.app .handoff-framework-label {
+.app .handoff-framework-label:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 16px;
 }
-.app .handoff-framework-grid {
+.app .handoff-framework-grid:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 /* Tag buttons: borderless, selection reads through a deeper neutral fill +
    strong text at a constant weight, so the selected chip never resizes. */
-.app .handoff-framework-chip {
+.app .handoff-framework-chip:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3632,44 +3631,44 @@
     background 160ms cubic-bezier(0.23, 1, 0.32, 1),
     color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.app .handoff-framework-chip:hover {
+.app .handoff-framework-chip:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
   background: color-mix(in srgb, var(--text-muted) 16%, transparent);
 }
-.app .handoff-framework-chip.active {
+.app .handoff-framework-chip.active:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--bg-panel);
   background: var(--text);
 }
-.app .handoff-framework-chip.active:hover {
+.app .handoff-framework-chip.active:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--bg-panel);
   background: color-mix(in srgb, var(--text) 88%, var(--bg-panel));
 }
-.app .handoff-menu-divider {
+.app .handoff-menu-divider:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 1px;
   background: var(--border);
   margin: 0;
 }
-.app .handoff-menu-section {
+.app .handoff-menu-section:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
   padding: 4px 10px;
 }
-.app .handoff-menu-error {
+.app .handoff-menu-error:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-danger, #c0392b);
   padding: 4px 10px 6px;
 }
 
 /* -- Project-page design-system picker (project chrome header) -- */
-.project-ds-picker {
+.project-ds-picker:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   display: inline-flex;
   flex: 0 1 auto;
   min-width: 0;
 }
-.project-ds-picker-trigger {
+.project-ds-picker-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -3686,37 +3685,37 @@
     border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
   max-width: 220px;
 }
-.project-ds-picker-trigger:hover {
+.project-ds-picker-trigger:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel-strong, var(--bg-panel));
   border-color: var(--border-strong, var(--border));
 }
-.project-ds-picker-trigger.picked {
+.project-ds-picker-trigger.picked:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
   color: var(--text-strong, var(--text));
 }
-.project-ds-picker-trigger:disabled {
+.project-ds-picker-trigger:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.project-ds-picker-label {
+.project-ds-picker-label:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
 }
-.project-ds-picker-swatches {
+.project-ds-picker-swatches:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 2px;
 }
-.project-ds-picker-swatch {
+.project-ds-picker-swatch:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 10px;
   height: 10px;
   border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
 }
-.project-ds-picker-popover {
+.project-ds-picker-popover:where(:not([data-chat-root], [data-chat-root] *)) {
   position: fixed;
   /* width + max-height come from the trigger-anchored inline style so the
      popover can flip above the trigger (composer-top placement) and stay
@@ -3730,7 +3729,7 @@
   z-index: 140;
   overflow: hidden;
 }
-.project-ds-picker-search {
+.project-ds-picker-search:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3747,10 +3746,10 @@
    10.2px wide against its own 14px height, i.e. an ellipse where the glyph
    draws a circle. Icons hold their box; the input (min-width: 0) absorbs the
    shortfall instead. */
-.project-ds-picker-search > svg {
+.project-ds-picker-search > svg:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
 }
-.project-ds-picker-search input {
+.project-ds-picker-search input:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 auto;
   min-width: 0;
   border: 0;
@@ -3765,15 +3764,15 @@
    not need the global `input:focus` blue selected-halo (box-shadow) from
    primitives.css — suppress it here (higher specificity wins) so focusing the
    field stays chromeless. */
-.project-ds-picker-search input:focus,
-.project-ds-picker-search input:focus-visible {
+.project-ds-picker-search input:focus:where(:not([data-chat-root], [data-chat-root] *)),
+.project-ds-picker-search input:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: none;
   border-color: transparent;
   box-shadow: none;
 }
 /* Inline Clear / Create actions sit flush against the search field so the
    popover header reads as one row (search + reset + create new system). */
-.project-ds-picker-action {
+.project-ds-picker-action:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -3795,29 +3794,29 @@
     background-color 120ms var(--ease-out),
     color 120ms var(--ease-out);
 }
-.project-ds-picker-action:hover,
-.project-ds-picker-action:focus-visible {
+.project-ds-picker-action:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.project-ds-picker-action:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: none;
   background: var(--bg-subtle);
   color: var(--text-strong);
 }
-.project-ds-picker-action--primary {
+.project-ds-picker-action--primary:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--accent-tint);
   color: var(--accent);
 }
-.project-ds-picker-action--primary:hover,
-.project-ds-picker-action--primary:focus-visible {
+.project-ds-picker-action--primary:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.project-ds-picker-action--primary:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
   color: var(--accent);
 }
-.project-ds-picker-body {
+.project-ds-picker-body:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.1fr);
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
-.project-ds-picker-list {
+.project-ds-picker-list:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow-y: auto;
   padding: 5px;
   display: flex;
@@ -3826,7 +3825,7 @@
 }
 /* Group heading separating "your systems" from "official presets", matching the
    Design Systems tab split. Sticks to the top while scrolling the list. */
-.project-ds-picker-group-label {
+.project-ds-picker-group-label:where(:not([data-chat-root], [data-chat-root] *)) {
   position: sticky;
   top: -5px;
   z-index: 1;
@@ -3841,10 +3840,10 @@
      list rows scrolling beneath it. */
   background: var(--bg-panel, var(--surface, #fff));
 }
-.project-ds-picker-group-label:first-child {
+.project-ds-picker-group-label:first-child:where(:not([data-chat-root], [data-chat-root] *)) {
   padding-top: 4px;
 }
-.project-ds-picker-option {
+.project-ds-picker-option:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3855,20 +3854,20 @@
   text-align: left;
   cursor: pointer;
 }
-.project-ds-picker-option:hover {
+.project-ds-picker-option:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 8%, transparent);
 }
-.project-ds-picker-option.active {
+.project-ds-picker-option.active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.project-ds-picker-option-head {
+.project-ds-picker-option-head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
 }
-.project-ds-picker-option-title {
+.project-ds-picker-option-title:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-strong, var(--text));
@@ -3877,14 +3876,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.project-ds-picker-option-cat {
+.project-ds-picker-option-cat:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   color: var(--text-muted);
 }
-.project-ds-picker-option-summary {
+.project-ds-picker-option-summary:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
@@ -3893,17 +3892,17 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.project-ds-picker-option-swatches {
+.project-ds-picker-option-swatches:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   gap: 3px;
 }
-.project-ds-picker-option-swatch {
+.project-ds-picker-option-swatch:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 14px;
   height: 14px;
   border-radius: 3px;
   border: 1px solid var(--border);
 }
-.project-ds-picker-option-check {
+.project-ds-picker-option-check:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-left: auto;
   width: 16px;
   height: 16px;
@@ -3913,13 +3912,13 @@
   color: var(--accent);
   flex: 0 0 auto;
 }
-.project-ds-picker-empty {
+.project-ds-picker-empty:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-muted);
   padding: 12px;
   text-align: center;
 }
-.project-ds-picker-preview {
+.project-ds-picker-preview:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow-y: auto;
   padding: 12px 14px;
   display: flex;
@@ -3929,7 +3928,7 @@
 /* When the previewed design system is a brand, the rich Brand Kit card
    (BrandPreviewCard, compact variant) owns the right pane and stretches to its
    full width. */
-.project-ds-picker-preview-brand {
+.project-ds-picker-preview-brand:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
 }
 /* The kit preview reuses DesignKitView, whose module/swatch cards carry their
@@ -3937,12 +3936,12 @@
    reads as double-boxing — strip every stroke here (transparent, not 0, so
    nothing reflows). Scoped to the picker only; the brand detail page keeps
    its frames. */
-.project-ds-picker-preview-kit *,
-.project-ds-picker-preview-kit-wrap * {
+.project-ds-picker-preview-kit *:where(:not([data-chat-root], [data-chat-root] *)),
+.project-ds-picker-preview-kit-wrap *:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent !important;
   box-shadow: none !important;
 }
-.project-ds-picker-preview-open {
+.project-ds-picker-preview-open:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 8px;
   display: inline-flex;
   align-items: center;
@@ -3961,11 +3960,11 @@
     background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.project-ds-picker-preview-open:hover {
+.project-ds-picker-preview-open:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
-.project-ds-picker-preview-head {
+.project-ds-picker-preview-head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3973,7 +3972,7 @@
 }
 /* 16:9 preview stage — frames the design-system first-screen render. The
    expand-to-fullscreen button floats over the top-right, revealed on hover. */
-.project-ds-picker-preview-stage {
+.project-ds-picker-preview-stage:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -3982,7 +3981,7 @@
   overflow: hidden;
   background: var(--bg-panel);
 }
-.project-ds-picker-preview-expand {
+.project-ds-picker-preview-expand:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   left: 50%;
   bottom: 10px;
@@ -4009,49 +4008,49 @@
     transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
     background 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.project-ds-picker-preview-stage:hover .project-ds-picker-preview-expand,
-.project-ds-picker-preview-expand:focus-visible {
+.project-ds-picker-preview-stage:hover .project-ds-picker-preview-expand:where(:not([data-chat-root], [data-chat-root] *)),
+.project-ds-picker-preview-expand:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 1;
   transform: translate(-50%, 0);
 }
-.project-ds-picker-preview-expand:hover {
+.project-ds-picker-preview-expand:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
 }
-.project-ds-picker-preview-expand svg {
+.project-ds-picker-preview-expand svg:where(:not([data-chat-root], [data-chat-root] *)) {
   display: block;
   width: 13px !important;
   height: 13px !important;
 }
-.project-ds-picker-preview-expand:hover {
+.project-ds-picker-preview-expand:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--accent);
   border-color: var(--border-strong, var(--border));
   background: color-mix(in srgb, var(--text-muted) 8%, var(--bg-panel));
 }
-.project-ds-picker-preview-cat {
+.project-ds-picker-preview-cat:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   color: var(--text-muted);
 }
-.project-ds-picker-preview-summary {
+.project-ds-picker-preview-summary:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
 }
-.project-ds-picker-preview-swatches {
+.project-ds-picker-preview-swatches:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
-.project-ds-picker-preview-swatch {
+.project-ds-picker-preview-swatch:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 20px;
   height: 20px;
   border-radius: var(--radius-xs);
   border: 1px solid var(--border);
 }
-.project-ds-picker-preview-frame {
+.project-ds-picker-preview-frame:where(:not([data-chat-root], [data-chat-root] *)) {
   /* Render the design-system page at desktop width (1280×720), then scale
      the whole thing down so the 16:9 stage shows a faithful first-screen
      thumbnail rather than a cramped narrow-viewport reflow. scale() needs a
@@ -4068,8 +4067,8 @@
   transform-origin: top left;
   pointer-events: none;
 }
-.project-ds-picker-preview-empty,
-.project-ds-picker-preview-loading {
+.project-ds-picker-preview-empty:where(:not([data-chat-root], [data-chat-root] *)),
+.project-ds-picker-preview-loading:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   inset: 0;
   display: flex;
@@ -4080,7 +4079,7 @@
   padding: 8px;
   text-align: center;
 }
-.project-ds-picker-fullscreen {
+.project-ds-picker-fullscreen:where(:not([data-chat-root], [data-chat-root] *)) {
   position: fixed;
   inset: 0;
   z-index: 1800;
@@ -4093,7 +4092,7 @@
   padding: 28px;
   animation: project-ds-picker-fullscreen-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.project-ds-picker-fullscreen-frame {
+.project-ds-picker-fullscreen-frame:where(:not([data-chat-root], [data-chat-root] *)) {
   width: min(1280px, calc(100vw - 56px));
   height: min(820px, calc(100vh - 56px));
   background: var(--bg-panel);
@@ -4104,21 +4103,21 @@
   flex-direction: column;
   overflow: hidden;
 }
-.project-ds-picker-fullscreen-head {
+.project-ds-picker-fullscreen-head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
 }
-.project-ds-picker-fullscreen-title {
+.project-ds-picker-fullscreen-title:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--text-strong, var(--text));
   font-size: 14px;
 }
-.project-ds-picker-fullscreen-close {
+.project-ds-picker-fullscreen-close:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-left: auto;
   width: 36px;
   height: 36px;
@@ -4131,17 +4130,17 @@
   justify-content: center;
   cursor: pointer;
 }
-.project-ds-picker-fullscreen-close svg {
+.project-ds-picker-fullscreen-close svg:where(:not([data-chat-root], [data-chat-root] *)) {
   display: block;
   width: 18px !important;
   height: 18px !important;
 }
-.project-ds-picker-fullscreen-close:hover {
+.project-ds-picker-fullscreen-close:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--border);
   color: var(--text-strong, var(--text));
   background: var(--bg-subtle);
 }
-.project-ds-picker-fullscreen-iframe {
+.project-ds-picker-fullscreen-iframe:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 auto;
   width: 100%;
   border: 0;
@@ -4152,22 +4151,22 @@
   to { opacity: 1; transform: scale(1); }
 }
 @media (max-width: 720px) {
-  .project-ds-picker-body {
+  .project-ds-picker-body:where(:not([data-chat-root], [data-chat-root] *)) {
     grid-template-columns: 1fr;
     max-height: calc(70vh - 42px);
   }
-  .project-ds-picker-list {
+  .project-ds-picker-list:where(:not([data-chat-root], [data-chat-root] *)) {
     border-right: 0;
     border-bottom: 1px solid var(--border);
     max-height: 34vh;
   }
-  .project-ds-picker-preview {
+  .project-ds-picker-preview:where(:not([data-chat-root], [data-chat-root] *)) {
     min-height: 220px;
   }
-  .project-ds-picker-fullscreen {
+  .project-ds-picker-fullscreen:where(:not([data-chat-root], [data-chat-root] *)) {
     padding: 12px;
   }
-  .project-ds-picker-fullscreen-frame {
+  .project-ds-picker-fullscreen-frame:where(:not([data-chat-root], [data-chat-root] *)) {
     width: calc(100vw - 24px);
     height: calc(100vh - 24px);
     border-radius: var(--radius-md);
@@ -4178,107 +4177,107 @@
 /* quick-switcher composer isolation — restored from feat/workspace-team (functional rules the demo redesign dropped) */
 /* QuickSwitcher owns the modal input while open. The fixed composer normally
    restores pointer-events on its child .composer, so suspend that child too. */
-body.od-quick-switcher-open .chat-composer-fixed-layer {
+body.od-quick-switcher-open .chat-composer-fixed-layer:where(:not([data-chat-root], [data-chat-root] *)) {
   pointer-events: none;
   opacity: 0.58;
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer {
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer:where(:not([data-chat-root], [data-chat-root] *)) {
   pointer-events: none;
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:focus-within,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer.drag-active .composer-shell {
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:hover:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:focus-within:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer.drag-active .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
   box-shadow: none;
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap:focus-within {
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
   border-color: transparent;
   box-shadow: none;
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor .composer-editable,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer textarea,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer input {
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor .composer-editable:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer textarea:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer input:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted);
   caret-color: transparent;
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-placeholder {
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-placeholder:where(:not([data-chat-root], [data-chat-root] *)) {
   color: color-mix(in srgb, var(--text-muted) 72%, transparent);
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-design-system-row,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-row {
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-design-system-row:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-row:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger.picked,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--plugin,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--workspace,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-order,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-open,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-active-file,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__chip {
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger:hover:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger.picked:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip:hover:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--plugin:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--workspace:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-order:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger:hover:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-open:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button:hover:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-active-file:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__chip:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
   color: var(--text-muted);
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-name,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-kind,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name strong,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name span {
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-name:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-kind:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name strong:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name span:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted);
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-icon,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-remove,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-icon,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-remove,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__icon,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__remove {
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-icon:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-remove:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-icon:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-remove:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__icon:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__remove:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
   color: var(--text-muted);
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-import,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-research,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger.is-open,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-agent-trigger,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-btn,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled,
-body.od-quick-switcher-open .chat-composer-fixed-layer .working-dir-pill-trigger {
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn:hover:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-import:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-research:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger:hover:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger.is-open:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-btn:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled:where(:not([data-chat-root], [data-chat-root] *)),
+body.od-quick-switcher-open .chat-composer-fixed-layer .working-dir-pill-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
   color: var(--text-muted);
 }
 
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-faint);
 }
 

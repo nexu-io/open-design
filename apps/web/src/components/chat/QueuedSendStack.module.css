@@ -1,0 +1,110 @@
+.stack {
+  --chat-queue-open: 350ms;
+  --chat-queue-close: 250ms;
+  --chat-queue-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  width: calc(100% - var(--chat-composer-inline-inset, 16px) * 2);
+  height: var(--chat-queue-reserve);
+  margin: 0 var(--chat-composer-inline-inset, 16px) 8px;
+  z-index: 12;
+}
+
+.stack:focus-visible {
+  outline: 1px solid var(--chat-border-strong);
+  outline-offset: 2px;
+  border-radius: var(--chat-radius-lg);
+}
+
+.viewport {
+  position: absolute;
+  inset: auto 0 0;
+  height: 100%;
+  overflow: visible;
+}
+
+.column {
+  position: relative;
+  height: 100%;
+}
+
+.banner {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: var(--chat-queue-banner-height);
+  box-sizing: border-box;
+  border: 1px solid var(--chat-border-soft);
+  border-radius: var(--chat-radius-lg);
+  background: var(--chat-floating-card-bg);
+  color: var(--chat-floating-card-text);
+  box-shadow: var(--chat-shadow-sm);
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--chat-queue-depth) * -12px)) scale(calc(1 - var(--chat-queue-depth) * 0.06));
+  opacity: 1;
+  filter: blur(0);
+  will-change: transform, opacity, filter;
+  transition:
+    transform var(--chat-queue-open) var(--chat-queue-ease),
+    opacity var(--chat-queue-open) var(--chat-queue-ease),
+    filter var(--chat-queue-open) var(--chat-queue-ease),
+    visibility 0s;
+}
+
+.banner > div { width: 100%; }
+
+.banner[data-depth='0'] { transform-origin: 50% 50%; }
+.banner[data-depth='1'] { opacity: 0.6; }
+.banner[data-depth='2'] { opacity: 0.36; }
+.banner[aria-hidden='true'] { pointer-events: none; }
+
+.banner[data-overflow='true'] {
+  opacity: 0;
+  filter: blur(2px);
+  visibility: hidden;
+  transition-duration: var(--chat-queue-close), var(--chat-queue-close), var(--chat-queue-close), 0s;
+  transition-delay: 0s, 0s, 0s, var(--chat-queue-close);
+}
+
+.stack[data-expanded='true'] .viewport {
+  height: var(--chat-queue-viewport-height);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.stack[data-expanded='true'] .column { height: var(--chat-queue-column-height); }
+
+.stack[data-expanded='true'] .banner {
+  transform: translateY(calc(var(--chat-queue-offset) * -1)) scale(1);
+  opacity: 1;
+  filter: blur(0);
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.stack .banner[data-phase='enter'] {
+  transition: none;
+  transform: translateY(80px) scale(0.97);
+  opacity: 0;
+  filter: blur(2px);
+}
+
+.stack .banner[data-phase='exit'] {
+  transform-origin: 50% 100%;
+  transform: translateY(-36px) scale(0.82);
+  opacity: 0;
+  filter: blur(2px);
+  transition-duration: var(--chat-queue-close);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stack .banner[data-phase] { transition: none; filter: none; }
+  /* Keep the layout transforms: removing them would overlap the expanded cards. */
+  .banner[data-phase='enter'] { transform: none; opacity: 1; }
+}

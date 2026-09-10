@@ -13,11 +13,8 @@
 }
 .plus-menu__trigger {
   position: relative;
-  /* The base `button.icon-btn` only sets padding/font-size, so the inline SVG
-     baseline-aligns and the "+" reads as shifted up. Make the trigger a fixed
-     square flex box so the glyph sits dead-centre on every surface (the project
-     composer's higher-specificity `.composer-row .icon-btn` already does this;
-     this fixes the home hero, where that rule does not apply). */
+  /* Own the icon geometry instead of inheriting the chat toolbar's generic
+     icon-btn sizing. Home and chat share the accessory treatment below. */
   box-sizing: border-box;
   width: 32px;
   height: 32px;
@@ -125,27 +122,24 @@
   box-shadow: none;
   color: var(--text-strong);
 }
-/* Home's foot row: the upload entry is an icon-only disc at the head of the
-   row. It takes the model chip's own metrics and fill from the far end of the
-   same row (`.home-hero__execution-switcher .inline-switcher__chip`: 36px,
-   --bg-panel, no stroke, no shadow, --bg-subtle under the pointer), so the two
-   ends read as one set of controls. Must sit after the
-   `.home-hero__input-card` disc rules above — same specificity, so source
-   order decides. */
-.home-hero__foot-left .plus-menu__trigger {
+/* One accessory style for the home and project composers. Keep this after the
+   input-card rules so both surfaces use the same round fill and interaction. */
+:is(.home-hero__foot-left, .composer-row) .plus-menu__trigger {
   width: 36px;
   height: 36px;
   min-width: 36px;
+  min-height: 36px;
   padding: 0;
   border-radius: var(--radius-circular, 50%);
-  border-color: transparent;
+  border: 1px solid transparent;
   background: var(--bg-panel);
   color: var(--text-muted);
   box-shadow: none;
 }
-.home-hero__foot-left .plus-menu__trigger:hover:not(:disabled),
-.home-hero__foot-left .plus-menu__trigger:focus-visible,
-.home-hero__foot-left .plus-menu__trigger.is-active {
+:is(.home-hero__foot-left, .composer-row) .plus-menu__trigger:hover:not(:disabled),
+:is(.home-hero__foot-left, .composer-row) .plus-menu__trigger:focus-visible,
+:is(.home-hero__foot-left, .composer-row) .plus-menu__trigger.is-active {
+  outline: none;
   border-color: transparent;
   background: var(--bg-subtle);
   color: var(--text-strong);
@@ -502,4 +496,3 @@
 .plus-menu__subitem {
   position: relative;
 }
-

@@ -16,6 +16,8 @@ describe('chat code styles', () => {
     expect(cssRule(css, '.live-code-pre')).toContain('background: transparent');
     // …while #5517 gives the live-code widget WRAPPER a subtle secondary fill
     // so it reads as a self-contained card (the text inside stays transparent).
-    expect(cssRule(css, '.app .live-code-box')).toContain('background: var(--bg-fill-secondary)');
+    for (const scope of [':where(:not([data-chat-root], [data-chat-root] *))', ':where([data-chat-root], [data-chat-root] *)']) {
+      expect(cssRule(css, `.app .live-code-box${scope}`)).toContain('background: var(--bg-fill-secondary)');
+    }
   });
 });

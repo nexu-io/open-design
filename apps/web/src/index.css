@@ -33,3 +33,5 @@
 @import './styles/entrance.css';
 @import './styles/home/plugin-marketplace-demo.css';
 @import './styles/viewer/chat-cards-next.css';
+
+@import './components/chat/upstream/chat-main.css';

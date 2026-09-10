@@ -1,3 +1,5 @@
+import { conversationMetaLabel } from '../runtime/chat/conversation-time';
+export { conversationMetaLabel } from '../runtime/chat/conversation-time';
 import {
   Fragment,
   memo,
@@ -185,7 +187,7 @@ const CHAT_RAIL_HIGHLIGHT_MS = 1200;
 // Dock-style proximity effect: every dash rests at the same base length;
 // the hovered dash grows to the full module width and only its 4 neighbors
 // on each side are pulled along, easing off with distance.
-const CHAT_RAIL_DASH_BASE_PX = 8;
+const CHAT_RAIL_DASH_BASE_PX = 6;
 const CHAT_RAIL_DASH_HOVER_PX = 16;
 const CHAT_RAIL_DASH_NEIGHBOR_SPAN = 4;
 
@@ -5072,52 +5074,4 @@ function isProgrammaticBrandAssistantMessage(message: ChatMessage | null | undef
     /programmatic (design-system )?extraction|automatic pass needs a hand|extraction stopped/i.test(content) ||
     /程序化.*抽取|程式化.*抽取|抽取已停止/.test(content)
   );
-}
-
-function relTime(ts: number, t: TranslateFn): string {
-  const diff = Date.now() - ts;
-  const min = 60_000;
-  const hr = 60 * min;
-  const day = 24 * hr;
-  if (diff < min) return t('common.now');
-  if (diff < hr) return t('common.minutesShort', { n: Math.floor(diff / min) });
-  if (diff < day) return t('common.hoursShort', { n: Math.floor(diff / hr) });
-  if (diff < 7 * day) return t('common.daysShort', { n: Math.floor(diff / day) });
-  return new Date(ts).toLocaleDateString();
-}
-
-export function conversationMetaLabel(
-  conversation: Conversation,
-  t: TranslateFn,
-): string {
-  const latestRun = conversation.latestRun;
-  if (
-    latestRun &&
-    (latestRun.status === 'succeeded' ||
-      latestRun.status === 'failed' ||
-      latestRun.status === 'canceled') &&
-    typeof conversation.totalDurationMs === 'number' &&
-    Number.isFinite(conversation.totalDurationMs)
-  ) {
-    return formatDurationShort(conversation.totalDurationMs);
-  }
-  if (
-    latestRun &&
-    (latestRun.status === 'succeeded' ||
-      latestRun.status === 'failed' ||
-      latestRun.status === 'canceled') &&
-    typeof latestRun.durationMs === 'number' &&
-    Number.isFinite(latestRun.durationMs)
-  ) {
-    return formatDurationShort(latestRun.durationMs);
-  }
-  return relTime(conversation.updatedAt, t);
-}
-
-function formatDurationShort(ms: number): string {
-  const s = Math.max(0, ms) / 1000;
-  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
-  const m = Math.floor(s / 60);
-  const rem = Math.floor(s - m * 60);
-  return `${m}m ${rem.toString().padStart(2, '0')}s`;
 }

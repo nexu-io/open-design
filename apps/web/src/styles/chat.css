@@ -3,41 +3,20 @@
    now carries: back button, design-system picker, editable project
    title, and (right-aligned) the session-history trigger. position:
    relative anchors the absolutely-positioned history popover. */
-.chat-project-header {
+.chat-project-header:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 8px 12px;
   border-bottom: none;
-  /* Sticky over the translucent chat pane: frosted glass masks messages
-     scrolling beneath (glass tokens are theme-aware). */
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
+  background: transparent;
   min-width: 0;
   height: 38px;
   position: sticky;
   top: 0;
   z-index: 4;
 }
-.chat-project-header::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 0;
-  left: 0;
-  height: var(--spacing-18);
-  pointer-events: none;
-  /* Extend the regular glass material into the scroll area, then fade both
-     its tint and blur so messages pass under a soft edge instead of a hard
-     horizontal cutoff. */
-  background: linear-gradient(to bottom, var(--glass-regular), transparent);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  -webkit-mask-image: linear-gradient(to bottom, currentColor, transparent);
-  mask-image: linear-gradient(to bottom, currentColor, transparent);
-}
-.chat-project-back {
+.chat-project-back:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px;
   height: 28px;
   padding: 0;
@@ -50,11 +29,11 @@
   justify-content: center;
   flex: 0 0 auto;
 }
-.chat-project-back:hover {
+.chat-project-back:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   color: var(--text);
 }
-.chat-project-design-system {
+.chat-project-design-system:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
@@ -64,7 +43,7 @@
      pair at the trailing edge. */
   margin-inline-start: auto;
 }
-.chat-project-header-title {
+.chat-project-header-title:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -77,14 +56,14 @@
    below did nothing and a long project name was clipped mid-glyph by the
    header's own `overflow: hidden`. Blockifying both children as flex items
    makes their existing ellipsis rules take. */
-.chat-project-title-line {
+.chat-project-title-line:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   overflow: hidden;
 }
-.chat-project-header-title .title {
+.chat-project-header-title .title:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-strong);
   font-size: 13px;
   line-height: 18px;
@@ -108,22 +87,22 @@
   box-shadow: none;
   transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-project-header-title .title:hover {
+.chat-project-header-title .title:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text) 4%, transparent);
 }
-.chat-project-header-title .title.readonly {
+.chat-project-header-title .title.readonly:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: default;
   color: var(--text-strong);
 }
-.chat-project-header-title .title.readonly:hover {
+.chat-project-header-title .title.readonly:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
 }
-.chat-project-header-title .title:focus,
-.chat-project-header-title .title:focus-visible {
+.chat-project-header-title .title:focus:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-project-header-title .title:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text) 5%, transparent);
   box-shadow: none;
 }
-.chat-project-header-title .meta {
+.chat-project-header-title .meta:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 16px;
@@ -138,7 +117,7 @@
    it opens the history popover (which contains the "new session" entry
    and the conversation list). The session title is no longer shown
    inline — the project title owns the header line. */
-.chat-session-switcher {
+.chat-session-switcher:where(:not([data-chat-root], [data-chat-root] *)) {
   /* NOT a containing block — the .chat-history-menu popover positions
      itself with left/right:12px relative to the sticky .chat-project-header. */
   display: inline-flex;
@@ -147,7 +126,7 @@
   margin-inline-start: 2px;
   padding-inline-start: 6px;
 }
-.chat-session-trigger {
+.chat-session-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px;
   height: 28px;
   padding: 0;
@@ -160,13 +139,13 @@
   justify-content: center;
   cursor: pointer;
 }
-.chat-session-trigger:hover,
-.chat-session-switcher.open .chat-session-trigger {
+.chat-session-trigger:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-session-switcher.open .chat-session-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   color: var(--text);
 }
-.chat-header-tabs { display: inline-flex; gap: 16px; flex: 1; }
-.chat-header-tab {
+.chat-header-tabs:where(:not([data-chat-root], [data-chat-root] *)) { display: inline-flex; gap: 16px; flex: 1; }
+.chat-header-tab:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -176,19 +155,19 @@
   color: var(--text-muted);
   font-weight: 600;
 }
-.chat-header-tab:hover { color: var(--text); background: transparent; border-color: transparent; }
-.chat-header-tab.active {
+.chat-header-tab:hover:where(:not([data-chat-root], [data-chat-root] *)) { color: var(--text); background: transparent; border-color: transparent; }
+.chat-header-tab.active:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
   border-bottom-color: var(--text);
 }
-.chat-active-conversation {
+.chat-active-conversation:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   flex: 1;
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.chat-active-conversation-title {
+.chat-active-conversation-title:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -197,7 +176,7 @@
   font-weight: 600;
   color: var(--text);
 }
-.chat-active-conversation-rename {
+.chat-active-conversation-rename:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 24px;
   height: 24px;
   padding: 0;
@@ -210,15 +189,15 @@
   justify-content: center;
   flex: 0 0 auto;
 }
-.chat-active-conversation-rename:hover {
+.chat-active-conversation-rename:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   color: var(--text);
 }
-.chat-active-conversation-rename:focus-visible {
+.chat-active-conversation-rename:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.chat-active-conversation-input {
+.chat-active-conversation-input:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
   min-width: 0;
   height: 28px;
@@ -230,12 +209,12 @@
   font-size: 13px;
   font-weight: 600;
 }
-.chat-active-conversation-input:focus {
+.chat-active-conversation-input:focus:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: none;
   border-color: var(--accent);
 }
-.chat-header-actions { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
-.chat-header-actions .icon-only {
+.chat-header-actions:where(:not([data-chat-root], [data-chat-root] *)) { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
+.chat-header-actions .icon-only:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px; height: 28px;
   padding: 0;
   background: transparent;
@@ -246,9 +225,9 @@
   align-items: center;
   justify-content: center;
 }
-.chat-header-actions .icon-only:hover { background: var(--bg-subtle); color: var(--text); }
+.chat-header-actions .icon-only:hover:where(:not([data-chat-root], [data-chat-root] *)) { background: var(--bg-subtle); color: var(--text); }
 
-.chat-log {
+.chat-log:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -261,10 +240,10 @@
      positional affordance for the log. */
   scrollbar-width: none;
 }
-.chat-log::-webkit-scrollbar {
+.chat-log:where(:not([data-chat-root], [data-chat-root] *))::-webkit-scrollbar {
   display: none;
 }
-.chat-message-rail {
+.chat-message-rail:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   right: 4px;
   /* The nav is the hover hit zone: it spans the whole log viewport — from
@@ -273,7 +252,7 @@
   top: 0;
   bottom: 0;
   z-index: 8;
-  width: 20px;
+  width: 28px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -281,26 +260,26 @@
   pointer-events: auto;
   transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-message-rail:hover,
-.chat-message-rail:focus-within {
+.chat-message-rail:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-message-rail:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 1;
 }
 /* Picking a message retracts the module (component-managed): this loses to
    neither the hover nor the focus rule above because it comes later at equal
    specificity, and it clears on pointer leave. */
-.chat-message-rail.is-retracted,
-.chat-message-rail.is-retracted:hover,
-.chat-message-rail.is-retracted:focus-within {
+.chat-message-rail.is-retracted:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-message-rail.is-retracted:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-message-rail.is-retracted:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0;
 }
-.chat-message-rail__track {
+.chat-message-rail__track:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   width: 100%;
   min-height: 0;
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 0;
   pointer-events: auto;
   /* No justify-content: center here — centered flex overflow puts the start
      half of the column into unreachable negative scroll space. */
@@ -311,28 +290,28 @@
 }
 /* Wheel mode (long conversations only, gated by the component): the column
    fills the available rail height and the mask fades exactly the top and
-   bottom 8 dashes (8 × 11px pitch = 88px zones; the 40% bound only kicks in
+   bottom 8 dashes (8 × 16px pitch = 128px zones; the 40% bound only kicks in
    on very short windows so the fades never swallow the middle). When the
    column outgrows the rail, it rolls — the component keeps the active dash
    centered as the chat scrolls. Short conversations show the full column
    with no mask occlusion. */
-.chat-message-rail[data-wheel='true'] .chat-message-rail__track {
+.chat-message-rail[data-wheel='true'] .chat-message-rail__track:where(:not([data-chat-root], [data-chat-root] *)) {
   mask-image: linear-gradient(
     to bottom,
     transparent,
-    #000 min(88px, 40%),
-    #000 calc(100% - min(88px, 40%)),
+    #000 min(128px, 40%),
+    #000 calc(100% - min(128px, 40%)),
     transparent
   );
 }
-.chat-message-rail__track::-webkit-scrollbar {
+.chat-message-rail__track:where(:not([data-chat-root], [data-chat-root] *))::-webkit-scrollbar {
   display: none;
 }
-.chat-message-rail__marker {
+.chat-message-rail__marker:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
-  width: 20px;
-  height: 8px;
-  flex: 0 0 8px;
+  width: 100%;
+  height: 16px;
+  flex: 0 0 16px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -343,11 +322,16 @@
   justify-content: flex-end;
   cursor: pointer;
 }
-.chat-message-rail__marker span {
+/* Only the dash reacts; the larger hit area never gets a button fill. */
+.chat-message-rail .chat-message-rail__marker:is(:hover, :active, :focus-visible):where(:not([data-chat-root], [data-chat-root] *)) {
+  background: transparent;
+  transform: none;
+}
+.chat-message-rail__marker span:where(:not([data-chat-root], [data-chat-root] *)) {
   display: block;
   /* Uniform base length; on hover the component eases the pointed dash and
      its 4 neighbors per side longer via this variable (dock-style falloff). */
-  width: var(--chat-rail-dash, 8px);
+  width: var(--chat-rail-dash, 6px);
   height: 1.5px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 34%, transparent);
@@ -355,18 +339,18 @@
     width 220ms cubic-bezier(0.23, 1, 0.32, 1),
     background 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-message-rail__marker:hover span,
-.chat-message-rail__marker:focus-visible span,
-.chat-message-rail__marker.is-previewing span {
+.chat-message-rail__marker:hover span:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-message-rail__marker:focus-visible span:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-message-rail__marker.is-previewing span:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--text);
 }
-.chat-message-rail__marker.is-active span {
+.chat-message-rail__marker.is-active span:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--text);
 }
-.chat-message-rail__marker:focus-visible {
+.chat-message-rail__marker:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: none;
 }
-.chat-message-rail__preview {
+.chat-message-rail__preview:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   /* The rail sits at the pane's right edge; the card opens to its left. */
   right: 36px;
@@ -376,17 +360,14 @@
   padding: 12px 14px;
   border: 1px solid var(--material-separator);
   border-radius: 12px;
-  /* Keep the text side calm and opaque, then reveal more of the transcript
-     toward the rail so the card reads as a white-to-glass lens. */
-  background: linear-gradient(to right, var(--bg-elevated), var(--glass-regular));
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  color: var(--text);
+  /* Keep the overlaid message fully opaque in every theme. */
+  background: #fff;
+  color: #202020;
   box-shadow: 0 18px 40px color-mix(in srgb, var(--text) 12%, transparent);
   transform: translateY(-50%);
   pointer-events: none;
 }
-.chat-message-rail__preview p {
+.chat-message-rail__preview p:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 4;
@@ -398,22 +379,22 @@
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.chat-log.is-balanced-transcript > .msg:first-of-type {
+.chat-log.is-balanced-transcript > .msg:first-of-type:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: auto;
 }
 
 /* Anchor-to-top tail spacer. Height is driven imperatively by ChatPane; the
    negative margin cancels the flex `gap` so it contributes nothing when idle
    (height: 0). */
-.chat-log-tail-spacer {
+.chat-log-tail-spacer:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   height: 0;
   margin-top: -24px;
 }
-.chat-log.is-loading {
+.chat-log.is-loading:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
 }
-.chat-loading-state {
+.chat-loading-state:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: 220px;
   display: flex;
   flex-direction: column;
@@ -423,13 +404,13 @@
   color: var(--text-muted);
   animation: chat-loading-enter 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-loading-mark {
+.chat-loading-mark:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   height: 22px;
 }
-.chat-loading-mark span {
+.chat-loading-mark span:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 6px;
   height: 6px;
   border-radius: var(--radius-pill);
@@ -437,19 +418,19 @@
   opacity: 0.32;
   animation: chat-loading-dot 900ms cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
-.chat-loading-mark span:nth-child(2) { animation-delay: 120ms; }
-.chat-loading-mark span:nth-child(3) { animation-delay: 240ms; }
-.chat-loading-copy {
+.chat-loading-mark span:nth-child(2):where(:not([data-chat-root], [data-chat-root] *)) { animation-delay: 120ms; }
+.chat-loading-mark span:nth-child(3):where(:not([data-chat-root], [data-chat-root] *)) { animation-delay: 240ms; }
+.chat-loading-copy:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   font-weight: 600;
 }
-.chat-loading-lines {
+.chat-loading-lines:where(:not([data-chat-root], [data-chat-root] *)) {
   width: min(260px, 72%);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.chat-loading-lines span {
+.chat-loading-lines span:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 8px;
   border-radius: var(--radius-pill);
   background: linear-gradient(
@@ -461,14 +442,14 @@
   background-size: 200% 100%;
   animation: chat-loading-sheen 1100ms cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
-.chat-loading-lines span:nth-child(2) { width: 82%; }
-.chat-loading-lines span:nth-child(3) { width: 58%; }
-.chat-virtual-spacer {
+.chat-loading-lines span:nth-child(2):where(:not([data-chat-root], [data-chat-root] *)) { width: 82%; }
+.chat-loading-lines span:nth-child(3):where(:not([data-chat-root], [data-chat-root] *)) { width: 58%; }
+.chat-virtual-spacer:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   flex: 0 0 auto;
   min-height: 100%;
 }
-.chat-virtual-row {
+.chat-virtual-row:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   left: 0;
   right: 0;
@@ -493,7 +474,7 @@
 }
 
 /* -------- Messages -------------------------------------------------- */
-.msg {
+.msg:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 0;
   background: transparent;
   border: none;
@@ -508,16 +489,16 @@
   to { opacity: 1; transform: translateY(0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .msg { animation: none; }
+  .msg:where(:not([data-chat-root], [data-chat-root] *)) { animation: none; }
 }
-.msg.user {
+.msg.user:where(:not([data-chat-root], [data-chat-root] *)) {
   align-self: flex-end;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   max-width: min(78%, 560px);
 }
-.msg .role {
+.msg .role:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -528,14 +509,14 @@
   letter-spacing: 0;
   font-weight: 600;
 }
-.msg-time {
+.msg-time:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-faint);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.msg.user .user-text {
+.msg.user .user-text:where(:not([data-chat-root], [data-chat-root] *)) {
   white-space: pre-wrap;
   color: var(--text);
   background: #ededed;
@@ -546,11 +527,11 @@
   font-size: 13px;
   box-shadow: none;
 }
-.msg.user.is-chat-rail-highlighted .user-bubble {
+.msg.user.is-chat-rail-highlighted .user-bubble:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid color-mix(in srgb, var(--accent) 52%, transparent);
   outline-offset: 3px;
 }
-.msg-run-context-row {
+.msg-run-context-row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
@@ -561,7 +542,7 @@
   margin-left: auto;
   overflow: visible;
 }
-.msg-applied-context {
+.msg-applied-context:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex: 0 1 100%;
   flex-direction: column;
@@ -572,7 +553,7 @@
   background: transparent;
   color: var(--text-faint);
 }
-.msg-applied-context__toggle {
+.msg-applied-context__toggle:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -590,41 +571,41 @@
   cursor: pointer;
   transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.msg-applied-context__toggle:hover {
+.msg-applied-context__toggle:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   color: var(--text-muted);
 }
-.msg-applied-context__toggle:focus-visible {
+.msg-applied-context__toggle:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
   outline-offset: 1px;
 }
-.msg-applied-context__icon,
-.msg-applied-context__chevron {
+.msg-applied-context__icon:where(:not([data-chat-root], [data-chat-root] *)),
+.msg-applied-context__chevron:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   flex: 0 0 auto;
   color: var(--text-faint);
 }
-.msg-applied-context__summary {
+.msg-applied-context__summary:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.msg-applied-context__chevron {
+.msg-applied-context__chevron:where(:not([data-chat-root], [data-chat-root] *)) {
   transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.msg-applied-context__chevron.is-open {
+.msg-applied-context__chevron.is-open:where(:not([data-chat-root], [data-chat-root] *)) {
   transform: rotate(180deg);
 }
-.msg-applied-context__details {
+.msg-applied-context__details:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
   padding: 2px 4px 4px;
   border-top: 1px solid color-mix(in srgb, var(--text-muted) 7%, transparent);
 }
-.msg-applied-context__item {
+.msg-applied-context__item:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -638,20 +619,20 @@
   font-size: 9.5px;
   white-space: nowrap;
 }
-.msg-applied-context__item.is-action {
+.msg-applied-context__item.is-action:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: pointer;
 }
-.msg-applied-context__item.is-action:hover {
+.msg-applied-context__item.is-action:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
 }
-.msg-applied-context__kind {
+.msg-applied-context__kind:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-faint);
   font-size: 8.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
-.msg-mode-chip {
+.msg-mode-chip:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -668,16 +649,16 @@
   line-height: 12px;
   white-space: nowrap;
 }
-.msg-mode-chip svg {
+.msg-mode-chip svg:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 8px;
   height: 8px;
 }
-.msg-mode-chip--chat {
+.msg-mode-chip--chat:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--text-soft) 22%, var(--border));
   background: color-mix(in srgb, var(--bg-subtle) 78%, #fff);
   color: var(--text-muted);
 }
-.msg-plugin-context {
+.msg-plugin-context:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -688,7 +669,7 @@
   max-width: 100%;
   overflow: hidden;
 }
-.msg-plugin-chip {
+.msg-plugin-chip:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -706,32 +687,32 @@
   text-align: left;
   appearance: none;
 }
-.msg-plugin-chip--action {
+.msg-plugin-chip--action:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: pointer;
   transition:
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.msg-plugin-chip--action:hover {
+.msg-plugin-chip--action:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
 }
-.msg-plugin-chip--action:focus-visible {
+.msg-plugin-chip--action:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
   outline-offset: 2px;
 }
-.msg-plugin-chip__dot {
+.msg-plugin-chip__dot:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 3px;
   height: 3px;
   border-radius: 50%;
   background: var(--accent);
   flex: 0 0 auto;
 }
-.msg-plugin-chip--design-system .msg-plugin-chip__dot {
+.msg-plugin-chip--design-system .msg-plugin-chip__dot:where(:not([data-chat-root], [data-chat-root] *)) {
   background: #d76445;
 }
-.msg-plugin-chip__icon {
+.msg-plugin-chip__icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -742,21 +723,21 @@
   background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-subtle));
   color: var(--text-muted);
 }
-.msg-plugin-chip__icon svg {
+.msg-plugin-chip__icon svg:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 7px;
   height: 7px;
 }
-.msg-plugin-chip--workspace {
+.msg-plugin-chip--workspace:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 3px;
   padding-left: 2px;
   background: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-subtle));
   border-color: color-mix(in srgb, var(--text-muted) 18%, var(--border));
 }
-.msg-plugin-chip--workspace-browser .msg-plugin-chip__icon {
+.msg-plugin-chip--workspace-browser .msg-plugin-chip__icon:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-subtle));
   color: var(--accent);
 }
-.msg-plugin-chip__label {
+.msg-plugin-chip__label:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   flex: 1 1 auto;
@@ -767,7 +748,7 @@
   white-space: nowrap;
   line-height: 12px;
 }
-.msg-plugin-chip__kind {
+.msg-plugin-chip__kind:where(:not([data-chat-root], [data-chat-root] *)) {
   text-transform: uppercase;
   letter-spacing: 0.02em;
   font-weight: 600;
@@ -775,7 +756,7 @@
   flex: 0 0 auto;
   color: var(--text-faint);
 }
-.msg-plugin-chip__title {
+.msg-plugin-chip__title:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
   font-weight: 600;
   min-width: 0;
@@ -783,24 +764,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.msg-plugin-chip__version,
-.msg-plugin-chip__task {
+.msg-plugin-chip__version:where(:not([data-chat-root], [data-chat-root] *)),
+.msg-plugin-chip__task:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.msg-plugin-chip__task {
+.msg-plugin-chip__task:where(:not([data-chat-root], [data-chat-root] *)) {
   border-left: 1px solid var(--bg-fill-secondary);
   padding-left: 8px;
 }
-.msg-plugin-context .context-chip-strip {
+.msg-plugin-context .context-chip-strip:where(:not([data-chat-root], [data-chat-root] *)) {
   justify-content: flex-end;
   min-width: 0;
   gap: 3px;
 }
-.msg-plugin-context .context-chip-strip__chip {
+.msg-plugin-context .context-chip-strip__chip:where(:not([data-chat-root], [data-chat-root] *)) {
   box-sizing: border-box;
   height: 18px;
   max-width: 190px;
@@ -809,45 +790,45 @@
   font-size: 12px;
   line-height: 12px;
 }
-.msg-plugin-context .context-chip-strip__body {
+.msg-plugin-context .context-chip-strip__body:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 100%;
   gap: 3px;
   padding: 1px 5px;
   line-height: 12px;
 }
-.msg-plugin-context .context-chip-strip__icon svg {
+.msg-plugin-context .context-chip-strip__icon svg:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 7px;
   height: 7px;
 }
-.msg-plugin-context .context-chip-strip__icon::before {
+.msg-plugin-context .context-chip-strip__icon:where(:not([data-chat-root], [data-chat-root] *))::before {
   width: 3px;
   height: 3px;
   margin-right: 3px;
   box-shadow: none;
 }
-.msg-plugin-context .context-chip-strip__kind {
+.msg-plugin-context .context-chip-strip__kind:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   letter-spacing: 0.02em;
 }
-.msg-plugin-context .context-chip-strip__remove {
+.msg-plugin-context .context-chip-strip__remove:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 14px;
   height: 14px;
   font-size: 12px;
 }
 
 /* Wrapper for user bubble + hover action footer */
-.msg.user .user-text-wrap {
+.msg.user .user-text-wrap:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   max-width: 100%;
 }
-.msg.user .user-status-wrap {
+.msg.user .user-status-wrap:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   justify-content: flex-end;
 }
-.msg.assistant .op-waiting {
+.msg.assistant .op-waiting:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   width: auto;
@@ -862,16 +843,16 @@
   font-size: 12px;
   font-style: normal;
 }
-.msg.assistant .op-waiting-dot {
+.msg.assistant .op-waiting-dot:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 6px;
   height: 6px;
   flex: 0 0 6px;
 }
-.msg.assistant .op-waiting-label {
+.msg.assistant .op-waiting-label:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
   font-weight: 600;
 }
-.msg.assistant .op-waiting-detail {
+.msg.assistant .op-waiting-detail:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 180px;
   padding: 1px 5px;
   border-radius: var(--radius-sm);
@@ -880,13 +861,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.msg.assistant .op-waiting-hint {
+.msg.assistant .op-waiting-hint:where(:not([data-chat-root], [data-chat-root] *)) {
   flex-basis: auto;
   color: var(--text-soft);
   font-size: 12px;
   font-style: italic;
 }
-.user-status-card {
+.user-status-card:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -899,7 +880,7 @@
   color: var(--text);
   text-align: start;
 }
-.user-status-card__icon {
+.user-status-card__icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px;
   height: 28px;
   border-radius: var(--radius);
@@ -910,24 +891,24 @@
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.user-status-card__copy {
+.user-status-card__copy:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
-.user-status-card__copy strong {
+.user-status-card__copy strong:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
   line-height: 1.2;
   font-weight: 600;
 }
-.user-status-card__copy span {
+.user-status-card__copy span:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   line-height: 1.35;
   color: var(--text-muted);
 }
 
 /* Hover-revealed footer below the user bubble: time + copy (Lobe style) */
-.msg.user .user-actions {
+.msg.user .user-actions:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -936,11 +917,11 @@
   opacity: 0;
   transition: opacity 140ms var(--ease-out);
 }
-.msg.user .user-text-wrap:hover .user-actions,
-.msg.user .user-text-wrap:focus-within .user-actions {
+.msg.user .user-text-wrap:hover .user-actions:where(:not([data-chat-root], [data-chat-root] *)),
+.msg.user .user-text-wrap:focus-within .user-actions:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 1;
 }
-.msg.user .user-copy-btn {
+.msg.user .user-copy-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px;
   border: none;
   background: none;
@@ -950,21 +931,21 @@
   display: inline-flex;
   transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
-.msg.user .user-copy-btn:hover {
+.msg.user .user-copy-btn:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
   background: var(--bg-subtle);
 }
-.msg.user .user-copy-btn:focus-visible {
+.msg.user .user-copy-btn:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 @media (hover: none) {
-  .msg.user .user-actions {
+  .msg.user .user-actions:where(:not([data-chat-root], [data-chat-root] *)) {
     opacity: 1;
   }
 }
-.msg.assistant .prose { margin-top: 8px; }
-.msg .artifact-badge {
+.msg.assistant .prose:where(:not([data-chat-root], [data-chat-root] *)) { margin-top: 8px; }
+.msg .artifact-badge:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-block;
   margin-top: 8px;
   padding: 2px 8px;
@@ -976,20 +957,20 @@
 /* Run recovery uses the shared user-action card. Only the concrete problem and
    primary recovery action stay visible; friendly copy plus raw diagnostics are
    grouped in one expandable detail area. */
-.run-error__details {
+.run-error__details:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 9px;
 }
 
-.run-error__description {
+.run-error__description:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
   color: var(--text-strong);
 }
-.run-error__desc {
+.run-error__desc:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 3px 0 0;
   font-size: 13px;
   line-height: 1.55;
@@ -998,14 +979,14 @@
   overflow-wrap: anywhere;
 }
 
-.run-error__diagnostic {
+.run-error__diagnostic:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow: hidden;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
 }
 
-.run-error__diagnostic-head {
+.run-error__diagnostic-head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1014,7 +995,7 @@
   color: var(--text-soft);
 }
 /* Copy diagnostics — sits at the right edge of the source head row. */
-.run-error__source-copy {
+.run-error__source-copy:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   appearance: none;
   border: 0;
@@ -1027,25 +1008,25 @@
   color: var(--text-soft);
   transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1), color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.run-error__source-copy:hover {
+.run-error__source-copy:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
   color: var(--text);
 }
-.run-error__source-chevron {
+.run-error__source-chevron:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
   color: var(--text-faint);
   transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.run-error__source.is-open .run-error__source-chevron { transform: rotate(90deg); }
-.run-error__source-label {
+.run-error__source.is-open .run-error__source-chevron:where(:not([data-chat-root], [data-chat-root] *)) { transform: rotate(90deg); }
+.run-error__source-label:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   font-size: 12px;
   font-size: 11px;
   font-weight: 600;
 }
-.run-error__source-peek {
+.run-error__source-peek:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -1055,15 +1036,15 @@
   font-size: 12px;
   color: var(--text-muted);
 }
-.run-error__source.is-open .run-error__source-peek { opacity: 0; }
+.run-error__source.is-open .run-error__source-peek:where(:not([data-chat-root], [data-chat-root] *)) { opacity: 0; }
 /* max-height accordion (robust where grid-rows:0fr leaks the first child line) */
-.run-error__source-full {
+.run-error__source-full:where(:not([data-chat-root], [data-chat-root] *)) {
   max-height: 0;
   overflow: hidden;
   transition: max-height 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.run-error__source.is-open .run-error__source-full { max-height: 240px; }
-.run-error__source-full > pre {
+.run-error__source.is-open .run-error__source-full:where(:not([data-chat-root], [data-chat-root] *)) { max-height: 240px; }
+.run-error__source-full > pre:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 0;
   overflow: auto;
   max-height: 220px;
@@ -1076,7 +1057,7 @@
   overflow-wrap: anywhere;
 }
 
-.run-error__diagnostic > pre {
+.run-error__diagnostic > pre:where(:not([data-chat-root], [data-chat-root] *)) {
   max-height: 220px;
   margin: 0;
   padding: 4px 10px 10px;
@@ -1089,7 +1070,7 @@
   overflow-wrap: anywhere;
 }
 
-.run-error__source-copy {
+.run-error__source-copy:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -1104,12 +1085,12 @@
   cursor: pointer;
 }
 
-.run-error__source-copy:hover {
+.run-error__source-copy:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
   color: var(--text);
 }
 /* Primary contextual CTA (Authorize & retry / Top up / terminal launch). */
-.chat-error-action {
+.chat-error-action:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   appearance: none;
   cursor: pointer;
@@ -1123,9 +1104,9 @@
   border-radius: var(--radius-sm);
   transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-error-action:hover { background: var(--accent-hover, var(--accent)); }
+.chat-error-action:hover:where(:not([data-chat-root], [data-chat-root] *)) { background: var(--accent-hover, var(--accent)); }
 /* Secondary recovery (Retry / Continue) — ghost. */
-.chat-error-retry {
+.chat-error-retry:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   padding: 6px 14px;
 }
@@ -1133,22 +1114,22 @@
 /* Inline AMR sign-in inside the unified card. The pill's base layout is scoped
    to Settings/onboarding, so it arrives unstyled here — give it its own full
    row, wrap the long device-auth error, and match the accent CTA. */
-.chat-error-amr-login {
+.chat-error-amr-login:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 100%;
   min-width: 0;
 }
-.chat-error-amr-login .amr-account-control {
+.chat-error-amr-login .amr-account-control:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   width: 100%;
 }
-.chat-error-amr-login .amr-account-control__status {
+.chat-error-amr-login .amr-account-control__status:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-muted);
   font-size: 12px;
 }
-.chat-error-amr-login .amr-account-control__error {
+.chat-error-amr-login .amr-account-control__error:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 100%;
   overflow-wrap: anywhere;
   color: var(--danger-text, #991b1b);
@@ -1157,8 +1138,8 @@
   line-height: 1.3;
 }
 /* Sign-in / authorize CTA — solid accent, matching .chat-error-action. */
-.chat-error-amr-login .amr-account-control--signed-out .amr-account-control__action,
-.chat-error-amr-login .amr-account-control--error .amr-account-control__action {
+.chat-error-amr-login .amr-account-control--signed-out .amr-account-control__action:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-error-amr-login .amr-account-control--error .amr-account-control__action:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
   cursor: pointer;
   border: 1px solid var(--accent);
@@ -1170,13 +1151,13 @@
   border-radius: var(--radius-sm);
   transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-error-amr-login .amr-account-control--signed-out .amr-account-control__action:hover,
-.chat-error-amr-login .amr-account-control--error .amr-account-control__action:hover {
+.chat-error-amr-login .amr-account-control--signed-out .amr-account-control__action:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-error-amr-login .amr-account-control--error .amr-account-control__action:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--accent-hover, var(--accent));
 }
 /* Cancel during signing-in stays subtle — the activation block below carries
    the primary accent CTA (Open sign-in page). */
-.chat-error-amr-login .amr-account-control--signing-in .amr-account-control__action {
+.chat-error-amr-login .amr-account-control--signing-in .amr-account-control__action:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
   cursor: pointer;
   border: 1px solid var(--border);
@@ -1190,18 +1171,18 @@
 
 /* Hosted-agent recovery is another user decision, so it reuses the shared
    action-card shell. Only supporting copy and benefits remain local here. */
-.amr-card__body {
+.amr-card__body:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 0;
   font-size: 13px;
   line-height: 1.55;
   color: var(--text-muted);
 }
-.amr-card__chips {
+.amr-card__chips:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-.amr-card__chip {
+.amr-card__chip:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   line-height: 1.4;
   padding: 3px 8px;
@@ -1210,7 +1191,7 @@
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.amr-card__cta {
+.amr-card__cta:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
   cursor: pointer;
   border: 1px solid var(--accent);
@@ -1229,16 +1210,16 @@
     background 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.amr-card__cta:hover {
+.amr-card__cta:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--accent-hover, var(--accent));
 }
 
 /* -------- Composer -------------------------------------------------- */
-.pane {
+.pane:where(:not([data-chat-root], [data-chat-root] *)) {
   --chat-composer-inline-inset: 12px;
 }
 
-.composer {
+.composer:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 10px 16px;
   display: flex;
   flex-direction: column;
@@ -1247,26 +1228,26 @@
   position: relative;
   z-index: 1;
 }
-.split:has(.session-mode-toggle__popover),
-.split-chat-slot:has(.session-mode-toggle__popover),
-.split-chat-slot > .pane:has(.session-mode-toggle__popover) {
+.split:has(.session-mode-toggle__popover):where(:not([data-chat-root], [data-chat-root] *)),
+.split-chat-slot:has(.session-mode-toggle__popover):where(:not([data-chat-root], [data-chat-root] *)),
+.split-chat-slot > .pane:has(.session-mode-toggle__popover):where(:not([data-chat-root], [data-chat-root] *)) {
   overflow: visible;
 }
-.split-chat-slot:has(.session-mode-toggle__popover),
-.split-chat-slot > .pane:has(.session-mode-toggle__popover),
-.composer:has(.session-mode-toggle__popover) {
+.split-chat-slot:has(.session-mode-toggle__popover):where(:not([data-chat-root], [data-chat-root] *)),
+.split-chat-slot > .pane:has(.session-mode-toggle__popover):where(:not([data-chat-root], [data-chat-root] *)),
+.composer:has(.session-mode-toggle__popover):where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   z-index: 1500;
 }
-.composer:has(.composer-tools-menu),
-.composer:has(.composer-design-toolbox-menu),
-.composer:has(.composer-import-menu) {
+.composer:has(.composer-tools-menu):where(:not([data-chat-root], [data-chat-root] *)),
+.composer:has(.composer-design-toolbox-menu):where(:not([data-chat-root], [data-chat-root] *)),
+.composer:has(.composer-import-menu):where(:not([data-chat-root], [data-chat-root] *)) {
   z-index: 80;
 }
-.chat-composer-slot {
+.chat-composer-slot:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
 }
-.chat-composer-fixed-layer {
+.chat-composer-fixed-layer:where(:not([data-chat-root], [data-chat-root] *)) {
   position: fixed;
   z-index: 45;
   pointer-events: none;
@@ -1277,19 +1258,17 @@
   contain: layout style;
   transform: translateZ(0);
 }
-.chat-composer-fixed-layer .composer,
-/* The 扩展 / 设计百宝箱 quick pills travel with the composer into this layer;
-   without their own opt-in they inherit the layer's pointer-events: none and
-   clicks fall straight through to the transcript. */
-.chat-composer-fixed-layer [data-testid='composer-quick-pills'] {
+.chat-composer-fixed-layer .composer:where(:not([data-chat-root], [data-chat-root] *)),
+
+.chat-composer-fixed-layer [data-testid='composer-quick-pills']:where(:not([data-chat-root], [data-chat-root] *)) {
   pointer-events: auto;
 }
-.chat-composer-fixed-layer .composer-shell {
+.chat-composer-fixed-layer .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--glass-regular);
   -webkit-backdrop-filter: var(--glass-backdrop);
   backdrop-filter: var(--glass-backdrop);
 }
-.composer-shell {
+.composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   container-type: inline-size;
   border: 1px solid var(--bg-fill-secondary);
   border-radius: var(--radius-lg);
@@ -1309,24 +1288,24 @@
    inset via child margins rather than shell padding, leaving this width — and
    every other composer's collapse behavior — untouched. */
 @container (max-width: 430px) {
-  .composer-row .inline-switcher__chip { padding: 0 7px 0 5px; gap: 5px; }
+  .composer-row .inline-switcher__chip:where(:not([data-chat-root], [data-chat-root] *)) { padding: 0 7px 0 5px; gap: 5px; }
   /* Hide ONLY the trigger's label — the popover options share this class
      and must keep their labels ("Ask" / "Design") visible. */
-  .composer-row .session-mode-toggle__trigger .session-mode-toggle__label { display: none; }
-  .composer-row .session-mode-toggle__trigger { padding: 0 7px; gap: 3px; }
+  .composer-row .session-mode-toggle__trigger .session-mode-toggle__label:where(:not([data-chat-root], [data-chat-root] *)) { display: none; }
+  .composer-row .session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)) { padding: 0 7px; gap: 3px; }
   /* Right-align the popover so it grows leftward and stays inside the narrow
      chat pane instead of overflowing past its right edge (where the scroll
      container clips it). */
-  .composer-row .session-mode-toggle__popover { left: auto; right: 0; }
-  .composer-row .composer-send {
+  .composer-row .session-mode-toggle__popover:where(:not([data-chat-root], [data-chat-root] *)) { left: auto; right: 0; }
+  .composer-row .composer-send:where(:not([data-chat-root], [data-chat-root] *)) {
     width: 36px;
     min-width: 36px;
     padding: 0;
     gap: 0;
   }
-  .composer-row .composer-send span { display: none; }
+  .composer-row .composer-send span:where(:not([data-chat-root], [data-chat-root] *)) { display: none; }
 }
-.composer-shell:focus-within {
+.composer-shell:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border-strong));
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
@@ -1336,15 +1315,15 @@
    surfaces — white input sitting on the gray shell — so it still reads as a
    composer. The disabled state is carried by the muted placeholder / caret
    below, not by flattening both surfaces into one gray block. */
-.composer.composer-readonly .composer-input-wrap:focus-within {
+.composer.composer-readonly .composer-input-wrap:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
 }
-.composer.composer-readonly .composer-editable {
+.composer.composer-readonly .composer-editable:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: not-allowed;
   color: var(--text-muted);
   caret-color: transparent;
 }
-.composer.composer-readonly .composer-input-placeholder {
+.composer.composer-readonly .composer-input-placeholder:where(:not([data-chat-root], [data-chat-root] *)) {
   right: 9px;
   max-width: none;
   overflow: visible;
@@ -1358,7 +1337,7 @@
    the former chrome header). A full-bleed hairline divider separates it
    from the textarea, so the shell carries no padding and each inner row
    owns its own horizontal padding instead. */
-.composer-design-system-row {
+.composer-design-system-row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1366,11 +1345,11 @@
   padding: 7px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
-.composer.drag-active .composer-shell {
+.composer.drag-active .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--accent);
   background: var(--accent-tint);
 }
-.composer-active-file {
+.composer-active-file:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1386,12 +1365,12 @@
   font-size: 12px;
   line-height: 1.25;
 }
-.composer-active-file__label {
+.composer-active-file__label:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   color: var(--text-muted);
   font-weight: 600;
 }
-.composer-active-file__name {
+.composer-active-file__name:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   max-width: min(100%, 260px);
   overflow: hidden;
@@ -1400,7 +1379,7 @@
   font-weight: 600;
 }
 /* -------- Lexical contenteditable input ---------------------------- */
-.composer-input-wrap {
+.composer-input-wrap:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1411,43 +1390,43 @@
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.composer-input-wrap:focus-within {
+.composer-input-wrap:focus-within:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
   border-color: color-mix(in srgb, var(--selected) 28%, var(--border));
 }
 /* The wrapper that owns scroll + max-height (Lexical's ContentEditable is
    the inner [contenteditable] element). */
-.composer-input-editor {
+.composer-input-editor:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   min-height: 72px;
   max-height: min(184px, 34vh);
   overflow-y: auto;
 }
-.composer.composer-active-file-mode .composer-input-editor {
+.composer.composer-active-file-mode .composer-input-editor:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: clamp(150px, 20vh, 210px);
   max-height: min(300px, 32vh);
 }
 /* Manual height from dragging the shell's gray backdrop vertically. Wins
    over the default and active-file-mode min/max above (same specificity,
    declared later). */
-.composer .composer-shell--manual-height .composer-input-editor {
+.composer .composer-shell--manual-height .composer-input-editor:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: var(--composer-manual-h);
   max-height: var(--composer-manual-h);
 }
 /* The gray backdrop itself is the resize handle — children reset the cursor
    so only the shell's own padding / gaps advertise the drag. Scoped to the
    chat composer; the comment-side shell has no resize handler. */
-.composer .composer-shell {
+.composer .composer-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: ns-resize;
 }
-.composer .composer-shell > * {
+.composer .composer-shell > *:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: auto;
 }
-.composer-shell.comment-side-new-comment-shell {
+.composer-shell.comment-side-new-comment-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: auto;
 }
-.composer-input-editor [contenteditable='true'],
-.composer-input-editor .composer-editable {
+.composer-input-editor [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)),
+.composer-input-editor .composer-editable:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: none;
   min-height: 72px;
   padding: 8px 9px;
@@ -1465,18 +1444,18 @@
   caret-color: var(--accent);
   -webkit-user-modify: read-write-plaintext-only; /* paste-as-plain-text guard */
 }
-[data-theme="dark"] .composer-input-editor [contenteditable='true'],
-[data-theme="dark"] .composer-input-editor .composer-editable {
+[data-theme="dark"] .composer-input-editor [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)),
+[data-theme="dark"] .composer-input-editor .composer-editable:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text);
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .composer-input-editor [contenteditable='true'],
-  html:not([data-theme]) .composer-input-editor .composer-editable {
+  html:not([data-theme]) .composer-input-editor [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)),
+  html:not([data-theme]) .composer-input-editor .composer-editable:where(:not([data-chat-root], [data-chat-root] *)) {
     color: var(--text);
   }
 }
-.chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
-.chat-composer-fixed-layer .composer-input-editor .composer-editable {
+.chat-composer-fixed-layer .composer-input-editor [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-input-editor .composer-editable:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 13px;
   font-weight: 600;
 }
@@ -1488,16 +1467,16 @@
    (.home-hero__prompt-editor) without depending on the wrapper class. The
    carousel unmounts as soon as the field has text, which restores the native
    caret automatically. */
-.composer-input-editor:has(~ .home-hero__carousel) [contenteditable='true'] {
+.composer-input-editor:has(~ .home-hero__carousel) [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)) {
   caret-color: transparent;
 }
-.composer.composer-active-file-mode .composer-input-editor [contenteditable='true'],
-.composer.composer-active-file-mode .composer-input-editor .composer-editable {
+.composer.composer-active-file-mode .composer-input-editor [contenteditable='true']:where(:not([data-chat-root], [data-chat-root] *)),
+.composer.composer-active-file-mode .composer-input-editor .composer-editable:where(:not([data-chat-root], [data-chat-root] *)) {
   min-height: clamp(150px, 20vh, 210px);
 }
 /* Lexical placeholder — absolutely positioned over the empty editor. The
    editor adds/removes its sibling automatically; we style by class. */
-.composer-input-placeholder {
+.composer-input-placeholder:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   top: 8px;
   left: 9px;
@@ -1511,7 +1490,7 @@
   white-space: nowrap;
   max-width: calc(100% - 8px);
 }
-.composer-input-wrap .home-hero__carousel {
+.composer-input-wrap .home-hero__carousel:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   left: 9px;
   right: 9px;
@@ -1528,12 +1507,12 @@
   white-space: nowrap;
   overflow: hidden;
 }
-.composer-input-wrap .home-hero__carousel-text {
+.composer-input-wrap .home-hero__carousel-text:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.composer-input-wrap .home-hero__carousel-caret {
+.composer-input-wrap .home-hero__carousel-caret:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 1px;
   height: 1.25em;
   flex: 0 0 auto;
@@ -1543,8 +1522,8 @@
 }
 /* Single-paragraph + LineBreakNode model: collapse paragraph margins so a
    serialized "\n" reads as a single visual line break (no \n\n gap). */
-.composer-input-editor p,
-.composer-editor-paragraph {
+.composer-input-editor p:where(:not([data-chat-root], [data-chat-root] *)),
+.composer-editor-paragraph:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 0;
   line-height: inherit;
 }
@@ -1554,7 +1533,7 @@
    composer-inline-mention--{kind}"> rendered INSIDE the contenteditable
    line box, so it carries the native caret. Per-kind hue is driven by a
    single local custom prop pair so dot + bg + ring stay in sync. */
-.composer-inline-mention {
+.composer-inline-mention:where(:not([data-chat-root], [data-chat-root] *)) {
   --m-hue: var(--accent);
   --m-tint: var(--accent-tint);
   box-sizing: border-box;
@@ -1596,7 +1575,7 @@
 }
 /* Leading type dot. Lexical TextNode tokens can't host child elements, so
    render the dot via ::before — it costs nothing and reads as an icon. */
-.composer-inline-mention::before {
+.composer-inline-mention:where(:not([data-chat-root], [data-chat-root] *))::before {
   content: '';
   flex: 0 0 auto;
   width: 4px;
@@ -1605,60 +1584,60 @@
   background: var(--m-hue);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--m-hue) 18%, transparent);
 }
-.composer-inline-mention:hover {
+.composer-inline-mention:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--m-hue) 40%, var(--border));
   background: color-mix(in srgb, var(--m-hue) 14%, var(--bg-panel));
 }
 /* Lexical applies a 'selected' class when the token is range-selected
    (click / shift-arrow). Use the blue --selected token for the focus ring
    so it reads distinctly from the warm accent hue. */
-.composer-inline-mention.selected {
+.composer-inline-mention.selected:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--selected);
   box-shadow: 0 0 0 2px var(--selected-soft);
   background: color-mix(in srgb, var(--m-hue) 16%, var(--bg-panel));
 }
 /* Per-kind hue map — set only the two local props; everything above
    derives from them. */
-.composer-inline-mention--plugin    { --m-hue: var(--accent);  --m-tint: var(--accent-tint); }
-.composer-inline-mention--skill     { --m-hue: var(--accent);  --m-tint: var(--accent-tint); }
-.composer-inline-mention--design,
-.composer-inline-mention--mcp        { --m-hue: var(--purple);  --m-tint: var(--purple-bg); }
-.composer-inline-mention--file       { --m-hue: var(--blue);    --m-tint: var(--blue-bg); }
-.composer-inline-mention--connector  { --m-hue: var(--green);   --m-tint: var(--green-bg); }
-.composer-inline-mention--asset      { --m-hue: var(--text-soft); --m-tint: var(--bg-subtle); }
+.composer-inline-mention--plugin:where(:not([data-chat-root], [data-chat-root] *))    { --m-hue: var(--accent);  --m-tint: var(--accent-tint); }
+.composer-inline-mention--skill:where(:not([data-chat-root], [data-chat-root] *))     { --m-hue: var(--accent);  --m-tint: var(--accent-tint); }
+.composer-inline-mention--design:where(:not([data-chat-root], [data-chat-root] *)),
+.composer-inline-mention--mcp:where(:not([data-chat-root], [data-chat-root] *))        { --m-hue: var(--purple);  --m-tint: var(--purple-bg); }
+.composer-inline-mention--file:where(:not([data-chat-root], [data-chat-root] *))       { --m-hue: var(--blue);    --m-tint: var(--blue-bg); }
+.composer-inline-mention--connector:where(:not([data-chat-root], [data-chat-root] *))  { --m-hue: var(--green);   --m-tint: var(--green-bg); }
+.composer-inline-mention--asset:where(:not([data-chat-root], [data-chat-root] *))      { --m-hue: var(--text-soft); --m-tint: var(--bg-subtle); }
 /* Working-directory picker row, directly below the input and above the
    controls — mirrors the Home composer's placement. */
 /* Design-system picker rendered as a text-free palette icon button that sits
    in the toolbar right after the "+", reusing the shared `.icon-btn` chrome so
    the two read as one control system. */
-.composer-ds-icon {
+.composer-ds-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
 }
-.composer-row .composer-ds-icon-trigger.is-active {
+.composer-row .composer-ds-icon-trigger.is-active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   color: var(--text);
   border-color: var(--border);
 }
 /* A design system is selected — tint the palette so the icon-only control
    still signals its state without a text label. */
-.composer-row .composer-ds-icon-trigger.is-picked,
-.composer-row .composer-ds-icon-trigger.is-picked:hover:not(:disabled) {
+.composer-row .composer-ds-icon-trigger.is-picked:where(:not([data-chat-root], [data-chat-root] *)),
+.composer-row .composer-ds-icon-trigger.is-picked:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--accent);
 }
 /* The picked state also grows the square icon button into a pill carrying
    the selected system's name to the right of the palette icon. The prefixed
    variants must be listed too — they outrank the 28px width locks that the
    `.app` / `.chat-composer-fixed-layer` icon-btn rules apply later on. */
-.composer-row .composer-ds-icon-trigger.is-picked,
-.app .composer-row .composer-ds-icon-trigger.is-picked,
-.chat-composer-fixed-layer .composer-row .composer-ds-icon-trigger.is-picked {
+.composer-row .composer-ds-icon-trigger.is-picked:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-row .composer-ds-icon-trigger.is-picked:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-composer-fixed-layer .composer-row .composer-ds-icon-trigger.is-picked:where(:not([data-chat-root], [data-chat-root] *)) {
   width: auto;
   min-width: 0;
   padding: 0 8px 0 6px;
   gap: 5px;
 }
-.composer-ds-icon-trigger-label {
+.composer-ds-icon-trigger-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   font-weight: 600;
   max-width: 140px;
@@ -1670,11 +1649,11 @@
    flex shrink for label ellipsis, but an SVG flex item defaults to
    shrinkable too, so a hard squeeze rendered the palette icon tiny. The
    label's ellipsis is the intended give — pin every chip glyph. */
-.composer-row .icon-btn > svg,
-.composer-row .composer-ds-icon-trigger > svg {
+.composer-row .icon-btn > svg:where(:not([data-chat-root], [data-chat-root] *)),
+.composer-row .composer-ds-icon-trigger > svg:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
 }
-.composer-row {
+.composer-row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1704,31 +1683,31 @@
    proportional to base size, so wide chips absorb nearly all of the deficit
    while 28px icon buttons barely move; the run/stop pill itself keeps
    `flex-shrink: 0` (from .composer-send) and is never squeezed. */
-.composer-row > * {
+.composer-row > *:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
 }
-.composer-row .inline-switcher {
+.composer-row .inline-switcher:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   flex: 0 1 auto;
 }
-.composer-row .inline-switcher__chip {
+.composer-row .inline-switcher__chip:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 34px;
   max-width: 100%;
 }
-.composer-row .composer-ds-icon-trigger .composer-ds-icon-trigger-label {
+.composer-row .composer-ds-icon-trigger .composer-ds-icon-trigger-label:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
 }
 /* Agent/model chip (AvatarMenu): same treatment — the trigger may carry a
    model label; let it compress with an ellipsis instead of holding the row
    hostage at full width. */
-.composer-row .avatar-menu {
+.composer-row .avatar-menu:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 1 auto;
 }
-.composer-row .avatar-agent-trigger {
+.composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   max-width: 100%;
 }
-.composer-row .avatar-agent-trigger__model {
+.composer-row .avatar-agent-trigger__model:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1739,10 +1718,10 @@
    opens here, floating above the composer toolbar, triggered from the
    assistant "next step" card's "More" affordance. `display: contents` keeps
    the wrapper out of the flex flow so the backdrop + popup anchor cleanly. */
-.composer-toolbox-standalone {
+.composer-toolbox-standalone:where(:not([data-chat-root], [data-chat-root] *)) {
   display: contents;
 }
-.composer-toolbox-standalone-backdrop {
+.composer-toolbox-standalone-backdrop:where(:not([data-chat-root], [data-chat-root] *)) {
   position: fixed;
   inset: 0;
   z-index: 89;
@@ -1752,7 +1731,7 @@
   margin: 0;
   cursor: default;
 }
-.composer .composer-toolbox-standalone-popup {
+.composer .composer-toolbox-standalone-popup:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   left: 8px;
   right: auto;
@@ -1772,7 +1751,7 @@
 }
 /* Plugins variant of the standalone popover: wide enough that the
    `.plus-menu__plugin-pane` list + hover-preview columns both fit. */
-.composer .composer-plugins-standalone-popup {
+.composer .composer-plugins-standalone-popup:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 466px;
   max-width: calc(100vw - 24px);
   overflow: hidden;
@@ -1787,7 +1766,7 @@
     transform: translateY(0) scale(1);
   }
 }
-.composer-row .icon-btn {
+.composer-row .icon-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   box-sizing: border-box;
   width: 32px;
   height: 32px;
@@ -1807,14 +1786,14 @@
     color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.composer-row .icon-btn:hover:not(:disabled) {
+.composer-row .icon-btn:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   color: var(--text);
   border-color: var(--border);
 }
-.composer-row .icon-btn:active:not(:disabled) { background: var(--bg-muted); }
-.composer-row .icon-btn:disabled { opacity: 0.45; cursor: default; }
-.composer-spacer { flex: 1; }
+.composer-row .icon-btn:active:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) { background: var(--bg-muted); }
+.composer-row .icon-btn:disabled:where(:not([data-chat-root], [data-chat-root] *)) { opacity: 0.45; cursor: default; }
+.composer-spacer:where(:not([data-chat-root], [data-chat-root] *)) { flex: 1; }
 
 /* --- Composer footer: one control system ----------------------------------
    The toolbar mixes five controls authored in five different components —
@@ -1826,30 +1805,30 @@
    row reads as a single system. Send keeps its accent fill and + stays a
    ghost icon; only geometry/elevation is unified, not color. `.app` raises
    specificity above the per-component base rules in routines/shell.css. */
-.app .composer-row .working-dir-pill-trigger,
-.app .composer-row .avatar-agent-trigger,
-.app .composer-row .session-mode-toggle__trigger,
-.app .composer-row .icon-btn {
+.app .composer-row .working-dir-pill-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-row .session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.app .composer-row .icon-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 28px;
   border-radius: var(--radius-sm);
   box-sizing: border-box;
 }
-.app .composer-row .working-dir-pill-trigger {
+.app .composer-row .working-dir-pill-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   padding-top: 0;
   padding-bottom: 0;
 }
-.app .composer-row .session-mode-toggle__trigger {
+.app .composer-row .session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   box-shadow: none;
 }
 /* Chat composer model chip mirrors the home icon-only chip: just the agent
    mark, no chevron or box (see .inline-switcher__chip--icon in the home hero). */
-.app .composer-row .avatar-agent-trigger {
+.app .composer-row .avatar-agent-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px;
   grid-template-columns: 1fr;
   border-color: transparent;
   background: transparent;
 }
-.app .composer-row .avatar-agent-trigger:hover:not(:disabled) {
+.app .composer-row .avatar-agent-trigger:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: transparent;
   background: var(--bg-subtle);
 }
@@ -1857,19 +1836,19 @@
    RemixIcon <i>, not an <svg>, so the old `svg:last-child` never matched it —
    leaving a second child that the single-column grid wrapped to a second row,
    shoving the mark into the top row (it rendered noticeably high). */
-.app .composer-row .avatar-agent-trigger > i:last-child {
+.app .composer-row .avatar-agent-trigger > i:last-child:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
-.app .composer-row .avatar-btn {
+.app .composer-row .avatar-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 22px;
   height: 22px;
 }
-.app .composer-row .icon-btn {
+.app .composer-row .icon-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 28px;
   min-width: 28px;
   min-height: 28px;
 }
-.session-mode-toggle {
+.session-mode-toggle:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -1877,8 +1856,8 @@
   min-width: 0;
   flex-shrink: 0;
 }
-.session-mode-toggle__trigger,
-.session-mode-toggle__option {
+.session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)),
+.session-mode-toggle__option:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -1899,24 +1878,24 @@
     color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.session-mode-toggle__trigger {
+.session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 32px;
   max-width: 132px;
   padding: 0 8px;
   border-radius: var(--radius);
   box-shadow: var(--shadow-xs);
 }
-.session-mode-toggle__trigger:hover:not(:disabled),
-.session-mode-toggle__trigger.is-open {
+.session-mode-toggle__trigger:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)),
+.session-mode-toggle__trigger.is-open:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   border-color: var(--border-strong);
   color: var(--text-strong);
 }
-.session-mode-toggle__trigger:disabled {
+.session-mode-toggle__trigger:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: default;
   opacity: 0.65;
 }
-.session-mode-toggle__popover {
+.session-mode-toggle__popover:where(:not([data-chat-root], [data-chat-root] *)) {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
@@ -1927,7 +1906,7 @@
   align-items: flex-end;
   gap: 8px;
 }
-.session-mode-toggle__menu {
+.session-mode-toggle__menu:where(:not([data-chat-root], [data-chat-root] *)) {
   width: max-content;
   min-width: 168px;
   padding: 4px;
@@ -1936,11 +1915,11 @@
   background: var(--bg-panel);
   box-shadow: var(--shadow-md);
 }
-.session-mode-toggle__options {
+.session-mode-toggle__options:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   gap: 2px;
 }
-.session-mode-toggle__option {
+.session-mode-toggle__option:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 100%;
   height: 30px;
   justify-content: flex-start;
@@ -1950,29 +1929,29 @@
   border-radius: var(--radius-sm);
   background: transparent;
 }
-.session-mode-toggle__option:hover:not(:disabled) {
+.session-mode-toggle__option:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   color: var(--text);
 }
-.session-mode-toggle__option.is-active {
+.session-mode-toggle__option.is-active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text-strong);
 }
-.session-mode-toggle__label {
+.session-mode-toggle__label:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: left;
 }
-.session-mode-toggle__check {
+.session-mode-toggle__check:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   width: 13px;
   flex: 0 0 13px;
   align-items: center;
   justify-content: center;
 }
-.session-mode-card {
+.session-mode-card:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1980,7 +1959,7 @@
   color: var(--text);
   box-shadow: var(--shadow-md);
 }
-.session-mode-toggle__popover-card {
+.session-mode-toggle__popover-card:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 320px;
   flex: 0 0 320px;
   background: var(--bg-panel);
@@ -1988,15 +1967,15 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.composer .session-mode-toggle__popover-card {
+.composer .session-mode-toggle__popover-card:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
-.session-mode-card__head {
+.session-mode-card__head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: flex-start;
   gap: 8px;
 }
-.session-mode-card__icon {
+.session-mode-card__icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   width: 24px;
   height: 24px;
@@ -2007,47 +1986,47 @@
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text-strong);
 }
-.session-mode-card__heading {
+.session-mode-card__heading:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
 }
-.session-mode-card__title {
+.session-mode-card__title:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-strong);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.25;
 }
-.session-mode-card__label {
+.session-mode-card__label:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 1px;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
 }
-.session-mode-card__summary,
-.session-mode-card__section-text {
+.session-mode-card__summary:where(:not([data-chat-root], [data-chat-root] *)),
+.session-mode-card__section-text:where(:not([data-chat-root], [data-chat-root] *)) {
   margin: 7px 0 0;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
-.session-mode-card__section {
+.session-mode-card__section:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 9px;
 }
-.session-mode-card__section-label {
+.session-mode-card__section-label:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-strong);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1.25;
 }
-.session-mode-card__queries {
+.session-mode-card__queries:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   gap: 4px;
   margin: 6px 0 0;
   padding: 0;
   list-style: none;
 }
-.session-mode-card__query {
+.session-mode-card__query:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 6px 7px;
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   border-radius: var(--radius-sm);
@@ -2058,20 +2037,20 @@
   line-height: 1.35;
 }
 @media (max-width: 700px) {
-  .session-mode-toggle__trigger {
+  .session-mode-toggle__trigger:where(:not([data-chat-root], [data-chat-root] *)) {
     max-width: 138px;
   }
-  .session-mode-toggle__popover {
+  .session-mode-toggle__popover:where(:not([data-chat-root], [data-chat-root] *)) {
     display: grid;
     width: min(292px, calc(100vw - 24px));
   }
-  .session-mode-toggle__menu,
-  .session-mode-toggle__popover-card {
+  .session-mode-toggle__menu:where(:not([data-chat-root], [data-chat-root] *)),
+  .session-mode-toggle__popover-card:where(:not([data-chat-root], [data-chat-root] *)) {
     width: 100%;
     min-width: 0;
   }
 }
-.composer-import {
+.composer-import:where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
@@ -2079,8 +2058,8 @@
   font-size: 12px;
   color: var(--text-muted);
 }
-.composer-import:hover:not(:disabled) { background: var(--bg-fill-tertiary); color: var(--text); }
-.composer-research {
+.composer-import:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) { background: var(--bg-fill-tertiary); color: var(--text); }
+.composer-research:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2092,18 +2071,18 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.composer-research:hover:not(:disabled) { background: var(--bg-fill-tertiary); color: var(--text); }
-.composer-research.on {
+.composer-research:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) { background: var(--bg-fill-tertiary); color: var(--text); }
+.composer-research.on:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in oklab, var(--accent) 12%, transparent);
   color: var(--accent);
 }
-.composer-research-dot {
+.composer-research-dot:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
 }
-.composer-send {
+.composer-send:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2129,18 +2108,18 @@
     transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.composer-send:hover:not(:disabled) {
+.composer-send:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--text);
   border-color: var(--text);
   box-shadow: var(--shadow-sm);
 }
-.composer-send:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--shadow-xs); }
-.composer-send:focus-visible {
+.composer-send:active:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) { transform: translateY(1px); box-shadow: var(--shadow-xs); }
+.composer-send:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: var(--stroke-thin) solid var(--blue);
   outline-offset: 2px;
   box-shadow: var(--shadow-xs);
 }
-.composer-send:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+.composer-send:disabled:where(:not([data-chat-root], [data-chat-root] *)) { opacity: 0.5; cursor: default; box-shadow: none; }
 /* Executing state: the SAME box as Send, minus the arrow — 底.svg's 32px
    near-black squircle (rx 14, no rim) — with the green dot-matrix loader
    running on it. It used to widen into a labelled pill (dot-matrix + 思考中,
@@ -2148,7 +2127,7 @@
    the button's hover tooltip. viewer/routines.css loads later and owns the
    shared geometry for both states; these are the base-layer values for hosts
    that rule doesn't reach. */
-.composer-send.stop {
+.composer-send.stop:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 32px;
   min-width: 32px;
   height: 32px;
@@ -2163,8 +2142,8 @@
 /* Hover does NOT lift the ground the way the send disc's does: Group
    2147224570.svg draws the hovered run button on the same #202020 as the
    resting one, and the glyph swap below is the whole affordance. */
-.composer-send.stop:hover,
-.composer-send.stop:active {
+.composer-send.stop:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.composer-send.stop:active:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--send-ink);
   border-color: transparent;
   color: var(--send-ground);
@@ -2175,25 +2154,25 @@
    ThinkingOrb writes `display: block` in an INLINE style, which no
    non-!important stylesheet rule can beat (same trap the avatar chevron hit in
    viewer/routines.css). Opacity is untouched by that inline style. */
-.composer-send.stop {
+.composer-send.stop:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   place-items: center;
 }
-.composer-send.stop > * {
+.composer-send.stop > *:where(:not([data-chat-root], [data-chat-root] *)) {
   grid-area: 1 / 1;
 }
-.composer-send.stop .composer-stop-glyph {
+.composer-send.stop .composer-stop-glyph:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0;
 }
-.composer-send.stop:hover .composer-run-glyph,
-.composer-send.stop:focus-visible .composer-run-glyph {
+.composer-send.stop:hover .composer-run-glyph:where(:not([data-chat-root], [data-chat-root] *)),
+.composer-send.stop:focus-visible .composer-run-glyph:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0;
 }
-.composer-send.stop:hover .composer-stop-glyph,
-.composer-send.stop:focus-visible .composer-stop-glyph {
+.composer-send.stop:hover .composer-stop-glyph:where(:not([data-chat-root], [data-chat-root] *)),
+.composer-send.stop:focus-visible .composer-stop-glyph:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 1;
 }
-.composer-run-glyph {
+.composer-run-glyph:where(:not([data-chat-root], [data-chat-root] *)) {
   /* ThinkingOrb's own <canvas>; it sets display/width/height inline from its
      `size` prop (20), so nothing here needs to size it. */
   pointer-events: none;
@@ -2216,7 +2195,7 @@
      Dropping this one declaration restores the component's stock look. */
   filter: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='od-orb-green' color-interpolation-filters='sRGB'><feColorMatrix type='matrix' values='0 0 0 0 0  0 1 0 0 0  0 0.0314 0 0 0  0 0 0 1 0'/></filter></svg>#od-orb-green");
 }
-.composer-stop-glyph {
+.composer-stop-glyph:where(:not([data-chat-root], [data-chat-root] *)) {
   /* The file's own box: the square is drawn at 9..23 of a 32 viewBox, so the
      glyph renders at the button's full 32px and insets itself. */
   display: block;
@@ -2224,13 +2203,13 @@
   height: 32px;
   pointer-events: none;
 }
-.composer-hint {
+.composer-hint:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: 12px;
   color: var(--text-faint);
   margin: 0 8px;
 }
 
-.chat-queued-send-strip {
+.chat-queued-send-strip:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   align-self: auto;
@@ -2250,7 +2229,7 @@
     0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-.chat-queued-send-list {
+.chat-queued-send-list:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -2262,13 +2241,13 @@
   scrollbar-width: thin;
 }
 
-.chat-queued-send-list.is-scrollable {
+.chat-queued-send-list.is-scrollable:where(:not([data-chat-root], [data-chat-root] *)) {
   padding-right: 3px;
   overscroll-behavior: contain;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
 }
 
-.chat-queued-send-header {
+.chat-queued-send-header:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2276,7 +2255,7 @@
   padding: 0 4px 1px;
 }
 
-.chat-queued-send-heading {
+.chat-queued-send-heading:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2287,12 +2266,12 @@
   white-space: nowrap;
 }
 
-.chat-queued-send-heading strong {
+.chat-queued-send-heading strong:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--text-strong);
   font-weight: 600;
 }
 
-.chat-queued-send-row {
+.chat-queued-send-row:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) max-content;
@@ -2312,21 +2291,21 @@
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.chat-queued-send-row-active {
+.chat-queued-send-row-active:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--border) 80%, transparent);
   background: color-mix(in srgb, var(--bg-subtle) 82%, transparent);
 }
 
-.chat-queued-send-row:hover {
+.chat-queued-send-row:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
 }
 
-.chat-queued-send-row-dragging {
+.chat-queued-send-row-dragging:where(:not([data-chat-root], [data-chat-root] *)) {
   opacity: 0.45;
 }
 
-.chat-queued-send-row-drop-before::before,
-.chat-queued-send-row-drop-after::after {
+.chat-queued-send-row-drop-before:where(:not([data-chat-root], [data-chat-root] *))::before,
+.chat-queued-send-row-drop-after:where(:not([data-chat-root], [data-chat-root] *))::after {
   content: '';
   position: absolute;
   left: 28px;
@@ -2337,15 +2316,15 @@
   box-shadow: 0 0 0 2px var(--selected-soft);
 }
 
-.chat-queued-send-row-drop-before::before {
+.chat-queued-send-row-drop-before:where(:not([data-chat-root], [data-chat-root] *))::before {
   top: -2px;
 }
 
-.chat-queued-send-row-drop-after::after {
+.chat-queued-send-row-drop-after:where(:not([data-chat-root], [data-chat-root] *))::after {
   bottom: -2px;
 }
 
-.chat-queued-send-main {
+.chat-queued-send-main:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   flex: 1;
@@ -2354,7 +2333,7 @@
   gap: 2px;
 }
 
-.chat-queued-send-sender {
+.chat-queued-send-sender:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -2362,7 +2341,7 @@
   overflow: hidden;
 }
 
-.chat-queued-send-sender__avatar {
+.chat-queued-send-sender__avatar:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 22px;
   height: 22px;
   flex: 0 0 auto;
@@ -2372,7 +2351,7 @@
   background: color-mix(in srgb, var(--bg) 60%, transparent);
 }
 
-.chat-queued-send-sender__name {
+.chat-queued-send-sender__name:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   color: var(--text-muted);
@@ -2382,7 +2361,7 @@
   white-space: nowrap;
 }
 
-.chat-queued-send-title {
+.chat-queued-send-title:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   color: var(--text);
@@ -2392,7 +2371,7 @@
   white-space: nowrap;
 }
 
-.chat-queued-send-chips {
+.chat-queued-send-chips:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   /* #90: wrap instead of clip. With nowrap + overflow:hidden the container
      hard-cut the last visible chip mid-word ("1 workspace cont…") and the
@@ -2405,7 +2384,7 @@
   min-width: 0;
 }
 
-.chat-queued-send-chip {
+.chat-queued-send-chip:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -2424,7 +2403,7 @@
   white-space: nowrap;
 }
 
-.chat-queued-send-actions {
+.chat-queued-send-actions:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 1px;
@@ -2432,8 +2411,8 @@
   min-width: 0;
 }
 
-.chat-queued-send-drag-handle,
-.chat-queued-send-action {
+.chat-queued-send-drag-handle:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-queued-send-action:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -2446,40 +2425,40 @@
   color: var(--text-muted);
 }
 
-.chat-queued-send-drag-handle {
+.chat-queued-send-drag-handle:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   color: var(--text-faint);
   cursor: grab;
 }
 
-.chat-queued-send-drag-handle:active:not(:disabled) {
+.chat-queued-send-drag-handle:active:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: grabbing;
 }
 
-.chat-queued-send-drag-handle:disabled {
+.chat-queued-send-drag-handle:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: default;
   opacity: 0.35;
 }
 
-.chat-queued-send-drag-handle:hover:not(:disabled),
-.chat-queued-send-action:hover:not(:disabled) {
+.chat-queued-send-drag-handle:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)),
+.chat-queued-send-action:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--border) 84%, transparent);
   background: var(--bg-panel);
   color: var(--text);
 }
 
-.chat-queued-send-drag-handle:focus-visible,
-.chat-queued-send-action:focus-visible {
+.chat-queued-send-drag-handle:focus-visible:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-queued-send-action:focus-visible:where(:not([data-chat-root], [data-chat-root] *)) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.chat-queued-send-action:disabled {
+.chat-queued-send-action:disabled:where(:not([data-chat-root], [data-chat-root] *)) {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
-.chat-queued-send-overflow {
+.chat-queued-send-overflow:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 1px 4px 0 33px;
   color: var(--text-faint);
   font-size: 12px;
@@ -2487,11 +2466,11 @@
   white-space: nowrap;
 }
 
-.chat-queued-send-tooltip {
+.chat-queued-send-tooltip:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
 }
 
-.chat-queued-send-tooltip:not(.od-tooltip)[data-tooltip]::after {
+.chat-queued-send-tooltip:not(.od-tooltip)[data-tooltip]:where(:not([data-chat-root], [data-chat-root] *))::after {
   content: attr(data-tooltip);
   position: absolute;
   top: 50%;
@@ -2513,30 +2492,30 @@
     transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.chat-queued-send-drag-handle:not(.od-tooltip)[data-tooltip]::after {
+.chat-queued-send-drag-handle:not(.od-tooltip)[data-tooltip]:where(:not([data-chat-root], [data-chat-root] *))::after {
   right: auto;
   left: calc(100% + 6px);
   transform: translate(2px, -50%);
 }
 
-.chat-queued-send-tooltip:not(.od-tooltip)[data-tooltip]:hover::after,
-.chat-queued-send-tooltip:not(.od-tooltip)[data-tooltip]:focus-visible::after {
+.chat-queued-send-tooltip:not(.od-tooltip)[data-tooltip]:hover:where(:not([data-chat-root], [data-chat-root] *))::after,
+.chat-queued-send-tooltip:not(.od-tooltip)[data-tooltip]:focus-visible:where(:not([data-chat-root], [data-chat-root] *))::after {
   opacity: 1;
   transform: translate(0, -50%);
 }
 
-.preview-draw-note-input::placeholder {
+.preview-draw-note-input:where(:not([data-chat-root], [data-chat-root] *))::placeholder {
   color: rgba(255, 225, 210, 0.86);
 }
 
-.preview-draw-note-input:focus {
+.preview-draw-note-input:focus:where(:not([data-chat-root], [data-chat-root] *)) {
   background: rgba(218, 97, 56, 0.26) !important;
   border-color: rgba(255, 184, 140, 0.95) !important;
   box-shadow: 0 0 0 3px rgba(218, 97, 56, 0.34), 0 0 18px rgba(218, 97, 56, 0.24) !important;
 }
 
 /* -------- Staged attachments -------------------------------------- */
-.staged-row {
+.staged-row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2546,7 +2525,7 @@
   overflow-y: auto;
   overflow-x: hidden;
 }
-.staged-chip {
+.staged-chip:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2568,11 +2547,11 @@
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.staged-chip:hover {
+.staged-chip:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
   border-color: var(--border-strong);
 }
-.staged-order {
+.staged-order:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2586,22 +2565,22 @@
   font-weight: 600;
   line-height: 1;
 }
-.staged-context-row {
+.staged-context-row:where(:not([data-chat-root], [data-chat-root] *)) {
   padding-top: 2px;
 }
-.chat-composer-fixed-layer .staged-context-row:has(> .staged-context--workspace):not(:has(> :not(.staged-context--workspace))) {
+.chat-composer-fixed-layer .staged-context-row:has(> .staged-context--workspace):not(:has(> :not(.staged-context--workspace))):where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
-.chat-composer-fixed-layer .staged-context--workspace {
+.chat-composer-fixed-layer .staged-context--workspace:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
-.staged-context-picker {
+.staged-context-picker:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   min-width: 0;
   height: 22px;
 }
-.staged-context-picker--design-system .project-ds-picker-trigger {
+.staged-context-picker--design-system .project-ds-picker-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   height: 22px;
   min-height: 22px;
   max-width: 232px;
@@ -2611,7 +2590,7 @@
   font-size: 12px;
   box-shadow: none;
 }
-.staged-context {
+.staged-context:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 4px;
   height: 22px;
   min-height: 22px;
@@ -2622,7 +2601,7 @@
   background: color-mix(in srgb, var(--accent-tint) 30%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
 }
-.staged-context .staged-icon {
+.staged-context .staged-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 14px;
   height: 14px;
   flex-basis: 14px;
@@ -2630,67 +2609,67 @@
   background: color-mix(in srgb, var(--accent) 9%, var(--bg-subtle));
   color: var(--accent);
 }
-.staged-context .staged-icon svg {
+.staged-context .staged-icon svg:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 8px;
   height: 8px;
 }
 /* Skill chips (设计百宝箱 picks): icon-less pill with a touch more air on
    every side than the compact 22px context chips (dogfood 2026-07-28). */
-.staged-context--skill {
+.staged-context--skill:where(:not([data-chat-root], [data-chat-root] *)) {
   height: auto;
   min-height: 26px;
   padding: 4px 10px;
   border-radius: var(--radius-pill, 999px);
 }
-.staged-context .staged-name {
+.staged-context .staged-name:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 106px;
   line-height: 14px;
 }
-.staged-context .staged-remove {
+.staged-context .staged-remove:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 16px;
   height: 16px;
   flex-basis: 16px;
   border-radius: var(--radius-xs);
 }
-.staged-context .staged-remove svg {
+.staged-context .staged-remove svg:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 8px;
   height: 8px;
 }
-.staged-context--mcp {
+.staged-context--mcp:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--purple-bg) 34%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--purple) 18%, var(--border));
 }
-.staged-context--mcp .staged-icon {
+.staged-context--mcp .staged-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--purple) 10%, var(--bg-subtle));
   color: var(--purple);
 }
-.staged-context--connector {
+.staged-context--connector:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--green-bg) 34%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--green) 18%, var(--border));
 }
-.staged-context--connector .staged-icon {
+.staged-context--connector .staged-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--green) 10%, var(--bg-subtle));
   color: var(--green);
 }
 /* Applied-plugin chip — accent-tinted, sitting inline in the staged-context
    row next to the design-system picker. The chip itself is a plain container;
    its two controls (open-details + remove) are real sibling buttons. */
-.staged-context--plugin {
+.staged-context--plugin:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
 }
-.staged-context--plugin .staged-icon {
+.staged-context--plugin .staged-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-subtle));
   color: var(--accent);
 }
-.staged-context--plugin:hover {
+.staged-context--plugin:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 /* The chip's "open details" trigger: icon + name as a real <button> so it is a
    sibling of the remove button, not a role=button wrapper around it (nested
    interactive controls break focus order + assistive-tech announcements).
    Unstyled so it reads as the chip's content rather than a nested button. */
-.staged-context-open {
+.staged-context-open:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2705,27 +2684,27 @@
   cursor: pointer;
   overflow: hidden;
 }
-.staged-context--workspace {
+.staged-context--workspace:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--bg-subtle) 48%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--text-muted) 18%, var(--border));
 }
-.staged-context--workspace .staged-icon {
+.staged-context--workspace .staged-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-subtle));
   color: var(--text-muted);
 }
-.staged-context-kind {
+.staged-context-kind:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-right: 3px;
   color: var(--text-muted);
   font-weight: 600;
 }
-.staged-chip img {
+.staged-chip img:where(:not([data-chat-root], [data-chat-root] *)) {
   display: block;
   width: 12px;
   height: 12px;
   border-radius: 3px;
   object-fit: cover;
 }
-.staged-preview-trigger {
+.staged-preview-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -2738,14 +2717,14 @@
   color: inherit;
   text-align: left;
 }
-.staged-preview-trigger:hover:not(:disabled) {
+.staged-preview-trigger:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
   background: transparent;
   border-color: transparent;
 }
 /* Videos ride the same thumbnail box as stills — a staged .mp4 shows its own
    first frame here (per product: 视频类默认展示可打开预览). */
-.staged-preview-trigger img,
-.staged-preview-trigger video {
+.staged-preview-trigger img:where(:not([data-chat-root], [data-chat-root] *)),
+.staged-preview-trigger video:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 12px;
   width: 12px;
   height: 12px;
@@ -2754,18 +2733,18 @@
 }
 /* Image attachments mirror the home composer's chips: a 36px thumbnail with
    no filename text (the name lives in the tooltip / preview modal). */
-.staged-chip--image-file {
+.staged-chip--image-file:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: var(--spacing-6, 6px);
   min-height: 44px;
   padding: var(--spacing-4, 4px) var(--spacing-6, 6px) var(--spacing-4, 4px) var(--spacing-4, 4px);
   border-radius: var(--radius-large, 12px);
   background: var(--bg-panel);
 }
-.staged-chip--image-file .staged-preview-trigger {
+.staged-chip--image-file .staged-preview-trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
 }
-.staged-chip--image-file .staged-preview-trigger img,
-.staged-chip--image-file .staged-preview-trigger video {
+.staged-chip--image-file .staged-preview-trigger img:where(:not([data-chat-root], [data-chat-root] *)),
+.staged-chip--image-file .staged-preview-trigger video:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 var(--spacing-36, 36px);
   width: var(--spacing-36, 36px);
   height: var(--spacing-36, 36px);
@@ -2773,14 +2752,14 @@
   object-fit: cover;
   background: var(--bg-subtle);
 }
-.staged-preview-trigger .staged-name {
+.staged-preview-trigger .staged-name:where(:not([data-chat-root], [data-chat-root] *)) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 12px;
 }
-.staged-preview-modal {
+.staged-preview-modal:where(:not([data-chat-root], [data-chat-root] *)) {
   position: fixed;
   inset: 0;
   z-index: 1200;
@@ -2792,7 +2771,7 @@
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }
-.staged-preview-card {
+.staged-preview-card:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2804,14 +2783,14 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
 }
-.staged-preview-head {
+.staged-preview-head:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
 }
-.staged-preview-head span {
+.staged-preview-head span:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2825,7 +2804,7 @@
    height and dropping the padding is what turns the pill into a true circle;
    `flex: 0 0 auto` keeps the long filename beside it from squashing it back
    into an oval. */
-.staged-preview-head .icon-only {
+.staged-preview-head .icon-only:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 0 0 auto;
   width: 36px;
   height: 36px;
@@ -2835,8 +2814,8 @@
 /* One box for both: a staged video opens in this same card as a player (the
    home composer previews video now, not only stills), and it has to be bound
    by the card exactly the way an image is. */
-.staged-preview-card > img,
-.staged-preview-card > video {
+.staged-preview-card > img:where(:not([data-chat-root], [data-chat-root] *)),
+.staged-preview-card > video:where(:not([data-chat-root], [data-chat-root] *)) {
   display: block;
   max-width: 100%;
   max-height: min(70vh, 640px);
@@ -2844,32 +2823,32 @@
   border-radius: var(--radius);
   background: var(--bg);
 }
-.staged-comment {
+.staged-comment:where(:not([data-chat-root], [data-chat-root] *)) {
   border-radius: var(--radius-pill);
   padding: 3px 5px 3px 8px;
 }
-.user-attachment.staged-comment {
+.user-attachment.staged-comment:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: 100%;
   max-height: 200px;
   overflow-y: auto;
 }
-.staged-comment .staged-name {
+.staged-comment .staged-name:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
   flex-wrap: wrap;
 }
-.staged-comment .staged-name strong {
+.staged-comment .staged-name strong:where(:not([data-chat-root], [data-chat-root] *)) {
   color: var(--accent-strong);
   font-weight: 600;
   flex: 0 0 auto;
 }
-.staged-comment .staged-name span {
+.staged-comment .staged-name span:where(:not([data-chat-root], [data-chat-root] *)) {
   white-space: normal;
   word-break: break-word;
 }
-.staged-comment button {
+.staged-comment button:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 20px;
   height: 20px;
   padding: 0;
@@ -2880,11 +2859,11 @@
   font-size: 14px;
   line-height: 1;
 }
-.staged-comment button:hover {
+.staged-comment button:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-subtle);
   color: var(--text);
 }
-.staged-icon {
+.staged-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 12px;
   height: 12px;
   flex: 0 0 12px;
@@ -2896,12 +2875,12 @@
   justify-content: center;
   font-size: 12px;
 }
-.staged-icon svg {
+.staged-icon svg:where(:not([data-chat-root], [data-chat-root] *)) {
   display: block;
   width: 8px;
   height: 8px;
 }
-.staged-name {
+.staged-name:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2909,7 +2888,7 @@
   color: var(--text);
   line-height: 12px;
 }
-.staged-remove {
+.staged-remove:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
@@ -2924,19 +2903,19 @@
   line-height: 1;
   border-radius: 3px;
 }
-.staged-remove svg {
+.staged-remove svg:where(:not([data-chat-root], [data-chat-root] *)) {
   display: block;
   width: 8px;
   height: 8px;
 }
-.staged-remove:hover { color: var(--red); background: var(--red-bg); }
+.staged-remove:hover:where(:not([data-chat-root], [data-chat-root] *)) { color: var(--red); background: var(--red-bg); }
 
-.linked-dirs-row {
+.linked-dirs-row:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
-.linked-dir-chip {
+.linked-dir-chip:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2948,21 +2927,21 @@
   color: var(--text-muted);
   max-width: 220px;
 }
-.linked-dir-chip svg { flex-shrink: 0; color: var(--text-muted); }
-.linked-dir-name {
+.linked-dir-chip svg:where(:not([data-chat-root], [data-chat-root] *)) { flex-shrink: 0; color: var(--text-muted); }
+.linked-dir-name:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.user-attachments {
+.user-attachments:where(:not([data-chat-root], [data-chat-root] *)) {
   display: flex;
   gap: 3px;
   flex-wrap: wrap;
   justify-content: flex-end;
   margin-bottom: 4px;
 }
-.user-attachment {
+.user-attachment:where(:not([data-chat-root], [data-chat-root] *)) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2979,23 +2958,23 @@
   font-size: 12px;
   line-height: 12px;
 }
-.user-attachment.openable { cursor: pointer; }
-.user-attachment.openable:hover {
+.user-attachment.openable:where(:not([data-chat-root], [data-chat-root] *)) { cursor: pointer; }
+.user-attachment.openable:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-secondary);
 }
-.user-attachment img {
+.user-attachment img:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 12px;
   height: 12px;
   object-fit: cover;
   border-radius: 3px;
   display: block;
 }
-.user-attachment > svg {
+.user-attachment > svg:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 12px;
   height: 12px;
   flex: 0 0 12px;
 }
-.user-attachment .staged-name {
+.user-attachment .staged-name:where(:not([data-chat-root], [data-chat-root] *)) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -1868,9 +1868,9 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
      280px min-width kept forcing the menu wide. */
   min-width: 0;
   padding: 6px;
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
@@ -2302,11 +2302,11 @@ a.avatar-item:visited {
 @property --project-chat-handle-width {
   syntax: '<length>';
   inherits: true;
-  initial-value: 8px;
+  initial-value: 4px;
 }
 .split {
   --project-chat-panel-width: 460px;
-  --project-chat-handle-width: 8px;
+  --project-chat-handle-width: 4px;
   --project-workspace-panel-track: minmax(400px, 1fr);
   display: grid;
   /* Always three tracks — collapsing never drops to a 1-column layout.
@@ -2480,8 +2480,8 @@ a.avatar-item:visited {
   grid-column: 2;
   position: relative;
   z-index: 45;
-  width: 8px;
-  min-width: 8px;
+  width: var(--project-chat-handle-width, 4px);
+  min-width: 0;
   height: 100%;
   cursor: col-resize;
   background: transparent;
@@ -2531,4 +2531,8 @@ a.avatar-item:visited {
 }
 .split-resize-handle:focus-visible {
   outline: none;
+}
+/* Keep the resize hit area out of persistent message navigation markers. */
+.split:has(.chat-message-rail) > .split-resize-handle::before {
+  left: 0;
 }

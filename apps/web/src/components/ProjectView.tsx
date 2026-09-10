@@ -279,7 +279,8 @@ import { persistCommentAnchors } from '../collab/comment-anchor-client';
 import type { AnchorWriteBack } from '../comments';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
-import { ChatPane } from './ChatPane';
+import { ChatPane } from './chat/ProjectChatPane';
+import historyDockStyles from './chat/ConversationHistoryDock.module.css';
 import type { ChatSendMeta, ChatSendOutcome } from './ChatComposer';
 import {
   CritiqueTheaterMount,
@@ -696,7 +697,7 @@ const DEFAULT_CHAT_PANEL_WIDTH = 460;
 const MIN_CHAT_PANEL_WIDTH = 345;
 const MAX_CHAT_PANEL_WIDTH = 720;
 const MIN_WORKSPACE_PANEL_WIDTH = 400;
-const SPLIT_RESIZE_HANDLE_WIDTH = 8;
+const SPLIT_RESIZE_HANDLE_WIDTH = 4;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
 const BYOK_PROVIDER_REQUIRED_MESSAGE =
@@ -2262,6 +2263,7 @@ export function ProjectView({
   // Chat-column dock host for the workspace tab strip (workspaceTabsDock.ts);
   // FileWorkspace registers its own focus-mode host when the chat collapses.
   const chatTabsDockRef = useWorkspaceTabsDockRef();
+  const [historyPortalTarget, setHistoryPortalTarget] = useState<HTMLDivElement | null>(null);
   const [commentInspectorActive, setCommentInspectorActive] = useState(false);
   const commentInspectorPortalId = useId();
   // Per-session override for the BYOK chat's generate_image tool. Seeded once
@@ -10857,9 +10859,8 @@ export function ProjectView({
               data-testid="workspace-tabs-dock"
               ref={chatTabsDockRef}
             >
-              {/* Collapse-chat control, lifted out of the chat card header to
-                  sit left of the docked tab dropdown (the dropdown portals in
-                  after this button, so flex order stays button → dropdown). */}
+              {/* Conversation controls follow the docked project dropdown. */}
+              <div className={historyDockStyles.dock} ref={setHistoryPortalTarget} data-testid="chat-history-dock" />
               <button
                 type="button"
                 className="split-chat-collapse od-tooltip"
@@ -10876,6 +10877,7 @@ export function ProjectView({
           ) : null}
           {activeConversationId || conversationLoadError || emptyConversationReadOnlySettled ? (
             <ChatPane
+              historyPortalTarget={historyPortalTarget}
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
               key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
@@ -11108,7 +11110,7 @@ export function ProjectView({
               )}
               designSystemPicker={(
                 <DesignSystemPicker
-                  variant="icon"
+                  variant="home"
                   designSystems={designSystems}
                   selectedId={projectDesignSystemId ?? null}
                   workspaceContext={projectRunWorkspaceContext}

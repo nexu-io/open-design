@@ -161,11 +161,11 @@ describe('conversation timestamps', () => {
     ).toBe(true);
   });
 
-  it('shows fixed latest run duration in the conversation menu instead of live relative age', () => {
+  it('shows hours and minutes since the last update for completed conversations', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
     const t = (key: string, vars?: Record<string, string | number>) =>
-      key === 'common.minutesShort' ? `${vars?.n}m` : key;
+      key === 'common.minutesShort' ? `${vars?.n}m` : key === 'common.hoursShort' ? `${vars?.n}h` : key;
     const conversation: Conversation = {
       id: 'conv-1',
       projectId: 'project-1',
@@ -180,14 +180,14 @@ describe('conversation timestamps', () => {
       },
     };
 
-    expect(conversationMetaLabel(conversation, t as never)).toBe('15s');
+    expect(conversationMetaLabel(conversation, t as never)).toBe('1h 59m');
   });
 
-  it('prefers cumulative conversation duration over the latest run duration', () => {
+  it('keeps conversation recency independent of cumulative run duration', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
     const t = (key: string, vars?: Record<string, string | number>) =>
-      key === 'common.minutesShort' ? `${vars?.n}m` : key;
+      key === 'common.minutesShort' ? `${vars?.n}m` : key === 'common.hoursShort' ? `${vars?.n}h` : key;
     const conversation = {
       id: 'conv-1',
       projectId: 'project-1',
@@ -203,6 +203,6 @@ describe('conversation timestamps', () => {
       },
     } satisfies Conversation & { totalDurationMs: number };
 
-    expect(conversationMetaLabel(conversation, t as never)).toBe('1m 25s');
+    expect(conversationMetaLabel(conversation, t as never)).toBe('1h 57m');
   });
 });

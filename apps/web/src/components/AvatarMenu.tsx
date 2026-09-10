@@ -162,10 +162,13 @@ export function AvatarMenu({
 
       const margin = 16;
       const gap = 8;
-      const width = Math.min(208, window.innerWidth - margin * 2);
+      const composer = triggerRef.current?.closest('.composer-shell')?.getBoundingClientRect();
+      const minLeft = Math.max(margin, composer?.left ?? margin);
+      const maxRight = Math.min(window.innerWidth - margin, composer?.right ?? window.innerWidth - margin);
+      const width = Math.min(208, Math.max(0, maxRight - minLeft));
       const left = Math.min(
-        Math.max(rect.left, margin),
-        window.innerWidth - width - margin,
+        Math.max(composer ? rect.right - width : rect.left, minLeft),
+        maxRight - width,
       );
 
       if (placement === 'up') {
@@ -203,9 +206,13 @@ export function AvatarMenu({
     };
 
     updatePosition();
+    const composer = triggerRef.current?.closest('.composer-shell');
+    const resizeObserver = composer ? new ResizeObserver(updatePosition) : null;
+    if (composer) resizeObserver?.observe(composer);
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
     return () => {
+      resizeObserver?.disconnect();
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
