@@ -159,25 +159,7 @@ export async function publishExactRelease(input: JsonObject, receiptPath: string
   });
   const headPath = await checkedFile((pack.documents as JsonObject[]).find((value) => resolve(String(value.file)) === resolve(String(pack.channelHeadFile)))!, "channel head");
   const head = objects.find((value) => value.name === basename(headPath))!;
-  const resourcePublications = pack.resourcePublications ?? [];
-  if (!Array.isArray(resourcePublications)) throw new Error("invalid resource publication bindings");
-  if (resourcePublications.length > 0) {
-    const content = publicByName.get("content-metadata.json");
-    const descriptor = (pack.documents as JsonObject[]).find(value => basename(String(value.file)) === "content-metadata.json");
-    if (content == null || descriptor == null) throw new Error("resource publications lack published content metadata");
-    const envelope = await readObject(await checkedFile(descriptor, "resource publication metadata"));
-    const seen = new Set<string>();
-    for (const binding of resourcePublications) {
-      const resource = envelope.metadata?.resources?.find((value: JsonObject) => value.id === binding?.id);
-      if (binding == null || seen.has(binding.id) || resource?.component !== "standalone.resource"
-        || resource.materialization?.type !== "zip" || binding.sha256 !== resource.blob
-        || binding.metadata?.url !== content.url || binding.metadata?.sha256 !== content.sha256) {
-        throw new Error("resource publication is not backed by the published content document");
-      }
-      seen.add(binding.id);
-    }
-  }
-  await writeObject(receiptPath, { schemaVersion: 1, operation: "exact.publish", profile: policy.profile, channel, releaseVersion: version, sourceCommit: pack.sourceCommit, target: policy.target, latestChannelHeadUrl: policy.target.latestChannelHeadUrl, channelHead: { ...head, file: headPath }, objects, requiredAcceptances, resourcePublications, replayed: allReplayed });
+  await writeObject(receiptPath, { schemaVersion: 1, operation: "exact.publish", profile: policy.profile, channel, releaseVersion: version, sourceCommit: pack.sourceCommit, target: policy.target, latestChannelHeadUrl: policy.target.latestChannelHeadUrl, channelHead: { ...head, file: headPath }, objects, requiredAcceptances, replayed: allReplayed });
 }
 
 async function validateAcceptances(published: JsonObject, paths: unknown): Promise<boolean> {

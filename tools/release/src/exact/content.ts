@@ -14,7 +14,6 @@ import {
   type JsonObject,
 } from "./control-common.ts";
 import { composeReleaseDataResources } from "./resource-composition.ts";
-import { prepareLocalResource, prepareSelectedResources, type PreparedResource } from "./resource-selection.ts";
 import { verifyCapsuleReleaseBudget } from "./capsule-budget.ts";
 import { preparePlatformProduct } from "./platform-product.ts";
 
@@ -218,23 +217,25 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
   await copyFile(standaloneSource, standaloneFile);
   const standalone = await describeFile(standaloneFile, "text/javascript");
   if (standalone.sha256 !== standaloneSourceDescription.sha256 || standalone.size !== standaloneSourceDescription.size) throw new Error("Standalone launcher promotion source changed during copy");
-  const closureResources: PreparedResource[] = [];
+  const closureResources: Array<{ blob: JsonObject; entrypoint: string; id: string; treeSha256: string }> = [];
   if (request.dataResourceReceiptFiles != null && request.resourceReceiptFile == null) throw new Error("independent data resources require a runtime resource collection");
   if (typeof request.resourceReceiptFile === "string") {
     const resourceReceiptPath = resolve(request.resourceReceiptFile), originalReceipt = await readObject(resourceReceiptPath);
-    if (originalReceipt.operation === "release.resources.select") {
-      if (request.dataResourceReceiptFiles != null) throw new Error("resource selection cannot be combined with data overrides");
-      closureResources.push(...await prepareSelectedResources({ selection: originalReceipt, selectionFile: resourceReceiptPath,
-        artifacts, artifactBaseUrl: request.artifactBaseUrl, channel: request.channel, releaseVersion: request.releaseVersion,
-        keys: new Map(keys.map(({ keyId, publicKey }) => [keyId, publicKey])) }));
-    } else {
-      const resourceReceipt = request.dataResourceReceiptFiles == null ? originalReceipt
-        : await composeReleaseDataResources(originalReceipt, request.dataResourceReceiptFiles);
-      if (resourceReceipt.schemaVersion !== 1 || resourceReceipt.operation !== "closure.resources.build" || !Array.isArray(resourceReceipt.resources)) throw new Error("exact.prepare resource receipt is invalid");
-      for (const raw of resourceReceipt.resources) {
-        if (raw == null || typeof raw !== "object" || Array.isArray(raw)) throw new Error("exact.prepare resource descriptor is invalid");
-        closureResources.push(await prepareLocalResource(raw as JsonObject, resourceReceiptPath, artifacts, request.artifactBaseUrl));
-      }
+    const resourceReceipt = request.dataResourceReceiptFiles == null ? originalReceipt
+      : await composeReleaseDataResources(originalReceipt, request.dataResourceReceiptFiles);
+    if (resourceReceipt.schemaVersion !== 1 || resourceReceipt.operation !== "closure.resources.build" || !Array.isArray(resourceReceipt.resources)) throw new Error("exact.prepare resource receipt is invalid");
+    for (const raw of resourceReceipt.resources) {
+      if (raw == null || typeof raw !== "object" || Array.isArray(raw)) throw new Error("exact.prepare resource descriptor is invalid");
+      const resource = raw as JsonObject;
+      if (typeof resource.id !== "string" || typeof resource.file !== "string" || typeof resource.entrypoint !== "string" || typeof resource.treeSha256 !== "string" || !DIGEST.test(String(resource.sha256 ?? ""))) throw new Error("exact.prepare resource descriptor is incomplete");
+      const source = typeof resource.path === "string"
+        ? resolve(resource.path)
+        : resolve(resourceReceiptPath, "..", basename(resource.file));
+      const actual = await describeFile(source);
+      if (actual.sha256 !== resource.sha256 || actual.size !== resource.size) throw new Error(`Closure resource receipt binding failed: ${resource.id}`);
+      const destination = join(artifacts, basename(resource.file));
+      await copyFile(source, destination);
+      closureResources.push({ blob: await describeFile(destination, "application/zip"), entrypoint: resource.entrypoint, id: resource.id, treeSha256: resource.treeSha256 });
     }
   }
   const base = String(request.artifactBaseUrl).replace(/\/$/u, "");
@@ -242,7 +243,7 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
     [closure.sha256]: { sha256: closure.sha256, size: closure.size, mediaType: "text/javascript", sources: [{ kind: "remote", url: `${base}/${basename(closureFile)}` }] },
     [standalone.sha256]: { sha256: standalone.sha256, size: standalone.size, mediaType: "text/javascript", sources: [{ kind: "remote", url: `${base}/${basename(standaloneFile)}` }] },
   };
-  for (const resource of closureResources) blobs[resource.blob.sha256] = resource.blob;
+  for (const resource of closureResources) blobs[resource.blob.sha256] = { sha256: resource.blob.sha256, size: resource.blob.size, mediaType: resource.blob.mediaType, sources: [{ kind: "remote", url: `${base}/${basename(resource.blob.file)}` }] };
   const metadata = { schemaVersion: STANDALONE_METADATA_SCHEMA, channel: request.channel, releaseVersion: request.releaseVersion, standaloneVersion: request.standaloneVersion, sourceCommit: request.sourceCommit, publishedAt: request.publishedAt,
     blobs,
     resources: [
@@ -255,7 +256,7 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
   const contentFile = join(documents, "content-metadata.json");
   await writeObject(contentFile, signed("metadata", metadata, keys));
   await writeObject(trustFile, { schemaVersion: 1, keys: keys.map(({ keyId, publicKey }) => ({ keyId, publicKey })) });
-  const receipt: JsonObject = { schemaVersion: 2, operation: "exact.prepare", channel: request.channel, releaseVersion: request.releaseVersion, sourceCommit: request.sourceCommit, publishedAt: request.publishedAt, artifactBaseUrl: base, standaloneVersion: request.standaloneVersion, shells: shellRecords, closureArtifact: closure, standaloneArtifact: standalone, resourceArtifacts: closureResources.flatMap(({ artifact }) => artifact == null ? [] : [artifact]), contentMetadata: await describeFile(contentFile), trustFile: await describeFile(trustFile) };
+  const receipt: JsonObject = { schemaVersion: 2, operation: "exact.prepare", channel: request.channel, releaseVersion: request.releaseVersion, sourceCommit: request.sourceCommit, publishedAt: request.publishedAt, artifactBaseUrl: base, standaloneVersion: request.standaloneVersion, shells: shellRecords, closureArtifact: closure, standaloneArtifact: standalone, resourceArtifacts: closureResources.map(({ blob }) => blob), contentMetadata: await describeFile(contentFile), trustFile: await describeFile(trustFile) };
   await writeObject(receiptPath, receipt);
 }
 
@@ -348,12 +349,6 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
   const contentSource = await checkedFile(prepared.contentMetadata, "content metadata", request.contentMetadataFile), contentFile = join(documents, "content-metadata.json");
   await copyFile(contentSource, contentFile);
   const content = await describeFile(contentFile), base = String(prepared.artifactBaseUrl);
-  const contentEnvelope = await readObject(contentFile) as SignedStandaloneMetadata;
-  verifyStandaloneMetadata(contentEnvelope, new Map(keys.map(({ keyId, publicKey }) => [keyId, publicKey])));
-  const resourcePublications = contentEnvelope.metadata.resources
-    .filter(resource => resource.component === "standalone.resource" && resource.materialization.type === "zip")
-    .map(resource => ({ id: resource.id, sha256: resource.blob,
-      metadata: { url: publicObjectUrl(base, contentFile), sha256: content.sha256 } }));
   const lanes: JsonObject = { content: { releaseVersion: prepared.releaseVersion, url: publicObjectUrl(base, contentFile), sha256: content.sha256, size: content.size } };
   const shellMetadata: JsonObject = {}, shellFiles: string[] = [], requiredAcceptances: JsonObject[] = [];
   for (const shellType of [...distributions.keys()].sort()) {
@@ -378,6 +373,5 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
   await writeObject(headFile, signed("head", { schemaVersion: 1, channel: prepared.channel, publishedAt: prepared.publishedAt, lanes }, keys));
   const receipt: JsonObject = { schemaVersion: 2, operation: "exact.pack", channel: prepared.channel, releaseVersion: prepared.releaseVersion, sourceCommit: prepared.sourceCommit, shells: (prepared.shells as JsonObject[]).map(({ type, version, buildHash, minimumVersion }) => ({ type, version, buildHash, minimumVersion })), artifacts, documents: await Promise.all([contentFile, ...capsuleFiles, ...shellFiles, headFile].map((path) => describeFile(path))), contentMetadataFile: contentFile, shellMetadataFiles: Object.fromEntries(Object.entries(shellMetadata).map(([key, value]) => [key, value.file])), channelHeadFile: headFile, requiredAcceptances };
   if (shellMetadata.terminal != null) Object.assign(receipt, { terminalMetadataFile: shellMetadata.terminal.file, shellBuildHash: preparedShells.get("terminal")!.buildHash, minimumShellVersion: preparedShells.get("terminal")!.minimumVersion });
-  receipt.resourcePublications = resourcePublications;
   await writeObject(receiptPath, receipt);
 }

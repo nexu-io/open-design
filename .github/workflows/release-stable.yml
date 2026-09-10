@@ -795,8 +795,9 @@ jobs:
           retention-days: 1
 
   data:
-    name: Data resources (batch)
+    name: Build Closure data resources (misses)
     needs: [tools, plan]
+    if: ${{ fromJSON(needs.plan.outputs.batch_run).data }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -827,6 +828,7 @@ jobs:
   prepare:
     name: Prepare signed exact content
     needs: [tools, plan, scene, terminal_scene, platform, capsule, data, validation]
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.scene.result == 'success' && needs.terminal_scene.result == 'success' && needs.platform.result == 'success' && needs.capsule.result == 'success' && needs.validation.result == 'success' && (needs.data.result == 'success' || (needs.data.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).data)) }}
     runs-on: ubuntu-24.04
     environment: standalone-stable-release
     timeout-minutes: 10
@@ -884,10 +886,19 @@ jobs:
           merge-multiple: true
 
       - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.batch_run).data }}
         with:
           pattern: exact-data-product-*-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/data-products
+          path: ${{ runner.temp }}/data-built
           merge-multiple: true
+
+      - name: Acquire complete version data resources
+        run: >-
+          tools-release resource acquire
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/data.json"
+          --products "$RUNNER_TEMP/data-built"
+          --output "$RUNNER_TEMP/data-products"
+          --receipt "$RUNNER_TEMP/data-acquisition.json"
 
       - uses: actions/download-artifact@v8
         with:

@@ -304,15 +304,16 @@ describe("exact Electron release topology", () => {
     expect(distribution).toContain("name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}");
   });
 
-  it("builds or restores each data group without bundling app runtimes and passes the complete directory to prepare", async () => {
-    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+  it.each(["exact", "stable", "prerelease"])("builds only data misses and acquires the complete version set in release-%s prepare", async channel => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${channel}.yml`), "utf8");
     const data = workflow.split("\n  data:")[1]!.split("\n  prepare:")[0]!;
     expect(data).toContain("runs-on: ubuntu-24.04");
     expect(data).toContain("uses: ./.github/actions/release-data");
     expect(data).not.toMatch(/matrix:|pnpm|install --frozen-lockfile/u);
     const action = await readFile(resolve(workspaceRoot, ".github/actions/release-data/action.yml"), "utf8");
     expect(action).toContain("resource materialize");
-    expect(action).toContain("artifacts/batches/data.json");
+    expect(action).toContain("artifacts/batches/data.execution.json");
+    expect(data).toContain("if: ${{ fromJSON(needs.plan.outputs.batch_run).data }}");
     for (const id of dataIds) expect(action).toContain(`name: exact-data-cache-${id}-`);
     expect(data).not.toContain("build:resources");
     expect(data).not.toContain("@open-design/daemon");
@@ -320,6 +321,10 @@ describe("exact Electron release topology", () => {
     const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
     expect(prepare).toContain('--data-resources "$RUNNER_TEMP/data-products"');
     expect(prepare).toContain("pattern: exact-data-product-*-${{ inputs.source_sha }}");
+    expect(prepare).toContain("needs.data.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).data");
+    expect(prepare).toContain("tools-release resource acquire");
+    expect(prepare).toContain('artifacts/batches/data.json');
+    expect(prepare).toContain('--products "$RUNNER_TEMP/data-built"');
   });
 
   it("requires native validation independently of scene cache reuse and transports its receipt to baseline staging", async () => {

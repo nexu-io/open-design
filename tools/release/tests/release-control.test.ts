@@ -138,8 +138,7 @@ describe("exact phased release control", () => {
       const terminal = join(output, "terminal-metadata.json");
       const head = join(output, "channel-head.json");
       await writeFile(archive, "native-shell");
-      await writeFile(content, JSON.stringify({ metadata: { resources: [{ id: "open-design-web", component: "standalone.resource",
-        blob: "f".repeat(64), materialization: { type: "zip" } }] } }));
+      await writeFile(content, "{\"metadata\":{}}\n");
       await writeFile(terminal, "{\"document\":{}}\n");
       await writeFile(head, JSON.stringify({ head: {
         schemaVersion: 1,
@@ -165,9 +164,6 @@ describe("exact phased release control", () => {
         artifacts: [artifact],
         documents: [contentDocument, terminalDocument, headDocument],
         channelHeadFile: head,
-        resourcePublications: [{ id: "open-design-web", sha256: "f".repeat(64), metadata: {
-          url: `http://127.0.0.1:${address.port}/betahyx/0.1.0-betahyx.1/content-metadata.json`, sha256: contentDocument.sha256,
-        } }],
         requiredAcceptances: [{
           shell,
           target: "darwin-arm64",
@@ -211,16 +207,6 @@ describe("exact phased release control", () => {
       expect(JSON.parse(await readFile(replayPublish, "utf8"))).toMatchObject({ operation: "exact.publish", replayed: true });
 
       const published = JSON.parse(await readFile(firstPublish, "utf8"));
-      expect(published.resourcePublications).toEqual([{ id: "open-design-web", sha256: "f".repeat(64), metadata: {
-        url: `${endpointUrl}/betahyx/0.1.0-betahyx.1/content-metadata.json`, sha256: contentDocument.sha256,
-      } }]);
-      const invalidPack = join(root, "invalid-resource-pack.json"), invalidContent = JSON.parse(await readFile(pack, "utf8"));
-      invalidContent.resourcePublications[0].metadata.sha256 = "0".repeat(64);
-      await writeFile(invalidPack, JSON.stringify(invalidContent));
-      const invalid = await runRelease(["publish", "--pack-receipt", invalidPack, "--policy", policyReceipt,
-        "--endpoint-url", endpointUrl, "--bucket", "fixture", "--public-base-url", endpointUrl], join(root, "invalid-resource-publish.json"));
-      expect(invalid.status).not.toBe(0);
-      expect(invalid.stderr).toContain("not backed by the published content document");
       const required = published.requiredAcceptances[0];
       const acceptance = join(root, "acceptance.json");
       await writeFile(acceptance, JSON.stringify({

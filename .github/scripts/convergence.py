@@ -821,24 +821,7 @@ def contribute_command(args: argparse.Namespace, contract: ConvergenceContract) 
     labels = execution_class["labels"]
     if not isinstance(labels, list) or not labels or any(not isinstance(label, str) or not label for label in labels):
         raise ConfigError("contribution execution labels are invalid")
-    descriptor_path = getattr(args, "descriptor", None)
-    if descriptor_path is None:
-        products = validate_products({args.product: {"type": "job", "source": args.artifact}}, "contribution products", require_urls=False)
-    else:
-        # Already-published objects are opaque business outputs, not archives
-        # for the atom to download, repack and upload again. This input carries
-        # no workload identity; bind it to the exact pending decision here.
-        descriptor = object_value(load_json(descriptor_path), "published product descriptor")
-        if not {"url", "sha256"} <= set(descriptor) or set(descriptor) - {"url", "sha256", "data"}:
-            raise ConfigError("published product descriptor requires URL, SHA-256 and optional data")
-        digest_binding = require_string(descriptor["sha256"], "published product digest")
-        if not DIGEST_RE.fullmatch(digest_binding):
-            raise ConfigError("published product digest must be SHA-256")
-        data = object_value(descriptor.get("data", {}), "published product data")
-        if "sha256" in data:
-            raise ConfigError("published product data must not shadow the object digest")
-        products = validate_products({args.product: {"type": "url", "source": descriptor["url"],
-            "data": {**data, "sha256": digest_binding}}}, "contribution products", require_urls=True)
+    products = validate_products({args.product: {"type": "job", "source": args.artifact}}, "contribution products", require_urls=False)
     write_json_atomic(args.output / identity / "product-manifest.json", {
         "workload": identity, "digest": digest, "executionClass": execution_class, "products": products,
     })
@@ -937,6 +920,9 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
             write_json_atomic(args.products_output / f"{name}.json", binding)
         for name, entries in batch_inputs(workflow, pending).items():
             write_json_atomic(args.products_output / "batches" / f"{name}.json", {"sources": entries})
+            write_json_atomic(args.products_output / "batches" / f"{name}.execution.json", {
+                "sources": [entry for entry in entries if "artifact" not in entry],
+            })
     append_outputs(
         {
             "run": compact_json(run),
@@ -1624,9 +1610,7 @@ def parse_args() -> argparse.Namespace:
     contribute.add_argument("--pending", type=Path, required=True)
     contribute.add_argument("--workload", required=True)
     contribute.add_argument("--product", required=True)
-    contribution_source = contribute.add_mutually_exclusive_group(required=True)
-    contribution_source.add_argument("--artifact")
-    contribution_source.add_argument("--descriptor", type=Path, help="Checksum-bound, already-published product; no payload relay")
+    contribute.add_argument("--artifact", required=True)
     contribute.add_argument("--output", type=Path, required=True)
     contribute_all = sub.add_parser("contribute-all")
     contribute_all.add_argument("--pending", type=Path, required=True)

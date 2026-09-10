@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
@@ -9,6 +9,7 @@ import { exportDataResource, importDataResource } from "@/exact/resource-artifac
 import { composeReleaseDataResources } from "@/exact/resource-composition.ts";
 import { materializeReleaseDataResources } from "@/exact/resource-build.ts";
 import { acquireArtifactProduct } from "@/exact/artifact-product.ts";
+import { acquireReleaseDataResources } from "@/exact/resource-acquisition.ts";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -80,6 +81,48 @@ it("materializes mixed sources without rebuilding the artifact-backed resource",
   expect(await readdir(join(output, "contributions"))).toEqual(["skills"]);
   expect(JSON.parse(await readFile(receipt, "utf8")).resources).toHaveLength(2);
   expect(hit.fetch).toHaveBeenCalledTimes(1);
+});
+
+it.each(["cold", "mixed", "hot"])("acquires a complete %s version set without producing workload contributions", async mode => {
+  const f = await fixture(), products = join(f.root, "products"), output = join(f.root, "version-inputs");
+  const bodies = new Map<string, Buffer>();
+  const sources = await Promise.all(f.resources.map(async resource => {
+    const cached = mode === "hot" || (mode === "mixed" && resource.id === "craft");
+    const resourceReceipt = join(f.root, "built", `${resource.id}.json`);
+    if (!cached) {
+      const directory = join(products, resource.id); await mkdir(directory, { recursive: true });
+      await copyFile(resourceReceipt, join(directory, "resource-receipt.json"));
+      await copyFile(resource.path, join(directory, resource.file));
+      return { id: resource.id };
+    }
+    const exported = await exportDataResource({ resourceId: resource.id, resourceReceipt, output: join(f.root, "cache", resource.id) });
+    const entries: ZipFixtureEntries = {};
+    for (const file of await readdir(exported.artifactDirectory)) entries[file] = await readFile(join(exported.artifactDirectory, file));
+    const body = await zipFixture(entries), url = `https://cache.example/${resource.id}.zip`;
+    bodies.set(url, body);
+    return { id: resource.id, artifact: { url, sha256: createHash("sha256").update(body).digest("hex") } };
+  }));
+  const fetch = vi.fn(async (url: string | URL) => new Response(new Uint8Array(bodies.get(String(url))!))); vi.stubGlobal("fetch", fetch);
+  const sourceFile = join(f.root, "acquire.json"), receipt = join(f.root, "acquired.json");
+  await writeFile(sourceFile, JSON.stringify({ sources }));
+  await acquireReleaseDataResources({ sources: sourceFile, products, output, receipt });
+  expect(await readdir(output)).toEqual(f.resources.map(resource => resource.id).sort());
+  expect(fetch).toHaveBeenCalledTimes(bodies.size);
+  expect(JSON.parse(await readFile(receipt, "utf8")).resources).toHaveLength(9);
+  for (const resource of f.resources) {
+    const directory = join(output, resource.id);
+    expect(await readFile(join(directory, resource.file))).toEqual(await readFile(resource.path));
+    expect(JSON.parse(await readFile(join(directory, "resource-receipt.json"), "utf8")).resource.path).toBeUndefined();
+  }
+});
+
+it("fails missing local products without downloading, building or writing success", async () => {
+  const f = await fixture(), sources = join(f.root, "acquire.json"), receipt = join(f.root, "acquired.json");
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  await writeFile(sources, JSON.stringify({ sources: CLOSURE_DATA_RESOURCES.map(({ id }) => ({ id })) }));
+  await expect(acquireReleaseDataResources({ sources, products: join(f.root, "missing"), output: join(f.root, "output"), receipt })).rejects.toThrow();
+  expect(fetch).not.toHaveBeenCalled();
+  await expect(readFile(receipt)).rejects.toThrow();
 });
 
 it("rejects an invalid descriptor before download and leaves no restored directory", async () => {

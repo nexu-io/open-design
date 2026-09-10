@@ -1,5 +1,5 @@
 name: Produce independent data resources
-description: Materialize a JSON resource selection once while retaining independent product artifacts
+description: Build only the selected misses while retaining independent workload cache contributions
 inputs:
   source-sha:
     required: true
@@ -10,12 +10,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Materialize selected data resources
+    - name: Build missing data resources
       shell: bash
       run: >-
         "$RUNNER_TEMP/release-tools/tools-release" resource materialize
         --root "$GITHUB_WORKSPACE"
-        --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/data.json"
+        --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/data.execution.json"
         --output "$RUNNER_TEMP/exact-data"
         --receipt "$RUNNER_TEMP/exact-data-result.json"
     - uses: actions/upload-artifact@v7.0.1
