@@ -4,6 +4,8 @@ import {
 } from './markdown-context';
 
 type LineKind = 'blank' | 'fence' | 'standalone' | 'paragraph';
+/** Form grammar stays with its parser; this walker only owns nesting/order. */
+type ReadFormPayload = (text: string, openStart: number) => Range | null;
 interface MarkdownLine {
   start: number;
   end: number;
@@ -49,15 +51,15 @@ function markdownLines(text: string): MarkdownLine[] {
 }
 
 /**
- * Code and card payloads are data, never independent question/done markers.
- * A recognized card resets Markdown context after its close: backticks inside
- * JSON cannot open a code span in the following prose. An unfinished card owns
- * its remaining payload until a later delta completes it.
+ * Code and protocol payloads are data, never independent question/done markers.
+ * Recognized cards/forms reset Markdown after their close: JSON field strings
+ * cannot open code or cards in following prose. An unfinished card owns its
+ * remaining payload until a later delta completes it.
  *
  * All indexes advance monotonically. In particular, a sequence of valid cards
  * does not rescan the entire remaining Markdown tail once per card.
  */
-export function chatProtocolSkipRanges(text: string): Range[] {
+export function chatProtocolSkipRanges(text: string, readFormPayload: ReadFormPayload): Range[] {
   const lines = markdownLines(text);
   const ticks = Array.from(text.matchAll(/`/g), (match) => match.index);
   const opens = Array.from(text.matchAll(/<od-card(?=\s|>)[^>]*>/gi), (match) => ({
@@ -66,17 +68,19 @@ export function chatProtocolSkipRanges(text: string): Range[] {
   const closes = Array.from(text.matchAll(/<\/od-card>/gi), (match) => ({
     start: match.index, end: match.index + match[0].length,
   }));
+  const forms = Array.from(text.matchAll(/<(?:question-form|ask-question)\b[^>]*>/gi), (match) => match.index);
   const result: Range[] = [];
   let cursor = 0;
   let lineIndex = 0;
   let tickIndex = 0;
   let openIndex = 0;
   let closeIndex = 0;
+  let formIndex = 0;
   while (cursor < text.length) {
     while (lines[lineIndex] && lines[lineIndex]!.next <= cursor) lineIndex++;
     const line = lines[lineIndex];
     if (!line) break;
-    // A card may end mid-line. Its suffix starts a fresh Markdown render,
+    // A protocol block may end mid-line. Its suffix starts a fresh Markdown render,
     // while subsequent full-line boundaries remain usable from the index.
     const kind = cursor === line.start ? line.kind
       : lineKind(text.slice(cursor, line.end), line.next > line.end);
@@ -90,15 +94,17 @@ export function chatProtocolSkipRanges(text: string): Range[] {
       continue;
     }
     const blockEnd = kind === 'standalone' ? line.end : line.nextBoundary;
-    let cardEnded = false;
+    let protocolEnded = false;
     while (cursor < blockEnd) {
       while (ticks[tickIndex] !== undefined && ticks[tickIndex]! < cursor) tickIndex++;
       while (opens[openIndex] && opens[openIndex]!.start < cursor) openIndex++;
+      while (forms[formIndex] !== undefined && forms[formIndex]! < cursor) formIndex++;
       const tick = ticks[tickIndex] ?? text.length;
       const open = opens[openIndex];
       const openStart = open?.start ?? text.length;
-      if (Math.min(tick, openStart) >= blockEnd) break;
-      if (tick < openStart) {
+      const formStart = forms[formIndex] ?? text.length;
+      if (Math.min(tick, openStart, formStart) >= blockEnd) break;
+      if (tick < openStart && tick < formStart) {
         const nextTick = ticks[tickIndex + 1] ?? text.length;
         // Same single-backtick grammar as INLINE_CODE_RE. Adjacent backticks
         // cannot form an empty span; the second may start a nonempty one.
@@ -108,6 +114,20 @@ export function chatProtocolSkipRanges(text: string): Range[] {
         } else {
           cursor = tick + 1;
         }
+        continue;
+      }
+      if (formStart < openStart) {
+        formIndex++;
+        const payload = readFormPayload(text, formStart);
+        if (payload) {
+          // Keep the real opener visible to form parsing / implicit done, but
+          // its field strings cannot open cards or code in later siblings.
+          result.push(payload);
+          cursor = payload[1];
+          protocolEnded = true;
+          break;
+        }
+        cursor = formStart + 1;
         continue;
       }
       if (!open) break;
@@ -120,23 +140,23 @@ export function chatProtocolSkipRanges(text: string): Range[] {
       if (recognized) {
         result.push([open.start, end]);
         cursor = end;
-        cardEnded = true;
+        protocolEnded = true;
         break;
       }
       // Invalid card markup remains Markdown, including any backticks in its
       // attributes/body. Do not skip it or reset the paragraph boundary.
       cursor = open.start + 1;
     }
-    if (!cardEnded) cursor = blockEnd;
+    if (!protocolEnded) cursor = blockEnd;
   }
   return result;
 }
 
 /** Equal-length search view only; the original text remains the rendered data. */
-export function maskChatProtocolPayloads(text: string): string {
+export function maskChatProtocolPayloads(text: string, readFormPayload: ReadFormPayload): string {
   const pieces: string[] = [];
   let cursor = 0;
-  for (const [start, end] of chatProtocolSkipRanges(text)) {
+  for (const [start, end] of chatProtocolSkipRanges(text, readFormPayload)) {
     pieces.push(text.slice(cursor, start), ' '.repeat(end - start));
     cursor = end;
   }

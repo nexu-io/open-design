@@ -40,6 +40,7 @@ import type {
   TurnBlock,
 } from './contract';
 import { maskChatProtocolPayloads } from '../../artifacts/chat-protocol-context';
+import { readQuestionFormPayloadAt } from '../../artifacts/question-form';
 import { UNKNOWN_ELAPSED_BELOW_MS, diffStat } from './format';
 import {
   commandFile,
@@ -162,7 +163,10 @@ function markerSearchViews(events: readonly PersistedAgentEvent[]): Map<Persiste
   let textEvents: Extract<PersistedAgentEvent, { kind: 'text' }>[] = [];
   const flush = () => {
     if (textEvents.length === 0) return;
-    const masked = maskChatProtocolPayloads(textEvents.map((event) => event.text ?? '').join(''));
+    const masked = maskChatProtocolPayloads(
+      textEvents.map((event) => event.text ?? '').join(''),
+      readQuestionFormPayloadAt,
+    );
     let offset = 0;
     for (const event of textEvents) {
       const length = (event.text ?? '').length;

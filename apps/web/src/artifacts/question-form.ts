@@ -29,7 +29,7 @@
  */
 import { parsePartialJson } from '../runtime/partial-json';
 import { chatProtocolSkipRanges } from './chat-protocol-context';
-import { rangeContains } from './markdown-context';
+import { rangeContains, type Range } from './markdown-context';
 
 export type QuestionType =
   | 'radio'
@@ -210,9 +210,22 @@ const INVALID_QUESTION_FORM_FALLBACK =
 // time so `<Question-Form>` and `<ASK-QUESTION>` still parse.
 const OPEN_RE = /<(question-form|ask-question)\b([^>]*)>/i;
 
+/** Recognize only an existing complete form; never recurse into the scanner. */
+export function readQuestionFormPayloadAt(input: string, openStart: number): Range | null {
+  const match = OPEN_RE.exec(input.slice(openStart));
+  if (!match || match.index !== 0) return null;
+  const openEnd = openStart + match[0].length;
+  const closeTag = `</${(match[1] ?? 'question-form').toLowerCase()}>`;
+  const closeStart = findCloseTag(input, openEnd, closeTag);
+  if (closeStart < 0) return null;
+  const body = input.slice(openEnd, closeStart);
+  if (!parseForm(body, parseAttrs(match[2] ?? '')).form) return null;
+  return [openEnd, closeStart + closeTag.length];
+}
+
 export function splitOnQuestionForms(input: string): FormSegment[] {
   const out: FormSegment[] = [];
-  const protectedRanges = chatProtocolSkipRanges(input);
+  const protectedRanges = chatProtocolSkipRanges(input, readQuestionFormPayloadAt);
   let cursor = 0;
   let searchFrom = 0;
   // Scan repeatedly for question-form / ask-question opens; for each,
@@ -311,7 +324,7 @@ export function findFirstQuestionForm(
 export function stripTrailingOpenQuestionForm(
   input: string,
 ): { text: string; hadOpenForm: boolean } {
-  const protectedRanges = chatProtocolSkipRanges(input);
+  const protectedRanges = chatProtocolSkipRanges(input, readQuestionFormPayloadAt);
   let cursor = 0;
   while (cursor < input.length) {
     const slice = input.slice(cursor);
