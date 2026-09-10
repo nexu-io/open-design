@@ -83,12 +83,16 @@ export function buildPreviewSandboxShim(): string {
  * the same problem without a base at all: an `about:srcdoc` document can never
  * match a resolved http(s) URL.
  *
- * The guard handles such a click itself and moves the fragment through
- * `location.hash`, which the browser resolves against the document's real URL
- * rather than the base -- so the scroll, the `:target` match, and the history
- * entry all stay on the previewed artifact. It also routes `target="_blank"`
- * links through `window.open`, because the preview iframe's sandbox drops the
- * default new-window navigation.
+ * The guard handles such a click itself: it resolves the document's indicated
+ * part the way the HTML standard does (raw and percent-decoded fragment, id
+ * then legacy `a[name]`, then `top`), scrolls to it, and moves the fragment
+ * through `location.hash`, which the browser resolves against the document's
+ * real URL rather than the base -- so the `:target` match, the history entry
+ * and any hashchange listener all stay on the previewed artifact. A fragment
+ * that matches nothing still lands on the document instead of the click being
+ * swallowed. It also routes `target="_blank"` links through `window.open`,
+ * because the preview iframe's sandbox drops the default new-window
+ * navigation.
  *
  * Installed at most once per document: the containment base and the sandbox
  * shim both ask for it, and a second listener would open two windows for a
@@ -98,6 +102,43 @@ export function buildPreviewInPageLinkGuard(): string {
   return `<script ${PREVIEW_IN_PAGE_LINK_GUARD_MARKER}>(function(){
   if (window.__odPreviewInPageLinkGuard) return;
   window.__odPreviewInPageLinkGuard = true;
+  // The document's indicated part, resolved the way the HTML standard does it:
+  // the raw fragment as an id, then as a legacy \`a[name]\`, then the same two
+  // against the percent-decoded fragment. An exact \`getElementById\` would miss
+  // \`#order%20summary\` pointing at \`id="order summary"\`, and every \`<a name>\`
+  // anchor -- both of which resolve when the artifact is opened normally.
+  function indicatedPart(fragment){
+    var candidates = [fragment];
+    try {
+      var decoded = decodeURIComponent(fragment);
+      if (decoded !== fragment) candidates.push(decoded);
+    } catch (_) {}
+    for (var i = 0; i < candidates.length; i++) {
+      var name = candidates[i];
+      if (!name) continue;
+      var byId = document.getElementById(name);
+      if (byId) return byId;
+      var named = document.getElementsByName ? document.getElementsByName(name) : null;
+      for (var j = 0; named && j < named.length; j++) {
+        if (named[j].tagName && named[j].tagName.toLowerCase() === 'a') return named[j];
+      }
+    }
+    return null;
+  }
+  function decodeFragment(fragment){
+    try { return decodeURIComponent(fragment); } catch (_) { return fragment; }
+  }
+  // Drop the fragment from the DOCUMENT's own URL. A bare \`replaceState(…, ' ')\`
+  // would resolve the empty URL against the injected base instead, silently
+  // repointing the document at the containment scope's directory.
+  function clearFragment(){
+    try {
+      var url = new URL(location.href);
+      if (!url.hash) return;
+      url.hash = '';
+      history.replaceState(null, '', url.href);
+    } catch (_) {}
+  }
   document.addEventListener('click', function(e){
     if (!e.target || !(e.target instanceof Element)) return;
     var link = e.target.closest('a[href]');
@@ -107,18 +148,23 @@ export function buildPreviewInPageLinkGuard(): string {
     var isAnchor = href.indexOf('#') === 0 || href === '';
     if (isAnchor) {
       e.preventDefault();
-      if (href === '' || href === '#') {
+      var fragment = href.slice(1);
+      if (fragment === '') {
         window.scrollTo({ top: 0 });
-        history.replaceState(null, '', ' ');
-      } else {
-        var targetId = href.slice(1);
-        var target = targetId ? document.getElementById(targetId) : null;
-        if (target) {
-          target.scrollIntoView();
-          if (location.hash === href) history.replaceState(null, '', ' ');
-          location.hash = href;
-        }
+        clearFragment();
+        return;
       }
+      var target = indicatedPart(fragment);
+      if (target && target.scrollIntoView) {
+        target.scrollIntoView();
+      } else if (!target && decodeFragment(fragment).toLowerCase() === 'top') {
+        window.scrollTo({ top: 0 });
+      }
+      // Move the fragment on the document's own URL: \`location\` is resolved
+      // against the document rather than the base, so \`:target\`, the history
+      // entry and any hashchange listener stay on this artifact. An unmatched
+      // fragment still lands here instead of the click being swallowed.
+      if (location.hash !== href) location.hash = href;
     } else if (link.getAttribute('target') === '_blank') {
       e.preventDefault();
       var safe = false;

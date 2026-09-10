@@ -21,6 +21,7 @@ import { buildPreviewInPageLinkGuard } from '@open-design/contracts/runtime/prev
 const CONTAINMENT_BASE = '/api/projects/p1/preview/scope-1/';
 
 const installedClickListeners: EventListener[] = [];
+let scrolledInto: Element[] = [];
 
 /**
  * Run the injected guard against this document, remembering the listener it
@@ -42,11 +43,9 @@ function installGuard(): void {
   }
 }
 
-function renderPreviewedDocument(): HTMLAnchorElement {
+function renderPreviewedDocument(bodyHtml: string): void {
   document.head.innerHTML = `<base href="${CONTAINMENT_BASE}">`;
-  document.body.innerHTML =
-    '<a class="cta" href="#join">Join</a><section id="join">Join the beta</section>';
-  return document.querySelector('a.cta') as HTMLAnchorElement;
+  document.body.innerHTML = bodyHtml;
 }
 
 function clickIt(link: HTMLAnchorElement): MouseEvent {
@@ -57,7 +56,10 @@ function clickIt(link: HTMLAnchorElement): MouseEvent {
 
 describe('preview in-page link guard', () => {
   beforeEach(() => {
-    Element.prototype.scrollIntoView = vi.fn();
+    scrolledInto = [];
+    Element.prototype.scrollIntoView = function scrollIntoView(this: Element) {
+      scrolledInto.push(this);
+    } as Element['scrollIntoView'];
     if (window.location.hash) window.location.hash = '';
   });
 
@@ -70,7 +72,10 @@ describe('preview in-page link guard', () => {
   });
 
   it('reproduces the break: under the containment base an in-page link leaves the document', () => {
-    const link = renderPreviewedDocument();
+    renderPreviewedDocument(
+      '<a class="cta" href="#join">Join</a><section id="join">Join the beta</section>',
+    );
+    const link = document.querySelector('a.cta') as HTMLAnchorElement;
 
     // Where the browser goes when the link is followed. It is not the document
     // being previewed, so this is a real navigation rather than a scroll.
@@ -82,21 +87,66 @@ describe('preview in-page link guard', () => {
   });
 
   it('keeps the click on the previewed document and moves the fragment there', () => {
-    const link = renderPreviewedDocument();
+    renderPreviewedDocument(
+      '<a class="cta" href="#join">Join</a><section id="join">Join the beta</section>',
+    );
+    const link = document.querySelector('a.cta') as HTMLAnchorElement;
     installGuard();
 
     expect(clickIt(link).defaultPrevented).toBe(true);
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(scrolledInto).toEqual([document.getElementById('join')]);
     // `location.hash` resolves against the document's own URL rather than the
     // base, so the artifact keeps its `:target` match and its history entry.
     expect(window.location.hash).toBe('#join');
     expect(window.location.pathname).not.toBe(CONTAINMENT_BASE);
   });
 
+  // The fragment is matched against the id both raw and percent-decoded, the
+  // way the standard's "indicated part" does. An exact `getElementById` on the
+  // raw fragment finds nothing here, and the click would be swallowed.
+  it('reaches an id that only matches after percent-decoding', () => {
+    renderPreviewedDocument(
+      '<a class="cta" href="#order%20summary">Summary</a>'
+      + '<section id="order summary">Order summary</section>',
+    );
+    const link = document.querySelector('a.cta') as HTMLAnchorElement;
+    installGuard();
+
+    expect(clickIt(link).defaultPrevented).toBe(true);
+    expect(scrolledInto).toEqual([document.getElementById('order summary')]);
+    expect(window.location.hash).toBe('#order%20summary');
+  });
+
+  // Legacy named anchors are part of the same resolution order, after ids.
+  it('reaches a legacy named anchor', () => {
+    renderPreviewedDocument(
+      '<a class="cta" href="#pricing">Pricing</a>'
+      + '<a name="pricing"></a><section>Pricing</section>',
+    );
+    const link = document.querySelector('a.cta') as HTMLAnchorElement;
+    installGuard();
+
+    expect(clickIt(link).defaultPrevented).toBe(true);
+    expect(scrolledInto).toEqual([document.querySelector('a[name="pricing"]')]);
+    expect(window.location.hash).toBe('#pricing');
+  });
+
+  // A fragment that matches nothing is still a navigation in the browser: it
+  // updates the URL and scrolls nowhere. Swallowing it would leave the artifact
+  // unable to move its own fragment at all.
+  it('still moves the fragment when nothing matches it', () => {
+    renderPreviewedDocument('<a class="cta" href="#missing">Missing</a>');
+    const link = document.querySelector('a.cta') as HTMLAnchorElement;
+    installGuard();
+
+    expect(clickIt(link).defaultPrevented).toBe(true);
+    expect(scrolledInto).toEqual([]);
+    expect(window.location.hash).toBe('#missing');
+  });
+
   it('installs one listener even when both the base and the sandbox shim ask for it', () => {
-    const link = renderPreviewedDocument();
-    link.setAttribute('href', 'https://example.com/pricing');
-    link.setAttribute('target', '_blank');
+    renderPreviewedDocument('<a class="cta" href="https://example.com/pricing" target="_blank">Pricing</a>');
+    const link = document.querySelector('a.cta') as HTMLAnchorElement;
     const open = vi.fn();
     vi.spyOn(window, 'open').mockImplementation(open as unknown as typeof window.open);
 
