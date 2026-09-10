@@ -597,11 +597,13 @@ export const zhTW: Dict = {
   "settings.azureModelFetchHint":
     "請輸入您 Azure 資源中的部署名稱。Azure 部署無法自動擷取。",
   "settings.apiVersion": "API 版本",
+  "settings.bedrockRegionLabel": "AWS 區域",
   "settings.bedrockAuthMode": "身分驗證",
   "settings.bedrockAuthApiKey": "Bedrock API 金鑰",
   "settings.bedrockAuthProfile": "AWS 設定檔",
   "settings.bedrockProfile": "AWS 設定檔名稱",
   "settings.bedrockProfileHint": "來自 ~/.aws/config 的命名設定檔。對於 IAM Identity Center (SSO) 設定檔，工作階段過期時「測試連線」會在瀏覽器中開啟登入。需要 AWS CLI v2。",
+  "settings.bedrockSsoSignIn": "使用 AWS SSO 登入",
   "settings.bedrockRegionHint": "區域 {region} 從端點 URL 讀取。",
   "settings.bedrockRegionUnknownHint": "端點 URL 不包含區域，預設使用 {region}。",
   "settings.byokImageModel": "圖片生成模型",

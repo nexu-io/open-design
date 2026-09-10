@@ -2599,7 +2599,7 @@ export function SettingsDialog({
   };
 
   const handleTestProvider = async (
-    options: { silentPreconditions?: boolean } = {},
+    options: { silentPreconditions?: boolean; awsSsoLogin?: boolean } = {},
   ) => {
     if (providerTestState.status === 'running') {
       return;
@@ -2674,6 +2674,7 @@ export function SettingsDialog({
               ? cfg.apiVersion?.trim() || undefined
               : undefined,
           ...(bedrockProfile ? { awsProfile: bedrockProfile } : {}),
+          ...(bedrockProfile && options.awsSsoLogin ? { awsSsoLogin: true } : {}),
         },
         controller.signal,
       );
@@ -3497,8 +3498,13 @@ export function SettingsDialog({
   const showProviderPreset =
     protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
   // Fixed-origin gateways resolve their Base URL automatically; nothing for the
-  // user to edit, so hide the field entirely.
-  const showBaseUrlField = !isFixedOriginGateway(apiProtocol);
+  // user to edit, so hide the field entirely. Bedrock's presets are regions
+  // whose endpoint is implied by the region, so the URL is hidden as long as a
+  // preset is selected and only appears for a custom endpoint (VPC endpoint,
+  // FIPS, another region).
+  const showBaseUrlField =
+    !isFixedOriginGateway(apiProtocol)
+    && !(apiProtocol === 'bedrock' && selectedProvider !== undefined);
   const bedrockProfileMode =
     apiProtocol === 'bedrock' && resolveBedrockAuthMode(cfg.awsAuthMode) === 'profile';
   const byokRequiresApiKey = byokProviderRequiresApiKey(
@@ -5574,7 +5580,9 @@ export function SettingsDialog({
               ) : null}
               {showProviderPreset ? (
                 <ByokProviderPicker
-                  label={t('settings.providerPreset')}
+                  label={apiProtocol === 'bedrock'
+                    ? t('settings.bedrockRegionLabel')
+                    : t('settings.providerPreset')}
                   customProviderLabel={t('settings.customProvider')}
                   providers={protocolProviders}
                   selectedProviderIndex={selectedProviderIndex}
@@ -5629,24 +5637,41 @@ export function SettingsDialog({
                 </div>
               ) : null}
               {bedrockProfileMode ? (
-                <label className="field">
-                  <span className="field-label">
-                    {t('settings.bedrockProfile')}
-                    <span className="field-required" aria-label={t('settings.required')}>
-                      *
+                <>
+                  <label className="field">
+                    <span className="field-label">
+                      {t('settings.bedrockProfile')}
+                      <span className="field-required" aria-label={t('settings.required')}>
+                        *
+                      </span>
                     </span>
-                  </span>
-                  <input
-                    type="text"
-                    value={cfg.awsProfile ?? ''}
-                    placeholder="default"
-                    autoComplete="off"
-                    spellCheck={false}
-                    onBlur={commitProviderModelsInputs}
-                    onChange={(e) => updateApiConfig({ awsProfile: e.target.value.trim() })}
-                  />
-                  <p className="hint">{t('settings.bedrockProfileHint')}</p>
-                </label>
+                    <input
+                      type="text"
+                      value={cfg.awsProfile ?? ''}
+                      placeholder="default"
+                      autoComplete="off"
+                      spellCheck={false}
+                      onBlur={commitProviderModelsInputs}
+                      onChange={(e) => updateApiConfig({ awsProfile: e.target.value.trim() })}
+                    />
+                    <p className="hint">{t('settings.bedrockProfileHint')}</p>
+                  </label>
+                  <div className="section-head-actions">
+                    <Button
+                      data-testid="settings-bedrock-sso-sign-in"
+                      disabled={
+                        providerTestState.status === 'running'
+                        || !(cfg.awsProfile ?? '').trim()
+                        || !cfg.model.trim()
+                      }
+                      onClick={() => {
+                        void handleTestProvider({ awsSsoLogin: true });
+                      }}
+                    >
+                      {t('settings.bedrockSsoSignIn')}
+                    </Button>
+                  </div>
+                </>
               ) : (
               <ByokKeyField
                 apiKey={cfg.apiKey}
@@ -5736,7 +5761,7 @@ export function SettingsDialog({
                   }}
                 />
               ) : null}
-              {apiProtocol === 'bedrock' && cfg.baseUrl.trim() ? (
+              {apiProtocol === 'bedrock' && showBaseUrlField && cfg.baseUrl.trim() ? (
                 <p className="hint">
                   {bedrockRegionFromBaseUrl(cfg.baseUrl)
                     ? t('settings.bedrockRegionHint', { region: resolveBedrockRegion(cfg.baseUrl) })

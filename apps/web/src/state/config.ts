@@ -166,7 +166,7 @@ export const BEDROCK_REGION_PRESETS: KnownProvider[] = (
     ['ap-southeast-2', 'Asia Pacific (Sydney)'],
   ] as const
 ).map(([region, regionLabel]) => ({
-  label: `Amazon Bedrock — ${regionLabel}`,
+  label: `${region} · ${regionLabel}`,
   protocol: 'bedrock' as const,
   baseUrl: bedrockRuntimeEndpoint(region),
   preferredModels: BEDROCK_PREFERRED_MODELS,
