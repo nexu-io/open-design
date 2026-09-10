@@ -6,7 +6,7 @@ import { installMacElectronApp, withMacElectronProcess } from "@open-design/shel
 import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp, waitForElectronStartup } from "@open-design/shell-electron/lifecycle/inspection";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 import { readPublishedAcceptance } from "./installed-acceptance.ts";
-import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
+import { collectReleaseAcceptance, updateAcceptanceSameCarrier } from "./acceptance.ts";
 
 type Input = Readonly<{ publication: string; policy: string; shell: string; target: string; workRoot: string }>;
 const execute = promisify(execFile);
@@ -94,7 +94,11 @@ async function executeReleaseInstallation(input: ExerciseInput) {
         // only the subsequent updater interaction belongs to the CDP budget.
         await waitForElectronStartup({ baseUserDataRoot, channel: policy.channel,
           namespace: required.installIdentity.namespace, presentation: "headless" }, baselineStartedAfter, 420_000);
-        await updateAcceptanceClosure({ ...input, baseUserDataRoot, receipt: hotAcceptanceReceipt! });
+        const first = await readObject(join(resolve(input.workRoot), "first", "execution.json"));
+        await checkedFile(first.publication, "first-install publication", input.publication);
+        await updateAcceptanceSameCarrier({ ...input, installedRoot, firstInstallRoot: first.installedRoot,
+          firstInstallUserDataRoot: first.baseUserDataRoot,
+          baseUserDataRoot, receipt: hotAcceptanceReceipt! });
       });
     }
     const startedAfter = Date.now();

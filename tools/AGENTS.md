@@ -30,6 +30,13 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   contributes cache results. Ordinary URL+SHA descriptors are business inputs,
   not permission to interpret workload identities. User-facing CDN objects
   remain complete per-version immutable copies, even for reused bytes.
+- Same-carrier installed acceptance chooses isolated Closure hot update or
+  public Shell updater Capsule+Closure replacement using verified logical Shell
+  identity, not per-version metadata URLs. Capsule proof requires sealed baseline
+  and first-install bindings, freshly authenticated selected bytes, exact committed
+  generation, outgoing shutdown, restarted renderer and a separate cold restart.
+  Keep current first-install proof independent; a changed physical carrier still
+  requires its own upgrade evidence and must not silently become first-install-only.
 - Experimental `baseline --mode candidate` is restricted to betahyx exact
   releases. It requires installed first-start evidence, marks that evidence as
   candidate-only and defers channel activation while advancing the test baseline

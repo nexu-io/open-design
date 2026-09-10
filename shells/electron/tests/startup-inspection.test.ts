@@ -2,7 +2,7 @@ import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp } from "@/adapters/tools/lifecycle/inspection.ts";
+import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp, waitForElectronShutdown } from "@/adapters/tools/lifecycle/inspection.ts";
 const cdp = vi.hoisted(() => vi.fn());
 vi.mock("@open-design/electron-kit/cdp", () => ({ executeElectronCdpContractControl: cdp }));
 const roots: string[] = [];
@@ -22,7 +22,7 @@ it("does not reuse old startup evidence when closing a restarted process", async
   const pending = inspectElectronStartupThroughCdp(f.session, now);
   expect(cdp).not.toHaveBeenCalled();
   await appendFile(f.log, events(new Date(now).toISOString(), "new"));
-  await pending;
+  expect(await pending).toMatchObject({ attemptId: "new" });
   expect(cdp).toHaveBeenCalledWith(expect.objectContaining({ close: true, session: f.session, timeoutMs: 120_000,
     invocations: [{ path: ["updater", "status"], args: [] }] }));
 });
@@ -31,4 +31,11 @@ it("reports failed startup without treating an open CDP port as readiness", asyn
   await writeFile(f.log, JSON.stringify({ event: "startup.failed", timestamp: new Date(now).toISOString(), attemptId: "failed" }) + "\n");
   await expect(inspectElectronStartupThroughCdp(f.session, now, 1_000)).rejects.toThrow("startup failed");
   expect(cdp).not.toHaveBeenCalled();
+});
+it("does not count the outgoing process shutdown as the relaunched process exit", async () => {
+  const f = await fixture(), now = Date.now(), timestamp = new Date(now).toISOString();
+  await writeFile(f.log, JSON.stringify({ event: "shutdown.complete", timestamp, attemptId: "old" }) + "\n" + events(timestamp, "new"));
+  await expect(waitForElectronShutdown(f.session, now, 1)).rejects.toThrow("shutdown did not complete");
+  await appendFile(f.log, JSON.stringify({ event: "shutdown.complete", timestamp, attemptId: "new" }) + "\n");
+  await expect(waitForElectronShutdown(f.session, now, 1)).resolves.toBeUndefined();
 });

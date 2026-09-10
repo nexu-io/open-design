@@ -6,6 +6,7 @@ export { callElectronCdp, withElectronCdp, inspectElectronCdpStatus, type Electr
 export { readElectronInstalledManifest } from "@open-design/electron-kit/installation/inspection";
 import { StandaloneStore } from "@open-design/standalone";
 import { resolveElectronStandaloneStoreRoot } from "../../standalone/store-root.ts";
+export { inspectElectronSelectedCapsule } from "./capsule-inspection.ts";
 
 export type ElectronDiagnosticSession = Readonly<{
   baseUserDataRoot: string; channel: string; namespace: string; presentation: "headless" | "interactive";
@@ -48,6 +49,13 @@ export async function applyElectronShellThroughCdp(session: ElectronDiagnosticSe
   return Object.freeze({ schemaVersion: 1, operation: "electron.cdp.contract.invoked", ...result });
 }
 
+/** Best-effort native close for a caller-owned relaunch, even without a bridge. */
+export async function closeElectronDiagnosticSession(session: ElectronDiagnosticSession) {
+  describeElectronRuntimeDiagnostics(session);
+  return executeElectronCdpContractControl({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session,
+    timeoutMs: 5_000, close: true, invocations: [] });
+}
+
 /** Observe the current launch without issuing CDP calls or closing the product. */
 export async function waitForElectronStartup(session: ElectronDiagnosticSession, startedAfter: number, timeoutMs = 540_000) {
   if (!Number.isFinite(startedAfter)) throw new Error("Startup observation requires the launch timestamp");
@@ -65,7 +73,7 @@ export async function waitForElectronStartup(session: ElectronDiagnosticSession,
     }
     const startup = events.findLast(event => event.event === "startup.committed");
     // The carrier emits these only after validating Capsule's renderer-mounted signal.
-    if (startup && events.some(event => event.attemptId === startup.attemptId && event.event === "capsule.startup.ready")) break;
+    if (startup && typeof startup.attemptId === "string" && events.some(event => event.attemptId === startup.attemptId && event.event === "capsule.startup.ready")) return startup;
     if (events.some(event => event.event === "startup.failed")) throw new Error("Installed Electron startup failed; inspect runtime log: " + diagnostics.runtimeLog);
     if (Date.now() >= deadline) throw new Error("Installed Electron startup did not commit; inspect runtime log: " + diagnostics.runtimeLog);
     await new Promise(done => setTimeout(done, 100));
@@ -75,8 +83,24 @@ export async function waitForElectronStartup(session: ElectronDiagnosticSession,
 /** Observe committed product startup before closing through native CDP. */
 export async function inspectElectronStartupThroughCdp(session: ElectronDiagnosticSession, startedAfter: number, timeoutMs = 540_000) {
   const deadline = Date.now() + timeoutMs;
-  await waitForElectronStartup(session, startedAfter, timeoutMs);
-  return executeElectronCdpContractControl({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session,
+  const startup = await waitForElectronStartup(session, startedAfter, timeoutMs);
+  const result = await executeElectronCdpContractControl({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session,
     timeoutMs: Math.max(1_000, Math.min(120_000, deadline - Date.now())), close: true,
     invocations: [{ path: ["updater", "status"], args: [] }] });
+  return { ...result, attemptId: startup.attemptId };
+}
+
+/** A CDP disconnect is not process-exit evidence, especially after relaunch. */
+export async function waitForElectronShutdown(session: ElectronDiagnosticSession, startedAfter: number, timeoutMs = 90_000) {
+  const diagnostics = describeElectronRuntimeDiagnostics(session), deadline = Date.now() + timeoutMs;
+  if (!Number.isFinite(startedAfter) || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000) throw new Error("invalid shutdown observation bound");
+  for (;;) {
+    const events = (await readFile(diagnostics.runtimeLog, "utf8")).split("\n").slice(0, -1).filter(Boolean)
+      .map(line => JSON.parse(line) as { event: string; attemptId: string; timestamp: string })
+      .filter(event => Date.parse(event.timestamp) >= startedAfter);
+    const startup = events.findLast(event => event.event === "startup.committed");
+    if (startup && events.some(event => event.attemptId === startup.attemptId && event.event === "shutdown.complete")) return;
+    if (Date.now() >= deadline) throw new Error("Installed Electron shutdown did not complete: " + diagnostics.runtimeLog);
+    await new Promise(done => setTimeout(done, 100));
+  }
 }

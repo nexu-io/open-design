@@ -6,13 +6,18 @@ import { createPackage } from "@electron/asar";
 import { describeElectronRuntimeDiagnostics } from "@open-design/shell-electron/lifecycle/inspection";
 import { collectReleaseAcceptance } from "@/exact/acceptance.ts";
 
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { executeExactReleaseControl } from "@/exact/control-release.js";
 import { resolveReleasePolicy } from "@/policy/release-profile.js";
 import { createAcceptedShellBaselineReceipt, resolveAcceptedShellBaseline } from "@/exact/accepted-baseline.js";
 
 const roots: string[] = [];
+const capsuleInspection = vi.hoisted(() => vi.fn());
+vi.mock("@open-design/shell-electron/lifecycle/inspection", async original => ({
+  ...await original<typeof import("@open-design/shell-electron/lifecycle/inspection")>(), inspectElectronSelectedCapsule: capsuleInspection,
+}));
+afterEach(() => vi.resetAllMocks());
 afterEach(async () => await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
 
 async function fixture() {
@@ -259,6 +264,55 @@ it("requires a mounted hot renderer followed by a separate cold start of the sam
     await f.log(invalid);
     await expect(executeExactReleaseControl(input, f.output)).rejects.toThrow("mounted candidate renderer");
   }
+});
+
+it("requires an exact committed Capsule plus Closure restart and independent current first installation", async () => {
+  const f = await fixture(), first = await fixture(), id = "e".repeat(64), oldId = "a".repeat(64), bindingDigest = "f".repeat(64);
+  const beforeEnvelope = { document: { version: "old" }, signatures: [] }, envelope = { document: { version: "new" }, signatures: [] };
+  const capsule = async (item: Awaited<ReturnType<typeof fixture>>, value: unknown) => {
+    const file = await item.save("capsule-manifest.json", value), bytes = await readFile(file);
+    return { ...item.installation.capsule, manifest: { file: "capsule-manifest.json", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") } };
+  };
+  const baselineVersion = "1.2.3-betahyx.3";
+  await f.save("standalone-installation.json", { ...f.installation, releaseVersion: baselineVersion, capsule: await capsule(f, beforeEnvelope) });
+  await f.archive({ ...f.physical, version: baselineVersion });
+  await first.save("standalone-installation.json", { ...first.installation, capsule: await capsule(first, envelope) });
+  const after = { envelope, shell: { buildHash: "selected" }, revision: 2, closureGenerationId: id };
+  const proof = { schemaVersion: 1, operation: "electron.capsule.upgrade",
+    before: { envelope: beforeEnvelope, revision: 1, closureGenerationId: oldId }, after,
+    prepared: { discoveryUrl: "http://127.0.0.1:1234", results: [{ lines: { shell: { state: "ready" } } }] },
+    applied: { results: [{ outcome: "context-destroyed" }] },
+    restarted: { attemptId: "upgrade", results: [{ lines: { shell: { state: "current" } } }] } };
+  const hotAcceptanceReceipt = await f.save("capsule-hot.json", proof);
+  const standaloneState = await f.save("state.json", { schemaVersion: 5, revision: 7, active: id, lastHealthy: id, prepared: null, activationIntent: null, activationAttempt: null });
+  await f.save(`${id}.json`, { schemaVersion: 4, id, channel: f.published.channel, releaseVersion: f.published.releaseVersion });
+  const events = [
+    { attemptId: "baseline", event: "startup.committed", details: { generationId: oldId } },
+    { attemptId: "baseline", event: "shutdown.complete" },
+    ...["upgrade", "cold"].flatMap(attemptId => [
+      { attemptId, event: "capsule.startup.ready", details: { generationId: id, bindingDigest } },
+      { attemptId, event: "startup.committed", details: { generationId: id } },
+      { attemptId, event: "shutdown.complete" },
+    ]),
+  ];
+  await f.log(events);
+  const input = { ...f.input, hotAcceptanceReceipt, standaloneState, standaloneGenerationsRoot: f.root,
+    baseUserDataRoot: join(f.root, "session"), firstInstallRoot: first.root, firstInstallRuntimeLog: first.input.runtimeLog };
+  capsuleInspection.mockResolvedValue({ ...after, revision: 3 });
+  await executeExactReleaseControl(input, f.output);
+  expect(JSON.parse(await readFile(f.output, "utf8")).installed.proof.hotUpdate.capsule.after.revision).toBe(3);
+  for (const changed of [
+    { ...proof, after: { ...after, envelope: beforeEnvelope } },
+    { ...proof, restarted: { ...proof.restarted, attemptId: "cold" } },
+    { ...proof, before: { ...proof.before, closureGenerationId: id } },
+    { ...proof, applied: { results: [{ lines: { shell: { state: "failed" } } }] } },
+  ]) {
+    await f.save("capsule-hot.json", changed);
+    await expect(executeExactReleaseControl(input, f.output)).rejects.toThrow();
+  }
+  await f.save("capsule-hot.json", proof);
+  await f.log(events.filter(event => !(event.attemptId === "baseline" && event.event === "shutdown.complete")));
+  await expect(executeExactReleaseControl(input, f.output)).rejects.toThrow("clean baseline-to-restart");
 });
 
 it("preserves Terminal installed lifecycle evidence and rejects a surviving Sidecar", async () => {

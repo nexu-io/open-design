@@ -162,7 +162,7 @@ export async function executeElectronCdpContractControl(value: unknown): Promise
   exactKeys(input, ["close", "invocations", "operation", "schemaVersion", "timeoutMs", "session"], "Electron CDP contract request");
   if (input.schemaVersion !== 1 || input.operation !== "electron.cdp.contract.invoke"
     || typeof input.close !== "boolean" || !Number.isSafeInteger(input.timeoutMs) || input.timeoutMs < 1_000 || input.timeoutMs > 120_000
-    || !Array.isArray(input.invocations) || input.invocations.length === 0) {
+    || !Array.isArray(input.invocations) || (input.invocations.length === 0 && !input.close)) {
     throw new Error("Electron CDP contract request is invalid");
   }
   const session = record(input.session, "Electron CDP session");

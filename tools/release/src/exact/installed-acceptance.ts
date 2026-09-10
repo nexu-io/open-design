@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { readElectronInstalledManifest } from "@open-design/shell-electron/lifecycle/inspection";
+import { inspectElectronSelectedCapsule, readElectronInstalledManifest } from "@open-design/shell-electron/lifecycle/inspection";
 import { validateGenerationState } from "@open-design/standalone";
 
 import { readReleasePolicyReceipt, releaseTargetsEqual, type ReleasePolicyReceipt } from "../policy/release-profile.ts";
@@ -40,20 +40,50 @@ async function runtimeProof(path: string): Promise<JsonObject> {
   return { outcome: "ready", attemptId: latest, events };
 }
 
-async function hotProof(input: JsonObject, published: JsonObject): Promise<JsonObject> {
+async function hotProof(input: JsonObject, published: JsonObject, required: JsonObject): Promise<JsonObject> {
   const receiptPath = String(input.hotAcceptanceReceipt);
   const hot = await readObject(receiptPath);
-  if (hot.schemaVersion !== 1 || hot.operation !== "electron.cdp.contract.invoked" || !Array.isArray(hot.results)
-    || hot.results.length !== 4 || hot.results.some((value: unknown) => value == null || typeof value !== "object" || Array.isArray(value))) {
-    throw new Error("Electron CDP hot acceptance receipt is invalid");
-  }
-  const [before, checked, applied, after] = hot.results;
-  const shellVersion = before.lines?.shell?.currentVersion;
-  if (!nonempty(shellVersion) || !nonempty(hot.discoveryUrl)
-    || checked.lines?.closure?.state !== "ready" || checked.lines?.closure?.candidateVersion !== published.releaseVersion
-    || (applied.outcome !== "context-destroyed" && applied.lines?.closure?.state !== "current")
-    || shellVersion !== after.lines?.shell?.currentVersion || after.lines?.shell?.state === "applying") {
-    throw new Error("Electron CDP did not prove an isolated Closure hot update");
+  const capsuleUpgrade = hot.operation === "electron.capsule.upgrade";
+  let capsuleSnapshot;
+  if (capsuleUpgrade) {
+    if (!nonempty(input.baseUserDataRoot)) throw new Error("Capsule upgrade requires the actual session root");
+    const current = capsuleSnapshot = await inspectElectronSelectedCapsule({ baseUserDataRoot: input.baseUserDataRoot,
+      channel: published.channel, namespace: required.installIdentity.namespace, presentation: "headless" }, input.installedRoot);
+    const expectedInstallation = await readObject(join(input.firstInstallRoot, "standalone-installation.json"));
+    await installedFile(input.firstInstallRoot, expectedInstallation.capsule?.manifest, "candidate Capsule manifest");
+    const expected = await readObject(join(input.firstInstallRoot, expectedInstallation.capsule.manifest.file));
+    const baselineInstallation = await readObject(join(input.installedRoot, "standalone-installation.json"));
+    const baselineCapsule = await readObject(join(input.installedRoot, baselineInstallation.capsule.manifest.file));
+    if (hot.schemaVersion !== 1 || current == null || hot.before == null || hot.after == null
+      || !Array.isArray(hot.prepared?.results) || hot.prepared.results.at(-1)?.lines?.shell?.state !== "ready"
+      || !Array.isArray(hot.applied?.results) || hot.applied.results.length !== 1
+      || (hot.applied.results[0]?.outcome !== "context-destroyed" && !["applying", "current"].includes(hot.applied.results[0]?.lines?.shell?.state))
+      || !Array.isArray(hot.restarted?.results) || hot.restarted.results.length !== 1 || !nonempty(hot.restarted.attemptId)
+      || hot.restarted.results[0]?.lines?.shell?.state !== "current"
+      || !canonicalBytes(current.envelope).equals(canonicalBytes(expected))
+      || !canonicalBytes(hot.after.envelope).equals(canonicalBytes(current.envelope))
+      || !canonicalBytes(hot.after.shell).equals(canonicalBytes(current.shell))
+      || !canonicalBytes(hot.before.envelope).equals(canonicalBytes(baselineCapsule))
+      || canonicalBytes(hot.before.envelope).equals(canonicalBytes(current.envelope))
+      || !Number.isSafeInteger(hot.before.revision) || hot.before.revision < 1
+      || !Number.isSafeInteger(hot.after.revision) || !Number.isSafeInteger(current.revision)
+      || !/^[a-f0-9]{64}$/u.test(hot.before.closureGenerationId ?? "")
+      || hot.after.revision <= hot.before.revision || current.revision < hot.after.revision
+      || hot.after.closureGenerationId !== current.closureGenerationId
+      || hot.before.closureGenerationId === current.closureGenerationId) throw new Error("Electron Capsule upgrade evidence is invalid");
+  } else {
+    if (hot.schemaVersion !== 1 || hot.operation !== "electron.cdp.contract.invoked" || !Array.isArray(hot.results)
+      || hot.results.length !== 4 || hot.results.some((value: unknown) => value == null || typeof value !== "object" || Array.isArray(value))) {
+      throw new Error("Electron CDP hot acceptance receipt is invalid");
+    }
+    const [before, checked, applied, after] = hot.results;
+    const shellVersion = before.lines?.shell?.currentVersion;
+    if (!nonempty(shellVersion) || !nonempty(hot.discoveryUrl)
+      || checked.lines?.closure?.state !== "ready" || checked.lines?.closure?.candidateVersion !== published.releaseVersion
+      || (applied.outcome !== "context-destroyed" && applied.lines?.closure?.state !== "current")
+      || shellVersion !== after.lines?.shell?.currentVersion || after.lines?.shell?.state === "applying") {
+      throw new Error("Electron CDP did not prove an isolated Closure hot update");
+    }
   }
   if (!nonempty(input.standaloneState) || !nonempty(input.standaloneGenerationsRoot)) {
     throw new Error("Electron hot acceptance requires Standalone generation state");
@@ -68,22 +98,34 @@ async function hotProof(input: JsonObject, published: JsonObject): Promise<JsonO
   const generation = await readObject(generationPath);
   if (generation.schemaVersion !== 4 || generation.id !== id || generation.channel !== published.channel
     || generation.releaseVersion !== published.releaseVersion) throw new Error("Electron hot acceptance did not activate the candidate Standalone generation");
+  if (capsuleUpgrade && capsuleSnapshot!.closureGenerationId !== id) throw new Error("Capsule upgrade and active Closure generation differ");
   const events = (await readFile(input.runtimeLog, "utf8")).replace(/^\uFEFF/u, "").split(/\r?\n/u).filter(Boolean).map((line) => JSON.parse(line) as JsonObject);
-  const mounted = events.findLast((event) => event.event === "renderer.generation.committed" && event.details?.generationId === id);
+  // Capsule readiness precedes startup commit; Closure hot mounting follows it.
+  // The later cold restart must be a separate healthy attempt in both paths.
+  const matching = events.filter((event) => event.event === (capsuleUpgrade ? "capsule.startup.ready" : "renderer.generation.committed") && event.details?.generationId === id);
+  const mounted = capsuleUpgrade ? matching.find(event => event.attemptId === hot.restarted.attemptId) : matching.at(-1);
   const hotAttempt = mounted == null ? [] : events.filter((event) => event.attemptId === mounted.attemptId);
   const mountedIndex = mounted == null ? -1 : hotAttempt.indexOf(mounted);
   const hotStartup = hotAttempt.findIndex((event) => event.event === "startup.committed");
   const hotShutdown = hotAttempt.findIndex((event) => event.event === "shutdown.complete");
   const coldStartup = events.findLast((event) => event.event === "startup.committed");
+  if (capsuleUpgrade) {
+    const baseline = events.find(event => event.event === "startup.committed" && event.details?.generationId === hot.before.closureGenerationId);
+    const stopped = baseline == null ? undefined : events.find(event => event.attemptId === baseline.attemptId && event.event === "shutdown.complete");
+    if (baseline == null || stopped == null || mounted == null || events.indexOf(stopped) >= events.indexOf(mounted)) {
+      throw new Error("Capsule upgrade lacks a clean baseline-to-restart transition");
+    }
+  }
   if (mounted == null || !/^[a-f0-9]{64}$/u.test(mounted.details?.bindingDigest ?? "")
-    || hotStartup < 0 || mountedIndex <= hotStartup || hotShutdown <= mountedIndex
+    || hotStartup < 0 || (capsuleUpgrade ? mountedIndex >= hotStartup : mountedIndex <= hotStartup) || hotShutdown <= Math.max(mountedIndex, hotStartup)
     || hotAttempt.some((event) => ["renderer.generation.failed", "shutdown.failed", "startup.failed"].includes(event.event))
     || coldStartup == null || coldStartup.attemptId === mounted.attemptId || coldStartup.details?.generationId !== id
     || events.indexOf(coldStartup) <= events.indexOf(hotAttempt[hotShutdown]!)) {
     throw new Error("Electron hot acceptance requires a mounted candidate renderer and a subsequent clean cold start");
   }
   return {
-    releaseVersion: published.releaseVersion, discoveryUrl: hot.discoveryUrl,
+    releaseVersion: published.releaseVersion, discoveryUrl: capsuleUpgrade ? hot.prepared.discoveryUrl : hot.discoveryUrl,
+    ...(capsuleUpgrade ? { capsule: { before: hot.before, after: capsuleSnapshot } } : {}),
     receiptSha256: digest(await readFile(receiptPath)), generationId: id,
     generationSha256: digest(await readFile(generationPath)), stateSha256: digest(await readFile(input.standaloneState)),
     rendererAttemptId: mounted.attemptId, rendererBindingDigest: mounted.details.bindingDigest, coldAttemptId: coldStartup.attemptId,
@@ -118,7 +160,7 @@ async function electronProof(input: JsonObject, published: JsonObject, required:
     proof: {
       installationSha256: digest(await readFile(installationPath)), files, physical,
       runtime: await runtimeProof(input.runtimeLog), baselineReleaseVersion: installation.releaseVersion,
-      ...(input.hotAcceptanceReceipt == null ? {} : { hotUpdate: await hotProof(input, published) }),
+      ...(input.hotAcceptanceReceipt == null ? {} : { hotUpdate: await hotProof(input, published, required) }),
     },
   };
 }

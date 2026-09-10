@@ -13,7 +13,7 @@ vi.mock("@open-design/shell-electron/lifecycle/inspection", () => ({ inspectElec
   describeElectronRuntimeDiagnostics: ({ baseUserDataRoot }: { baseUserDataRoot: string }) => ({ runtimeLog: join(baseUserDataRoot, "runtime.jsonl") }) }));
 vi.mock("@open-design/shell-electron/lifecycle/installed", () => ({ installMacElectronApp: mocks.install, withMacElectronProcess: mocks.process }));
 vi.mock("@/exact/installed-acceptance.ts", () => ({ readPublishedAcceptance: mocks.published }));
-vi.mock("@/exact/acceptance.ts", () => ({ updateAcceptanceClosure: mocks.update, collectReleaseAcceptance: mocks.collect }));
+vi.mock("@/exact/acceptance.ts", () => ({ updateAcceptanceSameCarrier: mocks.update, collectReleaseAcceptance: mocks.collect }));
 const roots: string[] = [];
 afterEach(async () => { vi.resetAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 

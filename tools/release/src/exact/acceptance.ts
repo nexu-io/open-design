@@ -1,5 +1,9 @@
-import { describeElectronRuntimeDiagnostics, updateElectronClosureThroughCdp, type ElectronDiagnosticSession } from "@open-design/shell-electron/lifecycle/inspection";
-import { writeObject } from "./control-common.ts";
+import { join } from "node:path";
+import { describeElectronRuntimeDiagnostics, updateElectronClosureThroughCdp, inspectElectronSelectedCapsule,
+  prepareElectronShellThroughCdp, applyElectronShellThroughCdp, inspectElectronStartupThroughCdp, waitForElectronShutdown,
+  closeElectronDiagnosticSession,
+  type ElectronDiagnosticSession } from "@open-design/shell-electron/lifecycle/inspection";
+import { canonicalBytes, checkedFile, readObject, writeObject } from "./control-common.ts";
 import { acceptInstalledRelease } from "./control-release.ts";
 import { readPublishedAcceptance } from "./installed-acceptance.ts";
 
@@ -15,6 +19,40 @@ export async function updateAcceptanceClosure(input: AcceptanceInput): Promise<v
   await writeObject(input.receipt, await updateElectronClosureThroughCdp(await session(input)));
 }
 
+/** Same carrier, two public update paths. Capsule replacement owns its exact
+ * Closure transition; never fake a second Closure apply after that transition. */
+export async function updateAcceptanceSameCarrier(input: AcceptanceInput & Readonly<{ installedRoot: string; firstInstallRoot: string; firstInstallUserDataRoot: string }>) {
+  const diagnosticSession = await session(input);
+  const installation = await readObject(join(input.firstInstallRoot, "standalone-installation.json"));
+  const manifestFile = await checkedFile(installation.capsule.manifest, "current first-install Capsule",
+    join(input.firstInstallRoot, installation.capsule.manifest.file));
+  const expected = await readObject(manifestFile);
+  const first = await inspectElectronSelectedCapsule({ ...diagnosticSession, baseUserDataRoot: input.firstInstallUserDataRoot }, input.firstInstallRoot);
+  if (!canonicalBytes(first.envelope).equals(canonicalBytes(expected))) throw new Error("First installation did not commit its bound Capsule");
+  const before = await inspectElectronSelectedCapsule(diagnosticSession, input.installedRoot);
+  // Per-version URLs/signatures are not a content upgrade. The verified owner
+  // supplies logical Shell identity; release control never recomputes it.
+  if (before.shell.buildHash === first.shell.buildHash && before.shell.version === first.shell.version) return updateAcceptanceClosure(input);
+  const prepared = await prepareElectronShellThroughCdp(diagnosticSession);
+  const ready = prepared.results.at(-1) as { lines?: { shell?: { state?: string } } } | undefined;
+  if (ready?.lines?.shell?.state !== "ready") throw new Error("Shell updater did not prepare the candidate Capsule");
+  const startedAfter = Date.now();
+  try {
+    const applied = await applyElectronShellThroughCdp(diagnosticSession);
+    const restarted = await inspectElectronStartupThroughCdp(diagnosticSession, startedAfter);
+    await waitForElectronShutdown(diagnosticSession, startedAfter);
+    const after = await inspectElectronSelectedCapsule(diagnosticSession, input.installedRoot);
+    if (!canonicalBytes(after.envelope).equals(canonicalBytes(expected)) || after.revision <= before.revision
+      || after.closureGenerationId === before.closureGenerationId) throw new Error("Shell updater did not commit the exact Capsule and Closure replacement");
+    await writeObject(input.receipt, { schemaVersion: 1, operation: "electron.capsule.upgrade", before, prepared, applied, restarted, after });
+  } catch (error) {
+    // The original process owner cannot reap a native Electron relaunch child.
+    // Scope cleanup to this caller-owned CDP session, never a global app kill.
+    await closeElectronDiagnosticSession(diagnosticSession).catch(cleanup => console.error("Could not close failed Capsule relaunch:", cleanup));
+    throw error;
+  }
+}
+
 export async function collectReleaseAcceptance(input: AcceptanceInput & Readonly<{
   installedRoot: string; runtimeProofRoot: string; hotAcceptanceReceipt?: string;
   firstInstallRoot?: string; firstInstallUserDataRoot?: string;
@@ -26,6 +64,7 @@ export async function collectReleaseAcceptance(input: AcceptanceInput & Readonly
   const diagnostics = input.shell === "electron" ? describeElectronRuntimeDiagnostics(await session(input)) : undefined;
   const first = input.firstInstallRoot == null ? undefined : describeElectronRuntimeDiagnostics(await session({ ...input, baseUserDataRoot: input.firstInstallUserDataRoot }));
   await acceptInstalledRelease({ installedRoot: input.installedRoot, runtimeProofRoot: input.runtimeProofRoot,
+    ...(input.baseUserDataRoot == null ? {} : { baseUserDataRoot: input.baseUserDataRoot }),
     ...(input.baselineCandidate ? { baselineCandidate: true } : {}),
     publishReceipt: input.publication, policyReceipt: input.policy, shellType: input.shell, target: input.target,
     ...(diagnostics == null ? {} : { runtimeLog: diagnostics.runtimeLog }),

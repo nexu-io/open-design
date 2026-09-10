@@ -59,6 +59,12 @@ function installCdpFixture(responses: Array<Readonly<{ error?: unknown; result?:
 }
 
 describe("Electron CDP contract control", () => {
+  it("closes the owned native browser without depending on a mounted business bridge", async () => {
+    const root = await userDataRoot(), fixture = installCdpFixture([{ result: {} }]);
+    const result = await executeElectronCdpContractControl({ ...request(root), close: true, invocations: [] });
+    expect(result.results).toEqual([]); expect(fixture.fetch).toHaveBeenCalledOnce();
+    await expect(executeElectronCdpContractControl({ ...request(root), close: false, invocations: [] })).rejects.toThrow("request is invalid");
+  });
   it("rediscovers the page until the declared contract is mounted", async () => {
     const root = await userDataRoot();
     const fixture = installCdpFixture([
