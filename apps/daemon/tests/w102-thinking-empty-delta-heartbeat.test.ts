@@ -179,9 +179,12 @@ setTimeout(() => process.exit(0), 10);
     expect(body).not.toMatch(
       /<\/?(?:CRITIQUE_RUN|ROUND|ROUND_END|PANELIST|SHIP|MUST_FIX|RESOLVED)(?=[\s/>])/u,
     );
-    // 属性碎片也不许剩 —— 这两个字符串只可能来自标记内部
-    expect(body).not.toContain('Critic');
-    expect(body).not.toContain('8.1');
+    // 属性碎片也不许剩 —— 只检查 agent 的 thinking payload，避免把
+    // daemon envelope 里的合法 ISO 时间戳（例如 `...:08.178Z`）误判为
+    // 评分属性的 `8.1`。
+    const thinkingText = deltas.join('');
+    expect(thinkingText).not.toContain('Critic');
+    expect(thinkingText).not.toContain('8.1');
     // 而且它连一格空事件都不该变成:那一帧整条被扔,不是被改写成空串。
     // 空串帧的条数恰好等于上游送的空串条数,多一条就说明标记帧漏成了空事件。
     expect(deltas.filter((d) => d === '').length).toBe(EMPTY_THINKING_FRAMES);
