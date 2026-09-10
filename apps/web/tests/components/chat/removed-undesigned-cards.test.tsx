@@ -14,7 +14,7 @@ const RETIRED = [
 ] satisfies OdCard[];
 const MEMORY = { kind: 'memory-applied', summary: 'Retained memory', used: [{ type: 'rule', name: 'Existing palette' }] } satisfies OdCard;
 const SCORE = { kind: 'verify-scorecard', status: 'pass', summary: 'Retained verification', rows: [{ rule: 'Existing palette', status: 'pass' }] } satisfies OdCard;
-const ASSIST = { kind: 'brand-browser-assist', brandId: 'brand-1', url: 'https://brand.test/', reason: 'Retained browser assistance' } satisfies OdCard;
+const ASSIST = { kind: 'brand-browser-assist', brandId: 'brand-1', url: 'https://brand.test/', reason: 'Retired browser assistance' } satisfies OdCard;
 const PROSE = 'Visible neighboring prose';
 const CODE = '<od-demo>literal code guard</od-demo>';
 
@@ -115,13 +115,13 @@ it('preserves the verification card', () => {
   expect(container.textContent).toContain(SCORE.summary);
 });
 
-it('preserves the browser-assist action and callback', async () => {
+it('also hides the subsequently retired browser-assist card without invoking its callback', () => {
   const onConfirm = vi.fn().mockResolvedValue({ ok: true, action: 'opened' });
   const { container } = show(message(`${PROSE}\n${markup(ASSIST)}`, 'prose', false), true, onConfirm);
   expect(container.textContent).toContain(PROSE);
-  expect(container.querySelector('[data-od-card="brand-browser-assist"]')).not.toBeNull();
-  const button = within(container).getByRole('button', { name: 'Open browser assist' });
-  expect(button.hasAttribute('disabled')).toBe(false);
-  fireEvent.click(button);
-  await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(ASSIST));
+  expect(container.querySelector('[data-od-card="brand-browser-assist"]')).toBeNull();
+  expect(within(container).queryByRole('button', { name: 'Open browser assist' })).toBeNull();
+  expect(container.textContent).not.toContain(ASSIST.reason);
+  expect(container.textContent).not.toContain('<od-card');
+  expect(onConfirm).not.toHaveBeenCalled();
 });

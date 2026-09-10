@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OdCard } from '@open-design/contracts';
 import { ExecutionShell } from '../../../src/components/chat/ExecutionShell';
@@ -12,7 +12,7 @@ const TASK_BRIEF = { kind: 'task-brief', summary: 'Keep <od-demo>brand wording</
 const MEMORY_APPLIED = { kind: 'memory-applied', summary: 'Applied palette', used: [{ type: 'rule', name: 'Palette' }] } satisfies OdCard;
 const VERIFY_SCORECARD = { kind: 'verify-scorecard', status: 'pass', summary: 'Checks passed', rows: [{ rule: 'Palette', status: 'pass' }] } satisfies OdCard;
 const BROWSER_ASSIST = { kind: 'brand-browser-assist', brandId: 'brand-1', url: 'https://brand.test/', reason: 'Verification' } satisfies OdCard;
-const CARDS = [MEMORY_APPLIED, VERIFY_SCORECARD, BROWSER_ASSIST];
+const CARDS = [MEMORY_APPLIED, VERIFY_SCORECARD];
 
 function markup(card: OdCard): string {
   return `<od-card type="${card.kind}">${JSON.stringify(card)}</od-card>`;
@@ -164,7 +164,7 @@ describe('execution shell card boundaries', () => {
     expect(other.container.querySelectorAll('[data-od-card="memory-applied"]')).toHaveLength(2);
   });
 
-  it('wires browser assistance from AssistantMessage through a todo', async () => {
+  it('hides retired browser assistance inside a todo without dropping its neighboring text', () => {
     const card = BROWSER_ASSIST;
     const onConfirm = vi.fn().mockResolvedValue({ ok: true, action: 'opened' });
     const message: ChatMessage = {
@@ -172,14 +172,16 @@ describe('execution shell card boundaries', () => {
       runId: 'run-1', runStatus: 'running', events: [
         { kind: 'done_key', key: 'a7f3c91ed2b40561' },
         { kind: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: { todos: [{ content: 'Verify brand', status: 'in_progress' }] } },
-        { kind: 'text', text: markup(card) },
+        { kind: 'text', text: `Before browser boundary.\n\n${markup(card)}\n\nAfter browser boundary.` },
       ],
     };
-    render(<I18nProvider initial="en"><AssistantMessage message={message} streaming projectId="project" conversationId="conversation" onBrandBrowserAssistConfirm={onConfirm} /></I18nProvider>);
-    const button = screen.getByRole('button', { name: 'Open browser assist' });
-    expect(button.hasAttribute('disabled')).toBe(false);
-    fireEvent.click(button);
-    await waitFor(() => expect(screen.getByText('Browser opened')).toBeTruthy());
-    expect(onConfirm).toHaveBeenCalledWith(card);
+    const { container } = render(<I18nProvider initial="en"><AssistantMessage message={message} streaming projectId="project" conversationId="conversation" onBrandBrowserAssistConfirm={onConfirm} /></I18nProvider>);
+    expect(container.textContent).toContain('Before browser boundary.');
+    expect(container.textContent).toContain('After browser boundary.');
+    expect(container.querySelector('[data-od-card="brand-browser-assist"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open browser assist' })).toBeNull();
+    expect(container.textContent).not.toContain('<od-card');
+    expect(container.textContent).not.toContain(card.url);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });

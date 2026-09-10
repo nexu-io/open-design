@@ -1,7 +1,7 @@
-// ChatPanel renders memory, verification, and browser-assist cards.
-// Legacy task-brief and rule-proposal payloads remain decodable for history,
-// but the user explicitly removed their ChatPanel presentation (OPEND-2971).
-import { Fragment, useMemo, useState } from 'react';
+// ChatPanel renders memory and verification cards.
+// Retired task-brief, rule-proposal, and brand-browser-assist payloads remain
+// decodable for history without a ChatPanel presentation.
+import { Fragment, useState } from 'react';
 import type {
   OdCard,
   OdCardMemoryApplied,
@@ -9,14 +9,11 @@ import type {
   OdCardRowStatus,
   OdCardBrandBrowserAssist,
 } from '@open-design/contracts';
-import { Button } from '@open-design/components';
 import { Icon, type IconName } from './Icon';
-import { UserActionCard } from './UserActionCard';
 import { useT } from '../i18n';
 import styles from './OdCard.module.css';
 
-/** Outcome a brand-browser-assist confirm handler reports back to the card so it
- *  can show a completed / error state. */
+/** Compatibility result for existing browser-assist callers outside this renderer. */
 export interface BrandBrowserAssistResult {
   ok: boolean;
   /** `opened` means the Browser tab was focused/navigated; extraction still
@@ -32,7 +29,6 @@ export type BrandBrowserAssistConfirm = (
 
 export function OdCardView({
   card,
-  onBrandBrowserAssistConfirm,
 }: {
   card: OdCard;
   /** Compatibility with existing message/shell callers; retired cards used this scope. */
@@ -42,13 +38,12 @@ export function OdCardView({
   switch (card.kind) {
     case 'task-brief':
     case 'rule-proposal':
+    case 'brand-browser-assist':
       return null;
     case 'memory-applied':
       return <MemoryAppliedCard card={card} />;
     case 'verify-scorecard':
       return <VerifyScorecardCard card={card} />;
-    case 'brand-browser-assist':
-      return <BrandBrowserAssistCard card={card} onConfirm={onBrandBrowserAssistConfirm} />;
     default:
       return null;
   }
@@ -207,110 +202,5 @@ function VerifyScorecardCard({ card }: { card: OdCardVerifyScorecard }) {
         </div>
       </div>
     </div>
-  );
-}
-
-const BRAND_ASSIST_DECISION_PREFIX = 'od:brand-browser-assist-decision:';
-
-function brandAssistStorageKey(brandId: string): string {
-  return `${BRAND_ASSIST_DECISION_PREFIX}${brandId}`;
-}
-
-function readBrandAssistDone(key: string): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(key) === 'done';
-  } catch {
-    return false;
-  }
-}
-
-function writeBrandAssistDone(key: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, 'done');
-  } catch {
-    // Best effort — the in-memory `done` state still shows the opened marker.
-  }
-}
-
-// Brand extraction hit an anti-bot wall. This card opens/focuses the in-app
-// browser tab so the user can clear verification, then the normal next-step
-// action continues extraction from that live page.
-// A localStorage marker keyed off the brand id remembers that the browser was
-// opened, but the action remains available because users may need to re-open the
-// Browser tab or re-trigger the Download Page highlight.
-function BrandBrowserAssistCard({
-  card,
-  onConfirm,
-}: {
-  card: OdCardBrandBrowserAssist;
-  onConfirm?: BrandBrowserAssistConfirm;
-}) {
-  const t = useT();
-  const storageKey = useMemo(() => brandAssistStorageKey(card.brandId), [card.brandId]);
-  const [done, setDone] = useState(() => readBrandAssistDone(storageKey));
-  const [status, setStatus] = useState<'idle' | 'working' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const confirm = async () => {
-    if (!onConfirm) return;
-    setStatus('working');
-    setErrorMsg(null);
-    try {
-      // `{ ok: true, action: "opened" }` means the Browser tab was focused and
-      // the user should clear verification before using the Continue next step.
-      // Plain `{ ok: true }` is kept for older handlers. Either successful
-      // outcome resolves this prompt so the card does not look unclicked.
-      const result = await onConfirm(card);
-      if (!result || result.ok !== true) {
-        setStatus('error');
-        setErrorMsg((result && result.message) || null);
-        return;
-      }
-      writeBrandAssistDone(storageKey);
-      setDone(true);
-      setStatus('idle');
-    } catch (err) {
-      setStatus('error');
-      setErrorMsg(err instanceof Error ? err.message : null);
-    }
-  };
-
-  return (
-    <UserActionCard
-      dataKind="browser-assist"
-      dataOdCard="brand-browser-assist"
-      icon="globe"
-      title={t('artifact.odCardBrandAssistKicker', { reason: card.reason || 'Browser' })}
-      detailsLabel={t('brand.viewDetails')}
-      actions={
-        <Button
-          variant="primary"
-          className={styles.ruleAction}
-          disabled={status === 'working' || !onConfirm}
-          onClick={() => void confirm()}
-        >
-          {status === 'working'
-            ? t('artifact.odCardBrandAssistWorking')
-            : t('artifact.odCardBrandAssistConfirm')}
-        </Button>
-      }
-      details={
-        <div className={styles.ruleSummary}>
-          <p className={styles.ruleDescription}>{t('artifact.odCardBrandAssistBody')}</p>
-          {card.url ? <p className={styles.ruleName}>{card.url}</p> : null}
-        </div>
-      }
-      status={done ? (
-        <span className={styles.ruleSavedLabel} role="status">
-          {t('artifact.odCardBrandAssistDone')}
-        </span>
-      ) : status === 'error' ? (
-        <span className={styles.ruleError} role="status">
-          {errorMsg || t('artifact.odCardBrandAssistError')}
-        </span>
-      ) : null}
-    />
   );
 }

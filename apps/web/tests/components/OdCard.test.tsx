@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OdCardRuleProposal, OdCardBrandBrowserAssist, OdCardVerifyScorecard } from '@open-design/contracts';
@@ -111,70 +111,22 @@ describe('OdCard verification scorecard disclosure', () => {
   });
 });
 
-describe('OdCard brand browser assist', () => {
-  it('shows one problem and its primary action before the details are opened', () => {
-    const { container } = renderAssistCard(vi.fn().mockResolvedValue({ ok: true }));
-
-    expect(container.querySelector('[data-user-action-card="browser-assist"]')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-    const toggle = screen.getByRole('button', { name: 'View details' });
-    const disclosure = container.querySelector('[data-od-card="brand-browser-assist"] .accordion-collapsible');
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(disclosure?.classList.contains('open')).toBe(false);
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(disclosure?.classList.contains('open')).toBe(true);
-  });
-
-  it('marks browser assist done only when the confirm handler succeeds', async () => {
-    const onConfirm = vi.fn().mockResolvedValue({ ok: true });
-
-    renderAssistCard(onConfirm);
-    fireEvent.click(screen.getByRole('button', { name: 'Open browser assist' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Browser opened')).toBeTruthy();
-    });
-    expect(onConfirm).toHaveBeenCalledWith(ASSIST_CARD);
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-    expect(window.localStorage.getItem('od:brand-browser-assist-decision:brand-123')).toBe('done');
-  });
-
-  it('marks browser assist done when the handler opens or focuses the browser tab', async () => {
+describe('retired brand browser assist presentation', () => {
+  it.each([null, 'done'])('does not reopen a card or consume callbacks/storage for cached state %s', (cached) => {
+    const storageKey = 'od:brand-browser-assist-decision:brand-123';
+    if (cached !== null) window.localStorage.setItem(storageKey, cached);
+    const before = { ...window.localStorage };
     const onConfirm = vi.fn().mockResolvedValue({ ok: true, action: 'opened' });
-
-    renderAssistCard(onConfirm);
-    fireEvent.click(screen.getByRole('button', { name: 'Open browser assist' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Browser opened')).toBeTruthy();
-    });
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-    expect(screen.getByText(/Open Browser and clear any human check/)).toBeTruthy();
-    expect(window.localStorage.getItem('od:brand-browser-assist-decision:brand-123')).toBe('done');
-  });
-
-  it('keeps browser assist available after a saved opened state remounts', () => {
-    window.localStorage.setItem('od:brand-browser-assist-decision:brand-123', 'done');
-
-    renderAssistCard(vi.fn().mockResolvedValue({ ok: true }));
-
-    expect(screen.getByText('Browser opened')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-  });
-
-  it('keeps browser assist retryable when the confirm handler reports failure', async () => {
-    const onConfirm = vi.fn().mockResolvedValue({ ok: false, message: 'Open this in the desktop app.' });
-
-    renderAssistCard(onConfirm);
-    fireEvent.click(screen.getByRole('button', { name: 'Open browser assist' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('desktop app');
-    });
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-    expect(screen.queryByText('Browser opened')).toBeNull();
+    const first = renderAssistCard(onConfirm);
+    expect(first.container.textContent).toBe('');
+    expect(first.container.querySelector('[data-od-card]')).toBeNull();
+    expect(first.container.querySelector('button')).toBeNull();
+    first.unmount();
+    const second = renderAssistCard(onConfirm);
+    expect(second.container.textContent).toBe('');
+    expect(second.container.querySelector('button')).toBeNull();
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect({ ...window.localStorage }).toEqual(before);
   });
 });
 
