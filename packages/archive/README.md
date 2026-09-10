@@ -25,8 +25,12 @@ and creates validated internal links only after regular files. Links require
 `allowInternalLinks`; ZIP packing with links currently requires the `zip`
 backend because 7z link preservation has not been established.
 
-7z is a first-class selectable backend, not a platform fallback. The initial
-safe extraction adapter starts a process per file; this is not yet the final
-high-throughput implementation. Backend/version are returned for observability;
+7z is a first-class selectable backend, not a platform fallback. Extraction uses
+one native stdout producer per nonempty archive, with backpressure and per-entry
+size/CRC verification in central-directory order. The backend never receives a
+destination path; archive owns file creation and defers validated links until
+all bytes and the native exit status are verified. Failure, timeout or cancellation
+drains the producer and pending writes before staging cleanup. `timeoutMs` bounds
+the whole native extraction, not each file. Backend/version are returned for observability;
 there is no cross-backend byte-identical archive guarantee. Release identity,
 cache keys, trust and product-specific size budgets remain caller concerns.

@@ -22,7 +22,11 @@ export function safeLink(path: string, target: string) {
 }
 /** ZIP directory metadata only: no compression/decompression implementation.
  * Unsupported ZIP64/multi-volume/encrypted inputs fail before native work. */
+export type IndexedEntry = ArchiveEntry & Readonly<{ crc32: number }>;
 export async function inspect(file: string, options: ArchiveOptions = {}): Promise<readonly ArchiveEntry[]> {
+  return (await inspectIndex(file, options)).map(({ crc32: _crc32, ...entry }) => entry);
+}
+export async function inspectIndex(file: string, options: ArchiveOptions = {}): Promise<readonly IndexedEntry[]> {
   const handle = await open(file, "r");
   try {
     const size = (await handle.stat()).size;
@@ -36,7 +40,7 @@ export async function inspect(file: string, options: ArchiveOptions = {}): Promi
       || count === 0xffff || offset === 0xffffffff || length > 64 * 1024 ** 2
       || offset + length !== size - tail.length + end || count > (options.maxEntries ?? 100_000)) throw new Error("unsupported ZIP directory");
     const directory = await readExactly(handle, length, offset);
-    const entries: ArchiveEntry[] = [], names = new Map<string, ArchiveEntry>(); let cursor = 0, expanded = 0;
+    const entries: IndexedEntry[] = [], names = new Map<string, ArchiveEntry>(); let cursor = 0, expanded = 0;
     for (let index = 0; index < count; index++) {
       if (cursor + 46 > length || directory.readUInt32LE(cursor) !== 0x02014b50) throw new Error("invalid ZIP directory entry");
       const flags = directory.readUInt16LE(cursor + 8), method = directory.readUInt16LE(cursor + 10);
@@ -55,7 +59,9 @@ export async function inspect(file: string, options: ArchiveOptions = {}): Promi
         || (kind === "link" && (!options.allowInternalLinks || bytes > 4096))) throw new Error("archive entry violates file or link policy");
       expanded += bytes;
       if (expanded > (options.maxExpandedBytes ?? 4 * 1024 ** 3)) throw new Error("archive expanded size exceeds bound");
-      const entry: ArchiveEntry = { path, size: bytes, mode: mode & 0o777, kind }, key = path.normalize("NFC").toLowerCase();
+      const checksum = directory.readUInt32LE(cursor + 16);
+      if (kind === "directory" && (bytes !== 0 || checksum !== 0)) throw new Error("archive directory contains payload");
+      const entry: IndexedEntry = { path, size: bytes, mode: mode & 0o777, kind, crc32: checksum }, key = path.normalize("NFC").toLowerCase();
       if (names.has(key)) throw new Error("duplicate archive path");
       names.set(key, entry); entries.push(entry); cursor = next;
     }
