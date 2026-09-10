@@ -2,7 +2,7 @@
 
 Open `index.html` directly in a browser, or download it from the repository and send the single file to a reviewer. Fonts and icons are embedded; no server, installation, account, or network connection is required.
 
-The scene controls cover generation in progress, queued messages, execution plans, clarification questions, completion, and failure/retry. The chat includes project and conversation menus, a message navigation rail, attachment and design-system controls, model selection, and an expandable message queue.
+The scene controls cover generation in progress, queued messages, execution plans, clarification questions, completion, and failure/retry. The chat includes project and conversation menus, a message navigation rail, attachment and design-system controls, model selection, and an expandable message queue. The queue has 4 px outer spacing and 2 px between cards. Hover or keyboard focus shows up to six cards; additional messages are available by scrolling down from the start of the queue.
 
 This is an offline presentation fixture using synthetic conversations and simulated execution. It does not invoke models, publish projects, upload attachments, or replace the application runtime. Local file previews and edits remain in the current page; reload or Reset restores the sample state. The Download HTML control exports a clean copy of the original demo, without messages or attachments entered during the session.
 
