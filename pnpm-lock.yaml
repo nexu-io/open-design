@@ -5105,7 +5105,7 @@ packages:
 
   '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.matrix-six.g2419a3777c64.portable.1.tgz':
     resolution: {integrity: sha512-HY0Vfjt2JfjImxsCIR11rrF/Bc6pAdiWvLuJ0knmeEbGBH2CZIyEadchVmR9Dzijg7RWDsJYYsuhzZyy1p82iA==, tarball: file:vendor/vela/powerformer-vela-cli-0.0.1-test.matrix-six.g2419a3777c64.portable.1.tgz}
-    version: 0.0.1-test.matrix-six.g2419a3777c64
+    version: 0.0.1-test.matrix-six.g2419a3777c64.portable.1
     hasBin: true
 
   '@preact/signals-core@1.14.2':
