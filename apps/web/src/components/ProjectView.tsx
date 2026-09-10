@@ -4891,7 +4891,7 @@ export function ProjectView({
         return { ok: false as const, error: message };
       }
     },
-    [project.id, projectDesignSystemId, project.skillId, requestOpenFile],
+    [project.id, projectDesignSystemId, project.skillId, projectRunWorkspaceContext, requestOpenFile],
   );
 
   const artifactFromStandaloneHtml = useCallback(
@@ -7967,7 +7967,17 @@ export function ProjectView({
             );
           }
           if (cancelled) return;
-          const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+          const recoveredManualFileWrites = findDetachedManualFileWrites(activeConversationId, runId);
+          const manualWrites = recoveredManualFileWrites?.files ?? new Map<string, ProjectFile>();
+          const agentPaths = [
+            ...extractTouchedFilePathsFromEvents(message.events),
+            ...(latestRunStatus?.artifactPaths ?? []),
+          ];
+          const ownedFiles = attributableRunFiles(
+            nextFiles, manualWrites, agentPaths, project.id, projectDetail.resolvedDir,
+            recoveredExistingArtifact?.name,
+          );
+          const diff = computeProducedFiles(beforeFileNames, ownedFiles) ?? [];
           const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
           if (produced.length === 0) {
             continue;
@@ -7994,6 +8004,14 @@ export function ProjectView({
               ...prev,
               content: sourceText,
               producedFiles: produced,
+              // Keep this recovery path's existing optional trace surface;
+              // only remove unchanged files proven to be manual writes.
+              ...(prev.traceObjectFiles ? {
+                traceObjectFiles: attributableRunFiles(
+                  prev.traceObjectFiles, manualWrites, agentPaths,
+                  project.id, projectDetail.resolvedDir, recoveredExistingArtifact?.name,
+                ),
+              } : {}),
               resultDeliveryState: 'delivered',
               runStatus:
                 latestRunStatus?.status === 'succeeded'
@@ -8004,6 +8022,7 @@ export function ProjectView({
             true,
             { telemetryFinalized: true },
           );
+          recoveredManualFileWrites?.dispose();
           await auditDesignSystemWorkspaceAfterRun(message.id);
           scheduleConversationMessageRefresh(activeConversationId);
           onProjectsRefresh();
@@ -8027,6 +8046,8 @@ export function ProjectView({
     config.mode,
     activeConversationId,
     project.id,
+    projectDetail.resolvedDir,
+    findDetachedManualFileWrites,
     currentConversationHasRecoverableArtifact,
     artifactFromStandaloneHtml,
     refreshProjectFiles,
@@ -9837,12 +9858,27 @@ export function ProjectView({
               true,
               { telemetryFinalized: true },
             );
+            // An accepted output ends recovery; otherwise an inline artifact
+            // can still need the sibling recovery effect's real file POST.
+            if (produced.length > 0 && !isGenericDaemonDisconnect(err)) manualFileWriteRegistration.release();
           })().catch(() => {
             // Retain the last accepted file list while the daemon recovers.
           });
           clearTraceTouchedFilePaths(Boolean(
-            currentRunId && runMayFinalize && isGenericDaemonDisconnect(err)
-            && !completedReattachRunsRef.current.has(currentRunId),
+            currentRunId && runMayFinalize && (
+              (isGenericDaemonDisconnect(err) && !completedReattachRunsRef.current.has(currentRunId))
+              // A terminal strategy error can precede browser artifact
+              // persistence. Retain this scoped run's receipts until that
+              // recovery accepts an output, rather than losing writer proof.
+              || hasRecoverableArtifactMessage({
+                ...latestAssistantMsg,
+                runId: currentRunId,
+                // React may not have committed the final text updater yet;
+                // this transport's accumulator already has every delta.
+                content: streamedText || latestAssistantMsg.content,
+                runStatus: 'failed',
+              })
+            ),
           ));
         },
       };
