@@ -12,6 +12,7 @@ import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { assertMacNotarizationCredentials, requiresFormalMacTrust } from "../policy/native-trust.ts";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 import { buildReleaseRuntimeResources } from "./resource-build.ts";
+import { withDistributionResult } from "./distribution-result.ts";
 
 type Target = ElectronExactSceneRequest["target"];
 type BuildInput = Readonly<{ root: string; shell: string; target: string; output: string; receipt: string }>;
@@ -171,7 +172,7 @@ export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: str
   return receipt;
 }
 
-export async function buildReleaseDistribution(input: BuildInput & Readonly<{ baseDirectory?: string; baseReceipt?: string; scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
+export async function buildReleaseDistribution(input: BuildInput & Readonly<{ retainResult?: boolean; baseDirectory?: string; baseReceipt?: string; scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
   if (input.baseDirectory != null) {
     if (input.baseReceipt != null) throw new Error("Base directory and receipt are mutually exclusive");
     if (input.shell === "electron") input = { ...input, baseReceipt: join(resolve(input.baseDirectory), "base-build-receipt.json") };
@@ -194,6 +195,7 @@ export async function buildReleaseDistribution(input: BuildInput & Readonly<{ ba
   const sceneManifestSha256 = (await describeFile(join(scene, "scene.json"))).sha256;
   if (manifest.target !== buildTarget || expected?.sceneManifestSha256 !== sceneManifestSha256) throw new Error("prepared scene binding mismatch");
   const common = { schemaVersion: 1 as const, target: buildTarget, sceneDirectory: scene, sceneManifestSha256, outputDirectory: resolve(input.output) };
+  const build = async () => {
   if (input.shell === "terminal") return terminalBuild(input, "distribution", { ...common, operation: "terminal.distribution.build", trustFile: trust,
     releaseDocumentsDirectory: join(preparedRoot, "documents"), release: { channel: input.channel, releaseVersion: input.releaseVersion,
       sourceCommit: input.sourceCommit, publishedAt: prepared.publishedAt, artifactBaseUrl: prepared.artifactBaseUrl } });
@@ -210,4 +212,12 @@ export async function buildReleaseDistribution(input: BuildInput & Readonly<{ ba
   await writeObject(join(input.output, "shell-contribution.json"), result);
   await writeObject(input.receipt, result);
   return result;
+  };
+  if (!input.retainResult) return build();
+  const digest = (file: { sha256: string; size: number }) => ({ sha256: file.sha256, size: file.size });
+  return withDistributionResult({ policy, shell: input.shell, target: buildTarget, output: resolve(input.output), receipt: input.receipt, build,
+    binding: { policy, sceneManifestSha256, content: digest(prepared.contentMetadata), trust: digest(prepared.trustFile),
+      capsule: input.shell !== "electron" ? null : { manifest: digest(expected.capsule.manifest), archive: digest(expected.capsule.archive) },
+      base: baseReceipt?.base?.manifestSha256 ?? null, signerTeamId: process.env.APPLE_TEAM_ID ?? null,
+      signerName: process.env.CSC_NAME ?? null, identityAutoDiscovery: process.env.CSC_IDENTITY_AUTO_DISCOVERY ?? null } });
 }

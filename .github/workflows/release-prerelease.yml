@@ -1108,6 +1108,11 @@ jobs:
 
       - name: Build native distribution
         env:
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
           CSC_LINK: ${{ matrix.shell == 'electron' && secrets.APPLE_SIGNING_CERTIFICATE_BASE64 || '' }}
           CSC_KEY_PASSWORD: ${{ matrix.shell == 'electron' && secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD || '' }}
           APPLE_ID: ${{ matrix.shell == 'electron' && secrets.APPLE_ID || '' }}
@@ -1127,7 +1132,7 @@ jobs:
             --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
             --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" --base-directory "$RUNNER_TEMP/base" \
             --output "$RUNNER_TEMP/distribution" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json" \
-            --transport-output "$RUNNER_TEMP/distribution-transport"
+            --transport-output "$RUNNER_TEMP/distribution-transport" --retain-result true
 
       - uses: actions/upload-artifact@v7.0.1
         with:

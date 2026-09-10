@@ -22,6 +22,7 @@ describe("exact Electron release topology", () => {
     const publish = workflow.split("\n  publish:")[1]!.split("\n  acceptance:")[0]!;
     expect(workflow).toContain('--native-output "$RUNNER_TEMP/exact-installation-input"');
     expect(workflow).toContain('--freeze-storage true');
+    expect(distribution).toContain('--retain-result true');
     expect(distribution).toContain("name: exact-installation-input-");
     expect(distribution).not.toContain("name: exact-prepared-");
     expect(publish).toContain("name: exact-prepared-");
