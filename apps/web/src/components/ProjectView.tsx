@@ -14286,26 +14286,57 @@ export function resolveRetryTarget(
   messages: ChatMessage[],
   failedAssistantId: string,
 ): RetryTarget | null {
-  const failedIndex = messages.findIndex(
+  let failedIndex = messages.findIndex(
     (message) =>
       message.id === failedAssistantId &&
-      message.role === 'assistant' &&
-      isRetryableAssistantTerminalFailure(message),
+      message.role === 'assistant',
   );
+  const taskId = messages[failedIndex]?.strategyTaskExecutionId;
+  // ChatPane's folded task keeps the request message ID while displaying the
+  // last physical Run's verdict. Resolve only contiguous successors belonging
+  // to that task; a later user, another task or a new run-index-zero head is a
+  // boundary, not permission to retry an older turn.
+  if (taskId) {
+    while (failedIndex + 1 < messages.length) {
+      const successor = messages[failedIndex + 1]!;
+      if (
+        successor.role !== 'assistant' ||
+        successor.strategyTaskExecutionId !== taskId ||
+        (successor.strategyTaskRunIndex ?? 0) <= 0
+      ) break;
+      failedIndex += 1;
+    }
+  }
   if (failedIndex <= 0 || failedIndex !== messages.length - 1) return null;
+  const failedAssistant = messages[failedIndex]!;
+  if (!isRetryableAssistantTerminalFailure(failedAssistant)) return null;
 
-  let userIndex = failedIndex - 1;
-  while (
-    userIndex >= 0 &&
-    messages[userIndex]?.role === 'assistant' &&
-    isRetryableAssistantTerminalFailure(messages[userIndex]!)
-  ) {
+  let userIndex = failedIndex;
+  let failedAttemptTaskId: string | undefined;
+  while (userIndex >= 0 && messages[userIndex]?.role === 'assistant') {
+    const attemptMessage = messages[userIndex]!;
+    if (isRetryableAssistantTerminalFailure(attemptMessage)) {
+      // Each preserved retry may have created a new strategy task. Its own
+      // failed tail is the witness that permits crossing its successful
+      // internal Runs; a failure in another task cannot grant that permission.
+      failedAttemptTaskId = attemptMessage.strategyTaskExecutionId;
+    } else if (
+      !failedAttemptTaskId ||
+      attemptMessage.strategyTaskExecutionId !== failedAttemptTaskId ||
+      attemptMessage.runStatus !== 'succeeded'
+    ) {
+      break;
+    }
+    // A new index-zero head starts a separate attempt even if a task ID was
+    // reused. Do not retain an allowlist that could cross an earlier success.
+    if ((attemptMessage.strategyTaskRunIndex ?? 0) === 0) {
+      failedAttemptTaskId = undefined;
+    }
     userIndex -= 1;
   }
 
   const userMsg = messages[userIndex];
-  const failedAssistant = messages[failedIndex];
-  if (!userMsg || userMsg.role !== 'user' || !failedAssistant) return null;
+  if (!userMsg || userMsg.role !== 'user') return null;
 
   return {
     failedAssistant,
