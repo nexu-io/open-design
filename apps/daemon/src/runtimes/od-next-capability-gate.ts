@@ -228,17 +228,17 @@ export const VELA_PI_LOCAL_BEST_EFFORT_MANIFEST =
  * hashes actual HTTP/ACP observations rather than the declared case outcomes.
  */
 export const VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS = [
-  { runtime: 'opencode', companionVersion: '0.0.0--202609020336', recordingDigest: 'sha256:af24a7a545e13fb7024a143911df54244adaee81ce4485c01b9c52f2894c7c0b' },
-  { runtime: 'pi', companionVersion: '0.85.1', recordingDigest: 'sha256:8488f22a50e1150b08ed08625fb4a61f14196e1c0d4ecc453510ae20a17d8d24' },
-  { runtime: 'codex', companionVersion: 'codex-cli 0.153.2', recordingDigest: 'sha256:7bbf5b73499e3f14b10fbb0168d8803fc867bc253eb24231ed7ecc99f6718c30' },
-  { runtime: 'claude', companionVersion: '2.1.263 (Claude Code)', recordingDigest: 'sha256:b755898bac3baab3ed7189ca1fa02a7ffd826004b9cb3072d53d11c1701f57d2' },
-  { runtime: 'dsh', companionVersion: '0.1.2-rc.1', recordingDigest: 'sha256:367baa4d290d6c8f5d7d916ee2da15b339cbc4b136fab53d8be18ff633f8ab9c' },
+  { runtime: 'opencode', companionVersion: '1.18.30-powerformer.g92ba6a3b82b5', recordingDigest: 'sha256:7bec668d542dfcf350c50a1695659c85c34e7eba1da972f494c26a9c9b77cf63' },
+  { runtime: 'pi', companionVersion: '0.85.1', recordingDigest: 'sha256:d6789046182b54aa505e9b7f19b895843c4f915308dec62b2d798551ab4f7c65' },
+  { runtime: 'codex', companionVersion: 'codex-cli 0.154.0', recordingDigest: 'sha256:4f5111c57f18dbc5b78cf859596c377d374c7336e794fd5f1725171cc7587300' },
+  { runtime: 'claude', companionVersion: '2.1.267 (Claude Code)', recordingDigest: 'sha256:7f6f0a16788b764b46c158a0810c8f21b00d320e8ad8bd9386c81ead2378ade4' },
+  { runtime: 'dsh', companionVersion: '0.1.5-rc.1', recordingDigest: 'sha256:d810b966ca329b4f2c2a6cc85ccb9b9b546e4042837851b6475fc957e057974a' },
 ].map(({ runtime, companionVersion, recordingDigest }) => RuntimeCapabilityFixtureManifestV1Schema.parse({
   schema: OD_NEXT_RUNTIME_FIXTURE_MANIFEST_V1_SCHEMA,
   fixtureVersion: `vela-${runtime}-six-local-continuation/v1`,
   runtimePath: `vela-${runtime}`,
   agentId: 'amr',
-  agentCliVersion: '0.0.1-test.matrix-six.g2419a3777c64',
+  agentCliVersion: '0.0.1-test.latest-frozen.g0479e8f22dd2',
   runtimeAdapterVersion: `od-vela-${runtime}-acp/v1`,
   runtimeCompanionName: runtime,
   runtimeCompanionVersion: companionVersion,

@@ -160,7 +160,7 @@ describe('OD Next runtime capability gate', () => {
   });
   it.each(['codex', 'claude', 'dsh'] as const)('admits verified AMR %s continuation without borrowing OpenCode child evidence', (runtime) => {
     const capability = resolveBundledOdNextRuntimeCapability({
-      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.matrix-six.g2419a3777c64',
+      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.latest-frozen.g0479e8f22dd2',
       runtimeCompanionName: 'opencode', runtimeCompanionVersion: '1.18.18',
     });
     expect(capability.reason).toBe('capability_resolved');
@@ -174,16 +174,16 @@ describe('OD Next runtime capability gate', () => {
     expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'complex')).toEqual({ eligible: false, reason: 'native_subagents_not_verified' });
   });
   it.each([
-    { runtime: 'opencode' as const, companionVersion: '0.0.0--202609020336' },
+    { runtime: 'opencode' as const, companionVersion: '1.18.30-powerformer.g92ba6a3b82b5' },
     { runtime: 'pi' as const, companionVersion: '0.85.1' },
   ])('uses the installed new $runtime tuple with its own simple-only evidence', ({ runtime, companionVersion }) => {
     const capability = resolveBundledOdNextRuntimeCapability({
-      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.matrix-six.g2419a3777c64',
+      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.latest-frozen.g0479e8f22dd2',
       runtimeCompanionName: runtime, runtimeCompanionVersion: companionVersion,
     });
     expect(capability.reason).toBe('capability_resolved');
     expect(capability.snapshot).toMatchObject({
-      recordedAgentCliVersion: '0.0.1-test.matrix-six.g2419a3777c64',
+      recordedAgentCliVersion: '0.0.1-test.latest-frozen.g0479e8f22dd2',
       recordedRuntimeCompanionName: runtime, recordedRuntimeCompanionVersion: companionVersion,
       nativeSessionContinuation: { support: 'verified' }, nativeSubagents: { support: 'unknown' },
     });
