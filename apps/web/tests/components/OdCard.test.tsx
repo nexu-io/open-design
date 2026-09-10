@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OdCardRuleProposal, OdCardBrandBrowserAssist, OdCardVerifyScorecard } from '@open-design/contracts';
@@ -65,8 +65,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('OdCard verification scorecard disclosure', () => {
-  it('keeps a passing scorecard collapsed to one summary line', () => {
+describe('retired verification scorecard presentation', () => {
+  it('hides a passing scorecard including its summary and all checks', () => {
     const { container } = renderScorecard({
       kind: 'verify-scorecard',
       status: 'pass',
@@ -78,17 +78,12 @@ describe('OdCard verification scorecard disclosure', () => {
       ],
     });
 
-    const head = container.querySelector<HTMLButtonElement>('[data-od-card="verify-scorecard"] > button');
-    const disclosure = container.querySelector('[data-od-card="verify-scorecard"] .accordion-collapsible');
-    expect(head?.getAttribute('aria-expanded')).toBe('false');
-    expect(disclosure?.classList.contains('open')).toBe(false);
-
-    fireEvent.click(head as HTMLButtonElement);
-    expect(head?.getAttribute('aria-expanded')).toBe('true');
-    expect(disclosure?.classList.contains('open')).toBe(true);
+    expect(container.querySelector('[data-od-card="verify-scorecard"]')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.textContent).toBe('');
   });
 
-  it('opens partial verification and promotes only failed checks', () => {
+  it('hides partial verification including failed and fixed check details', () => {
     const { container } = renderScorecard({
       kind: 'verify-scorecard',
       status: 'partial',
@@ -100,14 +95,9 @@ describe('OdCard verification scorecard disclosure', () => {
       ],
     });
 
-    const head = container.querySelector<HTMLButtonElement>('[data-od-card="verify-scorecard"] > button');
-    const disclosure = container.querySelector('[data-od-card="verify-scorecard"] .accordion-collapsible');
-    expect(head?.getAttribute('aria-expanded')).toBe('true');
-    expect(disclosure?.classList.contains('open')).toBe(true);
-    expect(screen.getByText('Has accessible labels')).toBeTruthy();
-    expect(screen.getByText('Missing the export label.')).toBeTruthy();
-    expect(screen.queryByText('Uses brand colors')).toBeNull();
-    expect(screen.queryByText('Fits the viewport')).toBeNull();
+    expect(container.querySelector('[data-od-card="verify-scorecard"]')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.textContent).toBe('');
   });
 });
 

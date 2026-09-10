@@ -12,7 +12,6 @@ const TASK_BRIEF = { kind: 'task-brief', summary: 'Keep <od-demo>brand wording</
 const MEMORY_APPLIED = { kind: 'memory-applied', summary: 'Applied palette', used: [{ type: 'rule', name: 'Palette' }] } satisfies OdCard;
 const VERIFY_SCORECARD = { kind: 'verify-scorecard', status: 'pass', summary: 'Checks passed', rows: [{ rule: 'Palette', status: 'pass' }] } satisfies OdCard;
 const BROWSER_ASSIST = { kind: 'brand-browser-assist', brandId: 'brand-1', url: 'https://brand.test/', reason: 'Verification' } satisfies OdCard;
-const CARDS = [MEMORY_APPLIED, VERIFY_SCORECARD];
 
 function markup(card: OdCard): string {
   return `<od-card type="${card.kind}">${JSON.stringify(card)}</od-card>`;
@@ -49,11 +48,21 @@ afterEach(() => {
 });
 
 describe('execution shell card boundaries', () => {
-  it.each(CARDS)('renders $kind while preserving neighboring Markdown', (card) => {
+  it('renders memory while preserving neighboring Markdown', () => {
+    const card = MEMORY_APPLIED;
     const { container } = render(show([{ kind: 'text', text: `**Before**\n\n${markup(card)}\n\nAfter` }]));
     expect(container.querySelector(`[data-od-card="${card.kind}"]`)).not.toBeNull();
     expect(container.querySelector('strong')?.textContent).toBe('Before');
     expect(container.textContent).toContain('After');
+  });
+
+  it('consumes a retired verification card without exposing its payload or losing neighboring Markdown', () => {
+    const { container } = render(show([{ kind: 'text', text: `**Before**\n\n${markup(VERIFY_SCORECARD)}\n\nAfter` }]));
+    expect(container.querySelector('[data-od-card="verify-scorecard"]')).toBeNull();
+    expect(container.querySelector('strong')?.textContent).toBe('Before');
+    expect(container.textContent).toContain('After');
+    expect(container.textContent).not.toContain(VERIFY_SCORECARD.summary);
+    expect(container.textContent).not.toContain('<od-card');
   });
 
   it.each(['fenced', 'inline', 'unclosed fence'])('preserves a card quoted as %s code', (style) => {

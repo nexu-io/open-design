@@ -106,15 +106,16 @@ describe.each(['shell', 'prose'] as const)('hidden brand-browser-assist in %s', 
     });
   });
 
-  it('keeps memory and verification cards without reviving the two retired cards', async () => {
+  it('keeps memory without reviving retired verification, brief, or rule cards', async () => {
     const text = ['Visible before.', markup(MEMORY), markup(SCORE), ...RETIRED.map(markup), 'Visible after.'].join('\n\n');
     const { container } = show(message(text, lane, false), true);
     await waitFor(() => expect(container.textContent).toContain('Visible before.'));
     expect(container.textContent).toContain('Visible after.');
     expect(container.querySelector('[data-od-card="memory-applied"]')).not.toBeNull();
-    expect(container.querySelector('[data-od-card="verify-scorecard"]')).not.toBeNull();
+    expect(container.querySelector('[data-od-card="verify-scorecard"]')).toBeNull();
     expect(container.textContent).toContain(MEMORY.summary);
-    expect(container.textContent).toContain(SCORE.summary);
+    expect(container.textContent).not.toContain(SCORE.summary);
+    expect(container.textContent).not.toContain('<od-card');
     expect(container.querySelector('[data-od-card="task-brief"]')).toBeNull();
     expect(container.querySelector('[data-od-card="rule-proposal"]')).toBeNull();
     expect(container.textContent).not.toContain('RETIRED_');

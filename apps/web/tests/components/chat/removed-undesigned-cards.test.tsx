@@ -108,11 +108,12 @@ describe.each(['shell', 'prose'] as const)('removed ChatPanel cards in %s', (lan
   });
 });
 
-it('preserves the verification card', () => {
+it('also hides the subsequently retired verification card', () => {
   const { container } = show(message(`${PROSE}\n${markup(SCORE)}`, 'prose', false), true);
   expect(container.textContent).toContain(PROSE);
-  expect(container.querySelector('[data-od-card="verify-scorecard"]')).not.toBeNull();
-  expect(container.textContent).toContain(SCORE.summary);
+  expect(container.querySelector('[data-od-card="verify-scorecard"]')).toBeNull();
+  expect(container.textContent).not.toContain(SCORE.summary);
+  expect(container.textContent).not.toContain('<od-card');
 });
 
 it('also hides the subsequently retired browser-assist card without invoking its callback', () => {

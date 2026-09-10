@@ -4564,10 +4564,6 @@ export interface Dict {
   'questions.submitting': string;
 
   // Inline <od-card> memory cards (display-only siblings of question-form)
-  'artifact.odCardScorecardTitle': string;
-  'artifact.odCardScorecardStatusPass': string;
-  'artifact.odCardScorecardStatusPartial': string;
-  'artifact.odCardScorecardStatusFail': string;
 
   // Pet (Codex-style floating companion)
   'pet.title': string;

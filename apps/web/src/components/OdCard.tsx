@@ -1,16 +1,12 @@
-// ChatPanel renders memory and verification cards.
-// Retired task-brief, rule-proposal, and brand-browser-assist payloads remain
-// decodable for history without a ChatPanel presentation.
-import { Fragment, useState } from 'react';
+// ChatPanel renders memory cards. Other od-card types remain decodable
+// for history without a ChatPanel presentation.
+import { Fragment } from 'react';
 import type {
   OdCard,
   OdCardMemoryApplied,
-  OdCardVerifyScorecard,
-  OdCardRowStatus,
   OdCardBrandBrowserAssist,
 } from '@open-design/contracts';
-import { Icon, type IconName } from './Icon';
-import { useT } from '../i18n';
+import { Icon } from './Icon';
 import styles from './OdCard.module.css';
 
 /** Compatibility result for existing browser-assist callers outside this renderer. */
@@ -39,11 +35,10 @@ export function OdCardView({
     case 'task-brief':
     case 'rule-proposal':
     case 'brand-browser-assist':
+    case 'verify-scorecard':
       return null;
     case 'memory-applied':
       return <MemoryAppliedCard card={card} />;
-    case 'verify-scorecard':
-      return <VerifyScorecardCard card={card} />;
     default:
       return null;
   }
@@ -112,95 +107,5 @@ function MemoryAppliedCard({ card }: { card: OdCardMemoryApplied }) {
         </div>
       ) : null}
     </details>
-  );
-}
-
-const ROW_STATUS_ICON: Record<OdCardRowStatus, IconName> = {
-  pass: 'check',
-  fail: 'close',
-  fixed: 'refresh',
-};
-
-// Map the rolled-up verdict + per-row status to their CSS-module class keys.
-// Explicit maps keep the lookups type-safe and avoid snake_case template-key
-// fragility against CSS-module name mangling.
-const SCORECARD_PILL_CLASS: Record<OdCardVerifyScorecard['status'], string> = {
-  pass: styles.pillPass ?? '',
-  partial: styles.pillPartial ?? '',
-  fail: styles.pillFail ?? '',
-};
-
-const SCORE_ROW_CLASS: Record<OdCardRowStatus, string> = {
-  pass: styles.rowPass ?? '',
-  fail: styles.rowFail ?? '',
-  fixed: styles.rowFixed ?? '',
-};
-
-// POST — a header (status pill + summary) over rubric rows; each row shows a
-// pass/fail/fixed icon, the rule text, and the note. Light and scannable.
-function VerifyScorecardCard({ card }: { card: OdCardVerifyScorecard }) {
-  const t = useT();
-  // Passing validation is supporting evidence, so keep it to one quiet line.
-  // Partial/failed validation is actionable and starts open, but only failed
-  // rules are promoted; passing rows remain available when an all-pass card is
-  // explicitly expanded instead of competing with the answer by default.
-  const [open, setOpen] = useState(card.status !== 'pass');
-  const statusLabel =
-    card.status === 'pass'
-      ? t('artifact.odCardScorecardStatusPass')
-      : card.status === 'partial'
-        ? t('artifact.odCardScorecardStatusPartial')
-        : t('artifact.odCardScorecardStatusFail');
-  const failedRows = card.rows.filter((row) => row.status === 'fail');
-  const visibleRows = card.status === 'pass'
-    ? card.rows
-    : failedRows.length > 0
-      ? failedRows
-      : card.rows.filter((row) => row.status !== 'pass');
-  return (
-    <div className={`${styles.card} ${styles.scorecard}`} data-od-card="verify-scorecard">
-      <button
-        type="button"
-        className={styles.scorecardHead}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className={`${styles.scorecardPill} ${SCORECARD_PILL_CLASS[card.status]}`}>
-          {statusLabel}
-        </span>
-        <span className={styles.scorecardTitle}>
-          {t('artifact.odCardScorecardTitle')}
-        </span>
-        {card.summary ? (
-          <span className={styles.scorecardSummary}>{card.summary}</span>
-        ) : null}
-        <span className={styles.scorecardCount}>{card.rows.length}</span>
-        <span className={`${styles.scorecardChevron}${open ? ` ${styles.scorecardChevronOpen}` : ''}`} aria-hidden>
-          <Icon name="chevron-down" size={14} />
-        </span>
-      </button>
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
-        <div className="accordion-collapsible-inner">
-          <ul className={styles.scoreRows}>
-            {visibleRows.map((row, i) => (
-              <li
-                key={`${row.rule}-${i}`}
-                className={`${styles.scoreRow} ${SCORE_ROW_CLASS[row.status]}`}
-              >
-                <span className={styles.scoreRowIcon} aria-hidden>
-                  <Icon name={ROW_STATUS_ICON[row.status]} size={14} />
-                </span>
-                <span className={styles.scoreRowBody}>
-                  <span className={styles.scoreRowRule}>{row.rule}</span>
-                  {row.note ? (
-                    <span className={styles.scoreRowNote}>{row.note}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
   );
 }
