@@ -1879,9 +1879,11 @@ describe('exportProjectAsZip degraded-archive reporting (#8005)', () => {
     expect(await capturedBlob?.text()).toBe('PK\x03\x04archive-bytes');
   });
 
-  it('reports a failed version export as degraded rather than passing off current content', async () => {
-    // Given: a version-scoped export whose fetch fails. The fallback ships the
-    // *current* content under the requested version's name.
+  it('reports a failed version export as degraded rather than passing off a client snapshot', async () => {
+    // Given: a version-scoped export whose fetch fails. Callers pass the
+    // selected version's own cached content as fallbackHtml, so the user gets
+    // the right version — but as a client-rendered snapshot rather than the
+    // server-rendered export that was requested.
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('nope', { status: 500 })));
 
     // When: the user exports a specific version as a ZIP.

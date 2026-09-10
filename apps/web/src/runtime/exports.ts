@@ -934,9 +934,12 @@ export async function exportProjectAsZip(opts: {
       exportAsZip(await resp.text(), opts.fallbackTitle);
       return;
     } catch (err) {
-      // Same silent-substitution problem as the archive path below: the
-      // fallback ships the *current* content under the name of the version
-      // the user asked for, so the caller must be able to say so.
+      // Same silent-substitution problem as the archive path below, though
+      // milder: callers pass the selected version's own cached content as
+      // `fallbackHtml` (`HtmlVersionExportContext.content` is required), so
+      // the user gets the right version — but as a client-rendered snapshot
+      // instead of the server-rendered export they asked for. Still a
+      // different artifact than the one requested, so say so.
       console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
       exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
       return 'degraded';
