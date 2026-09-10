@@ -131,10 +131,9 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   ref,
 ) {
   const uiT = useT();
-  // Host strings inside the card follow the form's declared content language
-  // (`form.lang`, set by the model alongside the localized labels) so a
-  // Chinese form in an English UI doesn't mix scripts; without a resolvable
-  // tag they follow the app UI locale as before.
+  // Answer-content strings follow the form's declared language, falling back
+  // to the UI locale when it is absent or unsupported. Required/navigation
+  // controls use uiT independently; they are not part of the answer content.
   const t = useMemo(() => tForLanguageTag(form.lang) ?? uiT, [form.lang, uiT]);
   const initial = useMemo(
     () => buildInitialState(form, submittedAnswers, draftAnswers, visualStyleContext),
@@ -605,9 +604,9 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       className="qf-primary-action"
       onClick={handleSubmit}
       disabled={submitDisabled || !ready}
-      title={!submitDisabled && ready ? t('qf.submitTitle') : t('qf.submitDisabledTitle')}
+      title={!submitDisabled && ready ? uiT('qf.submitTitle') : uiT('qf.submitDisabledTitle')}
     >
-      {form.submitLabel ?? t('qf.submitDefault')}
+      {form.submitLabel ?? uiT('qf.submitDefault')}
     </Button>
   );
   /*
@@ -630,7 +629,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       onClick={handleSkipAll}
       disabled={submitDisabled}
     >
-      {t('questionForm.skip')}
+      {uiT('questionForm.skip')}
     </Button>
   );
   // A manual Skip all is always available, including for required questions.
@@ -750,8 +749,8 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
           <time
             className="qf-auto-continue"
             dateTime={`PT${autoContinueRemaining}S`}
-            title={t('questions.autoSkipHint')}
-            aria-label={`${t('questions.autoSkipHint')} ${autoContinueCountdown}`}
+            title={uiT('questions.autoSkipHint')}
+            aria-label={`${uiT('questions.autoSkipHint')} ${autoContinueCountdown}`}
           >
             {autoContinueCountdown}
           </time>
@@ -800,7 +799,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
               */}
               <div className="qf-label">
                 {q.label}
-                {q.required ? <span className="qf-required">{t('qf.required')}</span> : null}
+                {q.required ? <span className="qf-required">{uiT('qf.required')}</span> : null}
                 {/*
                   OPEND-2641:进度收在**问句这一行的末尾** —— 跟在问句文字后面,
                   也跟在「必填」角标后面。分步态下 `questionsToRender` 只有当前那一问
@@ -825,7 +824,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                   options={q.options}
                   value={typeof value === 'string' ? value : ''}
                   disabled={locked}
-                  t={t}
+                  t={uiT}
                   onPick={(next) => pickFixed(q, next)}
                   ownChoice={
                     shouldRenderCustomChoice(q)
@@ -1042,7 +1041,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
           <div className="question-form-foot" data-chat-scroll-anchor="question-footer">
             {locked ? (
               <span className="qf-locked-note">
-                {submittedAnswers ? t('qf.lockedSubmitted') : t('qf.lockedPrev')}
+                {submittedAnswers ? t('qf.lockedSubmitted') : uiT('qf.lockedPrev')}
               </span>
             ) : stepped ? (
               <>
@@ -1056,7 +1055,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                   onClick={handleSkipCurrent}
                   disabled={submitDisabled}
                 >
-                  {t('questionForm.skip')}
+                  {uiT('questionForm.skip')}
                 </Button>
                 <span className="qf-submit-actions">
                   {activeQuestionIndex > 0 ? (
@@ -1068,7 +1067,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                       onClick={handlePreviousQuestion}
                       disabled={submitDisabled}
                     >
-                      {t('settings.onboardingBack')}
+                      {uiT('settings.onboardingBack')}
                     </Button>
                   ) : null}
                   <Button
@@ -1089,15 +1088,15 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                     }
                     title={
                       !submitDisabled && activeQuestion?.required === true && !currentQuestionReady
-                        ? t('qf.submitDisabledTitle')
+                        ? uiT('qf.submitDisabledTitle')
                         : isLastQuestion && !submitDisabled && ready
-                          ? t('qf.submitTitle')
+                          ? uiT('qf.submitTitle')
                           : undefined
                     }
                   >
                     {isLastQuestion
-                      ? form.submitLabel ?? t('qf.submitDefault')
-                      : t('nextStep.title')}
+                      ? form.submitLabel ?? uiT('qf.submitDefault')
+                      : uiT('nextStep.title')}
                   </Button>
                 </span>
               </>
@@ -1112,7 +1111,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                     onClick={handleSkipAll}
                     disabled={submitDisabled}
                   >
-                    {t('questions.skipAll')}
+                    {uiT('questions.skipAll')}
                   </Button>
                 ) : null}
                 {/* 撑开:稿子里跳过靠左、下一步靠右,中间是空的 */}
