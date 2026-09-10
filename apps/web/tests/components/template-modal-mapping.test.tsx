@@ -136,6 +136,12 @@ afterEach(() => {
 describe('Community template card → full details modal', () => {
   it('opens the full plugin details modal (Use split action + Share + close), not the lightweight preview', async () => {
     render(<CommunityView />);
+    // The gallery opens on Prototype (the Home type row's lead); this fixture
+    // catalogue is deck-only, so drive the Slides tab before reading the grid.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Slides' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Slides' }));
     await waitFor(() => {
       expect(document.querySelector('.community-template-card')).not.toBeNull();
     });

@@ -1244,6 +1244,10 @@ export interface Dict {
   'messageCenter.emptyAllTitle': string;
   'messageCenter.emptyUnreadTitle': string;
   'messageCenter.emptyReadTitle': string;
+  'messageCenter.archive': string;
+  'messageCenter.unarchive': string;
+  'messageCenter.archivedTitle': string;
+  'messageCenter.emptyArchivedTitle': string;
   'messageCenter.emptyBody': string;
   'messageCenter.close': string;
   'messageCenter.desktopSettings': string;
@@ -4863,11 +4867,15 @@ export interface Dict {
   'community.typePrototype': string;
   'community.typeLiveArtifact': string;
   'community.typeSlides': string;
+  'community.typeDocument': string;
   'community.typeImage': string;
   'community.typeVideo': string;
   'community.typeHyperFrames': string;
   'community.typeAudio': string;
   'community.usePrompt': string;
+  /** Empty gallery tab; `{type}` is the tab's own label. */
+  'community.emptyTitle': string;
+  'community.emptyBody': string;
   'marketplace.title': string;
   'marketplace.filterTrusted': string;
   'marketplace.filterRestricted': string;

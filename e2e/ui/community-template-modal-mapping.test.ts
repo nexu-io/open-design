@@ -129,7 +129,7 @@ async function gotoCommunity(page: Page) {
 async function openDeckCommunityCard(page: Page) {
   await page.getByRole('button', { name: 'Slides', exact: true }).click();
   const card = page.locator('article.community-template-card').first();
-  await expect(card.locator('.community-template-card__foot')).toContainText('Slides');
+  await expect(card).toHaveAttribute('data-template-type', 'Slides');
   await card.click();
 }
 
@@ -189,12 +189,21 @@ test('[P0] signed-out Local setup can use a Community template on Home', async (
 test('[P1] community category tabs filter the current template catalog', async ({ page }) => {
   await gotoCommunity(page);
 
+  // The caption under a card is the template's own title now, so the type it
+  // was gridded under is read off the card element itself.
   const cards = page.locator('article.community-template-card');
   await expect(cards).toHaveCount(1);
-  await expect(cards.locator('.community-template-card__foot')).toContainText('Prototype');
+  await expect(cards).toHaveAttribute('data-template-type', 'Prototype');
 
   await page.getByRole('button', { name: 'Slides', exact: true }).click();
 
   await expect(cards).toHaveCount(1);
-  await expect(cards.locator('.community-template-card__foot')).toContainText('Slides');
+  await expect(cards).toHaveAttribute('data-template-type', 'Slides');
+
+  // The row is fixed to the Home taxonomy: Document is a tab even while no
+  // document template ships, and picking it shows the empty state rather than
+  // borrowing another kind's cards.
+  await page.getByRole('button', { name: 'Document', exact: true }).click();
+  await expect(cards).toHaveCount(0);
+  await expect(page.getByTestId('community-empty-state')).toBeVisible();
 });

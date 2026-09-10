@@ -5,6 +5,7 @@ import { useI18n } from '../i18n';
 import { listPlugins } from '../state/projects';
 import {
   buildCommunityTemplates,
+  COMMUNITY_TAB_TYPES,
   isPromptArtifact,
   TEMPLATE_TYPE_LABEL_KEY,
   TEMPLATE_TYPE_ORDER,
@@ -32,6 +33,9 @@ const TEMPLATE_HOME_TARGET: Record<TemplateType, Pick<CommunityTemplateUseTarget
   'Prototype': { chipId: 'prototype', projectKind: 'prototype' },
   'Live Artifact': { chipId: 'live-artifact', projectKind: 'prototype' },
   'Slides': { chipId: 'deck', projectKind: 'deck' },
+  // Documents route through the generic scenario under `other` — the same pair
+  // the Home `document` chip dispatches (see home-hero/chips.ts).
+  'Document': { chipId: 'document', projectKind: 'other' },
   'Image': { chipId: 'image', projectKind: 'image' },
   'Video': { chipId: 'video', projectKind: 'video' },
   'HyperFrames': { chipId: 'hyperframes', projectKind: 'video' },
@@ -52,6 +56,7 @@ function templateUseTarget(template: TemplateDemo): CommunityTemplateUseTarget {
 const TEMPLATE_TYPE_ICON: Record<TemplateType, IconName> = {
   'Slides': 'present',
   'Prototype': 'artboard',
+  'Document': 'file-text',
   'Live Artifact': 'bar-chart-box',
   'Image': 'image',
   'Video': 'video-ai',
@@ -78,6 +83,12 @@ interface CommunityViewProps {
   ) => void;
 }
 
+/* Types whose artwork has no house format: user-shot photos, avatars, key art,
+   vertical clips. They lay out as an uncropped masonry instead of the shared
+   16:9 grid (per product: 图片和视频都用瀑布流). Everything else ships one
+   ratio and reads better as an even grid. */
+const MASONRY_TYPES = new Set<TemplateType>(['Image', 'Video']);
+
 export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: CommunityViewProps) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -99,8 +110,18 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
   // chip (飞书 recvqxDuYM6Uxk). Keep the raw record here: the modal renders
   // from `InstalledPluginRecord`, not from the card view-model.
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
-  const [selectedType, setSelectedType] = useState<TemplateType | null>(null);
-  const [activeSubtype, setActiveSubtype] = useState('All');
+  // The tab row leads with Prototype, mirroring the Home type row's order, and
+  // is fixed rather than derived from the catalogue (see COMMUNITY_TAB_TYPES):
+  // a kind with nothing published yet still gets its tab, and shows the empty
+  // state instead of silently borrowing the next kind's cards.
+  const [activeType, setActiveType] = useState<TemplateType>('Prototype');
+  // Whether GET /api/plugins has answered at all. The empty state is keyed on
+  // this, not on the grid being empty: before the catalogue lands every tab is
+  // empty, and painting "no templates yet" for the length of the fetch would
+  // flash on every visit.
+  const [catalogueLoaded, setCatalogueLoaded] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const typeTabsRef = useRef<HTMLDivElement | null>(null);
   // Remix hands off to a fire-and-forget parent callback
   // (`onRemixTemplate` returns void) that kicks off a real POST /api/projects
   // — nothing here observes
@@ -138,7 +159,9 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
     // `listPlugins` resolves to [] on a failed/aborted fetch, so a daemon that
     // is not up yet simply leaves the grid empty instead of throwing.
     void listPlugins().then((rows) => {
-      if (!cancelled) setPlugins(rows);
+      if (cancelled) return;
+      setPlugins(rows);
+      setCatalogueLoaded(true);
     });
     return () => { cancelled = true; };
   }, []);
@@ -150,22 +173,71 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
     () => new Map(plugins.map((record) => [record.id, record])),
     [plugins],
   );
-  const typeOptions = TEMPLATE_TYPE_ORDER.filter((type) =>
-    templates.some((template) => template.type === type),
+  // Every kind the catalogue carries beyond the four fixed tabs (Live
+  // Artifact, Video, HyperFrames, Audio…) stays reachable through the row's
+  // 更多 popover — the same tail the Home type row keeps for its overflow — so
+  // pinning the inline set to Home's taxonomy never strands a published
+  // template. A picked overflow kind is promoted to an inline pill after 图片
+  // for as long as it is the active one, so the selection is always visible.
+  const extraTypes = TEMPLATE_TYPE_ORDER.filter((type) =>
+    !COMMUNITY_TAB_TYPES.includes(type) && templates.some((template) => template.type === type),
   );
-  const activeType = selectedType && typeOptions.includes(selectedType)
-    ? selectedType
-    : typeOptions[0];
-  const subtypeOptions = Array.from(new Set(
-    templates
-      .filter((template) => template.type === activeType && template.subtype)
-      .map((template) => template.subtype),
-  ));
-  const filteredTemplates = templates.filter((template) => {
-    const typeMatches = template.type === activeType;
-    const subtypeMatches = activeSubtype === 'All' || template.subtype === activeSubtype;
-    return typeMatches && subtypeMatches;
-  });
+  const inlineTypes: TemplateType[] = COMMUNITY_TAB_TYPES.includes(activeType)
+    ? [...COMMUNITY_TAB_TYPES]
+    : [...COMMUNITY_TAB_TYPES, activeType];
+  const popoverTypes = extraTypes.filter((type) => type !== activeType);
+  const filteredTemplates = templates.filter((template) => template.type === activeType);
+  // Dismiss the 更多 popover on outside press / Escape, the way the Home row does.
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const onPointer = (event: MouseEvent) => {
+      if (typeTabsRef.current?.contains(event.target as Node)) return;
+      setMoreOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [moreOpen]);
+  const pickType = (type: TemplateType) => {
+    setMoreOpen(false);
+    if (type === activeType) return;
+    trackCommunityTemplateClick(analytics.track, {
+      page_name: 'community',
+      area: 'community_templates',
+      element: 'filter',
+      filter_type: 'category',
+      filter_value: type,
+      ...workspaceDimensions,
+    });
+    setActiveType(type);
+  };
+  /** One tab pill. It wears the Home type row's pill classes (home-hero.css,
+   *  a documented shared contract) so 原型 here and 原型 under the composer
+   *  are the same object: same ring, same icon hue keyed on `data-chip`, same
+   *  lit state. */
+  const typeTab = (type: TemplateType, inPopover: boolean) => {
+    const isActive = type === activeType;
+    return (
+      <button
+        key={type}
+        type="button"
+        className={`home-hero__type-pill${isActive ? ' is-active' : ''}`}
+        aria-pressed={isActive}
+        data-chip={TEMPLATE_HOME_TARGET[type].chipId}
+        data-testid={`community-type-tab-${TEMPLATE_HOME_TARGET[type].chipId}${inPopover ? '-more' : ''}`}
+        onClick={() => pickType(type)}
+      >
+        <Icon name={TEMPLATE_TYPE_ICON[type]} size={14} aria-hidden />
+        <span>{t(TEMPLATE_TYPE_LABEL_KEY[type])}</span>
+      </button>
+    );
+  };
   const templateScope = (templateId: string) => {
     const sourceKind = plugins.find((row) => row.id === templateId)?.sourceKind;
     return sourceKind === 'bundled' || sourceKind === 'marketplace' ? 'official' as const : 'personal' as const;
@@ -254,105 +326,81 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
 
   return (
     <section className="community-template-view" aria-labelledby="community-template-title">
-      {/* Header (title + search + filter rows) scrolls away with the grid. */}
+      {/* Header (title + filter row) scrolls away with the grid. The header
+          search and the sub-facet pill row are gone: the type tabs are the
+          whole filter surface. */}
       <div className="community-template-view__header">
       <header className="community-template-view__hero">
         <div>
           <h1 id="community-template-title" className="entry-section__title">{t('community.title')}</h1>
         </div>
-        <div className="community-template-view__search" role="search">
-          <Icon name="search" size={16} />
-          <input type="search" placeholder={t('community.searchPlaceholder')} aria-label={t('community.searchAria')} readOnly />
-        </div>
       </header>
 
       <div className="community-template-view__filters" aria-label={t('community.filtersAria')}>
         <div className="community-template-view__filter-main">
-          <div className="community-template-view__type-tabs">
-            {typeOptions.map((type) => (
-              <button
-                key={type}
-                type="button"
-                className={activeType === type ? 'is-active' : ''}
-                onClick={() => {
-                  trackCommunityTemplateClick(analytics.track, {
-                    page_name: 'community',
-                    area: 'community_templates',
-                    element: 'filter',
-                    filter_type: 'category',
-                    filter_value: type,
-                    ...workspaceDimensions,
-                  });
-                  setSelectedType(type);
-                  setActiveSubtype('All');
-                }}
-              >
-                <Icon name={TEMPLATE_TYPE_ICON[type]} size={16} aria-hidden />
-                <span>{t(TEMPLATE_TYPE_LABEL_KEY[type])}</span>
-              </button>
-            ))}
+          <div className="community-template-view__type-tabs" ref={typeTabsRef}>
+            {inlineTypes.map((type) => typeTab(type, false))}
+            {popoverTypes.length > 0 ? (
+              <div className="home-hero__type-pills-more">
+                <button
+                  type="button"
+                  className={`home-hero__type-pill home-hero__type-pills-more-btn${moreOpen ? ' is-open' : ''}`}
+                  aria-haspopup="true"
+                  aria-expanded={moreOpen}
+                  data-testid="community-type-tabs-more"
+                  onClick={() => setMoreOpen((value) => !value)}
+                >
+                  <span>{t('homeHero.subTypeMore')}</span>
+                  <Icon name="chevron-down" size={14} />
+                </button>
+                {moreOpen ? (
+                  <div
+                    className="home-hero__type-pills-popover"
+                    role="group"
+                    aria-label={t('homeHero.subTypeMore')}
+                    data-testid="community-type-tabs-popover"
+                  >
+                    {popoverTypes.map((type) => typeTab(type, true))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
-        {subtypeOptions.length > 0 ? (
-          <div className="community-template-view__subtabs">
-            <button
-              type="button"
-              className={activeSubtype === 'All' ? 'is-active' : ''}
-              onClick={() => {
-                trackCommunityTemplateClick(analytics.track, {
-                  page_name: 'community',
-                  area: 'community_templates',
-                  element: 'filter',
-                  filter_type: 'subtype',
-                  filter_value: 'all',
-                  ...workspaceDimensions,
-                });
-                setActiveSubtype('All');
-              }}
-            >
-              {t('common.all')}
-            </button>
-            {subtypeOptions.map((subtype) => (
-              <button
-                key={subtype}
-                type="button"
-                className={activeSubtype === subtype ? 'is-active' : ''}
-                onClick={() => {
-                  trackCommunityTemplateClick(analytics.track, {
-                    page_name: 'community',
-                    area: 'community_templates',
-                    element: 'filter',
-                    filter_type: 'subtype',
-                    filter_value: subtype,
-                    ...workspaceDimensions,
-                  });
-                  setActiveSubtype(subtype);
-                }}
-              >
-                {subtype}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
       </div>
 
-      <div className="community-template-grid">
+      {/* The layout is per-type: the two media tabs break out of the shared
+          16:9 grid into an uncropped masonry (see plugin-marketplace-demo.css).
+          The flag, not the type name, is what the stylesheet keys on — which
+          types qualify is a product call and belongs here, next to the tab
+          state, rather than spread across a dozen selectors. */}
+      <div
+        className="community-template-grid"
+        data-layout={MASONRY_TYPES.has(activeType) ? 'masonry' : undefined}
+      >
         {filteredTemplates.map((template) => (
           <article
             key={template.id}
             className="community-template-card is-clickable"
+            /* The caption names the template now, so the tile no longer prints
+               its type anywhere — this keeps that fact assertable (a tab may
+               only grid cards of its own type). */
+            data-template-type={template.type}
             onClick={() => openTemplateDetails(template)}
           >
-            <div
-              className={`community-template-card__preview${template.type === 'Slides' ? ' is-deck' : ''}`}
-              style={{ '--template-accent': template.accent } as CSSProperties}
-              aria-hidden
-            >
-              <TemplateThumb template={template} />
-            </div>
-            <footer className="community-template-card__foot">
-              <span>{template.meta}</span>
+            {/* The plate owns the actions' positioning context: they overlay
+                the thumbnail (per product: 按钮的位置在卡片上) but must stay
+                OUTSIDE the `aria-hidden` preview, or assistive tech loses two
+                real controls. */}
+            <div className="community-template-card__plate">
+              <div
+                className={`community-template-card__preview${template.type === 'Slides' ? ' is-deck' : ''}`}
+                style={{ '--template-accent': template.accent } as CSSProperties}
+                aria-hidden
+              >
+                <TemplateThumb template={template} />
+              </div>
               <div className="community-template-card__actions">
                 {canRemixTemplate(template) ? (
                   <button
@@ -363,7 +411,17 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
                       handleTemplateAction(template);
                     }}
                   >
-                    {remixingId === template.id ? t('common.loading') : 'Remix'}
+                    {remixingId === template.id ? (
+                      t('common.loading')
+                    ) : (
+                      <>
+                        {/* Icon leads the label on both pills (per product). It
+                            is decorative — the label already names the action —
+                            so `Icon` renders it aria-hidden. */}
+                        <Icon name="remix-loop" size={14} />
+                        Remix
+                      </>
+                    )}
                   </button>
                 ) : null}
                 <button
@@ -374,13 +432,48 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
                     handleCardUse(template);
                   }}
                 >
-                  {t('pluginCard.use')}
+                  <Icon name="make-same" size={14} />
+                  {t('community.usePrompt')}
                 </button>
               </div>
+            </div>
+            <footer className="community-template-card__foot">
+              <span className="community-template-card__title">{template.title}</span>
+              {/* The byline the caption sits on: who published the template,
+                  then what it is. Both come out of the catalogue record
+                  (`buildCommunityTemplates`) — the view/remix counts this row
+                  used to carry alongside them were placeholder numbers with no
+                  source behind them, so they stay out until one exists. The
+                  initial disc is drawn from the name itself, not a stored
+                  avatar. */}
+              <span className="community-template-card__byline">
+                <span className="community-template-card__avatar" aria-hidden>
+                  {template.author.trim().charAt(0).toUpperCase()}
+                </span>
+                <span className="community-template-card__author">{template.author}</span>
+                <span className="community-template-card__meta">{template.meta}</span>
+              </span>
             </footer>
           </article>
         ))}
       </div>
+      {catalogueLoaded && filteredTemplates.length === 0 ? (
+        /* A tab with nothing published yet (Document, until document templates
+           ship). The mark is the same blueprint glyph the drafts blank state
+           draws, so the two empty pages read as one family. */
+        <div className="community-template-view__no-results" data-testid="community-empty-state">
+          <p className="community-template-view__no-results-title">
+            {t('community.emptyTitle', { type: t(TEMPLATE_TYPE_LABEL_KEY[activeType]) })}
+          </p>
+          <p>{t('community.emptyBody')}</p>
+          <img
+            className="community-template-view__no-results-mark"
+            src="/community-empty-mark.svg"
+            alt=""
+            aria-hidden
+          />
+        </div>
+      ) : null}
       {detailsRecord ? (
         <PluginDetailsModal
           record={detailsRecord}

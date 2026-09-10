@@ -39,6 +39,7 @@ const PITCH_DECK = plugin({
   title: 'Seed Round Pitch',
   manifest: {
     description: 'A decision-grade seed round narrative.',
+    author: { name: 'Zara Zhang' },
     tags: ['deck'],
     od: {
       mode: 'deck',
@@ -99,7 +100,26 @@ const DESIGN_SYSTEM_PLUGIN = plugin({
   manifest: { od: { mode: 'design-system' } },
 });
 
+// A kind outside the four fixed tabs: reachable through the row's 更多 popover
+// only, and only mixed into the catalogue by the specs that exercise it.
+const VIDEO_TEMPLATE = plugin({
+  id: 'video-template-teaser',
+  title: 'Product Teaser',
+  manifest: {
+    description: 'A fifteen-second product teaser.',
+    tags: ['teaser'],
+    od: { mode: 'video', preview: { type: 'image', poster: 'https://assets.test/teaser.jpg' } },
+  },
+});
+
 const CATALOGUE = [PITCH_DECK, SALES_DECK, LANDING_PROTOTYPE, IMAGE_TEMPLATE, HIDDEN_PLUGIN, DESIGN_SYSTEM_PLUGIN];
+
+function serveCatalogue(plugins: unknown[]) {
+  fetchMock.mockImplementation(async () => new Response(JSON.stringify({ plugins }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  }));
+}
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -139,10 +159,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Read every type tab as { label } plus the cards currently gridded. */
+/** Read every inline type tab as { label } plus the cards currently gridded.
+ *  The 更多 trigger (when the catalogue has overflow kinds) is not a tab. */
 function readFacets() {
   const tabs = Array.from(
-    document.querySelectorAll('.community-template-view__type-tabs button'),
+    document.querySelectorAll('.community-template-view__type-tabs button.home-hero__type-pill:not(.home-hero__type-pills-more-btn)'),
   ) as HTMLButtonElement[];
   return tabs.map((tab) => ({
     tab,
@@ -174,7 +195,15 @@ function renderedCards() {
 
 async function renderCommunity(props: Parameters<typeof CommunityView>[0] = {}) {
   render(<CommunityView {...props} />);
-  await waitFor(() => expect(readFacets().length).toBeGreaterThan(0));
+  // The tab row is fixed (it renders before the catalogue arrives), so readiness
+  // is the grid: the default Prototype tab grids its one fixture card once
+  // GET /api/plugins resolves.
+  await waitFor(() => expect(renderedCards().length).toBeGreaterThan(0));
+}
+
+/** Activate the tab whose (English) label matches, e.g. 'Slides'. */
+function clickTab(label: string) {
+  fireEvent.click(readFacets().find((facet) => facet.label === label)!.tab);
 }
 
 describe('CommunityView analytics', () => {
@@ -201,34 +230,65 @@ describe('CommunityView catalogue source', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/plugins', undefined);
 
-    // Prototype leads, followed by Slides; both come from the daemon-served
-    // plugin catalogue rather than a bundled demo array.
+    // The row mirrors the Home type row's taxonomy and order — Prototype leads
+    // — and renders all four kinds even though the fixture catalogue has no
+    // Document template yet. Each tab wears the Home pill and its hue hook.
     const facets = readFacets();
-    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Image']);
+    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
+    expect(facets.map((facet) => facet.tab.getAttribute('data-chip'))).toEqual(['prototype', 'deck', 'document', 'image']);
+    expect(facets[0]!.tab.classList.contains('is-active')).toBe(true);
+    expect(facets[0]!.tab.getAttribute('aria-pressed')).toBe('true');
 
-    // The card footer reads "<type> · <sub-facet>", both resolved from the
-    // shared plugins-home taxonomy. Asserted before the tab walk below, which
+    // The card caption is the template's own title now — the type line it used
+    // to carry rides the byline. Asserted before the tab walk below, which
     // leaves a different facet active.
-    expect(renderedCards().map((card) => card.querySelector('.community-template-card__foot span')?.textContent))
+    expect(renderedCards().map((card) => card.querySelector('.community-template-card__title')?.textContent))
+      .toEqual(['SaaS Landing Page']);
+    expect(renderedCards().map((card) => card.querySelector('.community-template-card__meta')?.textContent))
       .toEqual(['Prototype · Landing / marketing']);
 
-    expect(readFacetCardCounts()).toEqual([1, 2, 1]);
+    // Each tab grids exactly the plugins the daemon served for its kind — not
+    // a bundled demo array. Document is empty until document templates ship.
+    expect(readFacetCardCounts()).toEqual([1, 2, 0, 1]);
   });
 
-  it('falls back to the first available type when the catalogue has no Prototype templates', async () => {
-    fetchMock.mockImplementation(async () => new Response(JSON.stringify({
-      plugins: [PITCH_DECK, SALES_DECK],
-    }), {
+  it('keeps Prototype as the lead tab and shows the empty state when the catalogue has none', async () => {
+    serveCatalogue([PITCH_DECK, SALES_DECK]);
+
+    render(<CommunityView />);
+    await waitFor(() => expect(screen.getByTestId('community-empty-state')).toBeTruthy());
+
+    // The row is fixed to the Home taxonomy, so it does not fall through to
+    // the first kind that happens to have cards.
+    const facets = readFacets();
+    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
+    expect(facets[0]!.tab.classList.contains('is-active')).toBe(true);
+    expect(renderedCards()).toHaveLength(0);
+    expect(screen.getByText('No Prototype templates yet')).toBeTruthy();
+    expect(screen.getByText('Templates published to the community will show up here.')).toBeTruthy();
+    expect(document.querySelector('img.community-template-view__no-results-mark')?.getAttribute('src'))
+      .toBe('/community-empty-mark.svg');
+
+    // The empty state clears as soon as a tab with cards is picked.
+    clickTab('Slides');
+    expect(screen.queryByTestId('community-empty-state')).toBeNull();
+    expect(renderedCards()).toHaveLength(2);
+  });
+
+  it('holds the empty state back until the catalogue has answered', async () => {
+    let resolveCatalogue: (response: Response) => void = () => {};
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => { resolveCatalogue = resolve; }));
+
+    render(<CommunityView />);
+
+    // Every tab is empty before GET /api/plugins lands; painting "no templates
+    // yet" for the length of the fetch would flash on every visit.
+    expect(screen.queryByTestId('community-empty-state')).toBeNull();
+    resolveCatalogue(new Response(JSON.stringify({ plugins: [] }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));
-
-    await renderCommunity();
-
-    const facets = readFacets();
-    expect(facets.map((facet) => facet.label)).toEqual(['Slides']);
-    expect(facets[0]!.tab.classList.contains('is-active')).toBe(true);
-    expect(renderedCards()).toHaveLength(2);
+    await waitFor(() => expect(screen.getByTestId('community-empty-state')).toBeTruthy());
   });
 
   it('leaves hidden and design-system plugins out of the gallery', async () => {
@@ -242,24 +302,60 @@ describe('CommunityView catalogue source', () => {
     expect(screen.queryByText(/Hidden Utility/)).toBeNull();
   });
 
-  it('renders the sub-facet pills the selected type actually has plugins for', async () => {
+  it('renders no sub-facet pill row and no header search — the type tabs are the whole filter surface', async () => {
     await renderCommunity();
 
-    const pills = Array.from(
-      document.querySelectorAll('.community-template-view__subtabs button'),
-    ).map((button) => button.textContent?.trim());
-    expect(pills).toEqual(['All', 'Landing / marketing']);
+    expect(document.querySelector('.community-template-view__subtabs')).toBeNull();
+    expect(document.querySelector('.community-template-view__search')).toBeNull();
+  });
 
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
-    fireEvent.click(screen.getByRole('button', { name: 'B2B sales' }));
-    expect(renderedCards()).toHaveLength(1);
+  it('keeps kinds outside the fixed row reachable through the 更多 popover', async () => {
+    serveCatalogue([...CATALOGUE, VIDEO_TEMPLATE]);
+    await renderCommunity();
+
+    // The four fixed tabs are unchanged; Video is not one of them.
+    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
+    expect(screen.queryByTestId('community-type-tabs-popover')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('community-type-tabs-more'));
+    const popover = screen.getByTestId('community-type-tabs-popover');
+    expect(Array.from(popover.querySelectorAll('button')).map((button) => button.textContent?.trim()))
+      .toEqual(['Video']);
+
+    fireEvent.click(screen.getByTestId('community-type-tab-video-more'));
+
+    // Picking it closes the popover and promotes the kind to an inline, lit
+    // pill after 图片 so the selection is always visible.
+    expect(screen.queryByTestId('community-type-tabs-popover')).toBeNull();
+    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image', 'Video']);
+    expect(readFacets()[4]!.tab.classList.contains('is-active')).toBe(true);
+    // Video was the only overflow kind, so nothing is left for 更多 to show.
+    expect(screen.queryByTestId('community-type-tabs-more')).toBeNull();
+    expect(renderedCards().map((card) => card.getAttribute('data-template-type'))).toEqual(['Video']);
+    expect(document.querySelector('.community-template-grid')?.getAttribute('data-layout')).toBe('masonry');
+
+    // Back on a fixed tab the promoted pill retires and 更多 returns.
+    clickTab('Slides');
+    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
+    expect(screen.getByTestId('community-type-tabs-more')).toBeTruthy();
+  });
+
+  it('lays the media tabs out as a masonry and every other tab as the shared grid', async () => {
+    await renderCommunity();
+    const grid = () => document.querySelector('.community-template-grid');
+
+    expect(grid()?.getAttribute('data-layout')).toBeNull();
+    clickTab('Image');
+    expect(grid()?.getAttribute('data-layout')).toBe('masonry');
+    clickTab('Slides');
+    expect(grid()?.getAttribute('data-layout')).toBeNull();
   });
 });
 
 describe('CommunityView previews', () => {
   it('centres deck media in the 16:9 preview crop while legacy bakes are being replaced', async () => {
     await renderCommunity();
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
+    clickTab('Slides');
 
     expect(renderedCards()[0]!.querySelector('.community-template-card__preview.is-deck'))
       .not.toBeNull();
@@ -267,7 +363,7 @@ describe('CommunityView previews', () => {
 
   it('shows the plugin\'s own poster on the card and its live page in the full details modal', async () => {
     await renderCommunity();
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
+    clickTab('Slides');
 
     // Card thumbnail: the daemon-baked poster for that plugin.
     const thumb = renderedCards()[0]!.querySelector('img.plugins-home__media-img');
@@ -293,7 +389,7 @@ describe('CommunityView previews', () => {
     // floor even though the daemon still attached it and the classifier still
     // resolved it.
     await renderCommunity();
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
+    clickTab('Slides');
 
     const card = renderedCards()[0]!;
     expect(card.querySelector('img.community-template-thumb__image')).toBeNull();
@@ -313,7 +409,7 @@ describe('CommunityView previews', () => {
     // <video> just because the tile now routes through the shared surface.
     await renderCommunity();
 
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Image')!.tab);
+    clickTab('Image');
     const card = renderedCards()[0]!;
     expect(card.querySelector('img.plugins-home__media-img')?.getAttribute('src'))
       .toBe('https://assets.test/poster.jpg');
@@ -324,7 +420,7 @@ describe('CommunityView previews', () => {
     // The B2B deck ships an html preview and no bake, so there is no media spec
     // to mount — that card must still fall back to the stylized paper tile.
     await renderCommunity();
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
+    clickTab('Slides');
 
     const card = renderedCards()[1]!;
     expect(card.querySelector('.community-template-thumb__paper')).not.toBeNull();
@@ -334,7 +430,7 @@ describe('CommunityView previews', () => {
   it('carries a media template\'s poster into the full details modal stage', async () => {
     await renderCommunity();
 
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Image')!.tab);
+    clickTab('Image');
     fireEvent.click(renderedCards()[0]!);
 
     // Image templates dispatch to the media detail surface of the full
@@ -349,17 +445,24 @@ describe('CommunityView previews', () => {
 });
 
 describe('CommunityView remix', () => {
-  it('shows Remix + Use for duplicable decks, but only Use for prompt-driven media', async () => {
+  it('shows Remix + Try it now for duplicable decks, but only Try it now for prompt-driven media', async () => {
     await renderCommunity();
 
-    expect(Array.from(
+    const actions = () => Array.from(
       renderedCards()[0]!.querySelectorAll<HTMLButtonElement>('.community-template-card__actions button'),
-    ).map((button) => button.textContent?.trim())).toEqual(['Remix', 'Use']);
+    );
+    expect(actions().map((button) => button.textContent?.trim())).toEqual(['Remix', 'Try it now']);
+    // Icon leads the label on both pills; the glyph is decorative.
+    for (const button of actions()) expect(button.querySelector('svg')).not.toBeNull();
+    // The actions overlay the plate (outside the aria-hidden preview) so
+    // assistive tech keeps both controls.
+    const plate = renderedCards()[0]!.querySelector('.community-template-card__plate');
+    expect(plate?.querySelector('.community-template-card__preview')).not.toBeNull();
+    expect(plate?.querySelector('.community-template-card__actions')).not.toBeNull();
+    expect(renderedCards()[0]!.querySelector('[aria-hidden] .community-template-card__actions')).toBeNull();
 
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Image')!.tab);
-    expect(Array.from(
-      renderedCards()[0]!.querySelectorAll<HTMLButtonElement>('.community-template-card__actions button'),
-    ).map((button) => button.textContent?.trim())).toEqual(['Use']);
+    clickTab('Image');
+    expect(actions().map((button) => button.textContent?.trim())).toEqual(['Try it now']);
     expect(screen.queryByRole('button', { name: 'Copy prompt' })).toBeNull();
   });
 
@@ -368,8 +471,8 @@ describe('CommunityView remix', () => {
     const onUsePrompt = vi.fn();
     await renderCommunity({ onUsePlugin, onUsePrompt });
 
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Image')!.tab);
-    fireEvent.click(screen.getByRole('button', { name: 'Use' }));
+    clickTab('Image');
+    fireEvent.click(screen.getByRole('button', { name: 'Try it now' }));
 
     expect(onUsePlugin).toHaveBeenCalledWith(IMAGE_TEMPLATE, 'use-with-query', {
       templateId: 'image-template-poster',
@@ -439,7 +542,7 @@ describe('CommunityView remix', () => {
     // handler invocation really runs (see the rapid-click note above).
     const onRemix = vi.fn();
     await renderCommunity({ onRemixTemplate: onRemix });
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
+    clickTab('Slides');
 
     fireEvent.click(renderedCards()[0]!);
     await waitFor(() => {
@@ -476,7 +579,7 @@ describe('CommunityView use handoff', () => {
     const onUsePrompt = vi.fn();
     await renderCommunity({ onUsePrompt });
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Try it now' })[0]!);
 
     expect(onUsePrompt).toHaveBeenCalledWith({
       templateId: 'example-landing-prototype',
@@ -523,11 +626,16 @@ describe('CommunityView facet counts', () => {
 
     for (const { tab, label } of facets) {
       fireEvent.click(tab);
-      const footers = renderedCards().map(
-        (card) => card.querySelector('.community-template-card__foot span')?.textContent ?? '',
-      );
-      expect(footers.length).toBeGreaterThan(0);
-      for (const footer of footers) expect(footer.startsWith(`${label} ·`)).toBe(true);
+      // The caption is the template name now, so the type it was gridded under
+      // is read off the card itself rather than parsed out of the caption.
+      const types = renderedCards().map((card) => card.getAttribute('data-template-type') ?? '');
+      // The row is fixed to the Home taxonomy, so a tab may legitimately grid
+      // nothing (Document has no published templates yet) — but every card it
+      // does grid must be its own type. `TemplateType` and its English tab
+      // label are the same string ('Slides', 'Prototype', …) and this suite
+      // renders in English, so the tab's own label is the expected value
+      // without a lookup table.
+      for (const type of types) expect(type).toBe(label);
     }
   });
 
@@ -540,5 +648,28 @@ describe('CommunityView facet counts', () => {
     const renderedTotal = readFacetCardCounts().reduce((sum, count) => sum + count, 0);
 
     expect(renderedTotal).toBe(4);
+  });
+});
+
+describe('CommunityView card byline', () => {
+  it('names the publisher from the catalogue and keeps the type line under the caption', async () => {
+    await renderCommunity();
+    // Prototype leads the row, and its one card is not the fixture pair this
+    // spec is about — the two Slides decks are (one with a manifest author,
+    // one without).
+    clickTab('Slides');
+    const [pitch, sales] = renderedCards();
+
+    // Manifest author wins outright.
+    expect(pitch!.querySelector('.community-template-card__author')?.textContent).toBe('Zara Zhang');
+    expect(pitch!.querySelector('.community-template-card__avatar')?.textContent).toBe('Z');
+    // No manifest author: every fixture here is `sourceKind: 'bundled'`, i.e.
+    // shipped by the daemon, so the source answers it. Never a made-up handle.
+    expect(sales!.querySelector('.community-template-card__author')?.textContent).toBe('Open Design');
+
+    // The `type · sub-facet` line the caption gave up when it became the title
+    // rides the byline instead of disappearing.
+    expect(sales!.querySelector('.community-template-card__meta')?.textContent)
+      .toBe('Slides \u00b7 B2B sales');
   });
 });

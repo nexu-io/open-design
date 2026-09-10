@@ -57,8 +57,36 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   padding: 18px 18px 14px;
+}
+
+/* Inbox ⇄ 已归档 switch beside the close button. */
+.headerActions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Inbox ⇄ 已归档 switch. A quiet text button: the archive is a shelf, not a
+   second feature, so it must not compete with the panel title beside it. */
+.shelfToggle {
+  flex: 0 0 auto;
+  height: auto;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shelfToggle:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
 }
 
 .header::after {
@@ -81,13 +109,6 @@
   font-size: 17px;
   line-height: 1.25;
   letter-spacing: 0;
-}
-
-.headerCopy p {
-  margin: 5px 0 0;
-  color: var(--text-muted);
-  font-size: 12.5px;
-  line-height: 1.45;
 }
 
 .close.close {
@@ -113,6 +134,8 @@
 }
 
 .close.close:focus-visible,
+.shelfToggle:focus-visible,
+.archiveAction:focus-visible,
 .syncStatus button:focus-visible,
 .itemSummary:focus-visible,
 .itemActions button:focus-visible,
@@ -187,38 +210,44 @@
   flex: 0 0 auto;
   position: relative;
   min-width: 0;
+  border-radius: var(--radius-lg);
+  background: var(--accent-tint);
 }
 
-.item:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  left: 3px;
-  right: 13px;
-  bottom: -4px;
-  height: 1px;
-  background: var(--border-soft);
-}
-
+/* Unread rides the card's leading edge as an accent bar (the red dot that
+   used to sit beside the type line has no row to sit on now that the title
+   leads the card). */
 .itemUnread {
-  position: relative;
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.itemUnread::before {
-  content: '';
+/* Archive toggle, parked in the card's top-right corner. Always on (per
+   product: 去 hover 的所有状态) — the card carries no hover feedback at all now,
+   so a reveal-on-hover button would simply be unreachable with a mouse. It sat
+   at `opacity: 0` until `.item:hover`/`:focus-within` opened it, which is
+   exactly the state this card no longer has; touch already got it permanently
+   through a `(hover: none)` block, so this is that treatment everywhere. The
+   chevron it once competed with is inline beside the title, not in the corner. */
+.archiveAction {
   position: absolute;
+  top: 8px;
+  right: 8px;
   z-index: 1;
-  top: 38px;
-  left: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--red, #ef4444);
-  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
 .itemExpanded {
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  background: var(--accent-tint);
 }
 
 .itemSummary {
@@ -234,41 +263,32 @@
   gap: 6px;
   padding: 12px 13px 10px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: inherit;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.itemSummary:hover {
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-}
+/* No hover wash (per product): the summary used to take `--accent` at 5%, with
+   an expanded-state rule cancelling it again. The card is a read surface, not a
+   list row — `cursor: pointer` is the affordance it keeps. */
 
-.itemExpanded .itemSummary:hover {
-  background: transparent;
-}
-
-.itemMeta {
+.itemTitle {
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: flex-start;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 11.5px;
-  line-height: 1.2;
+  gap: 6px;
+  /* Leave the top-right corner to the archive button. */
+  padding-right: 30px;
 }
 
-.itemMeta span {
+.itemTitle strong {
+  flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.itemSummary strong {
   max-width: 100%;
   overflow: hidden;
   color: var(--text);
@@ -278,7 +298,17 @@
   white-space: nowrap;
 }
 
-.itemUnread .itemSummary strong {
+.expandIcon {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  transform: rotate(180deg);
+}
+
+.itemExpanded .expandIcon {
+  transform: rotate(0deg);
+}
+
+.itemUnread .itemTitle strong {
   color: var(--text-strong);
   font-weight: 700;
 }
@@ -301,17 +331,58 @@
   white-space: normal;
 }
 
-.itemExpanded .itemSummary strong {
+.itemExpanded .itemTitle strong {
   overflow: visible;
   overflow-wrap: anywhere;
   text-overflow: clip;
   white-space: normal;
 }
 
+.itemMedia {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-top: 2px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--bg-muted);
+}
+
+.itemMedia img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.itemMeta {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+.itemMeta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemMeta time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
 .itemActions {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   padding: 0 13px 12px;
 }
 
@@ -319,7 +390,7 @@
   min-height: 30px;
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--border));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill, 999px);
   background: var(--accent);
   color: var(--accent-contrast, #fff);
   cursor: pointer;
@@ -357,29 +428,6 @@
   margin: 0;
   font-size: 12.5px;
   line-height: 1.45;
-}
-
-.footer {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-top: 1px solid var(--border-soft);
-  background: var(--bg-panel);
-}
-
-.footer p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.footer button {
-  flex: 0 0 auto;
-  white-space: nowrap;
 }
 
 .toast {
@@ -430,11 +478,6 @@
     border-left: 0;
     border-bottom: 0;
     border-radius: var(--radius) var(--radius) 0 0;
-  }
-
-  .footer {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .toast {

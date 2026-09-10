@@ -58,10 +58,19 @@ describe('community template preview — window chrome', () => {
 
   it('shrinks the fit-to-window clamp by the top inset so the panel cannot slide back under the lights', () => {
     const panel = declarations(marketplaceCss, '.community-template-preview__panel');
+    // The whole panel is 8% smaller than it was (per product), cap and
+    // fit-to-window clamp alike, so the top-inset subtraction stays inside the
+    // scaled clamp and the proportions hold at every window size.
+    expect(panel).toMatch(/--preview-scale:\s*0\.92;/);
     expect(panel).toMatch(
-      /height:\s*min\(760px, calc\(100vh - 28px - var\(--community-template-preview-inset-top\)\)\)/,
+      /height:\s*calc\(min\(760px, 100vh - 28px - var\(--community-template-preview-inset-top\)\) \* var\(--preview-scale\)\)/,
     );
-    expect(panel).toMatch(/width:\s*min\(1120px, calc\(100vw - 56px\)\)/);
+    expect(panel).toMatch(/width:\s*calc\(min\(1120px, 100vw - 56px\) \* var\(--preview-scale\)\)/);
+  });
+
+  it('rounds the panel at 16px (--radius-xl), on the token ladder', () => {
+    const panel = declarations(marketplaceCss, '.community-template-preview__panel');
+    expect(panel).toMatch(/border-radius:\s*var\(--radius-xl\);/);
   });
 
   it('lets the uncovered top band drag the window like every other full-screen backdrop', () => {

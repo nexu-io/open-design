@@ -11,8 +11,10 @@ import {
   pullMessageCenter,
   readAnonymousMessages,
   readAnonymousReadIds,
+  readArchivedIds,
   type MessageCenterMessage,
   writeAnonymousState,
+  writeArchivedIds,
 } from '../message-center-client';
 import { GoPlanSunsetDialog } from './GoPlanSunsetDialog';
 import { Icon } from './Icon';
@@ -29,6 +31,12 @@ function formatPublishedDate(value: string, locale: Locale): string | null {
 }
 
 interface Props {
+  /** No longer rendered: the footer that carried the desktop-notification
+   *  settings link is gone (per product — the panel is the inbox and nothing
+   *  else; the setting itself still lives in Settings → Notifications). Kept
+   *  in the contract so the rail's two mounts (EntryNavRail.tsx) type-check
+   *  unchanged; drop it there and here together whenever that file is next
+   *  touched. */
   onOpenNotificationSettings?: () => void;
   /** Hide the built-in bell trigger — the host renders its own entry point
    *  (e.g. an account-menu row) and drives the panel via `open`/`onOpenChange`. */
@@ -55,7 +63,6 @@ interface Props {
 type SyncState = 'loading' | 'ready' | 'error';
 
 export function MessageCenter({
-  onOpenNotificationSettings,
   hideTrigger = false,
   returnFocusRef,
   open: controlledOpen,
@@ -81,6 +88,12 @@ export function MessageCenter({
   );
   const [messages, setMessages] = useState<MessageCenterMessage[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  /** Archived ids + which shelf the list is showing. Archiving is a third
+   *  per-message state on top of unread → read: it takes the message out of
+   *  the inbox without deleting it, and the header toggle is the way back. */
+  const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
+  const [shelf, setShelf] = useState<'inbox' | 'archived'>('inbox');
+  const archivedIdsRef = useRef<Set<string>>(new Set());
   const [loggedIn, setLoggedIn] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>('loading');
   const [priorityMessage, setPriorityMessage] = useState<MessageCenterMessage | null>(null);
@@ -102,6 +115,12 @@ export function MessageCenter({
     },
     [],
   );
+
+  const commitArchived = useCallback((next: Set<string>) => {
+    archivedIdsRef.current = next;
+    setArchivedIds(next);
+    writeArchivedIds(window.localStorage, next);
+  }, []);
 
   const sync = useCallback(async () => {
     const requestId = syncRequestIdRef.current + 1;
@@ -136,8 +155,15 @@ export function MessageCenter({
     if (account) clearAnonymousState(window.localStorage);
     commitState(merged, overlayReadIds, { persistAnonymous: !account });
     setPriorityMessage(account ? findGoPlanSunsetMessage(merged) : null);
+    // Drop archive entries whose message the server no longer returns, so the
+    // local set can't grow forever behind a feed that rolls over.
+    if (archivedIdsRef.current.size > 0) {
+      const live = new Set(merged.map((message) => message.id));
+      const kept = new Set([...archivedIdsRef.current].filter((id) => live.has(id)));
+      if (kept.size !== archivedIdsRef.current.size) commitArchived(kept);
+    }
     setSyncState('ready');
-  }, [commitState, locale]);
+  }, [commitArchived, commitState, locale]);
 
   const resolveLoggedInForWrite = useCallback(async () => {
     const account = await isAmrLoggedIn();
@@ -155,6 +181,9 @@ export function MessageCenter({
   }, []);
 
   useEffect(() => {
+    const stored = readArchivedIds(window.localStorage);
+    archivedIdsRef.current = stored;
+    setArchivedIds(stored);
     commitState(
       readAnonymousMessages(window.localStorage),
       readAnonymousReadIds(window.localStorage),
@@ -178,7 +207,19 @@ export function MessageCenter({
     if (open) retrySync();
   }, [open, retrySync]);
 
-  const unreadCount = messages.filter((message) => !message.readAt).length;
+  const inboxMessages = messages.filter((message) => !archivedIds.has(message.id));
+  const archivedMessages = messages.filter((message) => archivedIds.has(message.id));
+  const visibleMessages = shelf === 'archived' ? archivedMessages : inboxMessages;
+  /* Archived messages are put away, so an unread one must not keep the bell
+     badged — otherwise archiving would read as "hidden but still nagging". */
+  const unreadCount = inboxMessages.filter((message) => !message.readAt).length;
+
+  const toggleArchived = (messageId: string) => {
+    const next = new Set(archivedIdsRef.current);
+    if (next.has(messageId)) next.delete(messageId);
+    else next.add(messageId);
+    commitArchived(next);
+  };
 
   useEffect(() => {
     onUnreadCountChange?.(unreadCount);
@@ -263,7 +304,30 @@ export function MessageCenter({
       <Icon name="bell" size={17} />{unreadCount > 0 ? <span className={styles.badge} aria-hidden>{unreadBadgeLabel(unreadCount)}</span> : null}
     </button>}
     {open ? createPortal(<div className={styles.backdrop} data-testid="message-center-backdrop"><aside ref={panelRef} className={styles.panel} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-testid="message-center-dialog">
-      <header className={styles.header}><div className={styles.headerCopy}><h2 id={titleId}>{t('messageCenter.title')}</h2><p>{t('messageCenter.subtitle')}</p></div><Button size="icon" className={styles.close} onClick={closePanel} aria-label={t('messageCenter.close')}><Icon name="close" size={18} strokeWidth={2}/></Button></header>
+      <header className={styles.header}>
+        <div className={styles.headerCopy}>
+          <h2 id={titleId}>
+            {shelf === 'archived' ? t('messageCenter.archivedTitle') : t('messageCenter.title')}
+          </h2>
+        </div>
+        <div className={styles.headerActions}>
+          {/* The way back out of the archive — without it an archived message
+              is indistinguishable from a deleted one. Hidden while the inbox
+              is showing and nothing has been archived yet, so the header stays
+              quiet until the state exists. */}
+          {shelf === 'archived' || archivedMessages.length > 0 ? (
+            <button
+              type="button"
+              className={styles.shelfToggle}
+              onClick={() => setShelf(shelf === 'archived' ? 'inbox' : 'archived')}
+              data-testid="message-center-shelf-toggle"
+            >
+              {shelf === 'archived' ? t('messageCenter.filterAll') : t('messageCenter.archivedTitle')}
+            </button>
+          ) : null}
+          <Button size="icon" className={styles.close} onClick={closePanel} aria-label={t('messageCenter.close')}><Icon name="close" size={18} strokeWidth={2}/></Button>
+        </div>
+      </header>
       <div className={styles.list} aria-live="polite">
         {syncState === 'error' && messages.length > 0 ? (
           <div className={styles.syncStatus} role="status">
@@ -288,9 +352,18 @@ export function MessageCenter({
               </button>
             </div>
           </div>
-        ) : messages.length === 0 ? <div className={styles.empty}><Icon name="bell" size={20}/><strong>{t('messageCenter.emptyAllTitle')}</strong><p>{t('messageCenter.emptyBody')}</p></div> : messages.map((message) => <MessageItem key={message.id} locale={locale} message={message} onRead={markRead} onError={() => setSyncState('error')}/>)}
+        ) : visibleMessages.length === 0 ? (
+          <div className={styles.empty}>
+            <Icon name="bell" size={20}/>
+            <strong>
+              {shelf === 'archived'
+                ? t('messageCenter.emptyArchivedTitle')
+                : t('messageCenter.emptyAllTitle')}
+            </strong>
+            {shelf === 'archived' ? null : <p>{t('messageCenter.emptyBody')}</p>}
+          </div>
+        ) : visibleMessages.map((message) => <MessageItem key={message.id} locale={locale} message={message} archived={archivedIds.has(message.id)} onRead={markRead} onToggleArchived={toggleArchived} onError={() => setSyncState('error')}/>)}
       </div>
-      <footer className={styles.footer}><p>{t('messageCenter.desktopSettingsHint')}</p>{onOpenNotificationSettings ? <Button variant="ghost" onClick={() => { closePanel(); onOpenNotificationSettings(); }}>{t('messageCenter.desktopSettings')}</Button> : null}</footer>
     </aside></div>, document.body) : null}
     {priorityMessage != null ? (
       <GoPlanSunsetDialog
@@ -308,19 +381,52 @@ export function MessageCenter({
 function MessageItem({
   locale,
   message,
+  archived,
   onRead,
+  onToggleArchived,
   onError,
 }: {
   locale: Locale;
   message: MessageCenterMessage;
+  archived: boolean;
   onRead: (id: string) => Promise<void>;
+  onToggleArchived: (id: string) => void;
   onError: () => void;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const formatted = formatPublishedDate(message.publishedAt, locale);
   const ctaUrl = safeExternalUrl(message.ctaUrl);
+  // Only what the payload actually carries: the media slot stays empty until a
+  // message ships its own image.
+  const imageUrl = safeExternalUrl(message.imageUrl ?? null);
   return <article className={`${styles.item}${message.readAt ? '' : ` ${styles.itemUnread}`}${expanded ? ` ${styles.itemExpanded}` : ''}`}>
-    <button type="button" className={styles.itemSummary} aria-expanded={expanded} onClick={() => { setExpanded((value) => !value); void onRead(message.id).catch(onError); }}><span className={styles.itemMeta}><span>{message.typeName}</span>{formatted ? <time dateTime={message.publishedAt}>{formatted}</time> : null}</span><strong>{message.title}</strong><span className={styles.bodyPreview}>{message.body}</span></button>
+    <button type="button" className={styles.itemSummary} aria-expanded={expanded} onClick={() => { setExpanded((value) => !value); void onRead(message.id).catch(onError); }}>
+      <span className={styles.itemTitle}>
+        <strong>{message.title}</strong>
+        <Icon name="chevron-up" size={16} className={styles.expandIcon} />
+      </span>
+      <span className={styles.bodyPreview}>{message.body}</span>
+      {expanded && imageUrl ? <span className={styles.itemMedia}><img src={imageUrl} alt="" loading="lazy" /></span> : null}
+      <span className={styles.itemMeta}>
+        <span>{message.typeName}</span>
+        {formatted ? <time dateTime={message.publishedAt}>{formatted}</time> : null}
+      </span>
+    </button>
+    {/* Outside the summary button: a button inside a button is invalid markup,
+        and clicking the summary expands + marks read, which archiving must
+        not do. */}
+    <button
+      type="button"
+      className={`${styles.archiveAction} od-tooltip`}
+      onClick={() => onToggleArchived(message.id)}
+      aria-label={archived ? t('messageCenter.unarchive') : t('messageCenter.archive')}
+      title={archived ? t('messageCenter.unarchive') : t('messageCenter.archive')}
+      data-tooltip={archived ? t('messageCenter.unarchive') : t('messageCenter.archive')}
+      data-testid="message-center-archive"
+    >
+      <Icon name={archived ? 'inbox-unarchive' : 'inbox-archive'} size={15} />
+    </button>
     {expanded && message.ctaLabel && ctaUrl ? <div className={styles.itemActions}><button type="button" className={styles.primaryAction} onClick={() => window.open(ctaUrl, '_blank', 'noopener,noreferrer')}>{message.ctaLabel}</button></div> : null}
   </article>;
 }

@@ -169,8 +169,7 @@
   box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }
 
-.plugin-marketplace__search,
-.community-template-view__search {
+.plugin-marketplace__search {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -182,13 +181,7 @@
   color: var(--text-soft);
 }
 
-.community-template-view__search {
-  width: min(260px, 100%);
-  flex: 0 0 min(260px, 34%);
-}
-
-.plugin-marketplace__search input,
-.community-template-view__search input {
+.plugin-marketplace__search input {
   appearance: none;
   width: 100%;
   padding: 0;
@@ -202,9 +195,7 @@
 }
 
 .plugin-marketplace__search input:focus,
-.plugin-marketplace__search input:focus-visible,
-.community-template-view__search input:focus,
-.community-template-view__search input:focus-visible {
+.plugin-marketplace__search input:focus-visible {
   border: 0;
   outline: 0;
   background: transparent;
@@ -1341,15 +1332,41 @@
   padding-left: 28px;
 }
 
-/* Remix + Prompt are borderless pills; hover fills black with green ink. */
-.community-template-card__foot button {
+/* Remix + 做同款 are borderless pills that do not repaint on hover. */
+.community-template-card__actions button {
   appearance: none;
-  min-height: 32px;
-  padding: 0 12px;
+  /* 8px from every edge to what is inside (per product), which is what fixes
+     both numbers at once:
+       • sideways, the 1px transparent border below is part of that 8, so the
+         padding carries the other 7 (the same idiom the composer's input card
+         uses for its own inset);
+       • vertically, the box is 8 + a 14px content band + 8 = 30. It was a firm
+         32, which centred the 14px icon at 9 a side — the gap product measured.
+     A fixed height, not `padding` + auto: primitives.css sets `button { height:
+     36px }` globally, and a height-less pill takes that instead. The label's
+     line box is pinned to the icon's 14 so the two share the band and neither
+     re-opens the 9. */
+  height: 30px;
+  min-height: 30px;
+  padding: 0 calc(8px - var(--stroke-thin));
+  line-height: 14px;
+  /* Icon then label on one baseline; 4px is the pairing gap inside a control,
+     half the 8 that separates the two controls from each other. */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text);
+  /* Black frosted glass with white type (per product). These pills sit ON the
+     thumbnail, which can be any colour, so they take the media material
+     (`--material-dim`, styles/material.css) rather than a theme surface —
+     `--bg-panel` disappeared into every pale template preview. The blur is the
+     thin tier, enough to lift the label off a busy image without smearing the
+     artwork the card is there to show. */
+  background: var(--material-dim);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
+  color: var(--vibrancy-label-on-dim);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -1359,18 +1376,70 @@
     color 140ms var(--ease-out),
     border-color 140ms var(--ease-out);
 }
-.community-template-card__foot button:hover:not(:disabled) {
-  background: var(--text-strong);
+/* No colour change on hover (per product): the pills already appear only
+   while the card is hovered, so a second hover state on top of that read as
+   the card flickering rather than as a target. The rule stays and restates the
+   rest values instead of being deleted — primitives.css carries a global
+   `button:hover:not(:disabled)` fill that would otherwise repaint them. */
+.community-template-card__actions button:hover:not(:disabled) {
+  background: var(--material-dim);
   border-color: transparent;
-  color: var(--brand, #87ea5c);
+  color: var(--vibrancy-label-on-dim);
   filter: none;
 }
-/* Remix + Prompt sit side by side on the right. */
+/* Remix + 做同款 ride the thumbnail's bottom-right corner and only appear
+   while the card is hovered or holds focus (per product: remix 的按钮 hover
+   的时候展示，按钮的位置在卡片上). At rest they are inert as well as
+   invisible, so a click that lands on the card before they fade in still
+   opens the detail view. */
 .community-template-card__actions {
+  position: absolute;
+  /* 8px to the plate's right and bottom edges (per product). */
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  flex: 0 0 auto;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+
+.community-template-card:hover .community-template-card__actions,
+.community-template-card:focus-within .community-template-card__actions {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* No hover to reveal them on touch, so they stay put. */
+@media (hover: none) {
+  .community-template-card__actions {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-template-card__actions {
+    transform: none;
+    transition: opacity 140ms var(--ease-out);
+  }
+}
+
+/* Positioning context for the overlaid actions; the preview plate inside it
+   is `aria-hidden`, so the buttons cannot live there. */
+.community-template-card__plate {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .community-template-view__section-head span {
@@ -1391,60 +1460,18 @@
   gap: 12px;
 }
 
-.community-template-view__type-tabs,
-.community-template-view__subtabs {
+/* The type tabs ARE the Home type row's pills: each button wears
+   `.home-hero__type-pill` (+ `data-chip` for the lead hues, `.is-active` for
+   the lit state) from home-hero.css, a documented shared contract, so 原型 here
+   and 原型 under the composer are one object. This row only owns the layout —
+   the same 8px rhythm Home's `.home-hero__type-pills-wrap` keeps — and pins no
+   colour, size or ring of its own. The sub-facet pill row and its rules are
+   gone: the type tabs are the whole filter surface. */
+.community-template-view__type-tabs {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  /* No horizontal gap — each pill's own padding is the only spacing; the
-     row gap keeps wrapped lines apart. */
-  row-gap: 8px;
-  column-gap: 0;
-}
-
-/* Three flat states: colorless at rest, gray on hover, black/green when
-   selected. Border removed entirely (width 0) so the global button:hover
-   border-color primitive has nothing to paint. Height comes from the text
-   plus a fixed 4px vertical inset — no min-height. */
-.community-template-view__type-tabs button,
-.community-template-view__subtabs button {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: none;
-}
-
-.community-template-view__subtabs button {
-  /* The global button primitive hard-codes height: 36px — reset it so the
-     4px vertical inset is what actually sets the chip height. */
-  height: auto;
-  min-height: 0;
-  padding: 4px 11px;
-  font-size: 12px;
-}
-
-.community-template-view__type-tabs button:hover,
-.community-template-view__subtabs button:hover {
-  background: var(--bg-subtle);
-  color: var(--text-strong);
-}
-
-/* Selected pill mirrors the card-button hover: black fill, green ink. */
-.community-template-view__type-tabs button.is-active,
-.community-template-view__subtabs button.is-active {
-  background: var(--text-strong);
-  color: var(--brand, #87ea5c);
+  gap: 8px;
 }
 
 .community-template-grid {
@@ -1456,33 +1483,219 @@
   gap: 20px;
 }
 
+/* ── 图片 / 视频 tabs: uncropped masonry ───────────────────────────────────
+   Every other type ships one house format — a deck, a prototype frame — so a
+   fixed plate with `object-fit: cover` crops nothing that matters. Images and
+   clips do not: these two tabs mix 9:16 phone captures, square avatars and
+   ultrawide key art, and the shared plate cut every one of them (per product:
+   图片不要裁切，瀑布流的形式展开；视频也一样).
+
+   Which types get this lives in CommunityView, not in a list of selectors
+   here — the grid publishes `data-layout="masonry"` and this whole block hangs
+   off that one hook, so adding a third type is one array entry.
+
+   Multicol rather than grid: `grid-template-rows: masonry` is still behind a
+   flag in Chromium, and a JS masonry would need every poster's intrinsic size
+   before it could place a single card. What multicol costs is reading order —
+   it fills column 1 top-to-bottom before starting column 2, so the first four
+   cards are NOT the top row. That is the usual 瀑布流 bargain, and this
+   gallery has no ranking a reader is meant to follow across a row. */
+.community-template-grid[data-layout='masonry'] {
+  display: block;
+  /* The SAME column count the other tabs get, at every width (per product:
+     列数要和其他模块一致). Not a fixed `column-count`: multicol's used count
+     for a given `column-width` is floor((available + gap) / (width + gap)),
+     which is exactly the track count `repeat(auto-fill, minmax(300px, 1fr))`
+     resolves to above — so 300 here and 300 there stay in lockstep as the
+     window moves, with no breakpoints of their own to drift. */
+  column-width: 300px;
+  column-gap: 20px;
+  /* The floor a tile keeps until it knows how tall its picture is. An <img>
+     sized `height: auto` measures ZERO until its bytes arrive, and MediaSurface
+     mounts the tag on visibility rather than on load — so without this every
+     card in view collapses to its caption for the length of the fetch and then
+     shoves the whole column down as each one lands. One name, shared by the
+     media box and the shimmer inside it, so the two cannot drift mid-load. */
+  --masonry-tile-min: 180px;
+}
+/* Multicol has no row-gap; the cards carry the 20 themselves. `break-inside`
+   is not optional — without it a card can be split at a column boundary and
+   leave its plate in one column and its caption in the next. */
+.community-template-grid[data-layout='masonry'] .community-template-card {
+  margin-bottom: 20px;
+  break-inside: avoid;
+}
+/* The plate stops dictating a shape and takes the picture's own. `place-items`
+   goes to stretch with it: centred, the media box would size to its content
+   inside a plate that is itself sizing to the media box, and both would
+   settle at zero.
+   The tinted `--template-accent` wash goes too. It was there to give a 16:9
+   plate something to be while it waited, and a plate that is now exactly the
+   picture has nothing left to fill — all it did was tint the moment before the
+   image arrived a different colour on every card. A loading tile should read
+   as one neutral surface, not as coloured art that then gets replaced. */
+.community-template-grid[data-layout='masonry'] .community-template-card__preview {
+  aspect-ratio: auto;
+  place-items: stretch;
+  background: var(--bg-subtle);
+}
+/* The media chain is built to FILL a fixed plate — two boxes pinned to 100%
+   height around one that is `position: absolute; inset: 0`. Unpin all three so
+   the height flows up from the image instead of down from the card. */
+.community-template-grid[data-layout='masonry'] .community-template-thumb__media {
+  height: auto;
+}
+.community-template-grid[data-layout='masonry'] .plugins-home__media {
+  position: relative;
+  inset: auto;
+  /* THE tile's shape, and the one thing that decides its height. MediaSurface
+     publishes the poster's ratio here once it has loaded and KEEPS it — see
+     that component for why remembering it matters. On the 视频 tab this is
+     still the POSTER's ratio: it is the frame the clip is encoded from, and it
+     is the only one available before the video has any metadata.
+     Height must not come from the <img> itself. That tag unmounts every time
+     the tile drifts beyond the mount margin, so an image-driven height snapped
+     back to the floor below on every unmount, and in a multicol every one of
+     those snaps re-balances every column: scrolling flashed the whole gallery.
+     Reading the ratio off a box that outlives the <img> makes the layout stop
+     caring whether the picture is currently in the DOM.
+     An unset `--poster-ratio` makes this declaration invalid at computed-value
+     time, which lands the property on its initial `auto` — exactly the
+     pre-load state the floor below is for. */
+  aspect-ratio: var(--poster-ratio);
+}
+/* The floor, and ONLY until the poster reports pixels. A floor that outlived
+   the load would letterbox every picture wider than ~2:1 against the plate's
+   gradient: at a 377px column, 180px tall is a 2.1:1 tile, and a 10:3 banner
+   would sit in it with 67px of dead ground under it. Dropping it the instant
+   the real ratio exists is what keeps "no cropping" from turning into "no
+   cropping, but padded". Set together with `--poster-ratio`, so the two can
+   never disagree about whether the shape is known. */
+.community-template-grid[data-layout='masonry']
+  .plugins-home__media:not([data-poster-loaded]) {
+  min-height: var(--masonry-tile-min);
+}
+/* Everything inside the tile is painted OUT of flow, against the box the ratio
+   above defines. Absolute rather than `height: 100%`: a percentage height
+   resolves against the parent's `height` property — `auto` here, since the box
+   is sized by `aspect-ratio` and `min-height` — and would collapse to nothing.
+   This is also what keeps the skeleton and the fallback exactly the size of the
+   picture they stand in for. */
+.community-template-grid[data-layout='masonry'] .plugins-home__media-img,
+.community-template-grid[data-layout='masonry'] .plugins-home__media-skeleton,
+.community-template-grid[data-layout='masonry'] .plugins-home__media-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* The box already carries the poster's own ratio, so `contain` and `cover`
+   agree; `contain` is the one that cannot crop if a rounding pixel disagrees.
+   The clip gets it too — it is sized from the poster's ratio, and an encode
+   that disagrees with its own thumbnail should letterbox rather than lose its
+   edges. */
+.community-template-grid[data-layout='masonry'] .plugins-home__media-img,
+.community-template-grid[data-layout='masonry'] .plugins-home__media-video {
+  object-fit: contain;
+}
+/* Templates with no artwork at all fall back to the drawn placeholder thumb,
+   which has no intrinsic size of its own — those keep the 16:9 plate rather
+   than collapsing to their 28px padding, and keep the accent wash they are
+   drawn against (it is that card's artwork, not a stand-in for one). */
+.community-template-grid[data-layout='masonry']
+  .community-template-card__preview:has(.community-template-thumb) {
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  background:
+    radial-gradient(circle at 72% 24%, color-mix(in srgb, var(--template-accent) 20%, transparent), transparent 32%),
+    linear-gradient(135deg, color-mix(in srgb, var(--template-accent) 15%, var(--bg-panel)), var(--bg-panel));
+}
+
+/* Empty tab (Document, until document templates ship): one centred column —
+   the copy on top, the blueprint mark under it — filling the space the grid
+   would have occupied. */
+.community-template-view__no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin: 0;
+  padding: 56px 0 72px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.community-template-view__no-results p {
+  margin: 0;
+}
+
+/* The title line reads in the strong ink; the line under it stays muted, and
+   the two sit as one paragraph pair rather than two spaced blocks. */
+.community-template-view__no-results-title {
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.community-template-view__no-results-title + p {
+  margin-top: -12px;
+}
+
+/* The mark sits inset in its own 539px blueprint canvas, so the drawn
+   glyph reads about half this width — sized to land near the 168px of the
+   entry blank state's mark. */
+.community-template-view__no-results-mark {
+  width: 320px;
+  max-width: 60%;
+  height: auto;
+}
+
+/* Surfaceless card, matching the projects grid (`.recent-projects__card`,
+   recent-projects.css): no frame of its own — no stroke, no fill, no shadow.
+   The preview plate below is the visible surface and carries the 16px
+   corners itself (all four, not just the top two, so it reads as one tile),
+   and the caption row sits directly on the page ground under it. */
 .community-template-card {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  box-shadow: var(--shadow-xs);
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: transparent;
+  box-shadow: none;
 }
 
 .community-template-card.is-clickable {
   cursor: pointer;
 }
 
+/* Nothing left to tint or deepen on a frameless card — a drop shadow with no
+   fill under it would read as a shadow around thin air. Hover is the 1px
+   lift alone, the same restraint the projects grid keeps. */
 .community-template-card.is-clickable:hover {
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
-  box-shadow: 0 12px 30px -24px color-mix(in srgb, #000 42%, transparent);
   transform: translateY(-1px);
 }
 
 .community-template-card__preview {
   display: grid;
   place-items: center;
-  flex: 1 1 auto;
   aspect-ratio: 16 / 9;
   min-height: 0;
   overflow: hidden;
+  /* Hairline around the tile — the SAME stroke the projects grid draws on its
+     covers (per product: 和全部项目卡片的描边一样); see
+     `.recent-projects__card-thumb::after` in recent-projects.css. It defines
+     the plate against the page for the light-ground previews, which otherwise
+     dissolve into it. A real border, not an inset ring: the ask was a stroke on
+     the OUTSIDE, and `aspect-ratio` resolves against the border box, so the
+     16:9 tile does not change size.
+     The mix is why this needs no theme overrides any more: it derives from
+     --text, which flips with the theme on its own — a flat #f7f7f7 shipped a
+     near-white ring into dark and had to be patched back out. */
+  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  /* The plate IS the card's visible surface now, so its corners set the
+     grid's silhouette — keep in step with `.community-template-card`. */
+  border-radius: var(--radius-xl);
   background:
     radial-gradient(circle at 72% 24%, color-mix(in srgb, var(--template-accent) 20%, transparent), transparent 32%),
     linear-gradient(135deg, color-mix(in srgb, var(--template-accent) 15%, var(--bg-panel)), var(--bg-panel));
@@ -1527,23 +1740,96 @@
 }
 
 .community-template-card__foot {
+  /* A column: the caption on its own line, with the byline (publisher +
+     type · subtype) on the row under it. */
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 48px;
-  padding: 0 14px 0 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  /* The plate-to-caption gap is 8 (per product), and it is PADDING now, not
+     the leftover of a fixed row. This used to be `min-height: 48px` with the
+     caption centred in it, so the 8 was really (48 - 17.5) / 2 = 15 — a number
+     nobody chose, and one that moved with the font's line box. Hugging the
+     caption puts the 8 where it can be read, and leaves the 20px grid row-gap
+     as the only thing under it. Cards stay row-aligned because the caption is
+     always one nowrap line. */
+  min-height: 0;
+  /* 8px side inset, the same one the projects grid's caption keeps: with no
+     card frame the row measures itself against the preview plate's edge, and
+     the old 16/14 read as an indent away from it. */
+  padding: 8px 8px 0;
+  /* No rule and no fill: the caption sits straight on the page ground. */
+  background: transparent;
 }
 
-.community-template-card__foot span {
+/* The caption is the template's NAME now (per product: 标题换成这个) — the
+   `type · category` line it replaced is already what the filters above the
+   grid say, repeated on every tile. Its own class rather than a bare
+   `__foot span`, which would also catch the byline's spans below. */
+.community-template-card__title {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The second row the `__foot` column was already leaving room for: who
+   published the template, then what it is. One line, and it truncates from the
+   type end so the name — the part that identifies a person — is the last thing
+   to go. */
+.community-template-card__byline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Initial disc, drawn from the name. No avatar is stored anywhere in the
+   catalogue, so this is a letterform rather than an <img> that would only ever
+   resolve to a placeholder. */
+.community-template-card__avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.community-template-card__author {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `type · subtype`, the line the caption replaced when it became the title.
+   It keeps its own middot separator from the name, and it is what gives up
+   room first when the card is narrow. */
+.community-template-card__meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-template-card__meta::before {
+  content: '·';
+  margin-right: 6px;
 }
 
 .community-template-thumb {
@@ -1666,14 +1952,22 @@
   /* Two rows: head + stage. The third (the footer bar with Remix) is gone
      (per product: 去掉下边的 remix 那一条; OPEND-2692). */
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(1120px, calc(100vw - 56px));
+  /* Whole panel 8% smaller than it was (per product), including the
+     viewport-bound case — the cap and the fit-to-window clamp are scaled
+     together so the proportions hold at every window size. */
+  --preview-scale: 0.92;
+  width: calc(min(1120px, 100vw - 56px) * var(--preview-scale));
   /* The fit-to-window clamp subtracts the overlay's actual padding, so a
      taller top inset shrinks the panel instead of pushing it back under the
-     traffic lights it was meant to clear. */
-  height: min(760px, calc(100vh - 28px - var(--community-template-preview-inset-top)));
+     traffic lights it was meant to clear (OPEND-2691). */
+  height: calc(min(760px, 100vh - 28px - var(--community-template-preview-inset-top)) * var(--preview-scale));
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  /* 16 (per product), which is --radius-xl on the shared scale — a step up from
+     the 12 this used to take, so the panel stays on the token ladder rather
+     than carrying a one-off literal. `overflow: hidden` above is what carries
+     it to the head bar and the full-bleed stage inside. */
+  border-radius: var(--radius-xl);
   background: var(--bg);
   box-shadow: var(--shadow-md);
 }
@@ -1757,6 +2051,14 @@ html:has(.workspace-shell--desktop[data-host-platform='darwin']) .community-temp
 
   .community-template-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* The narrow end, in step with the grid's own single column above.
+     `column-width` alone would still fit two 300px columns here, and the two
+     layouts would part ways exactly where the cards are tightest. */
+  .community-template-grid[data-layout='masonry'] {
+    column-width: auto;
+    column-count: 1;
   }
 
   .plugin-marketplace__filters .plugin-marketplace__search {
