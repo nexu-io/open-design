@@ -3,11 +3,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  classifyBrowserOsName,
   clearExceptionTrackingContext,
   installErrorHandlers,
   patchExceptionTrackingAppVersion,
   reportHandledException,
-  setExceptionTrackingContext,
+  reportSafetyEvent,
+  setExceptionTrackingContext as setProductionExceptionTrackingContext,
 } from '../../src/analytics/error-tracking';
 
 /**
@@ -27,6 +29,25 @@ import {
 const fetchMock = vi.fn();
 
 const ORIGINAL_FETCH = globalThis.fetch;
+
+function setExceptionTrackingContext(
+  next: {
+    apiKey: string;
+    host: string;
+    distinctId: string;
+    appVersion?: string;
+    sessionId?: string;
+    telemetryEnv?: string;
+    clientType?: 'web' | 'desktop' | 'external_mcp';
+    osName?: 'Mac OS X' | 'Windows' | 'Linux' | 'Android' | 'iOS' | 'Chrome OS' | 'unknown';
+  },
+): void {
+  setProductionExceptionTrackingContext({
+    clientType: 'web',
+    osName: 'Mac OS X',
+    ...next,
+  });
+}
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -49,6 +70,20 @@ function lastFetchedBody(): Record<string, unknown> {
 }
 
 describe('error-tracking', () => {
+  it.each([
+    ['MacIntel', 'Mozilla/5.0 (Macintosh)', 0, 'Mac OS X'],
+    ['Win32', 'Mozilla/5.0 (Windows NT 10.0)', 0, 'Windows'],
+    ['Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64)', 0, 'Linux'],
+    ['Linux armv8l', 'Mozilla/5.0 (Linux; Android 15)', 0, 'Android'],
+    ['iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)', 5, 'iOS'],
+    ['MacIntel', 'Mozilla/5.0 (Macintosh)', 5, 'iOS'],
+  ])(
+    'classifies browser signals for %s',
+    (platform, userAgent, maxTouchPoints, expected) => {
+      expect(classifyBrowserOsName({ platform, userAgent, maxTouchPoints })).toBe(expected);
+    },
+  );
+
   it('buffers captures dispatched before a context is set, then flushes', async () => {
     installErrorHandlers();
 
@@ -74,6 +109,7 @@ describe('error-tracking', () => {
       properties: expect.objectContaining({
         $exception_type: 'Error',
         $exception_message: 'early-boom',
+        event_schema_version: 4,
         app_version: '1.2.3',
         session_id: 'session-abc',
       }),
@@ -95,6 +131,24 @@ describe('error-tracking', () => {
       $exception_type: 'TypeError',
       $exception_message: 'immediate',
       handled: true,
+    });
+  });
+
+  it('stamps OS and client type on direct safety events', () => {
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-platform-metadata',
+      clientType: 'desktop',
+      osName: 'Mac OS X',
+    });
+
+    reportSafetyEvent('client_boot_timing', { duration_ms: 42 });
+
+    expect(lastFetchedBody().properties).toMatchObject({
+      $os: 'Mac OS X',
+      client_type: 'desktop',
+      duration_ms: 42,
     });
   });
 

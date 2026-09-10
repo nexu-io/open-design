@@ -1040,6 +1040,14 @@ interface QueuedSendUpdate {
  * folded. Every continuation's content, events and produced files are appended
  * to the turn's first message in Run order, so nothing is dropped and nothing
  * is duplicated.
+ *
+ * ⚠️ The turn keeps ONE message row, so it can carry only one `createdAt` and
+ * one `endedAt` — the head's start and the tail's end. Every Run boundary in
+ * between used to die here, and the renderer's clocks died with it
+ * (OPEND-2823 / OPEND-2824; the full causal chain is on
+ * `PersistedAgentEvent`'s `done_key.runStartedAt`). So each Run's own span is
+ * stamped onto the `done_key` it already emits — the very event the renderer
+ * uses to find the boundary — before its events are appended.
  */
 export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
   if (!messages.some((message) => (message.strategyTaskRunIndex ?? 0) > 0)) {
@@ -1056,7 +1064,7 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
     }
     if (runIndex === 0 || !turnHeadIndexByTask.has(taskId)) {
       turnHeadIndexByTask.set(taskId, folded.length);
-      folded.push(message);
+      folded.push({ ...message, events: stampRunSpan(message) });
       continue;
     }
     const headIndex = turnHeadIndexByTask.get(taskId)!;
@@ -1068,7 +1076,7 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
       content: tailContent
         ? `${headContent}${headContent && !headContent.endsWith('\n') ? '\n\n' : ''}${tailContent}`
         : headContent,
-      events: [...(head.events ?? []), ...(message.events ?? [])],
+      events: [...(head.events ?? []), ...stampRunSpan(message)],
       producedFiles: [...(head.producedFiles ?? []), ...(message.producedFiles ?? [])],
       // The turn's status is the latest Run's: the earlier Runs finishing is an
       // internal step, not the turn ending.
@@ -1086,6 +1094,32 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
     };
   }
   return folded;
+}
+
+/**
+ * Write this Run's own wall-clock span onto the `done_key` it already carries.
+ *
+ * The message row is about to be merged away, and with it the only record of
+ * when THIS Run started and ended. `done_key` is emitted once per Run and is
+ * where the renderer already splits Runs apart, so the span rides along with
+ * the boundary it belongs to instead of needing a channel of its own.
+ *
+ * A Run still in flight has no `endedAt`; a Run recorded before `done_key`
+ * existed has no marker to stamp. Both simply keep today's behaviour — the
+ * renderer treats an absent span as "unknown" and falls back to the turn's.
+ */
+function stampRunSpan(message: ChatMessage): NonNullable<ChatMessage['events']> {
+  const events = message.events ?? [];
+  if (message.createdAt == null && message.endedAt == null) return events;
+  return events.map((event) => (
+    event.kind === 'done_key'
+      ? {
+        ...event,
+        ...(message.createdAt != null ? { runStartedAt: message.createdAt } : {}),
+        ...(message.endedAt != null ? { runEndedAt: message.endedAt } : {}),
+      }
+      : event
+  ));
 }
 
 function shouldHideEmptyBrandAssistantMessage(message: ChatMessage, metadata?: ProjectMetadata): boolean {

@@ -83,6 +83,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'chat-context-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   vi.useFakeTimers({ shouldAdvanceTime: false });
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
