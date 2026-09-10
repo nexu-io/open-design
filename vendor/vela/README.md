@@ -17,6 +17,8 @@ Verify archives before installation:
 pnpm install --frozen-lockfile
 ```
 
+The lockfile meta-package version must match the version inside its archive, including `.portable.1`; otherwise pnpm can skip this optional package when reusing its store. Keep the native optional dependency snapshot reference fully qualified (`@powerformer/vela-cli-darwin-arm64@file:vendor/vela/...tgz`). With pnpm 10.33.2, a bare `file:` snapshot reference for a platform-skipped archive can be linked as a directory on Linux, causing `ENOTDIR` during bin linking. After regenerating the lockfile, verify a clean frozen install on both Linux and macOS Apple silicon; archive integrity and native versions must remain unchanged.
+
 Use a new immutable archive version for changes; never replace a published branch's existing archive bytes in place. Nodes also need an ODEval Runner supporting these runtime selections. This branch does not upgrade the Runner.
 
 The normal repository dependency-spec guard disallows `file:` dependencies. This intentionally temporary evaluation distribution follows the prior portable Pi branch; it is not a merge-ready product release. The guard is not relaxed. A normal product release must replace these references with published immutable packages.

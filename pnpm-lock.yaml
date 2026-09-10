@@ -14420,7 +14420,7 @@ snapshots:
       '@earendil-works/pi-coding-agent': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
       '@openai/codex': 0.153.2
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.matrix-six.g2419a3777c64.tgz
+      '@powerformer/vela-cli-darwin-arm64': '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.matrix-six.g2419a3777c64.tgz'
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@deepseek-ai/cordis-plugin-group'
