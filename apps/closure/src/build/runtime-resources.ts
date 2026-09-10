@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { standaloneTreeSha256 } from "@open-design/standalone/tree";
@@ -9,6 +9,7 @@ import { pack } from "@open-design/archive/build";
 import { closureNodeExternals } from "./node-externals.js";
 import { closureRuntimeDependencies as runtimeDependencies } from "./runtime-dependencies.js";
 import { pruneClosureNativeDependencies } from "./native-dependencies.js";
+import { copyClosureWebStandalone } from "./web-standalone.js";
 
 type TreeEntry = Readonly<{ path: string; sha256: string; size: number }>;
 
@@ -59,24 +60,6 @@ async function inventory(root: string, current = root): Promise<TreeEntry[]> {
   return entries;
 }
 
-async function copyTreeDereferenced(source: string, destination: string): Promise<void> {
-  const sourcePath = await realpath(source).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return null;
-    throw error;
-  });
-  if (sourcePath == null) return;
-  const details = await stat(sourcePath);
-  if (details.isDirectory()) {
-    await mkdir(destination, { recursive: true });
-    for (const entry of await readdir(sourcePath)) await copyTreeDereferenced(join(sourcePath, entry), join(destination, entry));
-    return;
-  }
-  if (details.isFile()) {
-    await mkdir(dirname(destination), { recursive: true });
-    await cp(sourcePath, destination);
-  }
-}
-
 async function archive(root: string, outputPath: string): Promise<{ sha256: string; size: number; treeSha256: string }> {
   const entries = await inventory(root);
   const packed = await pack(root, outputPath, { reproducible: true, permissions: "portable" });
@@ -120,15 +103,8 @@ export async function buildClosureRuntimeResources(input: Readonly<{ outputDirec
     daemonBundle(join(workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"), join(daemonRoot, "sidecar.mjs")),
     daemonBundle(join(workspaceRoot, "apps", "daemon", "dist", "cli.js"), join(daemonRoot, "daemon-cli.mjs")),
   ]);
-  await copyTreeDereferenced(join(workspaceRoot, "apps", "web", ".next", "standalone"), join(webRoot, "standalone"));
+  await copyClosureWebStandalone(join(workspaceRoot, "apps", "web", ".next", "standalone"), join(webRoot, "standalone"));
   const standaloneApp = join(webRoot, "standalone", "apps", "web");
-  // Next's pnpm standalone output links transitive packages through the root
-  // virtual store. Distribution resources cannot retain symlinks, so hoist
-  // that resolved dependency view beside the dereferenced `next` package.
-  await copyTreeDereferenced(
-    join(workspaceRoot, "apps", "web", ".next", "standalone", "node_modules", ".pnpm", "node_modules"),
-    join(standaloneApp, "node_modules"),
-  );
   await cp(join(workspaceRoot, "apps", "web", ".next", "static"), join(standaloneApp, ".next", "static"), { recursive: true, dereference: true });
   await cp(join(workspaceRoot, "apps", "web", "public"), join(standaloneApp, "public"), { recursive: true, dereference: true });
   await build({

@@ -20,3 +20,7 @@ distribution contribution.
 - Keep Node, better-sqlite3 and node-pty outside Closure resources. Bundled native
   imports use the Shell-supplied Node module environment; physical compatibility
   is expressed by the release's Shell requirement, not runtime acquisition.
+- Materialize Next's traced dependency view beside `apps/web`, without carrying
+  a second pnpm virtual-store tree. Resolve source symlinks during assembly;
+  unknown root dependency layouts fail closed. Layout changes need a real
+  production-entry/page check as well as module-resolution fixtures.
