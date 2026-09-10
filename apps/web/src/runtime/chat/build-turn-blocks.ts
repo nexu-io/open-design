@@ -283,18 +283,18 @@ function scanTurnMarkers(raw: string, runKey: string | null, searchText: string)
   let doneAt: number | null = stripped.doneAt;
   let doneLength = 0;
 
-  // ② 密钥标记已经定了位置就用它;否则回落到老判据
-  if (doneAt == null) {
-    const legacy = runKey ? null : LEGACY_DONE_RE.exec(stripped.searchText);
-    const implicit = IMPLICIT_DONE_RE.exec(stripped.searchText);
-    if (legacy && (!implicit || legacy.index <= implicit.index)) {
-      doneAt = legacy.index;
-      doneLength = legacy[0].length;
-    } else if (implicit) {
-      // 隐式:标签本身要留给后面的正文,由消息层去剥成卡片,所以长度记 0
-      doneAt = implicit.index;
-      doneLength = 0;
-    }
+  // ② 在已剥离噪音的同一下标空间里取最早边界。持久化会合并相邻 text,
+  // 所以后到的显式 done 不能盖过前面的真实表单 / 产物。
+  const legacy = runKey ? null : LEGACY_DONE_RE.exec(stripped.searchText);
+  const implicit = IMPLICIT_DONE_RE.exec(stripped.searchText);
+  if (legacy && (doneAt == null || legacy.index < doneAt)) {
+    doneAt = legacy.index;
+    doneLength = legacy[0].length;
+  }
+  if (implicit && (doneAt == null || implicit.index < doneAt)) {
+    // 隐式:标签本身要留给后面的正文,由消息层去剥成卡片,所以长度记 0
+    doneAt = implicit.index;
+    doneLength = 0;
   }
 
   return { text, searchText: stripped.searchText, doneAt, doneLength };
