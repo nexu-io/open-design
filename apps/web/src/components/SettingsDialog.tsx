@@ -186,6 +186,11 @@ import { ByokKeyField } from './byok/ByokKeyField';
 import { ByokModelField } from './byok/ByokModelField';
 import { ByokProviderBaseUrl } from './byok/ByokProviderBaseUrl';
 import { ByokProviderPicker } from './byok/ByokProviderPicker';
+import { OrcaRouterConnectControl } from './OrcaRouterConnectControl';
+import {
+  useClearedInvalidSelection,
+  useNarrowedModelOptions,
+} from './OrcaRouterModelPicker';
 import { byokPreflightBlockReason } from './byok/preflight';
 import {
   blockingByokDraftFields,
@@ -846,6 +851,11 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
   aihubmix: {
     host: 'aihubmix.com',
     url: 'https://aihubmix.com/?aff=JA1e',
+  },
+  orcarouter: {
+    host: 'orcarouter.ai',
+    // The console page that also revokes every key issued to this app.
+    url: 'https://www.orcarouter.ai/console/authorized-apps',
   },
   bedrock: {
     host: 'aws.amazon.com',
@@ -3831,13 +3841,13 @@ export function SettingsDialog({
     },
     [apiProtocol, selectedProvider, providerModelDiscoveryUnavailable],
   );
-  const apiModelOptions = useMemo(
-    () => mergeProviderModelOptions(
-      fetchedApiModelOptions,
-      suggestedApiModelIds,
-    ),
-    [fetchedApiModelOptions, suggestedApiModelIds],
-  );
+  // Same attachment-aware narrowing the composer picker applies — one shared
+  // rule, so the two surfaces cannot disagree about what is selectable.
+  const apiModelOptions = useNarrowedModelOptions({
+    protocol: apiProtocol,
+    fetchedModels: fetchedApiModelOptions,
+    suggestedModelIds: suggestedApiModelIds,
+  });
   // Shared hook: live AIHubMix catalogue for aihubmix, static registry for
   // other providers (same list the chat composer's image picker uses).
   const byokImageModelOptions = useByokImageModelOptions(apiProtocol);
@@ -3853,6 +3863,13 @@ export function SettingsDialog({
   }, [
     pendingProviderModelReconciliation,
   ]);
+  // A model the staged attachments rule out must not stay selected. A
+  // hand-typed custom model is the user's explicit choice, so it is exempt.
+  useClearedInvalidSelection({
+    options: apiModelOptions,
+    selected: cfg.mode === 'api' && !apiModelCustomEditing ? cfg.model : '',
+    onModelChange: (model) => updateApiConfig({ model }),
+  });
   const apiModelCustomActive =
     shouldShowCustomModelInput(
       cfg.model,
@@ -5612,6 +5629,17 @@ export function SettingsDialog({
                 }}
                 onToggleShowApiKey={() => setShowApiKey((v) => !v)}
               />
+              {apiProtocol === 'orcarouter' ? (
+                /* OrcaRouter shows its two auth entries together: the API-key
+                   field above (entry 1) and the PKCE connect control below
+                   (entry 2). The connect control owns its own credential
+                   storage, so a successful login refreshes the live catalogue
+                   through the same discovery path the key field uses. */
+                <OrcaRouterConnectControl
+                  onCredentialChange={commitProviderModelsInputs}
+                  pastedApiKey={cfg.apiKey}
+                />
+              ) : null}
               {showBaseUrlField ? (
                 <ByokProviderBaseUrl
                   apiProtocol={apiProtocol}
@@ -5715,6 +5743,7 @@ export function SettingsDialog({
                 }
                 providerModelsFailureMessage={providerModelsFailureMessage}
                 forceTextInput={apiProtocol === 'azure'}
+                alignModelPopoverEnd={apiProtocol === 'orcarouter'}
                 showAzureModelFetchHint={apiProtocol === 'azure'}
                 showFetchModelsUnsupportedHint={
                   apiProtocol !== 'azure' &&

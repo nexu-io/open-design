@@ -41,3 +41,46 @@ export function mergeProviderModelOptions(
   for (const id of suggestedModelIds) add({ id, label: id });
   return out;
 }
+
+/**
+ * The modalities an attachment actually carries. Only these force a narrower
+ * picker: any other file (a PDF, a source file) rides the normal text path.
+ */
+export type OrcaRouterModality = 'image' | 'audio' | 'video';
+
+export function attachmentModalities(
+  fileTypes: readonly (string | undefined | null)[],
+): OrcaRouterModality[] {
+  const out = new Set<OrcaRouterModality>();
+  for (const type of fileTypes) {
+    const normalized = (type ?? '').toLowerCase();
+    if (normalized.startsWith('image/')) out.add('image');
+    else if (normalized.startsWith('audio/')) out.add('audio');
+    else if (normalized.startsWith('video/')) out.add('video');
+  }
+  return [...out];
+}
+
+/**
+ * Narrow a model list to the routes that can actually receive the staged
+ * attachments.
+ *
+ * The rule is fail-closed: a model qualifies only when its catalogue metadata
+ * explicitly declares every required modality. The catalogue reports modality
+ * evidence only for OrcaRouter (its rows carry `input_modalities` through
+ * `toOrcaRouterModelOptions`), so for every other provider the list is
+ * returned untouched rather than emptied — an unknown capability must not be
+ * read as "unsupported".
+ */
+export function filterOptionsForModalities(
+  options: readonly ProviderModelOption[],
+  protocol: ApiProtocol,
+  required: readonly OrcaRouterModality[],
+): ProviderModelOption[] {
+  if (protocol !== 'orcarouter' || required.length === 0) return [...options];
+  return options.filter((option) => {
+    const declared = option.metadata?.inputModalities;
+    if (!Array.isArray(declared)) return false;
+    return required.every((modality) => declared.includes(modality));
+  });
+}

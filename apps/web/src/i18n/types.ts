@@ -5620,4 +5620,26 @@ export interface Dict {
   'labs.optOutSkip': string;
   'labs.optOutOtherPlaceholder': string;
   'labs.optOutSubmit': string;
+  'settings.orcaRouterConnectIntro': string;
+  'settings.orcaRouterNotConnected': string;
+  'settings.orcaRouterConnected': string;
+  'settings.orcaRouterNeedsReauthTitle': string;
+  'settings.orcaRouterNeedsReauth': string;
+  'settings.orcaRouterScopeGranted': string;
+  'settings.orcaRouterWaiting': string;
+  'settings.orcaRouterWaitingHint': string;
+  'settings.orcaRouterConnect': string;
+  'settings.orcaRouterReconnect': string;
+  'settings.orcaRouterReconnectHint': string;
+  'settings.orcaRouterConnecting': string;
+  'settings.orcaRouterOpeningBrowser': string;
+  'settings.orcaRouterCancel': string;
+  'settings.orcaRouterDisconnect': string;
+  'settings.orcaRouterDisconnecting': string;
+  'settings.orcaRouterOpenManually': string;
+  'settings.orcaRouterOpenManuallyLink': string;
+  'settings.orcaRouterPasteHint': string;
+  'settings.orcaRouterPastePlaceholder': string;
+  'settings.orcaRouterSubmitCode': string;
+  'settings.orcaRouterSubmitting': string;
 }

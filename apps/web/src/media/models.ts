@@ -36,6 +36,7 @@ export type MediaProviderId =
   | 'nanobanana'
   | 'imagerouter'
   | 'openrouter'
+  | 'orcarouter'
   | 'custom-image'
   | 'comfyui'
   | 'bfl'
@@ -153,6 +154,18 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     settingsVisible: true,
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     docsUrl: 'https://openrouter.ai/settings/keys',
+  },
+  {
+    id: 'orcarouter',
+    label: 'OrcaRouter',
+    hint: 'OpenAI-compatible image + video routing',
+    integrated: true,
+    credentialsRequired: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://api.orcarouter.ai/v1',
+    docsUrl: 'https://www.orcarouter.ai/console/authorized-apps',
+    supportsCustomModel: true,
+    customModelPlaceholder: 'openai/gpt-image-2 or kling/kling-v3',
   },
   {
     id: 'custom-image',
@@ -484,6 +497,12 @@ export const IMAGE_MODELS: MediaModel[] = [
   },
 
   // OpenRouter image models.
+  // OrcaRouter image rows. Ids are the gateway's own catalogue ids with the
+  // `orcarouter/` catalogue prefix in front so they stay unambiguous next to
+  // the other aggregators; the renderer strips that prefix before the wire
+  // call, exactly like the imagerouter/openrouter rows above.
+  { id: 'orcarouter/gpt-image-2', label: 'gpt-image-2 (OrcaRouter)', hint: 'OrcaRouter · OpenAI · routed image generation', provider: 'orcarouter', caps: ['t2i'] },
+  { id: 'orcarouter/openai/gpt-image-1.5', label: 'gpt-image-1.5 (OrcaRouter)', hint: 'OrcaRouter · OpenAI · routed image generation', provider: 'orcarouter', caps: ['t2i'] },
   { id: 'openrouter/google/gemini-2.5-flash-image', label: 'gemini-flash-image (OR)', hint: 'OpenRouter · Gemini', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/black-forest-labs/flux-1.1-pro', label: 'flux-1.1-pro (OR)', hint: 'OpenRouter · BFL', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/recraft/recraft-v3', label: 'recraft-v3 (OR)', hint: 'OpenRouter · Recraft', provider: 'openrouter', caps: ['t2i'] },
@@ -586,6 +605,11 @@ export const VIDEO_MODELS: MediaModel[] = [
   },
 
   // OpenRouter video models.
+  // OrcaRouter video rows. OrcaRouter advertises these on its `openai-video`
+  // endpoint type; the renderer posts them to the OpenAI-standard
+  // /v1/videos/generations path.
+  { id: 'orcarouter/kling/kling-v3', label: 'kling-v3 (OrcaRouter)', hint: 'OrcaRouter · Kuaishou Kling · routed video', provider: 'orcarouter', caps: ['t2v', 'i2v'] },
+  { id: 'orcarouter/minimax/minimax-h3', label: 'minimax-h3 (OrcaRouter)', hint: 'OrcaRouter · MiniMax · routed video', provider: 'orcarouter', caps: ['t2v'] },
   { id: 'openrouter/bytedance/seedance-2.0:1080p', label: 'seedance-2.0 1080p (OR)', hint: 'OpenRouter · ByteDance · 1080p', provider: 'openrouter', caps: ['t2v', 'i2v'], default: true },
   { id: 'openrouter/bytedance/seedance-2.0', label: 'seedance-2.0 720p (OR)', hint: 'OpenRouter · ByteDance · 720p', provider: 'openrouter', caps: ['t2v', 'i2v'] },
   { id: 'openrouter/bytedance/seedance-2.0:480p', label: 'seedance-2.0 480p (OR)', hint: 'OpenRouter · ByteDance · 480p', provider: 'openrouter', caps: ['t2v', 'i2v'] },

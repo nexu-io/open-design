@@ -163,6 +163,18 @@ interface SearchableModelSelectProps
   groupByCompany?: boolean;
   minSearchableOptions?: number;
   popoverMinWidth?: number;
+  /**
+   * Which edge of the trigger the panel hangs from.
+   *
+   * The default (`start`) is the historical behaviour: the panel's LEFT edge
+   * lines up with the trigger's left edge and any extra width extends right,
+   * which reads correctly for the wide full-width fields that dominate the app.
+   * A compact trigger that opens a panel wider than itself (a min/max-width
+   * capped list) is the case `end` exists for — the panel hangs from the
+   * trigger's RIGHT edge instead, so a narrow button does not look detached
+   * from a list that overhangs it.
+   */
+  popoverAlign?: 'start' | 'end';
   getPopoverBoundary?: () => {
     top?: number;
     right?: number;
@@ -189,6 +201,7 @@ export const SearchableModelSelect = forwardRef<
     groupByCompany = false,
     minSearchableOptions = 8,
     popoverMinWidth,
+    popoverAlign = 'start',
     getPopoverBoundary,
     className,
     ...buttonProps
@@ -364,8 +377,12 @@ export const SearchableModelSelect = forwardRef<
       );
       const maxWidth = Math.max(0, boundaryRight - boundaryLeft);
       const width = Math.min(desiredWidth, maxWidth);
+      // `end` hangs the panel from the trigger's right edge; the boundary clamp
+      // still wins so the panel never escapes its scroll container.
+      const rawLeft =
+        popoverAlign === 'end' ? rect.right - width : rect.left;
       const left = Math.min(
-        Math.max(boundaryLeft, rect.left),
+        Math.max(boundaryLeft, rawLeft),
         Math.max(boundaryLeft, boundaryRight - width),
       );
       const gap = 6;
@@ -417,7 +434,7 @@ export const SearchableModelSelect = forwardRef<
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [getPopoverBoundary, open, popoverMinWidth, shouldShowSearch]);
+  }, [getPopoverBoundary, open, popoverAlign, popoverMinWidth, shouldShowSearch]);
 
   useEffect(() => {
     if (!open || !shouldShowSearch) return;

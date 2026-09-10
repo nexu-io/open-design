@@ -884,6 +884,7 @@ import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.j
 import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginRoutes } from './routes/plugins/index.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
+import { registerOrcaRouterRoutes } from './routes/orcarouter.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDeliverableSyntaxToolRoutes } from './routes/deliverable-syntax-tool.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
@@ -8432,6 +8433,10 @@ export async function startServer({
     mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef, inheritedEnvironment },
   });
   registerXaiRoutes(app, {
+    http: httpDeps,
+    paths: pathDeps,
+  });
+  registerOrcaRouterRoutes(app, {
     http: httpDeps,
     paths: pathDeps,
   });

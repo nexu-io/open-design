@@ -46,6 +46,10 @@ export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   if (parsed.hostname === 'api.siliconflow.cn' || parsed.hostname === 'api.siliconflow.com') return true;
   if (u.includes('api.together')) return true;
   if (u.includes('openrouter')) return true;
+  // OrcaRouter is a named OpenAI-compatible gateway on its own origin. The
+  // explicit check keeps it routing correctly even if a self-hosted override
+  // does not contain the substring.
+  if (u.includes('orcarouter')) return true;
   if (u.includes('openai.com')) return true;
   if (m.startsWith('deepseek')) return true;
   if (m.startsWith('groq') || m.startsWith('llama') || m.startsWith('mixtral')) return true;

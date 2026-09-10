@@ -1,0 +1,47 @@
+/* OrcaRouter-specific layout inside the connect control.
+ *
+ * The panel reuses the shared `.mcp-oauth-*` classes for anything that should
+ * look identical to the other provider connect panels (status row, dot,
+ * actions, error box). Only the pieces unique to OrcaRouter — the side-by-side
+ * API-key entry, its action row, and the code paste-back — live here. */
+
+/* The two auth entries are stacked, not merged into one control: the provider
+ * form's key field above is entry one, and these actions are entry two. */
+.pasteBlock,
+.oauthEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.oauthEntry {
+  padding-top: 4px;
+}
+
+/* The status dot reuses the shared sizes; only the failure tone is new, and
+ * it matches the danger colour the shared error box already uses. */
+.dotError {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--danger, #d54);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger, #d54) 25%, transparent);
+}
+
+.pasteRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.pasteRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pasteRow button {
+  padding: 5px 12px;
+  font-size: 12px;
+  flex-shrink: 0;
+}

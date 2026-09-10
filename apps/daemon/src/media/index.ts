@@ -60,6 +60,7 @@ import { Agent as UndiciAgent } from 'undici';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { load as loadHtml } from 'cheerio';
 import { SETTINGS_MEDIA_PROVIDERS_PATH } from '@open-design/contracts';
+import { resolveOrcaRouterMediaBaseUrl } from '../integrations/orcarouter.js';
 import {
   findRealTagOffset,
   HTML_TAG_PATTERNS,
@@ -194,6 +195,8 @@ const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
 const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 const IMAGEROUTER_DEFAULT_BASE_URL = 'https://api.imagerouter.io/v1/openai';
+// Inference origin. Auth lives on https://www.orcarouter.ai and is never derived from this.
+const ORCAROUTER_DEFAULT_BASE_URL = 'https://api.orcarouter.ai/v1';
 const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
 const DEFAULT_OUTPUT_BY_SURFACE = {
   image: 'image.png',
@@ -710,6 +713,16 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'orcarouter' && surface === 'image') {
+      const result = await renderOrcaRouterMedia(ctx, credentials, 'image');
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'orcarouter' && surface === 'video') {
+      const result = await renderOrcaRouterMedia(ctx, credentials, 'video');
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'openrouter' && surface === 'image') {
       const result = await renderOpenRouterImage(ctx, credentials);
       bytes = result.bytes;
@@ -1108,6 +1121,73 @@ async function renderImageRouterVideo(ctx: MediaContext, credentials: ProviderCo
     bytes,
     providerNote: `imagerouter/${wireModel} · ${imageRouterSizeFor(ctx.aspect, 'video')} · ${seconds === 'auto' ? 'auto' : `${seconds}s`} · ${bytes.length} bytes`,
     suggestedExt: '.mp4',
+  };
+}
+
+/**
+ * OrcaRouter image + video renderer.
+ *
+ * OrcaRouter speaks the OpenAI-standard /v1/images/generations and
+ * /v1/videos/generations contracts, so this reuses the same size mapping,
+ * JSON parsing, and byte extraction the OpenAI/ImageRouter renderers use — no
+ * new HTTP contract. The only OrcaRouter-specific step is stripping the
+ * `orcarouter/` catalogue prefix so the wire model matches the gateway's own
+ * id (`orcarouter/gpt-image-2` -> `gpt-image-2`).
+ *
+ * Credentials come from `resolveProviderConfig`, whose OrcaRouter chain ends at
+ * the same credential store the chat path and the PKCE connect flow write, so a
+ * user who connected an account needs no separate media key.
+ */
+async function renderOrcaRouterMedia(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  surface: 'image' | 'video',
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      `no OrcaRouter credential — connect an account in ${SETTINGS_MEDIA_PROVIDERS_PATH}, `
+      + 'paste an API key, or set ORCA_API_KEY',
+    );
+  }
+  const baseUrl = resolveOrcaRouterMediaBaseUrl(credentials.baseUrl);
+  const catalogueModel = (credentials.model || ctx.wireModel).trim();
+  const wireModel = catalogueModel.replace(/^orcarouter\//, '');
+  const size = imageRouterSizeFor(ctx.aspect, surface);
+
+  const url = surface === 'image'
+    ? buildOpenAIImageUrl(baseUrl, false)
+    : buildOpenAIVideoUrl(baseUrl);
+  const body: Record<string, unknown> = surface === 'image'
+    ? {
+        prompt: ctx.prompt || 'A high-quality reference image.',
+        model: wireModel,
+        quality: 'auto',
+        size,
+        response_format: 'b64_json',
+        output_format: 'png',
+      }
+    : {
+        prompt: ctx.prompt || 'A short cinematic clip.',
+        model: wireModel,
+        size,
+        seconds: typeof ctx.length === 'number' ? ctx.length : 'auto',
+        response_format: 'b64_json',
+      };
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const data = await parseOpenAICompatibleJson(resp, `orcarouter ${surface}`);
+  const bytes = await bytesFromOpenAICompatibleData(data, `orcarouter ${surface}`, ctx.requestInit);
+  return {
+    bytes,
+    providerNote: `orcarouter/${wireModel} · ${size}${surface === 'video' ? ' · auto' : ''} · ${bytes.length} bytes`,
+    suggestedExt: surface === 'image' ? sniffImageExt(bytes) : '.mp4',
   };
 }
 

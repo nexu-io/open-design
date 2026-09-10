@@ -89,6 +89,12 @@ const ENV_KEYS: Record<string, string[]> = {
   nanobanana: ['OD_NANOBANANA_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   imagerouter: ['OD_IMAGEROUTER_API_KEY', 'IMAGEROUTER_API_KEY'],
   openrouter: ['OD_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
+  // OrcaRouter's inference credential. `ORCA_API_KEY` is the canonical name the
+  // docs use; the OD_-prefixed pair follows this daemon's per-provider
+  // convention. OD_ORCAROUTER_API_KEY and ORCAROUTER_API_KEY are ALSO the names
+  // the connect flow's credential resolver reads, so one env var lights up both
+  // the media dispatcher and the BYOK chat path.
+  orcarouter: ['OD_ORCAROUTER_API_KEY', 'ORCA_API_KEY', 'ORCAROUTER_API_KEY'],
   'custom-image': ['OD_CUSTOM_IMAGE_API_KEY', 'CUSTOM_IMAGE_API_KEY'],
   bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
   fal: ['OD_FAL_KEY', 'FAL_KEY'],
