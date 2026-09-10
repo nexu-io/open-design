@@ -776,7 +776,8 @@ export async function runDesktopMain(
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
   let removeDiagnosticsIpc: () => void = () => undefined;
-  let shuttingDown = false;
+  let shutdownPromise: Promise<void> | null = null;
+  let shutdownComplete = false;
   let pendingUpdateDialogRequest = false;
 
   async function snapshotUpdateForStatus(): Promise<{
@@ -827,22 +828,27 @@ export async function runDesktopMain(
     };
   }
 
-  async function shutdown(): Promise<void> {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    await options.beforeShutdown?.().catch((error: unknown) => {
-      console.error("desktop beforeShutdown failed", error);
+  // Every quit entry point joins the same cleanup, including repeated updater
+  // requests while sidecars are still draining.
+  function shutdown(): Promise<void> {
+    shutdownPromise ??= Promise.resolve().then(async () => {
+      const startedAt = Date.now();
+      console.info("[open-design desktop] shutdown started");
+      updateScheduler?.stop("shutdown");
+      await options.beforeShutdown?.().catch((error: unknown) => {
+        console.error("desktop beforeShutdown failed", error);
+      });
+      console.info("[open-design desktop] shutdown sidecars settled", { durationMs: Date.now() - startedAt });
+      disposeMenu();
+      removeDiagnosticsIpc();
+      await desktop?.close().catch(() => undefined);
+      // Mark clean only after teardown; a stalled cleanup is not a clean exit.
+      endDesktopSessionCleanly({ stateFilePath: sessionStatePath });
+      console.info("[open-design desktop] shutdown completed", { durationMs: Date.now() - startedAt });
+      shutdownComplete = true;
+      app.quit();
     });
-    updateScheduler?.stop("shutdown");
-    disposeMenu();
-    removeDiagnosticsIpc();
-    await desktop?.close().catch(() => undefined);
-    // Mark the session clean only AFTER teardown actually completed, right
-    // before app.quit(). Doing it at the start of shutdown would flag a quit as
-    // clean even if a later await hangs and the process is then force-quit or
-    // OS-killed — which is itself an abnormal exit worth reporting.
-    endDesktopSessionCleanly({ stateFilePath: sessionStatePath });
-    app.quit();
+    return shutdownPromise;
   }
 
   function shutdownAndExit(): void {
@@ -1013,7 +1019,7 @@ export async function runDesktopMain(
   if (updater.shouldAutoCheck()) updateScheduler.start();
 
   app.on("before-quit", (event) => {
-    if (shuttingDown) return;
+    if (shutdownComplete) return;
     event.preventDefault();
     void shutdown().finally(() => process.exit(0));
   });
