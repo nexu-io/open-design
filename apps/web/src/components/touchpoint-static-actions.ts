@@ -1,3 +1,8 @@
+import type { TouchpointComponentV2Manifest } from "@open-design/contracts";
+
+type SharedStaticAction =
+	TouchpointComponentV2Manifest["placements"][number]["staticActions"][number];
+
 export type TouchpointStaticAction = Readonly<{
 	id: string;
 	target: { kind: "https"; url: string } | { kind: "internal"; path: string };
@@ -6,7 +11,7 @@ export type TouchpointStaticAction = Readonly<{
 /** The server decision must exactly match the verified v2 placement declaration. */
 export function touchpointStaticActionsMatch(
 	actual: readonly TouchpointStaticAction[],
-	expected: readonly TouchpointStaticAction[],
+	expected: readonly SharedStaticAction[],
 ): boolean {
 	return (
 		actual.length === expected.length &&

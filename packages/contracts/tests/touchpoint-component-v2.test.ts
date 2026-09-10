@@ -4,15 +4,51 @@ import { describe, expect, it } from "vitest";
 
 import {
 	parseTouchpointComponentV2Fixture,
-	TouchpointComponentV2ManifestSchema,
-	touchpointComponentV2ConformanceVectors,
 	TOUCHPOINT_COMPONENT_V2_FIXTURE_SHA256,
 	TOUCHPOINT_COMPONENT_V2_PROTOCOL,
 	TOUCHPOINT_COMPONENT_V2_UPSTREAM_PROVENANCE,
+	TouchpointComponentV2ManifestSchema,
+	touchpointComponentV2ConformanceVectors,
 	touchpointComponentV2Fixture,
 } from "../src/index.js";
 
 describe("touchpoint component v2 controlled mirror", () => {
+	it("parses a mixed OD/Vela package without executing Vela-owned actions", () => {
+		const manifest = structuredClone(touchpointComponentV2Fixture.manifest);
+		const velaPlacement = (resourceId: string) => ({
+			key: "vela.web.console-overlay",
+			entry: "vela.js",
+			resources: [],
+			locales: ["en-US"],
+			staticActions: [
+				{
+					id: "subscribe",
+					target: { kind: "vela-personal-subscription", resourceId },
+				},
+			],
+		});
+		const mixed = {
+			...manifest,
+			resources: [...manifest.resources, "vela.js"],
+			placements: [
+				...manifest.placements,
+				velaPlacement("vela.dashboard.personal-subscription"),
+			],
+		};
+		expect(TouchpointComponentV2ManifestSchema.safeParse(mixed).success).toBe(
+			true,
+		);
+		expect(
+			TouchpointComponentV2ManifestSchema.safeParse({
+				...mixed,
+				placements: [
+					...manifest.placements,
+					velaPlacement("untrusted-resource"),
+				],
+			}).success,
+		).toBe(false);
+	});
+
 	it("imports and parses the frozen Vela v2 fixture through the public contract package", () => {
 		expect(TOUCHPOINT_COMPONENT_V2_PROTOCOL).toBe(
 			"vela-touchpoint-component/v2",
@@ -34,7 +70,7 @@ describe("touchpoint component v2 controlled mirror", () => {
 			],
 			sourceSha256: {
 				touchpoints:
-					"cbc7dc261a53cbc8f194938daa643962f42ee73553e2df5ccdc8c83e7ff903da",
+					"1b5f6fb5e52d8cc522649c723b829240b729727e04806fc237732163c5ebb58e",
 				fixture:
 					"278a40cd787dc74544aa785f85d218d8a51820d2d0e14c7b8d7c6eced10b4c92",
 			},

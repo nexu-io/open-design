@@ -1,13 +1,13 @@
 import {
 	type TouchpointComponentV2Manifest as ContentPackageManifest,
+	TouchpointComponentV2ManifestSchema as contentPackageManifestSchema,
+	createTouchpointSdk,
 	type TouchpointComponentContext,
 	type TouchpointComponentModule,
 	type TouchpointDiagnostic,
 	TouchpointModuleCache,
 	type TouchpointSdk,
 	TouchpointUpdateQueue,
-	TouchpointComponentV2ManifestSchema as contentPackageManifestSchema,
-	createTouchpointSdk,
 } from "@open-design/contracts";
 
 export type WebTouchpointContent = {
@@ -125,6 +125,15 @@ export async function verifyWebTouchpoint(touchpoint: WebTouchpointContent) {
 	);
 	if (!placement || placement.entry !== touchpoint.entryPath)
 		throw new Error("touchpoint_integrity_failed");
+	// Parse the shared manifest completely, but never load another host's action
+	// into the selected Open Design placement.
+	if (
+		placement.staticActions.some(
+			(action) =>
+				action.target.kind !== "https" && action.target.kind !== "internal",
+		)
+	)
+		throw new Error("touchpoint_action_unsupported");
 	// A multi-placement version declares a global resource union. Only the selected
 	// placement's entry and closure may be materialized or imported in this host.
 	const expectedPaths = [placement.entry, ...placement.resources];
@@ -333,7 +342,10 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 			component = await this.withTimeout(
 				webTouchpointModuleCache.import(
 					entryDigest,
-						() => import(/* @vite-ignore */ /* webpackIgnore: true */ entryUrl) as Promise<ComponentModule>,
+					() =>
+						import(
+							/* @vite-ignore */ /* webpackIgnore: true */ entryUrl
+						) as Promise<ComponentModule>,
 				),
 				generation,
 				"import",

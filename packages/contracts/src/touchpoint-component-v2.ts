@@ -16,7 +16,7 @@ export const TOUCHPOINT_COMPONENT_V2_UPSTREAM_PROVENANCE = Object.freeze({
 	]),
 	sourceSha256: Object.freeze({
 		touchpoints:
-			"cbc7dc261a53cbc8f194938daa643962f42ee73553e2df5ccdc8c83e7ff903da",
+			"1b5f6fb5e52d8cc522649c723b829240b729727e04806fc237732163c5ebb58e",
 		fixture: "278a40cd787dc74544aa785f85d218d8a51820d2d0e14c7b8d7c6eced10b4c92",
 	}),
 });
@@ -67,6 +67,11 @@ const staticActionSchema = z.object({
 						});
 					}
 				}),
+		}),
+		z.object({
+			/** Parsed across hosts; only the Vela host may execute this action. */
+			kind: z.literal("vela-personal-subscription"),
+			resourceId: z.literal("vela.dashboard.personal-subscription"),
 		}),
 		z.object({
 			kind: z.literal("internal"),
