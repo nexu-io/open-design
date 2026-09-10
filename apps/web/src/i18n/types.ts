@@ -1724,7 +1724,6 @@ export interface Dict {
   'pluginCard.publish': string;
   'pluginCard.contribute': string;
   'pluginCard.starting': string;
-  'pluginCard.creating': string;
   'pluginCard.detailsAria': string;
   'pluginCard.chooseUseAria': string;
   'pluginCard.useOptionsAria': string;
@@ -1736,9 +1735,6 @@ export interface Dict {
   'pluginCard.publishTitle': string;
   'pluginCard.contributeAria': string;
   'pluginCard.contributeTitle': string;
-  'skillPluginCandidate.createForMe': string;
-  'skillPluginCandidate.contributeToMain': string;
-  'skillPluginCandidate.repoDescription': string;
   'integrations.kicker': string;
   'integrations.lede': string;
   'integrations.agentReady': string;
@@ -4483,8 +4479,6 @@ export interface Dict {
   'assistant.thinking': string;
   'assistant.thought': string;
   'assistant.thoughtFor': string;
-  'assistant.systemReminder': string;
-  'assistant.possiblePromptInjection': string;
   'assistant.designSystemDirectionLocked': string;
   'assistant.waitingFirstOutput': string;
   'assistant.statusBootingAgent': string;
@@ -4574,12 +4568,6 @@ export interface Dict {
   'artifact.odCardScorecardStatusPass': string;
   'artifact.odCardScorecardStatusPartial': string;
   'artifact.odCardScorecardStatusFail': string;
-  'artifact.odCardBrandAssistDone': string;
-  'artifact.odCardBrandAssistKicker': string;
-  'artifact.odCardBrandAssistBody': string;
-  'artifact.odCardBrandAssistError': string;
-  'artifact.odCardBrandAssistWorking': string;
-  'artifact.odCardBrandAssistConfirm': string;
 
   // Pet (Codex-style floating companion)
   'pet.title': string;
@@ -5636,13 +5624,4 @@ export interface Dict {
   'labs.optOutSkip': string;
   'labs.optOutOtherPlaceholder': string;
   'labs.optOutSubmit': string;
-  'chat.pluginAction.failed': string;
-  'chat.pluginAction.saved': string;
-  'chat.pluginAction.validationIssues': string;
-  'chat.pluginAction.contributionStarted': string;
-  'chat.pluginAction.aria': string;
-  'chat.pluginAction.title': string;
-  'chat.pluginAction.subtitle': string;
-  'chat.pluginAction.filesReady': string;
-  'chat.pluginAction.install': string;
 }
