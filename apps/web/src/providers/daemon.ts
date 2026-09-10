@@ -742,7 +742,7 @@ export const STRATEGY_TASK_BLOCKED_MESSAGE =
  * resolver, and the error analytics can all name the gate. A projection from a
  * daemon too old to send `blockedContext` still fails, just anonymously.
  */
-function createStrategyTaskBlockedError(
+export function createStrategyTaskBlockedError(
   strategyTask: StrategyTaskProjectionV2,
 ): Error & { code?: string } {
   const error = new Error(STRATEGY_TASK_BLOCKED_MESSAGE) as Error & { code?: string };

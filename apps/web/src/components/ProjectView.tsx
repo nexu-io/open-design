@@ -24,6 +24,7 @@ import {
   type DaemonAgentReconnectState,
   type DaemonAgentRetryState,
   type DaemonReconnectState,
+  createStrategyTaskBlockedError,
   fetchChatRunStatus,
   GENERIC_DAEMON_DISCONNECT_CODE,
   GENERIC_DAEMON_DISCONNECT_MESSAGE,
@@ -6612,6 +6613,39 @@ export function ProjectView({
           && !taskRunAdvanced
           && (!status.strategyTask || status.strategyTask.terminal)
         ) {
+          const strategyTask = status.strategyTask;
+          if (
+            status.status === 'succeeded'
+            && status.id === runId
+            && status.projectId === project.id
+            && status.conversationId === reattachConversationId
+            && status.assistantMessageId === message.id
+            && strategyTask?.outcome === 'blocked'
+            && strategyTask.taskExecutionId === message.strategyTaskExecutionId
+            && strategyTask.activeRunId === runId
+            && !canRetainSuccessfulRunForBlockedStrategy(
+              status.status, strategyTask, status.deliverableValid,
+            )
+          ) {
+            // A cold history row keeps the daemon's physical success. Restore
+            // the same logical failure/reason as live SSE from this existing
+            // authorized probe, without rewriting the persisted physical row.
+            const failure = createStrategyTaskBlockedError(strategyTask);
+            updateMessageById(message.id, (prev) => {
+              if (
+                activeConversationIdRef.current !== reattachConversationId
+                || projectRunAuthorityKeyRef.current !== projectRunAuthorityKey
+                || prev.runId !== runId
+                || prev.strategyTaskExecutionId !== strategyTask.taskExecutionId
+                || prev.runStatus !== 'succeeded'
+              ) return prev;
+              return appendErrorStatusEvent({
+                ...prev,
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
+                runStatus: 'failed',
+              }, failure.message, failure.code);
+            });
+          }
           completedReattachRunsRef.current.add(runId);
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
@@ -7839,6 +7873,7 @@ export function ProjectView({
     daemonLive,
     config.mode,
     activeConversationId,
+    projectRunAuthorityKey,
     currentProject.metadata,
     streaming,
     messages,
