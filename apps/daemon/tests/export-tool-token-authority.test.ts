@@ -514,6 +514,28 @@ describe('od export run-scoped project authority', () => {
     expect(archiveResponse.status).toBe(200);
   });
 
+  it.each([
+    ['a malformed Bearer credential with no token', 'Bearer '],
+    ['a bare Bearer scheme', 'Bearer'],
+  ] as const)('fails closed on %s', async (_label, authorization) => {
+    // Given: a Bearer scheme carrying no token. Trimming reduces `Bearer ` to
+    // `Bearer`, so scheme detection must not depend on a token following it.
+    const request = {
+      method: 'POST',
+      headers: { authorization, 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'index.html' }),
+    } as const;
+
+    // When: it reaches an export surface that succeeds headerless.
+    const response = await fetch(`${daemonUrl}/api/projects/${unboundProjectId}/export/image`, request);
+    const body = await response.text();
+
+    // Then: it stays on the tool-token lane and fails closed, rather than
+    // downgrading to the browser project-authority lane.
+    expect(response.status, body).toBe(401);
+    expect(JSON.parse(body)).toMatchObject({ error: { code: 'TOOL_TOKEN_MISSING' } });
+  });
+
   it('still routes foreign Bearer credentials to the run-scoped tool-token lane', async () => {
     // Given: a Bearer credential that is neither the daemon API token nor a minted grant.
     const request = {

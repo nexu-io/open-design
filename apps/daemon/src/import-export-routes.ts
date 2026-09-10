@@ -664,9 +664,13 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     // `Authorization: Basic ...` header, and claiming those for the tool lane
     // fails every browser export with TOOL_TOKEN_MISSING. Foreign Bearer
     // tokens still fail closed inside the registry.
+    // The scheme is classified independently of whether a token follows it: a
+    // bare `Bearer` (or `Bearer ` trimmed to it) is still a caller reaching for
+    // the tool-token lane and must keep failing closed with TOOL_TOKEN_MISSING
+    // rather than downgrading to browser project authority.
     if (
       typeof authorization === 'string'
-      && /^Bearer\s+/i.test(authorization.trim())
+      && /^Bearer(?:\s|$)/i.test(authorization.trim())
       && !ctx.isApiTokenAuthorization(authorization)
     ) {
       const grant = ctx.auth.authorizeToolRequest(
