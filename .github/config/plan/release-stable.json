@@ -261,6 +261,7 @@
     ],
     "validation-closure": [
       "suite://validation-control",
+      "packages/archive/",
       "suite://closure-resources",
       "apps/closure/",
       "packages/standalone/"

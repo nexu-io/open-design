@@ -13,6 +13,7 @@ it("defaults Closure validation to architecture boundaries, not business aggrega
   const recipe = resolveExactValidationRecipe("closure.test");
   expect(recipe.coverage).toBe("architecture");
   expect(recipe.commands.find(command => command.directory === "apps/closure")?.args).toEqual(["test"]);
+  expect(recipe.commands.find(command => command.directory === "packages/archive")?.args).toEqual(["test"]);
   for (const directory of ["apps/daemon", "apps/web"]) {
     const command = recipe.commands.find(command => command.directory === directory)!;
     expect(command.args.slice(0, 3)).toEqual(["exec", "vitest", "run"]);

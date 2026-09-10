@@ -13,6 +13,7 @@ const recipes = {
     { directory: "packages/standalone", args: ["exec", "vitest", "run", "tests/packages"] },
   ],
   "closure.test": [
+    { directory: "packages/archive", args: ["test"] },
     { directory: "apps/closure", args: ["test"] },
     { directory: "apps/daemon", args: ["exec", "vitest", "run", "tests/product-resource-paths.test.ts", "tests/server-paths.test.ts",
       "tests/sidecar-startup.test.ts", "tests/sidecar-status-snapshot.test.ts"] },

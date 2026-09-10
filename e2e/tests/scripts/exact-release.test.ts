@@ -31,9 +31,12 @@ describe("exact Electron release topology", () => {
       "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in original(self,token)]",
       " with patch.object(GitFingerprinter,'records',records): after=compute()",
       " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
-      "print(json.dumps({path:changed('packages/standalone/src/'+path) for path in ['store.ts','preparation-queue.ts','tree.ts','protocol.ts']}))",
+      "result={path:changed('packages/standalone/src/'+path) for path in ['store.ts','preparation-queue.ts','tree.ts','protocol.ts']}",
+      "result['archive-tests']=changed('packages/archive/tests/archive.test.ts')",
+      "print(json.dumps(result))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
     const changed = JSON.parse(result.stdout) as Record<string, string[]>;
+    expect(changed["archive-tests"]).toEqual(["release_tools", "validation_closure_darwin_arm64"]);
     for (const path of ["store.ts", "preparation-queue.ts"]) {
       expect(changed[path]).toContain("electron_capsule_darwin_arm64");
       expect(changed[path]!.filter(name => name.startsWith("closure_data_"))).toEqual([]);
