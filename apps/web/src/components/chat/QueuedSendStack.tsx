@@ -7,7 +7,7 @@ import styles from './QueuedSendStack.module.css';
 type Banner = { id: string; content: ReactNode };
 type DisplayBanner = Banner & { phase: 'enter' | 'ready' | 'exit'; depth: number };
 const CLOSE_MS = 250;
-const SPREAD_GAP = 8;
+const SPREAD_GAP = 2;
 
 /** Presentation only: collapsed overflow never removes a queued message. */
 export function QueuedSendStack({ items, label, containerRef, dragging, onDragLeave }: {

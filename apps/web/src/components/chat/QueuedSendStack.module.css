@@ -5,9 +5,9 @@
   position: relative;
   flex: 0 0 auto;
   min-width: 0;
-  width: calc(100% - var(--chat-composer-inline-inset, 16px) * 2);
+  width: calc(100% - 16px);
   height: var(--chat-queue-reserve);
-  margin: 0 var(--chat-composer-inline-inset, 16px) 8px;
+  margin: 8px;
   z-index: 12;
 }
 
