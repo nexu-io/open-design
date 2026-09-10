@@ -20,6 +20,13 @@ Before changing GitHub automation, read the current versions of:
 
 If the change affects cross-workflow behavior, update the topology tests instead of relying only on workflow YAML review.
 
+Release plan batches emit both `<name>.json` for complete consumer inputs and
+`<name>.execution.json` for miss-only producer inputs. The declared `batch_run`
+controls job-level skip. Data and runtime producers never run as cache-hit
+relays; consumers acquire cached inputs directly. A runtime producer uploads
+each executed product once, shared by scene composition and workload result
+publication. Workload reuse does not remove per-version user CDN copies.
+
 ## Architecture
 
 GitHub automation uses two layers.

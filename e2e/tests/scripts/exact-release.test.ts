@@ -16,6 +16,39 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("keeps independent runtime producers out of Capsule-only work in release-%s", async lane => {
+    const result = await run("python3", ["-c", [
+      "import json,sys", "from pathlib import Path", "from functools import lru_cache", "from unittest.mock import patch",
+      "sys.path.insert(0,sys.argv[1])", "from convergence import ConvergenceContract, GitFingerprinter, calculate",
+      "root=Path(sys.argv[2]); lane='release-'+sys.argv[3]", "contract=ConvergenceContract(root/('.github/config/plan/'+lane+'.json'))",
+      "workflow=contract.workflow(lane); original=GitFingerprinter.records; baseline=GitFingerprinter(root)",
+      "@lru_cache(None)", "def records(token): return original(baseline,token)",
+      "def compute(): return calculate(contract,root,lane,workflow.execution['runners'])",
+      "before=compute()",
+      "def changed(path):",
+      " def altered(self,token): return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in records(token)]",
+      " with patch.object(GitFingerprinter,'records',altered): after=compute()",
+      " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
+      "print(json.dumps({p:changed(p) for p in ['apps/web/package.json','apps/daemon/package.json','packages/electron-capsule/package.json']}))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
+    const changes = JSON.parse(result.stdout) as Record<string, string[]>;
+    expect(changes["apps/web/package.json"]!.filter(name => name.startsWith("closure_runtime_"))).toEqual(["closure_runtime_web_darwin_arm64"]);
+    expect(changes["apps/daemon/package.json"]!.filter(name => name.startsWith("closure_runtime_"))).toEqual(["closure_runtime_daemon_darwin_arm64"]);
+    expect(changes["packages/electron-capsule/package.json"]!.filter(name => name.startsWith("closure_runtime_"))).toEqual([]);
+    for (const changed of Object.values(changes)) expect(changed).not.toContain("electron_base_darwin_arm64");
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const runtime = workflow.split("\n  runtime:")[1]!.split("\n  scene:")[0]!;
+    expect(runtime).toContain("if: ${{ fromJSON(needs.plan.outputs.batch_run).runtime }}");
+    expect(runtime.match(/run: pnpm install --frozen-lockfile/gu)).toHaveLength(1);
+    expect(runtime).toContain("batches/runtime.execution.json");
+    expect(runtime).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: runtime-build");
+    expect(runtime).toContain("path: ~/.npm");
+    const scene = workflow.split("\n  scene:")[1]!.split("\n  terminal_scene:")[0]!;
+    expect(scene).toContain("tools-release runtime acquire");
+    expect(scene).toContain("batches/runtime.json");
+    expect(scene).not.toContain("build scene-inputs");
+    expect(scene).toContain("needs.runtime.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).runtime");
+  });
   it.each(["release-exact", "release-prerelease", "release-stable"])("isolates static data from Standalone lifecycle changes in %s", async lane => {
     const result = await run("python3", ["-c", [
       "import json,sys", "from pathlib import Path", "from unittest.mock import patch",
@@ -261,7 +294,7 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(18);
+    expect(candidate.results).toHaveLength(20);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
@@ -290,7 +323,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).toContain('convergence.py --config .github/config/plan/release-exact.json contribute');
     expect(prepare).toContain('--capsules "$RUNNER_TEMP/capsules"');
     const scene = workflow.split("\n  scene:")[1]!.split("\n  platform:")[0]!;
-    expect(scene).toContain("needs: [tools, plan, capsule]");
+    expect(scene).toContain("needs: [tools, plan, capsule, runtime]");
     expect(scene).toContain('--capsule-directory "$RUNNER_TEMP/capsules"');
     expect(scene).not.toContain("capsule_args");
     for (const command of ["artifact acquire", "build base", "base export"]) expect(scene).toContain(`tools-release ${command}`);

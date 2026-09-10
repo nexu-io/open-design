@@ -24,6 +24,12 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - Exact content preparation, metadata signing and final composition live in
   tools-release behind its policy-bound commands. Do not restore tools-pack
   exact-control or a separate pack signing API/binary.
+- `resource acquire` assembles the complete nine data inputs; `runtime build`
+  produces an explicit miss-only web/daemon selection and `runtime acquire`
+  assembles the complete native runtime pair. Acquisition never builds or
+  contributes cache results. Ordinary URL+SHA descriptors are business inputs,
+  not permission to interpret workload identities. User-facing CDN objects
+  remain complete per-version immutable copies, even for reused bytes.
 - Experimental `baseline --mode candidate` is restricted to betahyx exact
   releases. It requires installed first-start evidence, marks that evidence as
   candidate-only and defers channel activation while advancing the test baseline

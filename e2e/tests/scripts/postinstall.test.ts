@@ -198,7 +198,7 @@ function eventIndex(events: StubEvent[], event: StubEvent["event"], target: stri
 }
 
 describe("postinstall script contract", () => {
-  it("[P2] bootstraps runtime consumers' dependencies without compiling daemon or Web", () => {
+  it.each(["release-smoke", "runtime-build"])("[P2] bootstraps %s dependencies without compiling daemon or Web", level => {
     const sandbox = createSandbox();
     try {
       for (const target of [...postinstallBuildTargetList(), "apps/web"]) {
@@ -207,7 +207,7 @@ describe("postinstall script contract", () => {
           dependencies: Object.fromEntries([...workspaceDependencyNames(manifest, true)].map(name => [name, "workspace:*"])) });
       }
       const log = writePnpmStub(sandbox);
-      const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_LEVEL: "release-smoke", OPEN_DESIGN_POSTINSTALL_CONCURRENCY: "2" });
+      const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_LEVEL: level, OPEN_DESIGN_POSTINSTALL_CONCURRENCY: "2" });
       expect(result.status, String(result.stderr)).toBe(0);
       const targets = readStubEvents(log).filter(event => event.event === "start").map(event => event.target);
       expect(targets).toEqual(expect.arrayContaining(["packages/plugin-runtime", "packages/registry-protocol", "packages/agui-adapter", "packages/components"]));

@@ -33,7 +33,9 @@
       "tools/release/src/exact/base-artifact.ts",
       "tools/release/src/exact/capsule-budget.ts",
       ".github/actions/release-data/action.yml",
-      ".github/actions/configure-ci-parallelism/action.yml"
+      ".github/actions/configure-ci-parallelism/action.yml",
+      "tools/release/src/exact/runtime-commands.ts",
+      "tools/release/src/exact/runtime-resources.ts"
     ],
     "electron-shell-source": [
       "shells/electron/package.json",
@@ -180,8 +182,24 @@
       "suite://closure-data-control",
       "data/plugin-previews/"
     ],
+    "electron-carrier": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "suite://electron-shell-source",
+      "packages/electron-kit/",
+      "packages/electron-contract/",
+      "packages/standalone/",
+      "packages/platform/",
+      "packages/release/",
+      "packages/sidecar/",
+      "packages/sidecar-proto/",
+      "packages/download/"
+    ],
     "electron-base": [
-      "suite://electron-capsule",
+      "suite://electron-carrier",
       "suite://release-executor",
       "tools/release/src/exact/base-artifact.ts",
       "tools/release/src/exact/native-build.ts",
@@ -265,6 +283,49 @@
       "suite://closure-resources",
       "apps/closure/",
       "packages/standalone/"
+    ],
+    "runtime-control": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "apps/closure/package.json",
+      "apps/closure/esbuild.config.ts",
+      "apps/closure/tsconfig.json",
+      "apps/closure/src/build/",
+      "packages/standalone/package.json",
+      "packages/standalone/tsconfig.json",
+      "packages/standalone/src/tree.ts",
+      "packages/standalone/src/protocol.ts",
+      "suite://release-executor",
+      "tools/release/src/exact/runtime-commands.ts",
+      "tools/release/src/exact/runtime-resources.ts",
+      "tools/release/src/exact/resource-build.ts"
+    ],
+    "runtime-daemon": [
+      "suite://runtime-control",
+      "apps/daemon/",
+      "packages/agui-adapter/",
+      "packages/contracts/",
+      "packages/diagnostics/",
+      "packages/platform/",
+      "packages/plugin-runtime/",
+      "packages/registry-protocol/",
+      "packages/release/",
+      "packages/sidecar/",
+      "packages/sidecar-proto/"
+    ],
+    "runtime-web": [
+      "suite://runtime-control",
+      "apps/web/",
+      "packages/release/",
+      "packages/components/",
+      "packages/contracts/",
+      "packages/electron-contract/",
+      "packages/platform/",
+      "packages/sidecar/",
+      "packages/sidecar-proto/"
     ]
   },
   "workflows": {
@@ -365,7 +426,11 @@
           "parameters": {
             "target": "darwin-arm64",
             "postinstall_level": "electron-build"
-          }
+          },
+          "dependsOn": [
+            "closure_runtime_daemon_darwin_arm64",
+            "closure_runtime_web_darwin_arm64"
+          ]
         },
         "electron_scene_win32_x64": {
           "inputs": [
@@ -613,6 +678,36 @@
             "product": "validation",
             "prefix": "exact-validation-closure-darwin-arm64"
           }
+        },
+        "closure_runtime_daemon_darwin_arm64": {
+          "inputs": [
+            "suite://runtime-daemon"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-runtime-cache-daemon-darwin-arm64"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
+          }
+        },
+        "closure_runtime_web_darwin_arm64": {
+          "inputs": [
+            "suite://runtime-web"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-runtime-cache-web-darwin-arm64"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
+          }
         }
       },
       "execution": {
@@ -634,7 +729,9 @@
           "closure_data_plugin_previews_darwin_arm64",
           "validation_contract_darwin_arm64",
           "validation_shell_darwin_arm64",
-          "validation_closure_darwin_arm64"
+          "validation_closure_darwin_arm64",
+          "closure_runtime_daemon_darwin_arm64",
+          "closure_runtime_web_darwin_arm64"
         ],
         "runners": {
           "terminal_darwin_arm64": [
@@ -819,6 +916,18 @@
                 "workload": "validation_closure_darwin_arm64"
               }
             ]
+          },
+          "runtime_sources": {
+            "include": [
+              {
+                "id": "open-design-daemon",
+                "workload": "closure_runtime_daemon_darwin_arm64"
+              },
+              {
+                "id": "open-design-web",
+                "workload": "closure_runtime_web_darwin_arm64"
+              }
+            ]
           }
         },
         "inputs": {
@@ -851,6 +960,13 @@
               "target": "target"
             },
             "product": "validation"
+          },
+          "runtime": {
+            "matrix": "runtime_sources",
+            "fields": {
+              "id": "id"
+            },
+            "product": "resource"
           }
         }
       }

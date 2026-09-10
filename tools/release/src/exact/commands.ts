@@ -8,6 +8,7 @@ import { importSceneArtifact, packSceneArtifact, unpackSceneArtifact, verifyScen
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, inspectAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 import { registerResourceCommands } from "./resource-commands.ts";
+import { registerRuntimeCommands } from "./runtime-commands.ts";
 import { exportPlatform, importPlatform } from "./platform-artifact.ts";
 import { exportCapsule, importCapsule } from "./capsule-artifact.ts";
 import { exportBase, packBase, importBase, unpackBase } from "./base-artifact.ts";
@@ -27,6 +28,7 @@ function boolean(options: Options, key: string): boolean {
 }
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  registerRuntimeCommands(cli);
   registerValidationCommands(cli);
   cli.command("artifact <operation>", "Acquire a checksum-bound opaque transport without repacking it")
     .option("--descriptor <file>", "Immutable URL and SHA-256 descriptor")

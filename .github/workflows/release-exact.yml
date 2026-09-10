@@ -298,9 +298,72 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  runtime:
+    name: Build Closure web and daemon (misses)
+    needs: [tools, plan]
+    if: ${{ fromJSON(needs.plan.outputs.batch_run).runtime }}
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-tools-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/release-tools
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Expose release tool
+        run: |
+          chmod +x "$RUNNER_TEMP/release-tools/tools-release"
+          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/cache@v5.0.5
+        with:
+          path: ~/.npm
+          key: runtime-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: runtime-npm-${{ runner.os }}-${{ runner.arch }}-
+      - uses: ./.github/actions/configure-ci-parallelism
+      - name: Prepare runtime build dependencies
+        env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: runtime-build
+        run: pnpm install --frozen-lockfile
+      - name: Build selected runtime resources
+        run: >-
+          tools-release runtime build --root "$GITHUB_WORKSPACE"
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/runtime.execution.json"
+          --target darwin-arm64 --output "$RUNNER_TEMP/runtime-built"
+          --receipt "$RUNNER_TEMP/runtime-build.json"
+      - uses: actions/upload-artifact@v7.0.1
+        if: ${{ fromJSON(needs.plan.outputs.run).closure_runtime_daemon_darwin_arm64 }}
+        with:
+          name: exact-runtime-cache-daemon-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/runtime-built/products/open-design-daemon
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v7.0.1
+        if: ${{ fromJSON(needs.plan.outputs.run).closure_runtime_web_darwin_arm64 }}
+        with:
+          name: exact-runtime-cache-web-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/runtime-built/products/open-design-web
+          if-no-files-found: error
+          retention-days: 1
+
   scene:
     name: ${{ matrix.shell }} scene (${{ matrix.target }})
-    needs: [tools, plan, capsule]
+    needs: [tools, plan, capsule, runtime]
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.capsule.result == 'success' && (needs.runtime.result == 'success' || (needs.runtime.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).runtime)) }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.electron_matrix) }}
@@ -368,17 +431,26 @@ jobs:
         shell: bash
         run: pnpm install --frozen-lockfile
 
-      - name: Build release-neutral scene inputs
+      - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && fromJSON(needs.plan.outputs.run).closure_runtime_daemon_darwin_arm64 }}
+        with:
+          name: exact-runtime-cache-daemon-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/runtime-built/open-design-daemon
+      - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && fromJSON(needs.plan.outputs.run).closure_runtime_web_darwin_arm64 }}
+        with:
+          name: exact-runtime-cache-web-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/runtime-built/open-design-web
+      - name: Acquire complete scene runtime resources
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
-          SHELL_TYPE: ${{ matrix.shell }}
           TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          tools-release build scene-inputs \
-            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
-            --output "$RUNNER_TEMP/exact-closure-resources" \
-            --receipt "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json"
+        run: >-
+          tools-release runtime acquire
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/runtime.json"
+          --products "$RUNNER_TEMP/runtime-built" --target "$TARGET"
+          --output "$RUNNER_TEMP/exact-closure-resources"
+          --receipt "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json"
 
       - uses: actions/download-artifact@v8
         if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -1451,7 +1523,7 @@ jobs:
 
   notify:
     name: Report release outcome
-    needs: [plan, tools, validation, scene, terminal_scene, platform, capsule, data, prepare, distribution, publish, acceptance, activate]
+    needs: [plan, tools, validation, runtime, scene, terminal_scene, platform, capsule, data, prepare, distribution, publish, acceptance, activate]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5

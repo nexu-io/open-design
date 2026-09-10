@@ -108,11 +108,12 @@ it("passes an explicit runtime resource selection to the workspace producer", as
     import { createHash } from "node:crypto";
     export async function buildClosureRuntimeResources(input) {
       if (JSON.stringify(input.resourceIds) !== '["open-design-web"]') throw new Error("selection lost");
-      await mkdir(input.outputDirectory);
+      await mkdir(input.outputDirectory, { recursive: true });
       const path = join(input.outputDirectory, "open-design-web.zip");
       const bytes = Buffer.from("selected web"); await writeFile(path, bytes);
       return { schemaVersion: 1, operation: "closure.runtime-resources.build", resources: [{
-        id: "open-design-web", path, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex")
+        id: "open-design-web", file: "open-design-web.zip", entrypoint: "sidecar.mjs", treeSha256: "a".repeat(64),
+        path, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex")
       }] };
     }
   `);
@@ -121,6 +122,13 @@ it("passes an explicit runtime resource selection to the workspace producer", as
   await f.invoke(args);
   expect(JSON.parse(await readFile(receipt, "utf8")).resources.map((resource: { id: string }) => resource.id)).toEqual(["open-design-web"]);
   await expect(f.invoke([...args, "--shell", "electron"])).rejects.toThrow("does not accept --shell");
+  const sources = join(f.root, "runtime-sources.json"), batch = join(f.root, "runtime-batch"), batchReceipt = join(f.root, "batch.json");
+  await writeFile(sources, JSON.stringify({ sources: [{ id: "open-design-web" }] }));
+  await f.invoke(["runtime", "build", "--root", f.root, "--sources", sources, "--target", `${process.platform}-${process.arch}`,
+    "--output", batch, "--receipt", batchReceipt]);
+  expect(JSON.parse(await readFile(join(batch, "products/open-design-web/resource-receipt.json"), "utf8")))
+    .toMatchObject({ operation: "closure.runtime-resource.build", target: `${process.platform}-${process.arch}`, resource: { id: "open-design-web" } });
+  await expect(f.invoke(["runtime", "build", "--plan", "forbidden.json"])).rejects.toThrow("Unknown option");
 });
 
 it("dispatches independent platform builds and rejects unrelated policy or Capsule arguments", async () => {

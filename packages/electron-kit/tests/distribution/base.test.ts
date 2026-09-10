@@ -39,6 +39,16 @@ it("rejects different carrier inputs and target bindings", async () => {
   await writeFile(join(input.scene.sceneRoot, "main.cjs"), "changed carrier");
   await expect(verifyElectronDistributionBase(base, input)).rejects.toThrow("differs from scene");
 });
+it("reuses identical native/carrier output across independent Capsule and Closure changes", async () => {
+  const input = await fixture(), base = await assembleElectronDistributionBase(input);
+  for (const name of ["capsule.zip", "closure.mjs", "open-design-web.zip", "open-design-daemon.zip"]) {
+    await writeFile(join(input.scene.sceneRoot, name), `new ${name}`);
+  }
+  await expect(verifyElectronDistributionBase(base, input)).resolves.toBeDefined();
+  const next = await assembleElectronDistributionBase({ ...input, outputRoot: input.outputRoot + "-next" });
+  expect(next.manifestSha256).toBe(base.manifestSha256);
+  expect(await readFile(join(next.root, "base.json"))).toEqual(await readFile(join(base.root, "base.json")));
+});
 it("preserves internal runtime links but refuses escaping links", async () => {
   const input = await fixture();
   await symlink("electron", join(input.runtimeDirectory, "internal"));
