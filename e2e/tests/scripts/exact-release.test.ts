@@ -16,6 +16,18 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it("reports candidate baseline evidence without claiming channel activation", async () => {
+    const result = await run("python3", ["-c", [
+      "import sys,json", "sys.path.insert(0,sys.argv[1])", "from feishu import build_report",
+      "binding={'channel':'betahyx','releaseVersion':'0.1.0-betahyx.15','sourceCommit':'a'*40}",
+      "evidence={'publish-receipt.json':dict(binding,operation='exact.publish'),'activate-receipt.json':dict(binding,operation='exact.activation.deferred')}",
+      "context={'branch':'experiment','actor':'fixture','attempt':1,'run_url':'https://example.invalid/run'}",
+      "print(json.dumps(build_report('betahyx',binding['releaseVersion'],binding['sourceCommit'],evidence,[],{},context,[])))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts")]);
+    const report = JSON.parse(result.stdout);
+    expect(report.state).toBe("candidate");
+    expect(report.card.header.template).toBe("orange");
+  });
   it.each(["release-exact", "release-prerelease", "release-stable"])("keeps Shell test-only edits out of build identities in %s", async lane => {
     const result = await run("python3", ["-c", [
       "import json,sys", "from pathlib import Path", "from unittest.mock import patch",
@@ -532,6 +544,8 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toMatch(/node "\$RUNNER_TEMP|exact-release-plan|--plan |--registry /u);
     expect(workflow).toContain('echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"');
     expect(workflow).toContain("tools-release baseline inspect");
+    expect(workflow).toContain("options: [accepted, candidate]");
+    expect(workflow.match(/--mode "\$\{\{ inputs.baseline_mode \}\}"/gu)).toHaveLength(2);
     expect(workflow).not.toContain('"operation": "exact.prepare"');
     expect(workflow).not.toContain('"operation": "exact.finalize"');
     for (const command of ["prepare", "finalize", "publish", "activate", "baseline promote", "baseline fetch"]) {

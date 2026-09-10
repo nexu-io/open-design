@@ -24,6 +24,11 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - Exact content preparation, metadata signing and final composition live in
   tools-release behind its policy-bound commands. Do not restore tools-pack
   exact-control or a separate pack signing API/binary.
+- Experimental `baseline --mode candidate` is restricted to betahyx exact
+  releases. It requires installed first-start evidence, marks that evidence as
+  candidate-only and defers channel activation while advancing the test baseline
+  with CAS. The subsequent default-mode release must pass hot acceptance before
+  activation. It never claims that the old baseline upgraded successfully.
 
 ## Retired tools
 

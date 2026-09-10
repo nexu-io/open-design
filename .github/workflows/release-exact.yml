@@ -21,6 +21,12 @@ on:
         required: true
         default: 0.1.0
         type: string
+      baseline_mode:
+        description: Accepted upgrade path, or betahyx candidate baseline without channel activation
+        required: true
+        default: accepted
+        type: choice
+        options: [accepted, candidate]
 
 permissions:
   actions: read
@@ -1237,6 +1243,7 @@ jobs:
         shell: bash
         run: >-
           tools-release baseline inspect
+          --mode "${{ inputs.baseline_mode }}"
           --publish-receipt "$RUNNER_TEMP/published/publish-receipt.json"
           --policy "$RUNNER_TEMP/published/release-policy.json" --target "${{ matrix.target }}"
           --receipt "$RUNNER_TEMP/baseline-inspection/receipt.json" --github-env "$GITHUB_ENV"
@@ -1415,6 +1422,7 @@ jobs:
         run: |
           set -euo pipefail
           tools-release baseline promote \
+            --mode "${{ inputs.baseline_mode }}" \
             --publish-receipt "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
             --channel-head "$RUNNER_TEMP/published/documents/channel-head.json" --activation-receipt "$RUNNER_TEMP/activate-receipt.json" \
             --acceptance "$RUNNER_TEMP/acceptances/electron-darwin-arm64.json" \

@@ -161,6 +161,7 @@ export function registerExactCommands(cli: CAC): void {
     });
 
   cli.command("baseline <operation>", "Fetch an upgrade-test baseline or promote a newly accepted baseline")
+    .option("--mode <mode>", "accepted (default), or betahyx candidate baseline without channel activation")
     .option("--github-env <file>", "Optional acceptance eligibility projection (inspect)")
     .option("--publish-receipt <file>", "Publication receipt (promote)")
     .option("--activation-receipt <file>", "Activation receipt (promote)")
@@ -180,12 +181,14 @@ export function registerExactCommands(cli: CAC): void {
       const receipt = required(options, "receipt");
       if (operation === "inspect") await inspectAcceptedElectronBaseline({ publication: required(options, "publishReceipt"),
         policy: required(options, "policy"), target: required(options, "target"), receipt,
+        ...(options.mode == null ? {} : { mode: required(options, "mode") }),
         ...(options.githubEnv == null ? {} : { githubEnv: required(options, "githubEnv") }) });
       else if (operation === "fetch") await fetchAcceptedElectronBaseline({ ...shared,
         baselineReceipt: required(options, "baseline"), publishReceipt: required(options, "publishReceipt"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"),
         sourceCommit: required(options, "sourceCommit"), target: required(options, "target"), outputDirectory: required(options, "output"),
         validationReceipt: required(options, "validation") }, receipt);
       else if (operation === "promote") await promoteAcceptedElectronBaseline({ ...shared,
+        ...(options.mode == null ? {} : { mode: required(options, "mode") }),
         publishReceipt: required(options, "publishReceipt"), activationReceipt: required(options, "activationReceipt"),
         acceptanceCredential: required(options, "acceptance"), channelHeadFile: required(options, "channelHead") }, receipt);
       else throw new Error("baseline operation must be inspect, fetch or promote");

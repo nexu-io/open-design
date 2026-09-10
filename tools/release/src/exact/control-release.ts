@@ -162,7 +162,7 @@ export async function publishExactRelease(input: JsonObject, receiptPath: string
   await writeObject(receiptPath, { schemaVersion: 1, operation: "exact.publish", profile: policy.profile, channel, releaseVersion: version, sourceCommit: pack.sourceCommit, target: policy.target, latestChannelHeadUrl: policy.target.latestChannelHeadUrl, channelHead: { ...head, file: headPath }, objects, requiredAcceptances, replayed: allReplayed });
 }
 
-async function validateAcceptances(published: JsonObject, paths: unknown): Promise<void> {
+async function validateAcceptances(published: JsonObject, paths: unknown): Promise<boolean> {
   if (!Array.isArray(paths)) throw new Error("exact.activate requires acceptanceCredentials");
   const credentials = await Promise.all(paths.map((path) => readObject(String(path))));
   const byKey = new Map<string, JsonObject>();
@@ -179,6 +179,15 @@ async function validateAcceptances(published: JsonObject, paths: unknown): Promi
     for (const field of ["shell", "artifact", "shellMetadata", "installIdentity", "platformTrust", "updater"]) if (!canonicalBytes(credential[field]).equals(canonicalBytes(expected[field]))) throw new Error("acceptance artifact or Shell binding mismatch");
     if (credential.installed == null || !canonicalBytes(credential.installed.shell).equals(canonicalBytes(expected.shell)) || credential.installed.target !== expected.target) throw new Error("acceptance lacks installed Shell proof");
   }
+  return credentials.some(credential => credential.baselineCandidate === true);
+}
+
+export function baselineCandidateMode(mode: unknown, policy: Pick<ReleasePolicyReceipt, "channel" | "profile">): boolean {
+  if (mode == null || mode === "accepted") return false;
+  if (mode !== "candidate" || policy.channel !== "betahyx" || policy.profile !== "exact-validation") {
+    throw new Error("candidate baseline is restricted to the betahyx exact experiment");
+  }
+  return true;
 }
 
 async function validatedElectronAcceptance(published: JsonObject, path: unknown): Promise<JsonObject> {
@@ -197,19 +206,21 @@ async function validatedElectronAcceptance(published: JsonObject, path: unknown)
 }
 
 export async function inspectAcceptedElectronBaseline(input: Readonly<{
-  publication: string; policy: string; target: string; receipt: string; githubEnv?: string;
+  publication: string; policy: string; target: string; receipt: string; githubEnv?: string; mode?: string;
 }>) {
   if (!["darwin-arm64", "darwin-x64", "win32-x64"].includes(input.target)) throw new Error("unsupported baseline target");
   const { required, policy } = await readPublishedAcceptance({ publishReceipt: input.publication, policyReceipt: input.policy, shellType: "electron", target: input.target });
+  const candidate = baselineCandidateMode(input.mode, policy);
   const acquired = await fetchAcceptedShellBaseline({ channel: policy.channel, target: input.target as AcceptedShellTarget,
     pointerUrl: `${policy.target.publicBaseUrl}/${policy.channel}/accepted/electron/${input.target}/latest.json` });
   const resolved = resolveAcceptedShellBaseline({ channel: policy.channel, target: input.target as AcceptedShellTarget, acceptedReceipt: acquired });
-  const compatible = resolved.mode === "accepted" && resolved.baseline.shell.buildHash === required.shell.buildHash
+  const compatible = !candidate && resolved.mode === "accepted" && resolved.baseline.shell.buildHash === required.shell.buildHash
     && resolved.baseline.shell.version === required.shell.version
     && compareVersion(policy.releaseVersion, resolved.acceptance.releaseVersion, policy.channel) > 0;
   const baselineReceipt = compatible ? join(dirname(resolve(input.receipt)), "accepted-baseline.json") : undefined;
   if (baselineReceipt != null) await writeObject(baselineReceipt, JSON.parse(Buffer.from(acquired!.bytes).toString("utf8")));
   const receipt = { schemaVersion: 1, operation: "electron.baseline.inspect", compatible,
+    ...(candidate ? { baselineCandidate: true } : {}),
     channel: policy.channel, releaseVersion: policy.releaseVersion, target: input.target,
     ...(baselineReceipt == null ? {} : { baselineReceipt }) };
   await writeObject(input.receipt, receipt);
@@ -291,7 +302,14 @@ export async function activateExactRelease(input: JsonObject, receiptPath: strin
     || published.latestChannelHeadUrl !== policy.target.latestChannelHeadUrl) {
     throw new Error("published release target binding mismatch");
   }
-  await validateAcceptances(published, input.acceptanceCredentials);
+  const candidate = await validateAcceptances(published, input.acceptanceCredentials);
+  if (candidate) {
+    baselineCandidateMode("candidate", policy);
+    await writeObject(receiptPath, { schemaVersion: 1, operation: "exact.activation.deferred", profile: policy.profile,
+      channel: published.channel, releaseVersion: published.releaseVersion, sourceCommit: published.sourceCommit,
+      reason: "candidate-baseline-awaiting-hot-acceptance" });
+    return;
+  }
   const headPath = await checkedFile(published.channelHead, "published channel head", input.channelHeadFile), headBody = await readFile(headPath);
   const incomingHead = JSON.parse(headBody.toString()).head as JsonObject, channel = String(published.channel);
   const latestUrl = policy.target.latestChannelHeadUrl;
@@ -321,20 +339,25 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
   const published = await readObject(String(input.publishReceipt ?? ""));
   const activation = await readObject(String(input.activationReceipt ?? ""));
   if (published.schemaVersion !== 1 || published.operation !== "exact.publish"
-    || activation.schemaVersion !== 1 || activation.operation !== "exact.activate") throw new Error("invalid exact baseline promotion authority");
+    || activation.schemaVersion !== 1) throw new Error("invalid exact baseline promotion authority");
   const channel = String(published.channel ?? ""), releaseVersion = String(published.releaseVersion ?? ""), sourceCommit = String(published.sourceCommit ?? "");
   const policy = await readReleasePolicyReceipt(input.policyReceipt, { capability: "promote", channel, releaseVersion, sourceCommit });
+  const candidate = baselineCandidateMode(input.mode, policy);
+  if (activation.operation !== (candidate ? "exact.activation.deferred" : "exact.activate")) throw new Error("invalid exact baseline promotion authority");
   if (published.profile !== policy.profile || !releaseTargetsEqual(published.target, policy.target)
     || published.latestChannelHeadUrl !== policy.target.latestChannelHeadUrl) throw new Error("accepted baseline published target binding mismatch");
   for (const field of ["profile", "channel", "releaseVersion", "sourceCommit"] as const) {
     if (activation[field] !== published[field]) throw new Error(`accepted baseline activation ${field} binding mismatch`);
   }
-  if (activation.latestChannelHeadUrl !== policy.target.latestChannelHeadUrl) throw new Error("accepted baseline activation target binding mismatch");
-  const channelHeadPath = await checkedFile(published.channelHead, "accepted baseline channel head", input.channelHeadFile), channelHeadBody = await readFile(channelHeadPath);
-  const activeHead = await request(policy.target.latestChannelHeadUrl);
-  if (!activeHead.ok || !Buffer.from(await activeHead.arrayBuffer()).equals(channelHeadBody)) throw new Error("accepted baseline requires the exact active channel head");
+  if (!candidate) {
+    if (activation.latestChannelHeadUrl !== policy.target.latestChannelHeadUrl) throw new Error("accepted baseline activation target binding mismatch");
+    const channelHeadPath = await checkedFile(published.channelHead, "accepted baseline channel head", input.channelHeadFile), channelHeadBody = await readFile(channelHeadPath);
+    const activeHead = await request(policy.target.latestChannelHeadUrl);
+    if (!activeHead.ok || !Buffer.from(await activeHead.arrayBuffer()).equals(channelHeadBody)) throw new Error("accepted baseline requires the exact active channel head");
+  }
 
   const credential = await validatedElectronAcceptance(published, input.acceptanceCredential);
+  if (candidate && credential.baselineCandidate !== true) throw new Error("candidate baseline requires explicit installed candidate evidence");
   const target = credential.target;
   if (target !== "darwin-arm64" && target !== "darwin-x64" && target !== "win32-x64") throw new Error("accepted baseline target is unsupported");
   const snapshot = createAcceptedShellBaselineReceipt(credential);
@@ -384,7 +407,7 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
   if (!pointerReadback.ok || !Buffer.from(await pointerReadback.arrayBuffer()).equals(pointerBody)) throw new Error("accepted baseline pointer readback failed");
   await writeObject(receiptPath, {
     schemaVersion: 1,
-    operation: "exact.baseline.promote",
+    operation: candidate ? "exact.baseline.candidate" : "exact.baseline.promote",
     profile: policy.profile,
     channel,
     releaseVersion,
@@ -399,6 +422,11 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
 export async function acceptInstalledRelease(input: JsonObject, receiptPath: string): Promise<void> {
   const { credential, policy } = await collectInstalledAcceptance(input);
   validateReleaseArtifactTrust(policy, [credential]);
+  if (input.baselineCandidate === true) {
+    baselineCandidateMode("candidate", policy);
+    if (credential.shell.type !== "electron" || input.hotAcceptanceReceipt != null) throw new Error("candidate baseline requires Electron first-install evidence");
+    credential.baselineCandidate = true;
+  }
   await writeObject(receiptPath, credential);
 }
 

@@ -35,7 +35,8 @@ async function fixture() {
     artifact: { url: "https://release.invalid/app.dmg", sha256: "c".repeat(64), size: 42 },
     shellMetadata: { url: "https://release.invalid/shell.json", sha256: "d".repeat(64), size: 20 },
     installIdentity: { appId: "io.open-design.betahyx", namespace: "acceptance", executableName: "open-design", productName: "OpenDesign" },
-    platformTrust: { platform: "macos", mode: "verify-only" }, updater: { mechanism: "standalone" },
+    // Binding-only fixture: formal policy shape, not a real codesign claim.
+    platformTrust: { platform: "macos", mode: "formal", teamIdentifier: "TESTTEAM01", designatedRequirement: 'identifier "io.open-design.betahyx"' }, updater: { mechanism: "standalone" },
   };
   const published = { schemaVersion: 1, operation: "exact.publish", profile: policy.profile, channel: policy.channel, releaseVersion: policy.releaseVersion, sourceCommit: policy.sourceCommit, target: policy.target, requiredAcceptances: [required] };
   const physical = { schemaVersion: 2, ...required.installIdentity, publisher: "OpenDesign", protocol: "open-design",
@@ -105,6 +106,14 @@ it("records hashes of the actual installed archive and physical manifest", async
     proof: { physical: { manifest: f.physical, manifestSha256: hash(JSON.stringify(f.physical)),
       archive: { file: "app.asar", sha256: hash(archive), size: archive.length } } },
   });
+});
+
+it("marks candidate installation evidence without claiming a hot update", async () => {
+  const f = await fixture();
+  await executeExactReleaseControl({ ...f.input, baselineCandidate: true }, f.output);
+  const credential = JSON.parse(await readFile(f.output, "utf8"));
+  expect(credential.baselineCandidate).toBe(true);
+  expect(credential.installed.proof).not.toHaveProperty("hotUpdate");
 });
 
 it("binds installed evidence to the policy and published target", async () => {

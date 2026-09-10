@@ -18,6 +18,7 @@ export async function updateAcceptanceClosure(input: AcceptanceInput): Promise<v
 export async function collectReleaseAcceptance(input: AcceptanceInput & Readonly<{
   installedRoot: string; runtimeProofRoot: string; hotAcceptanceReceipt?: string;
   firstInstallRoot?: string; firstInstallUserDataRoot?: string;
+  baselineCandidate?: boolean;
 }>): Promise<void> {
   if (input.hotAcceptanceReceipt != null && input.shell !== "electron") throw new Error("hot acceptance requires Electron");
   if ((input.firstInstallRoot != null || input.firstInstallUserDataRoot != null)
@@ -25,6 +26,7 @@ export async function collectReleaseAcceptance(input: AcceptanceInput & Readonly
   const diagnostics = input.shell === "electron" ? describeElectronRuntimeDiagnostics(await session(input)) : undefined;
   const first = input.firstInstallRoot == null ? undefined : describeElectronRuntimeDiagnostics(await session({ ...input, baseUserDataRoot: input.firstInstallUserDataRoot }));
   await acceptInstalledRelease({ installedRoot: input.installedRoot, runtimeProofRoot: input.runtimeProofRoot,
+    ...(input.baselineCandidate ? { baselineCandidate: true } : {}),
     publishReceipt: input.publication, policyReceipt: input.policy, shellType: input.shell, target: input.target,
     ...(diagnostics == null ? {} : { runtimeLog: diagnostics.runtimeLog }),
     ...(first == null ? {} : { firstInstallRoot: input.firstInstallRoot, firstInstallRuntimeLog: first.runtimeLog }),

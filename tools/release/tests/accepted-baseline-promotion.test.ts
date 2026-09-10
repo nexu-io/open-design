@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cac } from "cac";
 import { registerExactCommands } from "@/exact/commands.ts";
 
-import { executeExactReleaseControl, inspectAcceptedElectronBaseline } from "@/exact/control-release.js";
+import { baselineCandidateMode, executeExactReleaseControl, inspectAcceptedElectronBaseline } from "@/exact/control-release.js";
 import { createAcceptedShellBaselineReceipt } from "@/exact/accepted-baseline.ts";
 import { writeReleasePolicy } from "@/policy/release-profile.js";
 
@@ -75,6 +75,14 @@ async function fixture() {
 }
 
 describe("accepted Electron baseline promotion", () => {
+  it("restricts candidate mode to the explicitly selected betahyx experiment", () => {
+    expect(baselineCandidateMode(undefined, { channel: "stable", profile: "stable" } as never)).toBe(false);
+    expect(baselineCandidateMode("candidate", { channel: "betahyx", profile: "exact-validation" })).toBe(true);
+    for (const channel of ["stable", "prerelease", "another"]) {
+      expect(() => baselineCandidateMode("candidate", { channel, profile: "exact-validation" } as never)).toThrow("restricted");
+    }
+    expect(() => baselineCandidateMode("unknown", { channel: "betahyx", profile: "exact-validation" })).toThrow("restricted");
+  });
   it.each(["missing", "matching", "different", "tampered"])("inspects %s baseline using actual carrier metadata, without a source planner", async kind => {
     const input = await fixture();
     const acceptance = JSON.parse(await readFile(input.acceptanceCredential, "utf8"));
@@ -99,11 +107,22 @@ describe("accepted Electron baseline promotion", () => {
     expect(result.compatible).toBe(kind === "matching");
     expect(await readFile(args.githubEnv, "utf8")).toBe(`ELECTRON_ACCEPTANCE_MODE=${kind === "matching" ? "hot" : "full"}\n`);
     expect(result).not.toHaveProperty("acceptedIdentities");
-    if (kind === "matching") expect(JSON.parse(await readFile(result.baselineReceipt!, "utf8"))).toEqual(snapshot);
+    if (kind === "matching") {
+      expect(JSON.parse(await readFile(result.baselineReceipt!, "utf8"))).toEqual(snapshot);
+      const candidate = await inspectAcceptedElectronBaseline({ ...args, githubEnv: undefined,
+        receipt: join(input.root, "candidate-inspection.json"), mode: "candidate" });
+      expect(candidate).toMatchObject({ compatible: false, baselineCandidate: true });
+      expect(candidate).not.toHaveProperty("baselineReceipt");
+    }
   });
 
-  it("publishes an immutable self-contained snapshot and advances its target pointer with CAS", async () => {
+  it.each(["accepted", "candidate"])("publishes a %s snapshot with CAS and never activates a candidate", async mode => {
     const input = await fixture();
+    if (mode === "candidate") {
+      const credential = JSON.parse(await readFile(input.acceptanceCredential, "utf8"));
+      credential.baselineCandidate = true;
+      await writeFile(input.acceptanceCredential, JSON.stringify(credential));
+    }
     const objects = new Map<string, { body: Buffer; etag: string }>([[
       `${storageBase}/betahyx/latest/channel-head.json`, { body: input.channelHeadBody, etag: '"head"' },
     ]]);
@@ -126,22 +145,30 @@ describe("accepted Electron baseline promotion", () => {
     });
     const request = {
       schemaVersion: 1, operation: "exact.baseline.promote", publishReceipt: input.publishReceipt,
+      mode,
       activationReceipt: input.activationReceipt, policyReceipt: input.policyReceipt, acceptanceCredential: input.acceptanceCredential,
     };
     const receiptPath = join(input.root, "promotion.json");
+    if (mode === "candidate") {
+      await executeExactReleaseControl({ schemaVersion: 1, operation: "exact.activate", publishReceipt: input.publishReceipt,
+        policyReceipt: input.policyReceipt, acceptanceCredentials: [input.acceptanceCredential] }, input.activationReceipt);
+      expect(JSON.parse(await readFile(input.activationReceipt, "utf8"))).toMatchObject({ operation: "exact.activation.deferred" });
+      expect(generation).toBe(0);
+      await expect(executeExactReleaseControl({ ...request, mode: "accepted" }, receiptPath)).rejects.toThrow("promotion authority");
+    }
     const originalPublication = await readFile(input.publishReceipt);
     const relocatedHead = join(input.root, "relocated-head.json");
     await writeFile(relocatedHead, "tampered");
-    await expect(executeExactReleaseControl({ ...request, channelHeadFile: relocatedHead }, receiptPath)).rejects.toThrow("binding verification failed");
+    if (mode === "accepted") await expect(executeExactReleaseControl({ ...request, channelHeadFile: relocatedHead }, receiptPath)).rejects.toThrow("binding verification failed");
     await writeFile(relocatedHead, input.channelHeadBody);
     const cli = cac("tools-release"); registerExactCommands(cli);
-    cli.parse(["node", "tools-release", "baseline", "promote", "--publish-receipt", input.publishReceipt,
+    cli.parse(["node", "tools-release", "baseline", "promote", "--mode", mode, "--publish-receipt", input.publishReceipt,
       "--activation-receipt", input.activationReceipt, "--policy", input.policyReceipt, "--acceptance", input.acceptanceCredential,
       "--channel-head", relocatedHead, "--receipt", receiptPath], { run: false });
     await cli.runMatchedCommand();
     expect(await readFile(input.publishReceipt)).toEqual(originalPublication);
     const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
-    expect(receipt).toMatchObject({ operation: "exact.baseline.promote", target: "darwin-arm64", snapshot: { replayed: false }, pointer: { replayed: false } });
+    expect(receipt).toMatchObject({ operation: mode === "candidate" ? "exact.baseline.candidate" : "exact.baseline.promote", target: "darwin-arm64", snapshot: { replayed: false }, pointer: { replayed: false } });
     expect(receipt).not.toHaveProperty("acceptedIdentities");
     const pointerStorageUrl = `${storageBase}/betahyx/accepted/electron/darwin-arm64/latest.json`;
     const pointer = JSON.parse(objects.get(pointerStorageUrl)!.body.toString("utf8"));

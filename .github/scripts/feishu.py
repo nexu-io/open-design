@@ -121,8 +121,9 @@ def build_report(channel, version, commit, evidence, jobs, results, context, war
 
     published = bound("publish-receipt.json", "exact.publish")
     activated = bound("activate-receipt.json", "exact.activate")
-    state = "activated" if activated else "published" if published else "unconfirmed"
-    lines = [f"发布状态：{ {'activated': '已激活', 'published': '已发布，激活未确认', 'unconfirmed': '未确认'}[state]}",
+    candidate = published and bound("activate-receipt.json", "exact.activation.deferred")
+    state = "activated" if activated else "candidate" if candidate else "published" if published else "unconfirmed"
+    lines = [f"发布状态：{ {'activated': '已激活', 'candidate': '候选验收基线，未激活 channel', 'published': '已发布，激活未确认', 'unconfirmed': '未确认'}[state]}",
              f"分支：{context['branch']} · 提交：{commit[:10]}",
              f"触发人：{context['actor']} · 执行轮次：{context['attempt']}",
              "运行结果：" + ", ".join(f"{name}={result['result']}" for name, result in results.items())]

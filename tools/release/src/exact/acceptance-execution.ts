@@ -137,6 +137,7 @@ export async function collectExecutedAcceptance(input: Input & Readonly<{ inspec
   };
   const first = await readExecution("first");
   let hot = false;
+  let baselineCandidate = false;
   if (input.shell === "electron") {
     if (!input.inspection) throw new Error("Electron collection requires baseline inspection");
     const inspection = await readObject(input.inspection);
@@ -145,9 +146,12 @@ export async function collectExecutedAcceptance(input: Input & Readonly<{ inspec
       || inspection.target !== input.target || inspection.channel !== policy.channel || inspection.releaseVersion !== policy.releaseVersion
       || typeof inspection.compatible !== "boolean") throw new Error("Baseline inspection identity mismatch");
     hot = inspection.compatible;
+    baselineCandidate = inspection.baselineCandidate === true;
+    if (baselineCandidate && hot) throw new Error("candidate baseline cannot claim hot acceptance");
   }
   const selected = hot ? await readExecution("hot") : first;
   await collectReleaseAcceptance({ ...input, installedRoot: selected.installedRoot,
+    baselineCandidate,
     runtimeProofRoot: selected.runtimeProofRoot, baseUserDataRoot: selected.baseUserDataRoot,
     ...(hot ? { hotAcceptanceReceipt: selected.hotAcceptanceReceipt,
       firstInstallRoot: first.installedRoot, firstInstallUserDataRoot: first.baseUserDataRoot } : {}) });
