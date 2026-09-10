@@ -44,6 +44,7 @@ import {
 } from '../runtime/chat/reconnect-state';
 import { forkBoundaryMessageIndex } from '../runtime/chat/fork-boundary';
 import { resolveRecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
+import { canRetainSuccessfulRunForBlockedStrategy } from '../runtime/blocked-strategy-result';
 import { loadConversationTranscript } from '../state/load-conversation-transcript';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
@@ -7998,6 +7999,14 @@ export function ProjectView({
             latestRunStatus,
             projectRunWorkspaceContext,
           );
+          const strategyTask = latestRunStatus?.strategyTask;
+          const taskBlocked = strategyTask?.terminal === true && strategyTask.outcome === 'blocked';
+          // Saving the inline file repairs delivery, not the strategy verdict.
+          // Apply the same success exceptions as the normal provider path.
+          const blockedRunCanSucceed = latestRunStatus != null
+            && canRetainSuccessfulRunForBlockedStrategy(
+              latestRunStatus.status, strategyTask, latestRunStatus.deliverableValid,
+            );
           updateMessageById(
             message.id,
             (prev) => ({
@@ -8015,6 +8024,7 @@ export function ProjectView({
               resultDeliveryState: 'delivered',
               runStatus:
                 latestRunStatus?.status === 'succeeded'
+                  && ((prev.strategyTaskBlocked !== true && !taskBlocked) || blockedRunCanSucceed)
                   ? 'succeeded'
                   : prev.runStatus,
               endedAt: prev.endedAt ?? recoveredArtifactEndedAt,
