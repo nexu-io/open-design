@@ -997,7 +997,7 @@ export function composeOdNextStrategyContinuationV2(
   }
   let payload: string;
   if (input.stage === 'clarification') {
-    payload = `# OD Next native continuation — clarification\n\nMerge the user's answer below into the existing Full Plan context. Preserve the locked route, ask no second question round, rerun only affected resolution and Preflight work, and emit the updated V2 machine structures.\n\n## Clarification answer\n\n${requireText(input.answer, 'answer')}`;
+    payload = `# OD Next native continuation — clarification\n\nMerge the user's answer below into the existing Full Plan context. Preserve the locked route, ask no second question round, rerun only affected resolution and Preflight work, and emit the updated V2 machine structures. This turn runs at the clarification stage: the Runtime State reports inputStage clarification (not request) with outcome plan_ready once the Full Plan is frozen, otherwise blocked or canceled.\n\n## Clarification answer\n\n${requireText(input.answer, 'answer')}`;
   } else if (input.stage === 'contract_repair') {
     payload = `# OD Next native continuation — contract_repair\n\nThe semantic plan in this native session is frozen. Make one serialization-only attempt that addresses the issue below. Use no tools, do not re-plan, and preserve the locked route, execution mode, Design Spec, steps, and Build Packages.\n\n## Serialization issue\n\n${requireText(input.serializationIssue, 'serializationIssue')}`;
   } else {
