@@ -66,7 +66,10 @@ it("prepares and finalizes signed content within release ownership, with no requ
   expect(fetch).not.toHaveBeenCalled();
   fetch.mockResolvedValueOnce(new Response(null, { status: 503 }));
   await expect(command(prepare)).rejects.toThrow("previous channel head acquisition failed (503)");
-  await command(prepare);
+  const nativeInput = join(root, "native-input");
+  await command([...prepare, "--native-output", nativeInput]);
+  expect(await readFile(join(nativeInput, "prepare-receipt.json"))).toEqual(await readFile(prepareReceipt));
+  await expect(readFile(join(nativeInput, "artifacts", `closure-${sha("closure")}.mjs`))).rejects.toThrow();
   const finalize = ["finalize", "--policy", policy, "--prepared", prepared, "--distributions", distributions, "--output", final, "--receipt", join(final, "pack-receipt.json")];
   await writeFile(join(distributions, "electron/installer.bin"), "tampered");
   await expect(command(finalize)).rejects.toThrow("binding verification failed");

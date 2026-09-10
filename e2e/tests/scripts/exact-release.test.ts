@@ -16,6 +16,15 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("separates native installation input from CDN payload transport in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
+    const publish = workflow.split("\n  publish:")[1]!.split("\n  acceptance:")[0]!;
+    expect(workflow).toContain('--native-output "$RUNNER_TEMP/exact-installation-input"');
+    expect(distribution).toContain("name: exact-installation-input-");
+    expect(distribution).not.toContain("name: exact-prepared-");
+    expect(publish).toContain("name: exact-prepared-");
+  });
   it.each(["exact", "stable", "prerelease"])("continues mandatory delivery past intentionally skipped producers in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     for (const [job, dependencies] of Object.entries({ distribution: ["tools", "plan", "prepare"], publish: ["tools", "plan", "distribution"],

@@ -998,12 +998,20 @@ jobs:
             --source-commit "$SOURCE_SHA" --root "$GITHUB_WORKSPACE" --standalone-version "$STANDALONE_VERSION" \
             --shells "$RUNNER_TEMP/exact-plan/inputs/shells.json" --scenes "$RUNNER_TEMP/scenes" \
             --capsules "$RUNNER_TEMP/capsules" --platforms "$RUNNER_TEMP/platforms" --data-resources "$RUNNER_TEMP/data-products" \
-            --output "$RUNNER_TEMP/exact-prepare" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
+            --output "$RUNNER_TEMP/exact-prepare" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json" \
+            --native-output "$RUNNER_TEMP/exact-installation-input"
 
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: exact-prepared-stable-${{ inputs.release_version }}
           path: ${{ runner.temp }}/exact-prepare
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: exact-installation-input-stable-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/exact-installation-input
           if-no-files-found: error
           retention-days: 1
 
@@ -1029,7 +1037,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: exact-prepared-stable-${{ inputs.release_version }}
+          name: exact-installation-input-stable-${{ inputs.release_version }}
           path: ${{ runner.temp }}/prepared
 
       - uses: actions/download-artifact@v8

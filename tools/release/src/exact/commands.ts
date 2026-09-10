@@ -19,6 +19,7 @@ import { registerValidationCommands } from "./validation-commands.ts";
 import { registerBuildCommands } from "./build-commands.ts";
 import { required, emit, type Options } from "./command-input.ts";
 import { acquireArtifactProduct } from "./artifact-product.ts";
+import { exportInstallationInput } from "./installation-input.ts";
 
 function boolean(options: Options, key: string): boolean {
   const value = options[key];
@@ -109,6 +110,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--data-resource <file>", "Independent data receipt beside its archive; repeat for the complete data set")
     .option("--data-resources <directory>", "Complete independent data products under <resource-id>/")
     .option("--output <directory>", "Prepared content directory")
+    .option("--native-output <directory>", "Optional minimal bound installation inputs, without CDN resource payloads")
     .option("--receipt <file>", "Preparation receipt")
     .action(async (options: Options) => {
       await prepareReleaseContent({ policy: required(options, "policy"), channel: required(options, "channel"),
@@ -124,6 +126,7 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.dataResource == null ? {} : { dataResourceReceiptFiles: Array.isArray(options.dataResource)
           ? options.dataResource as string[] : [required(options, "dataResource")] }),
         output: required(options, "output"), receipt: required(options, "receipt") });
+      if (options.nativeOutput != null) await exportInstallationInput({ source: required(options, "output"), output: required(options, "nativeOutput") });
     });
 
   cli.command("finalize", "Verify contributions and finalize signed release metadata")
