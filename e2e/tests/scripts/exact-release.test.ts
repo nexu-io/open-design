@@ -581,7 +581,9 @@ describe("exact Electron release topology", () => {
     await Promise.all([mkdir(publishedRoot), mkdir(installedRoot)]);
     const sourceCommit = "a".repeat(40);
     const shell = { buildHash: "b".repeat(64), type: "electron", version: "1.2.3" };
-    const platformTrust = { designatedRequirement: 'identifier "io.open-design.betahyx"', mode: "verify-only", platform: "macos", teamIdentifier: "adhoc" };
+    // This fixture binds published evidence; it does not perform native signing.
+    // Public release targets require formal trust even under exact-validation.
+    const platformTrust = { designatedRequirement: 'identifier "io.open-design.betahyx"', mode: "formal", platform: "macos", teamIdentifier: "TESTTEAM01" };
     const artifact = { mediaType: "application/x-apple-diskimage", sha256: "c".repeat(64), size: 73, url: "https://release.invalid/app.dmg" };
     const shellMetadata = { sha256: "d".repeat(64), size: 41, url: "https://release.invalid/electron-metadata.json" };
     const installIdentity = { appId: "io.open-design.betahyx", executableName: "open-design-betahyx", namespace: "acceptance", productName: "OpenDesign" };
