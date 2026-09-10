@@ -314,6 +314,10 @@
 }
 .assistant-footer-controls {
   display: inline-flex;
+  /* Keep the status and clock visible when the continuation action fills a
+     narrow pane; the existing actions can wrap within their own group. */
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: 2px;
   margin-left: 2px;
@@ -363,9 +367,11 @@
  */
 .assistant-continue-remaining {
   width: auto;
+  max-width: 100%;
   height: auto;
   padding: 3px 8px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .assistant-copy-button:hover {
@@ -1760,9 +1766,11 @@ body.desktop-pet-shell .pet-task-item {
   flex: 1;
 }
 .assistant-footer-time {
+  flex-shrink: 0;
   margin-left: 6px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--text-soft);
 }
 
