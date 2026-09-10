@@ -41,8 +41,8 @@ import type {
   StrategyTaskProjectionV2,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { OD_NEXT_AGENT_DECLARED_BLOCK_REASON } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
+import { canRetainSuccessfulRunForBlockedStrategy } from '../runtime/blocked-strategy-result';
 
 /**
  * 取消来源的四个合法值。服务端说了才算,说不清就不认 —— UI 把 `user_stop`
@@ -742,7 +742,7 @@ export const STRATEGY_TASK_BLOCKED_MESSAGE =
  * resolver, and the error analytics can all name the gate. A projection from a
  * daemon too old to send `blockedContext` still fails, just anonymously.
  */
-function createStrategyTaskBlockedError(
+export function createStrategyTaskBlockedError(
   strategyTask: StrategyTaskProjectionV2,
 ): Error & { code?: string } {
   const error = new Error(STRATEGY_TASK_BLOCKED_MESSAGE) as Error & { code?: string };
@@ -2262,7 +2262,7 @@ async function consumeDaemonPhysicalRun({
         // branch. `deliverableValid` is filesystem-backed (entry resolved, this
         // Run touched it, kind matches) — never the agent's own assertion — and
         // an unreachable daemon fails closed to the previous behaviour.
-        const deliveredDespiteBlock = endStatus === 'succeeded'
+        const deliverableValid = endStatus === 'succeeded'
           && (await fetchChatRunStatus(runId, workspaceContext))?.deliverableValid === true;
         // A block the agent declared on itself is not a failure to report.
         // Asked for a prototype with nothing to build on, the agent answers in
@@ -2284,12 +2284,7 @@ async function consumeDaemonPhysicalRun({
         // failed keeps its error even when the agent narrated the failure,
         // because narration is not a substitute for the failure the user has
         // to act on.
-        const agentDeclaredBlock = endStrategyTask.blockedContext?.reasonCodes
-          .includes(OD_NEXT_AGENT_DECLARED_BLOCK_REASON) === true;
-        const explainedToUser = endStatus === 'succeeded'
-          && agentDeclaredBlock
-          && (endStrategyTask.blockedContext?.visibleText?.trim().length ?? 0) > 0;
-        if (!deliveredDespiteBlock && !explainedToUser) {
+        if (!canRetainSuccessfulRunForBlockedStrategy(endStatus, endStrategyTask, deliverableValid)) {
           endStatus = 'failed';
           pendingStructuredError ??= createStrategyTaskBlockedError(endStrategyTask);
         }

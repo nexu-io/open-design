@@ -24,6 +24,7 @@ import {
   type DaemonAgentReconnectState,
   type DaemonAgentRetryState,
   type DaemonReconnectState,
+  createStrategyTaskBlockedError,
   fetchChatRunStatus,
   GENERIC_DAEMON_DISCONNECT_CODE,
   GENERIC_DAEMON_DISCONNECT_MESSAGE,
@@ -44,6 +45,7 @@ import {
 } from '../runtime/chat/reconnect-state';
 import { forkBoundaryMessageIndex } from '../runtime/chat/fork-boundary';
 import { resolveRecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
+import { canRetainSuccessfulRunForBlockedStrategy } from '../runtime/blocked-strategy-result';
 import { loadConversationTranscript } from '../state/load-conversation-transcript';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
@@ -2735,6 +2737,24 @@ export function ProjectView({
   const committedFilesRefreshKeyRef = useRef(committedFilesRefreshKey);
   committedFilesRefreshKeyRef.current = committedFilesRefreshKey;
   const projectFilesRef = useRef<ProjectFile[]>([]);
+  // A workspace manual save is explicit caller evidence, not a property of
+  // every browser POST (chat artifact persistence uses that API too).
+  const manualFileWritesByRunRef = useRef(new Map<AbortController, {
+    projectId: string;
+    authorityKey: string;
+    conversationId: string;
+    runId: string | null;
+    detached: boolean;
+    files: Map<string, ProjectFile>;
+    dispose: () => void;
+  }>());
+  useEffect(() => () => {
+    for (const run of manualFileWritesByRunRef.current.values()) {
+      if (run.projectId === project.id && run.authorityKey === projectRunAuthorityKey) {
+        run.dispose();
+      }
+    }
+  }, [project.id, projectRunAuthorityKey]);
   const projectFilesRequestSeqRef = useRef(0);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
@@ -4490,6 +4510,63 @@ export function ProjectView({
     return nextFiles;
   }, [refreshLiveArtifacts, refreshProjectFiles]);
 
+  const recordManualFileWrite = useCallback((file: ProjectFile) => {
+    for (const [controller, run] of manualFileWritesByRunRef.current) {
+      if ((run.detached || !controller.signal.aborted) && run.projectId === project.id
+        && run.authorityKey === projectRunAuthorityKey) {
+        run.files.set(file.name, { ...file });
+      }
+    }
+  }, [project.id, projectRunAuthorityKey]);
+
+  const findDetachedManualFileWrites = useCallback((conversationId: string, runId: string) => {
+    for (const run of manualFileWritesByRunRef.current.values()) {
+      if (run.detached && run.projectId === project.id
+        && run.authorityKey === projectRunAuthorityKey
+        && run.conversationId === conversationId && run.runId === runId) return run;
+    }
+    return undefined;
+  }, [project.id, projectRunAuthorityKey]);
+
+  const registerManualFileWrites = useCallback((
+    controller: AbortController,
+    files: Map<string, ProjectFile>,
+    conversationId: string,
+    runId: string | null = null,
+  ) => {
+    const previous = runId ? findDetachedManualFileWrites(conversationId, runId) : undefined;
+    if (previous) {
+      for (const [name, file] of previous.files) files.set(name, file);
+      previous.dispose();
+    }
+    const dispose = () => {
+      manualFileWritesByRunRef.current.delete(controller);
+      controller.signal.removeEventListener('abort', dispose);
+    };
+    const entry = {
+      projectId: project.id, authorityKey: projectRunAuthorityKey,
+      conversationId, runId, detached: false, files, dispose,
+    };
+    manualFileWritesByRunRef.current.set(controller, entry);
+    controller.signal.addEventListener('abort', dispose, { once: true });
+    return {
+      bindRun: (nextRunId: string) => {
+        // A strategy successor can reuse the assistant and transport, but its
+        // physical run must not inherit a predecessor's ownership receipts.
+        if (entry.runId && entry.runId !== nextRunId) files.clear();
+        entry.runId = nextRunId;
+      },
+      release: (recoverable = false) => {
+        if (recoverable && entry.runId && !controller.signal.aborted) {
+          // Keep observing real writes between transports, including during
+          // the status probe/backoff. Only the same scoped physical run adopts it.
+          entry.detached = true;
+          controller.signal.removeEventListener('abort', dispose);
+        } else dispose();
+      },
+    };
+  }, [project.id, projectRunAuthorityKey, findDetachedManualFileWrites]);
+
   const refreshFileWorkspace = useCallback(async (
     options?: { fresh?: boolean },
   ): Promise<FileRefreshResult> => {
@@ -4816,7 +4893,7 @@ export function ProjectView({
         return { ok: false as const, error: message };
       }
     },
-    [project.id, projectDesignSystemId, project.skillId, requestOpenFile],
+    [project.id, projectDesignSystemId, project.skillId, projectRunWorkspaceContext, requestOpenFile],
   );
 
   const artifactFromStandaloneHtml = useCallback(
@@ -6414,6 +6491,8 @@ export function ProjectView({
           ?? await fetchChatRunStatus(runId, projectRunWorkspaceContext);
         if (cancelled) return;
         if (!physicalStatus) {
+          // A local retry seal is not a daemon terminal verdict. Keep this
+          // run's receipts for the existing manual reconnect action.
           // `fetchChatRunStatus` returns null on ANY non-OK response or fetch
           // exception (providers/daemon.ts:686), not only when the daemon has
           // permanently forgotten the run.  For a spuriously-failed pending
@@ -6462,6 +6541,9 @@ export function ProjectView({
         const reattachRunId = taskRunAdvanced && projectedActiveRunId
           ? projectedActiveRunId
           : runId;
+        if (taskRunAdvanced) {
+          findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
+        }
         const projectedTaskStatus: ChatMessage['runStatus'] =
           physicalStatus.strategyTask?.terminal === true
             ? physicalStatus.strategyTask.outcome === 'canceled'
@@ -6512,6 +6594,7 @@ export function ProjectView({
             );
           }
           completedReattachRunsRef.current.add(runId);
+          findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
         }
         if (
@@ -6530,7 +6613,41 @@ export function ProjectView({
           && !taskRunAdvanced
           && (!status.strategyTask || status.strategyTask.terminal)
         ) {
+          const strategyTask = status.strategyTask;
+          if (
+            status.status === 'succeeded'
+            && status.id === runId
+            && status.projectId === project.id
+            && status.conversationId === reattachConversationId
+            && status.assistantMessageId === message.id
+            && strategyTask?.outcome === 'blocked'
+            && strategyTask.taskExecutionId === message.strategyTaskExecutionId
+            && strategyTask.activeRunId === runId
+            && !canRetainSuccessfulRunForBlockedStrategy(
+              status.status, strategyTask, status.deliverableValid,
+            )
+          ) {
+            // A cold history row keeps the daemon's physical success. Restore
+            // the same logical failure/reason as live SSE from this existing
+            // authorized probe, without rewriting the persisted physical row.
+            const failure = createStrategyTaskBlockedError(strategyTask);
+            updateMessageById(message.id, (prev) => {
+              if (
+                activeConversationIdRef.current !== reattachConversationId
+                || projectRunAuthorityKeyRef.current !== projectRunAuthorityKey
+                || prev.runId !== runId
+                || prev.strategyTaskExecutionId !== strategyTask.taskExecutionId
+                || prev.runStatus !== 'succeeded'
+              ) return prev;
+              return appendErrorStatusEvent({
+                ...prev,
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
+                runStatus: 'failed',
+              }, failure.message, failure.code);
+            });
+          }
           completedReattachRunsRef.current.add(runId);
+          findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
         }
         if (status.strategyTask?.taskExecutionId) {
@@ -6566,6 +6683,7 @@ export function ProjectView({
           genericDisconnectRetriesRef.current.delete(runId);
           genericDisconnectBackoffUntilRef.current.delete(runId);
           completedReattachRunsRef.current.add(runId);
+          findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
         }
         if (spuriouslyFailedPending && status.status === 'canceled') {
@@ -6591,6 +6709,7 @@ export function ProjectView({
           genericDisconnectRetriesRef.current.delete(runId);
           genericDisconnectBackoffUntilRef.current.delete(runId);
           completedReattachRunsRef.current.add(runId);
+          findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
         }
         if (spuriouslyFailedPending && status.status === 'succeeded') {
@@ -6704,19 +6823,25 @@ export function ProjectView({
                 nextFiles = await refreshProjectFiles();
               }
             }
+            const touchedFilePaths = extractTouchedFilePathsFromEvents(message.events);
+            const recoveredManualFileWrites = findDetachedManualFileWrites(reattachConversationId, runId);
+            const ownedFiles = attributableRunFiles(
+              nextFiles, recoveredManualFileWrites?.files ?? new Map<string, ProjectFile>(),
+              [...touchedFilePaths, ...(status.artifactPaths ?? [])], project.id, projectDetail.resolvedDir,
+              artifactPersistenceSucceeded ? savedArtifactRef.current : null,
+            );
             const diff = computeProducedFiles(
               beforeFileNames,
-              nextFiles,
+              ownedFiles,
               status.artifactPaths,
               project.id,
               projectDetail.resolvedDir,
             ) ?? [];
             const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
-            const touchedFilePaths = extractTouchedFilePathsFromEvents(message.events);
             const traceObjectFiles = mergeRecoveredTraceObjectFile(
               computeTraceObjectFiles(
                 beforeFileNames,
-                nextFiles,
+                ownedFiles,
                 [...touchedFilePaths, ...(status.artifactPaths ?? [])],
                 project.id,
                 projectDetail.resolvedDir,
@@ -6776,6 +6901,7 @@ export function ProjectView({
             transientFailedRetriesRef.current.delete(runId);
             genericDisconnectRetriesRef.current.delete(runId);
             completedReattachRunsRef.current.add(runId);
+            findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
             onProjectsRefresh();
             continue;
           }
@@ -6783,6 +6909,11 @@ export function ProjectView({
 
         const controller = new AbortController();
         const cancelController = new AbortController();
+        const manualFileWrites = new Map<string, ProjectFile>();
+        const manualFileWriteRegistration = registerManualFileWrites(
+          controller, manualFileWrites, reattachConversationId, reattachRunId,
+        );
+        let keepManualFileWritesForRecovery = false;
         const ownedReattachRunIds = new Set<string>();
         const claimReattachRun = (claimedRunId: string) => {
           ownedReattachRunIds.add(claimedRunId);
@@ -6800,6 +6931,7 @@ export function ProjectView({
           }
         };
         const completeReattachRuns = () => {
+          keepManualFileWritesForRecovery = false;
           for (const claimedRunId of ownedReattachRunIds) {
             completedReattachRunsRef.current.add(claimedRunId);
           }
@@ -7013,6 +7145,7 @@ export function ProjectView({
             );
           },
           onRunCreated: (nextRunId, strategyTask) => {
+            manualFileWriteRegistration.bindRun(nextRunId);
             activeReattachRunId = nextRunId;
             claimReattachRun(nextRunId);
             textBuffer.flush();
@@ -7204,21 +7337,27 @@ export function ProjectView({
                     nextFiles = await refreshProjectFiles();
                   }
                 }
+                const touchedFilePaths = extractTouchedFilePathsFromEvents(
+                  needsFullReplay ? replayedEvents : message.events,
+                );
+                const ownedFiles = attributableRunFiles(
+                  nextFiles, manualFileWrites,
+                  [...touchedFilePaths, ...(authoritativeReattachArtifactPaths ?? [])],
+                  project.id, projectDetail.resolvedDir,
+                  artifactPersistenceSucceeded ? savedArtifactRef.current : undefined,
+                );
                 const diff = computeProducedFiles(
                   beforeFileNames,
-                  nextFiles,
+                  ownedFiles,
                   authoritativeReattachArtifactPaths,
                   project.id,
                   projectDetail.resolvedDir,
                 ) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
-                const touchedFilePaths = extractTouchedFilePathsFromEvents(
-                  needsFullReplay ? replayedEvents : message.events,
-                );
                 const traceObjectFiles = mergeRecoveredTraceObjectFile(
                   computeTraceObjectFiles(
                     beforeFileNames,
-                    nextFiles,
+                    ownedFiles,
                     [
                       ...touchedFilePaths,
                       ...(authoritativeReattachArtifactPaths ?? []),
@@ -7297,6 +7436,8 @@ export function ProjectView({
               // banner or re-finalize its message over the replacement run.
               const runMayFinalize =
                 !supersededRunsRef.current.has(controller);
+              keepManualFileWritesForRecovery = genericDisconnect && runMayFinalize;
+              if (keepManualFileWritesForRecovery) manualFileWriteRegistration.release(true);
               textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
@@ -7367,7 +7508,12 @@ export function ProjectView({
                         { minMtime: runStartedAt },
                       );
                     }
-                    const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    const ownedFiles = attributableRunFiles(
+                      nextFiles, manualFileWrites,
+                      [...extractTouchedFilePathsFromEvents(replayedEvents), ...(latestRunStatus?.artifactPaths ?? [])],
+                      project.id, projectDetail.resolvedDir, recoveredExistingArtifact?.name,
+                    );
+                    const diff = computeProducedFiles(beforeFileNames, ownedFiles) ?? [];
                     const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                     if (produced.length > 0) {
                       recoveredArtifactMessagesRef.current.add(message.id);
@@ -7571,6 +7717,7 @@ export function ProjectView({
                 genericDisconnectBackoffUntilRef.current.delete(runId);
                 completeReattachRuns();
               }
+              manualFileWriteRegistration.release(keepManualFileWritesForRecovery);
               releaseReattachRuns();
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               if (!skipFinalPersistNow) persistNow({ telemetryFinalized: true });
@@ -7639,6 +7786,7 @@ export function ProjectView({
           },
         })
           .catch((err) => {
+            keepManualFileWritesForRecovery = false;
             // Skip AbortError (expected on interrupt) and any error from a run
             // that was tagged superseded by a send-now interrupt — it must not
             // surface a global failure over the replacement.
@@ -7657,6 +7805,7 @@ export function ProjectView({
             }
           })
           .finally(() => {
+            manualFileWriteRegistration.release(keepManualFileWritesForRecovery);
             textBuffer.flush();
             textBuffer.cancel();
             unregisterTextBuffer();
@@ -7724,6 +7873,7 @@ export function ProjectView({
     daemonLive,
     config.mode,
     activeConversationId,
+    projectRunAuthorityKey,
     currentProject.metadata,
     streaming,
     messages,
@@ -7737,6 +7887,8 @@ export function ProjectView({
     clearCurrentRunStreamingMarker,
     clearProjectTimeout,
     refreshProjectFiles,
+    registerManualFileWrites,
+    findDetachedManualFileWrites,
     readProjectHtml,
     persistArtifact,
     requestOpenFile,
@@ -7851,7 +8003,17 @@ export function ProjectView({
             );
           }
           if (cancelled) return;
-          const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+          const recoveredManualFileWrites = findDetachedManualFileWrites(activeConversationId, runId);
+          const manualWrites = recoveredManualFileWrites?.files ?? new Map<string, ProjectFile>();
+          const agentPaths = [
+            ...extractTouchedFilePathsFromEvents(message.events),
+            ...(latestRunStatus?.artifactPaths ?? []),
+          ];
+          const ownedFiles = attributableRunFiles(
+            nextFiles, manualWrites, agentPaths, project.id, projectDetail.resolvedDir,
+            recoveredExistingArtifact?.name,
+          );
+          const diff = computeProducedFiles(beforeFileNames, ownedFiles) ?? [];
           const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
           if (produced.length === 0) {
             continue;
@@ -7872,15 +8034,32 @@ export function ProjectView({
             latestRunStatus,
             projectRunWorkspaceContext,
           );
+          const strategyTask = latestRunStatus?.strategyTask;
+          const taskBlocked = strategyTask?.terminal === true && strategyTask.outcome === 'blocked';
+          // Saving the inline file repairs delivery, not the strategy verdict.
+          // Apply the same success exceptions as the normal provider path.
+          const blockedRunCanSucceed = latestRunStatus != null
+            && canRetainSuccessfulRunForBlockedStrategy(
+              latestRunStatus.status, strategyTask, latestRunStatus.deliverableValid,
+            );
           updateMessageById(
             message.id,
             (prev) => ({
               ...prev,
               content: sourceText,
               producedFiles: produced,
+              // Keep this recovery path's existing optional trace surface;
+              // only remove unchanged files proven to be manual writes.
+              ...(prev.traceObjectFiles ? {
+                traceObjectFiles: attributableRunFiles(
+                  prev.traceObjectFiles, manualWrites, agentPaths,
+                  project.id, projectDetail.resolvedDir, recoveredExistingArtifact?.name,
+                ),
+              } : {}),
               resultDeliveryState: 'delivered',
               runStatus:
                 latestRunStatus?.status === 'succeeded'
+                  && ((prev.strategyTaskBlocked !== true && !taskBlocked) || blockedRunCanSucceed)
                   ? 'succeeded'
                   : prev.runStatus,
               endedAt: prev.endedAt ?? recoveredArtifactEndedAt,
@@ -7888,6 +8067,7 @@ export function ProjectView({
             true,
             { telemetryFinalized: true },
           );
+          recoveredManualFileWrites?.dispose();
           await auditDesignSystemWorkspaceAfterRun(message.id);
           scheduleConversationMessageRefresh(activeConversationId);
           onProjectsRefresh();
@@ -7911,6 +8091,8 @@ export function ProjectView({
     config.mode,
     activeConversationId,
     project.id,
+    projectDetail.resolvedDir,
+    findDetachedManualFileWrites,
     currentConversationHasRecoverableArtifact,
     artifactFromStandaloneHtml,
     refreshProjectFiles,
@@ -8783,6 +8965,7 @@ export function ProjectView({
       // consuming a replacement run's colliding tool id.
       const pendingWrites = new Map<string, string>();
       const traceTouchedFilePaths = new Set<string>();
+      const manualFileWrites = new Map<string, ProjectFile>();
       // Per-write file-list reads are intentionally fire-and-forget so a file
       // can open while the run is still streaming. Once terminal completion
       // has selected a turn-level artifact, however, an older Write refresh
@@ -8791,7 +8974,8 @@ export function ProjectView({
       // A new run gets a clean slate: taking the preview over during the last
       // turn says nothing about this one.
       userTookOverPreviewRef.current = false;
-      const clearTraceTouchedFilePaths = () => {
+      const clearTraceTouchedFilePaths = (recoverable = false) => {
+        manualFileWriteRegistration.release(recoverable);
         pendingWrites.clear();
         traceTouchedFilePaths.clear();
       };
@@ -9072,6 +9256,9 @@ export function ProjectView({
       sendTextBufferRef.current = textBuffer;
 
       const controller = new AbortController();
+      const manualFileWriteRegistration = registerManualFileWrites(
+        controller, manualFileWrites, runConversationId,
+      );
       const cancelController = new AbortController();
       let authoritativeArtifactPaths: string[] | undefined;
       abortRef.current = controller;
@@ -9287,9 +9474,15 @@ export function ProjectView({
                   nextFiles = await refreshProjectFiles({ fresh: true });
                 }
               }
+              const ownedFiles = attributableRunFiles(
+                nextFiles, manualFileWrites,
+                [...traceTouchedFilePaths, ...(authoritativeArtifactPaths ?? [])],
+                project.id, projectDetail.resolvedDir,
+                artifactPersistenceSucceeded ? savedArtifactRef.current : undefined,
+              );
               const produced = computeProducedFiles(
                 beforeFileNames,
-                nextFiles,
+                ownedFiles,
                 authoritativeArtifactPaths,
                 project.id,
                 projectDetail.resolvedDir,
@@ -9318,7 +9511,7 @@ export function ProjectView({
               }
               const traceObjectFiles = computeTraceObjectFiles(
                 beforeFileNames,
-                nextFiles,
+                ownedFiles,
                 [
                   ...traceTouchedFilePaths,
                   ...(authoritativeArtifactPaths ?? []),
@@ -9448,6 +9641,9 @@ export function ProjectView({
           // tagged superseded. See the onDone above for the ownership rationale.
           const runMayFinalize =
             !supersededRunsRef.current.has(controller);
+          if (currentRunId && runMayFinalize && isGenericDaemonDisconnect(err)) {
+            manualFileWriteRegistration.release(true);
+          }
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
@@ -9491,6 +9687,7 @@ export function ProjectView({
                 void patchAttachedStatuses(runCommentAttachments, 'failed');
               }
             }
+            clearTraceTouchedFilePaths();
             clearCurrentRunStreamingMarker(
               runConversationId,
               controller,
@@ -9683,16 +9880,19 @@ export function ProjectView({
           void (async () => {
             const nextFiles = await refreshProjectFiles({ fresh: true });
             if (authoritativeArtifactPaths === undefined) return;
+            const ownedFiles = attributableRunFiles(
+              nextFiles, manualFileWrites, authoritativeTouchedPaths, project.id, projectDetail.resolvedDir,
+            );
             const produced = computeProducedFiles(
               beforeFileNames,
-              nextFiles,
+              ownedFiles,
               authoritativeArtifactPaths,
               project.id,
               projectDetail.resolvedDir,
             ) ?? [];
             const traceObjectFiles = computeTraceObjectFiles(
               beforeFileNames,
-              nextFiles,
+              ownedFiles,
               authoritativeTouchedPaths,
               project.id,
               projectDetail.resolvedDir,
@@ -9703,10 +9903,28 @@ export function ProjectView({
               true,
               { telemetryFinalized: true },
             );
+            // An accepted output ends recovery; otherwise an inline artifact
+            // can still need the sibling recovery effect's real file POST.
+            if (produced.length > 0 && !isGenericDaemonDisconnect(err)) manualFileWriteRegistration.release();
           })().catch(() => {
             // Retain the last accepted file list while the daemon recovers.
           });
-          clearTraceTouchedFilePaths();
+          clearTraceTouchedFilePaths(Boolean(
+            currentRunId && runMayFinalize && (
+              (isGenericDaemonDisconnect(err) && !completedReattachRunsRef.current.has(currentRunId))
+              // A terminal strategy error can precede browser artifact
+              // persistence. Retain this scoped run's receipts until that
+              // recovery accepts an output, rather than losing writer proof.
+              || hasRecoverableArtifactMessage({
+                ...latestAssistantMsg,
+                runId: currentRunId,
+                // React may not have committed the final text updater yet;
+                // this transport's accumulator already has every delta.
+                content: streamedText || latestAssistantMsg.content,
+                runStatus: 'failed',
+              })
+            ),
+          ));
         },
       };
 
@@ -9881,6 +10099,7 @@ export function ProjectView({
             };
             latestAssistantMsg = pinnedAssistant;
             currentRunId = runId;
+            manualFileWriteRegistration.bindRun(runId);
             // The view may already be on a different project/conversation;
             // pin the daemon run to the original row so returning can reattach.
             void saveMessage(project.id, runConversationId, pinnedAssistant, {
@@ -9933,7 +10152,10 @@ export function ProjectView({
             if (isTerminalRunStatus(runStatus)) {
               clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
               scheduleConversationMessageRefresh(runConversationId);
-              if (runStatus !== 'succeeded') clearTraceTouchedFilePaths();
+              // Transport exhaustion reports failed before its generic error.
+              // Keep receipts until onError distinguishes that recoverable
+              // disconnect from an authoritative failure; cancel still forgets.
+              if (runStatus !== 'succeeded') clearTraceTouchedFilePaths(runStatus === 'failed');
             }
           },
           /*
@@ -10082,6 +10304,7 @@ export function ProjectView({
             recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
           },
           onRunCreated: (runId, strategyTask) => {
+            manualFileWriteRegistration.bindRun(runId);
             textBuffer.flush();
             const resolvedTaskAnalytics = {
               ...taskAnalytics,
@@ -10211,6 +10434,8 @@ export function ProjectView({
       byokImageModelOptionsPV,
       byokVideoModelOptionsPV,
       byokSpeechModelOptionsPV,
+      projectRunAuthorityKey,
+      registerManualFileWrites,
       projectRunPreflightContext,
       projectRunWorkspaceContext,
       projectRunHasBillableAmrPrincipal,
@@ -13698,6 +13923,7 @@ export function ProjectView({
           filesRefreshKey={committedFilesRefreshKey}
           filesGeneration={committedFilesGeneration}
           onRefreshFiles={refreshFileWorkspace}
+          onManualFileWritten={recordManualFileWrite}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}
           commentQueueOnSend={commentQueueOnSend}
@@ -14592,6 +14818,29 @@ function applyDesignDeliveryOutcome(
     detail,
     'ARTIFACT_NOT_FOUND',
   );
+}
+
+function attributableRunFiles(
+  files: ProjectFile[],
+  manualWrites: ReadonlyMap<string, ProjectFile>,
+  agentPaths: Iterable<string>,
+  projectId: string,
+  projectRoot: string | null | undefined,
+  persistedArtifactName?: string | null,
+): ProjectFile[] {
+  const provenNames = new Set<string>();
+  for (const path of agentPaths) {
+    const file = findTouchedProjectFile(path, files, projectId, projectRoot);
+    if (file) provenNames.add(file.name);
+  }
+  if (persistedArtifactName) provenNames.add(persistedArtifactName);
+  return files.filter((file) => {
+    const manual = manualWrites.get(file.name);
+    // Only an unchanged, explicit manual-write receipt is excluded. Unknown
+    // later changes retain the existing fallback, without assigning an actor.
+    return !manual || provenNames.has(file.name)
+      || manual.mtime !== file.mtime || manual.size !== file.size;
+  });
 }
 
 export function computeProducedFiles(
