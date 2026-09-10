@@ -3261,6 +3261,7 @@ export const hu: Dict = {
   'fileViewer.exportSlideEta': '{current}/{total}. dia · ~{seconds}mp van hátra',
   'fileViewer.exportFailed': 'Az exportálás nem sikerült. Próbáld újra.',
   'fileViewer.exportDone': 'Exportálás kész',
+  'fileViewer.exportDegradedFallback': 'A projektfájlok nem érhetők el – ez a ZIP csak a megjelenített oldalt tartalmazza.',
   'fileViewer.exportImageFailed': 'A képrögzítés sikertelen. Kérjük, próbálja újra, vagy használja a böngészője képernyőkép eszközét.',
   'fileViewer.exportImageModalSubtitle': 'Válasszon formátumot, majd töltse le az aktuális előnézetet képként.',
   'fileViewer.exportImageFormatLabel': 'Formátum',

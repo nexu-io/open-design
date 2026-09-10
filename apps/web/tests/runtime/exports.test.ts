@@ -1722,3 +1722,108 @@ describe('exportAsImage', () => {
     expect(target?.filename).toBe('My-Design.png');
   });
 });
+
+describe('exportProjectAsZip degraded-archive reporting (#8005)', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('reports a rejected archive response as degraded instead of resolving silently', async () => {
+    // Given: the archive route fails, exactly as it does behind a reverse
+    // proxy that forwards its own Basic credentials (#7819) — but equally for
+    // a 500, a missing project directory, or a transport error.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(
+      { error: { code: 'TOOL_TOKEN_MISSING', message: 'tool token is required' } },
+      { status: 401 },
+    )));
+
+    // When: the user picks "Download as .zip".
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Degraded ZIP',
+    });
+
+    // Then: a ZIP is still delivered, but the caller is told it is the
+    // fallback artifact rather than the project tree, so the export is not
+    // reported to the user as a plain success.
+    expect(result).toBe('degraded');
+    expect(capturedBlob).toBeInstanceOf(Blob);
+    expect(capturedFilename).toBeTruthy();
+  });
+
+  it('resolves without a degraded marker when the archive succeeds', async () => {
+    // Given: the archive route returns the project tree.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('archive-bytes', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': 'attachment; filename="project.zip"',
+      },
+    })));
+
+    // When: the same export runs.
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Real ZIP',
+    });
+
+    // Then: the success path is unchanged — no marker, real bytes downloaded.
+    expect(result).toBeUndefined();
+    expect(capturedFilename).toBe('project.zip');
+    expect(await capturedBlob?.text()).toBe('archive-bytes');
+  });
+
+  it('reports a failed version export as degraded rather than passing off current content', async () => {
+    // Given: a version-scoped export whose fetch fails. The fallback ships the
+    // *current* content under the requested version's name.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('nope', { status: 500 })));
+
+    // When: the user exports a specific version as a ZIP.
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>current content</main>',
+      fallbackTitle: 'Versioned ZIP',
+      versionId: 'version-7',
+    });
+
+    // Then: the substitution is reported instead of silently standing in.
+    expect(result).toBe('degraded');
+    expect(capturedBlob).toBeInstanceOf(Blob);
+  });
+});

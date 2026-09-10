@@ -3261,6 +3261,7 @@ export const pl: Dict = {
   'fileViewer.exportSlideEta': 'Slajd {current}/{total} · pozostało ~{seconds}s',
   'fileViewer.exportFailed': 'Eksport nie powiódł się. Spróbuj ponownie.',
   'fileViewer.exportDone': 'Eksport zakończony',
+  'fileViewer.exportDegradedFallback': 'Nie udało się pobrać plików projektu — to archiwum ZIP zawiera tylko wyrenderowaną stronę.',
   'fileViewer.exportImageFailed': 'Przechwytywanie obrazu nie powiodło się. Spróbuj ponownie lub użyj narzędzia do zrzutów ekranu w przeglądarce.',
   'fileViewer.exportImageModalSubtitle': 'Wybierz format, a następnie pobierz bieżący podgląd jako obraz.',
   'fileViewer.exportImageFormatLabel': 'Format',

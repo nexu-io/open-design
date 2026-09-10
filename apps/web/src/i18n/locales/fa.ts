@@ -3261,6 +3261,7 @@ export const fa: Dict = {
   'fileViewer.exportSlideEta': 'اسلاید {current}/{total} · ~{seconds}ثانیه مانده',
   'fileViewer.exportFailed': 'خروجی‌گرفتن ناموفق بود. لطفاً دوباره تلاش کنید.',
   'fileViewer.exportDone': 'خروجی کامل شد',
+  'fileViewer.exportDegradedFallback': 'دسترسی به فایل‌های پروژه ممکن نشد — این ZIP فقط شامل صفحهٔ رندرشده است.',
   'fileViewer.exportImageFailed': 'گرفتن تصویر ناموفق بود. لطفاً دوباره تلاش کنید یا از ابزار اسکرین‌شات مرورگرتان استفاده کنید.',
   'fileViewer.exportImageModalSubtitle': 'یک قالب انتخاب کنید، سپس پیش‌نمایش فعلی را به‌صورت تصویر دانلود کنید.',
   'fileViewer.exportImageFormatLabel': 'قالب',

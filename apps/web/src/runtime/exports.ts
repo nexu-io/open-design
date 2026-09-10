@@ -871,6 +871,16 @@ export function exportReactComponentAsZip(
 // directory we scope the archive to that directory, otherwise we ask the
 // daemon for the whole project. Falls back to the in-memory single-file
 // ZIP on any failure so the action never silently no-ops.
+/**
+ * Downloads the project's on-disk tree as a ZIP.
+ *
+ * When the archive request fails the browser still receives a ZIP, but it is
+ * a client-rendered single-file snapshot rather than the project files. That
+ * substitution used to be silent, so a failed export was indistinguishable
+ * from a successful one. Returning 'degraded' — mirroring the 'cancelled'
+ * sentinel other exporters use — lets the caller tell the user which artifact
+ * they actually got.
+ */
 export async function exportProjectAsZip(opts: {
   projectId: string;
   filePath: string;
@@ -878,7 +888,7 @@ export async function exportProjectAsZip(opts: {
   fallbackTitle: string;
   versionId?: string;
   workspaceContext?: WorkspaceCollabContext | null;
-}): Promise<void> {
+}): Promise<void | 'degraded'> {
   if (opts.versionId) {
     const segments = opts.filePath
       .split('/')
@@ -897,9 +907,12 @@ export async function exportProjectAsZip(opts: {
       exportAsZip(await resp.text(), opts.fallbackTitle);
       return;
     } catch (err) {
+      // Same silent-substitution problem as the archive path below: the
+      // fallback ships the *current* content under the name of the version
+      // the user asked for, so the caller must be able to say so.
       console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
       exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
-      return;
+      return 'degraded';
     }
   }
   const root = archiveRootFromFilePath(opts.filePath);
@@ -918,6 +931,7 @@ export async function exportProjectAsZip(opts: {
   } catch (err) {
     console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
     exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+    return 'degraded';
   }
 }
 
