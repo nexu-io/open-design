@@ -60,7 +60,7 @@ type ReleaseState = { isDraft: boolean; isPrerelease: boolean };
  * non-zero exit for a tag that has no release at all. Every invocation is
  * appended to a log so a test can prove the lookup was skipped.
  */
-async function ghOnPath(releases: Record<string, ReleaseState>): Promise<{ bin: string; log: string }> {
+async function ghOnPath(releases: Record<string, ReleaseState>, failure?: string): Promise<{ bin: string; log: string }> {
   const dir = await scratchDir("bin");
   const log = join(dir, "gh-calls.log");
   const fixture = join(dir, "releases.json");
@@ -77,6 +77,7 @@ async function ghOnPath(releases: Record<string, ReleaseState>): Promise<{ bin: 
       `appendFileSync(${JSON.stringify(log)}, argv.join(" ") + "\\n", "utf8");`,
       'if (argv[0] !== "release" || argv[1] !== "view") { console.error("unsupported gh call"); process.exit(2); }',
       `const releases = JSON.parse(readFileSync(${JSON.stringify(fixture)}, "utf8"));`,
+      `if (${JSON.stringify(failure ?? "")}) { console.error(${JSON.stringify(failure ?? "")}); process.exit(1); }`,
       "const release = releases[argv[2]];",
       'if (release == null) { console.error("release not found"); process.exit(1); }',
       'const jq = argv[argv.indexOf("--jq") + 1];',
@@ -271,6 +272,24 @@ describe("cut-patch-release pre-flight", () => {
     expect(result.gateVersion).toBe("0.22.2");
     expect(result.cut).toBe(false);
     expect(result.ghCalls).toHaveLength(1);
+  });
+
+  it.each([
+    "HTTP 401: Bad credentials",
+    "HTTP 403: API rate limit exceeded",
+    "HTTP 503: Service Unavailable",
+    "dial tcp: network is unreachable",
+    "release not found\nHTTP 401: Bad credentials",
+  ])("[P1] fails the gate on a lookup error: %s", async (failure) => {
+    const gh = await ghOnPath({}, failure);
+    const result = await run("gate", {
+      env: { GATE_TAG: "open-design-v0.22.2", FORCE: "false" },
+      pathPrefix: gh.bin,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(failure);
+    expect(result.outputs.published).toBeUndefined();
   });
 
   it("[P2] lets force cut without consulting GitHub at all", async () => {

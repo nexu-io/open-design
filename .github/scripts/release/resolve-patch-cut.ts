@@ -147,8 +147,8 @@ function gate(): void {
 
   // "published" = the release exists AND is neither a draft nor a prerelease.
   // gh's --jq evaluates `(.isDraft or .isPrerelease) | not` to true only when
-  // both are false. A missing release makes `gh release view` exit non-zero,
-  // which the catch below treats as "not published".
+  // both are false. Only gh's exact missing-release sentinel is an unpublished
+  // release; other lookup failures must fail the job so operators can retry it.
   let answer = "";
   try {
     answer = execFileSync(
@@ -164,10 +164,18 @@ function gate(): void {
         "--jq",
         "(.isDraft or .isPrerelease) | not",
       ],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
     ).trim();
-  } catch {
-    answer = "";
+  } catch (error) {
+    const failure = error as Error & { status?: number; stderr?: string };
+    const detail = failure.stderr?.trim() ?? "";
+    if (failure.status !== 1 || detail !== "release not found") {
+      fail(`Could not look up release '${tag}': ${detail || failure.message}`);
+    }
+    answer = "false";
+  }
+  if (answer !== "true" && answer !== "false") {
+    fail(`Unexpected publication status for release '${tag}': ${JSON.stringify(answer)}`);
   }
 
   const published = answer === "true" ? "true" : "false";
