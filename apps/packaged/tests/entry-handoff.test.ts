@@ -89,7 +89,7 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
       bootstrapSidecarProcess: async () => { trace.push(`bootstrap:${alive}`); return false; },
     },
     "electron": { app: { commandLine: { appendSwitch() {} }, exit: (code: number) => trace.push(`exit:${code}`) } },
-    "@open-design/desktop/main": { applyOsLocaleSwitch() {}, applyLoopbackConnectionLimitSwitch() {} },
+    "@open-design/desktop/main": { async recordIncomingUpdateLifecycle() {}, applyOsLocaleSwitch() {}, applyLoopbackConnectionLimitSwitch() {} },
     "./config.js": { readPackagedConfig: async () => ({ namespace, appVersion: version }) },
     "./headless-runtime.js": { parsePackagedHeadlessRequest: () => ({ headless: false }), runPackagedMcpActionAgainstExistingDaemon: async () => false },
     "./paths.js": { resolvePackagedNamespacePaths: () => paths },

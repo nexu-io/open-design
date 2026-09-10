@@ -9,7 +9,7 @@ function shutdownHarness() {
   const source = readFileSync(new URL("../../src/main/index.ts", import.meta.url), "utf8");
   const ast = ts.createSourceFile("index.ts", source, ts.ScriptTarget.Latest, true);
   const declarations: string[] = [];
-  const names = new Set(["shuttingDown", "shutdownPromise", "shutdownComplete", "shutdown", "shutdownAndExit"]);
+  const names = new Set(["shuttingDown", "shutdownPromise", "shutdownComplete", "shutdownRequestCount", "shutdown", "shutdownAndExit"]);
   function visit(node: ts.Node): void {
     if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) &&
         node.expression.expression.getText(ast) === "app.on" &&
@@ -37,7 +37,9 @@ function shutdownHarness() {
   const on = (_event: string, listener: typeof beforeQuit) => { beforeQuit = listener; };
   const exit = vi.fn();
   const endSession = vi.fn();
+  const recordLifecycle = vi.fn(async (_event: unknown) => undefined);
   const sandbox = {
+    updater: { recordLifecycle },
     options: { beforeShutdown }, desktop: { close }, app: { quit, on }, process: { exit },
     updateScheduler: { stop: vi.fn() }, disposeMenu: vi.fn(), removeDiagnosticsIpc: vi.fn(),
     endDesktopSessionCleanly: endSession, sessionStatePath: "test-session", console: { info: vi.fn(), error: vi.fn() },
@@ -46,11 +48,11 @@ function shutdownHarness() {
   const api = runInNewContext(`${code}\n({ shutdown, shutdownAndExit })`, sandbox) as {
     shutdown(): Promise<void>; shutdownAndExit(): void;
   };
-  return { ...api, beforeShutdown, close, quit, exit, endSession, finishCleanup, beforeQuit };
+  return { ...api, beforeShutdown, close, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle };
 }
 
 async function flushPromises() {
-  for (let i = 0; i < 12; i++) await Promise.resolve();
+  for (let i = 0; i < 24; i++) await Promise.resolve();
 }
 
 describe("desktop shutdown", () => {
@@ -98,5 +100,17 @@ describe("desktop shutdown", () => {
     expect(finished).toHaveBeenCalledTimes(1);
     expect(h.beforeShutdown).toHaveBeenCalledTimes(1);
     expect(h.endSession).toHaveBeenCalledTimes(1);
+    expect(h.recordLifecycle.mock.calls.map(([event]) => event)).toEqual([
+      { stage: "shutdown_started", outcome: "started" },
+      { stage: "shutdown_completed", outcome: "completed", repeated_quit_count: 1, duration_ms: expect.any(Number) },
+    ]);
+  });
+
+  it("records caught cleanup failures without preventing the existing exit behavior", async () => {
+    const h = shutdownHarness();
+    h.beforeShutdown.mockRejectedValueOnce(new Error("cleanup failed"));
+    await h.shutdown();
+    expect(h.recordLifecycle).toHaveBeenLastCalledWith(expect.objectContaining({ stage: "shutdown_completed", outcome: "failed" }));
+    expect(h.quit).toHaveBeenCalledTimes(1);
   });
 });

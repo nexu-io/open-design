@@ -22,6 +22,7 @@ import {
   type SidecarStamp,
 } from "@open-design/sidecar";
 import {
+  recordIncomingUpdateLifecycle,
   applyLoopbackConnectionLimitSwitch,
   applyOsLocaleSwitch,
   createSplashWindow,
@@ -181,7 +182,13 @@ async function main(): Promise<void> {
   // An updater successor must outlive its predecessor before discovering or
   // bootstrapping a desktop in the same namespace. Otherwise it can focus
   // the quitting predecessor and exit as an ordinary duplicate launch.
-  if (!headlessRequest.headless && !await waitForLauncherAfterQuit(afterQuit, initialPaths)) {
+  const incomingObservation = { root: initialPaths.installerObservationRoot, namespace,
+    channel: launchStamp.channel, version: namespaceConfig.appVersion };
+  if (!headlessRequest.headless && afterQuit != null) {
+    await recordIncomingUpdateLifecycle(incomingObservation, { stage: "predecessor_wait_started", outcome: "started" });
+  }
+  if (!headlessRequest.headless && !await waitForLauncherAfterQuit(afterQuit, initialPaths, console, {},
+    afterQuit == null ? undefined : (event) => recordIncomingUpdateLifecycle(incomingObservation, event))) {
     app.exit(1);
     return;
   }
@@ -394,11 +401,11 @@ async function main(): Promise<void> {
         const started = await runDesktopMain(runtime, {
     splashWindow: splash.window,
     splashStartedAt: splash.startedAt,
-    async beforeShutdown() {
+    async beforeShutdown(record) {
       try {
         await retireObsoleteInstalledOuter();
       } finally {
-        await sidecars.close();
+        await sidecars.close(record);
       }
     },
     async discoverWebUrl() {
