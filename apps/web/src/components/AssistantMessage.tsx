@@ -2943,8 +2943,8 @@ function ProseBlock({
     () => chatFileLinkClickHandler(onRequestOpenFile, projectFileNames, projectId, projectResolvedDir),
     [onRequestOpenFile, projectFileNames, projectId, projectResolvedDir],
   );
-  // Each text segment is further split on `<od-card>` blocks (so memory cards
-  // render inline, composing with the surrounding question-form handling).
+  // The question-form scanner preserves card/code spans as opaque text. Decode
+  // those complete cards here so payload-owned forms never become renderables.
   // Use the shell's code-aware boundary so quoted card examples stay Markdown,
   // including retired card types whose real payloads no longer render.
   // Reminder-owned payloads have already been removed before protocol splitting.
