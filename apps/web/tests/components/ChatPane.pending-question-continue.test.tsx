@@ -153,3 +153,22 @@ describe('OPEND-2709: inherited unfinished work while a question is pending', ()
     expect(onContinueRemainingTasks).not.toHaveBeenCalled();
   });
 });
+
+it('keeps canceled unfinished work recoverable when a truncated question form has no answerable control', () => {
+  const truncatedForm = '<question-form id="audience-brief" title="Audience brief">\n'
+    + '{"questions":[{"id":"audience","label":"Who is this page for?","type":"text"';
+  const latestMessage = assistant('assistant-latest', truncatedForm, 'canceled');
+  const { latest, onContinueRemainingTasks, onSubmitQuestionForm } = showConversation(
+    conversationWithEarlierTodo(latestMessage),
+  );
+
+  // The user stopped before a complete form arrived. The terminal prose has
+  // no form to submit, so it must not remove the existing recovery action.
+  expect(within(latest).queryByRole('textbox')).toBeNull();
+  fireEvent.click(within(latest).getByTestId('assistant-continue-remaining'));
+  expect(onContinueRemainingTasks).toHaveBeenCalledTimes(1);
+  expect(onContinueRemainingTasks).toHaveBeenCalledWith(latestMessage, [
+    { ...remainingTodo, activeForm: undefined },
+  ]);
+  expect(onSubmitQuestionForm).not.toHaveBeenCalled();
+});

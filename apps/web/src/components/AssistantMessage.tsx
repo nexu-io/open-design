@@ -1310,20 +1310,24 @@ function AssistantMessageImpl({
   // path), the turn is mid-handshake, not settled. Suppressed direction forms
   // render as a locked pill the user cannot answer, so they don't hold the
   // card back.
-  const hasPendingQuestionForm = useMemo(() => {
-    if (hasUnterminatedQuestionForm(message.content)) return true;
-    return splitOnQuestionForms(message.content).some(
+  const { hasPendingQuestionForm, hasPendingCompleteQuestionForm } = useMemo(() => {
+    const hasPendingCompleteQuestionForm = splitOnQuestionForms(message.content).some(
       (seg) =>
         seg.kind === "form" &&
         !(suppressDirectionForms && isDirectionForm(seg.form)) &&
         (!nextUserContent || !parseSubmittedAnswers(seg.form, nextUserContent)),
     );
+    return {
+      hasPendingCompleteQuestionForm,
+      hasPendingQuestionForm:
+        hasPendingCompleteQuestionForm || hasUnterminatedQuestionForm(message.content),
+    };
   }, [message.content, nextUserContent, suppressDirectionForms]);
   // Continuing unfinished work belongs to the current turn, and must wait
-  // until its pending clarification is answered, including when the Todo
-  // snapshot was inherited from an earlier turn.
+  // for a complete pending form, including when the Todo snapshot was inherited.
+  // A terminal truncated form has no answer control; keep its recovery action.
   const continueRemaining =
-    isLast && !hasPendingQuestionForm && onContinueRemainingTasks && continuableTodos.length > 0
+    isLast && !hasPendingCompleteQuestionForm && onContinueRemainingTasks && continuableTodos.length > 0
       ? () => onContinueRemainingTasks(continuableTodos)
       : undefined;
   /**
