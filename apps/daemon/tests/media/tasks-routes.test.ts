@@ -410,6 +410,59 @@ describe('media task route recovery', () => {
     expect(authorityRequests).toBe(startupAuthorityRequests);
   });
 
+  it.each([
+    ['treats a forwarded foreign Basic credential as a proxy-authenticated browser request',
+     `Basic ${Buffer.from('proxy-user:proxy-pass').toString('base64')}`, 200],
+    ['still routes foreign Bearer credentials to the run-scoped tool-token lane',
+     'Bearer forged-tool-token', 401],
+  ] as const)('%s', async (_label, authorization, expected) => {
+    // Given: a running task that a header-free browser request can already read.
+    const dataDir = process.env.OD_DATA_DIR;
+    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const taskId = `task_${randomUUID()}`;
+    const now = Date.now() - 5_000;
+
+    insertProject(db, {
+      id: projectId,
+      name: 'Proxy-authenticated media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertMediaTask(db, {
+      id: taskId,
+      projectId,
+      status: 'running',
+      surface: 'video',
+      model: 'seedance-2',
+      progress: ['provider task accepted'],
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+
+    // When: the credential reaches the dual-lane wait route.
+    const response = await fetch(`${started.url}/api/media/tasks/${encodeURIComponent(taskId)}/wait`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization },
+      body: JSON.stringify({ since: 0, timeoutMs: 0 }),
+    });
+    const body = await response.text();
+
+    // Then: only Bearer claims the tool-token lane. A proxy's Basic header
+    // stays on project authorization like a header-free browser request,
+    // while a foreign Bearer token still fails closed in the registry.
+    expect(response.status, body).toBe(expected);
+    if (expected === 401) {
+      expect(JSON.parse(body)).toMatchObject({ error: { code: 'TOOL_TOKEN_INVALID' } });
+    }
+  });
+
   it('recovers a pre-restart running task so wait returns interrupted instead of 404', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
