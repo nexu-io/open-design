@@ -338,6 +338,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             apiVersion:
               typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
             ...(awsProfile ? { awsProfile } : {}),
+            ...(awsProfile && body.awsSsoLogin === true ? { awsSsoLogin: true } : {}),
             signal: controller.signal,
           });
           return res.json(result);

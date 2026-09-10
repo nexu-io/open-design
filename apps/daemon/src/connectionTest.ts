@@ -404,7 +404,7 @@ export async function assertAndFetchExternalAsset(
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 // Bedrock AWS-profile tests may have to wait for a human to finish a browser
 // SSO sign-in, which does not fit the HTTP provider budget. The extra budget
-// is added on top of the provider timeout for that mode only; the CLI steps
+// is added only when the user explicitly requested the sign-in; the CLI steps
 // inside it each carry their own shorter bound.
 const SSO_LOGIN_BUDGET_MS = 120_000;
 const LOOPBACK_NO_PROXY_TOKENS = ['localhost', '127.0.0.1', '[::1]'] as const;
@@ -1657,15 +1657,17 @@ export async function testProviderConnection(
     : '';
   if (normalizedInput.protocol === 'bedrock' && awsProfile) {
     // Credential-chain mode has no bearer to send: the AWS CLI resolves the
-    // profile (and drives the browser SSO login when the token expired) and
-    // runs the smoke prompt with SigV4 on our behalf.
+    // profile and runs the smoke prompt with SigV4 on our behalf. The browser
+    // SSO sign-in only runs when the user explicitly asked for it.
+    const ssoLogin = normalizedInput.awsSsoLogin === true;
     return testBedrockProfileConnection({
       profile: awsProfile,
       region: resolveBedrockRegion(normalizedInput.baseUrl),
       model,
       baseUrl: normalizedInput.baseUrl,
+      ssoLogin,
       signal: input.signal,
-      timeoutMs: providerTimeoutMs() + SSO_LOGIN_BUDGET_MS,
+      timeoutMs: providerTimeoutMs() + (ssoLogin ? SSO_LOGIN_BUDGET_MS : 0),
     });
   }
 

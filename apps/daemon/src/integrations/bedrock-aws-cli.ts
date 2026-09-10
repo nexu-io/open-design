@@ -7,9 +7,10 @@
 //
 // Three steps, each with its own bounded child process:
 //   1. `aws sts get-caller-identity` proves the profile resolves. An expired
-//      SSO token is the one failure with a recovery we can drive: spawn
+//      or missing SSO session is reported as `agent_auth_required`; only when
+//      the user explicitly asked to sign in (`ssoLogin`) does the test spawn
 //      `aws sso login --profile <p>`, which opens the browser, wait for it
-//      within the test budget, then retry.
+//      within the budget, then retry.
 //   2. `aws bedrock-runtime converse` runs the same one-line smoke prompt the
 //      HTTP providers get, against the same inference id the run will use.
 //   3. Classify the CLI's stderr into the shared `ConnectionTestKind` set.
@@ -44,6 +45,12 @@ export interface BedrockProfileConnectionInput {
   model: string;
   /** Runtime endpoint; forwarded as `--endpoint-url` when it is not the regional default. */
   baseUrl: string;
+  /**
+   * The user explicitly asked to sign in. Only then may the test spawn
+   * `aws sso login` (browser flow); otherwise an expired or missing SSO
+   * session is reported as `agent_auth_required` and nothing is launched.
+   */
+  ssoLogin?: boolean | undefined;
   signal?: AbortSignal | undefined;
   /** Wall-clock budget for the whole test, login included. */
   timeoutMs: number;
@@ -229,6 +236,14 @@ export async function testBedrockProfileConnection(
     return fail('agent_spawn_failed', identity.spawnError.message);
   }
   if (identity.code !== 0 && isSsoTokenExpiredError(identity.stderr)) {
+    if (!input.ssoLogin) {
+      // Never open a browser from a routine test: report the state and let
+      // the user trigger the sign-in explicitly.
+      return fail(
+        'agent_auth_required',
+        `The AWS SSO session for profile "${profile}" is missing or has expired. Use "Sign in with AWS SSO", then test again.`,
+      );
+    }
     // Browser sign-in. `aws sso login` blocks until the device flow completes
     // or the user closes the browser tab, so its exit is the signal to retry.
     const loginBudget = Math.min(SSO_LOGIN_TIMEOUT_MS, remaining());

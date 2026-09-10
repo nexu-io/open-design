@@ -83,7 +83,23 @@ describe('testBedrockProfileConnection', () => {
     expect(calls[1]).not.toContain('--endpoint-url');
   });
 
-  it('opens the browser SSO login when the token expired, then retries and succeeds', async () => {
+  it('reports an expired SSO session without launching a browser when no sign-in was requested', async () => {
+    const { run, calls } = scriptedRunner([
+      () => fail('Error when retrieving token from sso: Token has expired and refresh failed'),
+    ]);
+
+    const result = await testBedrockProfileConnection(baseInput, {
+      resolveAwsCli: () => '/usr/local/bin/aws',
+      runCli: run,
+    });
+
+    expect(result).toMatchObject({ ok: false, kind: 'agent_auth_required' });
+    expect(result.detail).toContain('Sign in with AWS SSO');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toContain('sso');
+  });
+
+  it('opens the browser SSO login when the user asked to sign in, then retries and succeeds', async () => {
     const { run, calls } = scriptedRunner([
       () => fail('Error when retrieving token from sso: Token has expired and refresh failed'),
       (args) => {
@@ -94,7 +110,7 @@ describe('testBedrockProfileConnection', () => {
       () => ok(CONVERSE),
     ]);
 
-    const result = await testBedrockProfileConnection(baseInput, {
+    const result = await testBedrockProfileConnection({ ...baseInput, ssoLogin: true }, {
       resolveAwsCli: () => '/usr/local/bin/aws',
       runCli: run,
     });
@@ -114,7 +130,7 @@ describe('testBedrockProfileConnection', () => {
       () => ({ code: null, signal: null, stdout: '', stderr: '', timedOut: true }),
     ]);
 
-    const result = await testBedrockProfileConnection(baseInput, {
+    const result = await testBedrockProfileConnection({ ...baseInput, ssoLogin: true }, {
       resolveAwsCli: () => '/usr/local/bin/aws',
       runCli: run,
     });
