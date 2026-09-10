@@ -58,6 +58,38 @@ function payloadDownloadedStatus(overrides: Partial<OpenDesignHostUpdaterStatusS
   });
 }
 
+function installerOpenedStatus(): OpenDesignHostUpdaterStatusSnapshot {
+  return downloadedStatus({
+    installResult: {
+      dryRun: true,
+      openedAt: '2026-05-19T00:00:00.000Z',
+      path: '/tmp/open-design-updater/Open Design Beta.dmg',
+    },
+  });
+}
+
+// Preflight denials arrive as a successful install whose status carries the
+// desktop preflight error (see apps/desktop/src/main/update-preflight.ts).
+function blockedStatus(activeRunCount = 2): OpenDesignHostUpdaterStatusSnapshot {
+  return downloadedStatus({
+    error: {
+      code: 'active-runs-blocked',
+      details: { activeRunCount },
+      message: `OpenDesign is still working on ${activeRunCount} active tasks.`,
+    },
+  });
+}
+
+function unknownStatus(): OpenDesignHostUpdaterStatusSnapshot {
+  return downloadedStatus({
+    error: {
+      code: 'active-runs-unknown',
+      details: { activeRunCount: null },
+      message: 'OpenDesign could not confirm whether tasks are still running.',
+    },
+  });
+}
+
 describe('UpdaterPopup', () => {
   let restoreHost: (() => void) | null = null;
 
@@ -601,5 +633,185 @@ describe('UpdaterPopup', () => {
 
     expect(await screen.findByTestId('entry-nav-updater')).toBeTruthy();
     expect(screen.queryByTestId('updater-popup')).toBeNull();
+  });
+
+  it('requires an explicit Restart anyway override when active runs block the restart', async () => {
+    const install = vi.fn()
+      .mockResolvedValueOnce(blockedStatus())
+      .mockResolvedValueOnce(installerOpenedStatus());
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    const warning = await screen.findByRole('dialog', { name: 'OpenDesign is still working' });
+    expect(warning.textContent).toContain('2 active tasks are still running');
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(install).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } });
+    expect(quit).not.toHaveBeenCalled();
+    // The denial swaps the normal install action for the override set, so the
+    // user cannot loop through the same doomed non-forced install button.
+    expect(screen.queryByTestId('updater-install-button')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Restart anyway' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restart anyway' }));
+    await waitFor(() => expect(install).toHaveBeenNthCalledWith(2, { payload: { force: true, source: 'updater-prompt' } }));
+    await waitFor(() => expect(quit).toHaveBeenCalledWith({ payload: { force: true, source: 'updater-prompt' } }));
+    expect(quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a non-forced Try again retry when the restart preflight is unknown', async () => {
+    const install = vi.fn()
+      .mockResolvedValueOnce(unknownStatus())
+      .mockResolvedValueOnce(installerOpenedStatus());
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    const warning = await screen.findByRole('dialog', { name: 'OpenDesign is still working' });
+    expect(warning.textContent).toContain('could not confirm whether tasks are still running');
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restart anyway' })).toBeTruthy();
+    expect(quit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(install).toHaveBeenNthCalledWith(2, { payload: { source: 'updater-prompt' } }));
+    await waitFor(() => expect(quit).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } }));
+  });
+
+  it('stays in the unknown warning across repeated retries without forcing or looping', async () => {
+    const install = vi.fn(async () => unknownStatus());
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    await screen.findByRole('dialog', { name: 'OpenDesign is still working' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(install).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('dialog', { name: 'OpenDesign is still working' })).toBeTruthy();
+    expect(install).toHaveBeenNthCalledWith(2, { payload: { source: 'updater-prompt' } });
+    expect(quit).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restart anyway' })).toBeTruthy();
+  });
+
+  it('keeps Later safe from blocked and unknown denials without installer side effects', async () => {
+    const install = vi.fn()
+      .mockResolvedValueOnce(blockedStatus())
+      .mockResolvedValueOnce(unknownStatus());
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    await screen.findByRole('dialog', { name: 'OpenDesign is still working' });
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+    expect(screen.queryByTestId('updater-popup')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    const unknownWarning = await screen.findByRole('dialog', { name: 'OpenDesign is still working' });
+    expect(unknownWarning.textContent).toContain('could not confirm whether tasks are still running');
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+    expect(screen.queryByTestId('updater-popup')).toBeNull();
+
+    expect(install).toHaveBeenCalledTimes(2);
+    expect(quit).not.toHaveBeenCalled();
+  });
+
+  it('focuses the safe Later action, never Restart anyway, on a denial', async () => {
+    const install = vi.fn(async () => blockedStatus());
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    await screen.findByRole('dialog', { name: 'OpenDesign is still working' });
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Later' }));
+  });
+
+  it('offers a forced quit override when the quit handoff is denied for active runs', async () => {
+    const install = vi.fn(async () => installerOpenedStatus());
+    const quit = vi.fn()
+      .mockResolvedValueOnce({ ok: false as const, reason: 'active-runs-blocked', details: { activeRunCount: 1 } })
+      .mockResolvedValueOnce({ ok: true as const });
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    expect(await screen.findByRole('dialog', { name: 'Could not quit' })).toBeTruthy();
+    expect(quit).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } });
+    expect(screen.getByRole('button', { name: 'Restart anyway' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restart anyway' }));
+    await waitFor(() => expect(quit).toHaveBeenNthCalledWith(2, { payload: { force: true, source: 'updater-prompt' } }));
+    expect(install).toHaveBeenCalledTimes(1);
   });
 });
