@@ -76,7 +76,7 @@ describe('explicitly hidden extra ChatPanel interfaces', () => {
     const text = `${BEFORE}\nUse More > Download Page to capture the brand page.\n${AFTER}`;
     const { container } = render(ui(message(text, false), false, {
       nextStepVariant: 'brand-extraction-incomplete',
-      projectMetadata: { brandId: 'brand-1', brandSourceUrl: 'https://brand.test/' },
+      projectMetadata: { kind: 'brand', brandId: 'brand-1', brandSourceUrl: 'https://brand.test/' },
       onBrandBrowserAssistConfirm: onConfirm,
     }));
     expectNeighbors(container);
