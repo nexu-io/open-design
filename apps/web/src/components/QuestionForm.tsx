@@ -4,6 +4,7 @@ import { Fragment,
   useContext,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1250,6 +1251,31 @@ function SelectChoice({
           .map((group) => group.label ?? ''),
       ),
   );
+  const expandedGroupRef = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    const group = expandedGroupRef.current;
+    expandedGroupRef.current = null;
+    const log = group?.closest<HTMLElement>('.chat-log');
+    const list = group?.querySelector<HTMLElement>('.qf-select-more-list');
+    if (!group || !log || !list || list.hidden) return;
+
+    // More options is an inline disclosure. ChatPane releases bottom-follow
+    // on its toggle, so reveal this group explicitly without moving other
+    // scroll containers or changing the user's subsequent wheel behavior.
+    const logRect = log.getBoundingClientRect();
+    const top = Math.max(0, logRect.top + log.clientTop);
+    const bottom = Math.min(window.innerHeight, logRect.top + log.clientTop + log.clientHeight);
+    if (bottom <= top) return;
+    list.style.removeProperty('--qf-select-viewport-height');
+    const headerHeight = group.getBoundingClientRect().height - list.getBoundingClientRect().height;
+    list.style.setProperty('--qf-select-viewport-height', `${Math.max(0, bottom - top - headerHeight)}px`);
+    const rect = group.getBoundingClientRect();
+    const delta = rect.bottom > bottom
+      ? rect.bottom - bottom
+      : rect.top < top ? rect.top - top : 0;
+    if (delta !== 0) log.scrollTop += delta;
+  }, [openGroups]);
 
   const renderOption = (option: FormOption) => (
     <button
@@ -1292,14 +1318,15 @@ function SelectChoice({
               className="qf-select-more-toggle"
               aria-expanded={open}
               aria-controls={listId}
-              onClick={() =>
+              onClick={(event) => {
+                expandedGroupRef.current = open ? null : event.currentTarget.parentElement;
                 setOpenGroups((prev) => {
                   const next = new Set(prev);
                   if (next.has(key)) next.delete(key);
                   else next.add(key);
                   return next;
-                })
-              }
+                });
+              }}
             >
               {/*
                 开关的字是 **host 文案**「更多选项」,不是模型给的组名。
