@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { userInfo } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { tryAcquireKernelLease, type KernelLease } from "@open-design/platform";
 
@@ -11,11 +9,7 @@ import { tryAcquireKernelLease, type KernelLease } from "@open-design/platform";
 export async function acquireElectronSessionLease(runtimeRoot: string): Promise<KernelLease> {
   if (!isAbsolute(runtimeRoot) || resolve(runtimeRoot) !== runtimeRoot) throw new Error("Electron session root must be absolute and normalized");
   const canonicalRoot = await realpath(runtimeRoot);
-  const digest = createHash("sha256").update(`electron-session-v1\n${userInfo().username}\n${canonicalRoot}`).digest();
-  const endpoint = process.platform === "win32"
-    ? `\\\\.\\pipe\\electron-session-${digest.toString("hex")}`
-    : { host: "127.0.0.1" as const, port: 49_152 + digest.readUInt16BE(0) % 16_384 };
-  const lease = await tryAcquireKernelLease(endpoint);
+  const lease = await tryAcquireKernelLease({ domain: "electron.session", key: canonicalRoot });
   if (lease == null) throw new Error("Electron session is owned by another process or explicit recovery; retry only after its owner exits");
   return lease;
 }

@@ -95,3 +95,15 @@ with native CDP discovery rather than defining a separate debug protocol.
 macOS Dock presentation controls only the current process. User “Keep in Dock”
 state belongs to macOS and resolves through stable bundle identity. Linux has
 only its symmetric declaration in this PR and no distribution delivery.
+
+Carrier 0.3.0 introduces kernel lease v2 across carrier, Capsule, Standalone and
+Sidecar. This is an offline namespace cutover: stop every old Electron/Terminal
+client and shared host, update the relevant installations, then start the new
+runtime. Old binaries must not be relaunched into that namespace. Never claim
+rolling old/new lock interoperability; taking the new lease cannot fence an old
+TCP owner. New Capsule manifests must require carrier 0.3.0 or later, routing old
+installations through physical installation, not Capsule-only activation.
+Terminal installation remains manual. Release objects already published remain
+immutable; no marker in new local state can retroactively teach old code this
+coordination protocol. Migration preconditions must be verified explicitly in
+the installed acceptance run before admitting normal shared-namespace startup.

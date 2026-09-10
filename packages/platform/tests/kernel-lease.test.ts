@@ -1,18 +1,10 @@
-import { createServer } from "node:net";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { tryAcquireKernelLease } from "../src/index.js";
 
 async function endpoint() {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen({ host: "127.0.0.1", port: 0 }, resolve);
-  });
-  const address = server.address();
-  if (address == null || typeof address === "string") throw new Error("missing fixture port");
-  await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-  return { host: "127.0.0.1" as const, port: address.port };
+  return { domain: "test.kernel", key: randomUUID() };
 }
 
 describe("kernel lease", () => {
@@ -35,19 +27,22 @@ describe("kernel lease", () => {
     finally { await second?.release(); await first?.release(); }
   });
 
-  it("rejects nonexclusive ephemeral ports and nonloopback endpoints", async () => {
-    await expect(tryAcquireKernelLease({ host: "127.0.0.1", port: 0 })).rejects.toThrow(/endpoint/u);
-    await expect(tryAcquireKernelLease({ host: "0.0.0.0" as never, port: 12345 })).rejects.toThrow(/endpoint/u);
-    await expect(tryAcquireKernelLease("/tmp/not-a-kernel-lease.sock")).rejects.toThrow(/endpoint/u);
+  it("rejects transport addresses and malformed logical identities", async () => {
+    await expect(tryAcquireKernelLease({ host: "127.0.0.1", port: 1 } as never)).rejects.toThrow(/identity/u);
+    await expect(tryAcquireKernelLease({ domain: "../escape", key: "a" })).rejects.toThrow(/identity/u);
+    await expect(tryAcquireKernelLease({ domain: "test", key: "" })).rejects.toThrow(/identity/u);
   });
 
   it("releases ownership on real process death without stale-file cleanup", async () => {
     const address = await endpoint();
     const module = new URL("../src/kernel-lease.ts", import.meta.url).href;
-    const child = spawn(process.execPath, ["--input-type=module", "-e", `
+    const child = spawn(process.execPath, ["--expose-gc", "--input-type=module", "-e", `
       import { tryAcquireKernelLease } from ${JSON.stringify(module)};
-      const lease = await tryAcquireKernelLease(${JSON.stringify(address)});
-      if (!lease) throw new Error("fixture endpoint busy");
+      await (async () => {
+        if (!await tryAcquireKernelLease(${JSON.stringify(address)})) throw new Error("fixture endpoint busy");
+      })();
+      globalThis.gc();
+      process.on("message", () => {}); // Keep the real owner alive, independently of the lease backend.
       process.send("owned");
     `], { stdio: ["ignore", "ignore", "pipe", "ipc"] });
     let errors = "";

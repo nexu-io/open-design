@@ -73,5 +73,5 @@ export { waitForHttpOk } from "./http.js";
 export type { WellKnownUserToolchainOptions } from "./toolchain.js";
 export { wellKnownUserToolchainBins } from "./toolchain.js";
 
-export type { KernelLease, KernelLeaseEndpoint } from "./kernel-lease.js";
+export type { KernelLease, KernelLeaseIdentity } from "./kernel-lease.js";
 export { tryAcquireKernelLease } from "./kernel-lease.js";

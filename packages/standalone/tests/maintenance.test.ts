@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
+import { mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { withStandaloneTransaction } from "@/transaction.js";
@@ -15,6 +16,7 @@ it.each(["maintenance", "generation-state"] as const)("reacquires %s immediately
       import { withStandaloneMaintenanceLock } from ${JSON.stringify(module)};
       import { withStandaloneTransaction } from ${JSON.stringify(transaction)};
       const operation = async () => {
+        process.on("message", () => {});
         process.send("owned");
         await new Promise(() => {});
       };
@@ -48,6 +50,26 @@ it.each(["maintenance", "generation-state"] as const)("reacquires %s immediately
     await Promise.all(children.map(({ exited }) => exited));
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("keeps distinct stores independent even when their former TCP ports collide", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "standalone-collision-")));
+  try {
+    const seen = new Map<number, string>();
+    let pair: [string, string] | undefined;
+    for (let index = 0; index <= 16_384; index++) {
+      const candidate = join(root, `store-${index}`);
+      const digest = createHash("sha256").update(`standalone-transaction-v1\n${userInfo().username}\nmaintenance\n${candidate}`).digest();
+      const port = 49_152 + digest.readUInt16BE(0) % 16_384;
+      const previous = seen.get(port);
+      if (previous != null) { pair = [previous, candidate]; break; }
+      seen.set(port, candidate);
+    }
+    expect(pair).toBeDefined();
+    await withStandaloneTransaction(pair![0], "maintenance", async () => {
+      await expect(withStandaloneTransaction(pair![1], "maintenance", async () => "independent", 0)).resolves.toBe("independent");
+    }, 0);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 it("canonicalizes aliases, keeps transaction purposes independent and releases failed operations", async () => {

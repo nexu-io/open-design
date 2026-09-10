@@ -24,6 +24,9 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
   Platform kernel ownership. Bound acquisition waits, never owner lifetimes;
   do not resurrect TTL/heartbeat lock stealing or stale-file deletion. Process
   death releases coordination only, not activation or recovery evidence.
+  Pass canonical root and transaction purpose as logical lease identity; do not
+  derive transport endpoints. Kernel lease v2 requires stopped-client migration
+  from the former TCP leases, not rolling coexistence in one namespace.
 - Address immutable blobs by SHA-256 and fail closed on size or digest mismatch.
 - Keep generation preparation separate from activation and successful-start acknowledgement.
 - Explicit `recoverGeneration` authenticates and materializes a pinned signed

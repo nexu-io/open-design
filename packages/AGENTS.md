@@ -34,6 +34,12 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - Do not let app packages depend directly on sidecar control-plane details.
 - Do not hard-code OpenDesign app/source/mode constants in `sidecar` or `platform`.
 - Keep stamp fields limited to five: `channel`, `namespace`, `source`, `mode`, and `app`. IPC is private implementation detail and is never a stamp field.
+- Kernel leases expose only opaque domain/key identities. Platform owns the
+  user-scoped backend: macOS stable private file anchors with descriptor-held
+  exclusive locks; Windows exclusive named pipes. Linux has no v2 backend in
+  this delivery. Never unlink/replace live-capable anchors or treat their presence
+  as ownership. Sidecar acquires per-resource leases so intersecting sets exclude
+  each other, releasing all partial acquisitions before retrying.
 
 ## Common package commands
 

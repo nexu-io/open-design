@@ -25,6 +25,16 @@ function deferred(): Readonly<{ promise: Promise<void>; resolve(): void }> {
 }
 
 describe("Sidecar lifecycle resource-set lock", () => {
+  it("excludes intersecting sets and releases partial acquisition on failure", async () => {
+    await withSidecarLifecycleLock([secondStamp], async () => {
+      const operation = vi.fn();
+      await expect(withSidecarLifecycleLock([firstStamp, secondStamp], operation, { timeoutMs: 1 }))
+        .rejects.toThrow(/timed out/u);
+      expect(operation).not.toHaveBeenCalled();
+      await expect(withSidecarLifecycleLock([firstStamp], async () => "independent", { timeoutMs: 1 }))
+        .resolves.toBe("independent");
+    });
+  });
   it("serializes the same normalized resource set across concurrent callers", async () => {
     const entered = deferred();
     const release = deferred();
