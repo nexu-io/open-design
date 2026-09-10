@@ -40,6 +40,7 @@ import type {
   TurnBlock,
 } from './contract';
 import { maskChatProtocolPayloads } from '../../artifacts/chat-protocol-context';
+import { createArtifactParser } from '../../artifacts/parser';
 import { readQuestionFormPayloadAt } from '../../artifacts/question-form';
 import { UNKNOWN_ELAPSED_BELOW_MS, diffStat } from './format';
 import {
@@ -163,10 +164,30 @@ function markerSearchViews(events: readonly PersistedAgentEvent[]): Map<Persiste
   let textEvents: Extract<PersistedAgentEvent, { kind: 'text' }>[] = [];
   const flush = () => {
     if (textEvents.length === 0) return;
-    const masked = maskChatProtocolPayloads(
-      textEvents.map((event) => event.text ?? '').join(''),
-      readQuestionFormPayloadAt,
-    );
+    const text = textEvents.map((event) => event.text ?? '').join('');
+    const formStarts = new Set<number>();
+    const maskedPayloads = maskChatProtocolPayloads(text, (input, start) => {
+      const payload = readQuestionFormPayloadAt(input, start);
+      if (payload) formStarts.add(start);
+      return payload;
+    });
+    let masked = maskedPayloads;
+    if (stripKeyedDone(text, runKey, maskedPayloads).doneAt !== null) {
+      // Bound candidates to a complete, quote-aware opener before asking the
+      // real artifact parser, rather than reparsing the whole remaining run.
+      const artifactStarts = new Set<number>();
+      for (const match of maskedPayloads.matchAll(/<artifact\s+(?:"[^"]*"|'[^']*'|[^'">])*>/g)) {
+        const first = createArtifactParser().feed(match[0]).next();
+        if (!first.done && first.value.type === 'artifact:start') artifactStarts.add(match.index);
+      }
+      // A literal opener must not preempt an authenticated boundary. Change
+      // only the search view, before restoring event boundaries; original text
+      // stays intact and forms spanning deltas are validated as one payload.
+      masked = maskedPayloads.replace(/<(?:question-form|artifact)\b/gi, (opener, start: number) =>
+        formStarts.has(start) || artifactStarts.has(start) ? opener : ' '.repeat(opener.length));
+    }
+    // Without an authenticated marker, keep the existing implicit-done path,
+    // including partially streamed forms, and the historical legacy fallback.
     let offset = 0;
     for (const event of textEvents) {
       const length = (event.text ?? '').length;
