@@ -16,6 +16,7 @@ import {
 import { ensureStandaloneBlob, materializeStandaloneBlob, type StandaloneBlobCandidate } from "./blob.js";
 import { StandaloneFeedbackEmitter, type StandaloneFeedbackHandler } from "./feedback.js";
 import { withStandaloneMaintenanceLock } from "./maintenance.js";
+import { preparationQueue } from "./preparation-queue.js";
 import { withStandaloneTransaction } from "./transaction.js";
 import {
   INITIAL_GENERATION_STATE,
@@ -211,26 +212,50 @@ export class StandaloneStore {
     const syncBlobs = new Set(envelope.metadata.resources.map((resource) => resource.blob));
     feedback.emit({ phase: "sync-planning", state: "complete", generationId: id, totalBytes: [...syncBlobs].reduce((total, digest) => total + envelope.metadata.blobs[digest]!.size, 0) });
     const resources: GenerationRecord["resources"] = {};
-    for (const resource of envelope.metadata.resources) {
-      const blob = envelope.metadata.blobs[resource.blob]!;
-      const ensured = await ensureStandaloneBlob(this.root, blob, {
-        candidates: options.candidates?.[blob.sha256],
-        ...(options.fetch == null ? {} : { fetch: options.fetch }),
-        ...(options.signal == null ? {} : { signal: options.signal }),
-        feedback,
-        resourceId: resource.id,
-      });
-      const materialized = await materializeStandaloneBlob(this.root, blob, ensured.path, resource.materialization, { feedback, resourceId: resource.id });
-      resources[resource.id] = {
-        component: resource.component,
-        blobSha256: blob.sha256,
-        entrypoint: materialized.entrypoint,
-        materialization: resource.materialization,
-        mediaType: blob.mediaType,
-        path: materialized.path,
-        size: blob.size,
-        sync: true,
-      };
+    const cancellation = new AbortController();
+    const signal = options.signal == null ? cancellation.signal : AbortSignal.any([options.signal, cancellation.signal]);
+    const download = preparationQueue(4, signal), extract = preparationQueue(2, signal);
+    const blobs = new Map<string, ReturnType<typeof ensureStandaloneBlob>>();
+    const trees = new Map<string, ReturnType<typeof materializeStandaloneBlob>>();
+    const outcomes = await Promise.allSettled(envelope.metadata.resources.map(async resource => {
+      try {
+        const blob = envelope.metadata.blobs[resource.blob]!;
+        let acquisition = blobs.get(blob.sha256);
+        if (acquisition == null) {
+          acquisition = download(() => ensureStandaloneBlob(this.root, blob, {
+            candidates: options.candidates?.[blob.sha256],
+            ...(options.fetch == null ? {} : { fetch: options.fetch }),
+            signal,
+            feedback,
+            resourceId: resource.id,
+          }));
+          blobs.set(blob.sha256, acquisition);
+        }
+        const ensured = await acquisition;
+        const key = canonicalJson({ blob: blob.sha256, materialization: resource.materialization });
+        let tree = trees.get(key);
+        if (tree == null) {
+          tree = extract(() => materializeStandaloneBlob(this.root, blob, ensured.path, resource.materialization, { feedback, resourceId: resource.id }));
+          trees.set(key, tree);
+        }
+        const materialized = await tree;
+        return [resource.id, {
+          component: resource.component,
+          blobSha256: blob.sha256,
+          entrypoint: materialized.entrypoint,
+          materialization: resource.materialization,
+          mediaType: blob.mediaType,
+          path: materialized.path,
+          size: blob.size,
+          sync: true as const,
+        }] as const;
+      } catch (error) { cancellation.abort(error); throw error; }
+    }));
+    signal.throwIfAborted();
+    // Preserve metadata order independently of completion order.
+    for (const outcome of outcomes) {
+      if (outcome.status === "rejected") throw outcome.reason;
+      resources[outcome.value[0]] = outcome.value[1];
     }
     feedback.emit({ phase: "sync-ready", state: "complete", generationId: id });
     const launcherEntry = Object.entries(resources).find(([, resource]) => resource.component === "standalone.launcher");

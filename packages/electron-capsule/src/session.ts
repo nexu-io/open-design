@@ -214,15 +214,14 @@ export async function runElectronCapsule(
     startupPresentation = await context.startupQuit.guard(definition.createStartupPresentation());
     splash = startupPresentation.window;
   }
-  let lastProgressAt = 0;
-  let lastProgressKey = "";
+  const progressTimes = new Map<string, number>();
   let progressMode: ElectronStartupProgress["mode"] = "startup";
   let startupProgressComplete = false;
   const observeProgress = (progress: ElectronStartupProgress) => {
     if (context.startupQuit.cancelled) return;
     const now = Date.now(), key = `${progress.label}:${progress.resourceId ?? ""}`;
-    if (progress.state === "progress" && key === lastProgressKey && now - lastProgressAt < 250) return;
-    lastProgressAt = now; lastProgressKey = key;
+    if (progress.state === "progress" && now - (progressTimes.get(key) ?? -Infinity) < 250) return;
+    progressTimes.set(key, now);
     progressMode = progress.mode ?? progressMode;
     if (!startupProgressComplete) startupPresentation?.setProgress({ ...progress, mode: progressMode });
     context.log?.write(startupProgressComplete ? "updater.progress" : "startup.progress", {

@@ -71,6 +71,27 @@ async function blobOptions(root: string, bytes: Uint8Array) {
   return { candidates: { [digest]: [{ path, source: "seed" as const }] } };
 }
 
+it("downloads independent blobs concurrently and shares duplicate blob acquisition", async () => {
+  const root = await mkdtemp(join(tmpdir(), "standalone-parallel-")); roots.push(root);
+  const keys = generateKeyPairSync("ed25519"), first = Buffer.from("first"), second = Buffer.from("second");
+  const input = metadata(first), digest = sha256Hex(second);
+  input.blobs[digest] = { sha256: digest, size: second.length, mediaType: "text/javascript", sources: [{ kind: "remote", url: "https://fixtures.invalid/second.mjs" }] };
+  input.resources.push({ id: "second", component: "standalone.resource", blob: digest, sync: true, materialization: { type: "file", entrypoint: "second.mjs" } });
+  let arrivals = 0, release!: () => void;
+  const bothStarted = new Promise<void>(resolve => { release = resolve; });
+  const store = new StandaloneStore(root, { channel: "somechan", namespace: "parallel" });
+  const generation = await store.prepare(signStandaloneMetadata(input, "release", keys.privateKey), { release: keys.publicKey }, {
+    fetch: async url => {
+      if (++arrivals === 2) release();
+      await bothStarted;
+      expect((await store.readState()).prepared).toBeNull();
+      return new Response(String(url).endsWith("second.mjs") ? second : first);
+    },
+  });
+  expect(arrivals).toBe(2);
+  expect(Object.keys(generation.resources)).toEqual(input.resources.map(resource => resource.id));
+});
+
 describe("explicit exact generation recovery", () => {
   it("revalidates and rearms the selected generation without claiming it healthy", async () => {
     const root = await mkdtemp(join(tmpdir(), "standalone-exact-recovery-")); roots.push(root);

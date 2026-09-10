@@ -33,21 +33,21 @@ it("creates no window until invoked, then mounts the declared sandboxed presenta
   expect(mock.load).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/^data:text\/html;charset=utf-8,/u));
   presentation.setProgress({ mode: "first-install", label: 'Preparing "exact"', receivedBytes: 1024, totalBytes: 2048 });
   expect(mock.execute).toHaveBeenCalledOnce();
-  expect(mock.execute.mock.calls[0]![0]).toContain('Completing first-time installation');
+  expect(mock.execute.mock.calls[0]![0]).toContain('First-time installation');
   expect(mock.execute.mock.calls[0]![0]).toContain('"ratio":0.5');
   mock.destroyed.mockReturnValue(true);
   presentation.setProgress({ label: "Late stage" });
   expect(mock.execute).toHaveBeenCalledTimes(1);
 });
 
-it("updates elapsed time without inventing a percentage and stops its timer on close", async () => {
+it("only renders observed changes without timers, history or invented percentages", async () => {
   mock.execute.mockResolvedValue(undefined);
   const presentation = await createElectronStartupPresentation(input);
   presentation.setProgress({ label: "Unpacking components", state: "begin" });
   await vi.advanceTimersByTimeAsync(1000);
-  expect(mock.execute.mock.lastCall![0]).toContain('"elapsed":"1s elapsed"');
+  expect(mock.execute).toHaveBeenCalledOnce();
+  expect(mock.execute.mock.lastCall![0]).not.toContain('elapsed');
   expect(mock.execute.mock.lastCall![0]).toContain('"ratio":null');
-  mock.once.mock.calls[0]![1]();
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -56,6 +56,18 @@ it("destroys an uncommitted window when document mounting fails", async () => {
   mock.load.mockRejectedValue(error);
   await expect(createElectronStartupPresentation(input)).rejects.toBe(error);
   expect(mock.destroy).toHaveBeenCalledOnce();
+});
+
+it("aggregates simultaneous downloads without rotating per-resource byte counters", async () => {
+  mock.execute.mockResolvedValue(undefined);
+  const presentation = await createElectronStartupPresentation(input);
+  presentation.setProgress({ resourceId: "a", label: "Downloading components", receivedBytes: 10, totalBytes: 20 });
+  presentation.setProgress({ resourceId: "b", label: "Downloading components", receivedBytes: 20, totalBytes: 40 });
+  expect(mock.execute.mock.lastCall![0]).toContain("Downloading 2 components");
+  expect(mock.execute.mock.lastCall![0]).toContain('"ratio":0.5');
+  presentation.setProgress({ resourceId: "a", label: "Unpacking components", state: "begin" });
+  expect(mock.execute.mock.lastCall![0]).not.toContain("Downloading 2 components");
+  expect(mock.execute.mock.lastCall![0]).toContain("Downloading components");
 });
 
 it("validates media before allocating an interactive window", async () => {

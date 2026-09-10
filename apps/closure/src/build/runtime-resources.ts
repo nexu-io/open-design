@@ -8,6 +8,7 @@ import { build } from "esbuild";
 import { pack } from "@open-design/archive/build";
 import { closureNodeExternals } from "./node-externals.js";
 import { closureRuntimeDependencies as runtimeDependencies } from "./runtime-dependencies.js";
+import { pruneClosureNativeDependencies } from "./native-dependencies.js";
 
 type TreeEntry = Readonly<{ path: string; sha256: string; size: number }>;
 
@@ -102,6 +103,7 @@ export async function buildClosureRuntimeResources(input: Readonly<{ outputDirec
   await Promise.all([mkdir(daemonRoot, { recursive: true }), mkdir(webRoot, { recursive: true })]);
   await writeFile(join(daemonRoot, "package.json"), `${JSON.stringify({ private: true, type: "module", dependencies: runtimeDependencies }, null, 2)}\n`, "utf8");
   await runNpm(daemonRoot, ["install", "--omit=dev", "--no-package-lock"]);
+  await pruneClosureNativeDependencies(daemonRoot);
   await rm(join(daemonRoot, "node_modules", ".bin"), { force: true, recursive: true });
   const daemonBundle = (entrypoint: string, outfile: string) => build({
     entryPoints: [entrypoint],
