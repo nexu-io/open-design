@@ -749,7 +749,11 @@ describe('FileWorkspace design-system project surface', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return new Response(new Blob(['zip']), {
+      // Real ZIP signature: the archive download verifies it now. Note the
+      // body is passed as a string — `new Response(new Blob([...]))` is
+      // stringified to "[object Blob]" in this environment, so the previous
+      // fixture never carried the bytes it appeared to.
+      return new Response('PK\x03\x04zip', {
         status: 200,
         headers: { 'Content-Disposition': 'attachment; filename="acme.zip"' },
       });
