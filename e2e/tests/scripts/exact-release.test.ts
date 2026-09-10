@@ -16,6 +16,30 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["release-exact", "release-prerelease", "release-stable"])("keeps Shell test-only edits out of build identities in %s", async lane => {
+    const result = await run("python3", ["-c", [
+      "import json,sys", "from pathlib import Path", "from unittest.mock import patch",
+      "sys.path.insert(0,sys.argv[1])",
+      "from convergence import ConvergenceContract, GitFingerprinter, calculate",
+      "root=Path(sys.argv[2]); lane=sys.argv[3]",
+      "contract=ConvergenceContract(root/('.github/config/plan/'+lane+'.json'))",
+      "workflow=contract.workflow(lane)",
+      "def compute(): return calculate(contract,root,lane,workflow.execution['runners'])",
+      "before=compute(); original=GitFingerprinter.records",
+      "def changed(path):",
+      " def records(self,token):",
+      "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in original(self,token)]",
+      " with patch.object(GitFingerprinter,'records',records): after=compute()",
+      " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
+      "print(json.dumps({path:changed('shells/electron/'+path) for path in ['tests/main.test.ts','tsconfig.tests.json','src/main.ts']}))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
+    const changed = JSON.parse(result.stdout);
+    expect(changed["tests/main.test.ts"]).toEqual(["validation_shell_darwin_arm64"]);
+    expect(changed["tsconfig.tests.json"]).toEqual(["validation_shell_darwin_arm64"]);
+    expect(changed["src/main.ts"]).toEqual(expect.arrayContaining([
+      "electron_base_darwin_arm64", "electron_capsule_darwin_arm64", "electron_scene_darwin_arm64", "release_tools", "validation_shell_darwin_arm64",
+    ]));
+  });
   it.each(["release-exact", "release-prerelease", "release-stable"])("isolates CLI registration from product recipes in %s", async lane => {
     const result = await run("python3", ["-c", [
       "import json,sys", "from pathlib import Path", "from unittest.mock import patch",
@@ -85,7 +109,7 @@ describe("exact Electron release topology", () => {
       "print(json.dumps(contract.suite_paths(sys.argv[3])))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/plan/release-exact.json"), suite]);
     const inputs: string[] = JSON.parse(result.stdout);
-    const paths = new Set(suite === "electron-scene" ? ["packages/electron-kit/", "shells/electron/", "apps/closure/"]
+    const paths = new Set(suite === "electron-scene" ? ["packages/electron-kit/", "shells/electron/src/", "shells/electron/config/", "shells/electron/resources/", "apps/closure/"]
       : suite === "electron-platform" ? ["shells/electron/config/carriers/node-lock.json", "packages/platform/"]
       : ({ "closure-data-plugins": ["plugins/_official/", "plugins/registry/"], "closure-data-frames": ["assets/frames/"],
         "closure-data-community-pets": ["assets/community-pets/"], "closure-data-plugin-previews": ["data/plugin-previews/"] } as Record<string, string[]>)[suite]

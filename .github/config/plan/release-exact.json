@@ -35,6 +35,19 @@
       ".github/actions/release-data/action.yml",
       ".github/actions/configure-ci-parallelism/action.yml"
     ],
+    "electron-shell-source": [
+      "shells/electron/package.json",
+      "shells/electron/tsconfig.json",
+      "shells/electron/tsconfig.build.json",
+      "shells/electron/src/",
+      "shells/electron/config/",
+      "shells/electron/resources/"
+    ],
+    "electron-shell-tests": [
+      "shells/electron/tests/",
+      "shells/electron/tsconfig.tests.json",
+      "shells/electron/vitest.config.ts"
+    ],
     "electron-platform": [
       ".node-version",
       "package.json",
@@ -88,7 +101,7 @@
       "packages/platform/",
       "packages/sidecar/",
       "packages/standalone/",
-      "shells/electron/",
+      "suite://electron-shell-source",
       "suite://release-executor",
       "tools/release/src/exact/scene-artifact.ts",
       "tools/release/src/exact/resource-artifact.ts",
@@ -186,7 +199,7 @@
       "packages/release/",
       "packages/sidecar/",
       "packages/standalone/",
-      "shells/electron/",
+      "suite://electron-shell-source",
       "tools/release/src/exact/control-common.ts",
       "suite://release-executor",
       "tools/release/src/exact/capsule-artifact.ts",
@@ -203,7 +216,7 @@
       "scripts/postinstall.mjs",
       "packages/",
       "apps/closure/",
-      "shells/electron/",
+      "suite://electron-shell-source",
       "tools/pack/",
       "tools/release/"
     ],
@@ -238,6 +251,7 @@
     ],
     "validation-shell": [
       "suite://validation-control",
+      "suite://electron-shell-tests",
       "suite://electron-capsule",
       "suite://electron-platform"
     ],
