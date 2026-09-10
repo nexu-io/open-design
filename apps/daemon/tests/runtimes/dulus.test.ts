@@ -79,9 +79,16 @@ async function runFakeDulus(
   );
 
   let bin = script;
+  // On Windows we spawn the current node binary directly against the fixture
+  // script. Modern Node (>=18.20/20.12/22, and v26 here) refuses to spawn a
+  // bare `.cmd` without `shell: true` (CVE-2024-27980 mitigation -> spawn
+  // EINVAL), so the old `.cmd` wrapper made this suite unrunnable on Windows.
+  // Spawning node.exe directly keeps the argv contract identical to the POSIX
+  // path below while staying cross-platform.
+  let binArgs: string[] = [];
   if (process.platform === 'win32') {
-    bin = path.join(dir, 'fake-dulus.cmd');
-    writeFileSync(bin, `@echo off\r\n"${process.execPath}" "${script}" %*\r\n`, 'utf8');
+    bin = process.execPath;
+    binArgs = [script];
   } else {
     bin = path.join(dir, 'fake-dulus');
     writeFileSync(
@@ -91,7 +98,7 @@ async function runFakeDulus(
     );
     chmodSync(bin, 0o755);
   }
-  const spawnArgs = dulusAgentDef.buildArgs(prompt, [], [], {});
+  const spawnArgs = [...binArgs, ...dulusAgentDef.buildArgs(prompt, [], [], {})];
 
   const events: { type: string; [key: string]: unknown }[] = [];
   const handler = createJsonEventStreamHandler('opencode', (event) => {
