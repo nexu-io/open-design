@@ -415,6 +415,10 @@ describe('media task route recovery', () => {
      `Basic ${Buffer.from('proxy-user:proxy-pass').toString('base64')}`, 200],
     ['still routes foreign Bearer credentials to the run-scoped tool-token lane',
      'Bearer forged-tool-token', 401],
+    ['fails closed on a malformed Bearer credential with no token',
+     'Bearer ', 401],
+    ['fails closed on a bare Bearer scheme',
+     'Bearer', 401],
   ] as const)('%s', async (_label, authorization, expected) => {
     // Given: a running task that a header-free browser request can already read.
     const dataDir = process.env.OD_DATA_DIR;
@@ -459,7 +463,11 @@ describe('media task route recovery', () => {
     // while a foreign Bearer token still fails closed in the registry.
     expect(response.status, body).toBe(expected);
     if (expected === 401) {
-      expect(JSON.parse(body)).toMatchObject({ error: { code: 'TOOL_TOKEN_INVALID' } });
+      // A forged token is INVALID; a Bearer scheme carrying no token at all is
+      // MISSING. Both must stay on the tool-token lane and fail closed rather
+      // than downgrading to browser project authority.
+      const code = (JSON.parse(body) as { error?: { code?: string } }).error?.code;
+      expect(code).toMatch(/^TOOL_TOKEN_(INVALID|MISSING)$/);
     }
   });
 

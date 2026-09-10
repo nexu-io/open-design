@@ -1162,8 +1162,12 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     // every proxied wait with TOOL_TOKEN_MISSING. Once a Bearer caller does
     // choose the lane, invalid, expired, or under-scoped credentials must not
     // downgrade to project authorization.
+    // Classify the scheme independently of whether a token follows it: a bare
+    // `Bearer` (or `Bearer ` trimmed to it) is still a caller reaching for the
+    // tool-token lane and must keep failing closed with TOOL_TOKEN_MISSING
+    // rather than downgrading to browser project authority.
     const usesToolTokenLane = typeof authorizationHeader === 'string'
-      && /^Bearer\s+/i.test(authorizationHeader.trim());
+      && /^Bearer(?:\s|$)/i.test(authorizationHeader.trim());
     const toolGrant = usesToolTokenLane
       ? authorizeToolRequest(
           req,
