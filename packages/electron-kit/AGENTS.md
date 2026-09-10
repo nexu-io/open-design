@@ -11,6 +11,11 @@ Follow the root and `packages/AGENTS.md` guidance first.
   normalized carrier config, Electron version and target. Callers cannot inject a
   plan/cache identity. Release labels and updatable Capsule/Closure bytes remain
   outside that projection; dev/pack consume the resulting physical manifest.
+- The package's exact Electron peer constraint owns the runtime version.
+  Development must match it; archive acquisition verifies the installed
+  checksum provider has that version. Scene and distribution read the declared
+  contract without requiring an installed Electron binary. A restored base
+  must still pass target, version, carrier and full runtime integrity checks.
 - Normal carrier startup and explicit recovery share the canonical runtime-root
   session lease, acquired before platform/activation/Capsule work. The running
   carrier retains it until process death. Use Platform kernel ownership, not a

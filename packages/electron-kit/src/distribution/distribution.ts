@@ -1,5 +1,4 @@
-import { access, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { access, copyFile, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
@@ -14,6 +13,7 @@ import {
 import { writeElectronWindowsNsisInclude } from "../platform/windows/installer/nsis-include.js";
 import type { ElectronDistributionReceipt, ElectronSceneReceipt } from "./contracts.js";
 import { loadElectronScene } from "./scene.js";
+import { readElectronRuntimeVersion } from "./runtime-version.js";
 import { verifyElectronDistributionBase, type ElectronDistributionBase } from "./base.js";
 import {
   resolveElectronDistributionConfiguration,
@@ -82,10 +82,9 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   const appPath = platform === "mac"
     ? join(input.outputRoot, `mac-${process.arch}`, `${input.manifest.executableName}.app`)
     : join(input.outputRoot, "win-unpacked", `${input.manifest.executableName}.exe`);
-  const require = createRequire(import.meta.url);
-  const electronPackage = JSON.parse(await readFile(require.resolve("electron/package.json"), "utf8")) as { version: string };
+  const electronVersion = await readElectronRuntimeVersion();
   const base = input.base == null ? undefined : await verifyElectronDistributionBase(input.base, {
-    scene, electronVersion: electronPackage.version, target: `${process.platform}-${process.arch}`,
+    scene, electronVersion, target: `${process.platform}-${process.arch}`,
   });
   const scratchRoot = await mkdtemp(join(tmpdir(), "electron-kit-distribution-"));
   const projectRoot = join(scratchRoot, "project");
@@ -123,7 +122,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
         ...resolveElectronDistributionConfiguration({
           manifest: input.manifest,
           policy,
-          electronVersion: electronPackage.version,
+          electronVersion,
           outputRoot: input.outputRoot,
           windowsLifecycle,
           windowsNsisIncludePath,

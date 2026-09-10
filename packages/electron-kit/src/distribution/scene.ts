@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { copyFile, cp, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { createRequire } from "node:module";
 
 import { build as bundle } from "esbuild";
 
@@ -9,6 +8,7 @@ import { validateElectronShellManifest, type ElectronShellManifest } from "../co
 import { validateElectronCapsuleContent, type ElectronCapsuleContent } from "../contracts/capsule.js";
 import { validateElectronCarrierConfig, type ElectronCarrierConfig } from "../runtime/startup/config.js";
 import type { ElectronSceneReceipt } from "./contracts.js";
+import { readElectronRuntimeVersion } from "./runtime-version.js";
 
 export type AssembleElectronSceneInput = Readonly<{
   authorityResources: readonly Readonly<{ name: string; path: string }>[];
@@ -130,7 +130,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   // Product identity binds the neutral carrier, not a workflow/cache key. The
   // manifest itself, release labels, Capsule and Closure are deliberately outside
   // this projection; their own authenticated descriptors bind those bytes.
-  const electronVersion = createRequire(import.meta.url)("electron/package.json").version as string;
+  const electronVersion = await readElectronRuntimeVersion();
   const carrier = await Promise.all(["main.cjs", "renderer-mount-preload.cjs", "carrier.json"]
     .map(name => describeSceneProduct(input.outputRoot, name)));
   const buildHash = createHash("sha256").update(JSON.stringify({

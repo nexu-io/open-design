@@ -6,6 +6,7 @@ import { extract } from "@open-design/archive";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { createRequire } from "node:module";
 import type { ElectronSceneReceipt } from "./contracts.js";
+import { readElectronRuntimeVersion } from "./runtime-version.js";
 
 const carrierFiles = ["main.cjs", "renderer-mount-preload.cjs", "carrier.json"] as const;
 export type ElectronDistributionBase = Readonly<{ root: string; manifestSha256: string }>;
@@ -98,8 +99,9 @@ export async function verifyElectronDistributionBase(base: ElectronDistributionB
 export async function resolveElectronDistributionArchive(target: string) {
   if (!["darwin-arm64", "darwin-x64", "win32-x64"].includes(target)) throw new Error("unsupported Electron archive target");
   const packagePath = createRequire(import.meta.url).resolve("electron/package.json");
-  const { version } = JSON.parse(await readFile(packagePath, "utf8"));
-  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/u.test(version)) throw new Error("invalid pinned Electron version");
+  const installed = JSON.parse(await readFile(packagePath, "utf8"));
+  const version = await readElectronRuntimeVersion();
+  if (installed.version !== version) throw new Error("installed Electron differs from the pinned runtime contract");
   const fileName = `electron-v${version}-${target}.zip`;
   const checksums = JSON.parse(await readFile(join(dirname(packagePath), "checksums.json"), "utf8"));
   const sha256 = checksums[fileName];
