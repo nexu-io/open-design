@@ -5,6 +5,7 @@ import { exactStorageObject } from "@open-design/release";
 import { authorizeReleaseCapability, resolveReleasePolicy } from "../policy/release-profile.ts";
 import { writeObject } from "./control-common.ts";
 import { importSceneArtifact, packSceneArtifact, unpackSceneArtifact, verifySceneArtifact } from "./scene-artifact.ts";
+import { acquireSceneArtifacts } from "./scene-acquisition.ts";
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, inspectAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 import { registerResourceCommands } from "./resource-commands.ts";
@@ -230,6 +231,8 @@ export function registerExactCommands(cli: CAC): void {
   registerResourceCommands(cli);
 
   cli.command("scene <operation>", "Transport or verify a release-neutral scene")
+    .option("--sources <file>", "Complete business scene source set (acquire)")
+    .option("--source-commit <sha>", "Current transport namespace (acquire)")
     .option("--scene <directory>", "Source scene (pack or verify)")
     .option("--archive <file>", "Source archive (unpack)")
     .option("--output <path>", "New archive (pack) or new scene directory (unpack/import)")
@@ -238,6 +241,10 @@ export function registerExactCommands(cli: CAC): void {
     .option("--target <target>", "Expected scene target (verify)")
     .option("--receipt <file>", "Optional receipt; defaults to stdout")
     .action(async (operation: string, options: Options) => {
+      if (operation === "acquire") {
+        await acquireSceneArtifacts({ sources: required(options, "sources"), sourceCommit: required(options, "sourceCommit"), output: required(options, "output") });
+        return;
+      }
       if (operation === "verify") {
         await emit(options, { schemaVersion: 1, operation: "exact.scene.verify",
           ...await verifySceneArtifact(required(options, "scene"), required(options, "target")) }); return;

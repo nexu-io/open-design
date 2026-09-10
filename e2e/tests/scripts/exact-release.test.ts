@@ -16,6 +16,20 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("skips scene and base hit relays in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const scene = workflow.split("\n  scene:")[1]!.split("\n  terminal_scene:")[0]!;
+    const terminal = workflow.split("\n  terminal_scene:")[1]!.split("\n  platform:")[0]!;
+    const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
+    const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
+    expect(scene).toContain("fromJSON(needs.plan.outputs.batch_run).electron_scenes || fromJSON(needs.plan.outputs.batch_run).bases");
+    expect(scene).not.toContain("Restore converged Electron base");
+    expect(terminal).toContain("if: ${{ fromJSON(needs.plan.outputs.batch_run).terminal_scenes }}");
+    expect(prepare).toContain("tools-release scene acquire");
+    expect(prepare).toContain("needs.scene.result == 'skipped'");
+    expect(distribution).toContain("Acquire cached distribution scene directly");
+    expect(distribution).toContain("Acquire cached Electron base directly");
+  });
   it.each(["exact", "stable", "prerelease"])("separates native installation input from CDN payload transport in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
@@ -360,13 +374,15 @@ describe("exact Electron release topology", () => {
     expect(scene).toContain("needs: [tools, plan, capsule, runtime]");
     expect(scene).toContain('--capsule-directory "$RUNNER_TEMP/capsules"');
     expect(scene).not.toContain("capsule_args");
-    for (const command of ["artifact acquire", "build base", "base export"]) expect(scene).toContain(`tools-release ${command}`);
+    for (const command of ["build base", "base export"]) expect(scene).toContain(`tools-release ${command}`);
+    expect(scene).not.toContain("tools-release artifact acquire");
     expect(scene).not.toContain("tools-release base pack");
     expect(scene).toContain("fromJSON(needs.plan.outputs.run)[matrix.base_workload]");
     expect(scene).toContain("path: ${{ runner.temp }}/base-contribution/artifact");
     expect(scene).not.toContain("path: ${{ runner.temp }}/base-contribution/products");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
     expect(distribution).toContain('tools-release base unpack');
+    expect(distribution).toContain('tools-release base import');
     expect(distribution).toContain('--base-directory "$RUNNER_TEMP/base"');
     expect(distribution).toContain("name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}");
   });

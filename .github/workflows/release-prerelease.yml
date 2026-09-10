@@ -357,7 +357,7 @@ jobs:
   scene:
     name: ${{ matrix.shell }} scene (${{ matrix.target }})
     needs: [tools, plan, capsule, runtime]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.capsule.result == 'success' && (needs.runtime.result == 'success' || (needs.runtime.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).runtime)) }}
+    if: ${{ (fromJSON(needs.plan.outputs.batch_run).electron_scenes || fromJSON(needs.plan.outputs.batch_run).bases) && !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.capsule.result == 'success' && (needs.runtime.result == 'success' || (needs.runtime.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).runtime)) }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.electron_matrix) }}
@@ -464,19 +464,6 @@ jobs:
             --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" --capsule-directory "$RUNNER_TEMP/capsules" \
             --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
 
-      - name: Restore converged Electron base
-        if: ${{ matrix.shell == 'electron' && !fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          WORKLOAD: ${{ matrix.base_workload }}
-          ARCHIVE_ZIP_PATH: /usr/bin/zip
-        shell: bash
-        run: |
-          set -euo pipefail
-          tools-release artifact acquire \
-            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/base.json" \
-            --output "$RUNNER_TEMP/base-contribution/artifact"
-
       - name: Build and contribute Electron base
         if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
         env:
@@ -496,7 +483,7 @@ jobs:
             --output "$RUNNER_TEMP/base-contribution"
 
       - uses: actions/upload-artifact@v7.0.1
-        if: ${{ matrix.shell == 'electron' }}
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
         with:
           name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/base-contribution/artifact
@@ -521,6 +508,7 @@ jobs:
             --scene "$RUNNER_TEMP/exact-scene" --output "$RUNNER_TEMP/exact-scene-artifact/scene.tar"
 
       - uses: actions/upload-artifact@v7.0.1
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         with:
           name: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/exact-scene-artifact/scene.tar
@@ -530,6 +518,7 @@ jobs:
   terminal_scene:
     name: ${{ matrix.shell }} scene (${{ matrix.target }})
     needs: [tools, plan]
+    if: ${{ fromJSON(needs.plan.outputs.batch_run).terminal_scenes }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.terminal_matrix) }}
@@ -896,7 +885,7 @@ jobs:
   prepare:
     name: Prepare signed exact content
     needs: [tools, plan, scene, terminal_scene, platform, capsule, data, validation]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.scene.result == 'success' && needs.terminal_scene.result == 'success' && needs.platform.result == 'success' && needs.capsule.result == 'success' && needs.validation.result == 'success' && (needs.data.result == 'success' || (needs.data.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).data)) }}
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && (needs.scene.result == 'success' || (needs.scene.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).electron_scenes && !fromJSON(needs.plan.outputs.batch_run).bases)) && (needs.terminal_scene.result == 'success' || (needs.terminal_scene.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).terminal_scenes)) && needs.platform.result == 'success' && needs.capsule.result == 'success' && needs.validation.result == 'success' && (needs.data.result == 'success' || (needs.data.result == 'skipped' && !fromJSON(needs.plan.outputs.batch_run).data)) }}
     runs-on: ubuntu-24.04
     environment: standalone-prerelease-release
     timeout-minutes: 10
@@ -911,6 +900,7 @@ jobs:
           node-version-file: .node-version
 
       - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.batch_run).scenes }}
         with:
           pattern: exact-*-scene-*-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/scenes
@@ -974,6 +964,14 @@ jobs:
           path: ${{ runner.temp }}/capsules
           merge-multiple: true
 
+      - name: Acquire complete scene inputs
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: >-
+          tools-release scene acquire
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/scenes.json"
+          --source-commit "$SOURCE_SHA" --output "$RUNNER_TEMP/scenes"
+
       - name: Compose and sign content metadata
         env:
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
@@ -1031,6 +1029,7 @@ jobs:
           persist-credentials: false
 
       - uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         with:
           name: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/scene-artifact
@@ -1072,6 +1071,15 @@ jobs:
           cache: ${{ matrix.shell == 'electron' && 'pnpm' || '' }}
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Acquire cached distribution scene directly
+        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          WORKLOAD: ${{ matrix.workload }}
+        run: >-
+          tools-release artifact acquire
+          --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/scene.json"
+          --output "$RUNNER_TEMP/scene-artifact"
+
       - name: Restore distribution scene
         shell: bash
         run: |
@@ -1091,13 +1099,13 @@ jobs:
           pnpm install --frozen-lockfile
 
       - uses: actions/download-artifact@v8
-        if: ${{ matrix.shell == 'electron' }}
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
         with:
           name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/base-transport
 
       - name: Restore distribution base
-        if: ${{ matrix.shell == 'electron' }}
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
         env:
           TARGET: ${{ matrix.target }}
         shell: bash
@@ -1105,6 +1113,16 @@ jobs:
           tools-release base unpack \
             --target "$TARGET" \
             --source "$RUNNER_TEMP/base-transport" --output "$RUNNER_TEMP/base"
+
+      - name: Acquire cached Electron base directly
+        if: ${{ matrix.shell == 'electron' && !fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.base_workload }}
+        run: >-
+          tools-release base import
+          --target "$TARGET" --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/base.json"
+          --output "$RUNNER_TEMP/base"
 
       - name: Build native distribution
         env:

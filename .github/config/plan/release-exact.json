@@ -751,6 +751,9 @@
           ]
         },
         "matrices": {
+          "base_matrix": {
+            "include": [{ "target": "darwin-arm64", "workload": "electron_base_darwin_arm64" }]
+          },
           "shell_matrix": {
             "include": [
               {
@@ -945,6 +948,26 @@
           }
         },
         "batches": {
+          "bases": {
+            "matrix": "base_matrix",
+            "fields": { "target": "target" },
+            "product": "base"
+          },
+          "scenes": {
+            "matrix": "shell_matrix",
+            "fields": { "shell": "shell", "target": "target" },
+            "product": "scene"
+          },
+          "electron_scenes": {
+            "matrix": "electron_matrix",
+            "fields": { "shell": "shell", "target": "target" },
+            "product": "scene"
+          },
+          "terminal_scenes": {
+            "matrix": "terminal_matrix",
+            "fields": { "shell": "shell", "target": "target" },
+            "product": "scene"
+          },
           "data": {
             "matrix": "data_matrix",
             "fields": {
