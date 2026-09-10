@@ -41,7 +41,7 @@ vi.mock("../../src/components/touchpoint-component", async () => ({
 	})),
 }));
 
-const { HoverTouchpointOverlay } = await import(
+const { HoverTouchpointOverlay, hoverBridgeRect, placeHoverOverlay } = await import(
 	"../../src/components/HoverTouchpointOverlay"
 );
 const content = (placementKey: string): WebTouchpointContent => ({
@@ -165,6 +165,66 @@ describe("HoverTouchpointOverlay interaction boundary", () => {
 		expect(layer!.parentElement).toHaveAttribute("hidden");
 		unmount();
 		await waitFor(() => expect(disposes).toHaveBeenCalledTimes(2));
+	});
+
+	it("keeps the union open across the measured 8px bridge over multiple frames three times so a layer action can be clicked", async () => {
+		const { container } = render(
+			createElement(HoverTouchpointOverlay, {
+				entry: content("opend.home.hover-entry"),
+				layer: content("opend.home.hover-layer"),
+			}),
+		);
+		const [entry, layer] = Array.from(container.querySelectorAll("opend-touchpoint")) as [HTMLElement, HTMLElement];
+		const entryRect = { left: 40, top: 20, right: 64, bottom: 44, width: 24, height: 24 };
+		const layerRect = { left: 40, top: 52, right: 160, bottom: 112, width: 120, height: 60 };
+		vi.spyOn(entry, "getBoundingClientRect").mockReturnValue(entryRect as unknown as DOMRect);
+		vi.spyOn(layer, "getBoundingClientRect").mockReturnValue(layerRect as unknown as DOMRect);
+		await waitFor(() => expect(entry).not.toHaveAttribute("hidden"));
+		expect(hoverBridgeRect(entryRect, layerRect)).toMatchObject({ top: 44, bottom: 52, left: 40, right: 64 });
+		for (let crossing = 0; crossing < 3; crossing += 1) {
+			fireEvent.pointerEnter(entry);
+			fireEvent.pointerLeave(entry, { clientX: 52, clientY: 46 });
+			// Slow diagonal movement can spend several paints in the physical gap.
+			await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+			fireEvent.pointerMove(document, { clientX: 54, clientY: 50 });
+			fireEvent.pointerEnter(layer, { clientX: 56, clientY: 54 });
+			expect(layer.parentElement).not.toHaveAttribute("hidden");
+		}
+		// The same measured corridor must work when returning from the layer.
+		fireEvent.pointerLeave(layer, { clientX: 52, clientY: 50 });
+		await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+		fireEvent.pointerMove(document, { clientX: 52, clientY: 46 });
+		fireEvent.pointerEnter(entry, { clientX: 52, clientY: 42 });
+		expect(layer.parentElement).not.toHaveAttribute("hidden");
+		const action = document.createElement("button");
+		const click = vi.fn();
+		action.addEventListener("click", click);
+		layer.appendChild(action);
+		fireEvent.click(action);
+		expect(click).toHaveBeenCalledOnce();
+		expect(layer.parentElement).not.toHaveAttribute("hidden");
+		fireEvent.pointerLeave(layer, { clientX: 200, clientY: 130 });
+		expect(layer.parentElement).toHaveAttribute("hidden");
+	});
+
+	it("flips above and clamps to a narrow viewport without changing keyboard dismissal", async () => {
+		const position = placeHoverOverlay(
+			{ left: 70, top: 80, right: 94, bottom: 104, width: 24, height: 24 },
+			{ width: 120, height: 60 },
+			{ left: 0, top: 0, right: 100, bottom: 110, width: 100, height: 110 },
+		);
+		expect(position).toMatchObject({ placement: "above", left: 8, maxWidth: 84 });
+		const { container } = render(createElement(HoverTouchpointOverlay, {
+			entry: content("opend.home.hover-entry"),
+			layer: content("opend.home.hover-layer"),
+		}));
+		const [entry, layer] = Array.from(container.querySelectorAll("opend-touchpoint")) as [HTMLElement, HTMLElement];
+		await waitFor(() => expect(entry).not.toHaveAttribute("hidden"));
+		act(() => entry.focus());
+		expect(layer.parentElement).not.toHaveAttribute("hidden");
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(layer.parentElement).toHaveAttribute("hidden");
+		expect(document.activeElement).toBe(entry);
 	});
 
 	it("disposes a resource acquired after unmount during first verification", async () => {

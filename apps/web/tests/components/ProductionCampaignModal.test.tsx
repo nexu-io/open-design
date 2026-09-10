@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
 	act,
 	cleanup,
@@ -19,7 +21,10 @@ vi.mock("@open-design/host", () => ({
 }));
 vi.mock("../../src/providers/registry", () => ({ openExternalUrl: openExternalUrlMock }));
 
-import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
+import {
+	ProductionCampaignModal,
+	internalActionNavigationUrl,
+} from "../../src/components/ProductionCampaignModal";
 import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
 
@@ -43,7 +48,18 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+const modalHostStyles = readFileSync(
+	resolve(process.cwd(), "src/components/TestCampaignModal.module.css"),
+	"utf8",
+);
+
 describe("ProductionCampaignModal", () => {
+	it("keeps generic modal chrome content-sized without asymmetric host padding", () => {
+		const modalRule = modalHostStyles.match(/\.modal\s*\{[^}]*\}/)?.[0];
+		expect(modalRule).toContain("max-width: calc(100vw - 32px)");
+		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)width:/);
+		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)padding:/);
+	});
 	it("does not restart the production loader on an unchanged parent render",async()=>{
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost={client:{osLocale:"en-US",type:"desktop"}};
 		const fetchMock=vi.fn(async()=>new Response(JSON.stringify(decision()),{status:200}));
@@ -88,7 +104,10 @@ describe("ProductionCampaignModal", () => {
 		expect(screen.getByTestId("campaign-custom-element").querySelector("opend-touchpoint")).not.toBeNull();
 		expect(document.body.style.overflow).toBe("hidden");
 		expect(document.querySelector("iframe,webview")).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		// The frozen `close` capability only grants an SDK callback; this fixture
+		// deliberately renders no close affordance, so the host fallback must remain.
+		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+		fireEvent.keyDown(document, { key: "Escape" });
 		expect(document.body.style.overflow).toBe("");
 		expect(screen.queryByRole("dialog")).toBeNull();
 		first.unmount();
@@ -172,6 +191,28 @@ it("rejects a decision unless both decision and content target the campaign moda
 });
 
 describe("Production campaign action guard", () => {
+ it("rejects normalized cross-origin internal targets before reporting an event", async () => {
+  Object.defineProperty(navigator, "userActivation", { configurable: true, value: { isActive: true } });
+  const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+  const accepted = await (await import("../../src/components/ProductionCampaignModal")).dispatchProductionCampaignAction(
+   decision({ staticActions: [{ id: "escape", target: { kind: "internal", path: "/\\evil.example" } }] }) as any,
+   "escape", 1, () => 1, Date.now() + 10_000,
+  );
+  expect(accepted).toBe(false);
+  expect(fetchMock).not.toHaveBeenCalled();
+ });
+
+ it("keeps valid internal navigation on the current origin", () => {
+  expect(internalActionNavigationUrl("/projects?view=active#recent", "https://app.example/home")?.href).toBe(
+   "https://app.example/projects?view=active#recent",
+  );
+  for (const path of [
+   String.raw`/\evil.example`,
+   `/${"\t"}/evil.example`,
+   `/${"\n"}/evil.example`,
+  ]) expect(internalActionNavigationUrl(path, "https://app.example/home")).toBeNull();
+ });
+
  it("rejects stale callbacks before they can report or consume a static action", async () => {
   const { dispatchProductionCampaignAction } = await import("../../src/components/ProductionCampaignModal");
   const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);

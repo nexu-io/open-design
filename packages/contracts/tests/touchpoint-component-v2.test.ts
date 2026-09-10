@@ -49,6 +49,36 @@ describe("touchpoint component v2 controlled mirror", () => {
 		).toBe(false);
 	});
 
+	it("rejects ambiguous internal paths after browser URL normalization", () => {
+		const withInternalPath = (path: string) => ({
+			...structuredClone(touchpointComponentV2Fixture.manifest),
+			placements: [
+				{
+					...touchpointComponentV2Fixture.manifest.placements[0],
+					staticActions: [{ id: "action", target: { kind: "internal", path } }],
+				},
+			],
+		});
+
+		const rejectedPaths = [
+			String.raw`/\evil.example`,
+			String.raw`/foo\bar`,
+			`/${"\t"}/evil.example`,
+			`/${"\n"}/evil.example`,
+		];
+		for (const path of rejectedPaths)
+			expect(
+				TouchpointComponentV2ManifestSchema.safeParse(withInternalPath(path))
+					.success,
+			).toBe(false);
+
+		expect(
+			TouchpointComponentV2ManifestSchema.safeParse(
+				withInternalPath("/projects?view=active#recent"),
+			).success,
+		).toBe(true);
+	});
+
 	it("imports and parses the frozen Vela v2 fixture through the public contract package", () => {
 		expect(TOUCHPOINT_COMPONENT_V2_PROTOCOL).toBe(
 			"vela-touchpoint-component/v2",
@@ -70,7 +100,7 @@ describe("touchpoint component v2 controlled mirror", () => {
 			],
 			sourceSha256: {
 				touchpoints:
-					"1b5f6fb5e52d8cc522649c723b829240b729727e04806fc237732163c5ebb58e",
+					"be26f9c4e5cfe6e0a0eedee3d31dc70df8f1c8ee61704e765d4f5c89879fc2f0",
 				fixture:
 					"278a40cd787dc74544aa785f85d218d8a51820d2d0e14c7b8d7c6eced10b4c92",
 			},

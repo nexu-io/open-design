@@ -168,6 +168,7 @@ import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
 import { canRenderProductionCampaignBadge, ProductionCampaignBadge } from './ProductionCampaignBadge';
+import { ProductionCampaignHover } from './ProductionCampaignHover';
 import {
   beginWorkspaceScopedRead,
   workspaceIdentityCacheKey,
@@ -1698,7 +1699,7 @@ export function EntryShell({
           }}
           onOpenSearch={() => setProjectSearchOpen(true)}
           open={railOpen}
-          topRightSlot={topRightCampaignAudience || canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? (
+          topRightSlot={topRightCampaignAudience || amrLoggedIn === true ? (
             <>
               {topRightCampaignAudience ? (
                 <WorkbenchCampaignBadge
@@ -1710,6 +1711,12 @@ export function EntryShell({
                 />
               ) : null}
               {canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? <ProductionCampaignBadge authenticated sessionSubject={amrAccountId} /> : null}
+              {/* The requirements-specific hover entry is its own authorized
+                  touchpoint, beside—not renamed from—the account badge. */}
+              <ProductionCampaignHover
+                authenticated={amrLoggedIn === true}
+                sessionSubject={amrAccountId}
+              />
             </>
           ) : null}
           context={railWorkspaceContext}

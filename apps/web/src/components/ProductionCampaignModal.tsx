@@ -46,6 +46,25 @@ type Decision = {
 const closedKey = (subject: string, activity: string) =>
 	`touchpoint-closed:${subject}:${activity}`;
 
+/**
+ * Parses an internal action at execution time. Browser URL normalization treats
+ * backslashes as hierarchy separators, so manifest validation alone cannot be
+ * the origin boundary.
+ */
+export function internalActionNavigationUrl(
+	path: unknown,
+	href = window.location.href,
+): URL | null {
+	if (typeof path !== "string") return null;
+	try {
+		const origin = new URL(href).origin;
+		const target = new URL(path, href);
+		return target.origin === origin ? target : null;
+	} catch {
+		return null;
+	}
+}
+
 /** Performs a server-validated click before the host consumes a static target. */
 export async function dispatchProductionCampaignAction(
 	decision: Decision,
@@ -57,8 +76,13 @@ export async function dispatchProductionCampaignAction(
 	const action = decision.staticActions.find(
 		(candidate) => candidate.id === actionId,
 	);
+	const internalTarget =
+		action?.target.kind === "internal"
+			? internalActionNavigationUrl(action.target.path)
+			: undefined;
 	if (
 		!action ||
+		(action.target.kind === "internal" && !internalTarget) ||
 		generation !== currentGeneration() ||
 		expiresAt <= Date.now() ||
 		!navigator.userActivation?.isActive
@@ -94,7 +118,8 @@ export async function dispatchProductionCampaignAction(
 		}
 		if (action.target.kind === "https")
 			await openExternalUrl(action.target.url);
-		else window.location.assign(action.target.path);
+		else if (internalTarget) window.location.assign(internalTarget.href);
+	else return false;
 		return true;
 	} catch {
 		emitWebTouchpointDiagnostic({

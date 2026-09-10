@@ -156,20 +156,34 @@ function configuredAllowedDevHosts(): string[] {
   ]));
 }
 
+/** Files that define the client host contract reported with CMS Test acceptances. */
+export const CMS_HOST_RELEASE_INPUTS = [
+  'apps/web/src/components/touchpoint-component.ts',
+  'apps/web/src/components/touchpoint-static-actions.ts',
+  'apps/web/src/components/TestCampaignModal.tsx',
+  'apps/web/src/components/ProductionCampaignModal.tsx',
+  'apps/web/src/components/ProductionCampaignBadge.tsx',
+  'apps/web/src/components/ProductionCampaignHover.tsx',
+  'apps/web/src/components/HoverTouchpointOverlay.tsx',
+  'apps/web/src/components/HoverTouchpointOverlay.module.css',
+  'packages/contracts/src/touchpoint-component-v2.ts',
+] as const;
+
+export function cmsHostReleaseFingerprint(
+  readFile: (file: (typeof CMS_HOST_RELEASE_INPUTS)[number]) => string | Buffer,
+): string {
+  return `sha256:${CMS_HOST_RELEASE_INPUTS.reduce(
+    (hash, file) => hash.update(file).update('\0').update(readFile(file)),
+    createHash('sha256'),
+  ).digest('hex')}`;
+}
+
 const nextConfig: NextConfig = {
   env: {
     // Embedded in the client at build time. Packaged servers use the already
     // compiled client and need not retain source files to load this config.
     NEXT_PUBLIC_CMS_HOST_RELEASE: existsSync(resolve(WEB_ROOT, 'src/components/touchpoint-component.ts'))
-      ? `sha256:${[
-          'apps/web/src/components/touchpoint-component.ts',
-          'apps/web/src/components/touchpoint-static-actions.ts',
-          'apps/web/src/components/TestCampaignModal.tsx',
-          'apps/web/src/components/ProductionCampaignModal.tsx',
-          'apps/web/src/components/ProductionCampaignBadge.tsx',
-          'apps/web/src/components/ProductionCampaignHover.tsx',
-          'packages/contracts/src/touchpoint-component-v2.ts',
-        ].reduce((hash, file) => hash.update(file).update('\0').update(readFileSync(resolve(WORKSPACE_ROOT, file))), createHash('sha256')).digest('hex')}`
+      ? cmsHostReleaseFingerprint((file) => readFileSync(resolve(WORKSPACE_ROOT, file)))
       : undefined,
   },
   allowedDevOrigins: configuredAllowedDevHosts(),
