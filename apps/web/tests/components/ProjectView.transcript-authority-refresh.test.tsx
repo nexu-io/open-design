@@ -54,8 +54,12 @@ vi.mock('../../src/collab/useProjectCollab', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/collab/useProjectCollab')>()),
   useProjectCollab: () => ({
     enabled: true, member: null, present: [], publishedVersion: null,
-    syncState: null, viewerOnly: false, writerAuthority: 'allowed',
-    isOwner: true, ownerDisplayName: null, ownerRole: null, downloadPending: false,
+    // Until initial scope/ownership confirmation, the real collab hook is
+    // read-only. Otherwise a restored queue legitimately drains immediately
+    // after the first history read, before this fixture can change scope.
+    syncState: null, viewerOnly: workspace.scope.loading,
+    writerAuthority: workspace.scope.loading ? 'pending' : 'allowed',
+    isOwner: !workspace.scope.loading, ownerDisplayName: null, ownerRole: null, downloadPending: false,
     reportChange: () => undefined, requestPublish: () => undefined,
     refreshPresence: () => undefined, checkStatusNow: () => undefined,
   }),
@@ -338,5 +342,98 @@ describe('ProjectView transcript visibility across authority confirmation', () =
     expect(view.queryByText(history.content)).toBeNull();
     expect(view.getByTestId('composer-fixture-send')).toBeDisabled();
     expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it.each(['success', 'refused'] as const)(
+    'does not drain a persisted queue before the same-principal authority read settles: %s',
+    async (outcome) => {
+      workspace.scope = { loading: true, scope: null };
+      const refresh = deferred<ChatMessage[]>();
+      const refreshedHistory: ChatMessage = {
+        id: 'new-authoritative-message', role: 'user',
+        content: 'History visible only after the confirmed scope read', createdAt: 2,
+      };
+      const queuedPrompt = 'Previously queued follow-up';
+      const storageKey = `od:chat-queued-sends:${project.id}:v1`;
+      const queued = {
+        id: 'authority-queued-request', conversationId: conversation.id,
+        prompt: queuedPrompt, attachments: [], commentAttachments: [],
+        meta: { clientRequestId: 'authority-queued-request' }, createdAt: 3,
+      };
+      window.localStorage.setItem(storageKey, JSON.stringify([queued]));
+      vi.mocked(listMessages).mockResolvedValueOnce([history]).mockReturnValueOnce(refresh.promise);
+      const view = render(projectView());
+      await waitFor(() => expect(view.getByText(history.content)).toBeTruthy());
+      expect(view.getByTestId('chat-queued-send-strip')).toHaveTextContent(queuedPrompt);
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+
+      workspace.scope = readableScope();
+      try {
+        // Real React effects run here: the scope read starts and the queue
+        // drain gets the same commit. No timer or effect-order mock intervenes.
+        await act(async () => { view.rerender(projectView()); });
+        expect(listMessages).toHaveBeenNthCalledWith(2, project.id, conversation.id, MEMBER);
+        expect(streamViaDaemon).not.toHaveBeenCalled();
+        expect(view.getByText(history.content)).toBeTruthy();
+        expect(view.getByTestId('chat-queued-send-strip')).toHaveTextContent(queuedPrompt);
+        expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '[]')).toEqual([queued]);
+
+        if (outcome === 'refused') {
+          await act(async () => {
+            refresh.reject(new ProjectMessageListError('workspace access forbidden', 403, null, false));
+          });
+          expect(view.queryByText(history.content)).toBeNull();
+          expect(streamViaDaemon).not.toHaveBeenCalled();
+          expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '[]')).toEqual([queued]);
+          return;
+        }
+
+        await act(async () => { refresh.resolve([history, refreshedHistory]); });
+        await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+        expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+          clientRequestId: queued.meta.clientRequestId,
+          conversationId: conversation.id,
+          workspaceContext: MEMBER,
+          history: expect.arrayContaining([
+            expect.objectContaining({ role: 'user', content: refreshedHistory.content }),
+            expect.objectContaining({ role: 'user', content: queuedPrompt }),
+          ]),
+        }));
+        await waitFor(() => expect(view.queryByTestId('chat-queued-send-strip')).toBeNull());
+        await act(async () => { view.rerender(projectView()); });
+        expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+        expect(window.localStorage.getItem(storageKey)).toBeNull();
+      } finally {
+        view.unmount();
+        refresh.resolve([history, refreshedHistory]);
+      }
+    },
+  );
+
+  it('does not drain a persisted queue while a different principal transcript is pending', async () => {
+    workspace.scope = { loading: true, scope: null };
+    const refresh = deferred<ChatMessage[]>();
+    window.localStorage.setItem(`od:chat-queued-sends:${project.id}:v1`, JSON.stringify([{
+      id: 'other-principal-queued-request', conversationId: conversation.id,
+      prompt: 'Queued before changing member', attachments: [], commentAttachments: [], createdAt: 3,
+    }]));
+    vi.mocked(listMessages).mockResolvedValueOnce([history]).mockReturnValueOnce(refresh.promise);
+    const view = render(projectView());
+    await waitFor(() => expect(view.getByText(history.content)).toBeTruthy());
+    expect(view.getByTestId('chat-queued-send-strip')).toHaveTextContent('Queued before changing member');
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+
+    const differentMember = { ...MEMBER, workspaceMemberId: 'new-confirmed-member' };
+    workspace.caller = differentMember;
+    workspace.scope = readableScope(differentMember);
+    try {
+      await act(async () => { view.rerender(projectView()); });
+      expect(listMessages).toHaveBeenNthCalledWith(2, project.id, conversation.id, differentMember);
+      expect(view.queryByText(history.content)).toBeNull();
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      refresh.resolve([]);
+    }
   });
 });

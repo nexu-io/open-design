@@ -3542,8 +3542,12 @@ export function ProjectView({
   );
   // A readable transcript can stay visible during an authority refresh, but
   // sending and recovery still wait for the new authoritative read to settle.
+  // Compare keys during render: the load effect's state reset cannot block
+  // later effects from draining a queue using this same render's readiness.
   const currentConversationReadPending = currentConversationLoading
-    || Boolean(activeConversationId && !messagesInitialized);
+    || Boolean(activeConversationId && (
+      !messagesInitialized || messagesAuthorityKeyRef.current !== projectRunAuthorityKey
+    ));
   const currentConversationStreaming = streaming && streamingConversationId === activeConversationId;
   const currentConversationControlStreaming =
     currentConversationStreaming || currentConversationHasProgrammaticBrandExtractionRun;
