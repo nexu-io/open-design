@@ -36,6 +36,11 @@ const HEADING_RE = /^#{1,4}\s+/;
 const UL_ITEM_RE = /^\s*[-*+]\s+/;
 const OL_ITEM_RE = /^\s*\d+\.\s+/;
 
+/** Heading/list rows render inline content independently of adjacent lines. */
+export function isStandaloneMarkdownLine(line: string): boolean {
+  return HEADING_RE.test(line) || UL_ITEM_RE.test(line) || OL_ITEM_RE.test(line);
+}
+
 // `<artifact` followed by whitespace is a real protocol open tag; any other
 // continuation (e.g. `<artifactual`) is a prefix-shared literal that must not
 // be treated as a tag. Mirrors the parser's `findOpenTag` real-open guard so
@@ -90,7 +95,7 @@ export function computeSkipRanges(buffer: string): {
       } else if (line.trim() === '') {
         // Blank lines separate blocks.
         closeBlockBefore(pos);
-      } else if (HEADING_RE.test(line) || UL_ITEM_RE.test(line) || OL_ITEM_RE.test(line)) {
+      } else if (isStandaloneMarkdownLine(line)) {
         // Heading and list-item lines are each their own block in the
         // renderer (`renderInline` runs per item / per heading), so they get
         // a one-line inline-scan region rather than joining adjacent

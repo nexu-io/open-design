@@ -158,6 +158,7 @@ function pendingTagTail(text: string): number {
 /** Scan each physical run's text once, preserving every original event boundary. */
 function markerSearchViews(events: readonly PersistedAgentEvent[]): Map<PersistedAgentEvent, string> {
   const views = new Map<PersistedAgentEvent, string>();
+  let runKey = readRunDoneKey(events);
   let textEvents: Extract<PersistedAgentEvent, { kind: 'text' }>[] = [];
   const flush = () => {
     if (textEvents.length === 0) return;
@@ -171,7 +172,15 @@ function markerSearchViews(events: readonly PersistedAgentEvent[]): Map<Persiste
     textEvents = [];
   };
   for (const event of events) {
-    if (event.kind === 'done_key') flush();
+    if (event.kind === 'done_key') {
+      const key = typeof event.key === 'string' ? event.key.trim() : '';
+      // Match the physical-run boundary in the block builder. Replayed timing
+      // metadata for this key (or empty metadata) does not end a card/code span.
+      if (key && key !== runKey) {
+        flush();
+        runKey = key;
+      }
+    }
     if (event.kind === 'text') textEvents.push(event);
   }
   flush();
