@@ -1288,6 +1288,7 @@
   gap: 6px;
   width: fit-content;
   max-width: 100%;
+  overflow-x: auto;
 }
 .shot {
   position: relative;
@@ -1344,9 +1345,16 @@
 }
 .shot.fail .failNote svg { width: 14px; height: 14px; }
 
-.strip { display: flex; align-items: center; gap: 5px; }
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow-x: auto;
+}
 .strip .th {
   position: relative;
+  flex-shrink: 0;
   width: 26px;
   height: 34px;
   padding: 0;
