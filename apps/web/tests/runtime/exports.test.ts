@@ -1810,6 +1810,51 @@ describe('exportProjectAsZip degraded-archive reporting (#8005)', () => {
     expect(result).toBe('degraded');
   });
 
+  it.each([
+    ['a two-byte body that is only the PK prefix', 'PK'],
+    ['a three-byte truncated signature', 'PK\x03'],
+    ['PK followed by the wrong signature bytes', 'PK\x01\x02rest'],
+    ['a text body that merely begins with PK', 'PKzip-bytes'],
+  ] as const)('rejects %s', async (_label, body) => {
+    // Given: a 200 whose body starts with PK but is not a ZIP. Checking only
+    // the first two bytes would let each of these through as an archive.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' },
+    })));
+
+    // When: the export runs.
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Partial Signature',
+    });
+
+    // Then: the full four-byte signature is required, so it is degraded.
+    expect(result).toBe('degraded');
+  });
+
+  it.each([
+    ['a normal archive (PK\\x03\\x04)', 'PK\x03\x04payload'],
+    ['an empty archive (PK\\x05\\x06)', 'PK\x05\x06'],
+  ] as const)('accepts %s', async (_label, body) => {
+    // Given: a body carrying a real ZIP signature — both forms the daemon can
+    // produce, including the end-of-central-directory-only empty archive.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' },
+    })));
+
+    // When / Then: the success path is untouched.
+    await expect(exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Real Zip',
+    })).resolves.toBeUndefined();
+  });
+
   it('resolves without a degraded marker when the archive succeeds', async () => {
     // Given: the archive route returns the project tree.
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(`PK\x03\x04archive-bytes`, {

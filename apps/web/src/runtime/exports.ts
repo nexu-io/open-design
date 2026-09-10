@@ -871,9 +871,21 @@ export function exportReactComponentAsZip(
 // directory we scope the archive to that directory, otherwise we ask the
 // daemon for the whole project. Falls back to the in-memory single-file
 // ZIP on any failure so the action never silently no-ops.
+/** Local file header — every non-empty ZIP starts here. */
+const ZIP_SIGNATURE_LOCAL_FILE = [0x50, 0x4b, 0x03, 0x04] as const;
+/** End of central directory — the whole body of an empty ZIP. */
+const ZIP_SIGNATURE_EMPTY_ARCHIVE = [0x50, 0x4b, 0x05, 0x06] as const;
+const ZIP_SIGNATURES = [ZIP_SIGNATURE_LOCAL_FILE, ZIP_SIGNATURE_EMPTY_ARCHIVE] as const;
+const ZIP_SIGNATURE_BYTES = 4;
+
 /**
- * True when the blob begins with the ZIP signature `PK` (`PK\x03\x04` for a
- * normal archive, `PK\x05\x06` for an empty one).
+ * True when the blob begins with a full four-byte ZIP signature — `PK\x03\x04`
+ * for a normal archive, `PK\x05\x06` for an empty one. Both bytes after `PK`
+ * are checked, so a short or corrupt body that merely starts with `PK` is
+ * rejected rather than passed off as an archive.
+ *
+ * This is a signature check, not archive-integrity validation: it tells us the
+ * response is shaped like a ZIP, not that the ZIP is complete or readable.
  *
  * A 2xx is not proof the body is an archive: an authenticating proxy can
  * answer with its own HTML interstitial at 200, and a truncated or empty
@@ -881,9 +893,9 @@ export function exportReactComponentAsZip(
  * the user as a .zip and reported as a successful export.
  */
 async function looksLikeZip(blob: Blob): Promise<boolean> {
-  if (blob.size < 2) return false;
-  const magic = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
-  return magic[0] === 0x50 && magic[1] === 0x4b;
+  if (blob.size < ZIP_SIGNATURE_BYTES) return false;
+  const magic = new Uint8Array(await blob.slice(0, ZIP_SIGNATURE_BYTES).arrayBuffer());
+  return ZIP_SIGNATURES.some((signature) => signature.every((byte, i) => magic[i] === byte));
 }
 
 /**
