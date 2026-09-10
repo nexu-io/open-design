@@ -12,6 +12,7 @@ export function registerBuildCommands(cli: CAC): void {
     .option("--output <directory>", "Build output")
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
+    .option("--resource-ids <json>", "Explicit runtime resource selection (runtime-resources)")
     .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--runtime-archive <file>", "Optional local official Electron archive; pinned checksum required (base)")
@@ -28,9 +29,10 @@ export function registerBuildCommands(cli: CAC): void {
     .option("--source-commit <sha>", "Exact source commit (distribution)")
     .action(async (operation: string, options: Options) => {
       if (operation === "runtime-resources") {
-        const allowed = new Set(["root", "output", "receipt", "--"]);
+        const allowed = new Set(["root", "output", "receipt", "resourceIds", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`runtime resource build does not accept --${key}`);
-        await buildReleaseRuntimeResources({ root: required(options, "root"), output: required(options, "output"), receipt: required(options, "receipt") });
+        await buildReleaseRuntimeResources({ root: required(options, "root"), output: required(options, "output"), receipt: required(options, "receipt"),
+          ...(options.resourceIds == null ? {} : { resourceIds: JSON.parse(required(options, "resourceIds")) }) });
         return;
       }
       if (operation === "resource") {
@@ -42,6 +44,7 @@ export function registerBuildCommands(cli: CAC): void {
           output: required(options, "output"), receipt: required(options, "receipt") });
         return;
       }
+      if (options.resourceIds != null) throw new Error("--resource-ids is only supported by build runtime-resources");
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
       if (options.runtimeArchive != null && operation !== "base") throw new Error("--runtime-archive is only supported by build base");
       if (options.baseReceipt != null && operation !== "distribution") throw new Error("--base-receipt is only supported by build distribution");

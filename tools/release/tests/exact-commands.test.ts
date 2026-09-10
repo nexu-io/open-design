@@ -98,6 +98,31 @@ it("rejects unknown commands, missing arguments and non-boolean switches", async
   await expect(f.invoke([...policyArgs, "--bypass"])).rejects.toThrow("Unknown option");
 });
 
+it("passes an explicit runtime resource selection to the workspace producer", async () => {
+  const f = await fixture(), moduleRoot = join(f.root, "node_modules/@open-design/closure");
+  await mkdir(moduleRoot, { recursive: true });
+  await writeFile(join(moduleRoot, "package.json"), JSON.stringify({ type: "module", exports: { "./build-runtime-resources": "./producer.mjs" } }));
+  await writeFile(join(moduleRoot, "producer.mjs"), `
+    import { mkdir, writeFile } from "node:fs/promises";
+    import { join } from "node:path";
+    import { createHash } from "node:crypto";
+    export async function buildClosureRuntimeResources(input) {
+      if (JSON.stringify(input.resourceIds) !== '["open-design-web"]') throw new Error("selection lost");
+      await mkdir(input.outputDirectory);
+      const path = join(input.outputDirectory, "open-design-web.zip");
+      const bytes = Buffer.from("selected web"); await writeFile(path, bytes);
+      return { schemaVersion: 1, operation: "closure.runtime-resources.build", resources: [{
+        id: "open-design-web", path, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex")
+      }] };
+    }
+  `);
+  const output = join(f.root, "runtime"), receipt = join(f.root, "runtime.json");
+  const args = ["build", "runtime-resources", "--root", f.root, "--resource-ids", '["open-design-web"]', "--output", output, "--receipt", receipt];
+  await f.invoke(args);
+  expect(JSON.parse(await readFile(receipt, "utf8")).resources.map((resource: { id: string }) => resource.id)).toEqual(["open-design-web"]);
+  await expect(f.invoke([...args, "--shell", "electron"])).rejects.toThrow("does not accept --shell");
+});
+
 it("dispatches independent platform builds and rejects unrelated policy or Capsule arguments", async () => {
   const f = await fixture(), pkg = join(f.root, "tools/release/node_modules/@open-design/shell-electron");
   await mkdir(pkg, { recursive: true });
@@ -182,6 +207,7 @@ it("dispatches runtime-only production through the Closure public API", async ()
     exports: { "./build-runtime-resources": "./build.mjs" } }));
   await writeFile(join(pkg, "build.mjs"), `
     import {mkdir,writeFile} from 'node:fs/promises'; import {join} from 'node:path'; import {createHash} from 'node:crypto';
+    export const CLOSURE_RUNTIME_RESOURCE_IDS = ['open-design-daemon','open-design-web'];
     export async function buildClosureRuntimeResources({outputDirectory}) {
       await mkdir(outputDirectory); const resources=[];
       for(const id of ['open-design-daemon','open-design-web']) {

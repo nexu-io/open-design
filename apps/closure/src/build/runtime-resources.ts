@@ -70,60 +70,75 @@ async function archive(root: string, outputPath: string): Promise<{ sha256: stri
   });
 }
 
-export async function buildClosureRuntimeResources(input: Readonly<{ outputDirectory: string; workspaceRoot: string }>) {
+export const CLOSURE_RUNTIME_RESOURCE_IDS = ["open-design-daemon", "open-design-web"] as const;
+export type ClosureRuntimeResourceId = typeof CLOSURE_RUNTIME_RESOURCE_IDS[number];
+
+export async function buildClosureRuntimeResources(input: Readonly<{
+  outputDirectory: string; workspaceRoot: string; resourceIds?: readonly ClosureRuntimeResourceId[];
+}>) {
+  const ids = input.resourceIds === undefined ? CLOSURE_RUNTIME_RESOURCE_IDS : input.resourceIds;
+  if (!Array.isArray(ids) || ids.length === 0 || new Set(ids).size !== ids.length
+    || ids.some(id => !CLOSURE_RUNTIME_RESOURCE_IDS.includes(id))) throw new Error("invalid runtime resource selection");
+  const daemonSelected = ids.includes("open-design-daemon"), webSelected = ids.includes("open-design-web");
   const outputDirectory = resolve(input.outputDirectory);
   const workspaceRoot = resolve(input.workspaceRoot);
   const stage = join(outputDirectory, "stage");
   await mkdir(dirname(outputDirectory), { recursive: true });
   await mkdir(outputDirectory);
   await mkdir(stage, { recursive: true });
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/daemon", "build"]);
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build:sidecar"]);
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "standalone" });
+  if (daemonSelected) await runPnpm(workspaceRoot, ["--filter", "@open-design/daemon", "build"]);
+  if (webSelected) {
+    await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build:sidecar"]);
+    await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "standalone" });
+  }
 
   const daemonRoot = join(stage, "daemon");
   const webRoot = join(stage, "web");
-  await Promise.all([mkdir(daemonRoot, { recursive: true }), mkdir(webRoot, { recursive: true })]);
-  await writeFile(join(daemonRoot, "package.json"), `${JSON.stringify({ private: true, type: "module", dependencies: runtimeDependencies }, null, 2)}\n`, "utf8");
-  await runNpm(daemonRoot, ["install", "--omit=dev", "--no-package-lock"]);
-  await pruneClosureNativeDependencies(daemonRoot);
-  await rm(join(daemonRoot, "node_modules", ".bin"), { force: true, recursive: true });
-  const daemonBundle = (entrypoint: string, outfile: string) => build({
-    entryPoints: [entrypoint],
-    outfile,
-    bundle: true,
-    format: "esm",
-    platform: "node",
-    target: "node24",
-    banner: { js: 'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);' },
-    plugins: [closureNodeExternals()],
-    external: [...Object.keys(runtimeDependencies), "fsevents"],
-  });
-  await Promise.all([
-    daemonBundle(join(workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"), join(daemonRoot, "sidecar.mjs")),
-    daemonBundle(join(workspaceRoot, "apps", "daemon", "dist", "cli.js"), join(daemonRoot, "daemon-cli.mjs")),
-  ]);
-  await copyClosureWebStandalone(join(workspaceRoot, "apps", "web", ".next", "standalone"), join(webRoot, "standalone"));
-  const standaloneApp = join(webRoot, "standalone", "apps", "web");
-  await cp(join(workspaceRoot, "apps", "web", ".next", "static"), join(standaloneApp, ".next", "static"), { recursive: true, dereference: true });
-  await cp(join(workspaceRoot, "apps", "web", "public"), join(standaloneApp, "public"), { recursive: true, dereference: true });
-  await build({
-    entryPoints: [join(workspaceRoot, "apps", "web", "dist", "sidecar", "index.js")],
-    outfile: join(webRoot, "sidecar.mjs"),
-    bundle: true,
-    format: "esm",
-    platform: "node",
-    target: "node24",
-  });
+  if (daemonSelected) {
+    await mkdir(daemonRoot, { recursive: true });
+    await writeFile(join(daemonRoot, "package.json"), `${JSON.stringify({ private: true, type: "module", dependencies: runtimeDependencies }, null, 2)}\n`, "utf8");
+    await runNpm(daemonRoot, ["install", "--omit=dev", "--no-package-lock"]);
+    await pruneClosureNativeDependencies(daemonRoot);
+    await rm(join(daemonRoot, "node_modules", ".bin"), { force: true, recursive: true });
+    const daemonBundle = (entrypoint: string, outfile: string) => build({
+      entryPoints: [entrypoint],
+      outfile,
+      bundle: true,
+      format: "esm",
+      platform: "node",
+      target: "node24",
+      banner: { js: 'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);' },
+      plugins: [closureNodeExternals()],
+      external: [...Object.keys(runtimeDependencies), "fsevents"],
+    });
+    await Promise.all([
+      daemonBundle(join(workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"), join(daemonRoot, "sidecar.mjs")),
+      daemonBundle(join(workspaceRoot, "apps", "daemon", "dist", "cli.js"), join(daemonRoot, "daemon-cli.mjs")),
+    ]);
+  }
+  if (webSelected) {
+    await mkdir(webRoot, { recursive: true });
+    await copyClosureWebStandalone(join(workspaceRoot, "apps", "web", ".next", "standalone"), join(webRoot, "standalone"));
+    const standaloneApp = join(webRoot, "standalone", "apps", "web");
+    await cp(join(workspaceRoot, "apps", "web", ".next", "static"), join(standaloneApp, ".next", "static"), { recursive: true, dereference: true });
+    await cp(join(workspaceRoot, "apps", "web", "public"), join(standaloneApp, "public"), { recursive: true, dereference: true });
+    await build({
+      entryPoints: [join(workspaceRoot, "apps", "web", "dist", "sidecar", "index.js")],
+      outfile: join(webRoot, "sidecar.mjs"),
+      bundle: true,
+      format: "esm",
+      platform: "node",
+      target: "node24",
+    });
+  }
 
   const artifactsRoot = join(outputDirectory, "artifacts");
   const daemonPath = join(artifactsRoot, "open-design-daemon.zip");
   const webPath = join(artifactsRoot, "open-design-web.zip");
-  const [daemon, web] = await Promise.all([archive(daemonRoot, daemonPath), archive(webRoot, webPath)]);
-  const resources = Object.freeze([
-    Object.freeze({ id: "open-design-daemon", file: "open-design-daemon.zip", path: daemonPath, entrypoint: "sidecar.mjs", ...daemon }),
-    Object.freeze({ id: "open-design-web", file: "open-design-web.zip", path: webPath, entrypoint: "sidecar.mjs", ...web }),
-  ]);
+  const resources = Object.freeze(await Promise.all(CLOSURE_RUNTIME_RESOURCE_IDS.filter(id => ids.includes(id)).map(async id => {
+    const daemon = id === "open-design-daemon", path = daemon ? daemonPath : webPath;
+    return Object.freeze({ id, file: `${id}.zip`, path, entrypoint: "sidecar.mjs", ...await archive(daemon ? daemonRoot : webRoot, path) });
+  })));
   const receipt = Object.freeze({ schemaVersion: 1 as const, operation: "closure.runtime-resources.build" as const, resources });
   await rm(stage, { force: true, recursive: true });
   return receipt;

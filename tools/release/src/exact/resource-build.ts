@@ -3,17 +3,20 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildClosureDataResource, CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
+import type { ClosureRuntimeResourceId } from "@open-design/closure/build-runtime-resources";
 import { exportDataResource, importDataResource } from "./resource-artifact.ts";
 import { canonicalBytes, checkedFile, readObject } from "./control-common.ts";
 
 /** Runtime production is separate from the nine independent data products. */
-export async function buildReleaseRuntimeResources(input: Readonly<{ root: string; output: string; receipt: string }>) {
+export async function buildReleaseRuntimeResources(input: Readonly<{
+  root: string; output: string; receipt: string; resourceIds?: readonly ClosureRuntimeResourceId[];
+}>) {
   const root = resolve(input.root), resolver = createRequire(join(root, "tools/release/package.json"));
   const builder: typeof import("@open-design/closure/build-runtime-resources") = await import(
     pathToFileURL(resolver.resolve("@open-design/closure/build-runtime-resources")).href);
-  const result = await builder.buildClosureRuntimeResources({ workspaceRoot: root, outputDirectory: resolve(input.output) });
+  const result = await builder.buildClosureRuntimeResources({ workspaceRoot: root, outputDirectory: resolve(input.output), resourceIds: input.resourceIds });
   if (result.schemaVersion !== 1 || result.operation !== "closure.runtime-resources.build"
-    || result.resources.map(resource => resource.id).sort().join(",") !== "open-design-daemon,open-design-web") throw new Error("invalid runtime resource set");
+    || result.resources.map(resource => resource.id).sort().join(",") !== [...(input.resourceIds ?? builder.CLOSURE_RUNTIME_RESOURCE_IDS)].sort().join(",")) throw new Error("invalid runtime resource set");
   for (const resource of result.resources) await checkedFile(resource, "runtime resource", resource.path);
   await mkdir(dirname(resolve(input.receipt)), { recursive: true });
   await writeFile(input.receipt, canonicalBytes(result), { flag: "wx" });

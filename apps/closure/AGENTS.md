@@ -17,6 +17,9 @@ distribution contribution.
   produces only daemon/Web archives with a `closure.runtime-resources.build`
   receipt. Neither composes the full release resource set. tools-release owns
   commands and combines runtime products with the complete independent data set.
+- Runtime resource production accepts an explicit nonempty selection of daemon
+  and/or Web. A single-resource build must not compile, stage, or require the
+  other app. Selection is caller-owned; this producer never decides cache hits.
 - Keep Node, better-sqlite3 and node-pty outside Closure resources. Bundled native
   imports use the Shell-supplied Node module environment; physical compatibility
   is expressed by the release's Shell requirement, not runtime acquisition.
