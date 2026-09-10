@@ -1,7 +1,7 @@
 {
-  "distributionVersion": "0.0.1-test.latest-frozen.g4c276a423de5",
-  "velaBinaryVersion": "0.0.1-test.latest-frozen.g4c276a423de5",
-  "velaSourceCommit": "4c276a423de527e3e6fc5dd593d106c12c7b00d1",
+  "distributionVersion": "0.0.1-test.latest-frozen.g0968d3835a8e",
+  "velaBinaryVersion": "0.0.1-test.latest-frozen.g0968d3835a8e",
+  "velaSourceCommit": "0968d3835a8ea508c6b265f6b2857e4e6b6a039d",
   "openDesignBaselineCommit": "4fd79e1d9dd068034f05e250b9d066a7c3e28b5b",
   "platforms": [
     "darwin-arm64"
@@ -20,7 +20,7 @@
     "codex": "0.154.0",
     "claude": "2.1.267",
     "dsh": "0.1.5-rc.1",
-    "none": "0.0.1-test.latest-frozen.g4c276a423de5"
+    "none": "0.0.1-test.latest-frozen.g0968d3835a8e"
   },
   "openCodeSourceCommit": "92ba6a3b82b575cdf1c90f811935ebb6fe256d4a",
   "openCodeBinarySHA256": "b7aeb12c9e8c46a1a97fb33d5b28cee2b0f26f9cc460dd1eb70d17cc7a2cac14",
@@ -28,14 +28,14 @@
   "npmPublished": false,
   "artifacts": [
     {
-      "file": "powerformer-vela-cli-0.0.1-test.latest-frozen.g4c276a423de5.tgz",
-      "bytes": 9262,
-      "sha256": "9376fde4e42e5f7ac18eb7a776aba06b96e93c62e6a5c3ba828342b97bd75fa3"
+      "file": "powerformer-vela-cli-0.0.1-test.latest-frozen.g0968d3835a8e.tgz",
+      "bytes": 9263,
+      "sha256": "a81d81e44686a1b0998eb78c47d70ddc3f41fe6a80066f11ac07a9b2f4d085b6"
     },
     {
-      "file": "powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g4c276a423de5.tgz",
-      "bytes": 47863250,
-      "sha256": "3a52cdfe28f7b16e69124db6ec751570051d6084202e29e0f6df9c9810f2bb1c"
+      "file": "powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g0968d3835a8e.tgz",
+      "bytes": 47863571,
+      "sha256": "14629fc59b178388926f516e0020688543861c11973b4b0607a3215a721388d8"
     }
   ]
 }
