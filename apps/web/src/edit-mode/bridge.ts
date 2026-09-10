@@ -3,6 +3,8 @@ export const MANUAL_EDIT_DISCOVERY_SELECTOR =
 export const MANUAL_EDIT_SOURCE_PATH_ATTR = 'data-od-source-path';
 export const MANUAL_EDIT_HOST_NODE_SELECTOR = [
   '[data-od-sandbox-shim]',
+  // Split out of the sandbox shim, which this list already covered.
+  '[data-od-preview-in-page-link-guard]',
   '[data-od-deck-bridge]',
   '[data-od-comment-bridge]',
   '[data-od-edit-bridge]',

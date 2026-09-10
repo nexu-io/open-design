@@ -2,6 +2,8 @@ import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PREVIEW_IN_PAGE_LINK_GUARD_MARKER } from '@open-design/contracts/runtime/preview-guards';
+
 import { ensureWorkspaceProject, openDatabase } from '../src/db.js';
 import { startServer } from '../src/server.js';
 import { rewriteOutsideExecutableHtmlRanges } from '../src/routes/project/index.js';
@@ -262,6 +264,47 @@ describe('project preview containment routes', () => {
     expect(assetResponse.headers.get('access-control-allow-origin')).toBe('*');
     expect(assetResponse.headers.get('content-type')).toContain('text/css');
     expect(await assetResponse.text()).toContain('color: black');
+  });
+
+  // OPEND-2970. The containment base repoints every relative URL in the
+  // document, and a bare `#section` link is a relative URL too. The browser
+  // resolves it against the base, gets a URL that is not the document it is
+  // showing, and performs a real navigation instead of scrolling within the
+  // page. The reported artifact is a landing page whose top-right button is
+  // `<a href="#join">`: clicking it replaced the preview with
+  // `Cannot GET /api/projects/<id>/preview/<scope>/`, while the same file
+  // opened from disk -- where nothing injects a base -- scrolled normally.
+  it("keeps an artifact's own in-page links on the previewed document", async () => {
+    const projectId = await createProject();
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      '<!doctype html><html><head><title>Landing</title></head><body>'
+      + '<a class="cta" href="#join">Join</a>'
+      + '<section id="join">Join the beta</section>'
+      + '</body></html>',
+    );
+
+    const previewPath =
+      `/api/projects/${projectId}/raw/index.html?odPreviewBridge=scroll`;
+    const response = await fetch(`${baseUrl}${previewPath}`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    const baseHref = /<base\b[^>]*href="([^"]+)"/i.exec(html)?.[1];
+    expect(baseHref).toBeTruthy();
+
+    // Resolve the link the way the browser does, then follow it: the base is
+    // deliberately not the document's own URL, and the route it points at does
+    // not serve this artifact.
+    const documentUrl = new URL(previewPath, baseUrl);
+    const followed = new URL('#join', new URL(baseHref!, documentUrl));
+    expect(followed.pathname).not.toBe(documentUrl.pathname);
+    expect((await fetch(`${followed.origin}${followed.pathname}`)).status).toBe(404);
+
+    // So the response has to carry the guard that keeps the click on this
+    // document. Without it the preview navigates to that 404.
+    expect(html).toContain(PREVIEW_IN_PAGE_LINK_GUARD_MARKER);
   });
 
   it('preserves script contents while rewriting workspace-scoped asset URLs', async () => {

@@ -10,6 +10,7 @@ export const PREVIEW_REDIRECT_GUARD_MAX_HOPS = 15;
 export const PREVIEW_REDIRECT_GUARD_WINDOW_MS = 4000;
 export const PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS = 2000;
 export const PREVIEW_REDIRECT_LOOP_MESSAGE = 'od:redirect-loop-blocked';
+export const PREVIEW_IN_PAGE_LINK_GUARD_MARKER = 'data-od-preview-in-page-link-guard';
 /**
  * URL preview responses above this size stay byte-for-byte streamable so the
  * daemon can honor Range requests and avoid buffering a very large document.
@@ -24,6 +25,12 @@ export function previewHtmlHasLoadTimeLocationNavigation(source: string): boolea
   return false;
 }
 
+/**
+ * Restore what the preview iframe's opaque origin takes away: Web Storage and
+ * `history.pushState`/`replaceState`. In-page link handling used to live here
+ * too; it belongs to the containment base rather than to the origin, and is
+ * now `buildPreviewInPageLinkGuard`.
+ */
 export function buildPreviewSandboxShim(): string {
   return `<script data-od-sandbox-shim>(function(){
   function makeStore(){
@@ -61,6 +68,36 @@ export function buildPreviewSandboxShim(): string {
   }
   shimHistoryMethod('pushState');
   shimHistoryMethod('replaceState');
+})();</script>`;
+}
+
+/**
+ * Keep an artifact's own in-page links working under a host-injected `<base>`.
+ *
+ * Both preview transports give the document a containment base so a URL the
+ * artifact builds at runtime still resolves onto the scoped preview route --
+ * `injectProjectPreviewBase` for the URL-loaded preview, `injectBaseHref` for
+ * srcDoc. A bare `#section` link is a relative URL as well, so the browser
+ * resolves it against that base too, finds a URL that is not the document it
+ * is showing, and leaves the page instead of scrolling within it. srcDoc has
+ * the same problem without a base at all: an `about:srcdoc` document can never
+ * match a resolved http(s) URL.
+ *
+ * The guard handles such a click itself and moves the fragment through
+ * `location.hash`, which the browser resolves against the document's real URL
+ * rather than the base -- so the scroll, the `:target` match, and the history
+ * entry all stay on the previewed artifact. It also routes `target="_blank"`
+ * links through `window.open`, because the preview iframe's sandbox drops the
+ * default new-window navigation.
+ *
+ * Installed at most once per document: the containment base and the sandbox
+ * shim both ask for it, and a second listener would open two windows for a
+ * single `target="_blank"` click.
+ */
+export function buildPreviewInPageLinkGuard(): string {
+  return `<script ${PREVIEW_IN_PAGE_LINK_GUARD_MARKER}>(function(){
+  if (window.__odPreviewInPageLinkGuard) return;
+  window.__odPreviewInPageLinkGuard = true;
   document.addEventListener('click', function(e){
     if (!e.target || !(e.target instanceof Element)) return;
     var link = e.target.closest('a[href]');

@@ -36,6 +36,7 @@ import {
   PREVIEW_RUNTIME_STATE_VERSION,
 } from '@open-design/contracts/runtime/preview-runtime-state';
 import {
+  buildPreviewInPageLinkGuard,
   PREVIEW_REDIRECT_GUARD_MAX_HOPS,
   PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
   PREVIEW_REDIRECT_GUARD_WINDOW_MS,
@@ -365,7 +366,7 @@ export function buildSrcdoc(
   const withDeferredFonts = options.deferFontStylesheets
     ? deferTrustedFontStylesheets(withPreviewBaseBridge)
     : withPreviewBaseBridge;
-  const withShim = injectSandboxShim(withDeferredFonts);
+  const withShim = injectPreviewInPageLinkGuard(injectSandboxShim(withDeferredFonts));
   const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withPreviewBaseBridge);
   // Always on: a redirect loop can freeze ANY previewed artifact, and the guard
   // is inert on documents that never self-redirect. Injected right after the
@@ -1553,42 +1554,19 @@ function injectSandboxShim(doc: string): string {
   }
   shimHistoryMethod('pushState');
   shimHistoryMethod('replaceState');
-  document.addEventListener('click', (e) => {
-    if (!e.target || !(e.target instanceof Element)) return;
-    var link = e.target.closest('a[href]');
-    if (!link) return;
-    var href = link.getAttribute('href');
-    if (href === null) return;
-    var isAnchor = href.startsWith('#') || href === '';
-    if (isAnchor) {
-      e.preventDefault();
-      if (href === '' || href === '#') {
-        window.scrollTo({ top: 0 });
-        history.replaceState(null, '', ' ');
-      } else {
-        var targetId = href.slice(1);
-        var target = targetId ? document.getElementById(targetId) : null;
-        if (target) {
-          target.scrollIntoView();
-          location.hash === href && history.replaceState(null, '', ' ');
-          location.hash = href;
-        }
-      }
-    } else if (link.getAttribute('target') === '_blank') {
-      e.preventDefault();
-      let safe = false;
-      try {
-        var url = new URL(href, location.href);
-        safe =
-          url.protocol === 'http:' ||
-          url.protocol === 'https:' ||
-          url.protocol === 'mailto:';
-      } catch (_) {}
-      safe && window.open(href, '_blank', 'noopener,noreferrer');
-    }
-  });
 })();</script>`;
   return injectAtDocumentStart(doc, shim);
+}
+
+/**
+ * Same guard the daemon installs on the URL-loaded preview, from the same
+ * builder — an artifact's `#section` links must scroll within the document
+ * rather than resolve against the injected `<base>` and navigate away from it.
+ * Injected unconditionally: srcDoc breaks these links with or without a base,
+ * because `about:srcdoc` never matches a resolved http(s) URL.
+ */
+function injectPreviewInPageLinkGuard(doc: string): string {
+  return injectAtDocumentStart(doc, buildPreviewInPageLinkGuard());
 }
 
 function injectPreviewFocusGuard(doc: string): string {
