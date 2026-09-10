@@ -297,6 +297,29 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('classifies Bedrock "does not support the document field" as a switch-model capability failure', () => {
+    const message =
+      "undefined: This model doesn't support the document field for user messages. Remove document and try again.";
+
+    expect(
+      classifyForAgent(
+        'byok-opencode',
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'model_document_unsupported',
+      failure_stage: 'model_select',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+  });
+
   it('classifies provider "Unsupported model" responses before stream-close fallback', () => {
     const message = [
       'Bad Request: {',
