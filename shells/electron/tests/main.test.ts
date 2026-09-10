@@ -7,7 +7,10 @@ const entry = vi.hoisted(() => ({
   carrier: vi.fn(),
 }));
 
-vi.mock("node:fs", () => ({ readFileSync: entry.readFileSync }));
+vi.mock("node:fs", async original => ({
+  ...await original<typeof import("node:fs")>(),
+  readFileSync: entry.readFileSync,
+}));
 vi.mock("electron", () => ({ app: { exit: entry.exit } }));
 vi.mock("@open-design/electron-kit/runtime", () => ({
   runElectronCarrier: entry.carrier,
