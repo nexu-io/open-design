@@ -1249,12 +1249,6 @@ function AssistantMessageImpl({
     hasEmptyResponse ||
     !!copyMarkdown ||
     canFork);
-  // Continuing unfinished work is current-turn state, unlike copy/feedback/
-  // fork. Restoring historical action rows must not revive stale todo work.
-  const continueRemaining =
-    isLast && onContinueRemainingTasks && continuableTodos.length > 0
-      ? () => onContinueRemainingTasks(continuableTodos)
-      : undefined;
   const canShowOpenDesignSubmission = !!onShareToOpenDesign && showFeedback && runSucceeded;
   const showOpenDesignSubmission =
     canShowOpenDesignSubmission && (!!isLast || shareToOpenDesignBusy);
@@ -1325,6 +1319,13 @@ function AssistantMessageImpl({
         (!nextUserContent || !parseSubmittedAnswers(seg.form, nextUserContent)),
     );
   }, [message.content, nextUserContent, suppressDirectionForms]);
+  // Continuing unfinished work belongs to the current turn, and must wait
+  // until its pending clarification is answered, including when the Todo
+  // snapshot was inherited from an earlier turn.
+  const continueRemaining =
+    isLast && !hasPendingQuestionForm && onContinueRemainingTasks && continuableTodos.length > 0
+      ? () => onContinueRemainingTasks(continuableTodos)
+      : undefined;
   /**
    * 整轮失败的那一轮,**「这一轮到此为止」由壳头那句「运行失败」宣布**,页脚不再重说。
    *
