@@ -16,6 +16,32 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["release-exact", "release-prerelease", "release-stable"])("isolates static data from Standalone lifecycle changes in %s", async lane => {
+    const result = await run("python3", ["-c", [
+      "import json,sys", "from pathlib import Path", "from unittest.mock import patch",
+      "sys.path.insert(0,sys.argv[1])",
+      "from convergence import ConvergenceContract, GitFingerprinter, calculate",
+      "root=Path(sys.argv[2]); lane=sys.argv[3]",
+      "contract=ConvergenceContract(root/('.github/config/plan/'+lane+'.json'))",
+      "workflow=contract.workflow(lane)",
+      "def compute(): return calculate(contract,root,lane,workflow.execution['runners'])",
+      "before=compute(); original=GitFingerprinter.records",
+      "def changed(path):",
+      " def records(self,token):",
+      "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in original(self,token)]",
+      " with patch.object(GitFingerprinter,'records',records): after=compute()",
+      " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
+      "print(json.dumps({path:changed('packages/standalone/src/'+path) for path in ['store.ts','preparation-queue.ts','tree.ts','protocol.ts']}))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
+    const changed = JSON.parse(result.stdout) as Record<string, string[]>;
+    for (const path of ["store.ts", "preparation-queue.ts"]) {
+      expect(changed[path]).toContain("electron_capsule_darwin_arm64");
+      expect(changed[path]!.filter(name => name.startsWith("closure_data_"))).toEqual([]);
+    }
+    for (const path of ["tree.ts", "protocol.ts"]) {
+      expect(changed[path]!.filter(name => name.startsWith("closure_data_"))).toHaveLength(9);
+    }
+  });
   it("reports candidate baseline evidence without claiming channel activation", async () => {
     const result = await run("python3", ["-c", [
       "import sys,json", "sys.path.insert(0,sys.argv[1])", "from feishu import build_report",

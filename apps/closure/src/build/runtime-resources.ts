@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
-import { standaloneTreeSha256 } from "@open-design/standalone";
+import { standaloneTreeSha256 } from "@open-design/standalone/tree";
 import { build } from "esbuild";
 import { pack } from "@open-design/archive/build";
 import { closureNodeExternals } from "./node-externals.js";

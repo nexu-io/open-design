@@ -8,6 +8,7 @@
   "types": "./dist/index.d.ts",
   "files": ["dist"],
   "exports": {
+    "./tree": { "types": "./dist/tree.d.ts", "default": "./dist/tree.mjs" },
     "./packages": { "types": "./dist/packages/index.d.ts", "default": "./dist/packages/index.mjs" },
     "./packages/build": { "types": "./dist/packages/build.d.ts", "default": "./dist/packages/build.mjs" },
     "./packages/resource": { "types": "./dist/packages/resource.d.ts", "default": "./dist/packages/resource.mjs" },

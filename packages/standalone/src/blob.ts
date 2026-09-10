@@ -8,6 +8,8 @@ import { extract } from "@open-design/archive";
 
 import { canonicalJson, type StandaloneBlob, type StandaloneMaterialization } from "./protocol.js";
 import type { StandaloneFeedbackEmitter } from "./feedback.js";
+import { standaloneTreeSha256, type StandaloneTreeEntry } from "./tree.js";
+export { standaloneTreeSha256 } from "./tree.js";
 
 export type StandaloneBlobCandidate = Readonly<{
   path: string;
@@ -30,7 +32,7 @@ export type StandaloneBlobResult = Readonly<{
   source: "cas" | "shell" | "seed" | "remote";
 }>;
 
-type TreeEntry = Readonly<{ path: string; sha256: string; size: number }>;
+type TreeEntry = StandaloneTreeEntry;
 
 function under(root: string, path: string): boolean {
   const value = relative(resolve(root), resolve(path));
@@ -145,10 +147,6 @@ export async function ensureStandaloneBlob(root: string, blob: StandaloneBlob, o
   }
   event("failed", { error: { code: "resource-unavailable", message: lastError instanceof Error ? lastError.message : "blob has no usable source" } });
   throw lastError instanceof Error ? lastError : new Error(`blob is unavailable: ${blob.sha256}`);
-}
-
-export function standaloneTreeSha256(entries: readonly TreeEntry[]): string {
-  return createHash("sha256").update(canonicalJson([...entries].sort((left, right) => left.path.localeCompare(right.path)))).digest("hex");
 }
 
 async function inventory(root: string, current = root): Promise<TreeEntry[]> {

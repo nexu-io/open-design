@@ -50,6 +50,9 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
   executable permissions and native probes follow complete tree verification.
 - Expose domain types and pure/library APIs only. Concrete pack, scene, cache,
   materialize, promote, release, workflow, and argv handling belongs elsewhere.
+- `/tree` exposes the pure tree digest shared by build producers and runtime
+  verification. Producers needing only that digest must not load Store or lifecycle
+  code. Its extraction does not change the existing digest algorithm or metadata.
 - Every resource explicitly declared `sync` materializes before generation preparation;
   Node remains Shell-owned and never enters Closure's business blob catalogue.
 - Keep `packages/download` as an atomic transport primitive. Blob identity, global CAS, Shell-carried candidates, materialized trees, quarantine, reachability, and bounded cleanup belong here.

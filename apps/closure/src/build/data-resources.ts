@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { link, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { pack } from "@open-design/archive/build";
-import { standaloneTreeSha256 } from "@open-design/standalone";
+import { standaloneTreeSha256 } from "@open-design/standalone/tree";
 import { CLOSURE_DATA_RESOURCES, type ClosureDataResourceId } from "../data-resources.js";
 export { CLOSURE_DATA_RESOURCES } from "../data-resources.js";
 
