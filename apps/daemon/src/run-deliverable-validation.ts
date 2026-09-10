@@ -216,6 +216,69 @@ export async function validateRunDeliverable(
       }),
     );
     if (!touched.has(entryFile)) {
+      // Export-only tasks: the declared entry is intentionally left stale, but a
+      // touched artifact with a complete explicit manifest is a valid deliverable
+      // regardless of the project's declared kind. The candidate must (a) be
+      // touched in this run, (b) carry a persisted (non-inferred) manifest, (c)
+      // have status `complete`, (d) its manifest must be bound to the file's
+      // own path, and (e) the manifest must declare an export task (i.e. carry
+      // a `metadata.task` string). The task marker is what distinguishes a true
+      // export run from a normal prototype run that happens to have a stale
+      // entry and a touched secondary artifact — without it, an ordinary
+      // prototype run would bypass the `entry_not_touched` contract.
+      const exportCandidates = files.filter((file) => {
+        const candidatePath = filePath(file);
+        const manifest = file.artifactManifest;
+        if (!manifest || manifest.status !== 'complete') return false;
+        if (typeof manifest.entry !== 'string' || manifest.entry !== candidatePath) return false;
+        // Only consider artifacts with an explicit persisted manifest, not
+        // inferred legacy manifests that every .html/.md file receives.
+        if (manifest.metadata?.inferred === true) return false;
+        // Require an export task marker so a normal prototype run (whose
+        // touched secondary artifact might still have a complete manifest)
+        // does not bypass the `entry_not_touched` contract.
+        if (typeof manifest.metadata?.task !== 'string' || manifest.metadata.task.length === 0) {
+          return false;
+        }
+        return touched.has(candidatePath);
+      });
+
+      for (const candidate of exportCandidates) {
+        const candidatePath = filePath(candidate);
+        const manifest = candidate.artifactManifest!;
+        // Map the manifest's ArtifactKind namespace to ProjectFileKind so the
+        // result field carries the user-meaningful value. ArtifactKind in
+        // @open-design/contracts only enumerates the eight accepted persisted
+        // kinds (html, deck, react-component, markdown-document, svg, diagram,
+        // code-snippet, mini-app, design-system); the only one that maps to a
+        // different ProjectFileKind is markdown-document → document. Other
+        // manifests (code-snippet, html, ...) report the file-extension kind
+        // directly without rewriting.
+        const candidateArtifactKind: ProjectFileKind =
+          manifest.kind === 'markdown-document' ? 'document' : candidate.kind;
+
+        try {
+          const target = path.resolve(projectRoot, candidatePath);
+          const relative = path.relative(projectRoot, target);
+          if (relative.startsWith('..') || path.isAbsolute(relative)) {
+            continue;
+          }
+          const stat = await fs.stat(target);
+          if (!stat.isFile()) {
+            continue;
+          }
+          const handle = await fs.open(target, 'r');
+          await handle.close();
+          return {
+            valid: true,
+            validation: 'valid',
+            entryFile: candidatePath,
+            artifactKind: candidateArtifactKind,
+          };
+        } catch {
+          continue;
+        }
+      }
       return {
         valid: false,
         validation: 'entry_not_touched',
