@@ -1129,6 +1129,8 @@ export interface Dict {
   'entry.discordOnlineLabel': string;
   'entry.xAria': string;
   'entry.mailAria': string;
+  /** Label beside the mail glyph in the rail's account dock social row. */
+  'entry.socialMail': string;
   'entry.accountSettings': string;
   'chat.collapsePane': string;
   'collabPresence.ariaOne': string;
@@ -1182,6 +1184,8 @@ export interface Dict {
   'entry.accountLanguageMeta': string;
   'entry.accountGithubHelp': string;
   'entry.accountFeatureRequest': string;
+  /** Account menu row that opens the workspace's billing console. */
+  'entry.accountBilling': string;
   'entry.accountAddAccount': string;
   'entry.accountSignOut': string;
   // Sign-out confirmation dialog (recvqgMWpJZqhL) — shared by every logout

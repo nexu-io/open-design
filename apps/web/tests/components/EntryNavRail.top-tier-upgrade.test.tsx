@@ -86,9 +86,12 @@ function renderRail(props: {
   );
 }
 
-/** Open the account menu and scope queries to its billing card. */
+/** Hover the top-right credits pill and scope queries to the billing card
+ *  that hangs under it. The card used to live inside the account menu; it now
+ *  hangs off the pill it describes (per product), so this is the gesture that
+ *  puts it on screen. */
 function billingCard() {
-  fireEvent.click(screen.getByTestId('entry-nav-account'));
+  fireEvent.pointerEnter(screen.getByTestId('entry-top-right-credits'));
   const el = document.querySelector('.entry-nav-rail__menu-credits');
   if (!el) throw new Error('billing card is not rendered');
   return within(el as HTMLElement);

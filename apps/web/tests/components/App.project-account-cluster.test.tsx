@@ -328,23 +328,26 @@ describe('project route — floating account cluster', () => {
     resetWorkspaceDirectoryCache();
   });
 
-  it('keeps the avatar and credits pill mounted on an open project', async () => {
+  it('keeps the credits pill — but not the account menu — mounted on an open project', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(<App />);
 
-    // Both cluster members ride the shared chrome portal; they appear once the
+    // The credits pill rides the shared chrome portal; it appears once the
     // workspace context read resolves.
-    const avatar = await screen.findByTestId('entry-nav-account');
-    expect(avatar.closest('.entry-top-right-cluster')).not.toBeNull();
+    const credits = await screen.findByTestId('entry-top-right-credits');
+    expect(credits.closest('.entry-top-right-cluster')).not.toBeNull();
 
-    await waitFor(() => {
-      expect(screen.getByTestId('entry-top-right-credits')).toBeTruthy();
-    });
-    expect(avatar.getAttribute('aria-label')).toBe('Project Nova');
+    // The account module now lives at the bottom of the entry rail, and this
+    // route has no rail — so it is deliberately absent rather than relocated.
+    expect(screen.queryByTestId('entry-nav-account')).toBeNull();
+
+    // Balance still comes from THIS route's workspace, not the shell's. Asserted
+    // without a currency symbol: the pill leads with the plan wordmark and
+    // renders the bare amount beside it.
     expect(
       screen.getByTestId('entry-top-right-credits').textContent,
-    ).toContain('$12.34');
-    expect(screen.getByTestId('entry-top-right-credits').textContent).not.toContain('$98.76');
+    ).toContain('12.34');
+    expect(screen.getByTestId('entry-top-right-credits').textContent).not.toContain('98.76');
 
     fireEvent.click(screen.getByTestId('entry-top-right-credits'));
     expect(open).toHaveBeenCalledOnce();

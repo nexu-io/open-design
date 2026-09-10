@@ -7,11 +7,13 @@
 // unlimited, so the wallet only meters flagship calls. A subscriber therefore
 // sits at $0.00 as a normal, healthy state — and the pill rendered it as a
 // permanent alarm next to their avatar. Product ruling: hide the money for a
-// subscribed plan whose balance is exactly zero. Free plans keep it (zero is
-// the number that explains why hosted models are unavailable), and an
-// overdrawn wallet keeps it on every plan.
+// subscribed plan whose balance is exactly zero. The pill itself stays (it
+// leads with the plan wordmark and is the only way to the billing card under
+// it); only the number goes. Free plans sell the upgrade on the pill instead
+// and keep the zero in the card (it is the number that explains why hosted
+// models are unavailable), and an overdrawn wallet keeps it on every plan.
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -82,6 +84,12 @@ function creditsPill(): HTMLElement | null {
   return screen.queryByTestId('entry-top-right-credits');
 }
 
+/** The balance row inside the billing card that hangs under the pill. */
+function creditsRow(): HTMLElement {
+  fireEvent.pointerEnter(screen.getByTestId('entry-top-right-credits'));
+  return screen.getByTestId('entry-nav-credits-row');
+}
+
 describe('top-right credits pill', () => {
   it.each(['go', 'plus', 'pro', 'max'])(
     'hides the zero balance on the subscribed personal plan %s',
@@ -91,23 +99,31 @@ describe('top-right credits pill', () => {
         billing: billing({ membershipTier: tier }),
         balanceUsd: '0',
       });
-      expect(creditsPill()).toBeNull();
+      // The pill still names the plan (wordmark, or the charge glyph for a
+      // tier with no wordmark such as `go`) but carries no number.
+      expect(creditsPill()).not.toBeNull();
+      expect(creditsPill()?.textContent?.trim()).toBe('');
+      expect(creditsPill()?.querySelector('svg')).not.toBeNull();
     },
   );
 
   it('hides a zero balance written as 0.00', () => {
     renderRail({ balanceUsd: '0.00' });
-    expect(creditsPill()).toBeNull();
+    expect(creditsPill()?.textContent?.trim()).toBe('');
   });
 
   it('keeps the balance when a subscriber still has money', () => {
+    // Bare amount on the pill: the wordmark beside it names the plan, and the
+    // dollar sign only appears on the card's balance row.
     renderRail({ balanceUsd: '120' });
-    expect(creditsPill()?.textContent).toContain('$120.00');
+    expect(creditsPill()?.textContent).toContain('120.00');
+    expect(creditsRow().textContent).toContain('$120.00');
   });
 
   it('keeps an overdrawn balance visible on a subscribed plan', () => {
     renderRail({ balanceUsd: '-1.25' });
-    expect(creditsPill()?.textContent).toContain('-$1.25');
+    expect(creditsPill()?.textContent).toContain('-1.25');
+    expect(creditsRow().textContent).toContain('-$1.25');
   });
 
   it.each(['team_basic', 'team_plus', 'team_max_yearly'])(
@@ -122,27 +138,34 @@ describe('top-right credits pill', () => {
         billing: billing({ membershipTier: tier }),
         balanceUsd: '0',
       });
-      expect(creditsPill()?.textContent).toContain('$0.00');
+      expect(creditsPill()?.textContent).toContain('0.00');
+      expect(creditsRow().textContent).toContain('$0.00');
     },
   );
 
-  it('keeps the zero balance for a free plan, where it explains the gate', () => {
+  it('sells the upgrade on a free plan and keeps the zero in the card, where it explains the gate', () => {
     renderRail({
       context: context({ planId: null, billingState: 'free' } as Partial<WorkspaceCollabContext>),
       billing: billing({ membershipTier: '', subscriptionStatus: '' }),
       balanceUsd: '0',
     });
-    expect(creditsPill()?.textContent).toContain('$0.00');
+    // The free pill IS the upgrade CTA (per product): no balance on it.
+    expect(creditsPill()?.textContent).toContain('升级');
+    expect(creditsPill()?.textContent).not.toContain('0.00');
+    expect(creditsRow().textContent).toContain('$0.00');
   });
 
-  it('keeps the zero balance while the plan is still unknown', () => {
-    // Billing has not answered yet: hiding money on an unresolved plan would
-    // make the pill flicker in and out as the read lands.
+  it('keeps the pill and the zero balance while the plan is still unknown', () => {
+    // Billing has not answered yet: hiding the pill on an unresolved plan
+    // would make it flicker in and out as the read lands. With no plan at all
+    // the display label resolves free — the state a local dev workspace sits
+    // in — so the pill sells the upgrade and the card keeps the zero.
     renderRail({
       context: context({ planId: null, billingState: undefined } as Partial<WorkspaceCollabContext>),
       billing: null,
       balanceUsd: '0',
     });
-    expect(creditsPill()?.textContent).toContain('$0.00');
+    expect(creditsPill()?.textContent).toContain('升级');
+    expect(creditsRow().textContent).toContain('$0.00');
   });
 });

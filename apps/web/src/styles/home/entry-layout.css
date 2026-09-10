@@ -117,6 +117,12 @@
 .entry-nav-rail__panel {
   flex: 1 1 auto;
   min-height: 0;
+  /* Size container for the rows inside it: the rail is draggable now, so the
+     account dock's social row drops its labels by MEASURING this box rather
+     than by testing the window (a media query cannot see a width the user
+     dragged). */
+  container-type: inline-size;
+  container-name: entry-rail-panel;
   /* No explicit width: as a stretch flex child it fills the rail minus its
      horizontal margins (so margin insets it without overflowing the track). */
   display: flex;
@@ -6170,17 +6176,91 @@
   }
 }
 
-/* ---- Account switcher (top of rail) ---- */
+/* ---- Account dock (foot of the nav column) ---- */
+/* Portal host for the account module (owned by `EntryTopRightCluster`).
+   Transparent to layout so the account block below behaves as a direct flex
+   child of `.entry-nav-rail__group`. */
+.entry-nav-rail__account-host {
+  display: contents;
+}
+
+/* Bottom dock: the social links stack directly above the identity row, and the
+   pair sinks to the foot of the nav column together. The auto margin lives
+   here, so `.entry-nav-rail__account` inside it gives up its own. */
+.entry-nav-rail__account-dock {
+  order: 99;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.entry-nav-rail__account-dock .entry-nav-rail__account {
+  order: 0;
+  margin: 0;
+  padding-top: 0;
+}
+
+.entry-nav-rail__account-dock .entry-nav-rail__menu-social {
+  /* Spans exactly what the identity row below it spans (per product: 上边这排
+     的最大宽度和头像那一排一样): no side inset, and the three links spread so
+     Discord starts on the account trigger's left edge and 邮件 ends on the
+     message-centre bell's right edge. `gap` stays the floor if the rail ever
+     gets narrow enough for the labels to meet. */
+  padding: 0;
+  justify-content: space-between;
+}
+
 .entry-nav-rail__account {
   position: relative;
   display: flex;
-  /* Credits chip stacks above the avatar row (chip is order: -1 below). */
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+  /* One row: identity, message centre, then the update slot at the outer edge.
+     Only the identity column is elastic — the two after it hold fixed slots, so
+     a long account name truncates instead of pushing them off the rail. (This
+     was a column back when the credits chip stacked above the avatar; that chip
+     now lives in the top-right cluster.) */
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   order: 99;
   margin: auto 0 0;
   padding-top: var(--spacing-10);
+}
+
+/* Message centre: a fixed square slot beside the identity, matching the rail
+   nav items' quiet icon treatment. */
+.entry-nav-rail__account-bell {
+  position: relative;
+  flex: 0 0 auto;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.entry-nav-rail__account-bell:hover,
+.entry-nav-rail__account-bell:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-strong);
+}
+
+/* The shared dot is authored for menu ROWS, where `margin-left: auto` pushes it
+   to the trailing edge. On the square bell it has to pin to the glyph instead. */
+.entry-nav-rail__account-bell .entry-nav-rail__menu-item-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  margin-left: 0;
 }
 /* Update-ready slot: an independent top-right cluster item immediately AFTER
    the credits/avatar capsule when present. Signed-out shells keep the same
@@ -6268,13 +6348,16 @@
   flex: 0 0 24px;
 }
 .entry-nav-rail__account-name {
-  font-size: 13px;
-  font-weight: 500;
   flex: 0 1 auto;
+  min-width: 0;
+  /* Pushes the fixed slots after it (bell, updater) to the row's far edge. */
   margin-right: auto;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
 }
 .entry-nav-rail__account-trigger svg { color: var(--text-soft); }
 /* The membership wordmark reads as a solid black mark, not a muted glyph. */
@@ -6550,7 +6633,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 30px;
+  /* Shared cluster row height — see .entry-deepseek-campaign-badge. */
+  min-height: 28px;
   padding: 0 11px;
   border: 1px solid var(--material-separator);
   border-radius: var(--radius-pill);
@@ -6559,7 +6643,7 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-13);
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
@@ -6572,15 +6656,56 @@
   border-color: var(--border-strong);
 }
 
+/* Hover region + positioning context for the billing panel that hangs under
+   the credits / 升级 pill (per product: 黑色卡片在右上角的升级下边显示). The
+   anchor wraps the pill AND the panel, so the pointer crossing from one to the
+   other never leaves it. */
+.entry-top-right-credits-anchor {
+  position: relative;
+  display: inline-flex;
+  /* The cluster lays its children out in a row; this wrapper must not change
+     the pill's own box, only give it a parent. */
+  align-items: center;
+}
+
+.entry-top-right-credits-panel {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  /* Right-aligned with the pill: the cluster sits in the window's top-right
+     corner, so a left-aligned or centred panel would hang off the edge. */
+  right: 0;
+  /* The card's own width, not the pill's — the pill is as narrow as "升级" and
+     the plan row inside needs room for the tier label plus its wordmark. */
+  width: 232px;
+  /* 6px of visual gap, paid as PADDING rather than margin/offset so the strip
+     between pill and panel is still inside the anchor and the pointer can
+     cross it without arming the close timer. */
+  padding-top: 6px;
+}
+
+/* The card carries its own ink-black ground; inside the menu it also kept a
+   6px tail before the rows under it, which out here is a stray gap under a
+   floating panel. */
+.entry-top-right-credits-panel .entry-nav-rail__menu-credits {
+  margin-bottom: 0;
+  box-shadow: var(--shadow-lg);
+}
+
 .entry-top-right-account-pill {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  /* ONE shared capsule around credits + avatar (per product: 两个合成一个
-     胶囊) — the pill material lives here; the segments inside stay
-     chrome-free click targets. */
-  min-height: 30px;
-  padding: 2px 3px 2px 10px;
+  /* The capsule holds the credits segment alone now — the avatar moved to the
+     rail — so it no longer keeps the 3px right inset that used to hug the
+     avatar circle. Padded evenly instead: 10px of ink gutter on the sides
+     (plus the 1px border); vertically the shared row height does the work, so
+     the vertical inset is 0 — a 24px credits segment plus the 1px borders
+     already fits inside 28px, and any padding here would push the capsule
+     taller than the chips beside it. */
+  /* Shared cluster row height — see .entry-deepseek-campaign-badge. */
+  min-height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--material-separator);
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
@@ -6625,7 +6750,7 @@
   background: transparent;
   box-shadow: none;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-13);
   font-weight: 600;
   line-height: 1;
   color: var(--text-strong);
@@ -6641,6 +6766,31 @@
 .entry-top-right-credits:hover:not(:disabled) {
   background: transparent;
   border-color: transparent;
+}
+
+/* Free plan: the capsule stops reporting a balance and becomes the upgrade
+   CTA — saturated green ground, near-black ink and spark mark on it (per
+   product). The ground goes on the WRAPPER because that is what owns the pill
+   material; the segment inside stays chrome-free. The frosted translucency
+   goes with it: it exists to let the wash through a near-white capsule, and
+   over an opaque green it only muddies the colour. */
+.entry-top-right-account-pill--upgrade {
+  background: var(--upgrade-ground);
+  border-color: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* The svg rule needs the extra class: `.entry-top-right-credits svg` above
+   paints every glyph in this segment --text-soft at (0,2,0). */
+.entry-top-right-account-pill--upgrade .entry-top-right-credits,
+.entry-top-right-account-pill--upgrade .entry-top-right-credits svg {
+  color: var(--upgrade-ink);
+}
+
+.entry-top-right-account-pill--upgrade .entry-top-right-credits:hover:not(:disabled) {
+  background: transparent;
+  color: var(--upgrade-ink);
 }
 /* Doubled class on the container: the rail-era
    `.entry-nav-rail__account .entry-nav-rail__account-menu` sizing rule
@@ -6719,6 +6869,12 @@
   width: auto;
   min-width: 0;
   box-sizing: border-box;
+  /* EntryNavRail measures the room left inside the rail card and sets
+     `max-height` inline (a CSS length cannot name that height). Scroll the
+     overflow rather than letting the menu run past the card's top edge. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 /* Invisible hover bridge over the 4px float gap, so moving the pointer from
    the avatar row up into the menu never leaves the hover region. */
@@ -6746,21 +6902,46 @@
   flex: 0 0 auto;
   background: var(--bg-elevated);
 }
-/* Left-aligned identity header (small avatar beside the name/email stack),
-   closed off by a dashed rule — mirrors the reference account menu. */
+/* Avatar over the name (per product: 头像和名称上下结构) rather than beside it,
+   and the stack centred on the menu card it sits in (per product: 和外边的白色
+   的卡片居中对齐) rather than ragged left. A single column, so the name and the
+   email below it keep the full menu width instead of the ~34px-narrower track
+   the avatar used to reserve — the email is the long one and it stops
+   truncating as early. */
 .entry-nav-rail__account-head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 9px;
-  row-gap: 2px;
-  align-items: center;
-  justify-items: start;
-  padding: 6px 6px 10px;
-  border-bottom: 1px dashed var(--material-separator);
+  /* The identity block is its own tinted card inset in the menu (per product:
+     头像那个模块下边是一个灰色的底, Chrome's profile menu as the reference) —
+     the grey sits UNDER the avatar/name/email, and the rows below stay on the
+     menu's plain ground. Inset, so it reads as a card rather than a banner: it
+     sits inside the menu's 6px padding on every side, with a radius one step
+     down from the menu's 12 so the two corners nest.
+     #EDEDED per product (was #F7F7F7, which at 3 steps off the menu's own
+     #fafafa was too close to read as a separate surface). Through the token
+     rather than the literal: --bg-subtle IS #ededed in light and steps to
+     #494949 in dark, so the card stays a lighter block on the darker menu
+     there instead of shipping a near-white slab. */
+  background: var(--bg-subtle);
   margin-bottom: 6px;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* The rows BELOW this block stay left-aligned — they are icon + label lines,
+     and centring them would leave their glyphs on a ragged column. Only the
+     identity block centres. */
+  text-align: center;
+  gap: 2px;
+  /* Roomy, like the reference: the fill needs air around the stack or it reads
+     as a highlight bar rather than a card. */
+  padding: 16px 12px 18px;
+  /* No dashed rule any more — the card's own fill is what separates the block
+     from the rows, and a hairline along the bottom edge of a filled card reads
+     as a seam in it. */
 }
 .entry-nav-rail__account-head-avatar {
-  grid-row: 1 / span 2;
+  /* Its own row now; the 6px separates it from the name under it (the flex
+     gap above carries the name→email 2px). */
+  margin-bottom: 6px;
   width: 34px;
   height: 34px;
   border-radius: 8px;
@@ -6771,7 +6952,16 @@
   font-size: 14px;
   font-weight: 700;
 }
-.entry-nav-rail__account-head-name { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.entry-nav-rail__account-head-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .entry-nav-rail__account-head-email {
   font-size: 12px;
   color: var(--text-muted);
@@ -6804,13 +6994,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Text glyph standing in for the X (Twitter) icon; sized like the 19px icon
-   slot so the label column stays aligned with icon rows. */
+/* X's own mark (inline SVG — it is not in the Remix set the Icon component
+   draws from). Sized in the markup like its Discord / mail neighbours; the
+   colour rides the link so hover moves all three together. */
 .entry-nav-rail__menu-x {
-  flex: 0 0 19px;
-  text-align: center;
-  font-weight: 700;
-  color: var(--text-soft);
+  flex: 0 0 auto;
+  display: block;
+  color: inherit;
 }
 /* Icon-only social row (Discord / X) below the GitHub Star row: the labels
    are dropped and the two links sit side by side as compact icon buttons.
@@ -6825,18 +7015,51 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
+  /* Icon + its name on one line (per product: 左边图标，右边文本), so the button
+     sizes to that pair instead of the old 34px icon square. */
+  gap: 5px;
   height: 30px;
+  padding: 0 7px;
   border-radius: var(--radius-md);
   color: var(--text-soft);
   text-decoration: none;
+}
+.entry-nav-rail__menu-social-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: inherit;
 }
 .entry-nav-rail__menu-social-btn:hover {
   background: var(--vibrancy-fill-secondary);
   color: var(--text);
 }
+/* Once the rail is too narrow to seat three labelled links side by side, the
+   labels go and the buttons fall back to icon squares. */
+@container entry-rail-panel (max-width: 190px) {
+  .entry-nav-rail__menu-social-label {
+    display: none;
+  }
+  .entry-nav-rail__menu-social-btn {
+    /* Back to a square target now that there is no label to sit beside. */
+    gap: 0;
+    width: 30px;
+    padding: 0;
+  }
+}
+/* All three marks at 16 (per product), pinned here rather than left to the
+   markup: `<Icon>` writes width/height as HTML ATTRIBUTES, which are
+   presentational hints and lose to any rule at all — so the size only holds as
+   long as nothing else in the cascade reaches these glyphs. The label beside
+   them stays 12 (`.entry-nav-rail__menu-social-label` above). */
 .entry-nav-rail__menu-social-btn svg,
-.entry-nav-rail__menu-social-btn .od-icon { color: inherit; }
+.entry-nav-rail__menu-social-btn .od-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: inherit;
+}
 /* GitHub 按钮附带实时 star 数时放开固定宽度，图标 + 数字并排 */
 .entry-nav-rail__menu-social-btn:has(.entry-nav-rail__menu-social-count) {
   width: auto;

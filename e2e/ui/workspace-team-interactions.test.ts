@@ -979,10 +979,14 @@ test('[P1] visible workspace allowance refreshes in place without reloading the 
 }) => {
   const workspaceMocks = await wireWorkspaceMocks(page, TEAM_OWNER, [TEAM_OWNER]);
   await gotoHome(page);
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-account').evaluate((element: HTMLButtonElement) => {
-    element.click();
-  });
+  const pill = page.getByTestId('entry-top-right-credits');
+  await pill.focus();
+  const billingPanel = page.getByTestId('entry-top-right-credits-panel');
+  await expect(billingPanel).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(billingPanel.getByRole('button', { name: 'Upgrade', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('entry-nav-credits-row')).toBeFocused();
   const credits = page.getByTestId('entry-nav-credits-row');
   await expect(credits).toContainText('$0.00');
   const documentMarker = await page.evaluate(() => {
@@ -2022,11 +2026,16 @@ async function gotoHome(page: Page): Promise<void> {
   await expect(page.getByTestId('workspace-switcher')).toBeAttached();
 }
 
+/**
+ * Put the billing card on screen. It hangs under the top-right credits pill
+ * (hover-opened) now, not inside the rail's account menu, so the rail state
+ * does not matter here.
+ */
 async function openAccountMenu(page: Page): Promise<void> {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-account').evaluate((element: HTMLButtonElement) => {
-    element.click();
-  });
+  // Bounded: a fixture with no billing answer must fail the assertion, not
+  // the test's own timeout (the two-windows spec is a `test.fail` that relies
+  // on an ordinary failure here).
+  await page.getByTestId('entry-top-right-credits').hover({ timeout: T.medium });
   await expect(page.getByTestId('entry-nav-credits-row')).toBeVisible({ timeout: 1_000 });
 }
 

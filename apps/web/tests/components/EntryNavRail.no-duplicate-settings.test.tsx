@@ -50,12 +50,23 @@ afterEach(() => {
   cleanup();
 });
 
+/** The rail item that follows 插件 in the destination column, by testId. */
+function testIdAfterPlugins(): string | null {
+  const items = Array.from(document.querySelectorAll('.entry-nav-rail__btn'));
+  const pluginsIndex = items.findIndex(
+    (el) => el.getAttribute('data-testid') === 'entry-nav-plugins',
+  );
+  if (pluginsIndex < 0) return null;
+  return items[pluginsIndex + 1]?.getAttribute('data-testid') ?? null;
+}
+
 describe('EntryNavRail settings entry', () => {
   it('renders the settings item below 扩展 when there is no cloud identity', () => {
     const onOpenSettings = renderRail(null);
 
     const settings = screen.getByTestId('entry-settings-button');
     expect(settings).toBeTruthy();
+    expect(testIdAfterPlugins()).toBe('entry-settings-button');
     fireEvent.click(settings);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
@@ -68,6 +79,9 @@ describe('EntryNavRail settings entry', () => {
     const group = settings[0]!.closest('.entry-nav-rail__team-section');
     expect(group).not.toBeNull();
     expect(group?.querySelector('[data-testid="entry-nav-plugins"]')).not.toBeNull();
+    // Directly under 插件 in BOTH identity states (per product: 设置的按钮在插件下边);
+    // the account menu carries no 设置 row, so the count stays exactly one.
+    expect(testIdAfterPlugins()).toBe('entry-settings-button');
     fireEvent.click(settings[0]!);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });

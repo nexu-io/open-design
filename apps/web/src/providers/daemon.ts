@@ -964,6 +964,20 @@ export function formatVelaBalanceUsd(raw?: string | null): string | null {
   return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
+/**
+ * Format a raw wallet `balanceUsd` string into the bare amount (e.g. "12.30")
+ * for surfaces that already name the currency some other way — the top-right
+ * credits pill leads with the plan wordmark and shows the number beside it.
+ * Same null contract as `formatVelaBalanceUsd`.
+ */
+export function formatVelaBalanceAmount(raw?: string | null): string | null {
+  if (raw == null || raw === '') return null;
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return null;
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}${Math.abs(amount).toFixed(2)}`;
+}
+
 /** Top subscription tier — no upgrade affordance is shown at/above this. */
 export const VELA_TOP_PLAN_TIER = 'max';
 

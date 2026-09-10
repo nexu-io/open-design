@@ -12,7 +12,10 @@ import {
   defaultAgentModelId,
   effectiveAgentModelChoice,
 } from './agentModelSelection';
-import { orderModelOptionsByAvailability } from './modelOptions';
+import {
+  modelVersionLabel,
+  orderModelOptionsByAvailability,
+} from './modelOptions';
 import {
   mergeProviderModelOptions,
   providerModelsCacheKey,
@@ -417,7 +420,9 @@ export function AvatarMenu({
     config.mode === 'api'
       ? apiModelLabel
       : config.mode === 'daemon'
-        ? currentModelLabel ?? currentModelId
+        ? currentModelId
+          ? modelVersionLabel(currentModelId, currentModelLabel ?? currentModelId)
+          : currentModelLabel ?? null
         : null;
   // Model id backing the readout — used to resolve the provider brand mark that
   // replaces the model-name text in the composer trigger.
@@ -565,7 +570,7 @@ export function AvatarMenu({
                                 })()}
                               </span>
                               <span className="avatar-model-option-label">
-                                {model.label}
+                                {modelVersionLabel(model.id, model.label)}
                               </span>
                               {locked ? (
                                 <RemixIcon
@@ -643,7 +648,11 @@ export function AvatarMenu({
                     <span className="avatar-select-label">
                       {t('avatar.modelLabel')}
                     </span>
-                    <div className="avatar-static-value">{currentModelLabel}</div>
+                    <div className="avatar-static-value">
+                      {currentModelId
+                        ? modelVersionLabel(currentModelId, currentModelLabel)
+                        : currentModelLabel}
+                    </div>
                   </div>
                 </div>
               ) : currentAgent ? (
