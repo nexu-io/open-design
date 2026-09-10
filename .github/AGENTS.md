@@ -81,6 +81,14 @@ gate may produce a `handoff/convergence` candidate; only trusted
 `convergence.atom.yml` code may publish immutable results. `lib/r2.py` knows R2
 transport only and must not interpret workload policy or handoff schemas.
 
+`convergence.py contribute` binds an executed workload to either `--artifact`
+(a current-run GitHub artifact) or `--descriptor` (a JSON object with a public
+`url`, `sha256`, and optional business `data`). URL products are not downloaded
+and repackaged by the trusted atom. The descriptor carries no planner identity;
+the Python command binds it to the pending decision. This transport choice does
+not relax repeated-result equality or authorize a resource publication reuse
+policy by itself.
+
 ## Handoff contract
 
 Use `.github/scripts/handoff.py` for all CI follow-on artifact names and paths. The canonical layout is:

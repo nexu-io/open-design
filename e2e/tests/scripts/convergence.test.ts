@@ -419,6 +419,55 @@ assert not (root / 'escape').exists()
     expect(refused.stderr).toContain("selected execution");
   });
 
+  test("carries a published descriptor through contribution and handoff without an artifact relay", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.workflows.ci.workloads.a.products = "manifest";
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const plan = runPlan(fixture);
+    const output = path.join(fixture.root, "products"), descriptorFile = path.join(fixture.root, "publication.json");
+    const descriptor = { url: "https://releases.example/betahyx/0.1.0-betahyx.1/content-metadata.json",
+      sha256: "e".repeat(64), data: { resource: { id: "skills", sha256: "f".repeat(64) } } };
+    writeFileSync(descriptorFile, JSON.stringify(descriptor));
+    const args = [convergenceScript, "--config", fixture.configPath, "contribute",
+      "--pending", fixture.pendingPath, "--workload", "a", "--product", "resource",
+      "--descriptor", descriptorFile, "--output", output];
+    execFileSync("python3", args);
+    const manifest = JSON.parse(readFileSync(path.join(output, "a/product-manifest.json"), "utf8"));
+    expect(manifest).toEqual({ workload: "a", digest: workload(plan.pending.workloads, "a").digest,
+      executionClass: { runnerClass: "worker", labels: ["ubuntu-24.04"] }, products: {
+        resource: { type: "url", source: descriptor.url, data: { ...descriptor.data, sha256: descriptor.sha256 } },
+      } });
+    const candidateFile = path.join(fixture.root, "candidate.json");
+    writeFileSync(candidateFile, JSON.stringify(candidate(manifest.products)));
+    const sources = execFileSync("python3", ["-c", [
+      "import json,sys", "from pathlib import Path", "sys.path.insert(0,sys.argv[1])",
+      "from convergence import candidate_product_sources, prepare_publication",
+      "print(json.dumps(candidate_product_sources(Path(sys.argv[2]))))",
+      "prepare_publication(Path(sys.argv[2]), Path(sys.argv[3]))",
+    ].join("\n"), path.dirname(convergenceScript), candidateFile, path.join(fixture.root, "ready")], { encoding: "utf8" });
+    expect(JSON.parse(sources)).toEqual([]);
+    for (const invalid of [
+      { ...descriptor, sha256: "invalid" },
+      { ...descriptor, url: "file:///tmp/product.json" },
+      { ...descriptor, url: "https://token:secret@releases.example/metadata.json" },
+      { ...descriptor, data: { sha256: "0".repeat(64) } },
+      { ...descriptor, workload: "executor-owned-identity" },
+    ]) {
+      writeFileSync(descriptorFile, JSON.stringify(invalid));
+      expect(spawnSync("python3", args, { encoding: "utf8" }).status).not.toBe(0);
+    }
+    writeFileSync(descriptorFile, JSON.stringify(descriptor));
+    expect(spawnSync("python3", [...args, "--artifact", "duplicate-source"], { encoding: "utf8" }).status).not.toBe(0);
+    const pending = JSON.parse(readFileSync(fixture.pendingPath, "utf8"));
+    pending.workloads.a.run = false;
+    pending.workloads.a.resultHit = true;
+    writeFileSync(fixture.pendingPath, JSON.stringify(pending));
+    const refused = spawnSync("python3", args, { encoding: "utf8" });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain("selected execution");
+  });
+
   test("binds declared artifacts in one control-plane batch and excludes cache hits", () => {
     const fixture = createRepository();
     const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
