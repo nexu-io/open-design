@@ -11,6 +11,7 @@ import {
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 
+import { buildZip } from '../../src/runtime/zip';
 import { FileWorkspace } from '../../src/components/FileWorkspace';
 import {
   CollabProvider,
@@ -749,11 +750,12 @@ describe('FileWorkspace design-system project surface', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      // Real ZIP signature: the archive download verifies it now. Note the
-      // body is passed as a string — `new Response(new Blob([...]))` is
-      // stringified to "[object Blob]" in this environment, so the previous
-      // fixture never carried the bytes it appeared to.
-      return new Response('PK\x03\x04zip', {
+      // A genuine archive from the app's own writer: the download now
+      // validates ZIP structure (central directory + EOCD), so a signature
+      // prefix is rejected. Passed as an ArrayBuffer because
+      // `new Response(new Blob([...]))` stringifies to "[object Blob]" here,
+      // which is what the original fixture was silently serving.
+      return new Response(await buildZip([{ path: 'acme.html', content: 'zip' }]).arrayBuffer(), {
         status: 200,
         headers: { 'Content-Disposition': 'attachment; filename="acme.zip"' },
       });

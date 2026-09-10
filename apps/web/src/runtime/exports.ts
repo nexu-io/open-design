@@ -871,31 +871,117 @@ export function exportReactComponentAsZip(
 // directory we scope the archive to that directory, otherwise we ask the
 // daemon for the whole project. Falls back to the in-memory single-file
 // ZIP on any failure so the action never silently no-ops.
-/** Local file header — every non-empty ZIP starts here. */
-const ZIP_SIGNATURE_LOCAL_FILE = [0x50, 0x4b, 0x03, 0x04] as const;
-/** End of central directory — the whole body of an empty ZIP. */
-const ZIP_SIGNATURE_EMPTY_ARCHIVE = [0x50, 0x4b, 0x05, 0x06] as const;
-const ZIP_SIGNATURES = [ZIP_SIGNATURE_LOCAL_FILE, ZIP_SIGNATURE_EMPTY_ARCHIVE] as const;
-const ZIP_SIGNATURE_BYTES = 4;
+/** Local file header — every non-empty ZIP starts with one. */
+const ZIP_LOCAL_FILE_SIGNATURE = [0x50, 0x4b, 0x03, 0x04] as const;
+/** End of central directory record: 22 bytes, plus an optional comment. */
+const ZIP_EOCD_SIGNATURE = [0x50, 0x4b, 0x05, 0x06] as const;
+const ZIP_EOCD_SIZE = 22;
+/** The EOCD comment length field is a uint16, so the record starts at most this far from the end. */
+const ZIP_MAX_COMMENT = 0xffff;
+/** Central directory file header — one per entry, 46 bytes plus name/extra/comment. */
+const ZIP_CENTRAL_HEADER_SIGNATURE = [0x50, 0x4b, 0x01, 0x02] as const;
+const ZIP_CENTRAL_HEADER_SIZE = 46;
 
 /**
- * True when the blob begins with a full four-byte ZIP signature — `PK\x03\x04`
- * for a normal archive, `PK\x05\x06` for an empty one. Both bytes after `PK`
- * are checked, so a short or corrupt body that merely starts with `PK` is
- * rejected rather than passed off as an archive.
+ * Walks the central directory the EOCD points at and confirms it holds
+ * exactly the number of well-formed records the EOCD declares, consuming the
+ * declared size exactly.
  *
- * This is a signature check, not archive-integrity validation: it tells us the
- * response is shaped like a ZIP, not that the ZIP is complete or readable.
+ * Checking only that the directory's byte range fits inside the file is not
+ * enough: a stream damaged in that region keeps a plausible range while the
+ * records themselves are gone, and a reader then fails with something like
+ * "expected 1 records in central dir, got 0".
+ */
+async function centralDirectoryIsIntact(
+  blob: Blob,
+  offset: number,
+  size: number,
+  declaredEntries: number,
+): Promise<boolean> {
+  // An empty archive has no directory at all.
+  if (size === 0) return declaredEntries === 0;
+  if (size < ZIP_CENTRAL_HEADER_SIZE) return false;
+
+  // The EOCD entry count is a uint16, so it is only ever the low 16 bits of
+  // the real total. Writers that predate Zip64 — including JSZip, which the
+  // daemon uses to build project archives, and this app's own `buildZip` —
+  // truncate rather than emitting the Zip64 sentinel, so 65,536 entries are
+  // written as 0 and 65,537 as 1. Comparing modulo 65,536 accepts those
+  // readable archives while still catching a directory that genuinely
+  // disagrees with its own count. 0xffff is the Zip64 sentinel proper, where
+  // the real count lives in the Zip64 record and no comparison is possible.
+  const countIsComparable = declaredEntries !== 0xffff;
+
+  const bytes = new Uint8Array(await blob.slice(offset, offset + size).arrayBuffer());
+  if (bytes.length !== size) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  let cursor = 0;
+  let found = 0;
+  while (cursor < bytes.length) {
+    if (cursor + ZIP_CENTRAL_HEADER_SIZE > bytes.length) return false;
+    if (!ZIP_CENTRAL_HEADER_SIGNATURE.every((b, k) => bytes[cursor + k] === b)) return false;
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    cursor += ZIP_CENTRAL_HEADER_SIZE + nameLength + extraLength + commentLength;
+    found += 1;
+  }
+  // The records must consume the declared directory size exactly, and — when
+  // the EOCD count is trustworthy — match it.
+  if (cursor !== bytes.length) return false;
+  return countIsComparable ? found % 0x10000 === declaredEntries : found > 0;
+}
+
+/**
+ * True when the blob is a structurally complete ZIP.
  *
  * A 2xx is not proof the body is an archive: an authenticating proxy can
- * answer with its own HTML interstitial at 200, and a truncated or empty
- * transfer arrives as a 0-byte body. Without this check both are handed to
- * the user as a .zip and reported as a successful export.
+ * answer with its own HTML interstitial at 200, and an empty or truncated
+ * transfer arrives short. Without this check each is handed to the user as a
+ * .zip and reported as a successful export.
+ *
+ * A signature prefix alone is not enough either. `PK\x05\x06` is only the
+ * first four bytes of the 22-byte end-of-central-directory record, and
+ * `PK\x03\x04…` is a local header with no central directory behind it —
+ * both are unreadable archives, and a truncated stream produces exactly the
+ * latter. So the EOCD is located and validated:
+ *
+ *   1. scan back from the end for the EOCD signature (bounded by the maximum
+ *      comment length, so the window is at most 64 KiB + 22 bytes),
+ *   2. require the declared comment length to account for every remaining
+ *      byte, so nothing is missing after the record,
+ *   3. walk the central directory it points at and require exactly the
+ *      declared number of well-formed records, consuming its declared size.
+ *
+ * This establishes that the archive's index is present and self-consistent.
+ * It is not a full parse: entry contents and CRCs are not verified.
  */
 async function looksLikeZip(blob: Blob): Promise<boolean> {
-  if (blob.size < ZIP_SIGNATURE_BYTES) return false;
-  const magic = new Uint8Array(await blob.slice(0, ZIP_SIGNATURE_BYTES).arrayBuffer());
-  return ZIP_SIGNATURES.some((signature) => signature.every((byte, i) => magic[i] === byte));
+  if (blob.size < ZIP_EOCD_SIZE) return false;
+
+  const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  const startsWith = (sig: readonly number[]): boolean => sig.every((b, i) => head[i] === b);
+  if (!startsWith(ZIP_LOCAL_FILE_SIGNATURE) && !startsWith(ZIP_EOCD_SIGNATURE)) return false;
+
+  const windowSize = Math.min(blob.size, ZIP_EOCD_SIZE + ZIP_MAX_COMMENT);
+  const tail = new Uint8Array(await blob.slice(blob.size - windowSize).arrayBuffer());
+  const view = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+
+  for (let i = tail.length - ZIP_EOCD_SIZE; i >= 0; i -= 1) {
+    if (!ZIP_EOCD_SIGNATURE.every((b, k) => tail[i + k] === b)) continue;
+    // Every byte after the record must be accounted for by its comment.
+    if (ZIP_EOCD_SIZE + view.getUint16(i + 20, true) !== tail.length - i) continue;
+    const declaredEntries = view.getUint16(i + 10, true);
+    const centralDirSize = view.getUint32(i + 12, true);
+    const centralDirOffset = view.getUint32(i + 16, true);
+    const eocdAt = blob.size - (tail.length - i);
+    if (centralDirOffset + centralDirSize > eocdAt) continue;
+    if (await centralDirectoryIsIntact(blob, centralDirOffset, centralDirSize, declaredEntries)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
