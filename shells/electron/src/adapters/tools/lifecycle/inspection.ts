@@ -2,6 +2,7 @@ import { isAbsolute, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { resolveElectronNamespacePaths, resolveElectronRuntimeLogPath, resolveElectronSessionNamespace } from "@open-design/electron-kit";
 import { executeElectronCdpContractControl } from "@open-design/electron-kit/cdp";
+export { callElectronCdp, withElectronCdp, inspectElectronCdpStatus, type ElectronCdpConnection, type ElectronCdpMessage } from "@open-design/electron-kit/cdp";
 export { readElectronInstalledManifest } from "@open-design/electron-kit/installation/inspection";
 import { StandaloneStore } from "@open-design/standalone";
 import { resolveElectronStandaloneStoreRoot } from "../../standalone/store-root.ts";

@@ -10,6 +10,14 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `pnpm tools-dev run web` runs foreground daemon + web for the Playwright webServer flow.
 - `pnpm tools-dev prepare closure --output <directory>` prepares development-only references to already-built daemon/Web outputs and emits `resource-receipt.json` for `tools-serve --resource-receipt`. These local references are not self-contained distribution artifacts and must never be published. Resource production is not an Electron Shell responsibility.
 - `pnpm tools-dev inspect desktop status` projects the Electron Shell status through its typed adapter.
+- Desktop inspect also exposes native `cdp --method <Domain.method> --params <json>`,
+  `eval --expression <js>`, `screenshot --path <new-file>`, and bounded
+  `events --method <Domain.enable> --duration-ms <ms>`. An explicit loopback
+  `--cdp-url <origin>` attaches to an already-enabled installed application without
+  taking lifecycle ownership; otherwise discovery uses the development instance.
+  Select ambiguous pages with `--target-id`; never implicitly focus windows or
+  replay mutating CDP calls. Full results can be written to a new `--path`; console
+  output summarizes large strings. Events use JSON lines and one owned socket.
 - `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. This PR delivers only the macOS build/install/start/stop/logs/uninstall/cleanup/inspect surface through public Shell build/lifecycle APIs.
 - `tools/serve` provides `@open-design/tools-serve` and the `tools-serve` bin. It owns local fixture services such as `tools-serve start updater`.
 - `tools/release` provides `@open-design/tools-release` and the `tools-release` bin. It owns release policy, channel-version lifecycle, metadata, immutable publication, reports, and notification-facing contracts. Python under `.github/scripts/` exclusively owns workflow planning, workload identities, cache decisions and result binding; tools-release must not consume or recompute that state.

@@ -64,3 +64,7 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Derive Windows uninstall, App Paths, protocol, shortcut, and executable endpoints from one validated Shell manifest plus the finite Shell lifecycle policy. Treat registry entries as a projection after install-tree commit: runtime reconciliation may update an existing deterministic owner key, but must never create a missing uninstall identity. Cleanup must compare normalized owned paths and commands before deleting shared registry locations.
 - Resolve package resources through `lib/resources.ts` by walking parent `package.json` files until the requested package name matches; never encode workspace depth, pnpm layout, or source/dist-relative fallbacks. Resource templates use only the `lib/templates.ts` raw-scalar Mustache subset—sections, partials, lambdas, escaped tags, unknown values, and unused values are invalid.
 - Package tests use the `@/*` alias for `src/*` imports.
+- `/cdp` owns native loopback discovery, target selection, method/params calls and
+  bounded event sessions. Connections close on failure/timeout/disposal; commands
+  are not retried and page ambiguity fails explicitly. Product contract automation
+  remains a separate semantic layer, never the generic debug transport protocol.

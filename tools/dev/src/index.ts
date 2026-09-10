@@ -63,9 +63,10 @@ import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 import { buildDevClosureResources } from "./closure-resources.js";
+import { inspectElectronNative, summarizeInspection, type ElectronInspectOptions } from "./electron-inspect.js";
 import { withStandaloneExactFixture, type StandaloneFixtureFiles } from "@open-design/tools-serve/standalone-exact-client";
 
-type CliOptions = ToolDevOptions & {
+type CliOptions = ToolDevOptions & ElectronInspectOptions & {
   envFile?: string | string[];
   noEnvFile?: boolean;
   parentPid?: number;
@@ -963,12 +964,17 @@ function printCheckResult(result: unknown, options: CliOptions): void {
 
 async function inspectDesktop(config: ToolDevConfig, target: string | undefined, options: CliOptions) {
   const operation = target ?? "status";
-  if (operation !== "status") throw new Error(`desktop ${operation} has not yet migrated to the Electron Shell handler surface`);
+  if (options.cdpUrl) return inspectElectronNative(operation, options.cdpUrl, options);
   const receipt = await invokeElectronLifecycle(config, "electron.dev.inspect", options);
-  return {
+  if (operation !== "status") {
+    const discovery = asRecord(asRecord(receipt.cdp)?.discovery);
+    if (discovery?.state !== "ready" || typeof discovery.discoveryUrl !== "string") throw new Error("Desktop CDP is not ready; start desktop or supply --cdp-url for an explicitly enabled installed application");
+    return inspectElectronNative(operation, discovery.discoveryUrl, options);
+  }
+  return summarizeInspection({
     cdp: asRecord(receipt.cdp) ?? { discovery: { state: "disabled" }, targets: [] },
     status: asRecord(receipt.status) ?? { state: "idle" },
-  };
+  });
 }
 
 async function inspect(config: ToolDevConfig, appName: string, target: string | undefined, options: CliOptions) {
@@ -1145,6 +1151,15 @@ addSharedOptions(cli.command("logs [app]", "Show log tail for daemon, web, deskt
 addSharedOptions(
   cli.command("inspect <app> [target]", "Inspect daemon, web, or Electron desktop status"),
 )
+  .option("--cdp-url <origin>", "explicit loopback CDP origin of an installed application")
+  .option("--target-id <id>", "exact CDP target id, or browser")
+  .option("--method <method>", "native CDP method for cdp/events")
+  .option("--params <json>", "native CDP parameters")
+  .option("--expression <expression>", "JavaScript expression for eval")
+  .option("--path <file>", "new screenshot or full JSON result file; never overwrite")
+  .option("--timeout-ms <ms>", "bounded CDP operation timeout")
+  .option("--duration-ms <ms>", "bounded events subscription duration")
+  .option("--event <method>", "optional exact native event filter")
   .action(async (appName: string, target: string | undefined, options: CliOptions) => {
     output(await inspect(resolveToolDevConfig(options), appName, target, options), options);
   });
