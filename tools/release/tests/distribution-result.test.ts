@@ -15,7 +15,7 @@ vi.mock("@/exact/release-object.ts", () => ({ releaseObjects: () => ({
 }) }));
 const roots: string[] = [];
 afterEach(async () => { objects.clear(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function fixture() {
+async function fixture(shell = "electron") {
   const root = await mkdtemp(join(tmpdir(), "distribution-result-")); roots.push(root);
   const output = join(root, "built"), receipt = join(output, "distribution-receipt.json");
   const policy = resolveReleasePolicy({ schemaVersion: 1, operation: "release.policy.resolve", profile: "exact-validation", channel: "betahyx",
@@ -24,18 +24,25 @@ async function fixture() {
       publicBaseUrl: "https://public.example", latestChannelHeadUrl: "https://storage.example/releases/betahyx/latest/channel-head.json" } });
   const build = vi.fn(async () => {
     await mkdir(output); const file = join(output, "installer.dmg"); await writeFile(file, "original signed bytes");
-    const result = { schemaVersion: 1, operation: "shell.distribution.contribute", shell: { type: "electron" }, target: "darwin-arm64",
+    const result = { schemaVersion: 1, operation: "shell.distribution.contribute", shell: { type: shell }, target: "darwin-arm64",
       artifact: await describeFile(file), platformTrust: { mode: "formal", teamIdentifier: "TEAM" } };
-    await writeObject(join(output, "shell-contribution.json"), result); await writeObject(receipt, result); return result;
+    await writeObject(join(output, "shell-contribution.json"), result); await writeObject(receipt, result);
+    return shell === "terminal" ? { schemaVersion: 1, operation: "terminal.distribution.build", archive: result.artifact } : result;
   });
-  return { policy, shell: "electron", target: "darwin-arm64", binding: { policy, content: "a".repeat(64), signerTeamId: "TEAM" }, output, receipt, build, root };
+  return { policy, shell, target: "darwin-arm64", binding: { policy, content: "a".repeat(64), signerTeamId: "TEAM" }, output, receipt, build, root };
 }
-it("restores exact completed installer bytes on a fresh runner without signing again", async () => {
-  const f = await fixture(), original = await withDistributionResult(f);
+it.each(["electron", "terminal"])("restores exact completed %s bytes from the contribution, not the builder's execution receipt", async shell => {
+  const f = await fixture(shell), original = await withDistributionResult(f);
   const output = join(f.root, "retry"), receipt = join(output, "distribution-receipt.json");
   expect(await withDistributionResult({ ...f, output, receipt })).toEqual(original);
   expect(f.build).toHaveBeenCalledTimes(1);
   expect(await readFile(join(output, "installer.dmg"), "utf8")).toBe("original signed bytes");
+});
+it("refuses a builder return value without its completed contribution file", async () => {
+  const f = await fixture();
+  const build = async () => { const result = await f.build(); await rm(join(f.output, "shell-contribution.json")); return result; };
+  await expect(withDistributionResult({ ...f, build })).rejects.toMatchObject({ code: "ENOENT" });
+  expect(objects.size).toBe(0);
 });
 it("rejects changed signing inputs and corrupted completed bytes", async () => {
   const f = await fixture(); await withDistributionResult(f);

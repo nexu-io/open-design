@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { ReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { requiresFormalMacTrust } from "../policy/native-trust.ts";
-import { canonicalBytes, checkedFile, writeObject, type JsonObject } from "./control-common.ts";
+import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-product.ts";
 import { releaseObjects } from "./release-object.ts";
 
@@ -10,7 +10,7 @@ import { releaseObjects } from "./release-object.ts";
  * workspace and never an installer from another release. */
 export async function withDistributionResult(input: Readonly<{
   policy: ReleasePolicyReceipt; shell: string; target: string; binding: JsonObject;
-  output: string; receipt: string; build: () => Promise<JsonObject>;
+  output: string; receipt: string; build: () => Promise<unknown>;
 }>) {
   if (!["electron", "terminal"].includes(input.shell) || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(input.target)) {
     throw new Error("Invalid native result target");
@@ -47,7 +47,10 @@ export async function withDistributionResult(input: Readonly<{
   // A failed local assembly is not a resumable signed result. Require a fresh
   // output instead of allowing native assembly to erase prior signed bytes.
   await assertArtifactDestinationAbsent(input.output);
-  const result = await input.build(), file = validate(result);
+  await input.build();
+  // Native builders have different execution receipts. Their completed,
+  // publication-facing contribution is the shared file-backed contract.
+  const result = await readObject(join(input.output, "shell-contribution.json")), file = validate(result);
   const path = await checkedFile(result.artifact, "Completed installer", join(input.output, file));
   await objects.create(`${prefix}/${file}`, await readFile(path), result.artifact.mediaType ?? "application/octet-stream");
   await objects.create(manifestName, canonicalBytes({ schemaVersion: 1, operation: "exact.distribution.result", binding: input.binding, contribution: result }), "application/json");
