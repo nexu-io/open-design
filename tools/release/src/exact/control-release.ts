@@ -214,12 +214,18 @@ export async function inspectAcceptedElectronBaseline(input: Readonly<{
   const acquired = await fetchAcceptedShellBaseline({ channel: policy.channel, target: input.target as AcceptedShellTarget,
     pointerUrl: `${policy.target.publicBaseUrl}/${policy.channel}/accepted/electron/${input.target}/latest.json` });
   const resolved = resolveAcceptedShellBaseline({ channel: policy.channel, target: input.target as AcceptedShellTarget, acceptedReceipt: acquired });
-  const compatible = !candidate && resolved.mode === "accepted" && resolved.baseline.shell.buildHash === required.shell.buildHash
-    && resolved.baseline.shell.version === required.shell.version
+  const upgradeRequired = !candidate && resolved.mode === "accepted"
     && compareVersion(policy.releaseVersion, resolved.acceptance.releaseVersion, policy.channel) > 0;
-  const baselineReceipt = compatible ? join(dirname(resolve(input.receipt)), "accepted-baseline.json") : undefined;
+  // This selects the existing same-carrier exercise, not runtime compatibility.
+  // A different carrier still requires upgrade evidence; first install cannot replace it.
+  const compatible = upgradeRequired && resolved.mode === "accepted"
+    && resolved.baseline.shell.buildHash === required.shell.buildHash
+    && resolved.baseline.shell.version === required.shell.version;
+  const reason = candidate ? "candidate-baseline" : resolved.mode !== "accepted" ? "baseline-missing"
+    : !upgradeRequired ? "baseline-not-older" : compatible ? "same-carrier" : "carrier-identity-changed";
+  const baselineReceipt = upgradeRequired ? join(dirname(resolve(input.receipt)), "accepted-baseline.json") : undefined;
   if (baselineReceipt != null) await writeObject(baselineReceipt, JSON.parse(Buffer.from(acquired!.bytes).toString("utf8")));
-  const receipt = { schemaVersion: 1, operation: "electron.baseline.inspect", compatible,
+  const receipt = { schemaVersion: 1, operation: "electron.baseline.inspect", compatible, upgradeRequired, reason,
     ...(candidate ? { baselineCandidate: true } : {}),
     channel: policy.channel, releaseVersion: policy.releaseVersion, target: input.target,
     ...(baselineReceipt == null ? {} : { baselineReceipt }) };

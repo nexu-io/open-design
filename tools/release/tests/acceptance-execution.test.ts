@@ -33,7 +33,7 @@ async function fixture() {
   const inspection = join(root, "inspection.json"), baselineReceipt = join(root, "baseline.json");
   await writeFile(baselineReceipt, JSON.stringify({ schemaVersion: 1, operation: "electron.baseline.fetch", target: input.target, ...required }));
   await writeFile(inspection, JSON.stringify({ schemaVersion: 1, operation: "electron.baseline.inspect",
-    compatible: true, target: input.target, channel: policy.channel, releaseVersion: policy.releaseVersion }));
+    compatible: true, upgradeRequired: true, reason: "same-carrier", target: input.target, channel: policy.channel, releaseVersion: policy.releaseVersion }));
   return { root, input, inspection, baselineReceipt };
 }
 
@@ -64,6 +64,17 @@ it.skipIf(process.platform !== "darwin")("does not invoke the hot updater before
     .rejects.toThrow("baseline startup failed");
   expect(mocks.update).not.toHaveBeenCalled();
   expect(mocks.startup).not.toHaveBeenCalled();
+});
+
+it.skipIf(process.platform !== "darwin")("does not substitute first installation for an unexercised baseline upgrade", async () => {
+  const f = await fixture();
+  await exerciseReleaseInstallation({ ...f.input, mode: "first" });
+  const inspection = JSON.parse(await readFile(f.inspection, "utf8"));
+  await writeFile(f.inspection, JSON.stringify({ ...inspection, compatible: false, upgradeRequired: true,
+    reason: "carrier-identity-changed" }));
+  await expect(collectExecutedAcceptance({ ...f.input, inspection: f.inspection, receipt: join(f.root, "accepted.json") }))
+    .rejects.toThrow("Baseline upgrade evidence is required");
+  expect(mocks.collect).not.toHaveBeenCalled();
 });
 
 it.skipIf(process.platform !== "darwin")("fails before installation for wrong bytes and leaves no successful receipt after runtime failure", async () => {

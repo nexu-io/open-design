@@ -144,10 +144,12 @@ export async function collectExecutedAcceptance(input: Input & Readonly<{ inspec
     const { policy } = await readPublishedAcceptance({ publishReceipt: input.publication, policyReceipt: input.policy, shellType: input.shell, target: input.target });
     if (inspection.schemaVersion !== 1 || inspection.operation !== "electron.baseline.inspect"
       || inspection.target !== input.target || inspection.channel !== policy.channel || inspection.releaseVersion !== policy.releaseVersion
-      || typeof inspection.compatible !== "boolean") throw new Error("Baseline inspection identity mismatch");
+      || typeof inspection.compatible !== "boolean" || typeof inspection.upgradeRequired !== "boolean") throw new Error("Baseline inspection identity mismatch");
     hot = inspection.compatible;
     baselineCandidate = inspection.baselineCandidate === true;
-    if (baselineCandidate && hot) throw new Error("candidate baseline cannot claim hot acceptance");
+    if (baselineCandidate && (hot || inspection.upgradeRequired)) throw new Error("candidate baseline cannot claim hot acceptance");
+    if (inspection.upgradeRequired && !hot) throw new Error(`Baseline upgrade evidence is required: ${inspection.reason}`);
+    if (hot && !inspection.upgradeRequired) throw new Error("Hot acceptance requires an older baseline");
   }
   const selected = hot ? await readExecution("hot") : first;
   await collectReleaseAcceptance({ ...input, installedRoot: selected.installedRoot,

@@ -31,6 +31,23 @@ export async function updateElectronClosureThroughCdp(session: ElectronDiagnosti
   return Object.freeze({ schemaVersion: 1, operation: "electron.cdp.contract.invoked", ...result });
 }
 
+/** Prepare through the public Shell updater without authorizing a restart or installer. */
+export async function prepareElectronShellThroughCdp(session: ElectronDiagnosticSession) {
+  describeElectronRuntimeDiagnostics(session);
+  const result = await executeElectronCdpContractControl({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session, timeoutMs: 120_000, close: false,
+    invocations: [{ path: ["updater", "status"], args: [] }, { path: ["updater", "check"], args: ["shell"] },
+      { path: ["updater", "download"], args: ["shell"] }, { path: ["updater", "status"], args: [] }] });
+  return Object.freeze({ schemaVersion: 1, operation: "electron.cdp.contract.invoked", ...result });
+}
+
+/** Authorization is explicit; transport loss is not proof that replacement completed. */
+export async function applyElectronShellThroughCdp(session: ElectronDiagnosticSession) {
+  describeElectronRuntimeDiagnostics(session);
+  const result = await executeElectronCdpContractControl({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session, timeoutMs: 120_000, close: false,
+    invocations: [{ path: ["updater", "apply"], args: ["shell", { force: true }], settleOnContextDestroyed: true }] });
+  return Object.freeze({ schemaVersion: 1, operation: "electron.cdp.contract.invoked", ...result });
+}
+
 /** Observe the current launch without issuing CDP calls or closing the product. */
 export async function waitForElectronStartup(session: ElectronDiagnosticSession, startedAfter: number, timeoutMs = 540_000) {
   if (!Number.isFinite(startedAfter)) throw new Error("Startup observation requires the launch timestamp");

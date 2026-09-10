@@ -105,13 +105,16 @@ describe("accepted Electron baseline promotion", () => {
     }
     const result = await inspectAcceptedElectronBaseline(args);
     expect(result.compatible).toBe(kind === "matching");
+    expect(result.upgradeRequired).toBe(kind !== "missing");
+    expect(result.reason).toBe(kind === "matching" ? "same-carrier" : kind === "missing" ? "baseline-missing" : "carrier-identity-changed");
+    if (kind === "different") expect(JSON.parse(await readFile(result.baselineReceipt!, "utf8"))).toEqual(snapshot);
     expect(await readFile(args.githubEnv, "utf8")).toBe(`ELECTRON_ACCEPTANCE_MODE=${kind === "matching" ? "hot" : "full"}\n`);
     expect(result).not.toHaveProperty("acceptedIdentities");
     if (kind === "matching") {
       expect(JSON.parse(await readFile(result.baselineReceipt!, "utf8"))).toEqual(snapshot);
       const candidate = await inspectAcceptedElectronBaseline({ ...args, githubEnv: undefined,
         receipt: join(input.root, "candidate-inspection.json"), mode: "candidate" });
-      expect(candidate).toMatchObject({ compatible: false, baselineCandidate: true });
+      expect(candidate).toMatchObject({ compatible: false, upgradeRequired: false, reason: "candidate-baseline", baselineCandidate: true });
       expect(candidate).not.toHaveProperty("baselineReceipt");
     }
   });

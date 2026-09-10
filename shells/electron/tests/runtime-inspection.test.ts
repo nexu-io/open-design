@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { StandaloneStore } from "@open-design/standalone";
 import { resolveElectronNamespacePaths, resolveElectronRuntimeLogPath } from "@open-design/electron-kit";
-import { describeElectronRuntimeDiagnostics, updateElectronClosureThroughCdp } from "@/adapters/tools/lifecycle/inspection.js";
+import { applyElectronShellThroughCdp, describeElectronRuntimeDiagnostics, prepareElectronShellThroughCdp, updateElectronClosureThroughCdp } from "@/adapters/tools/lifecycle/inspection.js";
 import { resolveElectronStandaloneStoreRoot } from "@/adapters/standalone/store-root.js";
 const mock = vi.hoisted(() => ({ invoke: vi.fn(async () => ({ discoveryUrl: "http://127.0.0.1:1234", results: [] })) }));
 vi.mock("@open-design/electron-kit/cdp", () => ({ executeElectronCdpContractControl: mock.invoke }));
@@ -27,4 +27,15 @@ it("uses the declared Closure updater contract over native CDP with no request f
   expect(mock.invoke).toHaveBeenCalledWith({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session, close: true, timeoutMs: 120_000,
     invocations: [{ path: ["updater", "status"], args: [] }, { path: ["updater", "check"], args: ["closure"] },
       { path: ["updater", "apply"], args: ["closure", { force: true }], settleOnContextDestroyed: true }, { path: ["updater", "status"], args: [] }] });
+});
+
+it("keeps Shell preparation separate from explicit apply and lets the runtime own restart", async () => {
+  const session = { baseUserDataRoot: join(tmpdir(), "electron-inspection"), channel: "betahyx", namespace: "inspection", presentation: "headless" as const };
+  await prepareElectronShellThroughCdp(session);
+  expect(mock.invoke).toHaveBeenLastCalledWith({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session, close: false, timeoutMs: 120_000,
+    invocations: [{ path: ["updater", "status"], args: [] }, { path: ["updater", "check"], args: ["shell"] },
+      { path: ["updater", "download"], args: ["shell"] }, { path: ["updater", "status"], args: [] }] });
+  await applyElectronShellThroughCdp(session);
+  expect(mock.invoke).toHaveBeenLastCalledWith({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session, close: false, timeoutMs: 120_000,
+    invocations: [{ path: ["updater", "apply"], args: ["shell", { force: true }], settleOnContextDestroyed: true }] });
 });
