@@ -146,7 +146,9 @@ export function registerOrcaRouterRoutes(
    * The attempt generation is captured before the first await and re-checked
    * before the write, so an exchange that finishes after a Cancel, a Disconnect,
    * or a newer Start commits nothing: without that fence a delayed provider
-   * response would restore an account the user just removed.
+   * response would restore an account the user just removed. The same check
+   * runs again once the bytes are down (as the write's commit fence), because
+   * the invalidator can land *during* the write as easily as during the fetch.
    */
   const persistExchange = async (
     state: string,
@@ -166,7 +168,9 @@ export function registerOrcaRouterRoutes(
         throw new OrcaRouterAttemptSupersededError();
       }
       const credential = acquirePkceCredential({ exchange, previous });
-      await setOrcaRouterCredential(dataDir(), credential);
+      await setOrcaRouterCredential(dataDir(), credential, {
+        isCurrent: () => authAttempts.isCurrent(attempt),
+      });
       // A completed exchange is itself a state change: a callback still queued
       // behind this one belongs to the attempt that just ended.
       authAttempts.bump();
@@ -365,15 +369,22 @@ export function registerOrcaRouterRoutes(
     try {
       const previous = await readOrcaRouterCredential(dataDir());
       const credential = acquireApiKeyCredential({ apiKey, previous });
-      await setOrcaRouterCredential(dataDir(), credential);
-      // Adopting a key replaces whatever the account was; any authorization
-      // still in flight is now stale and must not overwrite it on arrival.
-      authAttempts.bump();
+      // Adopting a key replaces whatever the account was, so it invalidates any
+      // authorization still in flight BEFORE the adoption's own write: bumping
+      // afterwards would let an exchange whose check already passed land on top
+      // of the key the user is looking at.
+      const attempt = authAttempts.bump();
+      await setOrcaRouterCredential(dataDir(), credential, {
+        // A newer adoption (or a Start, Cancel, or Disconnect) landing inside
+        // this write means this pasted key is no longer the account.
+        isCurrent: () => authAttempts.isCurrent(attempt),
+      });
       console.log(`[orcarouter] API key stored generation=${credential.generation}`);
       res.json({ ok: true, prefixOk, generation: credential.generation });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      res.status(400).json({ error: message });
+      res.status(err instanceof OrcaRouterAttemptSupersededError ? 409 : 400)
+        .json({ error: message });
     }
   });
 

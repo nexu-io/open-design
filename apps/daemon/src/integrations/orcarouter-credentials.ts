@@ -31,6 +31,8 @@ import {
 } from './orcarouter.js';
 import type { ByokChatProviderConfig } from '@open-design/contracts';
 
+import { resolveProjectRelativePath } from '../home-expansion.js';
+
 type Env = Record<string, string | undefined>;
 
 /** Re-exported so consumers of the credential seam need one import, not two. */
@@ -349,11 +351,15 @@ function credentialsFile(dataDir: string): string {
 /**
  * The daemon data root for a caller that was not handed `RUNTIME_DATA_DIR`.
  *
- * Mirrors `resolveDataDir` (daemon-paths.ts) closely enough for a workspace-root
- * caller: an `OD_DATA_DIR` override wins, otherwise `<projectRoot>/.od`. The
- * daemon itself passes its already-resolved root explicitly; this is the
- * fallback for the media resolver, which reaches OrcaRouter through
- * `resolveProviderConfig(projectRoot, …)`.
+ * Resolves `OD_DATA_DIR` through the same `resolveProjectRelativePath` the
+ * daemon's own `resolveDataDir` uses, so every accepted form — an absolute
+ * path, a project-relative one, and the `~` / `$HOME` / `${HOME}` launcher
+ * shorthand — lands on the root the daemon actually writes to. Recomputing the
+ * expansion here instead of sharing it would send the media resolver to a
+ * different file than the connect flow wrote: connected in the UI, "no
+ * credential" at generation time. The daemon itself passes its already-resolved
+ * root explicitly; this is the fallback for the media resolver, which reaches
+ * OrcaRouter through `resolveProviderConfig(projectRoot, …)`.
  */
 export function resolveOrcaRouterDataDir(
   projectRoot: string,
@@ -361,7 +367,7 @@ export function resolveOrcaRouterDataDir(
 ): string {
   const raw = (env.OD_DATA_DIR ?? '').trim();
   if (!raw) return path.join(projectRoot, '.od');
-  return path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw);
+  return resolveProjectRelativePath(raw, projectRoot);
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -465,13 +471,34 @@ async function writeCredentialsFile(
   }
 }
 
+/**
+ * A caller's liveness test for the operation that produced a credential.
+ *
+ * A check made before the write answers "was this still the current operation
+ * when I started committing?", but not "is it still current now?" — the write
+ * itself takes time, and Cancel, Disconnect, a newer Start, or a pasted key can
+ * all land inside it. A `CredentialCommitFence` is that second answer, re-read
+ * once the bytes are down so a losing write can undo itself rather than leave a
+ * credential the user just abandoned (or, worse, one that replaces the key they
+ * pasted).
+ */
+export type CredentialCommitFence = () => boolean | Promise<boolean>;
+
 /** Persist a credential, replacing any previous record for this account. */
 export async function setOrcaRouterCredential(
   dataDir: string,
   credential: OrcaRouterCredential,
+  options: { isCurrent?: CredentialCommitFence } = {},
 ): Promise<void> {
   await withLock(dataDir, async () => {
+    // Capture what this write is replacing, so a rollback restores it instead
+    // of leaving a hole where a still-valid credential used to be.
+    const previous = await readOrcaRouterCredential(dataDir);
     await writeCredentialsFile(dataDir, { credential });
+    if (options.isCurrent && !(await options.isCurrent())) {
+      await writeCredentialsFile(dataDir, previous ? { credential: previous } : {});
+      throw new OrcaRouterAttemptSupersededError();
+    }
   });
 }
 

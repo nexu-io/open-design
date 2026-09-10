@@ -21,12 +21,31 @@ import http from 'node:http';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// `rename` is replaced by a passthrough with a test-supplied hook, so a test can
+// park a credential write inside its final step. Every fence in the routes is
+// checked *before* the write, so the window that matters is the write itself,
+// and nothing outside the module can observe it.
+const renameHook = vi.hoisted(
+  () => ({ impl: null as null | ((from: string, to: string) => Promise<void>) }),
+);
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    rename: async (from: string, to: string) => {
+      if (renameHook.impl) await renameHook.impl(from, to);
+      return actual.rename(from, to);
+    },
+  };
+});
 
 import { registerOrcaRouterRoutes } from '../src/routes/orcarouter.js';
 import { readOrcaRouterCredential } from '../src/integrations/orcarouter-credentials.js';
 
 const FAKE_KEY = 'sk-orca-routelevelfakekey0000000000000000';
+const PASTED_KEY = 'sk-orca-pastedkey0000000000000000000000';
 
 interface AuthCall {
   url: string;
@@ -101,6 +120,7 @@ describe('OrcaRouter connect routes', () => {
   });
 
   afterEach(async () => {
+    renameHook.impl = null;
     if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
     server = null;
     for (const name of ENV_NAMES) {
@@ -145,6 +165,33 @@ describe('OrcaRouter connect routes', () => {
     const response = await fetch(`${baseUrl}/api/orcarouter/auth/status`);
     return await response.json() as Record<string, unknown>;
   };
+
+  /** Let already-dispatched route work reach its next await. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  /**
+   * Park the next credential write inside its rename, so a test can land a
+   * Cancel / Disconnect / key adoption while the exchange that produced it is
+   * still committing.
+   */
+  function gateCredentialWrite(): {
+    untilWrite: () => Promise<void>;
+    release: () => void;
+  } {
+    let reached: () => void = () => {};
+    const arrived = new Promise<void>((resolve) => { reached = resolve; });
+    let open: () => void = () => {};
+    const released = new Promise<void>((resolve) => { open = resolve; });
+    let armed = false;
+    renameHook.impl = async (from) => {
+      // The staged file is `<final>.<hex>.tmp`, so match on the stem.
+      if (armed || !from.includes('orcarouter-credentials.json')) return;
+      armed = true;
+      reached();
+      await released;
+    };
+    return { untilWrite: () => arrived, release: () => open() };
+  }
 
   it('refuses a paste-back whose state was cancelled', async () => {
     const fake = await startFakeAuthServer();
@@ -268,6 +315,104 @@ describe('OrcaRouter connect routes', () => {
       expect((await getStatus()).connected).toBe(false);
       expect(await readOrcaRouterCredential(dataDir)).toBeNull();
     } finally {
+      await fake.close();
+    }
+  });
+
+  it('does not let an exchange in flight land after Cancel', async () => {
+    // The provider answers immediately; the write is what is held open. The
+    // fence lives before the write, so a Cancel that lands inside it is exactly
+    // the case the "an abandoned attempt must not store a credential" promise
+    // has to cover.
+    const fake = await startFakeAuthServer();
+    process.env.ORCA_AUTH_BASE_URL = fake.origin;
+    const openGate = gateCredentialWrite();
+    try {
+      await startRoutes();
+      const started = await post('/api/orcarouter/oauth/start');
+
+      const completing = post('/api/orcarouter/oauth/complete', {
+        state: String(started.body.state),
+        code: 'the-code-the-user-submitted',
+      });
+      await openGate.untilWrite();
+
+      const cancelled = await post('/api/orcarouter/oauth/cancel');
+      expect(cancelled.status).toBe(200);
+
+      openGate.release();
+      const completed = await completing;
+      expect(completed.status).toBeGreaterThanOrEqual(400);
+      expect(await readOrcaRouterCredential(dataDir)).toBeNull();
+    } finally {
+      openGate.release();
+      await fake.close();
+    }
+  });
+
+  it('does not let an exchange in flight restore the account after Disconnect', async () => {
+    // The exchange is parked inside its write, and Disconnect is issued while
+    // it is there. Disconnect writes too, so it queues behind the parked write
+    // rather than overtaking it — which is exactly why the exchange itself has
+    // to notice that its attempt ended: otherwise it reports success to the
+    // user who just removed the account.
+    const fake = await startFakeAuthServer();
+    process.env.ORCA_AUTH_BASE_URL = fake.origin;
+    const openGate = gateCredentialWrite();
+    try {
+      await startRoutes();
+      const started = await post('/api/orcarouter/oauth/start');
+      const completing = post('/api/orcarouter/oauth/complete', {
+        state: String(started.body.state),
+        code: 'the-code-the-user-submitted',
+      });
+      await openGate.untilWrite();
+
+      // Deliberately not awaited: the response cannot arrive until the parked
+      // write releases the credential lock.
+      const disconnecting = post('/api/orcarouter/oauth/disconnect');
+      await settle();
+      openGate.release();
+
+      const disconnected = await disconnecting;
+      expect(disconnected.status).toBe(200);
+      const completed = await completing;
+      expect(completed.status).toBeGreaterThanOrEqual(400);
+      expect(await readOrcaRouterCredential(dataDir)).toBeNull();
+    } finally {
+      openGate.release();
+      await fake.close();
+    }
+  });
+
+  it('does not let an exchange in flight overwrite a key pasted during it', async () => {
+    // "Adopting a key replaces whatever the account was" has to hold against an
+    // authorization that was already running: the pasted key is the credential
+    // the user is looking at, and a late exchange must not replace it.
+    const fake = await startFakeAuthServer();
+    process.env.ORCA_AUTH_BASE_URL = fake.origin;
+    const openGate = gateCredentialWrite();
+    try {
+      await startRoutes();
+      const started = await post('/api/orcarouter/oauth/start');
+      const completing = post('/api/orcarouter/oauth/complete', {
+        state: String(started.body.state),
+        code: 'the-code-the-user-submitted',
+      });
+      await openGate.untilWrite();
+
+      // Not awaited for the same reason as Disconnect above.
+      const adopting = post('/api/orcarouter/credentials', { apiKey: PASTED_KEY });
+      await settle();
+      openGate.release();
+
+      const adopted = await adopting;
+      expect(adopted.status).toBe(200);
+      const completed = await completing;
+      expect(completed.status).toBeGreaterThanOrEqual(400);
+      expect((await readOrcaRouterCredential(dataDir))?.apiKey).toBe(PASTED_KEY);
+    } finally {
+      openGate.release();
       await fake.close();
     }
   });

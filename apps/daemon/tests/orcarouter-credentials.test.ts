@@ -51,6 +51,7 @@ import {
   setOrcaRouterCredential,
   type OrcaRouterCredential,
 } from '../src/integrations/orcarouter-credentials.js';
+import { resolveDataDir } from '../src/daemon-paths.js';
 
 // Never a real key. The `sk-orca-` prefix here exists only so the shape checks
 // have something to match.
@@ -422,6 +423,35 @@ describe('OrcaRouter credential adapters', () => {
         .toBe('/workspace/rel/od');
       expect(resolveOrcaRouterDataDir('/workspace', {})).toBe('/workspace/.od');
     });
+
+    it('resolves OD_DATA_DIR exactly as the daemon does, home shorthand included', () => {
+      // The media resolver reaches this store through a project root, not
+      // through RUNTIME_DATA_DIR, so its recomputation has to agree with
+      // `resolveDataDir` for every accepted form — including the `~` / `$HOME`
+      // launcher shorthand. A form only one of the two expands sends chat and
+      // media to a different file than the connect flow wrote, which reads as
+      // "connected" in the UI and "no credential" at generation time.
+      const projectRoot = path.join(dataDir, 'project');
+      const home = path.join(dataDir, 'home');
+      const previousHome = process.env.HOME;
+      process.env.HOME = home;
+      try {
+        for (const raw of [
+          undefined,
+          path.join(dataDir, 'od-abs'),
+          'rel/od',
+          '~/.open-design',
+          '$HOME/.open-design',
+          '${HOME}/.open-design',
+        ]) {
+          expect(resolveOrcaRouterDataDir(projectRoot, { OD_DATA_DIR: raw }))
+            .toBe(resolveDataDir(raw, projectRoot));
+        }
+      } finally {
+        if (previousHome === undefined) delete process.env.HOME;
+        else process.env.HOME = previousHome;
+      }
+    });
   });
 
   describe('in-flight attempt fencing', () => {
@@ -443,6 +473,41 @@ describe('OrcaRouter credential adapters', () => {
       expect(() => {
         if (!attempts.isCurrent(attempt)) throw new OrcaRouterAttemptSupersededError();
       }).toThrow(OrcaRouterAttemptSupersededError);
+    });
+
+    it('rolls back a credential whose attempt ended while its bytes were being written', async () => {
+      // The re-check before the write is not enough on its own: a Cancel that
+      // lands *during* the write would still leave the abandoned credential on
+      // disk. The commit has to re-read the fence once the bytes are down and
+      // undo itself.
+      const attempts = new OrcaRouterAuthAttempts();
+      const attempt = attempts.current();
+      let fired = false;
+      renameHook.impl = async () => {
+        if (fired) return; // the rollback's own rename must not re-trigger it
+        fired = true;
+        attempts.bump(); // the user abandoned the attempt mid-write
+      };
+      try {
+        await expect(setOrcaRouterCredential(dataDir, acquireApiKeyCredential({ apiKey: FAKE_KEY }), {
+          isCurrent: () => attempts.isCurrent(attempt),
+        })).rejects.toThrow(OrcaRouterAttemptSupersededError);
+      } finally {
+        renameHook.impl = null;
+      }
+      expect(fired).toBe(true);
+      // The abandoned credential is not on disk — and not merely overwritten
+      // by a later write, which would race the undo.
+      expect(await readOrcaRouterCredential(dataDir)).toBeNull();
+    });
+
+    it('still commits a credential whose attempt is intact', async () => {
+      const attempts = new OrcaRouterAuthAttempts();
+      const attempt = attempts.current();
+      await setOrcaRouterCredential(dataDir, acquireApiKeyCredential({ apiKey: FAKE_KEY }), {
+        isCurrent: () => attempts.isCurrent(attempt),
+      });
+      expect((await readOrcaRouterCredential(dataDir))?.apiKey).toBe(FAKE_KEY);
     });
   });
 });
