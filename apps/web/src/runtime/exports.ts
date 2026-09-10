@@ -872,6 +872,21 @@ export function exportReactComponentAsZip(
 // daemon for the whole project. Falls back to the in-memory single-file
 // ZIP on any failure so the action never silently no-ops.
 /**
+ * True when the blob begins with the ZIP signature `PK` (`PK\x03\x04` for a
+ * normal archive, `PK\x05\x06` for an empty one).
+ *
+ * A 2xx is not proof the body is an archive: an authenticating proxy can
+ * answer with its own HTML interstitial at 200, and a truncated or empty
+ * transfer arrives as a 0-byte body. Without this check both are handed to
+ * the user as a .zip and reported as a successful export.
+ */
+async function looksLikeZip(blob: Blob): Promise<boolean> {
+  if (blob.size < 2) return false;
+  const magic = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  return magic[0] === 0x50 && magic[1] === 0x4b;
+}
+
+/**
  * Downloads the project's on-disk tree as a ZIP.
  *
  * When the archive request fails the browser still receives a ZIP, but it is
@@ -927,6 +942,9 @@ export async function exportProjectAsZip(opts: {
       : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
+    if (!await looksLikeZip(blob)) {
+      throw new Error(`archive response was not a ZIP (${blob.size} bytes)`);
+    }
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
   } catch (err) {
     console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
@@ -1260,6 +1278,9 @@ export async function downloadDesignSystemArchive(opts: {
       : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
+    if (!await looksLikeZip(blob)) {
+      throw new Error(`archive response was not a ZIP (${blob.size} bytes)`);
+    }
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, ''));
     return true;
   } catch (err) {
@@ -1286,6 +1307,9 @@ export async function downloadProjectArchive(opts: {
       : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
+    if (!await looksLikeZip(blob)) {
+      throw new Error(`archive response was not a ZIP (${blob.size} bytes)`);
+    }
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
     return true;
   } catch (err) {

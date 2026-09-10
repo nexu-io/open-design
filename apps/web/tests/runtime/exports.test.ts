@@ -791,7 +791,7 @@ describe('binary project/design-system downloads', () => {
       if (url.endsWith('/export/html')) {
         return new Response('<!doctype html><p>exported</p>', { status: 200 });
       }
-      return new Response('archive-or-rendered-bytes', {
+      return new Response(`PK\x03\x04archive-or-rendered-bytes`, {
         status: 200,
         headers: {
           'content-type': 'application/octet-stream',
@@ -1011,7 +1011,7 @@ describe('binary project/design-system downloads', () => {
   });
 
   it('downloads the backing project archive with the daemon filename', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('project-zip', {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(`PK\x03\x04project-zip`, {
       status: 200,
       headers: {
         'content-type': 'application/zip',
@@ -1031,7 +1031,7 @@ describe('binary project/design-system downloads', () => {
   });
 
   it('passes an optional root when downloading a project subfolder archive', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('folder-zip', {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(`PK\x03\x04folder-zip`, {
       status: 200,
       headers: {
         'content-type': 'application/zip',
@@ -1784,9 +1784,35 @@ describe('exportProjectAsZip degraded-archive reporting (#8005)', () => {
     expect(capturedFilename).toBeTruthy();
   });
 
+  it.each([
+    ['an empty 200 body', '', 200, { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' }],
+    ['a 200 HTML interstitial from a proxy', '<html><body>Gateway error</body></html>', 200, { 'content-type': 'text/html' }],
+    ['a 204 with no content', '', 204, {}],
+  ] as const)('treats %s as degraded rather than a successful archive', async (_label, body, status, headers) => {
+    // Given: the archive request "succeeds" but the body is not an archive.
+    // A 2xx alone is not proof: an authenticating proxy can answer with its
+    // own error page at 200, and a truncated transfer arrives as 0 bytes.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      status === 204 ? null : body,
+      { status, headers: headers as Record<string, string> },
+    )));
+
+    // When: the user picks "Download as .zip".
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Not A Zip',
+    });
+
+    // Then: it is reported as degraded instead of handing over a .zip that
+    // holds an HTML error page or nothing at all.
+    expect(result).toBe('degraded');
+  });
+
   it('resolves without a degraded marker when the archive succeeds', async () => {
     // Given: the archive route returns the project tree.
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('archive-bytes', {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(`PK\x03\x04archive-bytes`, {
       status: 200,
       headers: {
         'content-type': 'application/zip',
@@ -1805,7 +1831,7 @@ describe('exportProjectAsZip degraded-archive reporting (#8005)', () => {
     // Then: the success path is unchanged — no marker, real bytes downloaded.
     expect(result).toBeUndefined();
     expect(capturedFilename).toBe('project.zip');
-    expect(await capturedBlob?.text()).toBe('archive-bytes');
+    expect(await capturedBlob?.text()).toBe('PK\x03\x04archive-bytes');
   });
 
   it('reports a failed version export as degraded rather than passing off current content', async () => {
