@@ -101,7 +101,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--previous-content <file>", "Optional verified previous content envelope")
     .option("--closure-artifact <file>", "Current Closure artifact; defaults to the scene seed")
     .option("--standalone-artifact <file>", "Current Standalone launcher; defaults to the scene seed")
-    .option("--resource-receipt <file>", "Current complete Closure resource collection; defaults to the scene seed")
+    .option("--resource-receipt <file>", "Complete resource collection or local/published selection; defaults to the scene seed")
     .option("--capsules <directory>", "Current Capsule products under <target>/; defaults to the scene Capsule")
     .option("--platforms <directory>", "Independent platform products under <target>/ (required for Electron)")
     .option("--data-resource <file>", "Independent data receipt beside its archive; repeat for the complete data set")

@@ -24,6 +24,20 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - Exact content preparation, metadata signing and final composition live in
   tools-release behind its policy-bound commands. Do not restore tools-pack
   exact-control or a separate pack signing API/binary.
+- `tools-release prepare --resource-receipt` also accepts a version-1
+  `release.resources.select` document with the complete declared Closure resource
+  set. Each entry is either `{kind: "local", id, receiptFile}` (receipt paths are
+  relative to the selection document) or `{kind: "published", id, sha256,
+  metadata: {url, sha256}}`. Published entries bind a signed content document
+  acquired from an existing immutable version in the same distribution origin
+  and channel. Only local entries become new upload artifacts; published entries
+  preserve their verified blob URLs without downloading ZIPs. Workload-cache
+  URLs are not publication evidence. Planner identity and hit/miss decisions
+  remain outside this business input. A complete selection cannot be combined
+  with separate data-resource overrides.
+- Finalize emits `resourcePublications` as candidate resource/content-document
+  bindings. Publish exposes them only after binding them to uploaded metadata;
+  the publish receipt is the handoff to planning, not a new cache writer.
 - Experimental `baseline --mode candidate` is restricted to betahyx exact
   releases. It requires installed first-start evidence, marks that evidence as
   candidate-only and defers channel activation while advancing the test baseline
