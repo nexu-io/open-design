@@ -11,6 +11,11 @@ export const BYOK_OPENCODE_API_KEY_ENV = 'OPEN_DESIGN_BYOK_API_KEY';
 // get the bare `@ai-sdk/amazon-bedrock` factory, which reads static access
 // keys from the environment and knows nothing about SSO profiles.
 export const BYOK_OPENCODE_BEDROCK_PROVIDER_ID = 'amazon-bedrock';
+// Key-mode routes onto Bedrock's Anthropic Messages and OpenAI Responses
+// endpoints. Distinct ids on purpose: OpenCode's `amazon-bedrock` loader keys
+// its Converse/credential-chain behaviour on that exact id.
+export const BYOK_OPENCODE_BEDROCK_ANTHROPIC_PROVIDER_ID = 'open-design-bedrock-anthropic';
+export const BYOK_OPENCODE_BEDROCK_OPENAI_PROVIDER_ID = 'open-design-bedrock-openai';
 // Read by OpenCode's Bedrock loader; takes precedence over the credential
 // chain, so it must only be set in API-key mode.
 export const BYOK_OPENCODE_BEDROCK_BEARER_TOKEN_ENV = 'AWS_BEARER_TOKEN_BEDROCK';
@@ -48,6 +53,8 @@ export interface OpenCodeByokProviderConfig {
 const OPENCODE_BYOK_PROVIDER_IDS = [
   BYOK_OPENCODE_PROVIDER_ID,
   BYOK_OPENCODE_BEDROCK_PROVIDER_ID,
+  BYOK_OPENCODE_BEDROCK_ANTHROPIC_PROVIDER_ID,
+  BYOK_OPENCODE_BEDROCK_OPENAI_PROVIDER_ID,
 ];
 
 export function opencodeByokProviderId(
@@ -157,14 +164,94 @@ function bedrockProfile(provider: ByokChatProviderConfig): string {
   return typeof provider.awsProfile === 'string' ? provider.awsProfile.trim() : '';
 }
 
-// OpenCode's `amazon-bedrock` loader reads `options.region`, `options.profile`
-// and `options.endpoint`, resolves credentials through the AWS credential
-// chain for the named profile, and reads `AWS_BEARER_TOKEN_BEDROCK` from the
-// process environment for the API-key mode (the bearer token wins over the
-// chain, so it is only exported in that mode). The regional endpoint is only
-// forwarded as `endpoint` when it differs from the default for the region,
-// which keeps the run on OpenCode's own endpoint selection unless the user
-// pointed at a VPC endpoint or another custom host.
+// Vendor segment of a Bedrock model id or inference-profile id, e.g.
+// `anthropic.claude-sonnet-5`, `global.anthropic.claude-sonnet-5`,
+// `us.openai.gpt-6-astra`, `arn:aws:bedrock:...:inference-profile/eu.anthropic.…`.
+type BedrockModelFamily = 'anthropic' | 'openai' | 'other';
+
+export function bedrockModelFamily(modelId: string): BedrockModelFamily {
+  const match = /(?:^|[./])(anthropic|openai)\./i.exec(modelId.trim());
+  if (!match) return 'other';
+  return match[1]!.toLowerCase() as BedrockModelFamily;
+}
+
+// OpenCode compacts the session once the prompt reaches `context - output`.
+// The generic 128k/16k default leaves a 111.6k window, and the OpenCode system
+// prompt plus tool schemas already measure ~112k tokens on Claude (measured
+// 2026-09-11 against Bedrock), so every Claude turn would compact and loop.
+// Claude models on Bedrock take 200k of context, the GPT family 400k+; both
+// families accept 32k of output.
+const BEDROCK_MODEL_LIMITS: Record<BedrockModelFamily, { context: number; output: number }> = {
+  anthropic: { context: 200_000, output: 32_000 },
+  openai: { context: 400_000, output: 32_000 },
+  other: { context: DEFAULT_CONTEXT_TOKEN_LIMIT, output: DEFAULT_OUTPUT_TOKEN_LIMIT },
+};
+
+// OpenCode gates file parts on the model's declared input modalities and
+// replaces an unsupported one with an "ERROR: Cannot read ... (this model does
+// not support pdf input)" text. A config-declared model defaults to text and
+// image, so PDFs never reach Claude or GPT unless the modalities are spelled
+// out. Both families take text, images and PDFs on Bedrock.
+const BEDROCK_MODEL_MODALITIES: Partial<
+  Record<BedrockModelFamily, { input: string[]; output: string[] }>
+> = {
+  anthropic: { input: ['text', 'image', 'pdf'], output: ['text'] },
+  openai: { input: ['text', 'image', 'pdf'], output: ['text'] },
+};
+
+function bedrockModelEntry(family: BedrockModelFamily, rawModel: string): Record<string, unknown> {
+  const modalities = BEDROCK_MODEL_MODALITIES[family];
+  return {
+    name: rawModel,
+    limit: BEDROCK_MODEL_LIMITS[family],
+    ...(modalities ? { modalities } : {}),
+  };
+}
+
+// One assembly for every Bedrock route: what varies is the OpenCode provider id,
+// the SDK package, its options, where the bearer travels and which plugins load.
+interface BedrockRoute {
+  providerId: string;
+  npm: ProviderPackage;
+  options: Record<string, string>;
+  env: Record<string, string>;
+}
+
+function assembleBedrockConfig(route: BedrockRoute, family: BedrockModelFamily, rawModel: string): OpenCodeByokProviderConfig {
+  return {
+    providerId: route.providerId,
+    modelId: `${route.providerId}/${rawModel}`,
+    env: route.env,
+    config: {
+      provider: {
+        [route.providerId]: {
+          name: 'Amazon Bedrock',
+          npm: route.npm,
+          options: route.options,
+          models: { [rawModel]: bedrockModelEntry(family, rawModel) },
+        },
+      },
+    },
+  };
+}
+
+// Routes, in API-key mode:
+// - Anthropic models: `@ai-sdk/anthropic` on `<endpoint>/anthropic/v1`
+//   (Anthropic Messages), the key as the SDK api key.
+// - OpenAI models: `@ai-sdk/openai` on `<endpoint>/openai/v1` (Responses API,
+//   the only OpenAI path Bedrock serves with tools), the key as the SDK api key.
+// - Every other family, and the AWS-profile mode: OpenCode's own
+//   `amazon-bedrock` provider (Converse). With a key it reads
+//   `AWS_BEARER_TOKEN_BEDROCK` ahead of the credential chain; in profile mode
+//   it resolves the chain for `options.profile` itself. The regional endpoint
+//   is only forwarded when it differs from the region default (VPC endpoint,
+//   custom host).
+//
+// Measured on 2026-09-11: Converse rejects `document` blocks and tool-result
+// `image` blocks for OpenAI models, and OpenAI Chat Completions on Bedrock
+// refuses tools for GPT-6, so the Responses API is the only OpenAI-family path
+// with tools. The key never enters the JSON config: the SDK routes reference
+// it as `{env:...}` and Converse reads its own env variable.
 function buildBedrockProviderConfig(
   provider: ByokChatProviderConfig,
   rawModel: string,
@@ -172,41 +259,51 @@ function buildBedrockProviderConfig(
   apiKey: string,
 ): OpenCodeByokProviderConfig | null {
   const profile = bedrockProfile(provider);
-  if (!profile && !apiKey) return null;
+  const bearer = apiKey; // the Bedrock API key travels as a bearer
+  if (!profile && !bearer) return null;
+  if (!opencodeByokModelId(rawModel, 'bedrock')) return null;
   const region = resolveBedrockRegion(baseUrl);
-  const defaultEndpoint = `https://bedrock-runtime.${region}.amazonaws.com`;
-  const modelId = opencodeByokModelId(rawModel, 'bedrock');
-  if (!modelId) return null;
-  return {
-    providerId: BYOK_OPENCODE_BEDROCK_PROVIDER_ID,
-    modelId,
-    env: {
-      AWS_REGION: region,
-      ...(profile ? {} : { [BYOK_OPENCODE_BEDROCK_BEARER_TOKEN_ENV]: apiKey }),
-    },
-    config: {
-      provider: {
-        [BYOK_OPENCODE_BEDROCK_PROVIDER_ID]: {
-          name: 'Amazon Bedrock',
-          npm: '@ai-sdk/amazon-bedrock' satisfies ProviderPackage,
-          options: {
-            region,
-            ...(profile ? { profile } : {}),
-            ...(baseUrl !== defaultEndpoint ? { endpoint: baseUrl } : {}),
-          },
-          models: {
-            [rawModel]: {
-              name: rawModel,
-              limit: {
-                context: DEFAULT_CONTEXT_TOKEN_LIMIT,
-                output: DEFAULT_OUTPUT_TOKEN_LIMIT,
-              },
-            },
-          },
-        },
+  const family = bedrockModelFamily(rawModel);
+
+  if (bearer && family === 'anthropic') {
+    return assembleBedrockConfig(
+      {
+        providerId: BYOK_OPENCODE_BEDROCK_ANTHROPIC_PROVIDER_ID,
+        npm: '@ai-sdk/anthropic',
+        options: { baseURL: `${baseUrl}/anthropic/v1`, apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` },
+        env: { AWS_REGION: region, [BYOK_OPENCODE_API_KEY_ENV]: bearer },
       },
+      family,
+      rawModel,
+    );
+  }
+  if (bearer && family === 'openai') {
+    return assembleBedrockConfig(
+      {
+        providerId: BYOK_OPENCODE_BEDROCK_OPENAI_PROVIDER_ID,
+        npm: '@ai-sdk/openai',
+        options: { baseURL: `${baseUrl}/openai/v1`, apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` },
+        env: { AWS_REGION: region, [BYOK_OPENCODE_API_KEY_ENV]: bearer },
+      },
+      family,
+      rawModel,
+    );
+  }
+  const defaultEndpoint = `https://bedrock-runtime.${region}.amazonaws.com`;
+  return assembleBedrockConfig(
+    {
+      providerId: BYOK_OPENCODE_BEDROCK_PROVIDER_ID,
+      npm: '@ai-sdk/amazon-bedrock',
+      options: {
+        region,
+        ...(bearer ? {} : { profile }),
+        ...(baseUrl !== defaultEndpoint ? { endpoint: baseUrl } : {}),
+      },
+      env: { AWS_REGION: region, ...(bearer ? { [BYOK_OPENCODE_BEDROCK_BEARER_TOKEN_ENV]: bearer } : {}) },
     },
-  };
+    family,
+    rawModel,
+  );
 }
 
 function requiresApiKey(
