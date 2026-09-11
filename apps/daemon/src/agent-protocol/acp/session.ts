@@ -41,7 +41,7 @@ import {
 } from './rpc.js';
 import {
   acpRawEventShape,
-  isAcpTerminalFailureStatus,
+  isAcpToolUpdateError,
   acpToolCallId,
   isAcpArtifactWriteLabel,
   isAcpArtifactWriteUpdate,
@@ -1255,7 +1255,7 @@ export function attachAcpSession({
             if (nextThinkOnly) st.thinkOnly = true;
           }
           if (isAcpTerminalToolStatus(update)) {
-            const failed = isAcpTerminalFailureStatus(update);
+            const failed = isAcpToolUpdateError(update);
             emitTerminalToolPair(toolCallId, st, failed);
             // Keep the entry (emitted=true) so a repeated terminal cannot re-emit.
           } else {
@@ -1272,7 +1272,7 @@ export function attachAcpSession({
           dsmlArtifactSuppressorArmedAfterText = emittedTextBuffer.length > 0;
           dsmlArtifactSuppressorSawIncrementalProse = false;
           if (toolCallId) acpArtifactWriteToolCallIds.delete(toolCallId);
-        } else if (toolCallId && isAcpTerminalFailureStatus(update)) {
+        } else if (toolCallId && isAcpToolUpdateError(update)) {
           const ownsPendingWriteSuppression = toolCallId === dsmlArtifactSuppressorToolCallId;
           const ownsPendingWriteCall = acpArtifactWriteToolCallIds.has(toolCallId);
           acpArtifactWriteToolCallIds.delete(toolCallId);

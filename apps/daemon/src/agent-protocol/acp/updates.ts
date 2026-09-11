@@ -73,6 +73,20 @@ export function isAcpTerminalFailureStatus(update: JsonObject): boolean {
   const status = acpUpdateStatus(update);
   return status === 'failed' || status === 'failure' || status === 'error' || status === 'cancelled' || status === 'canceled';
 }
+
+/**
+ * Returns whether an ACP tool update explicitly reports a failed operation.
+ * ACP adapters use both camelCase and snake_case for process exit codes, and
+ * some expose the canonical `isError` flag directly. A terminal `completed`
+ * status therefore cannot be treated as success when one of these fields
+ * reports failure.
+ */
+export function isAcpToolUpdateError(update: JsonObject): boolean {
+  if (isAcpTerminalFailureStatus(update)) return true;
+  if (update.isError === true) return true;
+  const exitCode = update.exitCode ?? update.exit_code;
+  return typeof exitCode === 'number' && Number.isInteger(exitCode) && exitCode !== 0;
+}
 /**
  * Returns `true` when the update's status is a terminal tool outcome
  * (completed or failed). Used to decide when to emit `tool_result`.
