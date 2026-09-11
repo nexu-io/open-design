@@ -18,6 +18,7 @@ export class WorkspaceHubSubscriptionManager {
   private readonly eventWorkspaceReferences = new Map<string, number>();
   private readonly subscribers = new Map<string, HubEventsSubscriber>();
   private disposed = false;
+  private environmentGeneration = 0;
   private readonly maxSubscribers: number;
 
   constructor(private readonly options: WorkspaceHubSubscriptionManagerOptions) {
@@ -54,9 +55,16 @@ export class WorkspaceHubSubscriptionManager {
       (this.eventWorkspaceReferences.get(workspaceId) ?? 0) + 1,
     );
     this.reconcile();
+    const environmentGeneration = this.environmentGeneration;
     let released = false;
     return () => {
-      if (released || this.disposed) return;
+      if (
+        released ||
+        this.disposed ||
+        environmentGeneration !== this.environmentGeneration
+      ) {
+        return;
+      }
       released = true;
       const remaining = (this.eventWorkspaceReferences.get(workspaceId) ?? 1) - 1;
       if (remaining > 0) {
@@ -74,6 +82,20 @@ export class WorkspaceHubSubscriptionManager {
     for (const subscriber of this.subscribers.values()) {
       subscriber.refreshEndpoint();
     }
+  }
+
+  /**
+   * Drop every scope retained under the previous daemon-global AMR profile.
+   * Workspace ids are environment-owned, so neither billing leases nor open
+   * renderer EventSources may carry an id across a profile switch.
+   */
+  resetForEnvironmentChange(): void {
+    this.assertUsable();
+    this.environmentGeneration += 1;
+    for (const subscriber of this.subscribers.values()) subscriber.stop();
+    this.subscribers.clear();
+    this.billingWorkspaceIds.clear();
+    this.eventWorkspaceReferences.clear();
   }
 
   dispose(): void {
