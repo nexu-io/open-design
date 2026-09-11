@@ -76,6 +76,32 @@ export function placeHoverOverlay(
 	});
 }
 
+/**
+ * Returns the physical gap shared by vertically adjacent entry and layer
+ * rectangles. The overlap requirement prevents an unrelated side exit from
+ * becoming a permissive hover region.
+ */
+export function hoverBridgeRect(anchor: Rect, layer: Rect): Rect | undefined {
+	const left = Math.max(anchor.left, layer.left);
+	const right = Math.min(anchor.right, layer.right);
+	if (right <= left) return undefined;
+	if (anchor.bottom <= layer.top) {
+		return { left, right, top: anchor.bottom, bottom: layer.top, width: right - left, height: layer.top - anchor.bottom };
+	}
+	if (layer.bottom <= anchor.top) {
+		return { left, right, top: layer.bottom, bottom: anchor.top, width: right - left, height: anchor.top - layer.bottom };
+	}
+	return undefined;
+}
+
+function pointIsInRect(point: Pick<PointerEvent, "clientX" | "clientY">, rect: Rect | undefined) {
+	return Boolean(
+		rect &&
+			point.clientX >= rect.left && point.clientX <= rect.right &&
+			point.clientY >= rect.top && point.clientY <= rect.bottom,
+	);
+}
+
 function viewportRect(): Rect {
 	const visual = window.visualViewport;
 	const left = visual?.offsetLeft ?? 0;
@@ -129,6 +155,7 @@ export function HoverTouchpointOverlay({
 	const layerRef = useRef<HTMLElement>(null);
 	const restoreFocusRef = useRef<HTMLElement | null>(null);
 	const restoringFocusRef = useRef(false);
+	const pointerIsInBridgeRef = useRef(false);
 	const [position, setPosition] = useState<HoverOverlayPosition>();
 	const [elementReady, setElementReady] = useState(() =>
 		typeof customElements !== "undefined" && customElements.get("opend-touchpoint") !== undefined,
@@ -139,6 +166,7 @@ export function HoverTouchpointOverlay({
 	}, []);
 
 	const close = useCallback((restoreFocus = false) => {
+		pointerIsInBridgeRef.current = false;
 		setOpen(false);
 		if (restoreFocus) {
 			restoringFocusRef.current = true;
@@ -146,6 +174,26 @@ export function HoverTouchpointOverlay({
 			restoringFocusRef.current = false;
 		}
 	}, []);
+	const openHover = useCallback(() => {
+		pointerIsInBridgeRef.current = false;
+		setOpen(true);
+	}, []);
+	const pointerIsInBridge = useCallback((event: Pick<PointerEvent, "clientX" | "clientY">) => {
+		const anchor = entryRef.current?.getBoundingClientRect();
+		const layer = layerRef.current?.getBoundingClientRect();
+		return Boolean(anchor && layer && pointIsInRect(event, hoverBridgeRect(anchor, layer)));
+	}, []);
+	const schedulePointerClose = useCallback((event: React.PointerEvent) => {
+		pointerIsInBridgeRef.current = pointerIsInBridge(event.nativeEvent);
+		if (!pointerIsInBridgeRef.current) close();
+	}, [close, pointerIsInBridge]);
+	useEffect(() => {
+		const closeWhenLeavingBridge = (event: PointerEvent) => {
+			if (pointerIsInBridgeRef.current && !pointerIsInBridge(event)) close();
+		};
+		document.addEventListener("pointermove", closeWhenLeavingBridge);
+		return () => document.removeEventListener("pointermove", closeWhenLeavingBridge);
+	}, [close, pointerIsInBridge]);
 	const refreshPosition = useCallback(() => {
 		const anchor = entryRef.current?.getBoundingClientRect();
 		const overlay = layerRef.current?.getBoundingClientRect();
@@ -294,6 +342,8 @@ export function HoverTouchpointOverlay({
 		return () => window.removeEventListener("keydown", keydown);
 	}, [open, close]);
 
+	const relatedTargetIsInUnion = (relatedTarget: EventTarget | null) =>
+		relatedTarget instanceof Node && rootRef.current?.contains(relatedTarget);
 	const closeIfOutsideUnion = () =>
 		queueMicrotask(() => {
 			const active = document.activeElement;
@@ -317,19 +367,19 @@ export function HoverTouchpointOverlay({
 			tabIndex: 0,
 			"aria-expanded": open,
 			"aria-haspopup": "dialog",
-			onPointerEnter: () => setOpen(true),
+			onPointerEnter: openHover,
 			onPointerLeave: (event: React.PointerEvent) => {
-				if (!rootRef.current?.contains(event.relatedTarget as Node | null))
-					close();
+				if (!relatedTargetIsInUnion(event.relatedTarget))
+					schedulePointerClose(event);
 			},
 			onFocus: () => {
 				restoreFocusRef.current = entryRef.current;
-				if (!restoringFocusRef.current) setOpen(true);
+				if (!restoringFocusRef.current) openHover();
 			},
 			onBlur: closeIfOutsideUnion,
 			// Hover and focus may already have opened the layer before a click.
 			// Activation always opens; Escape/outside focus remain the close paths.
-			onClick: () => setOpen(true),
+			onClick: openHover,
 		}),
 		createElement(
 			"div",
@@ -352,12 +402,12 @@ export function HoverTouchpointOverlay({
 							maxHeight: position.maxHeight,
 						}
 					: undefined,
-				onPointerEnter: () => setOpen(true),
+				onPointerEnter: openHover,
 				onPointerLeave: (event: React.PointerEvent) => {
-					if (!rootRef.current?.contains(event.relatedTarget as Node | null))
-						close();
+					if (!relatedTargetIsInUnion(event.relatedTarget))
+						schedulePointerClose(event);
 				},
-				onFocus: () => setOpen(true),
+				onFocus: openHover,
 				onBlur: closeIfOutsideUnion,
 			}),
 		),

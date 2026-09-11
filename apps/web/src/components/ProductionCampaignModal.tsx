@@ -1,6 +1,5 @@
 import { readCampaignHostLocale } from "./TestCampaignModal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@open-design/components";
 import { getOpenDesignHost } from "@open-design/host";
 import { openExternalUrl } from "../providers/registry";
 import {
@@ -19,7 +18,10 @@ import {
 	type OpenDesignTouchpointElement,
 	type WebTouchpointContent,
 } from "./touchpoint-component";
-import { emitProductionTouchpointLoadDiagnostic, loadProductionTouchpointDecision } from "./production-touchpoint-loader";
+import {
+	emitProductionTouchpointLoadDiagnostic,
+	loadProductionTouchpointDecision,
+} from "./production-touchpoint-loader";
 import {
 	TestTouchpointMount,
 	recordVisibleTestTouchpoint,
@@ -29,6 +31,7 @@ import type { TestCampaignPlacement, TestDecision } from "./TestCampaignModal";
 import styles from "./TestCampaignModal.module.css";
 const PLACEMENT = "opend.home.campaign-modal";
 const MAX_LEASE_MS = 5 * 60_000;
+export const PRODUCTION_ACTION_TELEMETRY_TIMEOUT_MS = 3_000;
 const supportedCapabilities = new Set(["close", "static-action"]);
 
 type Decision = {
@@ -43,8 +46,44 @@ type Decision = {
 	staticActions: TouchpointStaticAction[];
 	content: WebTouchpointContent;
 };
-const closedKey = (subject: string, activity: string) =>
-	`touchpoint-closed:${subject}:${activity}`;
+const displayedKey = (subject: string, activity: string) =>
+	`touchpoint-displayed:v1:${encodeURIComponent(subject)}:${encodeURIComponent(activity)}`;
+
+/** Local impressions gate automatic presentation only, independently of publication. */
+function wasDisplayed(subject: string, activity: string): boolean {
+	try {
+		return localStorage.getItem(displayedKey(subject, activity)) === "1";
+	} catch {
+		return false;
+	}
+}
+
+function recordDisplayed(subject: string, activity: string): void {
+	try {
+		localStorage.setItem(displayedKey(subject, activity), "1");
+	} catch {
+		// Storage may be unavailable or full; presentation and dismissal still work.
+	}
+}
+
+/**
+ * Parses an internal action at execution time. Browser URL normalization treats
+ * backslashes as hierarchy separators, so manifest validation alone cannot be
+ * the origin boundary.
+ */
+export function internalActionNavigationUrl(
+	path: unknown,
+	href = window.location.href,
+): URL | null {
+	if (typeof path !== "string") return null;
+	try {
+		const origin = new URL(href).origin;
+		const target = new URL(path, href);
+		return target.origin === origin ? target : null;
+	} catch {
+		return null;
+	}
+}
 
 /** Performs a server-validated click before the host consumes a static target. */
 export async function dispatchProductionCampaignAction(
@@ -57,8 +96,13 @@ export async function dispatchProductionCampaignAction(
 	const action = decision.staticActions.find(
 		(candidate) => candidate.id === actionId,
 	);
+	const internalTarget =
+		action?.target.kind === "internal"
+			? internalActionNavigationUrl(action.target.path)
+			: undefined;
 	if (
 		!action ||
+		(action.target.kind === "internal" && !internalTarget) ||
 		generation !== currentGeneration() ||
 		expiresAt <= Date.now() ||
 		!navigator.userActivation?.isActive
@@ -69,10 +113,17 @@ export async function dispatchProductionCampaignAction(
 		});
 		return false;
 	}
+	let response: Response | undefined;
+	const telemetryController = new AbortController();
+	const telemetryTimeout = setTimeout(
+		() => telemetryController.abort(),
+		PRODUCTION_ACTION_TELEMETRY_TIMEOUT_MS,
+	);
 	try {
-		const response = await fetch("/api/touchpoints/production-runtime/events", {
+		response = await fetch("/api/touchpoints/production-runtime/events", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
+			signal: telemetryController.signal,
 			body: JSON.stringify({
 				touchpointDecisionId: decision.touchpointDecisionId,
 				activityId: decision.activityId,
@@ -81,20 +132,39 @@ export async function dispatchProductionCampaignAction(
 				kind: "click",
 			}),
 		});
-		if (
-			!response.ok ||
-			generation !== currentGeneration() ||
-			expiresAt <= Date.now()
-		) {
-			emitWebTouchpointDiagnostic({
-				code: "touchpoint_action_denied",
-				detail: actionId,
-			});
-			return false;
-		}
+	} catch {
+		emitWebTouchpointDiagnostic({
+			code: "touchpoint_action_telemetry_failed",
+			detail: "network",
+		});
+	} finally {
+		clearTimeout(telemetryTimeout);
+	}
+	if (response && !response.ok && response.status < 500) {
+		emitWebTouchpointDiagnostic({
+			code: "touchpoint_action_denied",
+			detail: actionId,
+		});
+		return false;
+	}
+	if (response && !response.ok && response.status >= 500) {
+		emitWebTouchpointDiagnostic({
+			code: "touchpoint_action_telemetry_failed",
+			detail: `http_${response.status}`,
+		});
+	}
+	if (generation !== currentGeneration() || expiresAt <= Date.now()) {
+		emitWebTouchpointDiagnostic({
+			code: "touchpoint_action_denied",
+			detail: actionId,
+		});
+		return false;
+	}
+	try {
 		if (action.target.kind === "https")
 			await openExternalUrl(action.target.url);
-		else window.location.assign(action.target.path);
+		else if (internalTarget) window.location.assign(internalTarget.href);
+		else return false;
 		return true;
 	} catch {
 		emitWebTouchpointDiagnostic({
@@ -169,15 +239,29 @@ export function ProductionCampaignModal({
 			const nextRequestGeneration = ++requestGeneration.current;
 			try {
 				const loaded = await loadProductionTouchpointDecision(
-					PLACEMENT, locale, controller.signal, decisionRef.current?.touchpointDecisionId,
+					PLACEMENT,
+					locale,
+					controller.signal,
+					decisionRef.current?.touchpointDecisionId,
 				);
 				if (!current(nextRequestGeneration)) return;
 				if (loaded.kind === "revoked") {
 					const active = decisionRef.current;
-					if (active && loaded.receipt.touchpointDecisionId === active.touchpointDecisionId && loaded.receipt.deploymentId === active.deploymentId && loaded.receipt.activityId === active.activityId && loaded.receipt.contentVersionId === active.content.id) clear();
+					if (
+						active &&
+						loaded.receipt.touchpointDecisionId ===
+							active.touchpointDecisionId &&
+						loaded.receipt.deploymentId === active.deploymentId &&
+						loaded.receipt.activityId === active.activityId &&
+						loaded.receipt.contentVersionId === active.content.id
+					)
+						clear();
 					return;
 				}
-				if (loaded.kind === "no-decision") { if (!decisionRef.current) clear(); return; }
+				if (loaded.kind === "no-decision") {
+					if (!decisionRef.current) clear();
+					return;
+				}
 				const next = loaded.value as Decision;
 				if (!current(nextRequestGeneration)) return;
 				const deadline = Math.min(
@@ -190,8 +274,7 @@ export function ProductionCampaignModal({
 					next.placementKey !== PLACEMENT ||
 					next.content?.placementKey !== PLACEMENT ||
 					!Number.isFinite(deadline) ||
-					deadline <= Date.now() ||
-					sessionStorage.getItem(closedKey(subject, next.activityId))
+					deadline <= Date.now()
 				) {
 					if (
 						next.placementKey !== PLACEMENT ||
@@ -218,6 +301,12 @@ export function ProductionCampaignModal({
 					return;
 				}
 				if (expiry.current > Date.now()) return;
+				// Keep an already-open activity authorized; the marker only prevents a new automatic opening.
+				if (
+					decisionRef.current?.activityId !== next.activityId &&
+					wasDisplayed(subject, next.activityId)
+				)
+					return;
 				// Revoke the old mount and cancel its lease timer before scheduling React's replacement cleanup.
 				++authorizationGeneration.current;
 				const nextLeaseGeneration = ++leaseGeneration.current;
@@ -237,7 +326,11 @@ export function ProductionCampaignModal({
 					Math.max(0, deadline - Date.now()),
 				);
 			} catch (error) {
-				if (!current(nextRequestGeneration) || (error instanceof DOMException && error.name === "AbortError")) return;
+				if (
+					!current(nextRequestGeneration) ||
+					(error instanceof DOMException && error.name === "AbortError")
+				)
+					return;
 				const diagnostic = emitProductionTouchpointLoadDiagnostic(error);
 				if (diagnostic) emitWebTouchpointDiagnostic(diagnostic);
 				clear();
@@ -278,6 +371,27 @@ export function ProductionCampaignModal({
 		const element = document.createElement(
 			"opend-touchpoint",
 		) as OpenDesignTouchpointElement;
+		let visibleFrame: number | undefined;
+		let mounted = false;
+		let recorded = false;
+		const recordWhenVisible = () => {
+			if (!mounted || recorded || visibleFrame !== undefined) return;
+			visibleFrame = requestAnimationFrame(() => {
+				visibleFrame = undefined;
+				if (
+					!current() ||
+					decision.authorizationDeadline <= Date.now() ||
+					document.hidden ||
+					!element.isConnected ||
+					element.hidden ||
+					element.getClientRects().length === 0
+				)
+					return;
+				recordDisplayed(decision.sessionSubject, decision.activityId);
+				recorded = true;
+			});
+		};
+		document.addEventListener("visibilitychange", recordWhenVisible);
 		let elementDisposed = false;
 		let verifiedDisposed = false;
 		const disposeElement = () => {
@@ -356,20 +470,30 @@ export function ProductionCampaignModal({
 						onDiagnostic: emitWebTouchpointDiagnostic,
 					},
 				);
-				if (!current()) dispose();
+				if (!current()) {
+					dispose();
+					return;
+				}
+				mounted = true;
+				recordWhenVisible();
 			} catch (error) {
+				if (!current()) {
+					dispose();
+					return;
+				}
 				if (current()) {
 					emitWebTouchpointDiagnostic({
 						code:
 							error instanceof Error ? error.message : "touchpoint_load_failed",
 					});
-					clear();
 				}
 				dispose();
 			}
 		})();
 		return () => {
 			cancelled = true;
+			document.removeEventListener("visibilitychange", recordWhenVisible);
+			if (visibleFrame !== undefined) cancelAnimationFrame(visibleFrame);
 			++authorizationGeneration.current;
 			dispose();
 			container.replaceChildren();
@@ -388,7 +512,10 @@ export function ProductionCampaignModal({
 		};
 		document.addEventListener("keydown", key);
 		queueMicrotask(() =>
-			modalRef.current?.querySelector<HTMLElement>("button")?.focus(),
+			(
+				modalRef.current?.querySelector<HTMLElement>("button") ??
+				modalRef.current
+			)?.focus(),
 		);
 		return () => {
 			document.removeEventListener("keydown", key);
@@ -398,20 +525,27 @@ export function ProductionCampaignModal({
 	}, [decision]);
 	useEffect(() => {
 		if (!closed || !decision || !sessionSubject) return;
-		sessionStorage.setItem(closedKey(sessionSubject, decision.activityId), "1");
 		clear();
 		setClosed(false);
 	}, [closed, decision, sessionSubject]);
 	useEffect(() => {
 		if (!testDecision || testClosed || !authenticated) return;
-		const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		const previous =
+			document.activeElement instanceof HTMLElement
+				? document.activeElement
+				: null;
 		const releaseScrollLock = lockWebTouchpointModalScroll();
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") setTestClosed(true);
 			else trapWebTouchpointModalFocus(event, modalRef.current);
 		};
 		document.addEventListener("keydown", onKeyDown);
-		queueMicrotask(() => modalRef.current?.querySelector<HTMLElement>("button")?.focus());
+		queueMicrotask(() =>
+			(
+				modalRef.current?.querySelector<HTMLElement>("button") ??
+				modalRef.current
+			)?.focus(),
+		);
 		return () => {
 			document.removeEventListener("keydown", onKeyDown);
 			releaseScrollLock();
@@ -424,15 +558,20 @@ export function ProductionCampaignModal({
 	const closeTestModal = useCallback(() => setTestClosed(true), []);
 	const onTestVisible = useCallback(
 		(next: TestDecision, placementKey: TestCampaignPlacement) => {
-			if (testRuntime) recordVisibleTestTouchpoint(testRuntime, next, placementKey);
+			if (testRuntime)
+				recordVisibleTestTouchpoint(testRuntime, next, placementKey);
 		},
 		[testRuntime],
 	);
 	if (authenticated && testRuntime && testDecision && !testClosed) {
 		return (
-			<div className={styles.backdrop} role="dialog" aria-label="Test campaign" aria-modal="true">
+			<div
+				className={styles.backdrop}
+				role="dialog"
+				aria-label="Test campaign"
+				aria-modal="true"
+			>
 				<div className={styles.modal} ref={modalRef} tabIndex={-1}>
-					<Button type="button" onClick={() => setTestClosed(true)}>Close</Button>
 					<TestTouchpointMount
 						decision={testDecision}
 						placementKey={PLACEMENT}
@@ -452,9 +591,6 @@ export function ProductionCampaignModal({
 			aria-modal="true"
 		>
 			<div className={styles.modal} ref={modalRef} tabIndex={-1}>
-				<Button type="button" onClick={() => setClosed(true)}>
-					Close
-				</Button>
 				<div ref={elementRef} data-testid="campaign-custom-element" />
 			</div>
 		</div>

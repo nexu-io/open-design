@@ -4,15 +4,81 @@ import { describe, expect, it } from "vitest";
 
 import {
 	parseTouchpointComponentV2Fixture,
-	TouchpointComponentV2ManifestSchema,
-	touchpointComponentV2ConformanceVectors,
 	TOUCHPOINT_COMPONENT_V2_FIXTURE_SHA256,
 	TOUCHPOINT_COMPONENT_V2_PROTOCOL,
 	TOUCHPOINT_COMPONENT_V2_UPSTREAM_PROVENANCE,
+	TouchpointComponentV2ManifestSchema,
+	touchpointComponentV2ConformanceVectors,
 	touchpointComponentV2Fixture,
 } from "../src/index.js";
 
 describe("touchpoint component v2 controlled mirror", () => {
+	it("parses a mixed OD/Vela package without executing Vela-owned actions", () => {
+		const manifest = structuredClone(touchpointComponentV2Fixture.manifest);
+		const velaPlacement = (resourceId: string) => ({
+			key: "vela.web.console-overlay",
+			entry: "vela.js",
+			resources: [],
+			locales: ["en-US"],
+			staticActions: [
+				{
+					id: "subscribe",
+					target: { kind: "vela-personal-subscription", resourceId },
+				},
+			],
+		});
+		const mixed = {
+			...manifest,
+			resources: [...manifest.resources, "vela.js"],
+			placements: [
+				...manifest.placements,
+				velaPlacement("vela.dashboard.personal-subscription"),
+			],
+		};
+		expect(TouchpointComponentV2ManifestSchema.safeParse(mixed).success).toBe(
+			true,
+		);
+		expect(
+			TouchpointComponentV2ManifestSchema.safeParse({
+				...mixed,
+				placements: [
+					...manifest.placements,
+					velaPlacement("untrusted-resource"),
+				],
+			}).success,
+		).toBe(false);
+	});
+
+	it("rejects ambiguous internal paths after browser URL normalization", () => {
+		const withInternalPath = (path: string) => ({
+			...structuredClone(touchpointComponentV2Fixture.manifest),
+			placements: [
+				{
+					...touchpointComponentV2Fixture.manifest.placements[0],
+					staticActions: [{ id: "action", target: { kind: "internal", path } }],
+				},
+			],
+		});
+
+		const rejectedPaths = [
+			String.raw`/\evil.example`,
+			String.raw`/foo\bar`,
+			`/${"\t"}/evil.example`,
+			`/${"\n"}/evil.example`,
+		];
+		for (const path of rejectedPaths)
+			expect(
+				TouchpointComponentV2ManifestSchema.safeParse(withInternalPath(path))
+					.success,
+			).toBe(false);
+
+		expect(
+			TouchpointComponentV2ManifestSchema.safeParse(
+				withInternalPath("/projects?view=active#recent"),
+			).success,
+		).toBe(true);
+	});
+
 	it("imports and parses the frozen Vela v2 fixture through the public contract package", () => {
 		expect(TOUCHPOINT_COMPONENT_V2_PROTOCOL).toBe(
 			"vela-touchpoint-component/v2",
@@ -34,7 +100,7 @@ describe("touchpoint component v2 controlled mirror", () => {
 			],
 			sourceSha256: {
 				touchpoints:
-					"cbc7dc261a53cbc8f194938daa643962f42ee73553e2df5ccdc8c83e7ff903da",
+					"be26f9c4e5cfe6e0a0eedee3d31dc70df8f1c8ee61704e765d4f5c89879fc2f0",
 				fixture:
 					"278a40cd787dc74544aa785f85d218d8a51820d2d0e14c7b8d7c6eced10b4c92",
 			},

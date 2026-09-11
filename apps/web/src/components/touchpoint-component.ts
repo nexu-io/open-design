@@ -1,13 +1,13 @@
 import {
 	type TouchpointComponentV2Manifest as ContentPackageManifest,
+	TouchpointComponentV2ManifestSchema as contentPackageManifestSchema,
+	createTouchpointSdk,
 	type TouchpointComponentContext,
 	type TouchpointComponentModule,
 	type TouchpointDiagnostic,
 	TouchpointModuleCache,
 	type TouchpointSdk,
 	TouchpointUpdateQueue,
-	TouchpointComponentV2ManifestSchema as contentPackageManifestSchema,
-	createTouchpointSdk,
 } from "@open-design/contracts";
 
 export type WebTouchpointContent = {
@@ -38,6 +38,63 @@ export type TouchpointLifecycleOptions = Readonly<{
 	requestClose?: () => void;
 	onDiagnostic?: (diagnostic: TouchpointDiagnostic) => void;
 }>;
+
+/**
+ * Close is a runtime UI capability. Manifest metadata only grants the SDK
+ * callback, so the host fallback stays available unless the mounted component
+ * exposes an explicit close control marker.
+ */
+const TOUCHPOINT_CLOSE_CONTROL_SELECTOR =
+	'[data-touchpoint-close], [data-close], button[aria-label*="close" i], [role="button"][aria-label*="close" i]';
+
+function isVisibleAndEnabled(element: Element): boolean {
+	for (let current: Element | null = element; current; current = current.parentElement) {
+		if (
+			current.hasAttribute("hidden") ||
+			current.getAttribute("aria-hidden") === "true" ||
+			current.getAttribute("aria-disabled") === "true"
+		)
+			return false;
+		if (
+			current instanceof HTMLButtonElement ||
+			current instanceof HTMLInputElement ||
+			current instanceof HTMLSelectElement ||
+			current instanceof HTMLTextAreaElement ||
+			current instanceof HTMLOptGroupElement ||
+			current instanceof HTMLOptionElement
+		) {
+			if (current.disabled) return false;
+		}
+		const style = getComputedStyle(current);
+		if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")
+			return false;
+	}
+	return true;
+}
+
+export function hasWebTouchpointCloseControl(
+	element: OpenDesignTouchpointElement,
+): boolean {
+	const root = element.shadowRoot;
+	if (!root || !isVisibleAndEnabled(element)) return false;
+	const controls = [
+		...root.querySelectorAll(TOUCHPOINT_CLOSE_CONTROL_SELECTOR),
+		...root.querySelectorAll("button, [role='button']"),
+	];
+	return controls.some(
+		(control) =>
+			isVisibleAndEnabled(control) &&
+			(control.matches(TOUCHPOINT_CLOSE_CONTROL_SELECTOR) ||
+				/^close(?:\b|\s)/iu.test(
+					(
+						control.getAttribute("aria-label") ??
+						control.getAttribute("title") ??
+						control.textContent ??
+						""
+					).trim(),
+				)),
+	);
+}
 const ELEMENT_NAME = "opend-touchpoint";
 
 type ComponentModule = TouchpointComponentModule<
@@ -125,6 +182,15 @@ export async function verifyWebTouchpoint(touchpoint: WebTouchpointContent) {
 	);
 	if (!placement || placement.entry !== touchpoint.entryPath)
 		throw new Error("touchpoint_integrity_failed");
+	// Parse the shared manifest completely, but never load another host's action
+	// into the selected Open Design placement.
+	if (
+		placement.staticActions.some(
+			(action) =>
+				action.target.kind !== "https" && action.target.kind !== "internal",
+		)
+	)
+		throw new Error("touchpoint_action_unsupported");
 	// A multi-placement version declares a global resource union. Only the selected
 	// placement's entry and closure may be materialized or imported in this host.
 	const expectedPaths = [placement.entry, ...placement.resources];
@@ -333,7 +399,10 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 			component = await this.withTimeout(
 				webTouchpointModuleCache.import(
 					entryDigest,
-						() => import(/* @vite-ignore */ /* webpackIgnore: true */ entryUrl) as Promise<ComponentModule>,
+					() =>
+						import(
+							/* @vite-ignore */ /* webpackIgnore: true */ entryUrl
+						) as Promise<ComponentModule>,
 				),
 				generation,
 				"import",

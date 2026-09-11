@@ -89,7 +89,6 @@ import {
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import { TestCampaignModal } from './components/TestCampaignModal';
 import { ProductionCampaignModal } from './components/ProductionCampaignModal';
-import { ProductionCampaignHover } from './components/ProductionCampaignHover';
 import {
   daemonIsLive,
   fetchAppVersionInfo,
@@ -5581,10 +5580,6 @@ function AppInner() {
         sessionSubject={amrLoginStatus?.user?.id ?? null}
       />
       <ProductionCampaignModal
-        authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
-        sessionSubject={amrLoginStatus?.user?.id ?? null}
-      />
-      <ProductionCampaignHover
         authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
         sessionSubject={amrLoginStatus?.user?.id ?? null}
       />

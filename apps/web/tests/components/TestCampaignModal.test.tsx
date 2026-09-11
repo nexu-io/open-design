@@ -9,6 +9,7 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 type CampaignHostGlobal = typeof globalThis & {
 	__openDesignCampaignTestHost?: unknown;
 };
@@ -17,8 +18,14 @@ vi.mock("@open-design/host", () => ({
 	getOpenDesignHost: () =>
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost,
 }));
-import { TestCampaignModal, useTestRuntime } from "../../src/components/TestCampaignModal";
+
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
+import type { TestDecision } from "../../src/components/TestCampaignModal";
+import {
+	TestCampaignModal,
+	TestTouchpointMount,
+	useTestRuntime,
+} from "../../src/components/TestCampaignModal";
 import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
 
@@ -103,12 +110,17 @@ function fetches(response: Record<string, unknown> = runtime()) {
 										id: "deployment-1",
 										activityId: "activity-1",
 										snapshotHash: "sha256:test-snapshot",
-										snapshot: { contentVersionId:content.id, manifestHash:content.manifestHash, artifactHash:"sha256:test-artifact", placementKeys: ["opend.home.campaign-modal"] },
+										snapshot: {
+											contentVersionId: content.id,
+											manifestHash: content.manifestHash,
+											artifactHash: "sha256:test-artifact",
+											placementKeys: ["opend.home.campaign-modal"],
+										},
 									},
 								],
 							}
-							: url.includes("context")
-								? response.context
+						: url.includes("context")
+							? response.context
 							: response,
 				),
 				{ status: 200 },
@@ -145,9 +157,12 @@ const allTestManifest = {
 	resources: allTestPlacements.map((key) => `${key.split(".").at(-1)}.js`),
 	images: [],
 };
-function fourPlacementContent(placementKey: (typeof allTestPlacements)[number]) {
+function fourPlacementContent(
+	placementKey: (typeof allTestPlacements)[number],
+) {
 	const entryPath = `${placementKey.split(".").at(-1)}.js`;
-	const module = "export function mount(root) { root.textContent = 'Verified campaign'; return root; }";
+	const module =
+		"export function mount(root) { root.textContent = 'Verified campaign'; return root; }";
 	return {
 		...content,
 		id: "version-four-placement",
@@ -158,12 +173,21 @@ function fourPlacementContent(placementKey: (typeof allTestPlacements)[number]) 
 		entryPath,
 		entryDigest: digest(module),
 		entryModule: module,
-		resources: [{ path: entryPath, digest: digest(module), bytes: btoa(module) }],
+		resources: [
+			{ path: entryPath, digest: digest(module), bytes: btoa(module) },
+		],
 	};
 }
 function TestRuntimeProbe() {
 	const runtime = useTestRuntime();
-	return <output data-testid="test-runtime-decision-count" data-selected={runtime?.deployment.id ?? ""}>{runtime?.decisions.size ?? 0}</output>;
+	return (
+		<output
+			data-testid="test-runtime-decision-count"
+			data-selected={runtime?.deployment.id ?? ""}
+		>
+			{runtime?.decisions.size ?? 0}
+		</output>
+	);
 }
 function TestCampaignHarness({
 	authenticated,
@@ -174,7 +198,10 @@ function TestCampaignHarness({
 }) {
 	return (
 		<>
-			<TestCampaignModal authenticated={authenticated} sessionSubject={sessionSubject} />
+			<TestCampaignModal
+				authenticated={authenticated}
+				sessionSubject={sessionSubject}
+			/>
 			<ProductionCampaignModal
 				authenticated={authenticated}
 				sessionSubject={sessionSubject ?? null}
@@ -183,12 +210,14 @@ function TestCampaignHarness({
 	);
 }
 beforeEach(() => {
+	window.history.replaceState(null, "", "/?cmsTestControls=1");
 	(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 		version: 2,
 		client: { type: "desktop" },
 	};
 });
 afterEach(() => {
+	window.history.replaceState(null, "", "/");
 	delete (globalThis as CampaignHostGlobal).__openDesignCampaignTestHost;
 	cleanup();
 	vi.unstubAllGlobals();
@@ -202,6 +231,25 @@ describe("TestCampaignModal", () => {
 		expect(screen.queryByTestId("touchpoint-test-selector")).toBeNull();
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
+	it("automatically presents the Test campaign without client debug controls", async () => {
+		window.history.replaceState(null, "", "/");
+		const fetchMock = fetches();
+		vi.stubGlobal("fetch", fetchMock);
+		render(<TestCampaignHarness authenticated />);
+		await screen.findByRole("dialog");
+		expect(screen.queryByTestId("touchpoint-test-selector")).toBeNull();
+		expect(screen.queryByTestId("touchpoint-test-clock")).toBeNull();
+		expect(fetchMock).toHaveBeenCalledWith(
+			"/api/touchpoints/test-runtime/context",
+			expect.objectContaining({
+				body: JSON.stringify({
+					deploymentId: "deployment-1",
+					scenario: "active",
+				}),
+			}),
+		);
+	});
+
 	it("uses the selected Test decision to create a v2 ShadowRoot custom element, never iframe or webview", async () => {
 		vi.stubGlobal("fetch", fetches());
 		render(<TestCampaignHarness authenticated />);
@@ -290,6 +338,101 @@ describe("CMS modal host cleanup", () => {
 });
 
 describe("TestCampaignModal host guards", () => {
+	it("refreshes close-control availability when a shadow control becomes enabled", async () => {
+		let closeControl!: HTMLButtonElement;
+		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({
+			entryUrl: "blob:test-campaign",
+			resourceUrls: new Map(),
+			dispose: vi.fn(),
+		} as never);
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			async function (this: OpenDesignTouchpointElement) {
+				closeControl = document.createElement("button");
+				closeControl.dataset.touchpointClose = "true";
+				closeControl.disabled = true;
+				this.shadowRoot?.replaceChildren(closeControl);
+			},
+		);
+		const onCloseControlChange = vi.fn();
+		render(
+			<TestTouchpointMount
+				decision={runtime() as TestDecision}
+				placementKey="opend.home.campaign-modal"
+				testId="test-touchpoint-mount"
+				onVisible={vi.fn()}
+				onCloseControlChange={onCloseControlChange}
+			/>,
+		);
+		await waitFor(() =>
+			expect(onCloseControlChange).toHaveBeenCalledWith(false),
+		);
+		closeControl.disabled = false;
+		await waitFor(() =>
+			expect(onCloseControlChange).toHaveBeenCalledWith(true),
+		);
+	});
+
+	it("does not let a rejected stale Test mount overwrite a replacement close control", async () => {
+		let rejectOldMount!: (reason?: unknown) => void;
+		let mountCount = 0;
+		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({
+			entryUrl: "blob:test-campaign",
+			resourceUrls: new Map(),
+			dispose: vi.fn(),
+		} as never);
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			async function (this: OpenDesignTouchpointElement) {
+				mountCount += 1;
+				if (mountCount === 1) {
+					await new Promise<never>((_, reject) => {
+						rejectOldMount = reject;
+					});
+					return;
+				}
+				const close = document.createElement("button");
+				close.dataset.touchpointClose = "true";
+				this.shadowRoot?.replaceChildren(close);
+			},
+		);
+		const onCloseControlChange = vi.fn();
+		touchpointComponent.ensureWebTouchpointElement();
+		const firstDecision = runtime() as TestDecision;
+		const replacementDecision = {
+			...firstDecision,
+			content: { ...firstDecision.content, id: "replacement-version" },
+		} as TestDecision;
+		const { rerender } = render(
+			<div role="dialog">
+				<TestTouchpointMount
+					decision={firstDecision}
+					placementKey="opend.home.campaign-modal"
+					testId="test-touchpoint-mount"
+					onVisible={vi.fn()}
+					onCloseControlChange={onCloseControlChange}
+				/>
+			</div>,
+		);
+		await waitFor(() => expect(mountCount).toBe(1));
+		rerender(
+			<div role="dialog">
+				<TestTouchpointMount
+					decision={replacementDecision}
+					placementKey="opend.home.campaign-modal"
+					testId="test-touchpoint-mount"
+					onVisible={vi.fn()}
+					onCloseControlChange={onCloseControlChange}
+				/>
+			</div>,
+		);
+		await waitFor(() => expect(mountCount).toBe(2));
+		await waitFor(() =>
+			expect(onCloseControlChange).toHaveBeenLastCalledWith(true),
+		);
+		rejectOldMount(new Error("stale Test mount failed"));
+		await Promise.resolve();
+		expect(onCloseControlChange).toHaveBeenLastCalledWith(true);
+	});
+
 	it("skips a decision whose required capabilities drift from its immutable manifest and emits a diagnostic", async () => {
 		const diagnostics: string[] = [];
 		document.addEventListener(
@@ -356,77 +499,150 @@ describe("Test campaign decision and lifecycle guards", () => {
 		expect(screen.queryByRole("dialog")).toBeNull();
 	});
 	it("refuses a selected deployment whose immutable snapshot identity is missing", async () => {
-		const base=fetches();
-		vi.stubGlobal("fetch",async(url:string)=>{
-			const response=await base(url);
-			if(!url.endsWith("/deployments"))return response;
-			const body=await response.json();
+		const base = fetches();
+		vi.stubGlobal("fetch", async (url: string) => {
+			const response = await base(url);
+			if (!url.endsWith("/deployments")) return response;
+			const body = await response.json();
 			delete body.deployments[0].snapshotHash;
 			return new Response(JSON.stringify(body));
 		});
-		const diagnostics:string[]=[];
-		document.addEventListener("touchpointdiagnostic",event=>diagnostics.push((event as CustomEvent).detail.code),{once:true});
-		render(<><TestCampaignHarness authenticated /><TestRuntimeProbe /></>);
+		const diagnostics: string[] = [];
+		document.addEventListener(
+			"touchpointdiagnostic",
+			(event) => diagnostics.push((event as CustomEvent).detail.code),
+			{ once: true },
+		);
+		render(
+			<>
+				<TestCampaignHarness authenticated />
+				<TestRuntimeProbe />
+			</>,
+		);
 		await screen.findByTestId("touchpoint-test-selector");
-		fireEvent.change(screen.getByLabelText("Test activity"),{target:{value:"deployment-1"}});
-		await waitFor(()=>expect(diagnostics).toContain("touchpoint_decision_mismatch"));
+		fireEvent.change(screen.getByLabelText("Test activity"), {
+			target: { value: "deployment-1" },
+		});
+		await waitFor(() =>
+			expect(diagnostics).toContain("touchpoint_decision_mismatch"),
+		);
 		expect(screen.queryByRole("dialog")).toBeNull();
-		expect(screen.getByTestId("test-runtime-decision-count")).toHaveAttribute("data-selected","deployment-1");
+		expect(screen.getByTestId("test-runtime-decision-count")).toHaveAttribute(
+			"data-selected",
+			"deployment-1",
+		);
 	});
-	it.each(["activity", "tester", "actions"])("rejects mismatched %s identity before mounting",async(kind)=>{
-		const value=runtime();
-		const response={...value,
-			...(kind==="activity"?{activityId:"other-activity"}:{}),
-			...(kind==="tester"?{testContext:{...value.testContext,testerMemberId:"other-tester"}}:{}),
-			...(kind==="actions"?{staticActions:[{id:"forged",target:{kind:"https",url:"https://example.com"}}]}:{}),
-		};
-		const diagnostics:string[]=[];
-		document.addEventListener("touchpointdiagnostic",event=>diagnostics.push((event as CustomEvent).detail.code),{once:true});
-		vi.stubGlobal("fetch",fetches(response));
-		render(<TestCampaignHarness authenticated />);
+	it.each(["activity", "tester", "actions"])(
+		"rejects mismatched %s identity before mounting",
+		async (kind) => {
+			const value = runtime();
+			const response = {
+				...value,
+				...(kind === "activity" ? { activityId: "other-activity" } : {}),
+				...(kind === "tester"
+					? {
+							testContext: {
+								...value.testContext,
+								testerMemberId: "other-tester",
+							},
+						}
+					: {}),
+				...(kind === "actions"
+					? {
+							staticActions: [
+								{
+									id: "forged",
+									target: { kind: "https", url: "https://example.com" },
+								},
+							],
+						}
+					: {}),
+			};
+			const diagnostics: string[] = [];
+			document.addEventListener(
+				"touchpointdiagnostic",
+				(event) => diagnostics.push((event as CustomEvent).detail.code),
+				{ once: true },
+			);
+			vi.stubGlobal("fetch", fetches(response));
+			render(<TestCampaignHarness authenticated />);
+			await screen.findByTestId("touchpoint-test-selector");
+			fireEvent.change(screen.getByLabelText("Test activity"), {
+				target: { value: "deployment-1" },
+			});
+			await waitFor(() =>
+				expect(diagnostics).toContain("touchpoint_decision_mismatch"),
+			);
+			expect(screen.queryByRole("dialog")).toBeNull();
+		},
+	);
+	it("clears selected Test content when the authenticated account changes", async () => {
+		vi.stubGlobal("fetch", fetches());
+		const { rerender } = render(
+			<TestCampaignHarness authenticated sessionSubject="account-a" />,
+		);
 		await screen.findByTestId("touchpoint-test-selector");
-		fireEvent.change(screen.getByLabelText("Test activity"),{target:{value:"deployment-1"}});
-		await waitFor(()=>expect(diagnostics).toContain("touchpoint_decision_mismatch"));
-		expect(screen.queryByRole("dialog")).toBeNull();
-	});
-	it("clears selected Test content when the authenticated account changes",async()=>{
-		vi.stubGlobal("fetch",fetches());
-		const {rerender}=render(<TestCampaignHarness authenticated sessionSubject="account-a" />);
-		await screen.findByTestId("touchpoint-test-selector");
-		fireEvent.change(screen.getByLabelText("Test activity"),{target:{value:"deployment-1"}});
+		fireEvent.change(screen.getByLabelText("Test activity"), {
+			target: { value: "deployment-1" },
+		});
 		await screen.findByRole("dialog");
 		rerender(<TestCampaignHarness authenticated sessionSubject="account-b" />);
-		await waitFor(()=>expect(screen.queryByRole("dialog")).toBeNull());
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 		expect(screen.getByLabelText("Test activity")).toHaveValue("");
 	});
-	it("does not let a late failed context request clear a newer selection",async()=>{
-		let failFirst!: (value:Response)=>void;
-		const firstContext=new Promise<Response>(resolve=>{failFirst=resolve;});
-		const base=fetches();
-		vi.stubGlobal("fetch",async(url:string,init?:RequestInit)=>{
-			if(url.endsWith("/deployments")){
-				const body=await (await base(url)).json();
-				body.deployments.push({...body.deployments[0],id:"deployment-2",activityId:"activity-2"});
+	it("does not let a late failed context request clear a newer selection", async () => {
+		let failFirst!: (value: Response) => void;
+		const firstContext = new Promise<Response>((resolve) => {
+			failFirst = resolve;
+		});
+		const base = fetches();
+		vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+			if (url.endsWith("/deployments")) {
+				const body = await (await base(url)).json();
+				body.deployments.push({
+					...body.deployments[0],
+					id: "deployment-2",
+					activityId: "activity-2",
+				});
 				return new Response(JSON.stringify(body));
 			}
-			if(url.endsWith("/context")){
-				const selected=JSON.parse(String(init?.body)).deploymentId;
-				if(selected==="deployment-1")return firstContext;
-				return new Response(JSON.stringify({...runtime().context,deploymentId:selected}));
+			if (url.endsWith("/context")) {
+				const selected = JSON.parse(String(init?.body)).deploymentId;
+				if (selected === "deployment-1") return firstContext;
+				return new Response(
+					JSON.stringify({ ...runtime().context, deploymentId: selected }),
+				);
 			}
-			const value=runtime();
-			return new Response(JSON.stringify({...value,activityId:"activity-2",deploymentId:"deployment-2",testContext:{...value.testContext,deploymentId:"deployment-2"}}));
+			const value = runtime();
+			return new Response(
+				JSON.stringify({
+					...value,
+					activityId: "activity-2",
+					deploymentId: "deployment-2",
+					testContext: { ...value.testContext, deploymentId: "deployment-2" },
+				}),
+			);
 		});
 		render(<TestCampaignHarness authenticated />);
 		await screen.findByTestId("touchpoint-test-selector");
-		fireEvent.change(screen.getByLabelText("Test activity"),{target:{value:"deployment-1"}});
-		fireEvent.change(screen.getByLabelText("Test activity"),{target:{value:"deployment-2"}});
+		fireEvent.change(screen.getByLabelText("Test activity"), {
+			target: { value: "deployment-1" },
+		});
+		fireEvent.change(screen.getByLabelText("Test activity"), {
+			target: { value: "deployment-2" },
+		});
 		await screen.findByRole("dialog");
-		await act(async()=>{
-			failFirst(new Response(JSON.stringify({error:"failed"}),{status:500}));
+		await act(async () => {
+			failFirst(
+				new Response(JSON.stringify({ error: "failed" }), { status: 500 }),
+			);
 			await firstContext;
 		});
-		await waitFor(()=>expect(screen.getByLabelText("Test activity")).toHaveValue("deployment-2"));
+		await waitFor(() =>
+			expect(screen.getByLabelText("Test activity")).toHaveValue(
+				"deployment-2",
+			),
+		);
 		expect(screen.getByRole("dialog")).toBeInTheDocument();
 	});
 	it("diagnoses immutable byte integrity failure and revokes every created Blob URL", async () => {
@@ -509,7 +725,7 @@ describe("Test campaign decision and lifecycle guards", () => {
 	});
 });
 
-	describe("Test campaign four-placement contract", () => {
+describe("Test campaign four-placement contract", () => {
 	it("loads the real context shape, mounts every enabled placement, and records one server acceptance per visible host", async () => {
 		const context = {
 			deploymentId: "deployment-four",
@@ -540,48 +756,96 @@ describe("Test campaign decision and lifecycle guards", () => {
 					artifactHash: deployment.snapshot.artifactHash,
 					manifestHash: deployment.snapshot.manifestHash,
 					requiredCapabilities:
-					placementKey === "opend.home.campaign-modal"
-						? ["close", "static-action"]
-						: placementKey === "opend.home.account-badge"
-							? ["static-action"]
-							: ["hover", "static-action"],
+						placementKey === "opend.home.campaign-modal"
+							? ["close", "static-action"]
+							: placementKey === "opend.home.account-badge"
+								? ["static-action"]
+								: ["hover", "static-action"],
 					activityId: deployment.activityId,
 					testContext: { ...context, scheduleState: "active" as const },
 				},
 			]),
 		);
-		((globalThis as CampaignHostGlobal).__openDesignCampaignTestHost as { client: { osLocale: string } }).client.osLocale = "zh-CN";
+		(
+			(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost as {
+				client: { osLocale: string };
+			}
+		).client.osLocale = "zh-CN";
 		const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
 			if (init?.method === "POST" && url.includes("acceptances"))
-				return new Response(JSON.stringify({ id: "acceptance" }), { status: 201 });
+				return new Response(JSON.stringify({ id: "acceptance" }), {
+					status: 201,
+				});
 			if (init?.method === "POST")
 				return new Response(JSON.stringify(context), { status: 201 });
 			if (url.includes("/deployments"))
-				return new Response(JSON.stringify({ deployments: [deployment] }), { status: 200 });
-			const placementKey = new URL(url, "http://127.0.0.1").searchParams.get("placementKey");
-			return new Response(JSON.stringify(responses.get(placementKey as (typeof allTestPlacements)[number])), { status: 200 });
+				return new Response(JSON.stringify({ deployments: [deployment] }), {
+					status: 200,
+				});
+			const placementKey = new URL(url, "http://127.0.0.1").searchParams.get(
+				"placementKey",
+			);
+			return new Response(
+				JSON.stringify(
+					responses.get(placementKey as (typeof allTestPlacements)[number]),
+				),
+				{ status: 200 },
+			);
 		});
 		vi.stubGlobal("fetch", fetchMock);
-		const mount = vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(async function (this: OpenDesignTouchpointElement) {
-			this.shadowRoot?.replaceChildren(document.createTextNode("Verified campaign"));
-		});
+		const mount = vi
+			.spyOn(OpenDesignTouchpointElement.prototype, "mount")
+			.mockImplementation(async function (this: OpenDesignTouchpointElement) {
+				this.shadowRoot?.replaceChildren(
+					document.createTextNode("Verified campaign"),
+				);
+			});
 		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({
 			entryUrl: "blob:test-four-placement",
 			resourceUrls: new Map(),
 			dispose: vi.fn(),
 		} as never);
-		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1, item: () => null } as unknown as DOMRectList);
-		render(<><TestRuntimeProbe /><TestCampaignHarness authenticated /></>);
+		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({
+			length: 1,
+			item: () => null,
+		} as unknown as DOMRectList);
+		render(
+			<>
+				<TestRuntimeProbe />
+				<TestCampaignHarness authenticated />
+			</>,
+		);
 		await screen.findByTestId("touchpoint-test-selector");
-		fireEvent.change(screen.getByLabelText("Test activity"), { target: { value: deployment.id } });
+		fireEvent.change(screen.getByLabelText("Test activity"), {
+			target: { value: deployment.id },
+		});
 		await screen.findByRole("dialog");
-		await waitFor(() => expect(screen.getByTestId("test-runtime-decision-count")).toHaveTextContent("4"));
+		await waitFor(() =>
+			expect(
+				screen.getByTestId("test-runtime-decision-count"),
+			).toHaveTextContent("4"),
+		);
 		await waitFor(() => expect(mount).toHaveBeenCalledTimes(1));
-		const acceptanceCalls = () => fetchMock.mock.calls.filter(([url, init]) => init?.method === "POST" && url.includes("acceptances"));
+		const acceptanceCalls = () =>
+			fetchMock.mock.calls.filter(
+				([url, init]) => init?.method === "POST" && url.includes("acceptances"),
+			);
 		await waitFor(() => expect(acceptanceCalls()).toHaveLength(1));
-		expect(acceptanceCalls().map(([, init]) => JSON.parse(String(init?.body)).placementKey)).toEqual(["opend.home.campaign-modal"]);
+		expect(
+			acceptanceCalls().map(
+				([, init]) => JSON.parse(String(init?.body)).placementKey,
+			),
+		).toEqual(["opend.home.campaign-modal"]);
 		for (const placementKey of allTestPlacements) {
-			expect(fetchMock.mock.calls.some(([url, init]) => init?.method !== "POST" && new URL(url, "http://127.0.0.1").searchParams.get("placementKey") === placementKey)).toBe(true);
+			expect(
+				fetchMock.mock.calls.some(
+					([url, init]) =>
+						init?.method !== "POST" &&
+						new URL(url, "http://127.0.0.1").searchParams.get(
+							"placementKey",
+						) === placementKey,
+				),
+			).toBe(true);
 		}
 	});
 });

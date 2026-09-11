@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+	hasWebTouchpointCloseControl,
+	OpenDesignTouchpointElement,
 	verifyWebTouchpoint,
 	type WebTouchpointContent,
 } from "../../src/components/touchpoint-component";
@@ -101,7 +103,100 @@ function content(
 
 afterEach(() => vi.restoreAllMocks());
 
+describe("hasWebTouchpointCloseControl", () => {
+	it("ignores disabled or hidden marker controls and accepts a usable control", () => {
+		const element = document.createElement(
+			"opend-touchpoint",
+		) as OpenDesignTouchpointElement;
+		const root = element.attachShadow({ mode: "open" });
+		const hidden = document.createElement("button");
+		hidden.dataset.touchpointClose = "true";
+		hidden.disabled = true;
+		root.append(hidden);
+		expect(hasWebTouchpointCloseControl(element)).toBe(false);
+		hidden.disabled = false;
+		hidden.hidden = true;
+		expect(hasWebTouchpointCloseControl(element)).toBe(false);
+		hidden.hidden = false;
+		expect(hasWebTouchpointCloseControl(element)).toBe(true);
+		element.hidden = true;
+		expect(hasWebTouchpointCloseControl(element)).toBe(false);
+	});
+});
+
 describe("verifyWebTouchpoint multi-placement resource closure", () => {
+	it("loads only OD resources from a mixed package containing a Vela subscription action", async () => {
+		const create = vi
+			.spyOn(URL, "createObjectURL")
+			.mockReturnValue("blob:od-only");
+		const value = content("opend.home.campaign-modal");
+		const mixed: WebTouchpointContent["manifest"] = {
+			...value.manifest,
+			resources: [...value.manifest.resources, "vela.js"],
+			placements: [
+				...value.manifest.placements,
+				{
+					key: "vela.web.console-overlay",
+					entry: "vela.js",
+					resources: [],
+					locales: ["en-US"],
+					requiredCapabilities: [],
+					staticActions: [
+						{
+							id: "subscribe",
+							target: {
+								kind: "vela-personal-subscription",
+								resourceId: "vela.dashboard.personal-subscription",
+							},
+						},
+					],
+				},
+			],
+		};
+		const verified = await verifyWebTouchpoint({
+			...value,
+			manifest: mixed,
+			manifestHash: digest(JSON.stringify(mixed)),
+		});
+		expect([...verified.resourceUrls.keys()]).toEqual([
+			"modal.js",
+			"shared.css",
+			"modal.png",
+		]);
+		expect(create).toHaveBeenCalledTimes(3);
+		verified.dispose();
+	});
+	it("rejects a Vela-only action on the selected OD placement before materializing resources", async () => {
+		const create = vi.spyOn(URL, "createObjectURL");
+		const value = content("opend.home.campaign-modal");
+		const invalid: WebTouchpointContent["manifest"] = {
+			...value.manifest,
+			placements: value.manifest.placements.map((placement) =>
+				placement.key === value.placementKey
+					? {
+							...placement,
+							staticActions: [
+								{
+									id: "subscribe",
+									target: {
+										kind: "vela-personal-subscription",
+										resourceId: "vela.dashboard.personal-subscription",
+									},
+								},
+							],
+						}
+					: placement,
+			),
+		};
+		await expect(
+			verifyWebTouchpoint({
+				...value,
+				manifest: invalid,
+				manifestHash: digest(JSON.stringify(invalid)),
+			}),
+		).rejects.toThrow("touchpoint_action_unsupported");
+		expect(create).not.toHaveBeenCalled();
+	});
 	it.each(manifest.placements)(
 		"accepts only the selected closure for $key",
 		async (placement) => {
