@@ -12,8 +12,10 @@
 // at the call site (it needs CODEX_HOME + the captured session id).
 
 import os from 'node:os';
-import { readFile, readdir } from 'node:fs/promises';
+import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+
+import { findIndexedCodexArchivedRolloutPath } from './codex-archived-rollout-index.js';
 
 interface CodexFirstCallUsage {
   first_call_input_tokens: number;
@@ -168,7 +170,18 @@ export async function readCodexRolloutFirstCall(opts: {
   const sessionId = opts.sessionId?.trim();
   if (!sessionId) return null;
   try {
-    const rolloutPath = await findCodexRolloutPath(codexHome, sessionId);
+    let rolloutPath = await findCodexRolloutPath(codexHome, sessionId);
+    if (!rolloutPath) rolloutPath = await findIndexedCodexArchivedRolloutPath(codexHome, sessionId);
+    if (!rolloutPath) {
+      const archiveRoot = path.join(codexHome, 'archived_sessions');
+      const stat = await lstat(archiveRoot).catch(() => null);
+      if (!stat?.isDirectory() || stat.isSymbolicLink()) return null;
+      const entries = await readdir(archiveRoot, { withFileTypes: true }).catch(() => []);
+      if (entries.length > 2_048) return null;
+      const matches = entries.filter((entry) => entry.isFile() && !entry.isSymbolicLink()
+        && rolloutFileMatchesSession(entry.name, sessionId));
+      if (matches.length === 1) rolloutPath = path.join(archiveRoot, matches[0]!.name);
+    }
     if (!rolloutPath) return null;
     const contents = await readFile(rolloutPath, 'utf8');
     return extractCodexLastTurnFirstCallUsage(contents);
