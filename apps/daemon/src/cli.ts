@@ -1233,7 +1233,13 @@ function printOrcaRouterHelp() {
 
   od orcarouter connect [--json] [--watch]
       Start an OAuth 2.0 + PKCE login. Prints the authorize URL and the state.
-      --watch polls until the credential lands (or the 10-minute window ends).
+      --watch polls until a NEW credential lands (or the 10-minute window ends).
+      A reconnect keeps the previous credential usable, so --watch waits for the
+      daemon's credential generation to change rather than for "connected".
+      With --json, --watch emits newline-delimited events on stdout:
+        {"event":"started", ...authorizeUrl, state, callback}
+        {"event":"connected", attempt, generation, status}
+      so a script can read the URL before the login completes.
 
   od orcarouter complete --state <state> (--code <code> | --code-file <path|->) [--json]
       Finish a login with the code the consent screen showed. Use --code-file -
@@ -1291,6 +1297,36 @@ async function postOrcaRouterRoute(base, route, body = {}) {
   }
   if (!resp.ok) return structuredHttpFailure(resp);
   return await resp.json();
+}
+
+/**
+ * Read `/api/orcarouter/auth/status`.
+ *
+ * Fails the command on the same conditions `postOrcaRouterRoute` does — an
+ * unreachable daemon or a rejected read is a real error, and a watch loop that
+ * swallowed it would sit silent until the login window expired.
+ */
+async function fetchOrcaRouterStatus(base) {
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/orcarouter/auth/status`);
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  return await resp.json();
+}
+
+/**
+ * Emit one compact newline-delimited JSON event.
+ *
+ * `writeJson` pretty-prints, which is right for a single response but wrong for
+ * a stream: a multi-line object cannot be consumed one event per line. This is
+ * the same shape `od run watch` uses.
+ */
+function writeJsonEvent(data) {
+  process.stdout.write(JSON.stringify(data) + '\n');
 }
 
 async function runOrcaRouter(args) {
@@ -1351,6 +1387,17 @@ async function runOrcaRouter(args) {
   }
 
   if (sub === 'connect') {
+    // Capture the credential the daemon holds BEFORE starting. A reconnect
+    // deliberately leaves the previous credential usable, so `connected` is
+    // already true on the first poll and would report success with the old
+    // account while the new authorization is still pending. The generation is
+    // what distinguishes "reconnected" from "still the old grant" — the same
+    // rule the web connect control applies. Only the watch path needs it; a
+    // one-shot Start has nothing to compare against.
+    const baseline = flags.watch ? await fetchOrcaRouterStatus(base) : null;
+    const baselineGeneration =
+      typeof baseline?.generation === 'number' ? baseline.generation : null;
+
     const started = await postOrcaRouterRoute(base, '/api/orcarouter/oauth/start');
     if (flags.json && !flags.watch) return writeJson(started);
     if (!flags.json) {
@@ -1363,22 +1410,51 @@ async function runOrcaRouter(args) {
         );
         return;
       }
+    } else {
+      // The watch path must expose the authorization details before it starts
+      // waiting: a caller that only saw the trailing completion event could not
+      // open the URL the login needs, and the process would sit silent until
+      // the window expired.
+      writeJsonEvent({
+        event: 'started',
+        authorizeUrl: started.authorizeUrl,
+        state: started.state,
+        callback: started.callback ?? null,
+        baselineGeneration,
+      });
     }
     // Poll until the exchange lands, mirroring what the connect control does.
     const deadline = Date.now() + 10 * 60 * 1000;
     for (;;) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      const resp = await fetch(`${base}/api/orcarouter/auth/status`);
-      if (!resp.ok) return structuredHttpFailure(resp);
-      const status = await resp.json();
-      if (status.connected && typeof status.generation === 'number') {
-        if (flags.json) return writeJson({ started, status });
+      const status = await fetchOrcaRouterStatus(base);
+      const generationAdvanced =
+        typeof status?.generation === 'number'
+        && status.generation !== baselineGeneration;
+      if (status?.connected && generationAdvanced) {
+        if (flags.json) {
+          return writeJsonEvent({
+            event: 'connected',
+            attempt: status.attempt ?? null,
+            generation: status.generation,
+            status,
+          });
+        }
         console.log(`Connected\tyes`);
         console.log(`Account\t${status.accountId ?? '-'}`);
         return;
       }
       if (Date.now() > deadline) {
-        console.error('login window expired before an account was connected.');
+        const message = baselineGeneration === null
+          ? 'login window expired before an account was connected.'
+          : 'login window expired before a replacement credential was stored.';
+        if (flags.json) {
+          process.stderr.write(
+            `${JSON.stringify({ event: 'expired', ok: false, error: { message } })}\n`,
+          );
+        } else {
+          console.error(message);
+        }
         process.exit(4);
       }
     }
