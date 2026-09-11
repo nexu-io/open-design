@@ -16,6 +16,17 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("names every job and step by operation in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const names = [...workflow.matchAll(/^ {4}name: (.+)$|^ {6}- name: (.+)$/gmu)];
+    expect(names.length).toBeGreaterThan(100);
+    for (const match of names) expect(JSON.parse(match[1] ?? match[2]!)).toMatch(
+      /^\[(plan|setup|prepare|build|test|validate|fetch|restore|store|sign|publish|report)\] \S/u);
+    expect(workflow).not.toMatch(/^ {6}- (uses|run):/mu);
+    const prepareName = JSON.parse(workflow.split("\n  prepare:")[1]!.match(/^ {4}name: (.+)$/mu)![1]!);
+    const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
+    expect(config.workflows[`release-${lane}`].admission.productionJob).toBe(prepareName);
+  });
   it.each(["exact", "stable", "prerelease"])("commits complete production evidence before delivery in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
@@ -28,7 +39,7 @@ describe("exact Electron release topology", () => {
     expect(prepare).not.toContain("exact-final/");
     expect(publish).toContain("Upload exact release evidence");
     const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
-    expect(config.workflows[`release-${lane}`].admission).toEqual({ productionJob: "Prepare signed exact content" });
+    expect(config.workflows[`release-${lane}`].admission).toEqual({ productionJob: "[prepare] Release content · validated and signed" });
   });
   it.each(["exact", "stable", "prerelease"])("skips scene and base hit relays in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
@@ -488,7 +499,7 @@ describe("exact Electron release topology", () => {
     expect(distribution).not.toContain("baseline stage");
     const acceptance = workflow.split("\n  acceptance:")[1]!.split("\n  activate:")[0]!;
     expect(acceptance).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
-    const stage = acceptance.split("- name: Fetch accepted baseline for upgrade acceptance")[1]!;
+    const stage = acceptance.split("- name: \"[fetch] Fetch accepted baseline for upgrade acceptance")[1]!;
     expect(stage).toContain('--validation "$RUNNER_TEMP/exact-validation/shell.json"');
     expect(stage).toContain('tools-release baseline fetch');
     expect(stage).toContain('tools-release installation collect');
@@ -522,7 +533,7 @@ describe("exact Electron release topology", () => {
   });
   it("cold-restarts after CDP hot update and delegates acceptance checks to tools-release", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
-    const hot = workflow.split("- name: Exercise accepted macOS Shell through CDP hot update")[1]?.split("- name: Install and exercise Windows Electron Shell")[0];
+    const hot = workflow.split("- name: \"[test] Exercise accepted macOS Shell through CDP hot update")[1]?.split("- name: \"[test] Install and exercise Windows Electron Shell")[0];
     expect(hot).toBeDefined();
     expect(hot).toContain("tools-release installation exercise");
     expect(hot).toContain("--mode hot");
@@ -587,7 +598,7 @@ describe("exact Electron release topology", () => {
   it("transports scenes opaquely and restores the plan before reading a cache hit", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     const scene = workflow.split("\n  scene:")[1]!.split("\n  prepare:")[0]!;
-    expect(scene.indexOf("path: ${{ runner.temp }}/exact-plan")).toBeLessThan(scene.indexOf("- name: Restore converged scene"));
+    expect(scene.indexOf("path: ${{ runner.temp }}/exact-plan")).toBeLessThan(scene.indexOf("- name: \"[restore] Restore converged scene"));
     expect(scene).toContain("path: ${{ runner.temp }}/exact-scene-artifact/scene.tar");
     expect(scene).toContain("tools-release scene pack");
     expect(scene).toContain("tools-release scene import");
@@ -606,7 +617,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain("acceptance-request.json");
     expect(workflow).not.toMatch(/node (?:-e |--input-type=module)/u);
     const acceptance = workflow.split("\n  acceptance:")[1]!.split("\n  activate:")[0]!;
-    expect(acceptance.indexOf("node-version-file: .node-version")).toBeLessThan(acceptance.indexOf("- name: Authorize installed acceptance capability"));
+    expect(acceptance.indexOf("node-version-file: .node-version")).toBeLessThan(acceptance.indexOf("- name: \"[validate] Authorize installed acceptance capability"));
     const config = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
     expect(config.suites["electron-scene"]).toContain("tools/release/src/exact/scene-artifact.ts");
   });
@@ -639,7 +650,7 @@ describe("exact Electron release topology", () => {
         expect(section).toContain("node-version: ${{ needs.plan.outputs.node_version }}");
         expect(section).not.toContain("node-version-file:");
         expect(section.indexOf("actions/setup-node@")).toBeLessThan(section.indexOf("actions/checkout@"));
-        const cache = section.split(`- name: Restore ${job} dependency cache`)[1]!.split("- name: Build independent")[0]!;
+        const cache = section.split(`- name: "[restore] Restore ${job} dependency cache`)[1]!.split('- name: "[build] Build independent')[0]!;
         expect(cache).toContain("if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}");
         expect(cache).toContain("cache: pnpm");
         expect(cache).toContain("cache-dependency-path: pnpm-lock.yaml");
@@ -670,8 +681,8 @@ describe("exact Electron release topology", () => {
         expect(dataJob).toContain(credential);
         expect(workflow.replace(dataJob, "")).not.toContain(credential);
       }
-      const distributionBuild = workflow.split("- name: Build native distribution")[1]!.split("- uses:")[0]!;
-      const distributionSetup = workflow.split("- name: Restore distribution scene")[0]!.split("- uses: actions/setup-node@v6").at(-1)!;
+      const distributionBuild = workflow.split("- name: \"[build] Build native distribution")[1]!.split("\n      - name:")[0]!;
+      const distributionSetup = workflow.split("- name: \"[restore] Restore distribution scene")[0]!.split("uses: actions/setup-node@v6").at(-1)!;
       expect(distributionSetup).not.toContain("cache:");
       expect(distributionSetup).not.toContain("cache-dependency-path:");
       expect(distributionBuild).toContain("CSC_LINK: ${{ matrix.shell == 'electron' && secrets.APPLE_SIGNING_CERTIFICATE_BASE64 || '' }}");
@@ -700,10 +711,10 @@ describe("exact Electron release topology", () => {
       for (const job of source.split(/\n  [a-z_]+:\n/u).slice(1)) {
         const download = job.indexOf('uses: actions/download-artifact@v8\n        with:\n          name: release-tools-${{ inputs.source_sha }}');
         if (download < 0) continue;
-        expect(job.indexOf("- name: Expose release tool"), `${lane}: tool must exist before chmod/PATH`).toBeGreaterThan(download);
+        expect(job.indexOf("- name: \"[setup] Expose release tool"), `${lane}: tool must exist before chmod/PATH`).toBeGreaterThan(download);
         const invocation = job.includes("uses: ./.github/actions/release-data")
           ? job.indexOf("uses: ./.github/actions/release-data") : job.indexOf("tools-release ");
-        expect(invocation, `${lane}: expose before invocation`).toBeGreaterThan(job.indexOf("- name: Expose release tool"));
+        expect(invocation, `${lane}: expose before invocation`).toBeGreaterThan(job.indexOf("- name: \"[setup] Expose release tool"));
       }
     }
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
@@ -733,7 +744,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain("somepreview");
     expect(workflow).not.toContain('"appId": "io.open-design.betahyx"');
     expect(workflow).not.toContain('"executableName": "open-design-betahyx"');
-    const finalize = workflow.split("- name: Finalize signed Shell sidecar and channel head")[1]?.split("- name: Publish immutable release objects")[0];
+    const finalize = workflow.split("- name: \"[sign] Finalize signed Shell sidecar and channel head")[1]?.split("- name: \"[publish] Publish immutable release objects")[0];
     expect(finalize).toContain('--distributions "$RUNNER_TEMP/distributions"');
     expect(finalize).not.toContain("python3");
     expect(finalize).not.toContain("restart-and-install");

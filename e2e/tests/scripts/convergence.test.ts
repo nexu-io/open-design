@@ -470,7 +470,7 @@ for lane in ['exact','stable','prerelease']:
     run={'id':12,'run_attempt':2,'name':name,'event':'workflow_dispatch','head_sha':'a'*40,
          'status':'completed','conclusion':'failure','head_repository':{'full_name':'nexu-io/open-design'}}
     payload={'repository':{'id':42,'full_name':'nexu-io/open-design'},'workflow_run':run}
-    job={'name':'Prepare signed exact content','run_id':12,'run_attempt':2,'head_sha':'a'*40,'status':'completed','conclusion':'success'}
+    job={'name':'[prepare] Release content · validated and signed','run_id':12,'run_attempt':2,'head_sha':'a'*40,'status':'completed','conclusion':'success'}
     with patch.object(c,'api_json',return_value={'jobs':[job]}) as api:
         assert c.validate_production_admission(payload,contract)['run_attempt']==2
         api.assert_called_once_with('/repos/nexu-io/open-design/actions/runs/12/attempts/2/jobs?per_page=100&page=1')

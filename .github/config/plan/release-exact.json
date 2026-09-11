@@ -363,7 +363,7 @@
   },
   "workflows": {
     "release-exact": {
-      "admission": { "productionJob": "Prepare signed exact content" },
+      "admission": { "productionJob": "[prepare] Release content · validated and signed" },
       "policy": "shell-scenes-v3",
       "workloads": {
         "electron_base_darwin_arm64": {
