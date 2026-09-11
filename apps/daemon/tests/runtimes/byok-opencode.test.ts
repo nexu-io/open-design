@@ -14,6 +14,7 @@ describe('byok-opencode runtime config', () => {
     agentCapabilities.delete('byok-opencode');
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
     expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
+      '--auto': 'autoPermissionBypass',
       '--dangerously-skip-permissions': 'skipPermissions',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
@@ -31,6 +32,39 @@ describe('byok-opencode runtime config', () => {
         '--dangerously-skip-permissions',
         '-m',
         'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('uses the new --auto permission bypass when the installed OpenCode advertises it', () => {
+    agentCapabilities.set('byok-opencode', {
+      autoPermissionBypass: true,
+      skipPermissions: false,
+    });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--auto',
+      ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('omits the permission bypass when OpenCode advertises neither supported flag', () => {
+    agentCapabilities.set('byok-opencode', {
+      autoPermissionBypass: false,
+      skipPermissions: false,
+    });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
+        'run',
+        '--format',
+        'json',
       ]);
     } finally {
       agentCapabilities.delete('byok-opencode');
