@@ -1276,6 +1276,9 @@ export interface ChatMessage {
   createdAt?: number;
   runId?: string;
   runStatus?: ChatRunStatus;
+  /** True when this terminal run left declared work unfinished. Mirrors
+   *  ChatRunStatusResponse.endedWithUnfinishedWork. */
+  endedWithUnfinishedWork?: boolean;
   resultDeliveryState?: ResultDeliveryState;
   /** True when this message's failed run can be recovered by resuming the
    *  agent's CLI session (transient upstream drop / inactivity on a
