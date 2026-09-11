@@ -280,17 +280,22 @@ describe('chat Agent exact-text production choke point', () => {
     });
 
     const clientInstruction = [
+      'client system',
       'research contract',
       'run context',
       'connected MCP: figma',
       'browser unavailable',
       'emit title marker',
-      'client system',
     ].join('\n\n---\n\n');
     const instruction = [
       'daemon system',
       'runtime tools',
-      clientInstruction,
+      'client system',
+      'research contract',
+      'run context',
+      'connected MCP: figma',
+      'browser unavailable',
+      'emit title marker',
     ].join('\n\n---\n\n');
     expect(result.clientInstructionPrompt).toBe(clientInstruction);
     expect(result.instructionPrompt).toBe(instruction);

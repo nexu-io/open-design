@@ -24,6 +24,9 @@ export type PromptTelemetrySectionKind =
   | 'runtimeToolPrompt'
   | 'researchCommandContract'
   | 'runContextPrompt'
+  | 'browserUsePromptGuard'
+  | 'titleGenerationPrompt'
+  | 'connectedExternalMcpReference'
   | 'clientSystemPrompt'
   | 'echoGuard'
   | 'userRequest'
@@ -36,6 +39,69 @@ export type PromptTelemetrySectionKind =
   | 'attachments'
   | 'commentAttachments'
   | 'promptImagePaths';
+
+/**
+ * Cacheable-prefix classification (#4679, reliability epic #3408).
+ *
+ * Every prompt-stack section is declared `stable` or `volatile` at the point it
+ * is added to the union — there is no implicit default. `stable` sections are
+ * the cacheable prefix the model provider can reuse across turns of a
+ * conversation (daemon system prompt, tool contract, and the big system prompt =
+ * design system / skills / memory). `volatile` sections change per turn (run
+ * context, research contract, browser-use guard, title task, the user request,
+ * attachments, cwd) and MUST sit after the stable block so they never split it.
+ *
+ * Because this is a `Record` over the full `PromptTelemetrySectionKind` union,
+ * adding a new section kind without classifying it is a compile error — the
+ * one-choke-point guard #3408 asks for. The runtime fingerprint
+ * (`cacheablePrefixFingerprint`) plus `cacheablePrefixContiguous` then prove the
+ * stable block actually stayed contiguous in the composed byte order.
+ */
+export type PromptSectionCacheClass = 'stable' | 'volatile';
+
+export const PROMPT_SECTION_CACHE_CLASS: Record<
+  PromptTelemetrySectionKind,
+  PromptSectionCacheClass
+> = {
+  // Stable cacheable prefix: identical across turns in the common case.
+  daemonSystemPrompt: 'stable',
+  runtimeToolPrompt: 'stable',
+  clientSystemPrompt: 'stable',
+  skillPrompt: 'stable',
+  designSystemPrompt: 'stable',
+  pluginStagePrompt: 'stable',
+  odNextExactFinalText: 'volatile',
+  // Volatile tail: per-turn inputs that must not break the stable prefix.
+  formOverride: 'volatile',
+  researchCommandContract: 'volatile',
+  runContextPrompt: 'volatile',
+  browserUsePromptGuard: 'volatile',
+  titleGenerationPrompt: 'volatile',
+  connectedExternalMcpReference: 'volatile',
+  echoGuard: 'volatile',
+  userRequest: 'volatile',
+  cwdHint: 'volatile',
+  linkedDirsHint: 'volatile',
+  attachments: 'volatile',
+  commentAttachments: 'volatile',
+  promptImagePaths: 'volatile',
+};
+
+/**
+ * Classify a section kind, throwing on an unknown kind. The throw is the
+ * runtime mirror of the compile-time exhaustiveness of
+ * `PROMPT_SECTION_CACHE_CLASS`: a fixture or caller that invents a kind outside
+ * the declared union fails loudly instead of silently landing in the cacheable
+ * prefix.
+ */
+export function classifyPromptSectionCacheClass(
+  kind: PromptTelemetrySectionKind,
+): PromptSectionCacheClass {
+  if (!Object.hasOwn(PROMPT_SECTION_CACHE_CLASS, kind)) {
+    throw new Error(`unclassified prompt-stack section kind: ${String(kind)}`);
+  }
+  return PROMPT_SECTION_CACHE_CLASS[kind];
+}
 
 export interface PromptTelemetryInputSection {
   kind: PromptTelemetrySectionKind;
@@ -62,6 +128,24 @@ export interface PromptStackTelemetry {
   redactionVersion: typeof PROMPT_STACK_REDACTION_VERSION;
   promptFingerprint: string;
   stackFingerprint: string;
+  /**
+   * Fingerprint of just the `stable`-classified sections (#4679). Byte-identical
+   * across turns whenever the cacheable prefix content is unchanged, regardless
+   * of which volatile blocks (run context, research, title task, user request)
+   * vary — the signal the provider prefix cache can be reused.
+   */
+  cacheablePrefixFingerprint: string;
+  /** Number of stable sections folded into `cacheablePrefixFingerprint`. */
+  cacheablePrefixSectionCount: number;
+  /**
+   * True only when the stable sections form the actual prefix-cacheable run:
+   * they start at the first present section (no volatile preamble such as a
+   * question-form `formOverride` ahead of them) and occupy a single contiguous
+   * run with no volatile block wedged in. A volatile block reordered into — or
+   * prepended ahead of — the stable trio flips this to false, so those turns
+   * surface as not prefix-cacheable rather than as a false cache hit.
+   */
+  cacheablePrefixContiguous: boolean;
   rawBytes: number;
   redactedBytes: number;
   sectionCount: number;
@@ -93,6 +177,9 @@ export interface StructuredPromptStackInput {
   redactionVersion: typeof PROMPT_STACK_REDACTION_VERSION;
   promptFingerprint: string;
   stackFingerprint: string;
+  cacheablePrefixFingerprint: string;
+  cacheablePrefixSectionCount: number;
+  cacheablePrefixContiguous: boolean;
   sectionCount: number;
   redactedContentBytes: number;
   redactedContentBudgetBytes: number;
@@ -146,6 +233,9 @@ const REDACTED_CONTENT_KINDS = new Set<PromptTelemetrySectionKind>([
   'runtimeToolPrompt',
   'researchCommandContract',
   'runContextPrompt',
+  'browserUsePromptGuard',
+  'titleGenerationPrompt',
+  'connectedExternalMcpReference',
   'clientSystemPrompt',
   'echoGuard',
   'userRequest',
@@ -166,6 +256,9 @@ const SECTION_PRIORITY = new Map<PromptTelemetrySectionKind, number>([
   ['odNextExactFinalText', 1],
   ['researchCommandContract', 6],
   ['runContextPrompt', 7],
+  ['browserUsePromptGuard', 8],
+  ['titleGenerationPrompt', 8],
+  ['connectedExternalMcpReference', 8],
   ['echoGuard', 8],
   ['userRequest', 9],
 ]);
@@ -266,7 +359,18 @@ export function buildSafeChildPromptTelemetry(
 function stripRuntimeToolPromptTokens(input: string): string {
   return input
     .split(/\r?\n/)
-    .filter((line) => !line.includes('OD_TOOL_TOKEN'))
+    .map((line) => {
+      if (line.includes('OD_TOOL_TOKEN')) {
+        if (line.includes('is available')) {
+          return '- [TOKEN_AVAILABLE]';
+        }
+        if (line.includes('is not available') || line.includes('unavailable')) {
+          return '- [TOKEN_UNAVAILABLE]';
+        }
+        return '- [TOKEN_REDACTED]';
+      }
+      return line;
+    })
     .join('\n');
 }
 
@@ -364,6 +468,48 @@ function perSectionLimit(kind: PromptTelemetrySectionKind): number {
     : SECTION_MAX_BYTES;
 }
 
+/**
+ * Derive the cacheable-prefix signal (#4679) from the present sections in
+ * composed order. Absent sections contribute no bytes to the request, so they
+ * are filtered out before reasoning about order. The fingerprint covers only
+ * `stable` sections so it stays byte-identical when volatile inputs change.
+ *
+ * `contiguous` is the actual prefix-cacheable signal: provider prompt caching
+ * only reuses a byte-identical run from the very start of the request, so the
+ * stable sections must (a) start at the first present section — no volatile
+ * preamble such as a question-form `formOverride` may precede them — and (b)
+ * form a single unbroken run (no volatile block wedged into the stable trio).
+ * Either a leading volatile section or an interleaved one flips it to false so
+ * those turns surface as not prefix-cacheable instead of a false cache hit.
+ */
+function computeCacheablePrefix(
+  sections: PromptTelemetrySection[],
+): { fingerprint: string; sectionCount: number; contiguous: boolean } {
+  const present = sections.filter((section) => section.present);
+  const stable: PromptTelemetrySection[] = [];
+  const stablePositions: number[] = [];
+  present.forEach((section, position) => {
+    if (classifyPromptSectionCacheClass(section.kind) === 'stable') {
+      stable.push(section);
+      stablePositions.push(position);
+    }
+  });
+  const contiguous =
+    stablePositions.length > 0 &&
+    stablePositions[0] === 0 &&
+    stablePositions[stablePositions.length - 1]! - stablePositions[0]! ===
+      stablePositions.length - 1;
+  const fingerprintSource = stable.map((section) => ({
+    kind: section.kind,
+    fingerprint: section.fingerprint,
+  }));
+  return {
+    fingerprint: sha256(JSON.stringify(fingerprintSource)),
+    sectionCount: stable.length,
+    contiguous,
+  };
+}
+
 export function buildPromptStackTelemetry({
   composedPrompt,
   sections,
@@ -448,10 +594,14 @@ export function buildPromptStackTelemetry({
     (total, section) => total + byteLength(section.redactedContent ?? ''),
     0,
   );
+  const cacheablePrefix = computeCacheablePrefix(outputSections);
   return {
     redactionVersion: PROMPT_STACK_REDACTION_VERSION,
     promptFingerprint: sha256(normalizedComposed),
     stackFingerprint: sha256(JSON.stringify(stackFingerprintSource)),
+    cacheablePrefixFingerprint: cacheablePrefix.fingerprint,
+    cacheablePrefixSectionCount: cacheablePrefix.sectionCount,
+    cacheablePrefixContiguous: cacheablePrefix.contiguous,
     rawBytes,
     redactedBytes,
     sectionCount: outputSections.length,
@@ -524,7 +674,19 @@ export function assertOdNextExactSendPromptEvidence(input: {
     persisted: input.persisted,
     stage: input.stage,
   });
-  if (!isDeepStrictEqual(input.telemetry, expected)) {
+
+  // Tolerate legacy pre-4681 snapshots that lack additive cacheablePrefix fields
+  const normalizedTelemetry: PromptStackTelemetry = {
+    ...input.telemetry,
+    cacheablePrefixFingerprint:
+      input.telemetry.cacheablePrefixFingerprint ?? expected.cacheablePrefixFingerprint,
+    cacheablePrefixSectionCount:
+      input.telemetry.cacheablePrefixSectionCount ?? expected.cacheablePrefixSectionCount,
+    cacheablePrefixContiguous:
+      input.telemetry.cacheablePrefixContiguous ?? expected.cacheablePrefixContiguous,
+  };
+
+  if (!isDeepStrictEqual(normalizedTelemetry, expected)) {
     throw new InvalidOdNextExactSendPromptError(
       'Persisted OD Next exact-send Prompt evidence no longer matches its authoritative task mapping.',
     );
@@ -549,6 +711,9 @@ export function structuredPromptStackInput(
     redactionVersion: telemetry.redactionVersion,
     promptFingerprint: telemetry.promptFingerprint,
     stackFingerprint: telemetry.stackFingerprint,
+    cacheablePrefixFingerprint: telemetry.cacheablePrefixFingerprint,
+    cacheablePrefixSectionCount: telemetry.cacheablePrefixSectionCount,
+    cacheablePrefixContiguous: telemetry.cacheablePrefixContiguous,
     sectionCount: telemetry.sectionCount,
     redactedContentBytes: telemetry.redactedContentBytes,
     redactedContentBudgetBytes: telemetry.redactedContentBudgetBytes,
@@ -578,6 +743,9 @@ export function buildPromptStackFlatMetadata(
     promptStack_redactionVersion: telemetry.redactionVersion,
     promptStack_promptFingerprint: telemetry.promptFingerprint,
     promptStack_stackFingerprint: telemetry.stackFingerprint,
+    promptStack_cacheablePrefixFingerprint: telemetry.cacheablePrefixFingerprint,
+    promptStack_cacheablePrefixSectionCount: telemetry.cacheablePrefixSectionCount,
+    promptStack_cacheablePrefixContiguous: telemetry.cacheablePrefixContiguous,
     promptStack_sectionCount: telemetry.sectionCount,
     promptStack_redactedContentBytes: telemetry.redactedContentBytes,
     promptStack_redactedContentBudgetBytes: telemetry.redactedContentBudgetBytes,
