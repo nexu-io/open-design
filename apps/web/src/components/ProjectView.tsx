@@ -5641,31 +5641,46 @@ export function ProjectView({
   const {
     batch: memoryWritten,
     dismiss: dismissMemoryWritten,
-  } = useMemoryWrittenCard(memoryExtractionRunActive);
+  } = useMemoryWrittenCard(memoryExtractionRunActive, {
+    projectId: project.id,
+    conversationId: activeConversationId,
+    workspaceContext: projectRunWorkspaceContext,
+    ...selectedAssistantIdentity,
+  });
   useEffect(() => {
-    if (!memoryWritten || !activeConversationId) return;
-    if (messagesConversationId !== activeConversationId) return;
+    if (!memoryWritten) return;
+    const source = memoryWritten.context;
+    if (!source?.conversationId) {
+      dismissMemoryWritten();
+      return;
+    }
     const content = memoryWrittenCardContent(
       memoryWritten,
       t('chat.memoryWrittenSummary', { count: memoryWritten.count }),
     );
-    appendConversationMessage(activeConversationId, {
+    const message: ChatMessage = {
       id: randomUUID(),
       role: 'assistant',
-      agentId: selectedAssistantIdentity.agentId,
-      agentName: selectedAssistantIdentity.agentName,
+      agentId: source.agentId,
+      agentName: source.agentName,
       content,
       events: [{ kind: 'text', text: content }],
       createdAt: Date.now(),
+    };
+    // The extractor finishes after the turn. Persist to its original owner,
+    // and only append on screen if that transcript is still the one displayed.
+    if (projectIdRef.current === source.projectId
+      && activeConversationIdRef.current === source.conversationId
+      && messagesConversationIdRef.current === source.conversationId) {
+      setMessages((current) => [...current, message]);
+    }
+    void saveMessage(source.projectId, source.conversationId, message, {
+      workspaceContext: source.workspaceContext,
     });
     dismissMemoryWritten();
   }, [
     memoryWritten,
     dismissMemoryWritten,
-    activeConversationId,
-    appendConversationMessage,
-    messagesConversationId,
-    selectedAssistantIdentity,
     t,
   ]);
 
