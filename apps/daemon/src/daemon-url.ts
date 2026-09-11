@@ -12,6 +12,8 @@ export const DEFAULT_DAEMON_URL = "http://127.0.0.1:7456";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 export interface ResolveDaemonUrlOptions {
+  /** MCP must discover an endpoint; a guessed default could belong to another runtime. */
+  allowLegacyDefault?: boolean;
   connectInherited?: typeof SidecarFactory.connectInherited;
   /** Value passed via `--daemon-url`. Empty string is treated as unset. */
   flagUrl?: string | null;
@@ -46,6 +48,9 @@ export async function resolveDaemonUrl(
   if (discovered != null) return discovered;
   const toolsDevUrl = await discoverDaemonUrlFromToolsDev(env, options.timeoutMs ?? 800);
   if (toolsDevUrl != null) return toolsDevUrl;
+  if (options.allowLegacyDefault === false) {
+    throw new Error("Open Design daemon could not be discovered. Open the app and refresh the MCP registration, or supply --daemon-url explicitly.");
+  }
   return DEFAULT_DAEMON_URL;
 }
 
