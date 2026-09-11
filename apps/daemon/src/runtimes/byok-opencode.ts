@@ -75,9 +75,17 @@ export function opencodeByokModelId(
   return `${opencodeByokProviderId(protocol)}/${trimmed}`;
 }
 
+export interface OpenCodeByokProviderConfigOptions {
+  // `file://` URL of the Bedrock OpenAI file adapter plugin (see
+  // bedrock-openai-file-adapter.ts). Only the run spawn passes it; config
+  // completeness checks and connection tests leave it out.
+  bedrockOpenAiFileAdapterPluginUrl?: string;
+}
+
 export function buildOpenCodeByokProviderConfig(
   provider: ByokChatProviderConfig | null | undefined,
   model: string | null | undefined,
+  options: OpenCodeByokProviderConfigOptions = {},
 ): OpenCodeByokProviderConfig | null {
   if (!provider || typeof provider !== 'object') return null;
   const protocol = provider.protocol;
@@ -99,7 +107,7 @@ export function buildOpenCodeByokProviderConfig(
   if (!baseUrl) return null;
 
   if (protocol === 'bedrock') {
-    return buildBedrockProviderConfig(provider, rawModel, baseUrl, apiKey);
+    return buildBedrockProviderConfig(provider, rawModel, baseUrl, apiKey, options);
   }
 
   const modelId = opencodeByokModelId(rawModel, protocol);
@@ -215,6 +223,7 @@ interface BedrockRoute {
   npm: ProviderPackage;
   options: Record<string, string>;
   env: Record<string, string>;
+  plugin?: string[];
 }
 
 function assembleBedrockConfig(route: BedrockRoute, family: BedrockModelFamily, rawModel: string): OpenCodeByokProviderConfig {
@@ -223,6 +232,7 @@ function assembleBedrockConfig(route: BedrockRoute, family: BedrockModelFamily, 
     modelId: `${route.providerId}/${rawModel}`,
     env: route.env,
     config: {
+      ...(route.plugin ? { plugin: route.plugin } : {}),
       provider: {
         [route.providerId]: {
           name: 'Amazon Bedrock',
@@ -239,7 +249,8 @@ function assembleBedrockConfig(route: BedrockRoute, family: BedrockModelFamily, 
 // - Anthropic models: `@ai-sdk/anthropic` on `<endpoint>/anthropic/v1`
 //   (Anthropic Messages), the key as the SDK api key.
 // - OpenAI models: `@ai-sdk/openai` on `<endpoint>/openai/v1` (Responses API,
-//   the only OpenAI path Bedrock serves with tools), the key as the SDK api key.
+//   the only OpenAI path Bedrock serves with tools), the key as the SDK api
+//   key, plus the file adapter plugin (bedrock-openai-file-adapter.ts).
 // - Every other family, and the AWS-profile mode: OpenCode's own
 //   `amazon-bedrock` provider (Converse). With a key it reads
 //   `AWS_BEARER_TOKEN_BEDROCK` ahead of the credential chain; in profile mode
@@ -257,6 +268,7 @@ function buildBedrockProviderConfig(
   rawModel: string,
   baseUrl: string,
   apiKey: string,
+  options: OpenCodeByokProviderConfigOptions,
 ): OpenCodeByokProviderConfig | null {
   const profile = bedrockProfile(provider);
   const bearer = apiKey; // the Bedrock API key travels as a bearer
@@ -278,12 +290,14 @@ function buildBedrockProviderConfig(
     );
   }
   if (bearer && family === 'openai') {
+    const pluginUrl = options.bedrockOpenAiFileAdapterPluginUrl;
     return assembleBedrockConfig(
       {
         providerId: BYOK_OPENCODE_BEDROCK_OPENAI_PROVIDER_ID,
         npm: '@ai-sdk/openai',
         options: { baseURL: `${baseUrl}/openai/v1`, apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` },
         env: { AWS_REGION: region, [BYOK_OPENCODE_API_KEY_ENV]: bearer },
+        ...(pluginUrl ? { plugin: [pluginUrl] } : {}),
       },
       family,
       rawModel,

@@ -275,6 +275,7 @@ import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from './runtimes/byok-opencode.js';
+import { ensureBedrockOpenAiFileAdapterPlugin } from './runtimes/bedrock-openai-file-adapter.js';
 import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
@@ -10874,6 +10875,10 @@ export async function startServer({
       ? buildOpenCodeByokProviderConfig(
           byokProvider,
           typeof model === 'string' ? model : null,
+          {
+            bedrockOpenAiFileAdapterPluginUrl:
+              ensureBedrockOpenAiFileAdapterPlugin(RUNTIME_DATA_DIR),
+          },
         )
       : null;
     if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {

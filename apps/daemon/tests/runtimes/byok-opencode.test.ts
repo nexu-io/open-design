@@ -585,6 +585,16 @@ describe('byok-opencode Bedrock provider config', () => {
     expect(modalitiesOf('amazon.nova-2-lite-v1:0', 'amazon-bedrock')).toBeUndefined();
   });
 
+  it('loads the file adapter plugin for the OpenAI family only, and only when the caller provides it', () => {
+    const base = { protocol: 'bedrock' as const, apiKey: 'ABSKbedrock-key', baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' };
+    const url = 'file:///tmp/od/opencode-plugins/bedrock-openai-file-adapter.js';
+    const pluginOf = (model: string, options?: { bedrockOpenAiFileAdapterPluginUrl?: string }) =>
+      (buildOpenCodeByokProviderConfig(base, model, options)?.config as { plugin?: string[] }).plugin;
+    expect(pluginOf('us.openai.gpt-6-astra', { bedrockOpenAiFileAdapterPluginUrl: url })).toEqual([url]);
+    expect(pluginOf('us.openai.gpt-6-astra')).toBeUndefined();
+    expect(pluginOf('global.anthropic.claude-sonnet-5', { bedrockOpenAiFileAdapterPluginUrl: url })).toBeUndefined();
+    expect(pluginOf('amazon.nova-2-lite-v1:0', { bedrockOpenAiFileAdapterPluginUrl: url })).toBeUndefined();
+  });
 
   it('sizes the model window by family so Claude prompts do not trip OpenCode compaction', () => {
     const limitOf = (config: ReturnType<typeof buildOpenCodeByokProviderConfig>, providerId: string, model: string) =>
