@@ -140,6 +140,17 @@ describe('FileViewer manual edit regressions', () => {
     });
   }
 
+  async function requestManualEditDelete(id = 'hero') {
+    const frame = await previewFrame();
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od-edit-delete-request', id },
+        source: frame.contentWindow,
+      }));
+    });
+    await screen.findByText('Delete selected element? This can be undone with Undo.');
+  }
+
   it('removes invalid fields from pending manual edit style saves without dropping unrelated fields', () => {
     expect(cancelManualEditPendingStyleSnapshot({
       id: 'hero',
@@ -696,6 +707,188 @@ describe('FileViewer manual edit regressions', () => {
     expect(payload.content).not.toContain('<main data-od-id="hero">Hero</main>');
   });
 
+  it('opens confirmation for an iframe Delete request and preserves a dirty draft on cancel', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main><footer data-od-id="keep">Keep</footer></body></html>';
+    const savedBodies: Array<{ content: string; versionLabel?: string; versionSource?: string }> = [];
+    vi.stubGlobal('fetch', manualEditDeleteFetch(source, savedBodies));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget();
+    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Unsaved hero draft' } });
+
+    await requestManualEditDelete();
+    expect(savedBodies).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect((screen.getByLabelText('Text') as HTMLTextAreaElement).value).toBe('Unsaved hero draft');
+    expect(screen.queryByText('Delete selected element? This can be undone with Undo.')).toBeNull();
+    expect(savedBodies).toHaveLength(0);
+  });
+
+  it('routes inspector trash through confirmation before guarded undoable removal', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main><footer data-od-id="keep">Keep</footer></body></html>';
+    const savedBodies: Array<{ content: string; versionLabel?: string; versionSource?: string }> = [];
+    vi.stubGlobal('fetch', manualEditDeleteFetch(source, savedBodies));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget();
+    fireEvent.click(screen.getByLabelText('Delete element'));
+
+    expect(await screen.findByText('Delete selected element? This can be undone with Undo.')).toBeTruthy();
+    expect(savedBodies).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete element' }));
+
+    await waitFor(() => expect(savedBodies).toHaveLength(1));
+    expect(savedBodies[0]!.content).not.toContain('data-od-id="hero"');
+    expect(savedBodies[0]!.content).toContain('data-od-id="keep"');
+    expect(savedBodies[0]!.versionSource).toBe('manual');
+    expect(savedBodies[0]!.versionLabel).toBe('Delete element');
+  });
+
+  it.each(['target', 'file', 'project', 'source incarnation', 'mode', 'lifecycle'] as const)(
+    'invalidates an asynchronous confirmed deletion when the %s changes',
+    async (boundary) => {
+      const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main><footer data-od-id="keep">Keep</footer></body></html>';
+      const replacementSource = '<!doctype html><html><body><main data-od-id="hero">Replacement</main><footer data-od-id="keep">Keep</footer></body></html>';
+      let releaseParentVersion!: () => void;
+      const parentVersionGate = new Promise<void>((resolve) => { releaseParentVersion = resolve; });
+      let parentVersionReads = 0;
+      const savedBodies: Array<{ content: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.includes('/versions')) {
+          parentVersionReads += 1;
+          if (parentVersionReads === 1) await parentVersionGate;
+          return new Response(JSON.stringify({ versions: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+          savedBodies.push(JSON.parse(String(init.body)) as { content: string });
+          return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/raw/')) return new Response(source, { status: 200 });
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const initialFile = htmlPreviewFile();
+      const view = render(
+        <FileViewer projectId="project-1" projectKind="prototype" file={initialFile} liveHtml={source} />,
+      );
+
+      await enterManualEditMode();
+      await selectManualEditTarget();
+      await requestManualEditDelete();
+      fireEvent.click(screen.getByRole('button', { name: 'Delete element' }));
+      await waitFor(() => expect(parentVersionReads).toBe(1));
+
+      if (boundary === 'target') {
+        const frame = await previewFrame();
+        act(() => {
+          window.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'od-edit-select', target: footerTarget() },
+            source: frame.contentWindow,
+          }));
+        });
+      } else if (boundary === 'file') {
+        const nextFile = { ...initialFile, name: 'second.html', path: 'second.html' };
+        view.rerender(
+          <FileViewer projectId="project-1" projectKind="prototype" file={nextFile} liveHtml={replacementSource} />,
+        );
+      } else if (boundary === 'project') {
+        view.rerender(
+          <FileViewer projectId="project-2" projectKind="prototype" file={initialFile} liveHtml={replacementSource} />,
+        );
+      } else if (boundary === 'source incarnation') {
+        view.rerender(
+          <FileViewer
+            projectId="project-1"
+            projectKind="prototype"
+            file={{ ...initialFile, mtime: initialFile.mtime + 1 }}
+            liveHtml={replacementSource}
+          />,
+        );
+      } else if (boundary === 'mode') {
+        clickManualTool('manual-edit-mode-toggle');
+        await waitFor(() => {
+          expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+        });
+      } else {
+        view.unmount();
+      }
+
+      await act(async () => {
+        releaseParentVersion();
+        await parentVersionGate;
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      });
+
+      expect(savedBodies).toHaveLength(0);
+    },
+  );
+
+  it('invalidates deletion when the current parent version changes before write', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main><footer data-od-id="keep">Keep</footer></body></html>';
+    const digest = '630c9db1323ad244aaa91cccecea19c509fc5fb3988831172730e9afe109452a';
+    let versionReads = 0;
+    const savedBodies: Array<{ content: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/versions')) {
+        versionReads += 1;
+        return new Response(JSON.stringify({
+          versions: [{
+            id: versionReads === 1 ? 'v1' : 'v2',
+            fileName: 'preview.html',
+            version: versionReads,
+            label: 'Current',
+            createdAt: 1,
+            source: 'manual',
+            prompt: null,
+            size: source.length,
+            mime: 'text/html',
+            kind: 'html',
+            current: true,
+            contentDigest: digest,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+        savedBodies.push(JSON.parse(String(init.body)) as { content: string });
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), { status: 200 });
+      }
+      if (url.includes('/raw/')) return new Response(source, { status: 200 });
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml={source} />,
+    );
+    await enterManualEditMode();
+    await selectManualEditTarget();
+    await requestManualEditDelete();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete element' }));
+
+    await waitFor(() => expect(versionReads).toBe(2));
+    expect(savedBodies).toHaveLength(0);
+  });
+
   it('keeps the preview mounted and does not save when deleting the only rendered root', async () => {
     const source = '<!doctype html><html><body><main data-od-id="app-root">App</main><script>window.bootApp && window.bootApp();</script></body></html>';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -726,6 +919,8 @@ describe('FileViewer manual edit regressions', () => {
     });
 
     fireEvent.click(screen.getByLabelText('Delete element'));
+    expect(await screen.findByText('Delete selected element? This can be undone with Undo.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete element' }));
 
     await waitFor(() => {
       expect(screen.getByText('Cannot remove the last rendered element in the document.')).toBeTruthy();
@@ -737,6 +932,38 @@ describe('FileViewer manual edit regressions', () => {
     );
   });
 });
+
+function manualEditDeleteFetch(
+  source: string,
+  savedBodies: Array<{ content: string; versionLabel?: string; versionSource?: string }>,
+) {
+  let persistedSource = source;
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+    if (url.includes('/versions')) {
+      return new Response(JSON.stringify({ versions: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body)) as { content: string; versionLabel?: string; versionSource?: string };
+      savedBodies.push(body);
+      persistedSource = body.content;
+      return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/api/projects/project-1/raw/preview.html')) {
+      return new Response(persistedSource, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      });
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+}
 
 function heroTarget(): ManualEditTarget {
   return {
@@ -752,6 +979,19 @@ function heroTarget(): ManualEditTarget {
     styles: emptyManualEditStyles(),
     isLayoutContainer: false,
     outerHtml: '<main data-od-id="hero">Hero</main>',
+  };
+}
+
+function footerTarget(): ManualEditTarget {
+  return {
+    ...heroTarget(),
+    id: 'keep',
+    kind: 'container',
+    label: 'Footer',
+    tagName: 'footer',
+    text: 'Keep',
+    attributes: { 'data-od-id': 'keep' },
+    outerHtml: '<footer data-od-id="keep">Keep</footer>',
   };
 }
 

@@ -8884,6 +8884,12 @@ function HtmlViewer({
   }, []);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
+  const selectedManualEditTargetRef = useRef<ManualEditTarget | null>(null);
+  const [manualEditDeleteConfirmationTargetId, setManualEditDeleteConfirmationTargetId] = useState<string | null>(null);
+  const manualEditDeleteConfirmationTargetIdRef = useRef<string | null>(null);
+  const manualEditDeleteConfirmationFileIdentityRef = useRef<string | null>(null);
+  const manualEditDeleteConfirmationSourceIncarnationRef = useRef<number | null>(null);
+  const manualEditDeleteAuthorizationEpochRef = useRef(0);
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
@@ -8916,6 +8922,64 @@ function HtmlViewer({
   const manualEditStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualEditPreviewVersionRef = useRef(0);
   const sourceRef = useRef<string | null>(source);
+  const manualEditFileIdentity = `${sourceAuthorizationScopeKey ?? 'pending'}\0${projectId}\0${file.name}`;
+  const manualEditFileIdentityRef = useRef(manualEditFileIdentity);
+  manualEditFileIdentityRef.current = manualEditFileIdentity;
+  const manualEditModeRef = useRef(manualEditMode);
+  manualEditModeRef.current = manualEditMode;
+  const manualEditWorkspaceActiveRef = useRef(workspaceActive);
+  manualEditWorkspaceActiveRef.current = workspaceActive;
+  const manualEditOwnSourceWriteRef = useRef<string | null>(null);
+  const manualEditOwnRawRefreshPendingRef = useRef(false);
+  const markManualEditOwnSourceWrite = (nextSource: string | null) => {
+    manualEditOwnSourceWriteRef.current = nextSource;
+    manualEditOwnRawRefreshPendingRef.current = nextSource !== null && liveHtml === undefined;
+  };
+  const manualEditSourceSignal = liveHtml === undefined
+    ? `raw:${file.mtime}`
+    : `live:${liveHtml}`;
+  const manualEditSourceSignalRef = useRef(manualEditSourceSignal);
+  const manualEditSourceIncarnationRef = useRef(0);
+  if (manualEditSourceSignalRef.current !== manualEditSourceSignal) {
+    manualEditSourceSignalRef.current = manualEditSourceSignal;
+    const sourceChangeIsOurWrite = manualEditOwnSourceWriteRef.current !== null && (
+      liveHtml === manualEditOwnSourceWriteRef.current
+      || (
+        liveHtml === undefined
+        && manualEditOwnRawRefreshPendingRef.current
+        && sourceRef.current === manualEditOwnSourceWriteRef.current
+      )
+    );
+    if (sourceChangeIsOurWrite && liveHtml === undefined) {
+      manualEditOwnRawRefreshPendingRef.current = false;
+    }
+    if (!sourceChangeIsOurWrite) {
+      manualEditOwnSourceWriteRef.current = null;
+      manualEditSourceIncarnationRef.current += 1;
+    }
+  }
+  const manualEditSourceIncarnation = manualEditSourceIncarnationRef.current;
+  const updateManualEditDeleteConfirmation = useCallback((targetId: string | null) => {
+    manualEditDeleteAuthorizationEpochRef.current += 1;
+    manualEditDeleteConfirmationTargetIdRef.current = targetId;
+    manualEditDeleteConfirmationFileIdentityRef.current = targetId
+      ? manualEditFileIdentityRef.current
+      : null;
+    manualEditDeleteConfirmationSourceIncarnationRef.current = targetId
+      ? manualEditSourceIncarnationRef.current
+      : null;
+    setManualEditDeleteConfirmationTargetId(targetId);
+  }, []);
+  useEffect(() => {
+    updateManualEditDeleteConfirmation(null);
+  }, [manualEditFileIdentity, manualEditSourceIncarnation, updateManualEditDeleteConfirmation]);
+  useEffect(() => () => {
+    manualEditDeleteAuthorizationEpochRef.current += 1;
+    manualEditDeleteConfirmationTargetIdRef.current = null;
+    manualEditDeleteConfirmationFileIdentityRef.current = null;
+    manualEditDeleteConfirmationSourceIncarnationRef.current = null;
+    selectedManualEditTargetRef.current = null;
+  }, []);
   // Holds the last-good source snapshot taken just before reloadHtmlPreview
   // clears source to null on the srcDoc path.  The fetch effect restores this
   // value if fetchProjectFileText returns null (non-2xx / transient network
@@ -8982,6 +9046,8 @@ function HtmlViewer({
     setManualEditModeRaw(false);
     manualEditLiveStylesRef.current.clear();
     manualEditPendingStyleRef.current = null;
+    markManualEditOwnSourceWrite(null);
+    updateManualEditDeleteConfirmation(null);
     manualEditTextSessionIdRef.current = null;
     manualEditTextSessionStartSequenceRef.current = null;
     manualEditTextFinishRef.current = null;
@@ -12252,6 +12318,8 @@ function HtmlViewer({
     setManualEditViewportWidth(null);
     setManualEditTargets([]);
     setSelectedManualEditTarget(null);
+    selectedManualEditTargetRef.current = null;
+    updateManualEditDeleteConfirmation(null);
     setManualEditPanelPosition(null);
     selectedManualEditTargetIdRef.current = null;
     setManualEditDraft(emptyManualEditDraft());
@@ -12261,7 +12329,7 @@ function HtmlViewer({
     setManualEditError(null);
     manualEditPendingStyleRef.current = null;
     clearManualEditStyleTimer();
-  }, [file.name]);
+  }, [file.name, projectId, updateManualEditDeleteConfirmation]);
 
   // Selecting a new file or turning inspect/comment-inspect off resets the panel target.
   useEffect(() => {
@@ -12303,6 +12371,7 @@ function HtmlViewer({
 
   useEffect(() => {
     selectedManualEditTargetIdRef.current = selectedManualEditTarget?.id ?? null;
+    selectedManualEditTargetRef.current = selectedManualEditTarget;
   }, [selectedManualEditTarget?.id]);
 
   useEffect(() => {
@@ -12503,6 +12572,9 @@ function HtmlViewer({
     if (!manualEditMode) {
       setManualEditTargets([]);
       setSelectedManualEditTarget(null);
+      selectedManualEditTargetRef.current = null;
+      updateManualEditDeleteConfirmation(null);
+      markManualEditOwnSourceWrite(null);
       setManualEditHoverTarget(null);
       setManualEditPageStylesOpen(false);
       setManualEditPanelPosition(null);
@@ -12550,6 +12622,10 @@ function HtmlViewer({
       if (data.type === 'od-edit-select') {
         setManualEditHoverTarget(null);
         void selectManualEditTarget(data.target);
+        return;
+      }
+      if (data.type === 'od-edit-delete-request') {
+        requestManualEditTargetDelete(String(data.id));
         return;
       }
       if (data.type === 'od-edit-hover') {
@@ -12655,7 +12731,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [isRetainedPreviewIframeSource, manualEditMode, source, workspaceActive]);
+  }, [isRetainedPreviewIframeSource, manualEditMode, source, updateManualEditDeleteConfirmation, workspaceActive]);
 
   function nextManualEditPreviewVersion(): number {
     manualEditPreviewVersionRef.current += 1;
@@ -12975,6 +13051,9 @@ function HtmlViewer({
     return () => onManualEditExitHandlerChange?.(file.name, null);
   }, [file.name, manualEditMode, onManualEditExitHandlerChange]);
   useEffect(() => {
+    if (!workspaceActive || !manualEditMode) updateManualEditDeleteConfirmation(null);
+  }, [manualEditMode, updateManualEditDeleteConfirmation, workspaceActive]);
+  useEffect(() => {
     if (workspaceActive || !manualEditMode) return;
     void requestManualEditSafeExitRef.current();
   }, [manualEditMode, workspaceActive]);
@@ -13001,12 +13080,14 @@ function HtmlViewer({
   }
 
   async function selectManualEditTarget(target: ManualEditTarget) {
+    updateManualEditDeleteConfirmation(null);
     setManualEditPageStylesOpen(false);
     if (manualEditPendingStyleRef.current?.id !== target.id) cancelManualEditStyleDraft();
     const base = sourceRef.current ?? '';
     const nextDraft = manualEditDraftForTarget(target, base);
     selectedManualEditTargetIdRef.current = target.id;
     manualEditSelectionDraftRef.current = { id: target.id, draft: nextDraft };
+    selectedManualEditTargetRef.current = target;
     setSelectedManualEditTarget(target);
     setManualEditDraft(nextDraft);
     setManualEditDraftDirty(false);
@@ -13028,6 +13109,7 @@ function HtmlViewer({
   }
 
   async function clearManualEditTargetSelection() {
+    updateManualEditDeleteConfirmation(null);
     // If an inline edit is still live (e.g. clearing the selection from the
     // panel mid-edit), commit it first so it is not lost. Keep the selection
     // and the error if that commit fails.
@@ -13037,6 +13119,7 @@ function HtmlViewer({
     cancelManualEditStyleDraft();
     selectedManualEditTargetIdRef.current = null;
     manualEditSelectionDraftRef.current = null;
+    selectedManualEditTargetRef.current = null;
     manualEditTextSessionIdRef.current = null;
     manualEditTextSessionStartSequenceRef.current = null;
     setSelectedManualEditTarget(null);
@@ -13218,7 +13301,14 @@ function HtmlViewer({
     }
   }
 
-  async function applyManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {
+  async function applyManualEdit(
+    patch: ManualEditPatch,
+    label: string,
+    options?: {
+      expectedParentVersionId?: string | null;
+      revalidateBeforeWrite?: () => boolean;
+    },
+  ): Promise<boolean> {
     const startedAt = performance.now();
     let resultTracked = false;
     const finish = (
@@ -13251,11 +13341,19 @@ function HtmlViewer({
       if (!(await confirmManualEditHistorySource(
         baseSource,
         'The file changed outside manual edit mode. Refreshing before applying manual edits.',
+        { failClosedOnUnavailable: patch.kind === 'remove-element' },
       ))) {
         finish('failed', 'source_conflict');
         return false;
       }
       const parentVersionId = await resolveManualEditParentVersionId(baseSource);
+      if (
+        options?.expectedParentVersionId !== undefined
+        && (parentVersionId ?? null) !== options.expectedParentVersionId
+      ) {
+        finish('failed', 'source_conflict');
+        return false;
+      }
       // A committed content patch can notify the file watcher as soon as the
       // write lands. Capture the opaque iframe's exact scroll position before
       // that write so neither the watcher nor our local source update can
@@ -13263,6 +13361,12 @@ function HtmlViewer({
       // live through postMessage and never reload.
       if (patch.kind !== 'set-style') {
         await capturePreviewScrollPosition();
+      }
+      // Keep destructive-action authorization as the final synchronous guard:
+      // the awaited scroll capture above may allow the selection or source to change.
+      if (options?.revalidateBeforeWrite && !options.revalidateBeforeWrite()) {
+        finish('failed', 'source_conflict');
+        return false;
       }
       const saved = await writeProjectTextFileDetailed(projectId, file.name, result.source, {
         artifactManifest: file.artifactManifest,
@@ -13290,6 +13394,7 @@ function HtmlViewer({
       };
       setSource(result.source);
       sourceRef.current = result.source;
+      markManualEditOwnSourceWrite(result.source);
       setInlinedSource(null);
       if (patch.kind !== 'set-style') {
         setManualEditFrozenSource(result.source);
@@ -13319,6 +13424,7 @@ function HtmlViewer({
         }
         selectedManualEditTargetIdRef.current = null;
         manualEditSelectionDraftRef.current = null;
+        selectedManualEditTargetRef.current = null;
         setSelectedManualEditTarget(null);
         setManualEditTargets((current) => current.filter((target) => target.id !== patch.id));
         setManualEditDraft(emptyManualEditDraft(result.source));
@@ -13357,13 +13463,24 @@ function HtmlViewer({
     }
   }
 
-  async function confirmManualEditHistorySource(expectedSource: string, message: string): Promise<boolean> {
+  async function confirmManualEditHistorySource(
+    expectedSource: string,
+    message: string,
+    options?: { failClosedOnUnavailable?: boolean },
+  ): Promise<boolean> {
     const persisted = await fetchProjectFileText(projectId, file.name, {
       cache: 'no-store',
       cacheBustKey: Date.now(),
       workspaceContext,
     });
-    if (persisted == null || persisted === expectedSource) return true;
+    if (persisted == null) {
+      if (options?.failClosedOnUnavailable) {
+        setManualEditError(message);
+        return false;
+      }
+      return true;
+    }
+    if (persisted === expectedSource) return true;
     setSource(persisted);
     sourceRef.current = persisted;
     setInlinedSource(null);
@@ -13374,6 +13491,49 @@ function HtmlViewer({
     setManualEditDraft((current) => ({ ...current, fullSource: persisted }));
     setManualEditError(message);
     return false;
+  }
+
+  async function settleManualEditDeleteBoundary(): Promise<boolean> {
+    if (!(await settlePendingManualEditCommit())) return false;
+    if (!(await flushManualEditStyleSave())) return false;
+    return !manualEditSavingRef.current;
+  }
+
+  async function removeManualEditTarget(id: string) {
+    const fileIdentity = manualEditFileIdentityRef.current;
+    const authorizationEpoch = manualEditDeleteAuthorizationEpochRef.current;
+    const sourceIncarnation = manualEditSourceIncarnationRef.current;
+    const contextIsCurrent = () => (
+      manualEditFileIdentityRef.current === fileIdentity
+      && manualEditDeleteAuthorizationEpochRef.current === authorizationEpoch
+      && manualEditSourceIncarnationRef.current === sourceIncarnation
+      && manualEditModeRef.current
+      && manualEditWorkspaceActiveRef.current
+      && selectedManualEditTargetRef.current?.id === id
+    );
+    if (!(await settleManualEditDeleteBoundary())) return;
+    if (!contextIsCurrent()) return;
+    const baseSource = sourceRef.current;
+    if (baseSource == null) return;
+    const expectedParentVersionId = await resolveManualEditParentVersionId(baseSource) ?? null;
+    const deletionAuthorizationIsCurrent = () => (
+      contextIsCurrent()
+      && sourceRef.current === baseSource
+    );
+    if (!deletionAuthorizationIsCurrent()) return;
+    await applyManualEdit(
+      { id, kind: 'remove-element' },
+      t('manualEdit.deleteElement'),
+      {
+        expectedParentVersionId,
+        revalidateBeforeWrite: deletionAuthorizationIsCurrent,
+      },
+    );
+  }
+
+  function requestManualEditTargetDelete(id: string) {
+    if (selectedManualEditTargetRef.current?.id !== id) return;
+    updateManualEditDeleteConfirmation(id);
   }
 
   function describeManualEditSaveFailure(
@@ -13428,6 +13588,7 @@ function HtmlViewer({
       await capturePreviewScrollPosition();
       setSource(latest.beforeSource);
       sourceRef.current = latest.beforeSource;
+      markManualEditOwnSourceWrite(latest.beforeSource);
       setInlinedSource(null);
       syncRetainedManualEditDocument(
         latest.beforeSource,
@@ -13492,6 +13653,7 @@ function HtmlViewer({
       await capturePreviewScrollPosition();
       setSource(latest.afterSource);
       sourceRef.current = latest.afterSource;
+      markManualEditOwnSourceWrite(latest.afterSource);
       setInlinedSource(null);
       syncRetainedManualEditDocument(
         latest.afterSource,
@@ -15990,6 +16152,20 @@ function HtmlViewer({
       onInvalidStyle={cancelManualEditPendingStyles}
       onApplyPatch={(patch, label) => {
         void applyManualEdit(patch, label);
+      }}
+      deleteConfirmationTargetId={manualEditDeleteConfirmationTargetId}
+      onDeleteConfirmationChange={updateManualEditDeleteConfirmation}
+      onConfirmDelete={(targetId) => {
+        if (
+          manualEditDeleteConfirmationTargetIdRef.current !== targetId
+          || manualEditDeleteConfirmationFileIdentityRef.current !== manualEditFileIdentityRef.current
+          || manualEditDeleteConfirmationSourceIncarnationRef.current !== manualEditSourceIncarnationRef.current
+          || selectedManualEditTargetRef.current?.id !== targetId
+          || !manualEditModeRef.current
+          || !manualEditWorkspaceActiveRef.current
+        ) return;
+        updateManualEditDeleteConfirmation(null);
+        void removeManualEditTarget(targetId);
       }}
       onError={setManualEditError}
       onClearSelection={() => {
