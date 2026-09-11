@@ -7,7 +7,15 @@
  * connectionTest.ts and server.ts (via the acp/ barrel).
  */
 import path from 'node:path';
-import type { ExecutionProfile } from '@open-design/contracts';
+import {
+  AMR_CONTINUATION_ERROR_CODE,
+  isAmrContinuationIncomplete,
+  parseAmrContinuationRecovery,
+  supportsAmrNativeContinuation,
+  type AmrContinuationCursor,
+  type AmrContinuationRecovery,
+  type ExecutionProfile,
+} from '@open-design/contracts';
 import {
   createDsmlArtifactTextSuppressor,
   createToolCallTextSuppressor,
@@ -139,6 +147,7 @@ export interface AttachAcpSessionOptions {
   // `session/new`. The agent verifies the session and, if it is gone, returns a
   // structured `resume_failed` error the caller maps to its reseed path.
   resumeSessionId?: string | null;
+  nativeContinuation?: AmrContinuationCursor | null;
   /** Safe model/session metadata attached to the exact prompt-frame diagnostic. */
   promptBudgetContext?: AcpPromptBudgetContext;
   // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
@@ -201,6 +210,7 @@ export function attachAcpSession({
   modelUnavailableErrorCode,
   completePromptOnTurnEnd = false,
   resumeSessionId,
+  nativeContinuation,
   promptBudgetContext,
   onCliReady,
   onSessionInit,
@@ -249,6 +259,8 @@ export function attachAcpSession({
   // conversation to resume next turn. Distinct from `sessionId`, which is the
   // ACP wrapper id ("vela-opencode-1").
   let durableSessionId: string | null = null;
+  let nativeContinuationSupported = false;
+  let continuationRecovery: AmrContinuationRecovery | null = null;
   let activeModel: string | null = null;
   let modelConfigId: string | null = null;
   let emittedThinkingStart = false;
@@ -888,12 +900,11 @@ export function attachAcpSession({
     expectedId = promptRequestId;
     writeRpc(
       promptRequestId,
-      'session/prompt',
-      {
-        sessionId,
-        prompt: buildPromptBlocks(prompt, [...resourcePaths, ...imagePaths]),
-      },
-      'session/prompt',
+      nativeContinuation ? '_session/continue' : 'session/prompt',
+      nativeContinuation
+        ? { sessionId, continuation: nativeContinuation }
+        : { sessionId, prompt: buildPromptBlocks(prompt, [...resourcePaths, ...imagePaths]) },
+      nativeContinuation ? '_session/continue' : 'session/prompt',
     );
     send('agent', {
       type: 'status',
@@ -1027,6 +1038,19 @@ export function attachAcpSession({
         return;
       }
       const details = rpcErrorData(obj);
+      if (modelUnavailableErrorCode && obj.id === promptRequestId && isAmrContinuationIncomplete(rpcErr, details)) {
+        const recovery = parseAmrContinuationRecovery(details);
+        // Check before fail() flushes incomplete tools into synthetic errors.
+        const toolsCommitted = acpToolRunEventState.size > 0 &&
+          [...acpToolRunEventState.values()].every((tool) => tool.emitted);
+        if (nativeContinuationSupported && toolsCommitted && recovery?.sessionId === durableSessionId) {
+          continuationRecovery = recovery;
+        }
+        fail(rpcErr, { retryable: false, details: {
+          ...asObject(details), kind: 'opencode_continuation_incomplete', code: AMR_CONTINUATION_ERROR_CODE,
+        } });
+        return;
+      }
       const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
       if (promotedPayload) {
         failWithPayload(promotedPayload);
@@ -1291,6 +1315,13 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 1) {
+      nativeContinuationSupported = !!modelUnavailableErrorCode && supportsAmrNativeContinuation(result);
+      if (nativeContinuation && (!resumeSessionId || !nativeContinuationSupported)) {
+        fail('The agent does not support safe native continuation.', { retryable: false,
+          details: { kind: 'native_continuation_rejected', reason: 'capability_unavailable' } });
+        return;
+      }
+
       const negotiation = velaChildEvidenceConsumer?.negotiate(result);
       if (negotiation?.advertised) {
         send('agent', {
@@ -1351,6 +1382,11 @@ export function attachAcpSession({
       // The durable handle for resuming this session on the next turn.
       durableSessionId =
         typeof result.openCodeSessionId === 'string' ? result.openCodeSessionId : null;
+      if (nativeContinuation && durableSessionId !== resumeSessionId) {
+        fail('The agent loaded a different native session.', { retryable: false,
+          details: { kind: 'native_continuation_rejected', reason: 'session_mismatch' } });
+        return;
+      }
       // session/new acknowledged with a session id = handshake done (#3408 §4).
       if (sessionId) onSessionInit?.();
       const modelConfig = findModelConfigOption(result.configOptions);
@@ -1501,7 +1537,10 @@ export function attachAcpSession({
     // The durable upstream session handle to persist for resume, or null when
     // none was reported (older agents, or a handshake that never established a
     // session). Mirrors pi-rpc's getLastSessionPath().
-    /** Returns the durable upstream session id (e.g. vela's `openCodeSessionId`) to persist for next-turn resume, or `null` when the agent did not report one. */
+    /** Evidence captured before synthetic tool closure; never permits prompt replay. */
+    getContinuationRecovery() {
+      return continuationRecovery;
+    },
     getDurableSessionId() {
       return durableSessionId;
     },

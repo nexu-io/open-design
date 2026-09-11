@@ -497,3 +497,20 @@ describe('computeRetryBackoffMs', () => {
     }
   });
 });
+
+describe('verified AMR continuation', () => {
+  const failure = { failure_category: 'process_exit', failure_detail: 'continuation_incomplete',
+    failure_stage: 'post_tool_resume', retryable: false } as const;
+  it('uses the native path without authorizing prompt replay', () => {
+    expect(decidePostToolResume({ failure, hasVerifiedAmrContinuation: true })?.retryStrategy).toBe('native_session_continue');
+    expect(decide({ failure }).shouldRetry).toBe(false);
+  });
+  it.each([
+    { hasVerifiedAmrContinuation: false }, { hasNativeSession: false },
+    { supportsNativeSessionContinue: false }, { continuationAttemptCount: 1 },
+    { sideEffects: { toolCallSeen: true, cancelRequested: true } },
+    { failure: { ...failure, failure_stage: 'tool_outstanding' as const } },
+  ])('rejects unsafe or exhausted recovery: %j', (override) => {
+    expect(decidePostToolResume({ failure, hasVerifiedAmrContinuation: true, ...override })).toBeNull();
+  });
+});

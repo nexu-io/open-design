@@ -94,3 +94,5 @@ export * from './analytics/events.js';
 export * from './analytics/public-params.js';
 export * from './analytics/observability.js';
 export * from './observability/index.js';
+
+export * from './api/amr-continuation.js';

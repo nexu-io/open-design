@@ -671,22 +671,17 @@ describe('isAmrOpencodeEventStreamResumeFailure', () => {
     ).toBe(true);
   });
 
-  // vela 0.0.35 (#1847) moved the compaction continuation onto its own request
-  // and worded its EOF differently. Before this the phrase matched nothing in
-  // the repository, so the SAME bridge-level stream EOF — one phase later —
-  // could not reach the re-seed path at all and ended the conversation on a
-  // hard failure instead of one transparent cold turn.
-  it('matches the compaction-continuation EOF vela 0.0.35 introduced', () => {
+  it('keeps compaction continuation out of destructive reseed', () => {
     expect(
       isAmrOpencodeEventStreamResumeFailure(
         'json-rpc id 4: opencode event stream: opencode compaction continuation ended before prompt completion',
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isAmrOpencodeEventStreamResumeFailure(
         'opencode compaction continuation ended before prompt completion',
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('ignores unrelated AMR/opencode output', () => {
@@ -804,7 +799,7 @@ describe('resolveAgentResumeFailurePolicy', () => {
     });
   });
 
-  it('routes the compaction-continuation EOF into the same re-seed recovery', () => {
+  it('never reseeds a compaction continuation failure', () => {
     expect(
       resolveAgentResumeFailurePolicy({
         agentId: 'amr',
@@ -815,10 +810,10 @@ describe('resolveAgentResumeFailurePolicy', () => {
         resumeSessionId: 'ses-old',
       }),
     ).toEqual({
-      resumeFailed: true,
-      clearStaleSession: true,
-      autoReseedFullTranscript: true,
-      reason: 'resume_failed',
+      resumeFailed: false,
+      clearStaleSession: false,
+      autoReseedFullTranscript: false,
+      reason: null,
     });
   });
 

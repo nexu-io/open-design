@@ -65,6 +65,38 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     restoreEnv(originalEnv);
   });
 
+  it.each(['success', 'pending', 'legacy', 'missing', 'mismatch', 'limit'])(
+    'safely converges compaction continuation: %s', async (scenario) => {
+      binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-continuation-'));
+      const bin = path.join(binDir, 'vela');
+      const fixture = path.join(HERE, 'fixtures', 'fake-vela-continuation.ts');
+      const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+      await writeFile(bin, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(fixture)} ${quote(scenario)} ${quote(binDir)} "$@"\n`);
+      await chmod(bin, 0o755);
+      clearTelemetryEnv();
+      started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+      await putConfig(started.url, { agentId: 'amr', agentCliEnv: { amr: { VELA_BIN: bin } } });
+      const conversation = await createConversation(started.url);
+      const run = await sendRunAndWait(started.url, conversation, 'write exactly once');
+      expect(run.status, JSON.stringify({ run, events: (await readRunEvents(run.eventsLogPath)).slice(-8) })).toBe(scenario === 'success' ? 'succeeded' : 'failed');
+      const ledger = (await readFile(path.join(binDir, 'ledger.jsonl'), 'utf8')).trim().split('\n')
+        .map((line) => JSON.parse(line));
+      expect(ledger.filter((row) => row.method === 'session/new')).toHaveLength(1);
+      expect(ledger.filter((row) => row.method === 'session/prompt')).toHaveLength(1);
+      expect(await readFile(path.join(binDir, 'tool-executions'), 'utf8')).toBe('write\n');
+      const canAttempt = !['pending', 'legacy'].includes(scenario);
+      expect(ledger.filter((row) => row.method === 'session/load')).toHaveLength(canAttempt ? 1 : 0);
+      const attempts = ledger.filter((row) => row.method === '_session/continue');
+      expect(attempts).toHaveLength(['success', 'limit'].includes(scenario) ? 1 : 0);
+      const events = await readRunEvents(run.eventsLogPath);
+      expect(events.filter((event) => event.event === 'end')).toHaveLength(1);
+      expect(events.filter((event) => event.event === 'run_retry_attempted')).toHaveLength(canAttempt ? 1 : 0);
+      expect(hasDiagnostic(events, { type: 'agent_resume_auto_reseed' })).toBe(false);
+      const final = events.find((event) => event.event === 'run_retry_finished');
+      expect(final?.data).toMatchObject({ retry_result: scenario === 'success' ? 'success' : canAttempt ? 'failed' : 'suppressed' });
+    }, 30_000,
+  );
+
   it('captures the durable handle on turn 1 and resumes it via session/load on turn 2', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-resume-bin-'));
     const logPath = path.join(binDir, 'invocations.jsonl');
