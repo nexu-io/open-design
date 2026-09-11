@@ -167,6 +167,7 @@ import { resolvePlanLabelTier } from '../collab/team-plan';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
+import { canRenderProductionCampaignBadge, ProductionCampaignBadge } from './ProductionCampaignBadge';
 import {
   beginWorkspaceScopedRead,
   workspaceIdentityCacheKey,
@@ -484,6 +485,7 @@ interface Props {
    * `unknown` while billing summary leaves `membershipTier` empty.
    */
   amrAccountPlan?: string | null;
+  amrAccountId?: string | null;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -612,6 +614,7 @@ export function EntryShell({
   amrLoggedIn = null,
   amrSessionState,
   amrAccountPlan = null,
+  amrAccountId = null,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -1695,17 +1698,20 @@ export function EntryShell({
           }}
           onOpenSearch={() => setProjectSearchOpen(true)}
           open={railOpen}
-          topRightSlot={
-            topRightCampaignAudience ? (
-              <WorkbenchCampaignBadge
-                audience={topRightCampaignAudience}
-                page="home"
-                metricsConsent={config.telemetry?.metrics === true}
-                installationId={config.installationId}
-                loggedIn={amrLoggedIn}
-              />
-            ) : null
-          }
+          topRightSlot={topRightCampaignAudience || canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? (
+            <>
+              {topRightCampaignAudience ? (
+                <WorkbenchCampaignBadge
+                  audience={topRightCampaignAudience}
+                  page="home"
+                  metricsConsent={config.telemetry?.metrics === true}
+                  installationId={config.installationId}
+                  loggedIn={amrLoggedIn}
+                />
+              ) : null}
+              {canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? <ProductionCampaignBadge authenticated sessionSubject={amrAccountId} /> : null}
+            </>
+          ) : null}
           context={railWorkspaceContext}
           billing={workspaceBilling}
           balanceUsd={workspaceBalanceUsd}
