@@ -1177,6 +1177,7 @@ function hasVisibleBrandAssistantEvent(event: NonNullable<ChatMessage['events']>
     case 'status':
       return !HIDDEN_BRAND_ASSISTANT_STATUS_LABELS.has(event.label);
     case 'usage':
+    case 'request_usage':
     case 'diagnostic':
     case 'conversation_title':
     // Protocol metadata for this turn's done marker — never user-visible.
