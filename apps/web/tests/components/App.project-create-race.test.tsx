@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   buildWorkspacePermissions,
+  type ProjectWorkspaceScope,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,6 +55,7 @@ import {
   currentWorkspaceAccountGeneration,
   workspaceIdentityCacheKey,
 } from '../../src/collab/useWorkspaceContext';
+import { runWorkspaceIdentity } from '../../src/collab/useProjectWorkspaceScope';
 import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import {
   projectDisplaySnapshotKey,
@@ -77,6 +79,16 @@ const iframePoolHarness = vi.hoisted(() => ({
 
 const projectViewRenameFenceHarness = vi.hoisted(() => ({
   token: null as ProjectRenameFenceToken | null,
+}));
+
+const projectViewRetryScopeHarness = vi.hoisted(() => ({
+  scope: null as ProjectWorkspaceScope | null,
+  armedWorkspaceKey: null as string | null,
+  latest: null as {
+    context: WorkspaceCollabContext | null;
+    continuation: AmrAuthRetryContinuation | null;
+    consume: ((continuation: AmrAuthRetryContinuation) => boolean) | undefined;
+  } | null,
 }));
 
 const workspaceTabsHarness = vi.hoisted(() => ({
@@ -422,7 +434,13 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenAmrSettings?: () => void;
     onOpenSettings?: () => void;
     workspaceContextOverride?: WorkspaceCollabContext | null;
-  }) => (
+  }) => {
+    projectViewRetryScopeHarness.latest = {
+      context: workspaceContextOverride ?? null,
+      continuation: amrAuthRetryContinuation ?? null,
+      consume: onConsumeAmrAuthRetryContinuation,
+    };
+    return (
     <main data-testid="project-view">
       <span data-testid="project-title">{project.name}</span>
       <span data-testid="project-authoritative-title">{authoritativeProjectName ?? 'none'}</span>
@@ -524,13 +542,30 @@ vi.mock('../../src/components/ProjectView', () => ({
       <button
         type="button"
         onClick={() => {
-          onArmAmrAuthRetryContinuation?.({
+          const runContext = projectViewRetryScopeHarness.scope
+            ? runWorkspaceIdentity(
+                { loading: false, scope: projectViewRetryScopeHarness.scope },
+                workspaceContextOverride ?? null,
+                project.workspaceId,
+              )
+            : workspaceContextOverride;
+          const continuation = {
             projectId: project.id,
             conversationId: routeConversationId ?? 'conv-auth',
             assistantId: 'assistant-auth-failure',
             originMountId: 'origin-mount',
-            workspaceIdentityKey: workspaceIdentityCacheKey(workspaceContextOverride),
-          });
+            // ProjectView arms from its resolved project scope, which has a
+            // least-privilege role. App's directory context is a different
+            // projection of the same principal; don't silently substitute it.
+            workspaceIdentityKey: workspaceIdentityCacheKey(runContext),
+            workspacePrincipal: runContext ? {
+              workspaceId: runContext.workspaceId,
+              workspaceType: runContext.workspaceType,
+              workspaceMemberId: runContext.workspaceMemberId,
+            } : null,
+          };
+          projectViewRetryScopeHarness.armedWorkspaceKey = continuation.workspaceIdentityKey;
+          onArmAmrAuthRetryContinuation?.(continuation);
           onOpenAmrSettings?.();
         }}
       >
@@ -548,7 +583,8 @@ vi.mock('../../src/components/ProjectView', () => ({
         Consume auth continuation
       </button>
     </main>
-  ),
+    );
+  },
 }));
 
 vi.mock('../../src/components/WorkspaceTabsBar', () => ({
@@ -798,6 +834,9 @@ describe('App project creation routing', () => {
     workspaceInvalidationHarness.handlers.length = 0;
     workspaceInvalidationHarness.onActive.length = 0;
     projectViewRenameFenceHarness.token = null;
+    projectViewRetryScopeHarness.scope = null;
+    projectViewRetryScopeHarness.armedWorkspaceKey = null;
+    projectViewRetryScopeHarness.latest = null;
     workspaceTabsHarness.projectIds.clear();
     window.history.replaceState(null, '', '/');
     mockedDaemonIsLive.mockResolvedValue(true);
@@ -3731,6 +3770,102 @@ describe('App project creation routing', () => {
         'assistant-auth-failure',
       );
     });
+  });
+
+  it('retains a Cloud retry across Settings when local scope is member and the same caller is owner', async () => {
+    const scopeContext = workspaceContext('ws-1', 'wm-1');
+    const accountContext: WorkspaceCollabContext = {
+      ...scopeContext,
+      role: 'owner',
+      permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+    };
+    // This is the ordinary daemon projection from
+    // resolveLocalProjectWorkspaceScope: member protects creator-only writes.
+    // The routing test owns App; use the real runWorkspaceIdentity helper at
+    // the mocked ProjectView callback boundary to preserve that input shape.
+    projectViewRetryScopeHarness.scope = {
+      kind: 'team',
+      projectId: existingProject.id,
+      workspaceId: 'ws-1',
+      visibility: 'personal',
+      context: scopeContext,
+    };
+    expect(workspaceIdentityCacheKey(scopeContext)).not.toBe(
+      workspaceIdentityCacheKey(accountContext),
+    );
+    mockedListProjects.mockResolvedValue([{ ...existingProject, workspaceId: 'ws-1' }]);
+    const loginStatus: VelaLoginStatus = {
+      loggedIn: true,
+      profile: 'test',
+      user: { id: 'account-a', email: 'account-a@example.com', plan: 'free' },
+      configPath: '',
+    };
+    let settingsStatusResponse: ReturnType<typeof deferred<VelaLoginStatus>> | null = null;
+    const settingsStatusRequested = deferred<void>();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      return {
+        ok: true,
+        json: async () => {
+          if (pathname.endsWith('/integrations/vela/status') && settingsStatusResponse) {
+            settingsStatusRequested.resolve();
+            return settingsStatusResponse.promise;
+          }
+          return pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([accountContext])
+            : pathname.endsWith('/workspace/context')
+              ? { context: accountContext }
+              : pathname.endsWith('/integrations/vela/status')
+                ? loginStatus
+                : {};
+        },
+      } as Response;
+    }));
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Existing project' }));
+    await screen.findByTestId('project-view');
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize in settings' }));
+    await screen.findByTestId('settings-surface');
+    expect(window.location.pathname).toBe('/settings');
+
+    expect(projectViewRetryScopeHarness.armedWorkspaceKey).toBe(
+      workspaceIdentityCacheKey(scopeContext),
+    );
+
+    // Own the real status-response boundary. A synchronous act + waitFor
+    // pending can succeed on the returning render before App's discard effect
+    // settles; resolve the request inside async act before inspecting it.
+    settingsStatusResponse = deferred<VelaLoginStatus>();
+    act(() => notifyAmrLoginStatusChanged());
+    await settingsStatusRequested.promise;
+    await act(async () => {
+      settingsStatusResponse!.resolve(loginStatus);
+      await settingsStatusResponse!.promise;
+    });
+    await waitFor(() => expect(screen.getByTestId('project-route-conversation').textContent).toBe('conv-auth'));
+    expect(window.location.pathname).toBe('/projects/project-existing/conversations/conv-auth');
+    // Confirm the fixture actually crossed the two production projections,
+    // instead of accidentally letting App and ProjectView both use member.
+    expect(projectViewRetryScopeHarness.latest?.context).toMatchObject({
+      workspaceId: 'ws-1', workspaceMemberId: 'wm-1', role: 'owner',
+    });
+    const pending = projectViewRetryScopeHarness.latest?.continuation;
+    expect(pending).toMatchObject({
+      assistantId: 'assistant-auth-failure',
+      workspaceIdentityKey: workspaceIdentityCacheKey(scopeContext),
+    });
+    const consume = projectViewRetryScopeHarness.latest?.consume;
+    expect(consume).toBeTypeOf('function');
+    if (!pending || !consume) throw new Error('The Settings retry was discarded before consumption');
+    // This is App's real one-shot callback, not a retry spy. The exact saved
+    // object must remain consumable after effects, and then reject re-use.
+    const results: boolean[] = [];
+    act(() => {
+      results.push(consume(pending), consume(pending));
+    });
+    expect(results).toEqual([true, false]);
+    expect(screen.getByTestId('project-auth-continuation').textContent).toBe('none');
   });
 
   it('returns from full-page Settings to the exact project conversation and file route', async () => {

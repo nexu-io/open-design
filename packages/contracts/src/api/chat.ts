@@ -814,6 +814,23 @@ export interface ChatRunStatusResponse {
     | 'entry_not_touched'
     | 'entry_unreadable'
     | 'type_mismatch';
+  /** Whether the project holds a usable canonical deliverable RIGHT NOW,
+   *  regardless of whether this run wrote it. `deliverableValid` answers "did
+   *  THIS run deliver" and is the right gate for accepting a completion claim;
+   *  this answers "does the user have it", which is what decides whether a
+   *  refused turn is worth showing as a failure. A turn that verifies finished
+   *  work and correctly changes nothing is `deliverableValid: false` and
+   *  `projectDeliverableValid: true`. Present for terminal runs whose strategy
+   *  task settled blocked; absent on daemons that predate the split. */
+  projectDeliverableValid?: boolean;
+  /** Why `projectDeliverableValid` came out the way it did. Run-scoped values
+   *  (`not_succeeded`, `no_artifact`, `entry_not_touched`) never appear here. */
+  projectDeliverableValidation?:
+    | 'valid'
+    | 'project_missing'
+    | 'entry_missing'
+    | 'entry_unreadable'
+    | 'type_mismatch';
   /** Canonical project-relative file selected by deliverable validation. */
   deliverableEntryFile?: string;
   /** File kind of deliverableEntryFile, derived from the daemon file index. */

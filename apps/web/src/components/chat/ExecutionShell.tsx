@@ -29,7 +29,8 @@ import { ImageRow } from './primitives/ImageRow';
 import { useThinkingFollow } from './primitives/useThinkingFollow';
 import { ThinkingMarkdown } from './ThinkingMarkdown';
 import { Orb } from './primitives/Orb';
-import { SayText } from './primitives/SayText';
+import { SayBlock } from './SayBlock';
+import type { BrandBrowserAssistConfirm } from '../OdCard';
 import { StatusMark } from './primitives/StatusMark';
 import { ToolRow } from './primitives/ToolRow';
 import styles from './primitives/record.module.css';
@@ -99,6 +100,14 @@ export interface ExecutionShellProps {
    * `runtime/chat/contract.ts`,另有改动在飞,所以先由消息层推。
    */
   concluded?: boolean;
+  /**
+   * D43 routes pre-done prose, including cards, through the execution shell.
+   * Keep the existing optional instance scope for caller compatibility;
+   * retired rule proposals no longer consume it. Browser assistance still
+   * needs its confirmation callback in both shell and conclusion lanes.
+   */
+  odCardScope?: string;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }
 
 export function ExecutionShell({
@@ -110,6 +119,8 @@ export function ExecutionShell({
   imageSrc,
   deferCollapsedBodies = true,
   concluded = false,
+  odCardScope,
+  onBrandBrowserAssistConfirm,
 }: ExecutionShellProps): ReactElement {
   const t = useT();
   const running = shell.status === 'running' && !shell.stopped;
@@ -352,6 +363,7 @@ export function ExecutionShell({
             liveTextIndex: liveTextIndexOf(items, running),
             firstThoughtsStack,
             mutedThoughtsIndex: mutedThoughtsIndexOf(items, shell.items, firstThoughtsStack),
+            odCardScope, onBrandBrowserAssistConfirm,
           }))
         : null}
     </Foldable>
@@ -455,6 +467,9 @@ interface RenderCtx {
   firstThoughtsStack: ShellItem[] | null;
   /** **这一摞**里被压住时长的那一格排第几;`-1` = 不在这一摞 */
   mutedThoughtsIndex: number;
+  /** 壳内散文里的 `<od-card>` 要的两样 —— 说明在 `ExecutionShellProps` 上 */
+  odCardScope?: string;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }
 
 function renderItem(item: GroupedShellItem, index: number, ctx: RenderCtx): ReactElement | null {
@@ -500,7 +515,21 @@ function renderItem(item: GroupedShellItem, index: number, ctx: RenderCtx): Reac
      * 「包括我们所有普通文本, 都应该有这个流式输出的效果才对」)。
      * 前面几段早就写完了,再化开一遍等于每次重渲染重放一次历史。
      */
-    return <SayText key={`text-${index}`} text={item.text} live={index === ctx.liveTextIndex} />;
+    /*
+     * 走 `SayBlock` 而不是直接 `SayText`:同一段文字里可能夹着 `<od-card>`,
+     * 那是仓库真实实现的协议标签,必须画成卡片而不是原样上屏(理由与红测在
+     * `SayBlock.tsx` / `tests/components/chat/od-card-inside-execution-shell.test.tsx`)。
+     * 一张卡都没有时 `SayBlock` 把原来那只 `SayText` 原样交出去。
+     */
+    return (
+      <SayBlock
+        key={`text-${index}`}
+        text={item.text}
+        live={index === ctx.liveTextIndex}
+        instanceScope={ctx.odCardScope ? `${ctx.odCardScope}:${index}` : undefined}
+        onBrandBrowserAssistConfirm={ctx.onBrandBrowserAssistConfirm}
+      />
+    );
   }
   if (item.kind === 'image') {
     return (
@@ -894,6 +923,11 @@ function TodoRow({ segment, ctx }: { segment: TodoSegment; ctx: RenderCtx }): Re
       {expandable
         ? items.map((item, i) => renderItem(item, i, {
             ...ctx,
+            // Todo content is its identity (D17). Local text indices repeat in
+            // sibling todos, so each needs its own persisted card-decision scope.
+            odCardScope: ctx.odCardScope
+              ? `${ctx.odCardScope}:todo:${encodeURIComponent(segment.content)}`
+              : undefined,
             /* 抽屉里那一摞有自己的顺序:还在写的那一段只可能在**进行中**那条 todo 的末尾 */
             liveTextIndex: liveTextIndexOf(items, ctx.running && segment.status === 'in_progress'),
             /* 整轮头一格可能就落在这条抽屉里(有清单时推理进 in_progress 那条) */

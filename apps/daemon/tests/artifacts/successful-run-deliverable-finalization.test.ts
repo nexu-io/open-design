@@ -120,6 +120,29 @@ describe('successful physical Run deliverable finalization', () => {
     });
   });
 
+  it('checks the changed linked page while retaining the canonical entry (OPEND-2887)', async () => {
+    const entry = '<!doctype html><a href="catalog.html">Catalog</a>';
+    const source = '<!doctype html><script>const value = ;</script>';
+    const fixture = await projectFixture('index.html', entry);
+    const linkedPage = path.join(fixture.projectsRoot, fixture.projectId, 'catalog.html');
+    await fs.writeFile(linkedPage, source, 'utf8');
+
+    const result = await finalizeSuccessfulRunDeliverable({
+      ...fixture,
+      projectMetadata: { kind: 'prototype', entryFile: 'index.html' },
+      artifactCount: 1,
+      touchedPaths: ['catalog.html'],
+      processTreeQuiescent: true,
+    });
+
+    expect(result).toMatchObject({
+      deliverable: { valid: true, entryFile: 'index.html', linkedPage: 'catalog.html' },
+      syntax: { action: 'warn', reason: 'no_safe_fix' },
+    });
+    await expect(fs.readFile(linkedPage, 'utf8')).resolves.toBe(source);
+    await expect(fs.readFile(fixture.target, 'utf8')).resolves.toBe(entry);
+  });
+
   it('skips syntax mutation when the kill switch is off', async () => {
     const source = '<!doctype html><script>const items = [1, 2;</script>';
     const fixture = await projectFixture('index.html', source);

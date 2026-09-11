@@ -1,6 +1,11 @@
 import { renderArtifactFocusInstruction } from '../api/artifact-focus-marker.js';
 import { renderDoneMarker } from '../api/done-marker.js';
 import { renderNextStepMarkerExample } from '../api/next-step-marker.js';
+import {
+  PROMPT_LOCALE_EXEMPT_TERMS_SENTENCE,
+  normalizePromptLocale,
+  promptLanguageName,
+} from './ui-locale.js';
 
 export type ChatTurnHostProtocolPolicy =
   | 'ordinary'
@@ -33,13 +38,54 @@ function odNextStageGate(policy: ChatTurnHostProtocolPolicy): string {
 }
 
 /**
+ * The output-language rule for the three follow-up suggestions.
+ *
+ * The suggestions are user-visible chat prose — clicking one sends it verbatim
+ * as the user's next message — so they follow the run's UI locale like every
+ * other user-visible string. Two things make this rule need its own sentence
+ * here rather than inheriting the one in `# UI locale override`:
+ *
+ *  · That section rides the cache-stable prompt head, which `server.ts` drops
+ *    on every resume turn to protect the upstream prompt cache. This block is
+ *    re-sent every turn because of its nonce. Inheriting would mean the rule
+ *    is present exactly on the turns that need it least.
+ *  · That section ends with "Keep machine-readable ids and object option
+ *    `value` fields exact and unlocalized" — scoped to `<question-form>`, but
+ *    a marker whose suggestion also travels in a `value="…"` attribute reads
+ *    like it is covered. Saying "user-visible chat prose" here settles it.
+ *
+ * With no locale (or an English one) this returns the original
+ * infer-from-context wording, byte for byte: the fix is "follow the run's
+ * locale", not "always write another language".
+ */
+function nextStepLanguageRule(locale: string | undefined): string {
+  const normalized = normalizePromptLocale(locale);
+  if (!normalized) {
+    return 'Write them in the language the user is speaking, and keep each under 120 characters.';
+  }
+  return [
+    `Write all three in ${promptLanguageName(normalized)}: the OpenDesign UI locale for this`
+    + ` run is \`${normalized}\`, and these three lines are user-visible chat prose, not`
+    + ' machine-readable values. The markers above show the marker format only, not the'
+    + ' output language.',
+    PROMPT_LOCALE_EXEMPT_TERMS_SENTENCE,
+    'Keep each under 120 characters.',
+  ].join('\n');
+}
+
+/**
  * Render the keyed, per-turn protocol that hands a completed model turn back to
  * the chat host. The nonce keeps this text out of every cache-stable prompt
  * head; callers inject it into the request/continuation slice only.
+ *
+ * `locale` is the run's UI locale (`ChatRequest.locale`). Callers that have it
+ * must pass it; see `nextStepLanguageRule` for why this block restates a rule
+ * the stable prompt head already carries.
  */
 export function renderChatTurnHostProtocolInstructions(
   key: string,
   policy: ChatTurnHostProtocolPolicy = 'ordinary',
+  locale?: string | undefined,
 ): ChatTurnHostProtocolInstructions {
   if (!key) {
     return { doneMarker: '', nextSteps: '', artifactFocus: '', text: '' };
@@ -65,7 +111,7 @@ export function renderChatTurnHostProtocolInstructions(
     ]),
     'Rules: exactly three markers, one suggestion in each value attribute, no bullets, no numbering, no trailing punctuation, and no paired opening/closing tag.',
     'Each line is a concrete next action on what THIS turn actually produced, worded so the user could send it verbatim as their next message — not a topic, not a question, not an offer of help.',
-    'Write them in the language the user is speaking, and keep each under 120 characters.',
+    nextStepLanguageRule(locale),
     `This turn's key is ${key}: copy it verbatim, never reuse an earlier one, and never invent one.`,
     'Skip all three markers when the turn produced nothing to iterate on — a greeting, a plain answer, a turn ending in a <question-form> — or when you have no useful suggestion. Omitting them is fine; padding them with filler is not.',
     'The markers are protocol, not prose: do not mention them, do not explain them, and do not wrap them in a code fence.',

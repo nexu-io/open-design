@@ -302,6 +302,7 @@ import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
 import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
+  isVelaChatCapableModelId,
 } from './runtimes/defs/amr.js';
 import { migrateLegacyDataDirSync } from './migration/index.js';
 import {
@@ -586,6 +587,7 @@ import {
   deliverableSyntaxFinalizerEnabled,
   finalizeSuccessfulRunDeliverable,
 } from './artifacts/successful-run-deliverable-finalization.js';
+import { inferBaselineHtmlEntry } from './run-deliverable-validation.js';
 import { recordDeliverableSyntaxDelivery } from './artifacts/deliverable-syntax-metrics.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
@@ -11395,6 +11397,7 @@ export async function startServer({
     // for ANY agent (not just claude_code). Only for real project runs: a
     // null `cwd` means a no-project run rooted at PROJECT_ROOT, whose churn is
     // not the user's artifacts — those fall back to the tool-stream count.
+    let baselineEntryFile: string | undefined;
     if (run?.id && cwd) {
       try {
         const before = await snapshotProjectArtifactsAsync(cwd);
@@ -11403,6 +11406,7 @@ export async function startServer({
         // do not leave a stale baseline behind for a completed run.
         if (!run.artifactOutcome && !design.runs.isTerminal(run.status)) {
           runArtifactBaselines.remember(run.id, cwd, before);
+          baselineEntryFile = inferBaselineHtmlEntry(cwd, before.keys());
         }
       } catch {
         // Snapshotting is best-effort; finish falls back to the tool-stream count.
@@ -12012,9 +12016,20 @@ export async function startServer({
      * (emit one inline marker the host parses and strips), same "don't narrate
      * this to the user" clause.
      */
+    /*
+     * The run's UI locale rides along (OPEND-2765).
+     *
+     * `# UI locale override` states the same rule, but it lives in
+     * `daemonSystemPrompt` — the cache-stable head, which the payload below
+     * drops whenever `includeStableForPayload` is false. These three markers
+     * are re-sent every turn because of the nonce, so on a resume turn the
+     * marker contract was arriving with no locale attached and the follow-up
+     * suggestions came back in English on a zh-CN run.
+     */
     const hostProtocol = renderChatTurnHostProtocolInstructions(
       typeof run.doneKey === 'string' ? run.doneKey : '',
       'ordinary',
+      typeof locale === 'string' ? locale : undefined,
     );
     /*
      * This turn's follow-up suggestions.
@@ -13281,6 +13296,17 @@ export async function startServer({
       // catalog can lag the live one, and a logged-in user picked a concrete
       // id; vela rejects a truly unsupported model at `session/set_model` with
       // a precise error, which beats a pre-emptive block on a flaky metadata read.
+    }
+
+    if (
+      def.id === 'amr' &&
+      safeModel &&
+      !isVelaChatCapableModelId(safeModel)
+    ) {
+      send('error', createAmrModelUnavailablePayload(safeModel, {
+        reason: 'model_not_chat_capable',
+      }));
+      return finishStrategyAwarePhysicalRun('failed', 1, null);
     }
 
     // Plain-streaming adapters that own a "continue most recent
@@ -16537,6 +16563,7 @@ export async function startServer({
         }
         await resolveRunArtifactOutcomeBeforeFinishAsync();
         const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
+          ...(run.artifactOutcome?.diff && baselineEntryFile ? { baselineEntryFile } : {}),
           projectsRoot: PROJECTS_DIR,
           projectId: run.projectId ?? null,
           projectMetadata: projectRecord?.metadata,
@@ -16554,9 +16581,41 @@ export async function startServer({
             : {}),
         });
         const { deliverable } = deliverableFinalization;
+        // Adding a second page must not erase an unambiguous pre-run entry.
+        // Retain only a verified baseline identity, without replacing a user's
+        // explicit selection or metadata changed while this Run was executing.
+        if (
+          deliverable.valid && deliverable.linkedPage
+          && deliverable.entryFile === baselineEntryFile
+          && run.artifactOutcome?.diff && run.projectId && cwd
+        ) {
+          try {
+            const current = getProject(db, run.projectId);
+            if (
+              current?.metadata?.kind === 'prototype'
+              && !current.metadata.entryFile
+              && resolveProjectDir(PROJECTS_DIR, current.id, current.metadata) === cwd
+            ) {
+              updateProject(db, current.id, {
+                metadata: { ...current.metadata, entryFile: deliverable.entryFile },
+                updatedAt: SYNC_KEEPS_UPDATED_AT,
+              });
+            }
+          } catch {
+            console.warn('[deliverable] could not retain verified prototype entry');
+          }
+        }
         if (strategyCompletionCandidate) {
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
+          if (!deliverable.valid && strategyTaskAtStart) {
+            console.info('[od-next-task] completion evidence rejected', {
+              taskExecutionId: strategyTaskAtStart.taskExecutionId,
+              runId: run.id,
+              inputStage: strategyTaskAtStart.inputStage,
+              validation: deliverable.validation,
+            });
+          }
         }
         // Host-owned syntax finalization is based on physical delivery, not on
         // OD Next strategy identity. It never resumes or prompts the Agent.
@@ -16726,6 +16785,11 @@ export async function startServer({
               task: strategyTaskAtStart,
               parsed: strategyProtocolResult,
               toolUseCount: strategyToolUseCount,
+              // OPEND-2765: the production stage closes with the keyed host
+              // protocols, whose follow-up suggestions are user-visible prose.
+              ...(typeof chatBody.locale === 'string' && chatBody.locale
+                ? { locale: chatBody.locale }
+                : {}),
               ...(executionPreflight ? { executionPreflight } : {}),
               ...(complexRuntimeEvidence ? { complexRuntimeEvidence } : {}),
               ...(

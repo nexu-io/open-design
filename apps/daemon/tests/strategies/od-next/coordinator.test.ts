@@ -1513,6 +1513,146 @@ ${question}`),
     ]);
   });
 
+  /**
+   * The parser refuses before `validateAcceptedTurn` is ever reached, so every
+   * block-less turn used to be filed under the parser's own code — and
+   * `reasonCodes[0]` is what the failure card, the diagnostics export and the
+   * analytics bucket all read. A user who got nothing this round was told a
+   * marker was missing, which is true of the reply and useless to them, while
+   * the identical failure with a DECLARED block reported the real gate.
+   *
+   * The verdict does not move: both shapes still block. Only the name does.
+   */
+  it('names the evidence that refused an undeclared completion, not the parser', () => {
+    prepareStrategyIntake(db, {
+      taskExecutionId: 'task-1',
+      intake: intakePassed,
+      execution: executionPassed,
+    });
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol('好的,已经按计划做完了。'),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+      updatedAt: 120,
+    });
+
+    expect(result.action).toBe('blocked');
+    // The acting cause first: it is a host fact the user can act on.
+    expect(result.reasonCodes[0]).toBe('od_next_canonical_deliverable_invalid');
+    // The parser's own code is kept behind it, because "declared badly" and
+    // "declared nothing" have different remedies and only the first is ever
+    // eligible for a serialization repair.
+    expect(result.reasonCodes).toContain('od_next_protocol_runtime_state_missing');
+    expect(getStrategyTaskExecution(db, 'task-1')?.blockedContext?.reasonCodes)
+      .toEqual(result.reasonCodes);
+  });
+
+  it('gives the undeclared and declared shapes of one failure the same name', () => {
+    // The invariant the reattribution exists to hold: an empty-handed turn is
+    // reported the same way whether or not the agent wrote its machine block.
+    prepareStrategyIntake(db, {
+      taskExecutionId: 'task-1',
+      intake: intakePassed,
+      execution: executionPassed,
+    });
+    const undeclared = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol('做完了。'),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+      updatedAt: 120,
+    });
+
+    createStrategyTaskExecution(db, {
+      taskExecutionId: 'task-declared',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      snapshotId: snapshot.snapshotId,
+      selectedAgentId: AGENT_ID,
+      initialRunId: 'run-declared',
+      ...strategyTaskCreateIdentityFixture(),
+      createdAt: 100,
+    });
+    prepareStrategyIntake(db, {
+      taskExecutionId: 'task-declared',
+      intake: intakePassed,
+      execution: executionPassed,
+    });
+    const declared = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-declared',
+      runId: 'run-declared',
+      protocol: protocol(`做完了。\n${block('open-design-runtime-state', runtimeState({
+        route: 'direct_edit',
+        outcome: 'completed',
+        executionMode: 'simple',
+      }))}`),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+      updatedAt: 120,
+    });
+
+    expect(undeclared.reasonCodes[0]).toBe(declared.reasonCodes[0]);
+    expect(declared.reasonCodes[0]).toBe('od_next_canonical_deliverable_invalid');
+  });
+
+  it('leaves a turn the evidence accepts to the inference, unrenamed', () => {
+    // Reattribution must fire only where the evidence actually refused. A turn
+    // that DID deliver is recovered, not renamed.
+    prepareStrategyIntake(db, {
+      taskExecutionId: 'task-1',
+      intake: intakePassed,
+      execution: executionPassed,
+    });
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol('做完了,文件已经写好。'),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: true },
+      updatedAt: 120,
+    });
+
+    expect(result.action).toBe('completed');
+    expect(result.reasonCodes).toEqual(['od_next_protocol_runtime_state_inferred']);
+  });
+
+  it('keeps the parser code for a block-less turn no inference was shaped for', () => {
+    // A clarification-stage turn that answers in prose has no host fact that
+    // refused it — the declaration really is the thing that is missing, and
+    // renaming it would invent a cause.
+    prepareStrategyIntake(db, {
+      taskExecutionId: 'task-1',
+      intake: intakePassed,
+      execution: executionPassed,
+    });
+    const question = '<question-form id="scope">{"questions":[{"id":"surface","label":"Surface?"}]}</question-form>';
+    finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol(`${question}\n${block('open-design-runtime-state', runtimeState({
+        route: 'full_plan',
+        outcome: 'clarification_required',
+      }))}`),
+      updatedAt: 120,
+    });
+    beginStrategyClarification(db, {
+      taskExecutionId: 'task-1',
+      sourceRunId: 'run-request',
+      nextRunId: 'run-clarification',
+      answer: '深色,三页',
+      updatedAt: 130,
+    });
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-clarification',
+      protocol: protocol('明白了,我按深色三页来做。'),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+      updatedAt: 140,
+    });
+
+    expect(result.action).toBe('blocked');
+    expect(result.reasonCodes).toEqual(['od_next_protocol_runtime_state_missing']);
+  });
+
   it('accepts a clarification turn whose state predicted a premature execution mode', () => {
     prepareStrategyRequest(db, {
       taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
@@ -1793,8 +1933,13 @@ ${block('open-design-plan-contract', planContract(snapshot))}`),
       executionPreflight: executionPassed,
       updatedAt: 140,
     });
+    // What this test owns is the VERDICT: an undeclared production turn that
+    // delivered nothing must not be laundered into a completion. The name it
+    // blocks under is owned by the reattribution specs above — the evidence
+    // that actually refused leads, and the parser's code rides behind it.
     expect(result.action).toBe('blocked');
-    expect(result.reasonCodes).toEqual(['od_next_protocol_runtime_state_missing']);
+    expect(result.reasonCodes[0]).toBe('od_next_canonical_deliverable_invalid');
+    expect(result.reasonCodes).toContain('od_next_protocol_runtime_state_missing');
   });
 
   it('refuses to infer a Direct Edit completion without verified physical delivery', () => {
@@ -1815,7 +1960,8 @@ ${block('open-design-plan-contract', planContract(snapshot))}`),
       updatedAt: 120,
     });
     expect(result.action).toBe('blocked');
-    expect(result.reasonCodes).toEqual(['od_next_protocol_runtime_state_missing']);
+    expect(result.reasonCodes[0]).toBe('od_next_canonical_deliverable_invalid');
+    expect(result.reasonCodes).toContain('od_next_protocol_runtime_state_missing');
     expect(getStrategyTaskExecution(db, 'task-1')?.outcome).toBe('blocked');
   });
 

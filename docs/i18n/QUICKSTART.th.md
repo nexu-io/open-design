@@ -13,7 +13,7 @@
 
 ### Local agent CLI และ PATH
 
-Daemon จะ scan **`PATH`** ของคุณ (รวมถึง directory toolchain ของ user ที่พบบ่อย). ถ้าคุณติดตั้ง CLI ด้วย **`npm install -g`** หรือ **Homebrew** แล้ว OpenDesign ยังแสดงว่า *not installed*, GUI อาจเริ่มด้วย `PATH` แบบ minimal ที่ไม่มี global npm หรือ Homebrew `bin` directory (พบบ่อยบน macOS เมื่อไม่ได้ launch แอปจาก full login shell). ตรวจให้แน่ใจว่า directory ของ executable อยู่ใน `PATH` สำหรับ process ที่รัน daemon แล้วใช้ **Rescan** ใน **Settings → Execution mode**.
+Daemon จะ scan **`PATH`** ของคุณ (รวมถึง directory toolchain ของ user ที่พบบ่อย). ถ้าคุณติดตั้ง CLI ด้วย **`npm install -g`** หรือ **Homebrew** แล้ว OpenDesign ยังแสดงว่า *not installed*, GUI อาจเริ่มด้วย `PATH` แบบ minimal ที่ไม่มี global npm หรือ Homebrew `bin` directory (พบบ่อยบน macOS เมื่อไม่ได้ launch แอปจาก full login shell). ตรวจให้แน่ใจว่า directory ของ executable อยู่ใน `PATH` สำหรับ process ที่รัน daemon แล้วใช้ **Rescan** ใน **Models & providers → Local CLI**.
 
 [`nvm`](https://github.com/nvm-sh/nvm) / [`fnm`](https://github.com/Schniz/fnm) เป็น convenience tools แบบ optional ไม่ใช่สิ่งจำเป็นในการ setup project. ถ้าคุณใช้ตัวใดตัวหนึ่ง ให้ติดตั้ง/เลือก Node 24 ก่อนรัน pnpm:
 
@@ -347,14 +347,14 @@ open-design/
 ## Troubleshooting
 
 - **`better-sqlite3` fails to load / ABI mismatch after a Node.js version change** — `pnpm install` จะ re-run `postinstall` อัตโนมัติและ rebuild native addon สำหรับ Node.js ปัจจุบัน. ถ้าต้องการ rebuild เองหรือตรวจ fix: `pnpm --filter @open-design/daemon rebuild better-sqlite3` แล้ว `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`. ต้องมี build tools: `python3`, `make`, `g++` (หรือ `clang++`). ถ้าคุณใช้ `ignore-scripts=true` ใน `.npmrc` (พบบ่อยใน AUR packages), ให้รัน `pnpm bootstrap` หลัง `pnpm install`.
-- **"no agents found on PATH"** — ติดตั้ง local runtime ที่ register ไว้ใน [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts), ตรวจว่า daemon มองเห็น executable แล้วใช้ **Rescan** ใน **Settings → Execution mode**. หรือ configure BYOK runtime ใน Settings.
+- **"no agents found on PATH"** — ติดตั้ง local runtime ที่ register ไว้ใน [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts), ตรวจว่า daemon มองเห็น executable แล้วใช้ **Rescan** ใน **Models & providers → Local CLI**. หรือ configure BYOK runtime ใน Settings.
 - **Claude Code exits with code 1** — OpenDesign start `claude` ได้แล้ว แต่ spawned non-interactive run fail ก่อน produce response. จาก shell หรือ app environment เดียวกับที่ start OpenDesign ให้เช็ค:
   ```bash
   claude --version
   claude auth status --text
   printf 'hello' | claude -p --output-format stream-json --verbose --permission-mode bypassPermissions
   ```
-  ถ้า smoke test รายงาน `401`, `apiKeySource: "none"` หรือ auth error อื่นโดยไม่มี custom endpoint ให้รัน `claude`, ใช้ `/login`, exit Claude แล้วลอง OpenDesign ใหม่. ถ้าคุณใช้หลาย Claude profiles ให้ตั้ง **Settings -> Execution mode -> Claude Code config directory** ไปที่ profile path เช่น `~/.claude-2`. ถ้าตั้ง `ANTHROPIC_BASE_URL` หรือ proxy ไว้ ให้เช็ค endpoint URL, proxy credentials, endpoint auth environment และ model access; ลบ custom endpoint เฉพาะเมื่ออยาก retry ด้วย standard Claude Code auth. บน Windows, native PowerShell และ WSL ใช้ Claude installs และ credential stores แยกกัน; ให้ re-authenticate ใน environment เดียวกับที่ OpenDesign ใช้ และเช็ค Windows Credential Manager ถ้า `/login` ไม่ซ่อม native Windows credentials.
+  ถ้า smoke test รายงาน `401`, `apiKeySource: "none"` หรือ auth error อื่นโดยไม่มี custom endpoint ให้รัน `claude`, ใช้ `/login`, exit Claude แล้วลอง OpenDesign ใหม่. ถ้าคุณใช้หลาย Claude profiles ให้ตั้ง **Models & providers -> Local CLI -> Claude Code config directory** ไปที่ profile path เช่น `~/.claude-2`. ถ้าตั้ง `ANTHROPIC_BASE_URL` หรือ proxy ไว้ ให้เช็ค endpoint URL, proxy credentials, endpoint auth environment และ model access; ลบ custom endpoint เฉพาะเมื่ออยาก retry ด้วย standard Claude Code auth. บน Windows, native PowerShell และ WSL ใช้ Claude installs และ credential stores แยกกัน; ให้ re-authenticate ใน environment เดียวกับที่ OpenDesign ใช้ และเช็ค Windows Credential Manager ถ้า `/login` ไม่ซ่อม native Windows credentials.
 - **daemon 500 on /api/chat** — ดู stderr tail ใน daemon terminal; โดยมาก CLI reject args. CLI แต่ละตัวใช้ argv shapes ต่างกัน; ดู definition ที่ตรงกันใน `apps/daemon/src/runtimes/defs/` ถ้าต้องปรับ.
 - **media generation says `OD_BIN` is missing or daemon URL is `:0`** — รัน media dispatcher checks ด้านบน. อย่า resume CLI session เก่า; เปิด project จาก OpenDesign app ใหม่เพื่อให้ daemon inject variables `OD_*` ชุดใหม่.
 - **Codex loads too much plugin context** — start OpenDesign ด้วย `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` เพื่อให้ daemon-spawned Codex processes รันด้วย `--disable plugins`.

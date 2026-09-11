@@ -456,14 +456,16 @@ describe('splitOnQuestionForms', () => {
       `<question-form id="discovery" title="Quick brief">${VALID_BODY}</question-form>\n\n` +
       `Now I'll proceed.`;
     const out = splitOnQuestionForms(input);
-    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
-    if (out[2]?.kind === 'form') {
-      expect(out[2].form.id).toBe('discovery');
-      expect(out[2].form.questions).toHaveLength(1);
-    }
+    const forms = out.filter((segment) => segment.kind === 'form');
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.form).toMatchObject({
+      id: 'discovery', title: 'Quick brief',
+      questions: [{ id: 'platform', label: 'Platform', type: 'radio', required: true,
+        options: [{ label: 'Mobile' }, { label: 'Desktop' }, { label: 'Responsive' }] }],
+    });
     // Segments must reconstruct the input without gaps or duplication.
     const reconstructed = out
-      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .map((s) => (s.kind === 'form' ? s.raw : s.text))
       .join('');
     expect(reconstructed).toBe(input);
   });
@@ -474,13 +476,15 @@ describe('splitOnQuestionForms', () => {
       `<question-form id="real" title="Brief">${VALID_BODY}</question-form>\n\n` +
       `Done.`;
     const out = splitOnQuestionForms(input);
-    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
-    if (out[2]?.kind === 'form') {
-      expect(out[2].form.id).toBe('real');
-      expect(out[2].form.questions).toHaveLength(1);
-    }
+    const forms = out.filter((segment) => segment.kind === 'form');
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.form).toMatchObject({
+      id: 'real', title: 'Brief',
+      questions: [{ id: 'platform', label: 'Platform', type: 'radio', required: true,
+        options: [{ label: 'Mobile' }, { label: 'Desktop' }, { label: 'Responsive' }] }],
+    });
     const reconstructed = out
-      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .map((s) => (s.kind === 'form' ? s.raw : s.text))
       .join('');
     expect(reconstructed).toBe(input);
   });

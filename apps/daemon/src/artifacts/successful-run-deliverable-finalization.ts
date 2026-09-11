@@ -42,6 +42,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
   relatedPaths?: readonly string[];
   repairState?: DeliverableSyntaxRepairState;
   touchedPaths?: string[];
+  baselineEntryFile?: string;
   syntaxFinalizerEnabled?: boolean;
 }): Promise<SuccessfulRunDeliverableFinalizationResult> {
   const deliverable = await validateRunDeliverable({
@@ -53,6 +54,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     runStatus: 'succeeded',
     artifactCount: input.artifactCount,
     ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
+    ...(input.baselineEntryFile ? { baselineEntryFile: input.baselineEntryFile } : {}),
   });
   if (
     !deliverable.valid
@@ -69,7 +71,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
       input.projectId,
       input.projectMetadata,
     ),
-    entryFile: deliverable.entryFile,
+    entryFile: deliverable.linkedPage ?? deliverable.entryFile,
     relatedPaths: input.relatedPaths ?? [],
     processTreeQuiescent: input.processTreeQuiescent,
     ...(input.repairState ? { repairState: input.repairState } : {}),

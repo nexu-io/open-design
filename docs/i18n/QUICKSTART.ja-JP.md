@@ -326,7 +326,7 @@ open-design/
 
 ## トラブルシューティング
 
-- **「no agents found on PATH」** — [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) に登録されているローカルランタイムのいずれかをインストールし、その実行ファイルが daemon から見えることを確認してから、**Settings → Execution mode** で **Rescan** を実行してください。または、Settings で BYOK ランタイムを設定します。
+- **「no agents found on PATH」** — [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) に登録されているローカルランタイムのいずれかをインストールし、その実行ファイルが daemon から見えることを確認してから、**Models & providers → Local CLI** で **Rescan** を実行してください。または、Settings で BYOK ランタイムを設定します。
 - **/api/chat で daemon が 500 を返す** — daemon ターミナルで stderr の末尾を確認してください。通常は CLI が引数を拒否しています。CLI ごとに argv の形式が異なります。調整が必要な場合は `apps/daemon/src/runtimes/defs/` の対応する定義を参照してください。
 - **メディア生成で `OD_BIN` が欠落、または daemon URL が `:0`** — 上記のメディアディスパッチャーチェックを実行してください。古い CLI セッションを再開せず、OpenDesign アプリからプロジェクトを再度開いて、daemon が新しい `OD_*` 変数を注入できるようにしてください。
 - **Codex がプラグインコンテキストを多く読み込みすぎる** — `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` で OpenDesign を起動すると、daemon から起動された Codex プロセスが `--disable plugins` で実行されます。

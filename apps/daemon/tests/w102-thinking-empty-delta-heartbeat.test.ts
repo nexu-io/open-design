@@ -50,7 +50,10 @@ const ANSWER_TEXT = 'W102_ANSWER_SENTINEL';
 type SseFrame = { event: string; data: any };
 
 /** 把 SSE 正文拆成 (event, data) 序列 —— 断言"出现在出口上"只认这个 */
-function parseSse(body: string): SseFrame[] {
+function parseSse(
+  body: string,
+  { rejectMalformedAgent = false }: { rejectMalformedAgent?: boolean } = {},
+): SseFrame[] {
   const frames: SseFrame[] = [];
   for (const block of body.split('\n\n')) {
     let event = 'message';
@@ -62,7 +65,8 @@ function parseSse(body: string): SseFrame[] {
     if (!raw) continue;
     try {
       frames.push({ event, data: JSON.parse(raw) });
-    } catch {
+    } catch (error) {
+      if (rejectMalformedAgent && event === 'agent') throw error;
       /* keepalive / 非 JSON 帧不参与断言 */
     }
   }
@@ -74,6 +78,71 @@ function thinkingDeltas(frames: SseFrame[]): string[] {
     .filter((f) => f.event === 'agent' && f.data?.type === 'thinking_delta')
     .map((f) => String(f.data.delta ?? ''));
 }
+
+// Share the same payload oracle between the deterministic replay and real HTTP/SSE.
+function expectNoThinkingGrammarLeak(body: string): void {
+  const frames = parseSse(body, { rejectMalformedAgent: true });
+  // Transport metadata (for example an expiry timestamp) is not agent content.
+  // Reassemble each text channel so protocol fragments split across deltas are
+  // still checked, without joining unrelated thinking and answer channels.
+  for (const type of ['thinking_delta', 'text_delta']) {
+    const content = frames
+      .filter((frame) => frame.event === 'agent' && frame.data?.type === type)
+      .map((frame) => String(frame.data.delta ?? ''))
+      .join('');
+    // 标签名写死,不复用 `CRITIQUE_GRAMMAR_TAGS`:复用等于拿实现验实现
+    expect(content).not.toMatch(
+      /<\/?(?:CRITIQUE_RUN|ROUND|ROUND_END|PANELIST|SHIP|MUST_FIX|RESOLVED)(?=[\s/>])/u,
+    );
+    expect(content).not.toContain('Critic');
+    expect(content).not.toContain('8.1');
+  }
+}
+
+// Minimal replay of the failed CI response: only the start metadata field,
+// actual visible delta sequence, and terminal status are relevant to this oracle.
+// This is parser/oracle coverage; the HTTP/agent round trip remains below.
+function oracleReplay(timestamp: string, extraDelta?: { type: string; delta: string }): string {
+  const frames: SseFrame[] = [
+    { event: 'start', data: { toolTokenExpiresAt: timestamp } },
+    ...Array.from({ length: EMPTY_THINKING_FRAMES }, () => ({
+      event: 'agent', data: { type: 'thinking_delta', delta: '' },
+    })),
+    { event: 'agent', data: { type: 'thinking_delta', delta: REAL_THINKING_PROSE } },
+    { event: 'agent', data: { type: 'text_delta', delta: ANSWER_TEXT } },
+    ...(extraDelta ? [{ event: 'agent', data: extraDelta }] : []),
+    { event: 'end', data: { code: 0, status: 'succeeded' } },
+  ];
+  return frames.map((frame) => `event: ${frame.event}\ndata: ${JSON.stringify(frame.data)}\n\n`).join('');
+}
+
+describe('W102 SSE content oracle metadata isolation', () => {
+  it('accepts clean thinking with the CI start timestamp containing 8.1', () => {
+    const body = oracleReplay('2026-09-10T09:45:48.127Z');
+    const frames = parseSse(body);
+    expect(frames[0]).toEqual({
+      event: 'start', data: { toolTokenExpiresAt: '2026-09-10T09:45:48.127Z' },
+    });
+    expect(thinkingDeltas(frames)).toEqual([
+      ...Array.from({ length: EMPTY_THINKING_FRAMES }, () => ''), REAL_THINKING_PROSE,
+    ]);
+    expect(frames.at(-1)).toEqual({ event: 'end', data: { code: 0, status: 'succeeded' } });
+    expectNoThinkingGrammarLeak(body);
+  });
+
+  it.each([
+    ['thinking_delta', '<PANELIST role="Critic" score="8.1">'],
+    ['thinking_delta', 'Critic'],
+    ['thinking_delta', '8.1'],
+    ['text_delta', '<PANELIST role="Critic" score="8.1">'],
+    ['text_delta', 'Critic'],
+    ['text_delta', '8.1'],
+  ])('still rejects actual %s protocol content %s', (type, delta) => {
+    // A clean timestamp ensures rejection is caused by the visible payload.
+    const body = oracleReplay('2026-09-10T09:45:00.000Z', { type, delta });
+    expect(() => expectNoThinkingGrammarLeak(body)).toThrow();
+  });
+});
 
 describe('W102 · 上游本来就是空的思考帧必须照发(心跳 + 思考中)', () => {
   let server: http.Server;
@@ -175,13 +244,7 @@ setTimeout(() => process.exit(0), 10);
   it('反向:整片都是协议标记的思考帧仍然被扔(ba3e64ea69 的目的不回退)', async () => {
     const body = await runOnce();
     const deltas = thinkingDeltas(parseSse(body));
-    // 标签名写死,不复用 `CRITIQUE_GRAMMAR_TAGS`:复用等于拿实现验实现
-    expect(body).not.toMatch(
-      /<\/?(?:CRITIQUE_RUN|ROUND|ROUND_END|PANELIST|SHIP|MUST_FIX|RESOLVED)(?=[\s/>])/u,
-    );
-    // 属性碎片也不许剩 —— 这两个字符串只可能来自标记内部
-    expect(body).not.toContain('Critic');
-    expect(body).not.toContain('8.1');
+    expectNoThinkingGrammarLeak(body);
     // 而且它连一格空事件都不该变成:那一帧整条被扔,不是被改写成空串。
     // 空串帧的条数恰好等于上游送的空串条数,多一条就说明标记帧漏成了空事件。
     expect(deltas.filter((d) => d === '').length).toBe(EMPTY_THINKING_FRAMES);
@@ -201,4 +264,40 @@ setTimeout(() => process.exit(0), 10);
     // `markUpstreamActivity`,静默计时的读数全靠它。
     expect(deltas.length).toBe(EMPTY_THINKING_FRAMES + 1);
   }, 60_000);
+});
+
+describe('W102 SSE content oracle malformed and fragmented payload guards', () => {
+  it.each(['Critic', '8.1'])('rejects malformed agent JSON containing %s', (delta) => {
+    const body = oracleReplay('2026-09-10T09:45:00.000Z').replace(
+      'event: end\n',
+      // Deliberately missing the final object brace; this is a raw broken frame,
+      // not JSON.stringify creating a valid payload with an unusual string.
+      `event: agent\ndata: {"type":"thinking_delta","delta":"${delta}"\n\nevent: end\n`,
+    );
+    const frames = parseSse(body);
+    expect(thinkingDeltas(frames)).toEqual([
+      ...Array.from({ length: EMPTY_THINKING_FRAMES }, () => ''), REAL_THINKING_PROSE,
+    ]);
+    expect(frames.at(-1)).toEqual({ event: 'end', data: { code: 0, status: 'succeeded' } });
+    expect(() => expectNoThinkingGrammarLeak(body)).toThrow();
+  });
+
+  it.each(['thinking_delta', 'text_delta'])('rejects a protocol tag fragmented within %s', (type) => {
+    // No single frame contains a complete tag, role fragment, or score fragment.
+    const fragments = ['<PANE', 'LIST role="Cri', 'tic" score="8.', '1">'];
+    const events = fragments.map((delta) =>
+      `event: agent\ndata: ${JSON.stringify({ type, delta })}\n\n`,
+    ).join('');
+    const body = oracleReplay('2026-09-10T09:45:00.000Z').replace('event: end\n', `${events}event: end\n`);
+    expect(() => expectNoThinkingGrammarLeak(body)).toThrow();
+  });
+
+  it('does not join unrelated thinking and answer fragments into a protocol attribute', () => {
+    const events = [
+      { type: 'thinking_delta', delta: 'Cri' },
+      { type: 'text_delta', delta: 'tic' },
+    ].map((data) => `event: agent\ndata: ${JSON.stringify(data)}\n\n`).join('');
+    const body = oracleReplay('2026-09-10T09:45:00.000Z').replace('event: end\n', `${events}event: end\n`);
+    expectNoThinkingGrammarLeak(body);
+  });
 });

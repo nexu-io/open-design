@@ -1724,7 +1724,6 @@ export interface Dict {
   'pluginCard.publish': string;
   'pluginCard.contribute': string;
   'pluginCard.starting': string;
-  'pluginCard.creating': string;
   'pluginCard.detailsAria': string;
   'pluginCard.chooseUseAria': string;
   'pluginCard.useOptionsAria': string;
@@ -1736,9 +1735,6 @@ export interface Dict {
   'pluginCard.publishTitle': string;
   'pluginCard.contributeAria': string;
   'pluginCard.contributeTitle': string;
-  'skillPluginCandidate.createForMe': string;
-  'skillPluginCandidate.contributeToMain': string;
-  'skillPluginCandidate.repoDescription': string;
   'integrations.kicker': string;
   'integrations.lede': string;
   'integrations.agentReady': string;
@@ -2887,7 +2883,9 @@ export interface Dict {
   'chat.runError.title.cliSessionRefused': string;
   'chat.runError.title.strategyTaskHalted': string;
   'chat.runError.title.agentReplyIncomplete': string;
+  'chat.runError.title.noDeliverable': string;
   'chat.runError.agentReplyIncompleteMessage': string;
+  'chat.runError.noDeliverableMessage': string;
   'chat.runError.title.clarificationRepeated': string;
   'chat.runError.clarificationRepeatedMessage': string;
   'chat.runError.title.clientEnvironment': string;
@@ -4483,8 +4481,6 @@ export interface Dict {
   'assistant.thinking': string;
   'assistant.thought': string;
   'assistant.thoughtFor': string;
-  'assistant.systemReminder': string;
-  'assistant.possiblePromptInjection': string;
   'assistant.designSystemDirectionLocked': string;
   'assistant.waitingFirstOutput': string;
   'assistant.statusBootingAgent': string;
@@ -4570,30 +4566,6 @@ export interface Dict {
   'questions.submitting': string;
 
   // Inline <od-card> memory cards (display-only siblings of question-form)
-  'artifact.odCardTaskBriefChip': string;
-  'artifact.odCardScorecardTitle': string;
-  'artifact.odCardScorecardStatusPass': string;
-  'artifact.odCardScorecardStatusPartial': string;
-  'artifact.odCardScorecardStatusFail': string;
-  'artifact.odCardRuleKicker': string;
-  'artifact.odCardRuleNameLabel': string;
-  'artifact.odCardRuleDescriptionLabel': string;
-  'artifact.odCardRuleAssertionLabel': string;
-  'artifact.odCardRuleCheckLabel': string;
-  'artifact.odCardRuleRationaleLabel': string;
-  'artifact.odCardRuleKeep': string;
-  'artifact.odCardRuleEdit': string;
-  'artifact.odCardRuleDone': string;
-  'artifact.odCardRuleDiscard': string;
-  'artifact.odCardRuleSaving': string;
-  'artifact.odCardRuleSaved': string;
-  'artifact.odCardRuleError': string;
-  'artifact.odCardBrandAssistDone': string;
-  'artifact.odCardBrandAssistKicker': string;
-  'artifact.odCardBrandAssistBody': string;
-  'artifact.odCardBrandAssistError': string;
-  'artifact.odCardBrandAssistWorking': string;
-  'artifact.odCardBrandAssistConfirm': string;
 
   // Pet (Codex-style floating companion)
   'pet.title': string;
@@ -5650,13 +5622,4 @@ export interface Dict {
   'labs.optOutSkip': string;
   'labs.optOutOtherPlaceholder': string;
   'labs.optOutSubmit': string;
-  'chat.pluginAction.failed': string;
-  'chat.pluginAction.saved': string;
-  'chat.pluginAction.validationIssues': string;
-  'chat.pluginAction.contributionStarted': string;
-  'chat.pluginAction.aria': string;
-  'chat.pluginAction.title': string;
-  'chat.pluginAction.subtitle': string;
-  'chat.pluginAction.filesReady': string;
-  'chat.pluginAction.install': string;
 }

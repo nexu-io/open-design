@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { I18nProvider } from '../../../src/i18n';
 import { OdCardView } from '../../../src/components/OdCard';
 import odCardStyles from '../../../src/components/OdCard.module.css';
-import { UNSET, createResolver, hashed } from '../../helpers/chat-mirror-cascade';
+import { createResolver, hashed } from '../../helpers/chat-mirror-cascade';
 
 afterEach(cleanup);
 
@@ -123,19 +123,22 @@ function atRest(el: Element): Record<string, string> {
 
 describe('记忆卡 · 标题行悬停', () => {
   it('先证明这把尺子看得见 hover(拿一条已知的 hover 规则校准)', () => {
-    // `.fold > summary` 同一族里,`.briefChip:hover` 是**已经搬过来**的一条:
-    // 它两态不同,说明「量 hover」这条链路本身是通的。
-    const { container } = render(
-      <I18nProvider initial="zh-CN">
-        <OdCardView card={{ kind: 'task-brief', title: 'x', fields: [], note: '' } as never} />
-      </I18nProvider>,
-    );
-    const chip = container.querySelector(`.${(odCardStyles as Record<string, string>).briefChip}`);
-    expect(chip, '夹具变了 —— 找不到 briefChip,校准这一步就没了对象').not.toBeNull();
-    const rest = atRest(chip!)['background-color'];
-    const hover = whileHovering(chip!)['background-color'];
-    expect(rest).not.toBe(UNSET);
-    expect(hover).not.toBe(rest);
+    // The removed brief chip can no longer calibrate this resolver. Use a
+    // fixed test-only control whose hover rule is independent of memory CSS.
+    const calibration = createResolver([
+      '.hover-calibration { background-color: rgb(1, 2, 3); }',
+      '.hover-calibration:hover { background-color: rgb(4, 5, 6); }',
+    ], [], TARGETS);
+    const { container } = render(<button className="hover-calibration">Hover control</button>);
+    const chip = container.querySelector('button');
+    if (!chip) throw new Error('Missing hover calibration control');
+    expect(chip.matches(':hover')).toBe(false);
+    const rest = calibration.resolved(chip)['background-color'];
+    fireEvent.mouseOver(chip);
+    expect(chip.matches(':hover')).toBe(true);
+    const hover = calibration.resolved(chip)['background-color'];
+    expect(rest).toBe('rgb(1, 2, 3)');
+    expect(hover).toBe('rgb(4, 5, 6)');
   });
 
   it('标题行是可点的(所以才该有 hover 反馈)', () => {

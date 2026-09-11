@@ -422,6 +422,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       messages
         .map((message) => message['runId'])
         .filter((runId): runId is string => typeof runId === 'string' && runId.length > 0),
+      { projectId: req.params.id, conversationId: req.params.cid },
     );
     res.json({
       messages: messages.map((message) => {
@@ -433,6 +434,10 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           strategyTaskExecutionId: turn.taskExecutionId,
           strategyTaskRunIndex: turn.taskRunIndex,
           ...(turn.delivered ? { strategyTaskDelivered: true } : {}),
+          ...(turn.blocked ? {
+            strategyTaskBlocked: true,
+            strategyTaskBlockedText: turn.blockedText,
+          } : {}),
         };
       }),
     });

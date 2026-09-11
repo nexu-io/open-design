@@ -499,53 +499,6 @@
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-/* Collapsible system-reminder block in chat */
-.system-reminder-block {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin: 6px 0;
-}
-.system-reminder-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
-  text-align: left;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.system-reminder-toggle:hover { background: rgba(0, 0, 0, 0.03); }
-.system-reminder-icon { color: var(--text-muted); }
-.system-reminder-label { font-weight: 500; color: var(--text); }
-.system-reminder-preview {
-  flex: 1;
-  color: var(--text-muted);
-  font-style: italic;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.system-reminder-chev { color: var(--text-muted); font-size: 12px; }
-.system-reminder-body {
-  margin: 0;
-  padding: 0 12px 10px 12px;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-muted);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.system-reminder-block.injection .system-reminder-icon,
-.system-reminder-block.injection .system-reminder-label,
-.system-reminder-block.injection .system-reminder-chev {
-  color: var(--warning, #d97706);
-}
-
 /* Waiting-on-input pill (richer than the simple italic version above). */
 .op-waiting {
   display: flex;
