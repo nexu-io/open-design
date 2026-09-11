@@ -17,6 +17,7 @@ import {
   mergeProviderModelOptions,
   providerModelsCacheKey,
 } from './providerModelsCache';
+import { bedrockActiveProfile } from '../utils/byokProvider';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import { fetchProviderModels } from '../providers/provider-models';
@@ -439,11 +440,17 @@ export function AvatarMenu({
       ) ?? KNOWN_PROVIDERS.find((provider) => provider.protocol === apiProtocol),
     [apiProtocol, config.apiProviderBaseUrl],
   );
+  const byokAwsProfile = bedrockActiveProfile({
+    apiProtocol,
+    awsAuthMode: config.awsAuthMode,
+    awsProfile: config.awsProfile,
+  });
   const byokModelsKey = providerModelsCacheKey(
     apiProtocol,
     config.baseUrl ?? '',
     config.apiKey ?? '',
     config.apiVersion ?? '',
+    byokAwsProfile,
   );
   const [discoveredByokModels, setDiscoveredByokModels] = useState<
     Record<string, ProviderModelOption[]>
@@ -459,14 +466,16 @@ export function AvatarMenu({
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
     const baseUrl = config.baseUrl?.trim() ?? '';
     if (!/^https?:\/\//i.test(baseUrl)) return;
-    // AIHubMix's catalogue is public; every other protocol needs a key.
-    if (apiProtocol !== 'aihubmix' && !(config.apiKey ?? '').trim()) return;
+    // AIHubMix's catalogue is public; Bedrock in profile mode lists through
+    // the AWS profile; every other protocol needs a key.
+    if (apiProtocol !== 'aihubmix' && !byokAwsProfile && !(config.apiKey ?? '').trim()) return;
     const key = byokModelsKey;
     let cancelled = false;
     void fetchProviderModels({
       protocol: apiProtocol,
       baseUrl,
-      apiKey: config.apiKey ?? '',
+      apiKey: byokAwsProfile ? '' : config.apiKey ?? '',
+      ...(byokAwsProfile ? { awsProfile: byokAwsProfile } : {}),
     })
       .then((result) => {
         if (cancelled || !result.ok || !result.models?.length) return;
@@ -487,6 +496,7 @@ export function AvatarMenu({
     apiProtocol,
     config.baseUrl,
     config.apiKey,
+    byokAwsProfile,
     byokModelsKey,
     fetchedByokModels.length,
   ]);

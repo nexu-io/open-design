@@ -79,6 +79,7 @@ import type {
   ApiProtocol,
   ApiProtocolConfig,
   AppConfig,
+  BedrockAuthMode,
   ConnectionTestResponse,
   DesignSystemSummary,
   ExecMode,
@@ -236,6 +237,7 @@ import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
+import { bedrockActiveProfile, byokRequestCredentials, resolveBedrockAuthMode } from '../utils/byokProvider';
 import {
   ENTRY_RAIL_STATE_EVENT,
   ENTRY_RAIL_TOGGLE_EVENT,
@@ -2227,18 +2229,25 @@ function OnboardingView({
     step,
   });
   const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const byokAwsProfile = bedrockActiveProfile({
+    apiProtocol,
+    awsAuthMode: config.awsAuthMode,
+    awsProfile: config.awsProfile,
+  });
   const providerTestInputKey = [
     apiProtocol,
     config.baseUrl.trim(),
     config.model.trim(),
     config.apiKey.trim(),
     config.apiVersion?.trim() ?? '',
+    byokAwsProfile,
   ].join('\n');
   const providerModelsInputKey = providerModelsCacheKey(
     apiProtocol,
     config.baseUrl,
     config.apiKey,
     config.apiVersion ?? '',
+    byokAwsProfile,
   );
   providerModelAutoSelectRef.current = {
     model: config.model,
@@ -2246,14 +2255,20 @@ function OnboardingView({
     runtime,
     step,
   };
+  // In Bedrock profile mode only the profile counts as a credential: a
+  // leftover key is dropped from the request anyway.
+  const byokHasCredential =
+    apiProtocol === 'bedrock' && resolveBedrockAuthMode(config.awsAuthMode) === 'profile'
+      ? Boolean(byokAwsProfile)
+      : Boolean(config.apiKey.trim());
   const canTestProvider =
-    Boolean(config.apiKey.trim()) &&
+    byokHasCredential &&
     Boolean(config.baseUrl.trim()) &&
     Boolean(config.model.trim());
   const canFetchProviderModels =
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
+    byokHasCredential &&
     Boolean(config.baseUrl.trim()) &&
     isLikelyHttpUrl(config.baseUrl);
   const visibleProviderTestState =
@@ -3306,21 +3321,33 @@ function OnboardingView({
     }
   }
 
-  function testProviderInline(): Promise<ConnectionTestResponse | null> {
+  function testProviderInline(
+    options: { awsSsoLogin?: boolean } = {},
+  ): Promise<ConnectionTestResponse | null> {
     if (!canTestProvider) return Promise.resolve(null);
     const inputKey = providerTestInputKey;
     const protocol = apiProtocol;
     const baseUrl = config.baseUrl;
-    const apiKey = config.apiKey;
     const model = config.model;
     const apiVersion =
       protocol === 'azure' ? config.apiVersion?.trim() || undefined : undefined;
+    const credentials = byokRequestCredentials(
+      { apiProtocol, awsAuthMode: config.awsAuthMode, awsProfile: config.awsProfile },
+      config.apiKey,
+      { awsSsoLogin: options.awsSsoLogin === true },
+    );
     return startOrJoinInlineTest(providerTestRunRef, inputKey, async (signal) => {
       providerAutoTestKeyRef.current = inputKey;
       setProviderTestState({ status: 'running', inputKey });
       try {
         const result = await testApiProvider(
-          { protocol, baseUrl, apiKey, model, apiVersion },
+          {
+            protocol,
+            baseUrl,
+            model,
+            apiVersion,
+            ...credentials,
+          },
           signal,
         );
         setProviderTestState({ status: 'done', inputKey, result });
@@ -3463,7 +3490,8 @@ function OnboardingView({
       const result = await fetchProviderModels({
         protocol: apiProtocol,
         baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
+        apiKey: byokAwsProfile ? '' : config.apiKey,
+        ...(byokAwsProfile ? { awsProfile: byokAwsProfile } : {}),
       });
       if (result.ok && result.models?.length) {
         selectPreferredProviderModelWhenEmpty(result.models, inputKey);
@@ -3937,6 +3965,13 @@ function OnboardingView({
                     })
                   }
                   modelOptions={byokModelOptions}
+                  bedrock={{
+                    authMode: resolveBedrockAuthMode(config.awsAuthMode),
+                    profile: config.awsProfile ?? '',
+                    onAuthModeChange: (awsAuthMode) => updateApiConfig({ awsAuthMode }),
+                    onProfileChange: (awsProfile) => updateApiConfig({ awsProfile }),
+                    onSsoSignIn: () => void testProviderInline({ awsSsoLogin: true }),
+                  }}
                   testState={visibleProviderTestState}
                   canTest={canTestProvider}
                   onTest={() => void testProviderInline()}
@@ -4118,7 +4153,7 @@ function OnboardingCliSetupPanel({
   );
 }
 
-function OnboardingByokSetupPanel({
+export function OnboardingByokSetupPanel({
   apiProtocol,
   apiKey,
   baseUrl,
@@ -4133,6 +4168,7 @@ function OnboardingByokSetupPanel({
   onModelChange,
   onBaseUrlChange,
   modelOptions,
+  bedrock,
   testState,
   canTest,
   onTest,
@@ -4147,6 +4183,14 @@ function OnboardingByokSetupPanel({
   selectedProvider: KnownProvider | null;
   providerOptions: Array<{ value: string; label: string }>;
   modelOptions: Array<{ value: string; label: string }>;
+  /** Amazon Bedrock only: auth mode toggle, AWS profile, explicit SSO sign-in. */
+  bedrock: {
+    authMode: BedrockAuthMode;
+    profile: string;
+    onAuthModeChange: (mode: BedrockAuthMode) => void;
+    onProfileChange: (profile: string) => void;
+    onSsoSignIn: () => void;
+  };
   apiKeyVisible: boolean;
   onToggleApiKey: () => void;
   onProtocolChange: (protocol: ApiProtocol) => void;
@@ -4171,6 +4215,11 @@ function OnboardingByokSetupPanel({
   const running = testState.status === 'running';
   const fetchingModels = modelsState.status === 'running';
   const useDeploymentInput = apiProtocol === 'azure';
+  const isBedrock = apiProtocol === 'bedrock';
+  const bedrockProfileMode = isBedrock && bedrock.authMode === 'profile';
+  // Bedrock presets are regions whose endpoint is implied; the URL field only
+  // matters for a custom endpoint (no preset selected).
+  const showBaseUrlField = !(isBedrock && selectedProvider !== null);
   return (
     <div className="onboarding-view__setup-panel">
       <div className="onboarding-view__setup-head">
@@ -4218,40 +4267,96 @@ function OnboardingByokSetupPanel({
         ))}
       </div>
       <OnboardingDropdown
-        label={t('settings.quickFillProvider')}
+        label={isBedrock ? t('settings.bedrockRegionLabel') : t('settings.quickFillProvider')}
         placeholder={t('settings.customProvider')}
         value={selectedProvider?.baseUrl ?? ''}
         options={providerOptions}
         onChange={onProviderChange}
         allowEmptyValue={apiProtocol === 'azure'}
         searchable
-        searchPlaceholder={t('settings.quickFillProvider')}
+        searchPlaceholder={isBedrock ? t('settings.bedrockRegionLabel') : t('settings.quickFillProvider')}
       />
-      <label className="onboarding-view__inline-field">
-        <span>{t('settings.apiKey')}</span>
-        <span className="onboarding-view__field-row">
-          <input
-            type={apiKeyVisible ? 'text' : 'password'}
-            placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
-            value={apiKey}
-            onChange={(event) => onApiKeyChange(event.target.value)}
-          />
-          <button type="button" onClick={onToggleApiKey}>
-            {apiKeyVisible ? t('settings.hide') : t('settings.show')}
-          </button>
-        </span>
-      </label>
-      <div className="onboarding-view__compact-fields">
+      {isBedrock ? (
+        <div className="onboarding-view__inline-field">
+          <span>{t('settings.bedrockAuthMode')}</span>
+          <div
+            className="onboarding-view__protocol-strip"
+            role="group"
+            aria-label={t('settings.bedrockAuthMode')}
+          >
+            <button
+              type="button"
+              aria-pressed={!bedrockProfileMode}
+              className={!bedrockProfileMode ? 'is-selected' : ''}
+              onClick={() => bedrock.onAuthModeChange('api_key')}
+            >
+              {t('settings.bedrockAuthApiKey')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={bedrockProfileMode}
+              className={bedrockProfileMode ? 'is-selected' : ''}
+              onClick={() => bedrock.onAuthModeChange('profile')}
+            >
+              {t('settings.bedrockAuthProfile')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {bedrockProfileMode ? (
+        <>
+          <label className="onboarding-view__inline-field">
+            <span>{t('settings.bedrockProfile')}</span>
+            <input
+              type="text"
+              placeholder="default"
+              autoComplete="off"
+              spellCheck={false}
+              value={bedrock.profile}
+              onChange={(event) => bedrock.onProfileChange(event.target.value.trim())}
+            />
+          </label>
+          <div className="onboarding-view__field-row">
+            <button
+              type="button"
+              data-testid="onboarding-bedrock-sso-sign-in"
+              onClick={bedrock.onSsoSignIn}
+              disabled={running || !bedrock.profile.trim() || !model.trim()}
+              title={t('settings.bedrockProfileHint')}
+            >
+              {t('settings.bedrockSsoSignIn')}
+            </button>
+          </div>
+        </>
+      ) : (
         <label className="onboarding-view__inline-field">
-          <span>{t('settings.baseUrl')}</span>
-          <input
-            type="url"
-            inputMode="url"
-            value={baseUrl}
-            placeholder={selectedProvider?.baseUrl ?? 'https://api.anthropic.com'}
-            onChange={(event) => onBaseUrlChange(event.target.value)}
-          />
+          <span>{t('settings.apiKey')}</span>
+          <span className="onboarding-view__field-row">
+            <input
+              type={apiKeyVisible ? 'text' : 'password'}
+              placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
+              value={apiKey}
+              onChange={(event) => onApiKeyChange(event.target.value)}
+            />
+            <button type="button" onClick={onToggleApiKey}>
+              {apiKeyVisible ? t('settings.hide') : t('settings.show')}
+            </button>
+          </span>
         </label>
+      )}
+      <div className="onboarding-view__compact-fields">
+        {showBaseUrlField ? (
+          <label className="onboarding-view__inline-field">
+            <span>{t('settings.baseUrl')}</span>
+            <input
+              type="url"
+              inputMode="url"
+              value={baseUrl}
+              placeholder={selectedProvider?.baseUrl ?? 'https://api.anthropic.com'}
+              onChange={(event) => onBaseUrlChange(event.target.value)}
+            />
+          </label>
+        ) : null}
         {modelOptions.length > 0 && !useDeploymentInput ? (
           <OnboardingDropdown
             label={t('settings.model')}

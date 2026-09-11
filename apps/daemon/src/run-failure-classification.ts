@@ -429,6 +429,12 @@ function isByokOpenCodeProviderNotFoundText(
 }
 
 function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
+  // Bedrock Converse rejects `document` blocks (PDF attachments) for models
+  // that do not take documents, e.g. OpenAI models on Bedrock, while Anthropic
+  // and Nova models on the same provider accept them: a switch-model case.
+  if (/\bdoesn'?t support the document field\b|\bdocument field for user messages\b/i.test(text)) {
+    return 'model_document_unsupported';
+  }
   if (/\brequires a newer version of codex\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
     return 'cli_version_incompatible';
   }

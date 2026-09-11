@@ -1,4 +1,5 @@
 import type { AppConfigPrefs } from '@open-design/contracts';
+import { bedrockRuntimeEndpoint, isBedrockRuntimeBaseUrl } from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
@@ -139,6 +140,42 @@ export interface KnownProvider {
 // Preferred model lists are hand-curated from provider docs/current public
 // presets and are reconciled with the live account catalogue before automatic
 // selection. They are not a replacement for provider model discovery.
+
+// `global.` cross-region inference profile ids resolve from any commercial
+// region; the bare Nova ids are mapped to the regional profile by the daemon.
+const BEDROCK_PREFERRED_MODELS = [
+  'global.anthropic.claude-sonnet-5',
+  'global.anthropic.claude-opus-5',
+  'global.anthropic.claude-sonnet-4-6',
+  'global.anthropic.claude-haiku-4-5-20251001-v1:0',
+  'global.amazon.nova-2-lite-v1:0',
+  'amazon.nova-pro-v1:0',
+  'amazon.nova-lite-v1:0',
+  'amazon.nova-micro-v1:0',
+  'global.openai.gpt-5.6-sol',
+];
+
+export const BEDROCK_REGION_PRESETS: KnownProvider[] = (
+  [
+    ['us-east-1', 'US East (N. Virginia)'],
+    ['us-west-2', 'US West (Oregon)'],
+    ['eu-west-1', 'Europe (Ireland)'],
+    ['eu-central-1', 'Europe (Frankfurt)'],
+    ['eu-west-3', 'Europe (Paris)'],
+    ['ap-northeast-1', 'Asia Pacific (Tokyo)'],
+    ['ap-southeast-2', 'Asia Pacific (Sydney)'],
+  ] as const
+).map(([region, regionLabel]) => ({
+  label: `${region} · ${regionLabel}`,
+  protocol: 'bedrock' as const,
+  baseUrl: bedrockRuntimeEndpoint(region),
+  preferredModels: BEDROCK_PREFERRED_MODELS,
+  apiKeyConsoleLink: {
+    host: 'console.aws.amazon.com',
+    url: `https://${region}.console.aws.amazon.com/bedrock/home?region=${region}#/api-keys`,
+  },
+}));
+
 export const KNOWN_PROVIDERS: KnownProvider[] = [
   {
     label: 'Anthropic (Claude)',
@@ -490,6 +527,11 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'deepseek-reasoner',
     ],
   },
+  // Bedrock is regional and the BYOK form has a single URL field, so each
+  // region is a preset whose base URL is the regional runtime endpoint; the
+  // daemon reads the region back from that hostname. Any other endpoint
+  // (VPC interface endpoint, FIPS, another region) goes in as a custom URL.
+  ...BEDROCK_REGION_PRESETS,
 ];
 
 export function defaultKnownProviderModel(
@@ -585,36 +627,6 @@ function isValidOrbitTime(time: string): boolean {
   return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
 }
 
-function isBedrockRuntimeBaseUrl(baseUrl: string): boolean {
-  try {
-    const hostname = new URL(baseUrl).hostname.toLowerCase();
-    return (
-      /^bedrock-runtime(?:-fips)?[.-].*\.amazonaws\.com(?:\.cn)?$/.test(hostname)
-      || /^bedrock-runtime(?:-fips)?[.-].*\.api\.aws$/.test(hostname)
-    );
-  } catch {
-    return false;
-  }
-}
-
-function downgradeUnsupportedChatProtocol(config: AppConfig): boolean {
-  if (
-    config.apiProtocol !== 'bedrock'
-    && !isBedrockRuntimeBaseUrl(config.baseUrl)
-  ) {
-    return false;
-  }
-
-  config.apiProtocol = DEFAULT_CONFIG.apiProtocol;
-  config.apiKey = DEFAULT_CONFIG.apiKey;
-  config.apiVersion = DEFAULT_CONFIG.apiVersion;
-  config.baseUrl = DEFAULT_CONFIG.baseUrl;
-  config.model = DEFAULT_CONFIG.model;
-  config.apiProviderBaseUrl = DEFAULT_CONFIG.apiProviderBaseUrl;
-  delete config.apiProtocolConfigs?.bedrock;
-  return true;
-}
-
 function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   try {
     const normalized = (baseUrl || '').toLowerCase();
@@ -630,6 +642,9 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
     // APP-Code attribution header even though the wire shape is
     // OpenAI-compatible.
     if (normalized.includes('aihubmix.com')) return 'aihubmix';
+    // A saved Bedrock runtime endpoint belongs to the bedrock protocol (it
+    // used to be downgraded to Anthropic while Bedrock was unsupported).
+    if (isBedrockRuntimeBaseUrl(normalized)) return 'bedrock';
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
   } catch {
     // Preserve the rest of the user's settings even if an old saved base URL is
@@ -773,9 +788,6 @@ export function loadConfig(): AppConfig {
       ) || migratedConfig;
     }
 
-    const downgradedUnsupportedChatProtocol =
-      downgradeUnsupportedChatProtocol(merged);
-
     // Fixed-origin gateways (e.g. AIHubMix) hide the Base URL field, so a config
     // persisted before the origin was auto-resolved can carry an empty baseUrl.
     // Backfill it here so every consumer (Settings form, top-bar switcher, chat)
@@ -785,8 +797,8 @@ export function loadConfig(): AppConfig {
       merged.baseUrl = resolveFixedOriginBaseUrl(merged.apiProtocol, merged.baseUrl);
     }
 
-    if (migratedConfig || downgradedUnsupportedChatProtocol) {
-      // Best-effort re-persist of the migrated / downgraded config. A localStorage
+    if (migratedConfig) {
+      // Best-effort re-persist of the migrated config. A localStorage
       // write failure here (quota exceeded, private-mode storage disabled) must not
       // fall through to the outer catch and discard the valid config we just
       // parsed — that would silently reset the user to defaults for the session.

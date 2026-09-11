@@ -391,7 +391,7 @@ import {
 import { effectiveAgentModelChoice, effectiveAgentModelId } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
-import { byokProviderRequiresApiKey } from '../utils/byokProvider';
+import { byokProviderRequiresApiKey, resolveBedrockAuthMode } from '../utils/byokProvider';
 import {
   useByokImageModelOptions,
   useByokVideoModelOptions,
@@ -927,8 +927,6 @@ const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
 const BYOK_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a provider, API key, and model. Complete BYOK settings before starting a run.';
-const BEDROCK_BYOK_UNSUPPORTED_MESSAGE =
-  'AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.';
 const CHAT_PANEL_KEYBOARD_STEP = 16;
 const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;
 // The conversations list 404s while a project is not yet in the local daemon DB.
@@ -1970,9 +1968,19 @@ function byokOpenCodeProviderFromConfig(
   if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
   const selectedProvider = selectedKnownProviderForConfig(config);
   const model = config.model.trim();
+  const bedrockProfileMode =
+    config.apiProtocol === 'bedrock'
+    && resolveBedrockAuthMode(config.awsAuthMode) === 'profile';
+  const awsProfile = bedrockProfileMode ? (config.awsProfile ?? '').trim() : '';
+  const requiresApiKey = byokProviderRequiresApiKey(
+    config.apiProtocol,
+    selectedProvider,
+    config.baseUrl,
+    { awsAuthMode: config.awsAuthMode },
+  );
   if (
-    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl)
-      && !config.apiKey.trim())
+    (requiresApiKey && !config.apiKey.trim())
+    || (bedrockProfileMode && !awsProfile)
     || !model
     || model.toLowerCase() === 'default'
     || (config.apiProtocol === 'azure' && !config.baseUrl.trim())
@@ -1981,17 +1989,16 @@ function byokOpenCodeProviderFromConfig(
   }
   return {
     protocol: config.apiProtocol,
-    apiKey: config.apiKey.trim(),
+    // In AWS-profile mode the key field is ignored on purpose: the daemon
+    // must not export a stale bearer token that would win over the profile.
+    apiKey: bedrockProfileMode ? '' : config.apiKey.trim(),
     baseUrl: config.baseUrl.trim(),
     model,
     ...(config.apiProtocol === 'azure' && config.apiVersion?.trim()
       ? { apiVersion: config.apiVersion.trim() }
       : {}),
-    requiresApiKey: byokProviderRequiresApiKey(
-      config.apiProtocol,
-      selectedProvider,
-      config.baseUrl,
-    ),
+    ...(awsProfile ? { awsProfile } : {}),
+    requiresApiKey,
   };
 }
 
@@ -2018,7 +2025,8 @@ function isOpenCodeByokChatProtocol(
     protocol === 'google' ||
     protocol === 'ollama' ||
     protocol === 'senseaudio' ||
-    protocol === 'aihubmix'
+    protocol === 'aihubmix' ||
+    protocol === 'bedrock'
   );
 }
 
@@ -8121,7 +8129,7 @@ export function ProjectView({
       );
       const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
       const requiresByokPreflight =
-        (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
+        config.mode === 'api' ||
         (config.mode === 'daemon' && config.agentId === 'byok-opencode');
       if (requiresByokPreflight && !byokOpenCodeProvider) {
         const blockReason = byokPreflightBlockReason(config) ?? 'config_invalid';
@@ -9952,10 +9960,6 @@ export function ProjectView({
         });
         return true;
       } else {
-        if (config.apiProtocol === 'bedrock') {
-          handlers.onError(new Error(BEDROCK_BYOK_UNSUPPORTED_MESSAGE));
-          return true;
-        }
         if (!agentsById.get('byok-opencode')?.available) {
           handlers.onError(new Error(BYOK_OPENCODE_UNAVAILABLE_MESSAGE));
           return true;

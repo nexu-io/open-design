@@ -312,6 +312,10 @@ export type TrackingRunFailureDetail =
   | 'amr_tier_upgrade_required'
   | 'model_not_found'
   | 'model_not_supported'
+  // The selected model rejects `document` content blocks (PDF attachments,
+  // e.g. OpenAI models served through Amazon Bedrock); another model on the
+  // same provider accepts them.
+  | 'model_document_unsupported'
   | 'model_disabled'
   | 'local_model_not_loaded'
   | 'cli_version_incompatible'

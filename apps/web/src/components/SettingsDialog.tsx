@@ -5,6 +5,7 @@ import type {
   AmrWalletSnapshot,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { bedrockRegionFromBaseUrl, resolveBedrockRegion } from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -142,7 +143,7 @@ import {
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
-import { byokProviderRequiresApiKey } from '../utils/byokProvider';
+import { bedrockActiveProfile, byokProviderRequiresApiKey, byokRequestCredentials, resolveBedrockAuthMode } from '../utils/byokProvider';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -692,12 +693,14 @@ export function shouldShowCustomModelInput(
 }
 
 export function canRunProviderConnectionTest(
-  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model'>,
-  options: { requiresApiKey?: boolean } = {},
+  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model'> &
+    Partial<Pick<AppConfig, 'awsAuthMode' | 'awsProfile'>>,
+  options: { requiresApiKey?: boolean; bedrockProfileMode?: boolean } = {},
 ): boolean {
   const requiresApiKey = options.requiresApiKey ?? true;
   return (
     (!requiresApiKey || Boolean(config.apiKey.trim())) &&
+    (!options.bedrockProfileMode || Boolean(config.awsProfile?.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     Boolean(config.model.trim())
   );
@@ -749,7 +752,7 @@ function missingByokModelFetchFields(
   const missing: ByokRequiredField[] = [];
   // AIHubMix publishes its catalogue on a public endpoint, so its model list
   // loads without a key (the user shouldn't need to paste a key just to browse
-  // models). Bedrock uses a static model seed until AWS auth lands in BYOK.
+  // models). Bedrock serves a curated static list (discovery needs SigV4).
   // Every other protocol fetches /v1/models behind the key.
   if (protocol !== 'aihubmix' && protocol !== 'bedrock' && !config.apiKey.trim()) missing.push('api_key');
   if (!config.baseUrl.trim()) missing.push('base_url');
@@ -758,7 +761,8 @@ function missingByokModelFetchFields(
 
 function providerConnectionTestKey(
   protocol: ApiProtocol,
-  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion'>,
+  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion'> &
+    Partial<Pick<AppConfig, 'awsAuthMode' | 'awsProfile'>>,
 ): string {
   return [
     protocol,
@@ -766,6 +770,8 @@ function providerConnectionTestKey(
     config.apiKey.trim(),
     config.model.trim(),
     protocol === 'azure' ? config.apiVersion?.trim() ?? '' : '',
+    protocol === 'bedrock' ? resolveBedrockAuthMode(config.awsAuthMode) : '',
+    protocol === 'bedrock' ? config.awsProfile?.trim() ?? '' : '',
   ].join('\n');
 }
 
@@ -1020,6 +1026,8 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     model: config.model,
     apiVersion: config.apiVersion ?? '',
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+    awsAuthMode: config.awsAuthMode,
+    awsProfile: config.awsProfile ?? '',
     byokImageModel: config.byokImageModel ?? '',
     byokVideoModel: config.byokVideoModel ?? '',
     byokSpeechModel: config.byokSpeechModel ?? '',
@@ -1158,6 +1166,10 @@ function applyApiProtocolConfig(
     model: apiConfig.model,
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
+    // Bedrock's auth mode / AWS profile follow the same guarding as apiVersion:
+    // they only mean something on the Bedrock tab.
+    awsAuthMode: protocol === 'bedrock' ? apiConfig.awsAuthMode : undefined,
+    awsProfile: protocol === 'bedrock' ? (apiConfig.awsProfile ?? '') : '',
     // byokImageModel applies to the protocols that inject the daemon-side
     // generate_image tool (SenseAudio, AIHubMix) — flipping to another BYOK
     // tab shouldn't carry an image-model choice into, say, the OpenAI form.
@@ -1869,6 +1881,7 @@ export function SettingsDialog({
         initial.baseUrl,
         initial.apiKey,
         initial.apiVersion ?? '',
+        bedrockActiveProfile({ apiProtocol: protocol, awsAuthMode: initial.awsAuthMode, awsProfile: initial.awsProfile }),
       );
     });
   const agentTestAbortRef = useRef<AbortController | null>(null);
@@ -2587,7 +2600,7 @@ export function SettingsDialog({
   };
 
   const handleTestProvider = async (
-    options: { silentPreconditions?: boolean } = {},
+    options: { silentPreconditions?: boolean; awsSsoLogin?: boolean } = {},
   ) => {
     if (providerTestState.status === 'running') {
       return;
@@ -2648,12 +2661,16 @@ export function SettingsDialog({
         {
           protocol: apiProtocol,
           baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
           model: cfg.model,
           apiVersion:
             apiProtocol === 'azure'
               ? cfg.apiVersion?.trim() || undefined
               : undefined,
+          ...byokRequestCredentials(
+            { apiProtocol, awsAuthMode: cfg.awsAuthMode, awsProfile: cfg.awsProfile },
+            cleanByokApiKey(cfg.apiKey),
+            { awsSsoLogin: options.awsSsoLogin === true },
+          ),
         },
         controller.signal,
       );
@@ -2729,6 +2746,17 @@ export function SettingsDialog({
       return;
     }
     if (blockingByokDraftIssues(byokDraftValidation).length > 0) {
+      return;
+    }
+    // Bedrock profile mode with no profile yet: the request cannot carry a
+    // credential, so the auto-test would only surface the daemon's "either
+    // apiKey or awsProfile" error while the user is still typing. Same silence
+    // as an empty key.
+    if (
+      apiProtocol === 'bedrock'
+      && resolveBedrockAuthMode(cfg.awsAuthMode) === 'profile'
+      && !(cfg.awsProfile ?? '').trim()
+    ) {
       return;
     }
     const key = providerConnectionTestKey(apiProtocol, cfg);
@@ -2841,6 +2869,7 @@ export function SettingsDialog({
       cfg.baseUrl,
       cfg.apiKey,
       cfg.apiVersion ?? '',
+      bedrockActiveProfile({ apiProtocol, awsAuthMode: cfg.awsAuthMode, awsProfile: cfg.awsProfile }),
     );
     const cachedModels = activeProviderModelsCache[cacheKey];
     if (cachedModels) {
@@ -2875,11 +2904,17 @@ export function SettingsDialog({
       }
     };
     try {
+      const fetchProfile = bedrockActiveProfile({
+        apiProtocol,
+        awsAuthMode: cfg.awsAuthMode,
+        awsProfile: cfg.awsProfile,
+      });
       const result = await fetchProviderModels(
         {
           protocol: apiProtocol,
           baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
+          apiKey: fetchProfile ? '' : cleanByokApiKey(cfg.apiKey),
+          ...(fetchProfile ? { awsProfile: fetchProfile } : {}),
         },
         controller.signal,
       );
@@ -3477,17 +3512,26 @@ export function SettingsDialog({
   const showProviderPreset =
     protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
   // Fixed-origin gateways resolve their Base URL automatically; nothing for the
-  // user to edit, so hide the field entirely.
-  const showBaseUrlField = !isFixedOriginGateway(apiProtocol);
+  // user to edit, so hide the field entirely. Bedrock's presets are regions
+  // whose endpoint is implied by the region, so the URL is hidden as long as a
+  // preset is selected and only appears for a custom endpoint (VPC endpoint,
+  // FIPS, another region).
+  const showBaseUrlField =
+    !isFixedOriginGateway(apiProtocol)
+    && !(apiProtocol === 'bedrock' && selectedProvider !== undefined);
+  const bedrockProfileMode =
+    apiProtocol === 'bedrock' && resolveBedrockAuthMode(cfg.awsAuthMode) === 'profile';
   const byokRequiresApiKey = byokProviderRequiresApiKey(
     apiProtocol,
     selectedProvider,
     cfg.baseUrl,
+    { awsAuthMode: cfg.awsAuthMode },
   );
   const byokProviderConfigured = (provider: ByokProviderPreset): boolean => {
     if (provider.custom) {
       return canRunProviderConnectionTest(currentApiProtocolConfig(cfg), {
         requiresApiKey: byokRequiresApiKey,
+        bedrockProfileMode,
       }) && isValidApiBaseUrl(cfg.baseUrl);
     }
     const providerDraft = cfg.byokProviderConfigDrafts?.[
@@ -3513,7 +3557,11 @@ export function SettingsDialog({
         provider.protocol,
         knownProvider,
         entry.baseUrl,
+        { awsAuthMode: entry.awsAuthMode },
       ),
+      bedrockProfileMode:
+        provider.protocol === 'bedrock'
+        && resolveBedrockAuthMode(entry.awsAuthMode) === 'profile',
     }) && isValidApiBaseUrl(entry.baseUrl);
   };
   const byokFirstPartyBaseUrl = useMemo(
@@ -3593,8 +3641,9 @@ export function SettingsDialog({
       cfg.baseUrl,
       cfg.apiKey,
       cfg.apiVersion ?? '',
+      bedrockActiveProfile({ apiProtocol, awsAuthMode: cfg.awsAuthMode, awsProfile: cfg.awsProfile }),
     ),
-    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
+    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion, cfg.awsAuthMode, cfg.awsProfile],
   );
   const providerModelDiscoveryUnavailable =
     apiProtocol !== 'azure' &&
@@ -5501,6 +5550,7 @@ export function SettingsDialog({
                     !byokFirstPartyBaseUrl?.hostTypo &&
                     canRunProviderConnectionTest(cfg, {
                       requiresApiKey: byokRequiresApiKey,
+                      bedrockProfileMode,
                     })
                   }
                   labels={{
@@ -5545,7 +5595,9 @@ export function SettingsDialog({
               ) : null}
               {showProviderPreset ? (
                 <ByokProviderPicker
-                  label={t('settings.providerPreset')}
+                  label={apiProtocol === 'bedrock'
+                    ? t('settings.bedrockRegionLabel')
+                    : t('settings.providerPreset')}
                   customProviderLabel={t('settings.customProvider')}
                   providers={protocolProviders}
                   selectedProviderIndex={selectedProviderIndex}
@@ -5567,6 +5619,75 @@ export function SettingsDialog({
                   }}
                 />
               ) : null}
+              {apiProtocol === 'bedrock' ? (
+                <div className="field">
+                  <span className="field-label">{t('settings.bedrockAuthMode')}</span>
+                  <div
+                    className="seg-control"
+                    role="group"
+                    aria-label={t('settings.bedrockAuthMode')}
+                    style={{ '--seg-cols': 2 } as React.CSSProperties}
+                  >
+                    <button
+                      type="button"
+                      className={'seg-btn' + (!bedrockProfileMode ? ' active' : '')}
+                      aria-pressed={!bedrockProfileMode}
+                      onClick={() => {
+                        if (bedrockProfileMode) updateApiConfig({ awsAuthMode: 'api_key' });
+                      }}
+                    >
+                      <span className="seg-title">{t('settings.bedrockAuthApiKey')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={'seg-btn' + (bedrockProfileMode ? ' active' : '')}
+                      aria-pressed={bedrockProfileMode}
+                      onClick={() => {
+                        if (!bedrockProfileMode) updateApiConfig({ awsAuthMode: 'profile' });
+                      }}
+                    >
+                      <span className="seg-title">{t('settings.bedrockAuthProfile')}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {bedrockProfileMode ? (
+                <>
+                  <label className="field">
+                    <span className="field-label">
+                      {t('settings.bedrockProfile')}
+                      <span className="field-required" aria-label={t('settings.required')}>
+                        *
+                      </span>
+                    </span>
+                    <input
+                      type="text"
+                      value={cfg.awsProfile ?? ''}
+                      placeholder="default"
+                      autoComplete="off"
+                      spellCheck={false}
+                      onBlur={commitProviderModelsInputs}
+                      onChange={(e) => updateApiConfig({ awsProfile: e.target.value.trim() })}
+                    />
+                    <p className="hint">{t('settings.bedrockProfileHint')}</p>
+                  </label>
+                  <div className="section-head-actions">
+                    <Button
+                      data-testid="settings-bedrock-sso-sign-in"
+                      disabled={
+                        providerTestState.status === 'running'
+                        || !(cfg.awsProfile ?? '').trim()
+                        || !cfg.model.trim()
+                      }
+                      onClick={() => {
+                        void handleTestProvider({ awsSsoLogin: true });
+                      }}
+                    >
+                      {t('settings.bedrockSsoSignIn')}
+                    </Button>
+                  </div>
+                </>
+              ) : (
               <ByokKeyField
                 apiKey={cfg.apiKey}
                 apiKeyConsoleLink={apiKeyConsoleLink}
@@ -5612,6 +5733,7 @@ export function SettingsDialog({
                 }}
                 onToggleShowApiKey={() => setShowApiKey((v) => !v)}
               />
+              )}
               {showBaseUrlField ? (
                 <ByokProviderBaseUrl
                   apiProtocol={apiProtocol}
@@ -5653,6 +5775,13 @@ export function SettingsDialog({
                     }
                   }}
                 />
+              ) : null}
+              {apiProtocol === 'bedrock' && showBaseUrlField && cfg.baseUrl.trim() ? (
+                <p className="hint">
+                  {bedrockRegionFromBaseUrl(cfg.baseUrl)
+                    ? t('settings.bedrockRegionHint', { region: resolveBedrockRegion(cfg.baseUrl) })
+                    : t('settings.bedrockRegionUnknownHint', { region: resolveBedrockRegion(cfg.baseUrl) })}
+                </p>
               ) : null}
               <label className="field">
                 <span className="field-label">{t('settings.maxTokens')}</span>

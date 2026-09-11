@@ -295,6 +295,7 @@ export type RunFailureMessageKey =
   | 'chat.runError.promptTooLargeMessage'
   | 'chat.runError.modelUnavailableMessage'
   | 'chat.runError.modelCapabilityUnsupportedMessage'
+  | 'chat.runError.modelDocumentUnsupportedMessage'
   | 'chat.runError.artifactMissingMessage'
   | 'chat.runError.rateLimitedMessage'
   | 'chat.runError.modelWindowLimitMessage'
@@ -472,6 +473,7 @@ export type RunFailureTitleKey =
   // 「模型不存在」与「模型能力不支持」分列两行,S07 的「模型不可用」又是第三行;
   // 三句话不能共用一个键,否则谁改都盖到别人头上。
   | 'chat.runError.title.modelCapabilityUnsupported'
+  | 'chat.runError.title.modelDocumentUnsupported'
   | 'chat.runError.title.upstreamUnavailable'
   | 'chat.runError.title.toolLoop'
   | 'chat.runError.title.outputInvalid'
@@ -1530,6 +1532,13 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   model_not_supported: switchModelWithGuidance(
     'chat.runError.title.modelCapabilityUnsupported',
     'chat.runError.modelCapabilityUnsupportedMessage',
+  ),
+  // The provider serves the model but it rejects document blocks (PDF
+  // attachments): Bedrock's OpenAI models do, its Anthropic and Nova models do
+  // not, so switching models on the same provider is the direct fix.
+  model_document_unsupported: switchModelWithGuidance(
+    'chat.runError.title.modelDocumentUnsupported',
+    'chat.runError.modelDocumentUnsupportedMessage',
   ),
   model_disabled: switchModelWithGuidance(
     'chat.runError.title.modelCapabilityUnsupported',

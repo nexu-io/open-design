@@ -4,6 +4,7 @@ import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
   BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_ID,
+  bedrockModelFamily,
   buildOpenCodeByokProviderConfig,
   opencodeByokModelId,
 } from '../../src/runtimes/byok-opencode.js';
@@ -426,5 +427,279 @@ describe('byok-opencode runtime config', () => {
     const provider = (out?.config.provider as Record<string, { options?: Record<string, unknown> }> | undefined)
       ?.[BYOK_OPENCODE_PROVIDER_ID];
     expect(provider?.options).not.toHaveProperty('apiKey');
+  });
+});
+
+describe('byok-opencode Bedrock provider config', () => {
+  it('runs Bedrock under OpenCode\'s own amazon-bedrock provider id in API-key mode', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: 'ABSKbedrock-key',
+        baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
+      },
+      'amazon.nova-2-lite-v1:0',
+    );
+    expect(config).not.toBeNull();
+    expect(config?.providerId).toBe('amazon-bedrock');
+    expect(config?.modelId).toBe('amazon-bedrock/amazon.nova-2-lite-v1:0');
+    // The bearer token travels through the environment OpenCode's loader reads,
+    // never through the JSON config; the region comes from the endpoint host.
+    expect(config?.env).toEqual({
+      AWS_REGION: 'eu-west-1',
+      AWS_BEARER_TOKEN_BEDROCK: 'ABSKbedrock-key',
+    });
+    expect(JSON.stringify(config?.config)).not.toContain('ABSKbedrock-key');
+    expect(config?.config).toMatchObject({
+      provider: {
+        'amazon-bedrock': {
+          npm: '@ai-sdk/amazon-bedrock',
+          options: { region: 'eu-west-1' },
+          models: { 'amazon.nova-2-lite-v1:0': expect.any(Object) },
+        },
+      },
+    });
+    const options = (config?.config as { provider: Record<string, { options: Record<string, unknown> }> })
+      .provider['amazon-bedrock']?.options ?? {};
+    expect(options.endpoint).toBeUndefined();
+    expect(options.profile).toBeUndefined();
+  });
+
+  it('routes Anthropic models onto the Bedrock Anthropic Messages endpoint in API-key mode', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: 'ABSKbedrock-key',
+        baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
+      },
+      'global.anthropic.claude-sonnet-5',
+    );
+    expect(config?.providerId).toBe('open-design-bedrock-anthropic');
+    expect(config?.modelId).toBe('open-design-bedrock-anthropic/global.anthropic.claude-sonnet-5');
+    expect(config?.env).toEqual({
+      AWS_REGION: 'eu-west-1',
+      OPEN_DESIGN_BYOK_API_KEY: 'ABSKbedrock-key',
+    });
+    expect(JSON.stringify(config?.config)).not.toContain('ABSKbedrock-key');
+    expect(config?.config).toMatchObject({
+      provider: {
+        'open-design-bedrock-anthropic': {
+          npm: '@ai-sdk/anthropic',
+          options: {
+            baseURL: 'https://bedrock-runtime.eu-west-1.amazonaws.com/anthropic/v1',
+            apiKey: '{env:OPEN_DESIGN_BYOK_API_KEY}',
+          },
+          models: { 'global.anthropic.claude-sonnet-5': expect.any(Object) },
+        },
+      },
+    });
+  });
+
+  it('routes OpenAI models onto the Bedrock OpenAI Responses endpoint in API-key mode', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: 'ABSKbedrock-key',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+      },
+      'us.openai.gpt-6-astra',
+    );
+    expect(config?.providerId).toBe('open-design-bedrock-openai');
+    expect(config?.modelId).toBe('open-design-bedrock-openai/us.openai.gpt-6-astra');
+    expect(config?.config).toMatchObject({
+      provider: {
+        'open-design-bedrock-openai': {
+          npm: '@ai-sdk/openai',
+          options: {
+            baseURL: 'https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1',
+            apiKey: '{env:OPEN_DESIGN_BYOK_API_KEY}',
+          },
+        },
+      },
+    });
+  });
+
+  it('keeps a custom endpoint as the base of the family routes', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: 'ABSKbedrock-key',
+        baseUrl: 'https://bedrock-runtime.eu-west-1.vpce-0abc123.amazonaws.com/',
+      },
+      'eu.anthropic.claude-sonnet-5',
+    );
+    expect(config?.config).toMatchObject({
+      provider: {
+        'open-design-bedrock-anthropic': {
+          options: { baseURL: 'https://bedrock-runtime.eu-west-1.vpce-0abc123.amazonaws.com/anthropic/v1' },
+        },
+      },
+    });
+  });
+
+  it('runs the AWS-profile mode through the same config as the API-key mode once a bearer is minted', () => {
+    const base = { protocol: 'bedrock' as const, baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' };
+    for (const model of ['global.anthropic.claude-sonnet-5', 'us.openai.gpt-6-astra', 'amazon.nova-2-lite-v1:0']) {
+      const viaKey = buildOpenCodeByokProviderConfig({ ...base, apiKey: 'bedrock-api-key-minted' }, model);
+      const viaProfile = buildOpenCodeByokProviderConfig(
+        { ...base, apiKey: '', awsProfile: 'sandbox' },
+        model,
+        { bedrockProfileBearerToken: 'bedrock-api-key-minted' },
+      );
+      expect(viaProfile, model).toEqual(viaKey);
+      expect(JSON.stringify(viaProfile?.config), model).not.toContain('sandbox');
+    }
+  });
+
+  it('keeps Converse with the profile for callers that do not mint a bearer', () => {
+    for (const model of ['global.anthropic.claude-sonnet-5', 'us.openai.gpt-6-astra']) {
+      const config = buildOpenCodeByokProviderConfig(
+        {
+          protocol: 'bedrock',
+          apiKey: '',
+          awsProfile: 'sandbox',
+          baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        },
+        model,
+      );
+      expect(config?.providerId, model).toBe('amazon-bedrock');
+      expect(config?.modelId, model).toBe(`amazon-bedrock/${model}`);
+      expect(config?.env, model).toEqual({ AWS_REGION: 'us-east-1' });
+    }
+  });
+
+  it('recognises the vendor of plain, cross-region and ARN model ids', () => {
+    expect(bedrockModelFamily('anthropic.claude-sonnet-5')).toBe('anthropic');
+    expect(bedrockModelFamily('global.anthropic.claude-sonnet-5')).toBe('anthropic');
+    expect(bedrockModelFamily('us-gov.anthropic.claude-sonnet-5')).toBe('anthropic');
+    expect(bedrockModelFamily('openai.gpt-oss-120b')).toBe('openai');
+    expect(bedrockModelFamily('us.openai.gpt-6-astra')).toBe('openai');
+    expect(
+      bedrockModelFamily('arn:aws:bedrock:eu-west-1:123456789012:inference-profile/eu.anthropic.claude-sonnet-5'),
+    ).toBe('anthropic');
+    expect(bedrockModelFamily('amazon.nova-2-lite-v1:0')).toBe('other');
+    expect(bedrockModelFamily('meta.llama4-maverick-17b-instruct-v1:0')).toBe('other');
+  });
+
+  it('does not double-prefix an already qualified family provider model id', () => {
+    expect(opencodeByokModelId('open-design-bedrock-openai/us.openai.gpt-6-astra')).toBe(
+      'open-design-bedrock-openai/us.openai.gpt-6-astra',
+    );
+  });
+
+  it('declares text, image and pdf input for the Anthropic and OpenAI families', () => {
+    const base = { protocol: 'bedrock' as const, apiKey: 'ABSKbedrock-key', baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' };
+    const modalitiesOf = (model: string, providerId: string) =>
+      (buildOpenCodeByokProviderConfig(base, model)?.config as {
+        provider: Record<string, { models: Record<string, { modalities?: unknown }> }>;
+      }).provider[providerId]?.models[model]?.modalities;
+    const expected = { input: ['text', 'image', 'pdf'], output: ['text'] };
+    expect(modalitiesOf('global.anthropic.claude-sonnet-5', 'open-design-bedrock-anthropic')).toEqual(expected);
+    expect(modalitiesOf('us.openai.gpt-6-astra', 'open-design-bedrock-openai')).toEqual(expected);
+    expect(modalitiesOf('amazon.nova-2-lite-v1:0', 'amazon-bedrock')).toBeUndefined();
+  });
+
+  it('loads the file adapter plugin for the OpenAI family only, and only when the caller provides it', () => {
+    const base = { protocol: 'bedrock' as const, apiKey: 'ABSKbedrock-key', baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' };
+    const url = 'file:///tmp/od/opencode-plugins/bedrock-openai-file-adapter.js';
+    const pluginOf = (model: string, options?: { bedrockOpenAiFileAdapterPluginUrl?: string }) =>
+      (buildOpenCodeByokProviderConfig(base, model, options)?.config as { plugin?: string[] }).plugin;
+    expect(pluginOf('us.openai.gpt-6-astra', { bedrockOpenAiFileAdapterPluginUrl: url })).toEqual([url]);
+    expect(pluginOf('us.openai.gpt-6-astra')).toBeUndefined();
+    expect(pluginOf('global.anthropic.claude-sonnet-5', { bedrockOpenAiFileAdapterPluginUrl: url })).toBeUndefined();
+    expect(pluginOf('amazon.nova-2-lite-v1:0', { bedrockOpenAiFileAdapterPluginUrl: url })).toBeUndefined();
+  });
+
+  it('sizes the model window by family so Claude prompts do not trip OpenCode compaction', () => {
+    const limitOf = (config: ReturnType<typeof buildOpenCodeByokProviderConfig>, providerId: string, model: string) =>
+      (config?.config as { provider: Record<string, { models: Record<string, { limit: unknown }> }> })
+        .provider[providerId]?.models[model]?.limit;
+    const base = { protocol: 'bedrock' as const, baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' };
+    expect(
+      limitOf(
+        buildOpenCodeByokProviderConfig({ ...base, apiKey: 'ABSKbedrock-key' }, 'global.anthropic.claude-sonnet-5'),
+        'open-design-bedrock-anthropic',
+        'global.anthropic.claude-sonnet-5',
+      ),
+    ).toEqual({ context: 200_000, output: 32_000 });
+    expect(
+      limitOf(
+        buildOpenCodeByokProviderConfig({ ...base, apiKey: '', awsProfile: 'sandbox' }, 'global.anthropic.claude-sonnet-5'),
+        'amazon-bedrock',
+        'global.anthropic.claude-sonnet-5',
+      ),
+    ).toEqual({ context: 200_000, output: 32_000 });
+    expect(
+      limitOf(
+        buildOpenCodeByokProviderConfig({ ...base, apiKey: 'ABSKbedrock-key' }, 'us.openai.gpt-6-astra'),
+        'open-design-bedrock-openai',
+        'us.openai.gpt-6-astra',
+      ),
+    ).toEqual({ context: 400_000, output: 32_000 });
+    expect(
+      limitOf(
+        buildOpenCodeByokProviderConfig({ ...base, apiKey: 'ABSKbedrock-key' }, 'amazon.nova-2-lite-v1:0'),
+        'amazon-bedrock',
+        'amazon.nova-2-lite-v1:0',
+      ),
+    ).toEqual({ context: 128_000, output: 16_384 });
+  });
+
+  it('passes the AWS profile to OpenCode and exports no bearer token in profile mode', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: '',
+        awsProfile: 'sandbox',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        requiresApiKey: false,
+      },
+      'amazon.nova-lite-v1:0',
+    );
+    expect(config?.env).toEqual({ AWS_REGION: 'us-east-1' });
+    expect(config?.config).toMatchObject({
+      provider: {
+        'amazon-bedrock': { options: { region: 'us-east-1', profile: 'sandbox' } },
+      },
+    });
+  });
+
+  it('forwards a custom Bedrock endpoint (VPC endpoint) and keeps its region', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: 'ABSK',
+        baseUrl: 'https://bedrock-runtime.eu-west-1.vpce-0abc123.amazonaws.com/',
+      },
+      'amazon.nova-lite-v1:0',
+    );
+    expect(config?.config).toMatchObject({
+      provider: {
+        'amazon-bedrock': {
+          options: {
+            region: 'eu-west-1',
+            endpoint: 'https://bedrock-runtime.eu-west-1.vpce-0abc123.amazonaws.com',
+          },
+        },
+      },
+    });
+  });
+
+  it('rejects a Bedrock config with neither a key nor a profile', () => {
+    expect(
+      buildOpenCodeByokProviderConfig(
+        { protocol: 'bedrock', apiKey: '', baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' },
+        'amazon.nova-lite-v1:0',
+      ),
+    ).toBeNull();
+  });
+
+  it('does not double-prefix an already qualified amazon-bedrock model id', () => {
+    expect(opencodeByokModelId('amazon-bedrock/amazon.nova-lite-v1:0')).toBe(
+      'amazon-bedrock/amazon.nova-lite-v1:0',
+    );
+    expect(opencodeByokModelId('amazon.nova-lite-v1:0', 'bedrock')).toBe(
+      'amazon-bedrock/amazon.nova-lite-v1:0',
+    );
   });
 });
