@@ -1,0 +1,190 @@
+/* ---- Plan 卡:四态步骤图标 + 进度动效 ---- */
+/* 形状与动效取自 beui.dev 的 agents/todo-list(motion/react 版),颜色一律换成
+   本套 token —— 上游走的是 shadcn 那套 muted-foreground / emerald,整段抄过来
+   会在这份稿子里凭空多出一组灰阶和第二个绿。
+   ------------------------------------------------------------
+   原来这一列是三种不同的东西:绿勾底片(.mk.is-ok)、CSS 转圈(.mk.is-run)、
+   等宽序号(.k)。三个形状、三种尺寸,只有「做完了」那一档是图形。
+   换成同一枚 24 视窗的 SVG 之后,四种状态是同一个圆的四种画法:
+     未开始  虚线圈
+     进行中  淡圈 + 一段实弧在转
+     做完了  实圈 + 描出来的勾
+     取消了  实圈 + 叉
+   这一列于是自己就是进度条:上面一串勾、中间一个在转、下面一串虚线。
+   ------------------------------------------------------------
+   为什么勾还是绿:上游整枚图标是单色的,绿只留给头部那一枚。但在这套系统里
+   绿有固定含义(「这件事过了」),工具行、已完成任务、已确认全在用同一档绿;
+   Plan 里的勾要是跟着改成灰,它就从那一列绿勾里掉出去了。
+   形状照搬,颜色留在本地 —— 这是这次移植唯一没跟上游走的地方。 */
+
+.steps li .tk {
+  flex: none; width: 15px; height: 15px; margin-top: 1.5px;
+  /* 弧线是 stroke-width 2 的圆,压在 r=9 上会溢出 24 的视窗一点点 */
+  overflow: visible;
+  color: var(--text-soft);
+}
+.steps li.is-now  .tk { color: var(--text-strong); }
+.steps li.is-done .tk { color: var(--brand-weak); }
+.steps li.is-skip .tk { color: var(--red); }
+
+.steps li .tk circle,
+.steps li .tk path { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 底圈。未开始画虚线 —— 虚线是「这一格还空着」最直接的说法,
+   而实线圈会和「做完了」那一档混,得靠里面有没有勾才分得出。 */
+.steps li .tk .ring { stroke-width: 1.5; stroke-dasharray: 2 3; }
+.steps li.is-now .tk .ring { stroke-dasharray: none; opacity: 0.2; }
+.steps li.is-done .tk .ring,
+.steps li.is-skip .tk .ring { stroke-dasharray: none; }
+/* 做完那一档给圈里垫底。
+   ------------------------------------------------------------
+   原来是同色 6%(上游的值),扫视时那几行确实成了一块实心的东西,但跟
+   上面卡头那枚「已完成」不是一个颜色 —— 那枚是 .mk.is-ok:实心
+   --brand-weak 底 + --brand-text 勾。同一件事(「这件事过了」)在同一张卡上
+   出现两种画法,是说不通的。
+   所以这里直接吃同一对 token,底色和上面那枚对齐;深浅两套主题也因此
+   自动一致(--brand-weak / --brand-text 在暗色里成对翻转)。
+   描边也去掉 —— 底片实心之后那圈同色描边只是把边缘压深一档,反而比上面
+   那枚「已完成」多一层轮廓。做完这一档就是一块干净的实心圆加一个勾,
+   跟 .mk.is-ok 完全同形。其余三态(未开始虚线圈 / 进行中转弧 / 取消)
+   的圈照旧,它们靠圈本身表意。 */
+.steps li.is-done .tk .ring { fill: currentColor; fill-opacity: 1; stroke: none; }
+
+/* 进行中的那段弧:pathLength=1 之后 dasharray/dashoffset 直接就是百分比,
+   不用去算 2πr —— 半径改了这里不用跟着改。 */
+.steps li .tk .arc {
+  stroke-width: 2;
+  stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0;
+  transform-box: view-box; transform-origin: 12px 12px; transform: rotate(-90deg);
+  transition: stroke-dashoffset var(--duration-normal) var(--ease-out),
+              opacity var(--duration-faster) var(--ease-out);
+}
+/* 0.68 是上游「不知道具体进度」时的默认弧长:留一截缺口,转起来才看得出在转。
+   整圈实心的环转与不转看着一样。 */
+.steps li.is-now .tk .arc {
+  stroke-dashoffset: 0.32; opacity: 1;
+  animation: tk-spin 1.1s linear infinite;
+}
+@keyframes tk-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* 进行中那一格换成和 7 · 任务进度同一枚球。
+   ------------------------------------------------------------
+   直接复用 .mk.is-run —— 不是"照着再写一份",是同一个类:两处说的是同一件事
+   ("这一步正在跑"),同一件事在同一份稿子里出现两种画法,下一个人就得先判断
+   它俩是不是一回事。球的全部规则在 components.css 里,这里只管什么时候露面。
+   转弧那套(.tk .arc / tk-spin)【留着没删】:它仍然是这枚 SVG 标记的
+   四态之一,只是"进行中"这一态现在由球顶上;真要换回去,把下面三条删掉即可。
+   15px 和 .tk 同宽,margin-top 也照抄它的 1.5px —— 两者轮流占同一个位置,
+   基线不能差半像素,否则轮到哪一格哪一格的字就跳一下。 */
+.steps li > .mk.is-run { display: none; margin-top: 1.5px; }
+.steps li.is-now > .mk.is-run { display: grid; }
+.steps li.is-now > .tk { display: none; }
+
+/* 勾和叉都用 pathLength=1 + dashoffset 描出来,不是淡入。
+   一笔描过去说的是「刚刚完成」,淡入说的是「本来就在那儿」—— 这一列要报的
+   恰好是前者。叉的 d 是两段子路径,pathLength 会把两笔连着描完。 */
+.steps li .tk .ck,
+.steps li .tk .x {
+  stroke-width: 2; stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0;
+  transition: stroke-dashoffset var(--duration-gentle) var(--ease-out),
+              opacity var(--duration-faster) var(--ease-out);
+}
+.steps li.is-done .tk .ck { stroke-dashoffset: 0; opacity: 1; }
+.steps li.is-skip .tk .x  { stroke-dashoffset: 0; opacity: 1; }
+/* 勾的形状对齐那枚实心图标(.tick):同一段中线、同样 2 的粗细、同样的方头直角,
+   而且【描的是底色不是绿】—— 图标里的勾是从圆上挖掉的,这里描一笔底色出来
+   等于把那个洞一笔画出来,描完这一格和别处那枚图标一模一样。
+   这样"刚落下的勾"仍然是描出来的(挖洞没法逐段挖),而落定之后的样子和静态
+   那些勾完全同形 —— 动效和终态不再是两枚不同的图标。
+   方头直角只给勾:叉(.x)那一档仍是圆头,它画的不是这枚图标。 */
+.steps li .tk .ck { stroke: var(--bg); stroke-linecap: butt; stroke-linejoin: miter; }
+
+/* 做完那条划一道线,从左往右拉开,比勾晚 60ms —— 先看见勾落下,再看见这条
+   被划掉,是两件事的先后,不是同一帧的两个变化。
+   线只跟着文字走(内层 inline-block),不铺满整行:铺满的话短标题后面会拖出
+   一条指向空白的横线。 */
+.steps li .tx { flex: 1; min-width: 0; }
+.steps li .tt { position: relative; display: inline-block; max-width: 100%; }
+.steps li .tt::after {
+  content: ""; position: absolute; inset-inline: 0; top: 50%;
+  height: 1px; background: currentColor;
+  transform: scaleX(0); transform-origin: left; opacity: 0;
+  transition: transform var(--duration-slow) var(--ease-out) 60ms,
+              opacity var(--duration-faster) var(--ease-out);
+}
+.steps li.is-done .tt::after,
+.steps li.is-skip .tt::after { transform: scaleX(1); opacity: 1; }
+.steps li.is-skip { color: var(--plan-other-text); }
+
+/* ---- 卡头:图标在全部做完时换成绿勾,计数滚一格 ---- */
+/* 两枚图标叠在同一格里换,不是并排出现又消失 —— 换的是同一个位置上的同一件
+   东西(「这份清单现在是什么状态」),并排会读成两个指示灯。 */
+.card > .h .th-ic { position: relative; flex: none; display: grid; place-items: center; width: 15px; height: 15px; }
+.card > .h .th-ic > svg,
+.card > .h .th-ic > .orb {
+  grid-area: 1 / 1; width: 15px; height: 15px; overflow: visible;
+  transition: opacity var(--duration-faster) var(--ease-out),
+              transform var(--duration-normal) var(--ease-out);
+}
+/* 「执行中」那一格是一颗球,不是一枚清单图标。
+   ------------------------------------------------------------
+   清单图标画的是「这是一份清单」—— 可这件事标题和底下四行已经说过三遍了。
+   这一格该说的是另一件:【它还在跑】。球正好只说这一句,而且和 Thinking 那一行
+   是同一颗、同一个绿:页面上「有东西正在跑」只有一种长相。
+   状态取 breathing(上游内部叫 ring):一圈在缓慢涨落,不指向任何具体动作 ——
+   Plan 卡不知道当前这步在干什么(那是 7 · 任务进度的活),它只知道还没完。
+   球的画布是 20px,而这一格是 15px:上游 20 那一档四周本来就留了透明边,
+   居中溢出之后露出来的实心部分正好 15px,和旁边那枚绿勾同宽。 */
+.card > .h .th-ic > .orb { margin: 0; }
+/* 全做完了球让位给绿勾 —— 球说的是"在跑",跑完了还转着就成了假状态。 */
+.card > .h .th-ic .ic-ok { opacity: 0; transform: scale(0.72); }
+.card.is-all-done > .h .th-ic .ic-run { opacity: 0; transform: scale(0.72); }
+.card.is-all-done > .h .th-ic .ic-ok { opacity: 1; transform: scale(1); }
+.card > .h .th-ic .ic-ok circle { fill: var(--brand-weak); }
+/* 卡头这一枚同理:勾描的是卡的底色(--bg-panel),描完就是那枚实心图标。
+   2.25 收回 2 —— 图标里那个洞就是 2 宽,粗一点点会盖掉洞的边。 */
+.card > .h .th-ic .ic-ok path {
+  fill: none; stroke: var(--bg-panel); stroke-width: 2; stroke-linecap: butt; stroke-linejoin: miter;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  transition: stroke-dashoffset var(--duration-gentle) var(--ease-out);
+}
+.card.is-all-done > .h .th-ic .ic-ok path { stroke-dashoffset: 0; }
+/* 全做完了计数也转绿 —— 头部那枚勾和这个数字说的是同一句话,只有一个变色
+   会让人以为图标先变、数字还没跟上。 */
+.card.is-all-done > .h .n { color: var(--brand-text); }
+
+/* 计数只滚变的那一位:旧的往上走、新的从下面顶上来。
+   总数不动 —— 它不是进度,跟着一起滚会把「又完成一条」说成「清单变了」。 */
+/* 高度必须钉死,否则滚出去的那一位在 absolute 之前会把行撑高一瞬。
+   1lh 就是这一行的行高;老一点的浏览器不认,退回按行高算的 em。 */
+.card > .h .roll { position: relative; display: inline-block; overflow: hidden; height: 1.5em; height: 1lh; vertical-align: bottom; }
+.card > .h .roll > span { display: block; }
+.card > .h .roll > span.is-out { position: absolute; inset: 0; animation: roll-out var(--duration-normal) var(--ease-out) forwards; }
+.card > .h .roll > span.is-in { animation: roll-in var(--duration-normal) var(--ease-out); }
+@keyframes roll-out { to { transform: translateY(-100%); opacity: 0; } }
+@keyframes roll-in { from { transform: translateY(100%); opacity: 0; } }
+
+/* 演示循环回到起点的那一帧不走过渡:勾倒着描回去、划线倒着收回去,读起来像
+   「刚才那几步被取消了」—— 而它其实只是这段循环重新开始。 */
+.card.is-resetting .steps li .tk .ck,
+.card.is-resetting .steps li .tk .x,
+.card.is-resetting .steps li .tk .arc,
+.card.is-resetting .steps li .tt::after,
+.card.is-resetting > .h .th-ic > svg,
+.card.is-resetting > .h .th-ic > .orb,
+.card.is-resetting > .h .th-ic .ic-ok path { transition-duration: 0s; transition-delay: 0s; }
+
+/* 关掉动效的人:一切照旧显示,只是不动 —— 状态本身仍然分得清(虚线 / 弧 /
+   勾 / 叉是四个形状,不靠动画区分),所以停下来不丢信息。 */
+@media (prefers-reduced-motion: reduce) {
+  .steps li .tk .arc { animation: none; }
+  .steps li .tk .arc,
+  .steps li .tk .ck,
+  .steps li .tk .x,
+  .steps li .tt::after,
+  .card > .h .th-ic > svg,
+  .card > .h .th-ic > .orb,
+  .card > .h .th-ic .ic-ok path { transition-duration: 0s; transition-delay: 0s; }
+  .card > .h .roll > span.is-out,
+  .card > .h .roll > span.is-in { animation: none; }
+}

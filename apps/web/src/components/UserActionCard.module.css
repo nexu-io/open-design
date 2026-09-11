@@ -212,3 +212,115 @@
     transition: none;
   }
 }
+
+/* ============================================================
+   design/chat-panel-next 对齐层
+
+   稿子里这张卡有两副面孔：中性态是「头带 + 正文 + 尾带」的分栏卡
+   （`.card`，组件 5），危险态是没有分栏、整块红底的报错卡
+   （`.errb`，组件 19）。380px 与用户气泡同宽 —— 稿子的原话是
+   「对话里有形状的就这两样，你说的话和它问你的话，同宽、一左一右」。
+
+   写成末尾覆盖而不是改上面的块：一处可回滚，也便于和稿子对读。
+   ============================================================ */
+
+.card {
+  width: 380px;
+  max-width: 100%;
+  gap: 0;
+  margin: 6px 0;
+  padding: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* 头带 */
+.head {
+  gap: 8px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+.title {
+  font-size: var(--t-mini, 12px);
+  line-height: var(--lh-row, 1.5);
+}
+
+/* 正文带 */
+.details {
+  margin: 0;
+  padding: 9px 11px 10px;
+  border-top: 1px solid var(--border-soft);
+  font-size: var(--t-mini, 12px);
+  line-height: var(--lh-body, 1.7);
+}
+
+.status {
+  margin-left: 0;
+  padding: 0 11px 10px;
+  font-size: var(--t-cap, 12px);
+}
+
+/* 尾带 */
+.footer {
+  margin-left: 0;
+  padding: 8px 11px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+
+/* ── 危险态 = 稿子的 .errb：撤掉分栏，整块红底 ── */
+.card[data-tone='danger'] {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+}
+
+.card[data-tone='danger'] .head {
+  border-bottom-color: transparent;
+  background: transparent;
+  padding: 10px 11px 4px;
+}
+
+.card[data-tone='danger'] .title {
+  font-weight: 600;
+  color: var(--red);
+}
+
+.card[data-tone='danger'] .icon {
+  background: none;
+  color: var(--red);
+}
+
+.card[data-tone='danger'] .details,
+.card[data-tone='danger'] .status {
+  border-top-color: transparent;
+  color: var(--text-muted);
+}
+
+.card[data-tone='danger'] .footer {
+  border-top-color: transparent;
+  background: transparent;
+  padding: 4px 11px 10px;
+}
+
+/* ── 警示态 ──
+   就地写 color-mix，不在 :root 定义 --amber-border：
+   workspace/mention-home.css:2032 是
+   `var(--amber-border, var(--orange-border, var(--green-border)))`，
+   目前一路回落到绿色，定义它会把那处静默翻成琥珀。 */
+.card[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--amber) 24%, var(--border));
+}
+
+.card[data-tone='warning'] .icon {
+  background: none;
+  color: var(--amber);
+}

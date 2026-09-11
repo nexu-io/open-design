@@ -1,0 +1,21 @@
+/* ---- 生图占位格:像素液体 ---- */
+/* 取自 21st.dev 的 pixel-liquid-bg(@unlumen)。搬法与取舍写在 pixel-liquid.js
+   开头:上游那支 color_frag 原样翻成 JS,速度场用 curl noise 顶替 GPU 解算。
+   ------------------------------------------------------------
+   为什么这一版比之前那道"模糊幕布"更对:幕布要求格子里【已经有一张图】,
+   它演的是"图正在显出来";而这一格要说的是【还没生成出来】—— 那时候什么
+   都还没有,底下没有图可以糊。液体不指向任何一张具体的图,它只说"这里在动、
+   东西还在长",正是这一格此刻的全部信息。
+   ------------------------------------------------------------
+   格子自己的底色留着:上游 light 模式的 bgColor 是 vec4(1,1,1,0),alpha 为 0,
+   没有流体的地方原样透出底下 —— 所以这里不铺底,让 .shot 的 --bg-subtle 透上来。 */
+.shot.is-load { background: var(--bg-subtle); }
+.shot.is-load .liquid {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  /* 画布按 CSS 像素开(见 js 里的说明),2× 屏上要放大一倍才铺满格子。
+     nearest 放大,抖动的方格才是实的;默认的平滑会把 4×4 那层抖动抹成灰。 */
+  image-rendering: pixelated;
+  -webkit-user-select: none; user-select: none;
+}

@@ -1,0 +1,3358 @@
+/* ── 动效墨色 ─────────────────────────────────────────────────
+   产品指定:这份稿子里【所有会动的东西】用同一个色号 #353535 ——
+   上传描边流光、呼吸点、文字流光、步骤转圈、光标、以及两处球。
+   动效不再各自借品牌绿/文字色,统一成一档中性深灰。
+
+   暗色那份是我按明度镜像补的(#353535 在 #202020 的底上几乎看不见),
+   不是产品给的值 —— 要另定一个色号的话改这一行就行。
+   这两处是本文件仅有的 hex 字面量:它们是被指定的色号,不是配色板里的
+   一档,tokens.css 又是上游快照(一字未改),所以留在这里。 */
+:root { --anim-ink: #353535; }
+[data-theme="dark"] { --anim-ink: #dbdbdb; }
+
+/* ── 选中那一行的字色 ────────────────────────────────────────
+   产品指定 #353535(原来是 --brand-text 的深绿 #0d5400)。
+   选中态现在的三处变化里,颜色这一处退回中性:控件填 --pick 的荧光绿已经
+   把"选的是这条"说完了,字再跟着变绿,一行里就有两处在喊同一件事,而绿字
+   压在白底上比黑字难读。选中文字用 500,与确认卡标题保持同一档强调。
+   值跟 --anim-ink 一样是巧合(同为产品给的那档深灰),不合并:一个是动效的墨,
+   一个是选中行的字,下次谁变都不该带着另一个一起变。 */
+:root { --select-ink: #353535; }
+
+/* ── 推理流的字色 ────────────────────────────────────────────
+   产品指定 #a3a3a3(先是 #bdbdbd,当天压深了一档)。这一段是正在往上滚的
+   过程,不是要逐字读完的结论,所以比正文淡好几档;在 #fff 上 2.52:1
+   (#bdbdbd 那一档是 1.88:1)——
+   够看出"这儿有字在动"、也认得出写的是什么,又不勾着人去逐行读。
+   真要读的是收起后那条 .think(结论),它仍走正文墨色,不受这条影响。 */
+:root { --stream-ink: #a3a3a3; }
+
+/* ── Upgrade 按钮的底色 ──────────────────────────────────────
+   升级卡改为深灰底后,原来的 #00FF08 绿色改用于按钮底色,
+   文字和闪光图标固定使用 #353535,独立于卡面背景。
+   注意它跟 --brand-weak(#00FF04,那枚绿勾)差 4 —— 是两个被分别指定的
+   色号,不是同一个,所以不合并:一个说"这件事过了",一个说"这里可以升级"。 */
+:root { --upgrade-surface: #00FF08; }
+
+/* ── 「过了」那枚勾 ─────────────────────────────────────────
+   产品给的整图标(源文件 src/tick.svg,内联成 data URI —— 稿子是单文件)。
+   盘是荧光绿的、勾是从盘里挖掉的,露出底下那圈深色:一张图自带两层,不用再
+   拼"底片 + 勾"、也不用为深浅两套主题各挑一个勾色。
+   (2026-08-20 换过一次色序:先前是深盘绿勾,现在是绿盘深勾 —— 换的是图,
+   CSS 一条没动。)
+   全稿凡是"这件事过了"的那枚记号都指向这一条:折叠块行首(.tick)、
+   Plan 里打完勾的那一步(.tk)、Plan 卡头的「已完成」(.ic-ok)。
+   多选那枚和视觉方向的勾选圈现在也用它 —— 那两处的勾长在【控件】里,
+   换成整枚徽标等于把控件换掉,代价是"方=多选、圆=单选"那套形状对比没了;
+   2026-08-20 按要求接受了这个代价,未选中的方框也一并改成圆。 */
+:root { --tick-img: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4gPHBhdGggZD0iTTEyIDIyQzE3LjUyMjggMjIgMjIgMTcuNTIyOCAyMiAxMkMyMiA2LjQ3NzE1IDE3LjUyMjggMiAxMiAyQzYuNDc3MTUgMiAyIDYuNDc3MTUgMiAxMkMyIDE3LjUyMjggNi40NzcxNSAyMiAxMiAyMloiIGZpbGw9IiMyMDIwMjAiLz4gPHBhdGggZD0iTTEyIDIyQzE3LjUyMjggMjIgMjIgMTcuNTIyOCAyMiAxMkMyMiA2LjQ3NzE1IDE3LjUyMjggMiAxMiAyQzYuNDc3MTUgMiAyIDYuNDc3MTUgMiAxMkMyIDE3LjUyMjggNi40NzcxNSAyMiAxMiAyMlpNMTcuNDU3MSA5LjQ1NzExTDExIDE1LjkxNDJMNi43OTI4OSAxMS43MDcxTDguMjA3MTEgMTAuMjkyOUwxMSAxMy4wODU4TDE2LjA0MjkgOC4wNDI4OUwxNy40NTcxIDkuNDU3MTFaIiBmaWxsPSIjMDBGRjA4Ii8+IDwvc3ZnPg=="); }
+
+/* ── 「过了」那一档的底色 ────────────────────────────────────
+   产品指定 #00FF04(原来是 --brand-weak 的 #d0ffb5 淡绿)。
+   改的是【token 本身】,不是某一处用法 —— 这个色在稿子里只服务一件事:
+   "这件事过了"。四处用到它,全是同一个意思,所以一起变:
+     .mk.is-ok               工具行 / 步骤 / 已完成任务前面那枚绿勾底片
+     .steps li.is-done .tk   Plan 里打完勾那一格的圆
+     .card > .h .ic-ok       Plan 卡头「已完成」那一枚
+     .fb button.is-on        赞 / 踩 选中之后的底
+   勾本身仍是 --brand-text(#0d5400),压在 #00FF04 上约 7:1,读得出。
+   ------------------------------------------------------------
+   只改浅色那一档。暗色里 --brand-weak 是深绿 #2f781d、勾是浅绿 —— 明暗关系
+   整个是反的,把它也刷成 #00FF04 会让浅绿的勾压在荧光绿上糊掉。暗色那份
+   目前不产出(build.mjs 里停了),但 token 得留在能用的状态,所以原样重申一遍。 */
+:root { --brand-weak: #00ff04; }
+[data-theme="dark"] { --brand-weak: #2f781d; }
+
+/* 需要你确认的那类卡(带选项的)卡头那一条的底色。产品指定 #fafafa
+   (原来是 #eaffeb 的极淡绿,2026-08-19 改成中性灰)。
+   注意这个值跟 --bg-panel 一模一样 —— 留成独立 token 而不是直接用
+   --bg-panel:它是被单独指定的一档,下次再改回带颜色的值时只动这一行,
+   不用去分辨哪些 --bg-panel 是"卡头灰"、哪些是"等你确认"。
+   暗色那档留着不动:暗色稿已经不出了(见 build.mjs),真要再出时它还成立。 */
+:root { --confirm-surface: #fafafa; }
+[data-theme="dark"] { --confirm-surface: var(--brand-soft); }
+
+
+/* ============================================================
+   OpenDesign 的生成流程 —— 组件全集
+   ------------------------------------------------------------
+   来源:飞书文档《…/docx/VtOwd4ON2oYZj0xd6OTceubcnDe》第三节
+   「三、OpenDesign 的生成流程」的组件表(21 行),
+   外加评审时补的 3 个(21 待发送附件 / 22 重连 / 23 选中文字),共 25 个。
+   表里每个组件给了:出现时机 / 默认状态 / 包含的状态 / 支持的操作 /
+   展示的信息 —— 本文件把这五列逐一落成可看的样式。
+
+   ★ 绑的是【产品面】调色板:../../design-system/styles.css
+     (→ tokens/colors.css 等七份)。因为这份稿子的去向是替换 apps/web
+     的 chat panel,不是站点面。design-system/SKILL.md:
+       "Product surface links styles.css; marketing-site surface links
+        site.css — never mix the two palettes on one screen."
+     所以它和 chat-skeleton.html 用的不是同一套 token ——
+     那份链的是 tokens.css(站点纸墨:--ink / --bone / --line),
+     这份用产品词汇(--text-strong / --bg / --border)。别混。
+
+   刻意写成静态 HTML 而非 JS 模板:改样式时看到哪就能改哪。
+   最终形态是 JSX(design-system/components/product/*.jsx),
+   本文件是移植前的视觉稿。
+   改配色 → 去 tokens/colors.css,本文件禁止出现 hex 字面量。
+   ============================================================ */
+
+/* ---------- 字号:绑到产品面已有的 ladder,不另立一套 ----------
+   产品 tokens/typography.css 已提供 --font-size-12/13/14/16/18/20/…,
+   下限是 12px —— 原稿的 11px 档在产品体系里没有对应值,
+   所以 cap 与 mini 合并到 12px。要恢复 11px 需先在 typography.css
+   加 --font-size-11,不能在本文件里私开。 */
+:root {
+  --t-cap:   var(--font-size-12);   /* 角标、类名、耗时 */
+  --t-mini:  var(--font-size-12);   /* 状态标签、辅助行 */
+  --t-body:  var(--font-size-13);   /* 正文、气泡、按钮 */
+  --t-lead:  var(--font-size-14);   /* 组件名、卡片标题 */
+  --t-head:  var(--font-size-16);   /* 阶段标题 */
+  --t-disp:  var(--font-size-20);   /* 页面标题 */
+
+  /* 中文字面填满字身框,行距必须比拉丁文松,否则多行贴在一起 */
+  --lh-tight: 1.35;
+  --lh-body:  1.7;
+  --lh-row:   1.5;
+
+  /* ---- 外部平台标识色 ----
+     别人家的商标色,只用在那一枚平台图标上 —— 不参与品牌联动、不做底色、
+     不当语义色用。这是本文件唯一允许出现 hex 字面量的地方,因为它们不属于
+     设计系统的调色板,而是外部品牌的固定值,改不得也不该跟着主题走。
+     站点那套 tokens.css 里已经有同名分组(--plat-ios / --plat-wx / --plat-x …),
+     产品这套还没有 —— 移植时应该把这一段挪进 tokens/colors.css,不要留在这儿。 */
+  /* 浮层 chrome 用的深色磨砂。刻意【不跟主题翻】—— 它悬在内容之上,
+     不属于页面表面;跟着翻的话浅色主题下就成了白底浮白字。
+     port 时和 --plat-* 一起挪进 tokens/colors.css。 */
+  --overlay-glass:      rgba(32, 32, 32, 0.88);
+  --overlay-glass-text: #fafafa;   /* 底不翻,字当然也不能翻 */
+  --overlay-glass-edge: color-mix(in srgb, #fff 16%, transparent);
+  --agent-claude:      #d97757;   /* agent-icons/claude.svg 原色 */
+  --agent-codex-plate: #ffffff;   /* agent-icons/codex.svg 的白底板 */
+  --agent-codex-a:     #b1a7ff;
+  --agent-codex-b:     #7a9dff;
+  --agent-codex-c:     #3941ff;
+  --plat-discord:  #5865F2;
+  --plat-feishu-a: #00D6B9;
+  --plat-feishu-b: #3370FF;
+  --plat-feishu-c: #133C9A;
+}
+
+/* 字体不再需要本地垫片:产品面 tokens/fonts.css 指向的就是仓库里
+   实际存在的 .ttf(站点面 tokens.css 指向 .woff2 才是坏的)。 */
+
+/* ---------- 基础层 ----------
+   站点面的 tokens.css 自带 reset / button 复位 / :focus-visible,
+   产品面的 styles.css 是纯 import 入口、不含这些 —— 真实环境里由
+   apps/web/src/index.css 提供。这份稿子要独立打开看,所以本地补一份。
+   移植进 apps/web 时这一段应整体删掉,别把它带过去。 */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  color: var(--text);
+  overflow: auto; display: block; background: var(--bg-subtle);
+}
+svg { stroke-width: 1.75px; stroke-linecap: round; stroke-linejoin: round; }
+/* ---- 全文只有一个对号 ----
+   之前有四种写法:SVG(stroke-width=3)、文字 ✓、CSS 边框旋转画的、
+   还有一条别的路径 —— 形状、粗细、大小全不一样。
+   统一成一条路径 + 一个【视觉】笔画粗细。
+   关键是 vector-effect:non-scaling-stroke:SVG 的 stroke-width 默认跟着
+   viewBox 缩放,同一条路径画在 10px 的方钮里和 15px 的完成标记里,
+   笔画会差一倍以上 —— 那正是它们看起来像两个图标的原因。
+   加上它之后粗细恒定,像字体一样,尺寸只改大小不改笔画。
+   例外:终端输出里的 ✓ 是日志正文,真实终端就是打这个字符,不动。 */
+.ck { fill: none; stroke: currentColor; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+button { font-family: inherit; border: none; background: none; cursor: pointer; color: inherit; font-size: var(--font-size-13); }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---------- 外壳 ---------- */
+
+.hd {
+  display: flex; align-items: center; gap: 10px;
+  height: 46px; padding: 0 18px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+/* 标记直接内联 SVG:--logo-mark 只存在于站点面 tokens.css,
+   产品面没有这个 token。产品图标一律内联 SVG(见 fonts.css 注释:
+   打包的 od:// 协议加载不了 url() 字体,图标因此都走内联)。 */
+.hd .mark { flex: none; width: 18px; height: 18px; color: var(--text-strong); }
+.hd .mark svg { width: 100%; height: 100%; }
+.hd .tt { font-size: var(--t-body); font-weight: 700; color: var(--text-strong); }
+.hd .st { font-size: var(--t-cap); color: var(--text-soft); }
+
+.wrap { max-width: 1400px; margin: 0 auto; padding: 22px 18px 64px; }
+
+.intro { max-width: 70ch; margin-bottom: 22px; }
+.intro h1 { font-size: var(--t-disp); line-height: var(--lh-tight); color: var(--text-strong); font-weight: 700; }
+.intro p { margin-top: 8px; font-size: var(--t-mini); line-height: var(--lh-body); color: var(--text-muted); }
+.intro code { font-family: var(--mono); font-size: var(--t-cap); color: var(--text-strong); background: var(--bg-fill-secondary); border-radius: var(--radius-sm); padding: 1px 5px; }
+
+.kicker {
+  display: block; margin-bottom: 7px;
+  font-family: var(--mono); font-size: var(--t-cap); font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-soft);
+}
+
+/* ---------- 六阶段流程条 ---------- */
+.flowbar {
+  display: flex; align-items: stretch; flex-wrap: wrap; gap: 6px;
+  padding: 12px; margin-bottom: 26px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg);
+}
+.fstep {
+  flex: 1 1 148px; min-width: 0;
+  padding: 9px 11px; border-radius: var(--radius); background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+}
+.fstep .n { font-family: var(--mono); font-size: var(--t-cap); color: var(--text-soft); }
+.fstep .t { margin-top: 1px; font-size: var(--t-body); font-weight: 700; color: var(--text-strong); line-height: var(--lh-tight); }
+.fstep .c { margin-top: 3px; font-size: var(--t-cap); color: var(--text-muted); line-height: var(--lh-row); }
+/* 「边界」那一格:虚线边表示它不在主流程里,不再另加底色 ——
+   虚线本身已经把「这格是另一类」说清楚了,再垫一层灰是同一件事说两遍。 */
+.fstep.mod-edge { background: none; border-style: dashed; }
+.fstep.mod-edge .t { color: var(--text); }
+
+/* ---------- 阶段分组 ---------- */
+.stage { margin-top: 30px; }
+.stage-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.stage-h .no { font-family: var(--mono); font-size: var(--t-mini); color: var(--text-soft); }
+.stage-h h2 { font-size: var(--t-head); line-height: var(--lh-tight); color: var(--text-strong); font-weight: 700; }
+.stage-h p { font-size: var(--t-mini); color: var(--text-muted); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; align-items: start; }
+
+/* 每个阶段的组件数不是 3 的倍数(输入 2 / 规划 2 / 产出 1 / 收尾 2 / 边界 5),
+   凑不满的行右边会留空轨。让内容最厚的那张跨掉剩余轨道,行就闭合了。
+   跨列的卡把状态改成并排(mod-split)—— 宽度要用起来,不是把一列拉长。
+   断点按「几列放得下」算:2 列需 2×420+14=854,3 列需 1288,加 wrap 左右 18 padding。 */
+@media (min-width: 890px) {
+  .cmp.mod-w2, .cmp.mod-w3 { grid-column: span 2; }
+  .cmp.mod-split .cmp-b { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; align-items: start; }
+  .cmp.mod-split .st + .st { margin-top: 0; }
+}
+@media (min-width: 1330px) {
+  .cmp.mod-w3 { grid-column: span 3; }
+}
+
+/* ---------- 组件卡 ---------- */
+.cmp { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); overflow: hidden; }
+.cmp-h { display: flex; align-items: center; gap: 8px; padding: 10px 13px; border-bottom: 1px solid var(--border-soft); background: var(--bg-panel); }
+.cmp-h .no { flex: none; font-family: var(--mono); font-size: var(--t-cap); font-weight: 700; color: var(--bg); background: var(--text-strong); border-radius: var(--radius-sm); padding: 1px 5px; }
+.cmp-h .nm { flex: 1; min-width: 0; font-size: var(--t-lead); font-weight: 700; color: var(--text-strong); }
+.cmp-meta { display: flex; flex-wrap: wrap; gap: 0 14px; padding: 8px 13px 0; }
+.cmp-meta div { font-size: var(--t-cap); color: var(--text-soft); line-height: var(--lh-row); }
+.cmp-meta b { color: var(--text-muted); font-weight: 500; }
+.cmp-b { padding: 10px 13px; }
+.cmp-ops {
+  display: flex; gap: 7px; padding: 8px 13px 10px;
+  border-top: 1px solid var(--border-soft); background: var(--bg-panel);
+  font-size: var(--t-cap); line-height: var(--lh-row); color: var(--text-muted);
+}
+.cmp-ops svg { flex: none; width: 12px; height: 12px; margin-top: 2px; color: var(--text-soft); }
+.cmp-ops b { color: var(--text-strong); font-weight: 600; }
+
+.st + .st { margin-top: 11px; }
+.st-l { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-size: var(--t-cap); color: var(--text-soft); }
+.st-l i { flex: 1; height: 1px; background: var(--border-soft); }
+/* 「默认状态」是元信息,不是通过态 —— 用墨色强调而非品牌绿。
+   tokens.css 的规矩:绿只做首饰(chip / 选中态 / 通过态),
+   一张卡一个绿标签 × 23 张会把绿稀释掉。 */
+.st-l.mod-def { color: var(--text-strong); font-weight: 600; }
+.st-l.mod-def i { background: var(--border); }
+/* 样例格【不铺底色】,只留那圈虚线。
+   ------------------------------------------------------------
+   虚线本身已经说完了"这一格是展示区、不是组件的一部分",再垫一层灰是把同一句
+   话说两遍。而这一页有一百多个这样的格子,每一格都带底,整页就成了一片深浅相间
+   的条带 —— 真正要看的构件反倒是浮在噪声上的。
+   去掉之后格子和模块卡同底(都是 --bg),构件落在什么底上,就跟它在产品里落在
+   什么底上一样,颜色是直接可比的。 */
+.st-b { padding: 11px; border: 1px dashed var(--border); border-radius: var(--radius); background: none; }
+
+/* ============================================================
+   构件本体
+   ============================================================ */
+
+/* ---- 用户消息 ---- */
+.msg-me { display: flex; justify-content: flex-end; }
+/* 一条消息同时带文字和附件 —— 这是最常见的发送形态。
+   ------------------------------------------------------------
+   附件在上、文字在下,不并排:并排的话附件条会跟气泡抢那 380px 的宽度,
+   两边都变窄;而且附件是"我拿了这些东西来",文字是"我要你拿它们做什么",
+   前者是后者的前提,读的顺序本来就该是先看东西再看要求。
+   两者右边界对齐 —— 它们是同一条消息,不是两条。
+   壳子不设 width:100%:那样两个孩子会各自按自己的百分比算宽度,
+   右边界反而对不上;让壳子收缩到内容宽,再由 .msg-me 整体推到右边。
+   中间 6px:比附件之间的 7px 略紧,让它们读起来是一组而不是两件事。 */
+/* 附件和正文是同一条消息的两部分,靠得越近越像一条 —— 4 而不是 6。 */
+/* 壳子放到 412、气泡仍锁 380:附件行要够宽才能把最后一张切在腰上(见 .att),
+   但气泡不能跟着变宽 —— 412 的气泡离面板左缘只剩 8px,"我说的话贴右边"
+   这个读感就没了。两条上限各管各的,右边界照样对齐。 */
+.msg-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 412px; }
+.msg-stack .att { max-width: 100%; }
+.msg-stack .bub { max-width: 380px; }
+/* 折起来的长消息,气泡下面单独给一行「查看全部」。
+   ------------------------------------------------------------
+   气泡内右下角那枚「…⌄」说的是「这里被截断了」,是个记号;
+   这一行说的是「点这里看全文」,是个动作。两者不是一回事,记号挤在文末
+   容易被当成正文的一部分,动作放出来才有人点。
+   靠 .msg-stack 的 4px 竖向 gap 贴着气泡,和复制按钮那一行同一个节奏。 */
+.msg-more { display: flex; justify-content: flex-end; }
+/* 装在气泡【里面】时跟着气泡的前景色走(反色底上是白),
+   压一档透明度让它退在正文后面 —— 它是出口,不是话。 */
+.bub .msg-more { margin-top: 6px; }
+.bub .msg-more button { color: color-mix(in srgb, var(--bg) 68%, transparent); }
+.bub .msg-more button:hover { color: var(--bg); }
+.msg-more button {
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px 0;
+  font-size: var(--t-cap); font-weight: 600; color: var(--text-muted);
+  transition: color var(--duration-faster) var(--ease-out);
+}
+.msg-more button:hover { color: var(--text-strong); }
+.msg-more button svg { width: 12px; height: 12px; }
+/* ---- 长串兜底 ----
+   凡是承载【用户输入或外部数据】的容器,都要能把一串没有空格的东西断开:
+   链接、token、路径、base64。中文自己会断,带空格的英文也会断,所以这个
+   坑平时不露头 —— 一旦有人贴一条长链接,文字就会直接冲出圆角被裁掉。
+   用 anywhere 不用 break-all:前者只在真的放不下时才断,正常单词仍然整词
+   换行;后者会把每个英文单词都拆散。 */
+.bub, .doc .nm, .att-d .nm, .answered .ab, .answered .al li,
+.term div, .queue .q .tx { overflow-wrap: anywhere; }
+
+/* 底色走 --bub-bg 这个中间变量,不直接写颜色:折到 6 行时右下角那块「…」
+   要拿同一个色去盖住被截断的半个字(见 .bub.mod-clamp .more),
+   而气泡 hover 时底色会变深 —— 两处必须永远同色,所以只留一个出处。 */
+.bub {
+  --bub-bg: #121212;
+  max-width: min(84%, 380px); padding: 9px 13px;
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+  background: var(--bub-bg); color: var(--bg);
+  font-size: var(--t-body); font-weight: 500; line-height: var(--lh-body);
+}
+
+/* 设计系统工作区的自动创建消息。
+   它替代内部长 prompt，只留下用户需要识别的标题与说明；尺寸、层级和图标
+   与产品里的 user-status-card 保持一致。仍放在 .msg-me 中，所以和普通用户
+   消息共用右对齐边界。 */
+.user-status-card {
+  display: inline-flex; align-items: flex-start; gap: 10px;
+  max-width: min(320px, 100%); padding: 9px 11px;
+  border: none; border-radius: 14px 14px 4px 14px;
+  background: #121212; box-shadow: none;
+  color: #fff; text-align: start;
+}
+.user-status-card__icon {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--radius);
+  color: #fff; background: #353535;
+}
+.user-status-card__icon > svg { display: block; width: 16px; height: 16px; }
+.user-status-card__copy { min-width: 0; flex: 1 1 auto; overflow: hidden; display: grid; gap: 2px; }
+.user-status-card__copy strong {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--t-body); line-height: 1.2; font-weight: 600;
+}
+.user-status-card__copy span {
+  overflow-wrap: anywhere; font-size: var(--t-mini); line-height: 1.35; color: #bdbdbd;
+}
+/* 标题保持一行；280px 给完整标题留出空间，同时维持紧凑的消息宽度。 */
+.st-b .design-system-generation-status {
+  width: min(280px, 100%);
+}
+
+/* 超长消息折到 6 行,末尾留一枚「…」,hover 时「…」后面浮出下拉箭头。
+   ------------------------------------------------------------
+   这是流水里唯一没有上限的东西 —— Plan、Queue、附件、终端都限了高,
+   而用户自己贴进来的内容才是最没法预估的那个:一段日志、一份需求文档、
+   一整个报错堆栈。不封顶的话,一条消息就能把上下文全顶出屏幕。
+   6 行的来历:13px × 1.7 行高 ≈ 22px,6 行 132px —— 一条自己发的指令
+   看六行足够认出是哪一条,再多就开始跟下面的回答抢版面。
+   ------------------------------------------------------------
+   展开的入口从气泡【外面】收回气泡【里面】:原来底下另挂一行「展开」按钮,
+   那是给这条消息又加了一层结构,而它要说的事(还有下文)本来就发生在
+   被截断的那个位置。现在「…」直接长在文末,谁被截断谁自己说。
+   箭头【hover 才出】:静止时那枚「…」已经说清"还有";箭头是"点这儿能展开",
+   属于操作,不是状态 —— 一屏十几条消息各挂一个常驻箭头,就成了一列路标。
+   而「…」和箭头都占着位置,hover 只是把箭头的透明度打开,布局不动。 */
+/* 折的是【里面那层 .txt】,不是气泡本身。
+   -webkit-line-clamp 的裁切边界是 padding box —— 气泡有 9px 的下内边距,
+   直接折在气泡上的话,第 7 行会从那 9px 里露出来一条被切一半的字。
+   往里挪一层就没有这个问题:.txt 自己不带内边距,切口就落在文字的行边上。 */
+.bub.mod-clamp { position: relative; }
+/* .more 贴的是【文字块】的右下角,不是气泡的 —— 气泡里现在还装着下面那行
+   「查看全部」,再按气泡底边定位就会压在那一行上。 */
+.bub.mod-clamp .clip { position: relative; display: block; }
+.bub.mod-clamp .txt {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6;
+  overflow: hidden;
+}
+/* 贴着气泡右下角的内边距落位 —— 它要装成"文末",就得落在文字真正结束的地方。
+   左边垫一段由透明化到底色的渐变:被压在下面的那半个字不能硬生生地被切一刀,
+   化过去才像是文字自己淡出。底色取 --bub-bg,hover 变深时跟着变。 */
+/* 只在【真的被截断】时才出。同一段话在宽一点的面板里可能六行就说完了 ——
+   那时候还挂一枚「…」,是在说一句不存在的下文。是否截断由 JS 量
+   (scrollHeight 比 clientHeight 高就是有东西被压住了,见 interactions.js),
+   量出来的结果落成 .is-cut 这一个类,CSS 只认这个类。 */
+.bub.mod-clamp .more { display: none; }
+.bub.mod-clamp.is-cut .more {
+  position: absolute; inset-inline-end: 0; inset-block-end: 0;
+  display: inline-flex; align-items: center; gap: 1px;
+  padding-inline-start: 26px;
+  background: linear-gradient(to right, transparent 0, var(--bub-bg) 26px);
+  color: var(--bg); font-weight: 600; line-height: var(--lh-body);
+}
+/* 「…」跟着气泡的正文走(白),它是这段话的一部分 —— 被截断的是文字,说这句话的
+   还是文字自己。原来「…」后面还跟一枚 hover 才出的绿箭头(#00FF08,注释里
+   自己标着是演示色),现在展开入口已经独立成气泡内的「查看全部」那一行,
+   文末只留记号、不再挂操作,那枚箭头连同它的演示色一起去掉。 */
+/* hover 操作位放在气泡【下方】,距气泡 4px,右缘对齐。
+   ------------------------------------------------------------
+   原来是浮在气泡左侧、并靠一段高度计算做到"单行与气泡居中 /
+   多行与最后一行对齐"。改到下方之后这两种情况合并成同一种,
+   那段高度计算也就不需要了 —— 气泡的 padding 或 line-height
+   再怎么改,下方的位置都不会错位。
+   DOM 顺序是 .msg-act 在前、.bub 在后,所以用 column-reverse
+   让气泡在上、操作位在下,不动结构。 */
+.msg-row {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 4px;
+}
+.msg-row.is-hover .bub,
+.msg-row:hover .bub { --bub-bg: var(--text); }
+/* 复制 + 时间同在这一行,时间排在复制【之后】—— 也就是最右边。
+   ------------------------------------------------------------
+   跟 16 · 回复操作条那一行同一个排法:动作在前、时间收在末端。两边的时间
+   都靠外缘,扫一列就对得上"这句几点发的 / 那句几点答的"。
+   时间不是动作,所以不给它按钮那套 30px 命中框和 hover 底色 —— 它只是一段
+   可读的文字,做成能点的样子等于给一个按了没反应的东西。
+   字号取 caption,时间和未选中的操作图标统一用 #A3A3A3。 */
+/* 消息辅助信息专用色,不联动全局次级文字或已选中的反馈状态。 */
+.msg-act, .fb, .fork-note { --message-muted-ink: #a3a3a3; }
+.msg-act {
+  flex: none; display: flex; align-items: center;
+}
+.msg-act .tm { margin-inline-start: 2px; font-size: var(--t-cap); color: var(--message-muted-ink); }
+/* 消息旁的操作按钮跟着气泡的行高走,
+   不自己定尺寸。原来用的是 .btn.mod-sm,图标只有 11px。 */
+.msg-act button {
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border-radius: var(--radius-sm); color: var(--message-muted-ink);
+  transition: background-color var(--duration-faster) var(--ease-out),
+              color var(--duration-faster) var(--ease-out);
+}
+.msg-act button:hover { background: var(--bg-fill-secondary); color: var(--message-muted-ink); }
+.msg-act button svg { width: 16px; height: 16px; }
+
+/* 【重试】带可见文字,跟失败行的那枚同一套外观。
+   ------------------------------------------------------------
+   一行里三个纯图标,重试是唯一常驻的那个 —— 也是唯一"结果不对时要按"
+   的出口。给它文字而不给复制文字,是因为图标能不能被认出来这件事,只有
+   重试赌不起:认错复制最多多按一下,认错重试是白等一轮生成。
+   红色跟失败行的重试同源:同一个动作在两处出现(没发出去 / 发出去了但不
+   对),两处长得一样,人只需要认一次。
+   尺寸对齐 .msg-fail:13px 图标 + caption 600。高度仍是 30px,和同排的
+   时间、复制齐平,加了文字这一行也不会变高。 */
+.msg-act .keep {
+  width: auto; height: 30px; padding-inline: 6px;
+  grid-auto-flow: column; gap: 5px;
+  color: var(--red); font-size: var(--t-cap); font-weight: 600;
+}
+.msg-act .keep svg { width: 13px; height: 13px; }
+/* hover 压深红色,不铺底 —— 与 .msg-fail button 同因:--red 在这层底上
+   对比本就吃紧,往底色加红只会更低,压深前景才是唯一能加对比的方向。 */
+.msg-act .keep:hover { background: none; color: color-mix(in srgb, var(--red) 70%, var(--text-strong)); }
+/* 【重试】常驻,【时间和复制】hover 才出。
+   ------------------------------------------------------------
+   重试是这条消息随时可能要用的出口 —— 没发成功、或者结果不对,手要能
+   直接够到,不该先 hover 一下才知道有这个东西。时间和复制是"你问起才
+   需要"的信息与动作,平时把位置让给正文。
+   藏起来用 opacity 不用 display:位置一直占着,浮出时这一行不跳(和文末
+   那枚箭头同一个处理)。同时把 pointer-events 关掉,免得点到看不见的按钮。 */
+.msg-act .tm,
+.msg-act button:not(.keep) {
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--duration-faster) var(--ease-out);
+}
+.msg-row:hover .msg-act .tm,
+.msg-row:hover .msg-act button:not(.keep),
+.msg-row.is-hover .msg-act .tm,
+.msg-row.is-hover .msg-act button:not(.keep) {
+  opacity: 1; pointer-events: auto;
+}
+/* 只留【红色感叹号 + 重发】,不写"发送失败"。
+   红加感叹号本身就是"出事了",再写四个字是把同一件事说两遍;
+   而这条挂在自己刚发出的气泡下面,除了没发出去也没有别的可能。
+   真正有信息量的是那个动作 —— 重发,所以把位置全留给它。
+   文案没了之后图标要自己报名字:svg 上挂 role="img" + aria-label,
+   否则读屏用户会听到一个"重发"按钮却不知道为什么要重发。 */
+.msg-fail { display: flex; justify-content: flex-end; align-items: center; gap: 5px; margin-top: 5px; font-size: var(--t-cap); color: var(--red); }
+.msg-fail svg { width: 13px; height: 13px; }
+/* 文字型操作一律不加下划线。可点性靠字重区分(旁边的说明是 400,
+   它是 600),hover 时压深红色。
+   hover 不能改用浅红底 —— --red 在 --bg-panel 上已经只有约 3.6:1,
+   再往底色上加红会把对比度压得更低;压深前景才是唯一能加对比的方向。 */
+.msg-fail button { font-size: var(--t-cap); font-weight: 600; color: var(--red); }
+.msg-fail button:hover { color: color-mix(in srgb, var(--red) 70%, var(--text-strong)); }
+
+/* 点「重发」之后,这一行自己消失。
+   ------------------------------------------------------------
+   重发就是把同一条再发一次,发出去了就没有「发送失败」这回事 —— 不该在
+   原地换成「已重发」再留一个新状态让人读第二遍。所以是淡出 + 收掉占位,
+   气泡本身一动不动:变的只有那条错误提示,消息还是原来那条消息。
+   is-sent 由 interactions.js 在点击时挂上,淡完再补 is-gone 把整行连同
+   那 5px 的 margin 一起收掉(高度不参与动画 —— auto 高度补不出起始值,
+   为这 23px 的收拢去写 grid 0fr 不值)。
+   演示稿里 1.2s 后自动复原,否则这张卡看一次就空着了。 */
+.msg-fail.is-sent { animation: msg-fail-out var(--duration-normal) var(--ease-out) forwards; }
+.msg-fail.is-gone { display: none; }
+@keyframes msg-fail-out { to { opacity: 0; transform: translateY(-2px); } }
+
+/* 多附件排布:永远单行,不换行,超出横向滚动。
+   ------------------------------------------------------------
+   多少个附件都只占一行 —— 消息在流水里的高度因此是常量,不随附件数
+   变化。这比"换行 + 满两行收进 +N"更可预期:后者 5 个和 8 个的高度
+   不一样,回看历史时消息块忽高忽低。
+
+   滚动条隐藏,靠行尾裁掉半张卡来暗示还有更多。之前担心的两个问题
+   (滚动条压住文件名、小横条难点)在卡片放大之后都不成立了。
+
+   右对齐靠【首个子元素的 auto 外边距】,不用 justify-content:flex-end,
+   也不用 width:fit-content:
+     · flex-end 会让溢出内容跑到左边、滚不回去(经典的 flex 溢出陷阱);
+     · fit-content 叠加 overflow-x:auto 在单张卡时会算塌成 0 —— 实测
+       失败态那张卡整个不渲染,所以不用它。
+   auto 外边距的好处是自动二选一:附件少时它吸掉空白、整排贴右;
+   附件多时空白为负、它解析成 0,于是从左往右正常滚。 */
+.att {
+  display: flex; flex-wrap: nowrap; gap: 7px;
+  /* 用定值不用 min(84%, …):百分比要靠父级解析,而这张卡在 mod-split 的
+     网格列里,百分比基数算不出来时整个容器会塌掉 —— 实测失败态那张卡
+     因此整个不渲染,写死更稳。
+     ------------------------------------------------------------
+     412 = 6 x 64 + 28,【刻意错开卡片的节拍】。
+     卡 57 + 间隙 7 = 一格 64。原来写 380,正好落在第 6 张卡之后的
+     那道 3px 缝里 —— 7 张附件渲染出来是 6 张齐齐整整的卡,右边什么都
+     不缺,于是"后面还有"这件事一点痕迹都没有;而滚动条是藏起来的,
+     用户没有任何理由去拨它。注意这跟附件数量无关:只要是整排图卡,
+     切点永远落在那道缝里,8 张 20 张都一样。
+     412 把切点挪到第 7 张卡的腰上:6 张整的 + 半张。被切开的东西本身
+     就在说"我没画完",不用再加渐隐遮罩或「+2」角标。
+     为什么不是更窄的 348(5 张半):两张文档长条并排是 180+7+180=367,
+     348 会把第二张切掉一角 —— 那儿其实没有第三个附件,是个假信号,
+     「文档」和「文件名过长」两态首当其冲。所以行宽有个 367 的下限,
+     再往上找第一个能切在卡腰上的数,就是 412。
+     只对整排图卡是准的;混了文档长条节拍不齐,切点落哪儿看数据,
+     但缝只占一格的十分之一,正好落进去是小概率。 */
+  max-width: 412px;
+  margin-inline-start: auto;
+  overflow-x: auto; scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.att > :first-child { margin-inline-start: auto; }
+.att::-webkit-scrollbar { display: none; }
+
+/* ---- 附件行两端的翻页箭头 ----
+   ------------------------------------------------------------
+   这一行永远单行、超出横向滚动,而滚动条是藏起来的(见上面 scrollbar-width),
+   所以"还能往哪边走"必须由别的东西说。原来指望【卡被切在腰上】这一个信号 ——
+   它说得了"后面还有",说不了"往回也还有",更给不了鼠标一个能点的地方
+   (触控板能横扫,鼠标只有滚轮,横滚要按住 shift)。
+   ------------------------------------------------------------
+   两条规矩:
+   ① 【只在真的被遮住时才出】。左边有东西被卷走了才出左箭头,右边还有才出右
+      箭头;一行放得下时两枚都不出 —— 常驻的箭头是在说"这里有东西看不见",
+      而那时并没有。是否遮住由 JS 量(scrollLeft / scrollWidth,见
+      interactions.js),量出来落成 .is-prev / .is-next 两个类。
+   ② 【箭头自带一段渐变,压在内容上】。硬边的按钮扣在一排卡上,像是有人在这
+      一行里又摆了一个东西;渐变让被压住的那半张卡淡出去,读起来是"这一行到
+      这儿看不清了,那边还有",而不是"这儿多了一个按钮"。
+      渐变色取 --att-fade(默认就是面板底色 --bg):这一行落在白底的卡里、
+      也落在输入框的托盘里,两处底色相同,真出现第三种底时改这一个变量。 */
+.att-wrap { position: relative; max-width: 100%; }
+.att-nav {
+  position: absolute; inset-block: 0; z-index: 3;
+  display: none; align-items: center;
+  width: 52px; padding: 0; border: 0; background: none; cursor: pointer;
+}
+.att-wrap.is-prev > .att-nav.mod-prev,
+.att-wrap.is-next > .att-nav.mod-next { display: flex; }
+.att-nav.mod-prev {
+  inset-inline-start: 0; justify-content: flex-start;
+  background: linear-gradient(to right, var(--att-fade, var(--bg)) 46%, transparent);
+}
+.att-nav.mod-next {
+  inset-inline-end: 0; justify-content: flex-end;
+  background: linear-gradient(to left, var(--att-fade, var(--bg)) 46%, transparent);
+}
+/* 圆片是给鼠标的靶子:24px 的白片压在渐变上,自己带一圈边和一层浅影,
+   底下不管是深色缩略图还是白色文档卡,它都立得住。 */
+.att-nav i {
+  display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm); color: var(--text-strong);
+  transition: border-color var(--duration-faster) var(--ease-out),
+              background-color var(--duration-faster) var(--ease-out);
+}
+.att-nav:hover i { border-color: var(--border-strong); background: var(--bg-panel); }
+.att-nav svg { width: 14px; height: 14px; }
+/* 一枚朝下的箭头转 90 度当左右用 —— 稿子里只此一支箭头,不另画两枚。 */
+.att-nav.mod-prev svg { transform: rotate(90deg); }
+.att-nav.mod-next svg { transform: rotate(-90deg); }
+/* 卡片 57px 见方 —— 这个数字不是挑的,是【量出来的】。
+   ------------------------------------------------------------
+   57 = 文档卡的自然高度:9px 上内边距 + 18px 主名行(12×1.5)
+        + 1px 行距 + 18px 副行 + 9px 下内边距 + 2px 上下边框。
+   之前一直反着来:图卡定一个数,文档卡靠 stretch 被拉到那么高。
+   于是文档卡里那两行字总是浮在中间 —— 图卡 104 时上下各空 25px,
+   缩到 80 也还空 12px,看着就是一个空盒子里放了两行字。
+   现在换成图卡跟着文档卡走:行高由"两行字最少要多高"决定,
+   谁都不浪费,一行里两种卡严丝合缝。
+   ------------------------------------------------------------
+   这个数字调过三轮,前提每次都变了,记下来免得再来回:
+     74 → 104:那时卡下面挂着文件名,104 才够那行字读得出来
+     104 → 80:名字去掉了,不必再为一行字撑宽度
+     80  → 57:改由文档卡定高,图卡跟随 —— 也正好是 Codex 缩略图的量级
+   代价说明白:57px 的缩略图只够认出"大概是哪一屏",认不出细节。
+   可以接受 —— 要看细节是点开大图,那才是它的用途。
+   如果哪天文档卡的字号或内边距改了,这里要跟着重量一次。
+   380px 的消息宽度下可见 5.9 张,行尾露出的那半张当"还有更多"。 */
+/* 整张卡就是预览的点击区 —— 文档写的是「点缩略图弹层看大图」,
+   所以卡本身是 <button>,不是挂个角标了事。角标只是提示,不是唯一热区。
+   失败态那张例外:它里面已经有「重试」按钮,button 不能嵌 button,
+   而且失败的附件本来也没有大图可看。 */
+/* 圆角跟文档卡走:--radius-lg(12px),不是自己那档 8px。
+   两种卡并排站在同一行、同一个高度,只有拐角差 4px —— 这种量级的不一致
+   说不出任何区别,只会让一行东西看着没对齐。附件就是附件,图和文档是它的
+   两副面孔,轮廓该是同一个。改的是图卡去迁就文档卡,不是反过来:文档卡的
+   12px 是被它自己的尺寸定死的(180×57 的横条,拐角小了会显得生硬),
+   而 57px 的方块换个圆角只是换个圆角。 */
+.att-i {
+  flex: none; width: 57px; border-radius: var(--radius-lg); overflow: hidden;
+  border: 1px solid var(--border); background: var(--bg-subtle);
+  padding: 0; text-align: left; display: block;
+  transition: border-color var(--duration-faster) var(--ease-out);
+}
+button.att-i:hover { border-color: var(--border-strong); }
+/* 图片区 1:1。用 aspect-ratio 声明比例,不写死高度 ——
+   卡宽已经改过两次(74→104→80),每次高度都自己跟上,没回来重算过。
+   最早是写死的 78 高,减掉左右边框实际是 102:78 ≈ 17:13,
+   既不是 4:3 也不是任何声明过的比例,是撞出来的。 */
+.att-i .ph { display: block; aspect-ratio: 1/1; height: auto; }
+/* 图卡上不挂文件名 —— 缩略图本身就是它的名字。
+   ------------------------------------------------------------
+   你认出一张图靠的是看见那一屏的样子,不是读「首页」两个字;
+   而图片的文件名多半是「截屏2026-08-17-15.18.32.png」「IMG_4821.png」
+   这种东西,截进卡宽里变成「截屏2026-08-17-1…」,一个字的信息量都没有,
+   却让每张卡永远多背一行的高度。去掉之后卡是个干净的方块,
+   一整行矮 27px —— 这是每条带附件的消息都省下的。
+   真要看名字的时刻是【点开大图】,那时弹层里有地方好好写;aria-label 也留着,
+   读屏照读。
+   ------------------------------------------------------------
+   文档卡反过来必须挂名字:它没有画面,名字是它唯一的身份。
+   所以这不是两条规则,是同一条 —— 【每一项都得有一个能认出它的东西】,
+   图有画面,文档只有名字。
+   ------------------------------------------------------------
+   由此多出一条前提:走图卡的前提是【缩略图真的出得来】。
+   出不来(拿不到 PDF 首页、.sketch 预览、.mov 首帧)就退回文档卡 ——
+   一个既没画面又没名字的灰方块,是这套规则里唯一会出现的死格子。 */
+/* 失败态不描红框,红只留给「重试」两个字。
+   ------------------------------------------------------------
+   原来是「外框 + 重试」两处红、文件名不红,理由是别把红铺到三个层级上。
+   现在把外框也收掉,只剩一处 —— 和下面生图失败格 .shot.is-fail 同一条:
+   红指的是【可以点的那一下】,不是「这张卡出事了」。
+   卡上说明失败已经够用:画面是空的,中间摆着「↻ 重试」。再描一道红边,
+   人先看到的是「这张卡跟旁边不一样」,还得再看一眼才知道不一样在哪 ——
+   托盘里一排缩略图并排时尤其明显。
+   所以失败卡不改 border-color,走和其它卡一样的 --border。 */
+/* 失败卡里的「重试」:图标在上、文字在下,两行。
+   横排放不下 —— 缩略图只有 57px 见方,而「↻ 重试」横着要 60px 出头,
+   按钮会顶出卡外,还带出一块比卡还宽的灰底。竖排之后两行各占一半,
+   刚好落在方块里。
+   它不套 .btn:那套样式自带横向内边距和 nowrap,正是撑破的原因;
+   这里要的是"整块缩略图都是重试的热区",所以直接铺满 .ph。 */
+.att-i .rt {
+  display: grid; place-items: center; align-content: center; gap: 1px;
+  width: 100%; height: 100%; padding: 0;
+  font-size: var(--t-cap); font-weight: 600; line-height: 1.3; color: var(--red);
+}
+.att-i .rt svg { width: 14px; height: 14px; }
+.att-i .rt:hover { color: var(--text-strong); }
+/* hover 角标只留图标,不带「预览」二字 —— 眼睛图标本身已经说清了,
+   在 57px 宽的卡上再压两个汉字会把缩略图整个盖住。
+   文案挪进 aria-label,读屏仍然读得到。 */
+.att-ov { position: relative; }
+.att-ov .act {
+  position: absolute; inset-inline-end: 5px; top: 5px;
+  display: grid; place-items: center;
+  width: 20px; height: 20px; border-radius: var(--radius-sm);
+  background: var(--text-strong); color: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.att-ov .act svg { width: 12px; height: 12px; }
+
+/* ---- 发送前的托盘:同一张卡,只多两样东西 ----
+   待发送的附件跟已发送的用【同一张卡】—— 同样 57px、同样 1:1 缩略图、
+   同样的主名省略 / 后缀保留。只多:右上角一个「×」,和上传中的进度。
+   ------------------------------------------------------------
+   刻意不给"未发送"另画一套更矮的紧凑行。一旦两侧长得不一样,
+   同一批文件在按下发送的那一瞬会整个跳一下形状;更要命的是两套模板
+   会各自漂移 —— 线上那版就是这么裂的:图片走大卡、文档走单行,
+   同一行里两种高度,基线对不上。
+   卡片本身不变,状态只由叠加物承担,这条是这个组件的骨架。 */
+/* 托盘靠左。已发送那一侧要贴右,是因为它压在用户气泡上方、跟气泡右对齐;
+   而托盘在输入框里,输入框是满宽的,内容当然从左边起。
+   两处共用 .att 的单行滚动,只在这里把那个 auto 外边距归零。 */
+.att.mod-tray, .att.mod-tray > :first-child { margin-inline-start: 0; }
+.att.mod-tray { max-width: none; }
+/* 只给组件页用:把托盘按真实输入框的净内宽夹住,好让"滚"这件事看得见。
+   406 = 460 面板 − 两侧 20 边距 − 输入框 2 边框 − 托盘左右 9 内边距 ×2,量过。 */
+.att-demo { width: 406px; max-width: 100%; }
+.att-i { position: relative; }
+/* 「×」的本体样式不绑在图卡上 —— 文档长条也要用同一枚。
+   两处只有【位置】不同:图卡上它浮在右上角(absolute),长条上它就是行尾
+   的一个普通 flex 子元素。把共同的部分留在 .del,差异各自加。
+   之前写成 .att-i .del,长条里的那个既没底也没描边,svg 还失去了尺寸约束
+   —— 渲染成一个巨大的裸叉。 */
+.del {
+  display: grid; place-items: center; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text-muted); padding: 0;
+  transition: color var(--duration-faster) var(--ease-out),
+              border-color var(--duration-faster) var(--ease-out);
+}
+.del svg { width: 10px; height: 10px; }
+/* hover 不变红。红在这套系统里是"出事了 / 不可逆",而「×」只是把这个
+   文件从待发列表里拿掉 —— 文件还在你磁盘上,拿掉了还能再选一次,
+   代价约等于零。给它红,等于把"移除一个附件"和"任务失败"放在同一档上,
+   真出事时红就不灵了。所以只做常规的加深。
+   也不给它挂 tooltip:「×」本身就是通用约定,不需要解释;而且托盘是
+   横向滚动容器,气泡会被裁掉 —— 之前挂了 tip,结果只有那枚小三角
+   露在卡片外面,看着像个渲染错误。名字留在 aria-label 里,读屏仍读得到。 */
+.del:hover { color: var(--text-strong); border-color: var(--border-strong); background: var(--bg); }
+/* 「×」静止时不出,鼠标指到哪张才浮出哪张。
+   ------------------------------------------------------------
+   托盘里躺的是【你自己刚挑的这几个文件】,不是一份待办清单。每张卡的右上角
+   常驻一枚带底带描边的圆钮,三四张排开就成了一行小白点压在缩略图上 ——
+   缩略图统共 57px,而那枚钮吃掉的正是最能认出"这是哪张图"的那个角。
+   何况"拿掉某一个"是偶发动作:选错了才用得上,多数时候人是直接发出去的。
+   静止时只留内容,指到谁谁才显形 —— 和 6 · 注释芯片那条「全文和 × 都只在
+   hover 出现」是同一句话:静止时它是一条状态,不是一个待办。
+   ------------------------------------------------------------
+   逐张出,不是整条托盘一起亮:一起亮的话指一张会招来一排「×」,
+   而你要删的只有手底下这一张。
+   键盘走到它身上照样要显形(:focus-visible),否则 Tab 过去是个看不见的按钮。
+   触屏那一档没有 hover,一律常驻 —— 不然「×」永远等不出来。
+   只作用在托盘里:已发送那一侧本来就不挂「×」,不受这条影响。
+   ------------------------------------------------------------
+   稿子里【不拿 is-hover 钉住任何一张】。别处(如 1 · 用户消息)用钉住的办法
+   把 hover 态摆出来给人看,这里不行:这个组件要说的第一句话就是"静止时它不在",
+   而一张钉住的卡跟一张真的没关系的卡摆在同一页上,看的人分不清哪个是规格、
+   哪个是漏改 —— 反而把"默认不出"这条给盖掉了。想看「×」就把鼠标放上去。 */
+.att.mod-tray .del {
+  opacity: 0;
+  transition: opacity var(--duration-faster) var(--ease-out),
+              color var(--duration-faster) var(--ease-out),
+              border-color var(--duration-faster) var(--ease-out);
+}
+.att.mod-tray .att-i:hover .del,
+.att.mod-tray .att-d:hover .del,
+.att.mod-tray .del:focus-visible { opacity: 1; }
+@media (hover: none) { .att.mod-tray .del { opacity: 1; } }
+/* 图卡:浮在缩略图右上角 */
+.att-i .del { position: absolute; inset-inline-end: 4px; top: 4px; z-index: 2; box-shadow: var(--shadow-sm); }
+/* 「×」只在发送前有:发出去的消息撤不回,那一侧给删除键等于给一个
+   按了没用的按钮。已发送那几态里不会出现它。 */
+
+/* 上传中:缩略图压暗 + 描边上跑一道流光,传完就没。
+   ------------------------------------------------------------
+   原来是底边压一条 62% 的绿条。改成描边之后:
+     · 仍然不另占一行 —— 卡高是常量,多一行文字就得给所有卡都留出
+       那一行的位置,而那一行只有上传的这几秒用得上;
+     · 57px 的卡上一条 3px 的进度条读不出「62%」,只读得出「在动」,
+       那就让它老实地表达「在动」,不假装自己是个百分比;
+     · .is-up 一摘,流光和压暗一起消失,不需要收尾动画。
+   实现上不用伪元素:.att-i 有 overflow:hidden,inset 到边框上的环会被
+   裁掉。改用背景两层 —— padding-box 那层盖住内部,border-box 那层只
+   在 1px 描边区露出来;元素自身的背景不受 overflow 影响。
+   流光之外的那一圈仍是 --border,所以任何一瞬间卡都是有边的,
+   不会在两次扫过之间看着像掉了描边。 */
+@property --att-up-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.att-i .ph { position: relative; }
+.att-i.is-up .mini { opacity: 0.45; }
+.att-i.is-up {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--bg-subtle) 0 0) padding-box,
+    conic-gradient(from var(--att-up-angle),
+      var(--anim-ink) 0deg,
+      color-mix(in srgb, var(--anim-ink) 60%, var(--border)) 45deg,
+      color-mix(in srgb, var(--anim-ink) 25%, var(--border)) 90deg,
+      var(--border) 150deg,
+      var(--border) 360deg) border-box;
+  animation: att-up-travel 1.4s linear infinite;
+}
+@keyframes att-up-travel { to { --att-up-angle: 360deg; } }
+
+/* ---------- 缩略图占位 ----------
+   一块纯灰压住图片该占的范围,不画界面细节。这是【占位图】不是效果图 ——
+   评审要看的是缩略图的框、尺寸、排布、文件名截断,内容画得越像越抢注意力。
+   接真图时把它换成 <img style="width:100%;height:100%;object-fit:cover">,
+   占位和真图占的是同一个盒子,排版不会变。 */
+.mini { display: block; width: 100%; height: 100%; background: var(--bg-muted); }
+
+/* 上传上来的附件,缩略图先摆这枚 logo(源文件 src/att-placeholder.svg,
+   内联成 data URI —— 这份稿子是单文件,不能外链)。
+   ------------------------------------------------------------
+   真缩略图接上来之前,这一格不该是空的灰:一排纯灰方块读起来像"图没加载
+   出来",摆上标记才读得出"这里是一个传上来的文件"。
+   只挂在 .att-i 里,也就是用户传的附件;生图结果 .shot、缩略图条 .th、
+   视觉选项 .vpv 仍然是纯占位灰 —— 那些不是用户传的东西,不该盖产品标。
+   cover 不是 contain:卡是 1:1,图也是 1:1,cover 不会留边;底下那层
+   --bg-muted 留着,图万一没解出来还是原来那块灰,不会露白。 */
+.att-i .mini {
+  background:
+    url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDQ0IiBoZWlnaHQ9IjQ0NCIgdmlld0JveD0iMCAwIDQ0NCA0NDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+IDxyZWN0IHdpZHRoPSI0NDQiIGhlaWdodD0iNDQ0IiBmaWxsPSIjMjAyMDIwIi8+IDxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMF8zNDlfMjgxKSI+IDxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMV8zNDlfMjgxKSI+IDxwYXRoIGQ9Ik0yMjIgNzEuOTk0MUMzMDQuODQzIDcxLjk5NDEgMzcyIDEzOS4xNTEgMzcyIDIyMS45OTRDMzcyIDMwNC44MzcgMzA0Ljg0MyAzNzEuOTk0IDIyMiAzNzEuOTk0SDkxLjk1N0M4MC45MTE0IDM3MS45OTQgNzIuMDAxIDM2My4wODUgNzIuMDAxIDM1Mi4wMzlDNzIuMDAwOCAzMTguNTg1IDcyIDI1MS45MTUgNzIgMjIxLjk5NEM3MiAxMzkuMTUxIDEzOS4xNTcgNzEuOTk0MSAyMjIgNzEuOTk0MVpNMjIyLjAwMSAxMDEuOTk0QzE1NS43MjcgMTAxLjk5NCAxMDIuMDAxIDE1NS43MiAxMDIuMDAxIDIyMS45OTRDMTAyLjAwMSAyODguMjY4IDE1NS43MjcgMzQxLjk5NCAyMjIuMDAxIDM0MS45OTRDMjg4LjI3NSAzNDEuOTk0IDM0Mi4wMDEgMjg4LjI2OCAzNDIuMDAxIDIyMS45OTRDMzQyLjAwMSAxNTUuNzIgMjg4LjI3NSAxMDEuOTk0IDIyMi4wMDEgMTAxLjk5NFoiIGZpbGw9IndoaXRlIi8+IDxwYXRoIGQ9Ik0yMTIuNjU0IDI5Mi40MDlMMTY2LjkyMSAxNzIuMDYxQzE2NS40NDEgMTY4LjE2NiAxNjkuMjQ1IDE2NC4zNDcgMTczLjExNCAxNjUuODQ0TDI5My41MTkgMjEyLjQyN0MyOTguNDc0IDIxNC4zNDQgMjk3LjEwOSAyMjEuNzQgMjkxLjggMjIxLjc0SDIyMS45MTdWMjkwLjY4OUMyMjEuOTE3IDI5Ni4wMzUgMjE0LjU1MiAyOTcuNDAzIDIxMi42NTQgMjkyLjQwOVoiIGZpbGw9IndoaXRlIi8+IDwvZz4gPC9nPiA8ZGVmcz4gPGNsaXBQYXRoIGlkPSJjbGlwMF8zNDlfMjgxIj4gPHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3MiA3MikiLz4gPC9jbGlwUGF0aD4gPGNsaXBQYXRoIGlkPSJjbGlwMV8zNDlfMjgxIj4gPHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3MiA3MikiLz4gPC9jbGlwUGF0aD4gPC9kZWZzPiA8L3N2Zz4=") center / cover no-repeat,
+    var(--bg-muted);
+}
+
+/* ---- 文档附件:同一行、同高、不同宽 ----
+   md / txt / csv / mov 这些没有可看的画面。硬塞进 1:1 的灰方块,那块灰
+   不传达任何东西,而唯一有用的信息 —— 文件名 —— 反而被压在几十像素里
+   截成「跨端适配检查…」。所以给它一张【更宽的卡】,把宽度还给文件名。
+   ------------------------------------------------------------
+   关键是它跟图卡【同高】,并排躺在同一行里,不另起一行。
+   之前那版把文档拆到第二行,是把"高度不一致"这个毛病错当成"不能有两种
+   模板"来治了 —— 真正会散架的是【同一行里高度对不齐】,等高就解决了,
+   不必牺牲单行。高度靠 flex 默认的 stretch 自动跟住图卡,没有第二个数字
+   要维护:以后图卡尺寸再动一次,文档卡自己跟上。
+   ------------------------------------------------------------
+   分界线是【能不能渲染出预览】,不是"图片还是文档":
+     png / jpg / sketch / mov(首帧)/ pdf(首页) → 图卡,有画面可看
+     md / txt / csv / json / log / zip        → 宽卡,没有画面
+   宽度【定死 180px】,不随名字长短变。图卡是固定的 57,文档卡也该是一个
+   固定值 —— 一行里每张卡宽度都不一样的话,眼睛没有落点,扫过去像一排碎块。
+   180 的来历:消息区上限 380,180 × 2 + 7 间距 = 367,正好一行放下两张;
+   再宽就只放得下一张,后面有几个文件完全看不出来。
+   名字放不下就在主名上打省略号,后缀在下一行,永远完整。 */
+.att-d {
+  position: relative; flex: none;
+  width: 180px;
+  display: flex; align-items: center; gap: 9px; padding: 9px 11px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg); text-align: left;
+  transition: border-color var(--duration-faster) var(--ease-out);
+}
+button.att-d:hover { border-color: var(--border-strong); }
+/* 图标就是一枚 15px 的线稿,不压在灰块上。
+   原来那块 38×38 的圆角灰是想跟图卡的缩略图区呼应,但它什么也没说 ——
+   缩略图是内容,这块灰只是个装饰,占的地方比它给的信息多得多。
+   而且它一度是这张卡里最高的元素:.att-d 的纵向内边距当时写成了 0,
+   卡片高度直接等于这块灰的 38px,于是左右有 11px、上下贴边,整张卡失衡。
+   现在图标缩到跟文字一个量级,纵向内边距补成 9px,四边才对得上。 */
+.att-d .fi { flex: none; width: 15px; height: 15px; color: var(--text-soft); }
+.att-d .tx { min-width: 0; display: block; }
+/* 第一行是【完整的文件名】,主名 + 后缀连在一起。
+   ------------------------------------------------------------
+   上一版把后缀拆到第二行写成 MD,想的是"换行之后它天然完整"。
+   但那样它就成了一个【类型标签】,不再是名字的一部分 —— 人嘴里说的、
+   搜索框里敲的、复制出去的都是「商品卡组件规格说明终稿.md」,
+   把 .md 摘掉,屏幕上就没有一个地方写着这个文件真正的名字。
+   所以后缀回到第一行,第二行只留体积。
+   ------------------------------------------------------------
+   于是"后缀不参与截断"这条规则又回来了(图卡那边因为整个不挂名字,
+   确实用不上了,这条现在只服务文档卡):主名 min-width:0 可收缩、
+   超了打省略号;后缀 flex:none,永远完整。
+   整串一起截的话会从尾部吃起,「商品卡组件规格说明终稿.md」先变成
+   「商品卡组件规格说明终…」—— 截掉的正好是唯一能说明它是什么的那几个字符。 */
+.att-d .nm {
+  display: flex; align-items: baseline;
+  font-size: var(--t-mini); color: var(--text-strong);
+}
+/* 省略号切在【中间】,不切在结尾。
+   ------------------------------------------------------------
+   两个理由,都是实打实的:
+   ① 被吃掉的正好是最该留的。文件名的分辨力几乎全在末尾 —— 「-v3」
+      「终稿」「第三轮评审后」;从尾巴截,「跨端适配检查清单-v3.md」和
+      「跨端适配检查清单-v2.md」会截成一模一样的东西。
+   ② 「…」紧挨着后缀的点,「说…」+「.md」连读就是四个点糊成一片,
+      人一眼分不清哪个是省略、哪个是扩展名的分隔符。
+   ------------------------------------------------------------
+   ------------------------------------------------------------
+   这里的稿子直接写的是【切好的结果】,因为纯 CSS 做不到。
+   试过把主名拆成"头段(text-overflow:ellipsis)+ 尾段(flex:none)":
+   两段确实各归各位,但接缝处会空出一道 37px 的缝 —— ellipsis 是按
+   "整字放不下就换成省略号"来截的,而省略号比一个汉字窄得多,
+   那点差额留在了收缩项的盒子里,CSS 关不掉。
+   所以【实现时要在 JS 里量】:按可用宽度算出头段能放几个字,
+   拼成一段连续文本再渲染。切法是"末尾保留一个词" ——
+   中文留最后 2–3 字,拉丁留最后一个单词,-v3 这种版本尾巴算作一个词。 */
+.att-d .nm .base { min-width: 0; overflow: hidden; white-space: nowrap; }
+.att-d .nm .ext { flex: none; white-space: nowrap; }
+.att-d .meta { display: block; margin-top: 1px; font-size: var(--t-cap); color: var(--text-soft); }
+/* 「×」跟图卡同一个位置:右上角。两张卡形状不同,但"删除在哪儿"必须
+   是同一个地方 —— 一行里既有方的又有宽的,如果删除键还各在各处,
+   人每换一张卡就得重新找。托盘里给右侧留出 28px,长名字不会钻到它下面。 */
+.att-d .del { position: absolute; inset-inline-end: 5px; top: 5px; box-shadow: var(--shadow-sm); }
+.att.mod-tray .att-d { padding-inline-end: 28px; }
+/* 文档卡失败也不描红框 —— 同一个状态在方卡和宽卡上不能长成两个样。
+   理由见上面 .att-i 失败态那条。 */
+
+
+/* ---- Thinking / 折叠类通用 ---- */
+/* 卡宽跟着内容走。一行短标题的折叠块、只有两张图的生图块,拉满整栏时
+   右边那片空白不表示任何东西,只会让人以为还有内容没出来。
+   代价:靠 margin-left:auto 顶到右边的耗时/箭头会紧跟文字 —— 但它们仍在
+   各自卡片的右缘,「箭头一律靠右」这条没破。 */
+/* 不描边,只留底色和圆角。
+   ------------------------------------------------------------
+   全稿真正还带边的 .fold 只剩记忆那一块了(别的要么走 mod-flat,要么嵌在
+   mod-flat 里已经脱过框)。而它坐的位置本来就有底 —— 一块浅灰压在白底上,
+   "这是一块、不是散在流水里的几行"已经说清了;再描一圈,就是给一个已经有
+   形状的东西再套个框。
+   圆角留着:没有边之后,那点圆角是这块底色唯一的形状交代。 */
+.fold { border: 0; border-radius: var(--radius); background: var(--bg-panel); }
+.fold > summary {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 11px; cursor: pointer; list-style: none;
+  font-size: var(--t-mini); color: var(--text-strong);
+  border-radius: var(--radius); transition: background var(--duration-faster) var(--ease-out);
+}
+.fold > summary::-webkit-details-marker { display: none; }
+/* 静止就已经是最深的一档,hover 没法再靠"变深"回应鼠标 —— 改成加一层底色。
+   反过来做(静止最深、hover 变浅)不行:鼠标移上去反而退后,那是"禁用"的语义,
+   而 hover 要说的是"这个能点"。 */
+.fold > summary:hover { background: var(--bg-fill-tertiary); }
+/* 记忆的书签用绿,不用灰。
+   这一行是整条流水里唯一"东西被存下来了"的信号,而它原来跟旁边一堆
+   折叠行长得一模一样(同样的灰、同样的字号),扫过去根本注意不到。
+   ------------------------------------------------------------
+   色号产品指定 #00FF04,跟绿勾底片同一支 —— 这两处说的本来就是同一类事
+   (存下了 / 过了),同一支绿才连得起来。
+   之前用的是 --brand-text(#0d5400)那一档深绿,理由是"单独一枚 15px 的
+   实心图标压在白底上,亮绿会发飘"。这条判断没变,只是让位给指定色号:
+   #00FF04 对白底约 1.4:1,当文字是不合格的,当【图标】可以 —— 它是个实心
+   块面、有明确轮廓,靠形状识别不靠笔画;而且它右边紧跟着「已记住 3 条偏好」
+   这句深色的话,信息本身不依赖这枚图标读得清。
+   只染图标不染文字:文字要跟其它折叠行保持一致,绿的是那个标记,
+   不是那句话。 */
+.fold > summary .memo-ic { color: #00ff04; }
+/* 记忆卡的外壳和标题悬停底共用 16px 圆角,展开、收起保持一致。 */
+.fold:has(> summary > .memo-ic),
+.fold > summary:has(> .memo-ic) { border-radius: 16px; }
+/* 箭头一律靠右。原来右对齐是靠耗时 .ms 的 auto 外边距撑出来的,
+   于是没有耗时的那几条(执行计划、记忆组件)箭头就贴在文字后面。
+   现在两个都能自己靠右,谁先出现谁吃掉空白:
+     · 有耗时  → .ms 吃空白靠右,.ms + .chev 把箭头的 auto 清掉,紧跟其后
+     · 没耗时  → .chev 自己吃空白靠右
+   这样不用给每条 summary 补一个空的耗时占位。 */
+.fold > summary .ms { margin-left: auto; font-family: var(--mono); font-size: var(--t-cap); color: var(--text-soft); }
+.fold > summary .chev { margin-left: auto; display: inline-flex; transition: transform var(--duration-faster) var(--ease-out); }
+.fold > summary .ms + .chev { margin-left: 0; }
+/* 等宽里一个空格占满一格,中文夹数字会被撑得很散;只借它的数字对齐。 */
+.fold > summary .ms.mod-num, .tool .ms.mod-num { font-family: inherit; font-variant-numeric: tabular-nums; }
+.fold[open] > summary .chev { transform: rotate(180deg); }
+.fold .body { padding: 0 11px 11px; font-size: var(--t-mini); line-height: var(--lh-body); color: var(--text-muted); }
+.fold .body.mod-scroll { max-height: 96px; overflow-y: auto; }
+/* 展开之后:一张卡,里面全是行。
+   ------------------------------------------------------------
+   这些东西在对话流里各自是一张卡(有框有底),那是因为它们彼此独立、上下要分得
+   开。一旦嵌进这张卡,它们就不再是独立的块,而是这张卡的【行】—— 行不需要各自
+   的框,再画一圈就成了盒子套盒子,三层下来全是描边,内容反而看不见。
+   所以里面一律脱框,层级只靠【缩进】和状态点的列对齐来表达。
+   例外只有终端输出:那是代码,得有底色才读得出是"机器打出来的",但它也只留底
+   色,不要边框。 */
+/* Thinking 不是模块,是两样东西。
+   ------------------------------------------------------------
+   ① 进行中的一行:发出去之后、第一个字落地之前,面板空着,这一行是唯一能说明
+      "它没死"的东西。内容一落地它就让位。
+   ② 事后的一段纯文字:收进「已完成 N 个任务」里,和动作行交替 —— 文字说
+      "为什么这么做",动作行说"于是做了什么"。
+   都不需要框,也不需要展开收起:它本来就是几句话,套个可折叠模块等于给一句话
+   建了个房子。过程里本来就该有纯文字,不是所有东西都得装进模块。 */
+/* 不挂耗时。这一行只活到第一个字落地为止,给一个马上要消失的状态配一个跳动的
+   秒数,只会把注意力钉在一个从此不再相关的数字上;总耗时最后在回合状态行里有。
+   —— 和重连横幅不做滚动倒计时是同一条。 */
+.thinking-live { display: flex; align-items: center; gap: 7px; font-size: var(--t-mini); color: var(--text-muted); }
+/* 它是正文,不是注解 —— 给最深的一档。旁边那些行(执行计划、每个步骤)都是
+   --text-strong,这段话反倒更浅的话,就成了"标签比它标注的内容还重"。
+   和 .say 同一条:没有 hover 态的可读内容,不用留一档给鼠标。 */
+.think { margin: 0; font-size: var(--t-mini); line-height: var(--lh-body); color: var(--text-strong); overflow-wrap: anywhere; }
+/* 话里提到的文件名走等宽,和它下面动作行里的文件名是同一副字 —— 一段话说
+   "引用了 tokens.css",紧接着的动作行就是 tokens.css,两处长得一样才连得上。
+   不加底色:这是句子里的一个词,不是可点的标记。 */
+.think code { font-family: var(--mono); font-size: var(--t-cap); color: var(--text-strong); }
+
+/* 展开后不画分隔线,靠留白分层。
+   ------------------------------------------------------------
+   线是给【列表型】的 body 加的(里面一摞行,标题得和列表分开),但套到一行字的
+   body 上就成了噪音:一条横线压在标题和正文之间,两边又都贴着,看着比实际更挤。
+   去掉线、把上留白给足,层级一样清楚 —— 少画一根线,比多画一根管用。 */
+.fold[open] > summary + .body { padding-top: 4px; }
+.fold[open] > summary + .body.mod-stack { padding-top: 2px; }
+.fold .body.mod-stack { display: flex; flex-direction: column; padding: 0 0 8px; color: var(--text); }
+.fold .body.mod-stack > * { border: 0; background: none; border-radius: 0; width: auto; margin: 0; padding: 5px 11px; }
+.fold .body.mod-stack > .fold > summary { padding: 5px 11px; border-radius: 0; }
+.fold .body.mod-stack > .fold { padding: 0; }
+.fold .body.mod-stack > .fold > summary:hover { background: var(--bg-fill-tertiary); }
+/* 第二层:再缩进一格。缩进量 = 状态点(15) + 间距(7),让两级的状态点各自成列。 */
+.fold .body.mod-stack .body.mod-stack > * ,
+.fold .body.mod-stack .body.mod-stack > .fold > summary { padding-inline-start: 33px; }
+.fold .body.mod-stack .body.mod-stack { padding-bottom: 2px; }
+/* 终端块:缩进跟着它上面那行命令走(不能用 padding 覆盖掉行缩进,否则会顶到卡边),
+   右边也留一样的边,读起来才是"这条命令吐出来的东西"。
+   ------------------------------------------------------------
+   外边距、底色、圆角、边框现在都归外壳 .code —— 命令块和输出块贴成一块这件事,
+   原来靠给两块各自配一半圆角、再把中间那条缝的外边距清成 0 来凑;有了外壳就是
+   一句 overflow: hidden。里面两块只管自己的内边距和排版。 */
+.fold .body.mod-stack .code { margin: 2px 11px 4px 33px; }
+/* 嵌套一层之后,`.body.mod-stack .body.mod-stack > *` 会给每个直接子元素派一份
+   33px / 29px 的行缩进 —— 那是给工具行、说明段用的,代码块自己靠外边距对齐,
+   再吃一份就往右挪了一整格。原来这份逃逸挂在 .term 上,现在挂到外壳。
+   mod-flat 那条(0,6,0)比通用的高,所以两条都得写足。 */
+.fold .body.mod-stack .body.mod-stack > .code,
+.fold.mod-flat .body.mod-stack .body.mod-stack > .code { padding-inline-start: 0; }
+.fold .body.mod-stack .term { padding: 7px 9px; }
+
+/* 「已完成」不装进卡里 —— 它不是一个模块,是这一轮流水折起来的一段。
+   ------------------------------------------------------------
+   里面装的全是已经发生过的事:一句为什么这么做、一份计划、几个跑完的步骤。
+   外面再套一圈边框,等于宣布"这是一件独立的东西",于是每条记录都得先穿过
+   一层框才读得到;而且收起时它只是一行,展开却突然长出一张卡,开合之间
+   整段流水的节奏是断的。
+   撤掉外框之后:标题行自己就是分段的标记,下面的条目一律左对齐往下列 ——
+   调工具的带状态点/图标,纯文字就直接是一段话,层级只靠缩进和状态点的
+   列对齐说。折叠一点没少:标题行照常收起展开,每个步骤也还是各自能开合。 */
+.fold.mod-flat { border: 0; background: none; border-radius: 0; }
+/* 分段标题【不带状态图标】。
+   ------------------------------------------------------------
+   「已完成」「进行中」这几个字本身就是状态,前面再放一枚绿勾或者一个转圈,
+   是把同一件事用两种编码各说一遍 —— 图标什么也没多说。
+   而状态点这套记号是有分工的:它标的是【一条记录成没成】(这次读取成了、
+   这次构建挂了),一摞行靠这一列勾和叉扫下来就知道哪儿出了事。
+   给分段标题也发一枚,这一列里就混进了两种含义不同的记号,那一列不再是
+   "逐条结果",而"哪一条出事了"也就不再一眼可见。
+   撤掉之后正好和参考里一致:标题文字顶到最左,底下每条记录的图标各自成列,
+   缩进天然差出一格 —— 层级不用图标说,位置已经说了。 */
+/* 标题行的文字要退到和正文同一条左边缘,但 hover 的底色贴着字会发闷。
+   内边距照给、再用等量负外边距把整行拉回边缘:对齐和手感各拿各的。 */
+/* 这一行是分段标题,给 600 —— 和 Plan 卡头那行「执行中」同一档。
+   ------------------------------------------------------------
+   命中的是流水里那几条【分段头】:Thinking / 进行中 / 已完成 / 运行失败。
+   它们和 Plan 卡的卡头是同一种东西:一行字,说明底下这一段是什么、到哪了。
+   原来它们是 400,而卡头是 600 —— 同一屏里两种做法,扫下来分不出哪几行是
+   "标题"、哪几行是内容。字号本来就都是 12,统一字重就够,不用再动别的。
+   耗时和计数跟着继承:Plan 卡头的「3/4」也是 600,两处一致。
+   嵌在里面的工具行不受影响 —— 它们的 <details> 不带 mod-flat,选择器够不着。 */
+.fold.mod-flat > summary { margin-inline: -7px; padding: 6px 7px; border-radius: var(--radius-sm); font-weight: 600; }
+/* 耗时和箭头挨着文字放,不推到最右。
+   ------------------------------------------------------------
+   上面那条「箭头一律靠右」是给【有框的】折叠块写的:卡有右边缘,靠右是靠在
+   一条看得见的线上,一摞卡的箭头因此连成一列。
+   外框撤掉之后右边什么都没有了。再把箭头推过去,它贴的是一条不存在的边 ——
+   「已完成」四个字后面拖出一大片空白,读完标题还得横向扫过去才拿得到耗时,
+   而这两样本来就是一句话:完成了,花了多久,点这里展开。
+   所以在 mod-flat 里一律收回来:图标 · 文字 · 耗时 · 箭头,一行读完就是一行。
+   里面的步骤行、工具行跟着同一条 —— 半数靠左半数靠右,整块会散。 */
+.fold.mod-flat summary .ms,
+.fold.mod-flat summary .chev { margin-left: 0; }
+.fold.mod-flat > summary .ms { color: var(--text-strong); }
+/* 工具行的 .nm 默认 flex:1 会把耗时顶到行尾,同样收成只占文字宽。
+   带改动量的那种早就是这个行为(.dst 接走了 auto),这里补上没有改动量的。 */
+.fold.mod-flat .tool .nm { flex: 0 1 auto; }
+.fold.mod-flat > .body.mod-stack { padding: 0 0 2px; }
+/* 展开后补一条发丝线。和上面「一行字的 body 不画线」不冲突:那边线是噪音,
+   这边外框已经撤掉、底下又是一摞行,标题总得有个东西说明"这些归我"。
+   线从 0 起,和标题文字、下面每条记录的左边缘对齐。 */
+.fold.mod-flat[open] > summary + .body.mod-stack { border-top: var(--stroke-thin) solid var(--border); padding-top: 6px; }
+/* 纯文字直接落在左边缘 —— 它是正文,不该比动作行更靠里。 */
+.fold.mod-flat > .body.mod-stack > .think { padding: 6px 0; }
+/* 留下供阅读的推理正文用 13px;滚动中的过程文字保留原有字号。 */
+.fold.mod-flat > .body.mod-stack:not(.mod-stream) > .think { font-size: var(--t-body); }
+/* 动作行:同一套负外边距,状态点和标题行的状态点连成一列。 */
+.fold.mod-flat > .body.mod-stack > .fold { margin-inline: -7px; }
+.fold.mod-flat > .body.mod-stack > .fold > summary { padding: 5px 7px; border-radius: var(--radius-sm); }
+.fold.mod-flat > .body.mod-stack .fold > summary:hover { border-radius: var(--radius); }
+/* 执行计划和步骤标题统一为 13px / 500,进行中、已完成及展开/收起共用。
+   标题文字也直接设置同一档,不只依赖继承。耗时保持独立规则,
+   不影响顶层状态标题和工具调用行。 */
+.fold.mod-flat > .body.mod-stack > .fold > summary,
+.fold.mod-flat > .body.mod-stack > .fold > summary > .mk + span { font-size: var(--t-body); font-weight: 500; }
+.fold.mod-flat > .body.mod-stack > .fold > summary .ms { color: var(--text-strong); font-weight: 500; }
+/* 步骤小结与正常命令行跟随步骤标题色,不联动 Thinking 滚动流。 */
+.fold.mod-flat { --progress-detail-ink: var(--text-strong); }
+/* 开头说明与步骤间小结都沿用正文深色:浅色主题 --text-strong 为 #202020。 */
+.fold.mod-flat > .body.mod-stack:has(> .fold) > .think { color: var(--text-strong); }
+/* 夹在两步中间的小结往右让 22px,让首字和步骤名对齐。
+   22 = 状态点 15px + 行内间距 7px。开头说明不缩进,仍作为整块的开场白。 */
+.fold.mod-flat > .body.mod-stack > .fold ~ .think:has(~ .fold) {
+  padding-inline-start: 22px;
+  /* 步骤间的小结与正文同为 13px,但降到常规字重,避免盖过步骤标题。 */
+  font-size: var(--t-body);
+  font-weight: 400;
+  color: var(--progress-detail-ink);
+}
+.fold.mod-flat > .body.mod-stack > .fold ~ .think:has(~ .fold) code { color: inherit; }
+/* 步骤这一层【不挂失败标】。
+   失败的是整轮任务(由「任务失败」那张卡报),或者是具体的某一次调用(工具行
+   自己带红标);步骤夹在中间,它只是被打断,没有属于自己的失败态。
+   —— 所以这里没有 .fold > summary .fx 这条规则,不是漏了。 */
+/* 第一层的终端块:上面那行工具行靠 -7px 负外边距把内容顶到 22px,终端块没有
+   那份负外边距,所以左边直接给 22,右边收 11 —— 和第二层的终端块对齐规则一致。 */
+.fold.mod-flat > .body.mod-stack > .code { margin-inline: 22px 11px; }
+/* 三个状态里只有「失败」染色。
+   标题那一格现在是整块记录唯一报结局的地方,收起来时也只剩它 —— 出没出事
+   必须在这一个词上看得出来。进行中 / 已完成不染:它们是常态,颜色留给例外。 */
+.fold.mod-flat > summary .st-fail { color: var(--red); }
+/* 折叠头本身就是一个步骤时(正在跑的那一步),它下面的工具行是这个步骤的子项,
+   缩进一格(状态点 15 + 间距 7 = 22)—— 和「已完成」里步骤下面的工具行落在同一个
+   位置。同一个步骤在"正在跑"和"跑完了"两种状态下,它的工具行不该换个地方站。 */
+.fold.mod-flat > .body.mod-stack > .tool { margin-inline: -7px; padding: 5px 7px 5px 29px; }
+/* 一行字的展开内容跟到标题文字下面(7 + 状态点 15 + 间距 7),而不是退回图标列 ——
+   没有外框之后,"谁属于谁"只剩缩进这一个说法。 */
+.fold.mod-flat > .body.mod-stack > .fold > .body:not(.mod-stack) { padding: 2px 7px 6px 29px; }
+/* 第二层缩进量不变(状态点 15 + 间距 7 = 22),只是把上面那 7px 的负外边距补回来。 */
+.fold.mod-flat .body.mod-stack .body.mod-stack > * ,
+.fold.mod-flat .body.mod-stack .body.mod-stack > .fold > summary { padding-inline-start: 29px; }
+/* 折叠行的缩进由它的 summary 承担,盒子本身不再吃一份 —— 否则 29 + 29,
+   一条可折叠的命令行会比它旁边那几条工具行深一格,读起来像多了一层。 */
+.fold.mod-flat .body.mod-stack .body.mod-stack > .fold { padding-inline: 0; }
+/* 正常命令行的文字、耗时和标记同色;失败行保留原有状态色。 */
+.fold.mod-flat .fold:not(.is-fail) > summary:has(> .ti) { color: var(--progress-detail-ink); }
+.fold.mod-flat .fold:not(.is-fail) > summary:has(> .ti) > :is(.ti, .ms),
+.fold.mod-flat .fold:not(.is-fail) > summary:has(> .ti) > .ti > svg { color: inherit; }
+.fold.mod-flat .fold > summary:has(> .ti) > :is(.nm, .ms) { color: var(--text-strong); }
+/* 终端块同样把 7px 的负外边距补回来:左边跟着它上面那行命令,右边收回卡内。
+   只改左右两边 —— 上下那份间距是 .code 自己的,写成 margin 简写会把它顶掉。 */
+.fold.mod-flat .body.mod-stack .code { margin-inline: 29px 18px; }
+
+
+/* 「跑动中」的动效不能只压在一颗点上 —— 7px 的呼吸点动了也几乎看不见,
+   人会以为界面卡住了。所以让点和 Thinking 这个词一起动:
+   点做呼吸,词做流光扫过,两者合起来才有足够的运动面积。 */
+.breath {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  /* --brand(#87ea5c)在浅底上只有约 1.7:1,7px 的点会发飘。
+     往 --brand-text 掺一点压成中绿,兼顾"是品牌绿"和"看得见"。 */
+  background: var(--anim-ink);
+  animation: breath 1.4s var(--ease-out) infinite;
+}
+@keyframes breath { 0%,100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+
+/* 流光:Dia 那条彩带扫过去。用 background-clip:text 做。
+   ------------------------------------------------------------
+   照搬 soralabs 的 dia-text-reveal(21st.dev 上只有用法,实现在
+   ui.soralabs.io.vn/r/dia-text-reveal.json)。它的三件事:
+     ① 渐变分三段 —— 0~33.33% 文字终色 / 40~60% 一条 chromatic ribbon
+        (紫·红·橙·亮·蓝)/ 66.67~100% 尾色,靠 background-position
+        从 100% 走到 0%,彩带就从左往右扫过这几个字;
+     ② 时长 1.5s;
+     ③ 缓动 cubic-bezier(.23,1,.32,1) —— 起手快、尾巴长,彩带是"甩"过去
+        再慢慢停,不是匀速平移。这条比颜色更决定它像不像。
+   ------------------------------------------------------------
+   跟上游【差一处】,是故意的:上游那段尾色是【透明】,因为它是 reveal ——
+   字先没有,彩带扫过才留下字。这两行不能这么做:它们是状态行,得一直读得出来,
+   每 15 秒消失一次再擦回来,扫到一半时"正在重新连接"就是半截字。所以尾色
+   也用 --text-muted:彩带过去之前和之后,字都是那个平色,彩带只是掠过。
+   ------------------------------------------------------------
+   【5 秒扫一次,不是一直扫】。这一行可能挂十几秒也可能挂两分钟,一条一直在
+   跑的彩带在余光里不停闪,读底下那段推理时会被它一直拽走注意力 —— 而它要说的
+   事("还在想")第一遍就说完了。1.5s 扫完(占一轮的 30%),剩下 3.5 秒停在
+   0%,那时看到的是渐变头一段的平色,就是这一行的静止态;下一轮从 100% 起,
+   那一头也是平色,接缝上看不出跳。
+   周期只写在 animation 那一行的 5s 上,关键帧里的 30% 是跟着它算的
+   (1.5 ÷ 5)—— 以后改周期,这两个数要一起动,不然扫程会跟着周期一起被拉长。
+   ------------------------------------------------------------
+   彩带的五个色分浅深两套。上游那个"亮"色是近白的,它跑在深底上;放到浅底上
+   白色等于把字擦掉,所以浅色这套把"亮"换成天蓝 —— 要的是"这一段更透亮",
+   在白底上能担这个角色的不是白,是最跳的那个色。
+   关键帧名 dia-sweep:当初本文件下面的 .shot.is-load 占着 @keyframes shimmer
+   (缩略图 loading 的透明度呼吸),同名的话后定义的赢,这一行会跟着那组呼吸
+   整体明灭而根本没在扫。那组呼吸后来换成了点阵、关键帧也删了,但名字不改回去
+   —— dia-sweep 说的是它自己在干什么,shimmer 只是"闪一下",谁都能叫。 */
+:root {
+  --dia-1: #7c3aed;  /* 紫 */
+  --dia-2: #e11d48;  /* 红 */
+  --dia-3: #ea580c;  /* 橙 */
+  --dia-4: #0ea5e9;  /* 亮(浅底上由天蓝担任) */
+  --dia-5: #2563eb;  /* 蓝 */
+}
+[data-theme="dark"] {
+  --dia-1: #a78bfa;
+  --dia-2: #fb7185;
+  --dia-3: #fb923c;
+  --dia-4: #f1f5f9;  /* 亮(深底上就是近白) */
+  --dia-5: #60a5fa;
+}
+.shimmer {
+  /* 彩带没扫到的那一段是什么颜色,由 --dia-base 定,默认次级灰。
+     抽成变量是因为这条扫光挂在两类文字上:一类是【状态句】(思考中、
+     正在重新连接),它们是过程里的旁白,灰着就好;一类是【分段头】
+     (进行中),它跟「已完成」「运行失败」是同一列标题,得跟着那一档走。 */
+  background: linear-gradient(90deg,
+    var(--dia-base, var(--text-muted)) 0%, var(--dia-base, var(--text-muted)) 33.33%,
+    var(--dia-1) 40%, var(--dia-2) 45%, var(--dia-3) 50%,
+    var(--dia-4) 55%, var(--dia-5) 60%,
+    var(--dia-base, var(--text-muted)) 66.67%, var(--dia-base, var(--text-muted)) 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+  /* 字重钉在 500(产品指定,原来是 400)。三处扫光文案共用这一条 ——
+     思考中 / 进行中 / 正在重新连接:它们是同一类东西(一句会动的状态),
+     字重不该各是各的。500 是 Albert Sans 的 Medium,比正文重半档、又没到
+     标题那一档 600,在"比周围重一点"和"不喧宾夺主"之间。 */
+  font-weight: 500;
+  /* 扫一趟 1.5s,扫完停 1s 再扫下一趟 —— 一轮 2.5s。
+     停顿是这条动画的一半内容:彩带过去之后那一秒的静止,才让下一趟重新有
+     "又动了一下"的意思;没有间歇就成了一条一直在流的带子,反倒不提醒人了。
+     两段的比例写在关键帧里(0→60% 扫、60→100% 停),改总时长时两段一起缩放。 */
+  animation: dia-sweep 2.5s infinite;
+  /* 13:这三句(思考中 / 进行中 / 正在重新连接)是流水里【会动的那一行】,
+     跟旁边 12 的耗时、计数不是一档 —— 它们要先被看见。重连那行本来就是 13,
+     另外两处跟上,三处同款同号。前面那颗球也一起长到 24,字大了球还是 20
+     的话,球会显得掉在行的下半截。 */
+  font-size: var(--t-body);
+}
+/* 流水的分段头「进行中」跟 Plan 卡头的「执行中」是同一件东西:
+   一行字,说明底下这一段是什么、到哪了。所以字号字重颜色都走同一档 ——
+   12 / 600 / --text-strong。它旁边的「已完成」「运行失败」本来就是这一档
+   (纯文本,没有扫光),只有「进行中」因为套了扫光而落到了次级灰 + 500,
+   一列标题里就它浅一号,扫下来像是矮了半级。
+   扫光本身留着 —— 它标的是「这一段还在动」,跟颜色档位是两件事。 */
+.shimmer.mod-head { --dia-base: var(--text-strong); font-weight: 600; }
+/* 「思考中」后面那三个上下浮的点。
+   ------------------------------------------------------------
+   彩带说的是"这一行在动",三个点说的是"话还没说完" —— 两件事,所以分两个
+   动画:彩带 2.5 秒一轮(扫 1.5s + 停 1s,隔一阵子提醒一下),点是 1.2 秒
+   一轮不停地浮(持续的、低幅度的活口)。两条不同相位、也不整倍数,
+   免得看成同一件事在打拍子。
+   ------------------------------------------------------------
+   点挂在 .shimmer 【里面】,不是它旁边:summary 是 flex 行,搁外面就成了
+   一个被垂直居中的独立块,跟中文字的基线对不上;塞进去是行内上下文,
+   inline-flex 的基线就是里面那几个方块的下边缘,正好落在字的基线上。
+   颜色写死 --text-muted 不用 currentColor:.shimmer 为了 background-clip
+   把自己的 color 设成了 transparent,继承过来点就是透明的。
+   幅度只有 3px、直径 3px:它是句末的省略号,不是三颗在蹦的球。 */
+.dots {
+  display: inline-flex; align-items: flex-end; gap: 2px;
+  margin-inline-start: 3px; vertical-align: baseline;
+}
+.dots i {
+  width: 3px; height: 3px; border-radius: 50%;
+  background: var(--text-muted);
+  animation: dot-bob 1.2s var(--ease-out) infinite;
+}
+.dots i:nth-child(2) { animation-delay: 0.15s; }
+.dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dot-bob {
+  0%, 60%, 100% { transform: translateY(0); }
+  30%           { transform: translateY(-3px); }
+}
+@keyframes dia-sweep {
+  0%   { background-position: 100% 0; animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+  60%  { background-position: 0% 0; }   /* 2.5s × 60% = 1.5s:彩带扫完 */
+  100% { background-position: 0% 0; }   /* 剩下 1s 停在原处,再来一趟 */
+}
+
+
+/* 逐字化开的入场,值照搬 motion-primitives 的 TextEffect(per='char')。
+   ------------------------------------------------------------
+   单字 0.4s,字与字错开 0.01s —— 序号 --i 由 text-reveal.js 拆字时写上,
+   延时在这里算。一段五十来字的话,整段约 0.9s 化完:0.5s 是错开,0.4s 是
+   最后一个字自己的时长。
+   起手带 brightness(0%) 是上游的写法,不是我加的:配着 blur 一起,字是从
+   一团化不开的墨里浮出来,而不是单纯地由淡变浓。
+   only 进场,没有退场那一半 —— 这段话是这一轮交给人的结论,出来了就该一直在。
+   ------------------------------------------------------------
+   inline-block 是 filter 生效的前提,但它也给每个字都开了断行机会:中文本来
+   就逐字断,没影响;拉丁词靠 text-reveal.js 那边"元素整块算一个单位"保住,
+   不在这里处理。
+   reduced-motion 那条全局规则会把时长压到 0.01ms,animation-fill-mode: both
+   让它直接停在末帧 —— 是完整的一段字,不是空白。
+   ------------------------------------------------------------
+   【不做 startOnView】。上游有这个选项,一开始也照做了:默认 paused,
+   IntersectionObserver 看见它进视口再放。结果是这一格在页面下半截,观察器
+   一旦没回调(标签页在后台、渲染被节流,实测就会),动画永远停在第 0 帧 ——
+   那一帧是 opacity:0,整段话就是一片空白。
+   一个"可能让正文消失"的开关,换来的只是"动画开头能不能被看见",不划算。
+   现在是加载即播:滚过去时可能已经播完,但字一定在。想看效果刷新一下就是。 */
+[data-reveal] .rv {
+  display: inline-block;
+  animation: text-reveal 0.4s var(--ease-out) both;
+  animation-delay: calc(var(--i) * 0.01s);
+}
+@keyframes text-reveal {
+  from { opacity: 0; filter: blur(10px) brightness(0%); }
+  to   { opacity: 1; filter: blur(0px) brightness(100%); }
+}
+/* ---- 纯文案(开始执行 / 总结) ---- */
+/* 这是 agent 真正说给你听的那几句(开场白、总结),是这一屏你专程来读的东西 ——
+   它没有 hover 态,不用留一档给鼠标,直接给最深的一档。
+   .say b 因此不再靠颜色加重(已经同色),改成只用字重。 */
+.say { font-size: var(--t-body); line-height: var(--lh-body); color: var(--text-strong); }
+.say b { font-weight: 600; }
+/* 【行尾不再留那根闪烁的光标】。
+   ------------------------------------------------------------
+   它原本是"还在写"的记号,但这一屏已经有两处在说同一件事:上面的状态句
+   (思考中 / 生成中)带着扫光和小球一直在动,文字本身也是一个字一个字
+   浮出来的。第三个记号不添新信息,只添一个持续闪的高对比小方块 —— 它落在
+   行尾,恰好是眼睛读完一行要停的地方,于是每读一行都被它拽一下。
+   记号撤掉,"在写"这件事交给上面那行状态和逐字动画去说,读的时候安静。
+   终端块里那一枚一并删了:它从来没有匹配的样式,是一个不显示的空 span。 */
+
+/* ---- 意图澄清 / Plan / 阻塞类卡 ---- */
+/* 【卡片圆角统一 12px】(2026-08-20 按要求)
+   带这圈 1px --border 描边的"卡"—— 澄清/Plan 卡、产物卡、报错卡、代码块、
+   附件卡、视觉方向那四张、反馈弹窗里的原因卡 —— 全部走 --radius-lg(12px),
+   和 .cmp / .up / .composer / 音频条一致。8px 那一档只剩不是卡的东西:
+   工具调用那一行(.tool)、引用标签(.refs)——它们高度就二三十 px,12 的角
+   会把它们拉成胶囊,而胶囊在这套系统里是另一种东西(标签)。 */
+.card { width: fit-content; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); overflow: hidden; }
+/* 需要你做决定的那一类卡(有选项的:意图澄清、跟着改吗、挑视觉方向)把
+   【卡头那一条】垫成极淡的绿,跟「它只是在汇报」的卡区分开 —— 这一张在等你动手。
+   ------------------------------------------------------------
+   绿从卡面挪到了卡头:问题和选项那一片是要读、要点的地方,底下垫色等于给
+   每一行都加了一层背景噪音;卡头只有一句话,染它足够把这张卡从流水里认出来,
+   而正文回到白底,选中那一行的浅绿也就重新有了对比(同色系压同色系,原来那一档
+   选中态几乎读不出来)。
+   实现上染的是 .card 自己 —— 卡头 .h 是透明的,露的就是卡的底;.cbody 铺白盖住
+   下半截,只在它上两角的圆角缺口处露出一点绿,接缝因此还是那道圆角。
+   钩子用 :has(.foot):has(.opts):场景稿里同一张卡也跟着变,而 Plan 卡
+   (装的是 .steps)不在此列;多一个 :has(.foot) 是为了压过下面那条把这类卡
+   底色设成 --bg-panel 的规则。 */
+.card:has(.foot):has(.opts) { background: var(--confirm-surface); }
+.card > .h {
+  display: flex; align-items: center; gap: 7px; padding: 9px 11px;
+  border-bottom: 1px solid var(--border-soft); background: var(--bg-panel);
+  font-size: var(--t-lead); font-weight: 600; color: var(--text-strong);
+}
+/* 卡头整行走 600(2026-08-19 按要求加粗):这一行是卡的名字,压在灰底上,
+   字重是它跟下面正文拉开的唯一一档 —— 颜色两边都已经是最深的一档了。
+   <b> 仍显式收回成 inherit:浏览器默认给它 700,留着就成了行内再上一档,
+   同一行里两种字重。<b> 在标记里区分的是"标题"和旁边的计数 / 按钮,不是字重。 */
+.card > .h b { font-weight: 600; }
+/* 带选项的确认卡标题用 Medium;计划卡和其它状态卡仍沿用 600。 */
+.card:has(> .cbody > .opts) > .h > b { font-weight: 500; }
+/* 数字位用 tabular-nums,不用等宽字体。
+   ------------------------------------------------------------
+   这一格里的内容多半是中文夹数字(「已选 2」「4 步」「旧计划 4 步」),
+   而等宽字体只覆盖拉丁和数字 —— 中文会落回正文字体,一格里两套字形
+   宽度,看着就散。真正需要的只是"数字不跳",tabular-nums 正好只做这件事。
+   分数也一律写成 2/4 不写 2/4:等宽下每个空格都占满一个字宽,
+   「2/5」会被撑成三段,散得像三个独立的数。 */
+.card > .h .n { margin-left: auto; font-variant-numeric: tabular-nums; font-size: var(--t-cap); font-weight: 600; }
+/* 多选计数保留数字的原色,「已选」退后两档到 --text-soft。 */
+.card > .h .selection-count { color: var(--text-strong); }
+.card > .h .selection-count .count-label { color: var(--text-soft); }
+/* 卡头右上角直接放动作按钮,不再为它单开一行底栏。
+   这张卡的正文已经是一份清单了,底下再挂一条只有一个按钮的横条,
+   等于给两行东西撑出三行的高度 —— 而右上角本来就空着(原来放的是
+   「剩余 N 步」,那句话现在挪到左边当标题,右边正好腾出来)。
+   问答卡那边保留底栏,是因为那里有两个按钮(跳过 / 下一步)且要分列两端;
+   这里只有一个动作,没有分列的必要。 */
+.card > .h .hd-act { margin-inline-start: auto; }
+/* 卡头左边那枚标识图标。
+   ------------------------------------------------------------
+   卡头这一行原来只有一句话,和下面那句问话是同一副字号、同一种颜色 ——
+   区别只有底色深一档。图标是这一行唯一"不是文字"的东西,扫下来先落在它上面,
+   于是"这是一张要你回答的卡"在读第一个字之前就成立了。
+   跟着文字走 --text-soft 而不是 --text-strong:它是标识,不是标题;
+   压得和标题一样重,那句话反而不像主角了。
+   这枚是实心图标,和文件里其它描边图标不是一路 —— 15px 上实心比描边显重,
+   浅一档正好把两者的视觉重量拉平。 */
+.card > .h .hd-ic { flex: none; width: 15px; height: 15px; color: var(--text-soft); }
+/* 「要你拿主意」的卡走固定宽,不跟着内容缩,也不拉满。
+   ------------------------------------------------------------
+   报错卡也算这一类 —— 它一样在等你点(从失败处重试 / 导出日志 / 联系支持)。
+   而且它有额外的理由:红是这一屏最重的色,拉满整栏之后一整条红横在流水里,
+   分量远超它实际的严重性 —— 定在 380 之后红只占该占的那块。
+   这一类是同一件事的几种问法:意图澄清(带 .q 的提问)、Plan 卡、中断卡
+   (后两者都是 ol.steps 列着待办)—— 都在等你点一下才往下走,该长一个样。
+   认 .steps 而不是认按钮:Plan 卡在「执行中 / 更新中」时没有按钮,但它还是
+   同一张卡,不能因为状态变了就换个宽度。
+   跟着内容缩:选项一长一短,卡宽就一次一个样,可这是同一个框;
+   拉满整栏:它就和下面的执行记录一样宽,看不出这是需要停下来回答的东西。
+   380 = 用户消息气泡的 max-width。对话里有形状的就这两样 —— 你说的话和
+   它问你的话,同宽、一左一右,来回一目了然。 */
+.card:has(.q), .card:has(> .steps), .card:has(.foot), .errb { width: 380px; max-width: 100%; }
+.cbody > .q { padding: 10px 11px 8px; font-size: var(--t-mini); font-weight: 500; line-height: var(--lh-body); color: var(--text-strong); }
+/* 澄清问句与选项统一使用 13px 正文档。 */
+.card:has(> .cbody > .opts) > .cbody > .q { font-size: var(--t-body); }
+.cbody > .opts { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 11px 10px; }
+
+/* ---- 答题选项:纵向一行一个(mod-stack) ----
+   选项文案长度不可控。横排时长选项会自己折成两行,几个选项高矮不齐,
+   眼睛得在参差的边界之间来回找 —— 而这是要人做决定的地方,最不该费眼。
+   纵排后每个选项占满整宽,再长的文案换行也仍然是一个规整的块,
+   而且左边界对齐,扫一列就读完。
+   注意只作用在答题选项上:报错卡里的 Discord / 飞书社群是入口链接,
+   短且并列合理,那里保持横排。 */
+/* 去掉描边之后要把这一列推回问句的左边界:原来 opts 缩 11px、选项自己再缩 11px,
+   控件落在 22px 上 —— 有框时那读作"卡内的卡",框没了就成了没来由的缩进。
+   改成 opts 只留 6px,选项自己出 5px,控件正好落在 11px,和上面那句问话同一条竖线。
+   那 6px 不是留白是余量:hover 的底色铺到这儿为止,不会怼到卡的圆角上。
+   行距同时从 6 收到 2 —— 一列没有框的行之间留 6px,读起来是三段各自独立的话;
+   收紧之后它们才是一组待选项。 */
+.cbody > .opts.mod-stack { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 2px; padding: 0 6px 8px; }
+.opts.mod-stack .opt { padding-inline: 5px; }
+/* 选项不描边。
+   ------------------------------------------------------------
+   一列选项本来就是一列 —— 是谁和谁并列,靠的是它们左边界对齐、一个挨一个,
+   不需要每条再套一圈框来声明"我是一个块"。三条框叠在一张已经有框的卡里,
+   就是盒子套盒子:边最多的那一屏,内容反而最难扫。
+   静止态因此不占任何颜色,只有【控件 + 文字】;要表达的东西全交给控件 ——
+   圆圈/方块说能选几个,填没填说选没选。
+   底色留给会变的两档:hover 铺一层浅底说"这条能点",选中铺浅绿说"选的是它"。
+   圆角保留:它现在不是框的圆角,是那层底色的形状。 */
+.opt {
+  display: flex; align-items: flex-start; gap: 8px;
+  width: 100%; padding: 8px 11px;
+  border: 0; border-radius: var(--radius);
+  background: transparent; text-align: left;
+  font-size: var(--t-body); line-height: var(--lh-row); color: var(--text);
+  transition: background-color var(--duration-faster) var(--ease-out);
+}
+.opt:hover { background: var(--bg-panel); }
+/* 选中态【不铺底色】。
+   ------------------------------------------------------------
+   底色原来是浅绿的一整条。撤掉的理由和上面撤描边是同一条:一列选项里
+   只有一条被选中,它和其余几条的差别已经由前面那颗控件说清楚了 ——
+   实心 vs 空心,是这套控件唯一的职责。再给它铺一条通栏色块,是把
+   "哪条选中"这一件事说两遍,而底色是三者里最吵的一遍:它改变的是行的
+   面积,不是行里的那个点。「自己填」展开输入框时更明显 —— 整块底色
+   会连着输入框糊成一片绿。
+   选中态因此只剩两处变化:前面的控件填实(--pick),文字使用 500
+   并换成 --select-ink。底色那一档还给 hover:现在只有指针底下那条有底,
+   "能点的是这条"和"选中的是这条"各说各的,不再抢同一种表达。 */
+.opt.is-on {
+  color: var(--select-ink); font-weight: 500;
+}
+.opt .ic { flex: none; display: grid; place-items: center; height: calc(var(--t-mini) * var(--lh-row)); color: var(--text-soft); }
+.opt .ic svg { width: 13px; height: 13px; }
+
+/* ---- 单选 / 多选的控件 ----
+   【两边都是圆】(2026-08-20 按要求)。原来方形=多选、圆形=单选,
+   靠形状就能看出能选几个;现在这条线索没有了 —— 未选中时两种卡的控件
+   长得一模一样,得等选了、或者读卡头那句「已选 3」才分得出来。
+   换来的是一致:选中之后本来就都是同一枚绿勾徽标,未选中却一方一圆,
+   等于同一列控件在两个状态下用两套形状。
+   ------------------------------------------------------------
+   两边的【提交】是同一套:都要点底部「下一步」。
+   文档原话是"单选点选项即发送",这份稿子不照做 —— 点击这个动作
+   本身分不清"我选它"和"我手滑",而这一下不可撤回:卡片当场收成陈述,
+   想改只能再发一条消息去纠正 Agent,比多点一次贵得多。
+   两步多出的那一次点击只在"你本来就选对了"时发生,是最便宜的成本。
+   所以形状只表达"能选几个",不再兼职表达"点下去会不会立刻发出去"。
+   控件与首行文字顶对齐:选项可能换行,居中会让控件掉到文字块中间。 */
+.opt .box {
+  flex: none; width: 15px; height: 15px; margin-top: 1px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong); background: var(--bg);
+  display: grid; place-items: center;
+  transition: border-color var(--duration-faster) var(--ease-out),
+              background-color var(--duration-faster) var(--ease-out);
+}
+.opt:hover .box { border-color: var(--text-soft); }
+
+/* 单选选中也走那枚勾徽标,跟多选同一枚 —— 全稿"选了 / 过了"只有一种记号。
+   实心点那一档撤掉:点和勾并排出现时,人会去想"这两个是不是不同的选中",
+   而它们说的是同一件事。未选中仍是空圆(单选)/ 空方(多选),形状的分工留在那儿。
+   两关同多选:background-origin 掰到 border-box(描边已 transparent,
+   整个 15px 才是控件真正的尺寸)、尺寸给 120%(svg 画布 24 里圆只占 20,
+   contain 会把圆缩成 12.5px,比旁边的空圈小一圈)。 */
+.opts.mod-single .opt.is-on .box {
+  border-color: transparent;
+  background: var(--tick-img) center / 120% no-repeat; background-origin: border-box;
+}
+/* 多选选中:实心方块 + 深绿勾(纯 CSS 画,不额外塞 svg 进标记) */
+/* 选中之后方块整个让位给那枚图标(全稿的勾统一成一种画法)。
+   代价说明白:方=多选、圆=单选那组形状对比只剩【未选中】时还在 ——
+   选中的多选项现在也是个圆。换来的是"过了/选了"全站同一枚记号。 */
+/* 让这枚徽标画到和未选中那个圈【一样大】,要过两关:
+   ① background-origin 掰成 border-box。默认是 padding-box —— 那是拿【内容框】
+      去套的,15px 的框扣掉两边 1.5px 描边只剩 12px。描边这时已经 transparent,
+      整个 border-box 才是这枚控件真正的尺寸。
+   ② 尺寸给 120%,不是 contain。那张 svg 的画布是 24×24,而圆只占中间的 20
+      (x 从 2 到 22),四边各留 2 的空白。contain 是把【画布】塞进 15px,
+      圆就只剩 15 × 20/24 = 12.5px —— 比旁边那个 15 的空圈小一圈,一列排下来
+      选中的反而比没选的小,像是缩了一下。
+      120% 把画布放到 18px,圆正好 18 × 20/24 = 15px,和空圈严丝合缝;
+      溢出的 1.5px 是画布那圈空白,被 border-box 裁掉,什么也没少。 */
+.opts.mod-multi .opt.is-on .box { border-color: transparent; background: var(--tick-img) center / 120% no-repeat; background-origin: border-box; }
+/* 多选的勾用统一那条路径,不再用 CSS 边框旋转拼 —— 拼出来的勾
+   角度和端点跟 SVG 那个对不上,并排放就是两种形状。 */
+.opt .box svg { width: 10px; height: 10px; opacity: 0; }
+.opts.mod-single .opt .box svg { display: none; }   /* 单选是圆点,不该有勾 */
+.opts.mod-multi .opt.is-on .box svg { display: none; }   /* 勾由上面那枚图标自带 */
+/* 「自己填」是选项之一,不是卡片外的补充说明 —— 文档把「自定义」和
+   单选/多选/跳过并列写在支持的操作里,它就该和其它选项躺在同一列。 */
+/* 「自己填」原来靠一圈虚线框和其它选项区分。框去掉之后这一档只剩文字变浅 ——
+   够用:它和上面几条并排躺着、共用同一个圆圈控件,本来就是"选项之一",
+   浅一档说的是"这条要你自己写点什么",不是另一类东西。 */
+.opt.mod-own { color: var(--text-muted); }
+/* 选中之后它跟其它选项同档:静止态压一档灰是因为「自己填」是兜底的那一项,
+   选中之后它就是你选的那一条,没有理由比别的选中行淡。 */
+.opt.mod-own.is-on { color: var(--select-ink); }
+.opt.mod-own:hover { color: var(--text-strong); }
+
+/* 选中「自己填」后原地展开输入框。
+   ------------------------------------------------------------
+   输入框放在选项内部而不是卡片外面:它属于这一个选项,
+   放外面会让人以为那是另一个独立的输入区。
+   选中它不改变底栏 —— 「下一步」本来就常驻,只是在你写字之前
+   继续置灰:选了「自己填」却一个字没写,和一项都没选是同一种"还没答"。 */
+.opt.is-open { cursor: default; }
+.opt .own { flex: 1; min-width: 0; display: block; }
+.opt .own-l { display: block; font-weight: 500; }
+/* 只留一条底线,不围一圈框 —— 和反馈弹窗那个补充框(.rsn .ta)同一种写法。
+   ------------------------------------------------------------
+   一圈框是"这是一个独立的输入区";可这个框长在【某一个选项里面】,
+   外面已经有卡的边、选项行的圈,再套一层就是第三层容器,一屏三重边界。
+   一条底线只说"这儿可以写字",不再声明一次边界 —— 该说的上面那个圈说过了。
+   高度跟着内容(field-sizing)而不是钉死两行:框在的时候空行是框的一部分,
+   框没了,空行就只是文字和线之间的一段空白,写一行却空着两行的地方很显眼。 */
+.opt .own-ta {
+  display: block; width: 100%; margin-top: 6px; padding: 2px 0 5px;
+  border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
+  background: none; color: var(--text-strong);
+  font-family: inherit; font-size: var(--t-mini); font-weight: 500; line-height: var(--lh-row);
+  field-sizing: content; resize: none; outline: none;
+}
+.opt .own-ta::placeholder { color: var(--text-soft); }
+/* 一上手那句提示就撤掉,不等你打出第一个字。
+   ------------------------------------------------------------
+   提示语是【还没开始时】的示范,给你一个"该写成什么样"的样子。手一放上来,
+   这件事已经完成了 —— 再留着,光标就压在那行灰字前面闪,像是要在示范上接着写。
+   而且这句提示不短(一整行),它占着的正是你要写字的地方。
+   用 transparent 而不是 content-visibility 之类:字仍在,读屏仍念得到,
+   只是不再显形 —— 移开焦点、一个字没写的话,它自己就回来了。 */
+.opt .own-ta:focus::placeholder { color: transparent; }
+/* 聚焦只把线压深一档,不染色:染色是"这里有状态",而这儿要说的只是
+   "光标在这条线上",压深已经够了 —— 和 .rsn .ta 保持一致。 */
+.opt .own-ta:focus { border-bottom-color: var(--border-strong); }
+
+/* ---- 意图澄清:语言下拉选择 ----
+   常用语言先放在首屏,低频语言收到「更多语言」下面。展开后的额外列表固定
+   露出 6.5 行(32px × 6.5 = 208px),半行提示下面还能继续滚。 */
+.opts.mod-language { display: block; padding: 0 11px 10px; }
+.language-select { position: relative; }
+.language-menu,
+.language-more {
+  overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); box-shadow: var(--shadow-sm);
+}
+.language-more { margin-top: 8px; }
+.language-more-list[hidden] { display: none; }
+.language-group-label {
+  display: block; padding: 7px 10px 3px;
+  color: var(--text-muted); font-size: var(--t-cap); font-weight: 500;
+}
+.language-option,
+.language-more-toggle {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; min-height: 32px; padding: 6px 10px;
+  color: var(--text-strong); font-size: var(--t-mini); text-align: left;
+}
+.language-option:hover,
+.language-more-toggle:hover { background: var(--bg-fill-secondary); }
+.language-option[aria-selected="true"] { background: var(--brand-soft); color: var(--select-ink); font-weight: 500; }
+.language-option .language-code {
+  margin-inline-start: auto;
+  color: var(--text-muted); font-size: var(--t-cap);
+  font-variant-numeric: tabular-nums;
+}
+.language-option .language-check { width: 14px; height: 14px; margin-inline-start: auto; opacity: 0; color: var(--brand-text); }
+.language-option .language-code + .language-check { margin-inline-start: 0; }
+.language-option[aria-selected="true"] .language-check { opacity: 1; }
+.language-more-toggle { color: var(--text-muted); font-weight: 500; }
+.language-more-toggle .sp { flex: 1; }
+.language-more-toggle svg { width: 14px; height: 14px; transition: transform var(--duration-faster) var(--ease-out); }
+.language-more-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.language-more-list {
+  max-height: 208px; overflow-y: auto; overscroll-behavior: contain;
+  border-top: 1px solid var(--border); scrollbar-width: thin;
+}
+
+
+/* ---- 颜色选择:预设色 + 自定义色值 + 实时预览 ---- */
+.opts.mod-color {
+  display: grid; gap: 10px; padding: 0 11px 10px;
+}
+.color-field { min-width: 0; margin: 0; padding: 0; border: 0; }
+.color-field legend,
+.color-label {
+  display: block; margin: 0 0 6px;
+  font-size: var(--t-mini); font-weight: 600; color: var(--text-strong);
+}
+.color-presets {
+  display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px;
+}
+.color-swatch {
+  width: 30px; height: 30px; justify-self: center;
+  border: 2px solid var(--bg); border-radius: var(--radius-circular);
+  background: var(--swatch); box-shadow: 0 0 0 1px var(--border);
+  transition: transform var(--duration-faster) var(--ease-out),
+              box-shadow var(--duration-faster) var(--ease-out);
+}
+.color-swatch:hover { transform: scale(1.06); }
+.color-swatch[aria-pressed="true"] {
+  transform: scale(1.06); box-shadow: 0 0 0 2px var(--text-strong);
+}
+.color-custom { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+.color-native {
+  width: 34px; height: 34px; padding: 2px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg); overflow: hidden;
+}
+.color-native::-webkit-color-swatch-wrapper { padding: 0; }
+.color-native::-webkit-color-swatch { border: 0; border-radius: 2px; }
+.color-native::-moz-color-swatch { border: 0; border-radius: 2px; }
+.color-hex {
+  min-width: 0; height: 34px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--text-strong);
+  font-family: var(--mono); font-size: var(--t-mini);
+}
+.color-hex:hover { border-color: var(--border-strong); }
+.color-hex:focus { border-color: var(--text-soft); outline: none; }
+.color-hex[aria-invalid="true"] { border-color: var(--red); }
+.color-preview {
+  min-height: 48px; display: flex; align-items: center;
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--choice-color) 12%, var(--bg));
+  color: var(--choice-color); font-size: var(--t-mini); line-height: var(--lh-row);
+}
+.answered .color-answer { display: inline-flex; align-items: center; gap: 6px; }
+.answered .color-answer i {
+  width: 13px; height: 13px; border-radius: var(--radius-circular);
+  background: var(--answer-color); box-shadow: 0 0 0 1px var(--border);
+}
+
+/* ---- Amount Slider:滚动数值 + 光点矩阵 + 磁吸刻度 ---- */
+.opts.mod-slider { display: block; padding: 0 11px 10px; }
+.amount-slider { --range-pct: 25%; display: grid; gap: 7px; }
+.amount-readout {
+  min-height: 36px; display: flex; align-items: flex-start; justify-content: center; gap: 4px;
+  color: var(--text-strong); font-variant-numeric: tabular-nums;
+}
+.amount-value-viewport { display: block; height: 34px; overflow: hidden; }
+.amount-value-stack { display: flex; flex-direction: column; will-change: transform; }
+.amount-value-stack > span {
+  min-width: 22px; height: 34px; line-height: 34px; text-align: center;
+  font-family: var(--sans); font-size: 32px; font-weight: 600;
+}
+.amount-unit { margin-top: 3px; font-size: var(--t-cap); color: var(--text-muted); }
+.amount-announcer {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.amount-rail {
+  position: relative; height: 34px; overflow: hidden;
+  border-radius: var(--radius); background: var(--bg-panel);
+}
+.amount-grid {
+  position: absolute; inset-block: 0; inset-inline-start: 0; width: var(--range-pct);
+  min-width: 14px; overflow: hidden; pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg,
+      color-mix(in srgb, var(--accent) 24%, transparent) 0 2px,
+      transparent 2px 4px),
+    repeating-linear-gradient(0deg,
+      color-mix(in srgb, var(--accent) 18%, transparent) 0 2px,
+      transparent 2px 4px);
+}
+.amount-grid::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(100deg,
+    transparent 15%,
+    color-mix(in srgb, var(--bg) 72%, transparent) 48%,
+    transparent 78%);
+  animation: amount-grid-shimmer 1.8s var(--curve-linear) infinite;
+}
+@keyframes amount-grid-shimmer {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(110%); }
+}
+.amount-stops {
+  position: absolute; inset: 0 9px; z-index: 1;
+  display: flex; align-items: center; justify-content: space-between;
+  pointer-events: none;
+}
+.amount-stop {
+  width: 4px; height: 4px; border-radius: var(--radius-circular); background: var(--border-strong);
+  transition: background-color var(--duration-faster) var(--ease-out);
+}
+.amount-stop.is-past { background: var(--text-strong); }
+.amount-range {
+  position: absolute; inset: 0; z-index: 2;
+  appearance: none; width: 100%; height: 34px; margin: 0;
+  background: transparent; cursor: grab;
+}
+.amount-range:active { cursor: grabbing; }
+.amount-range::-webkit-slider-runnable-track { height: 34px; background: transparent; }
+.amount-range::-webkit-slider-thumb {
+  appearance: none; width: 18px; height: 32px; margin-top: 1px;
+  border: 0; border-radius: var(--radius); background: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.amount-range::-moz-range-track { height: 34px; border: 0; background: transparent; }
+.amount-range::-moz-range-thumb {
+  width: 18px; height: 32px; border: 0; border-radius: var(--radius);
+  background: var(--accent); box-shadow: var(--shadow-sm);
+}
+.amount-range:focus-visible { outline: none; }
+.amount-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--selected-soft); }
+.amount-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--selected-soft); }
+.amount-limits {
+  display: flex; justify-content: space-between;
+  font-size: var(--t-cap); color: var(--text-soft); font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .amount-grid::after { animation: none; }
+  .amount-value-stack { transition: none !important; }
+}
+
+/* 预设颜色的分组标签与确认卡标题使用同一档字重。 */
+.opts.mod-color .color-field > legend { font-weight: 500; }
+/* 选中状态只改变外圈,保留色块本身所代表的真实颜色。 */
+.opts.mod-color .color-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px #00FF08;
+}
+/* 自定义取色器的外框与浏览器内部色块统一为圆形。 */
+.opts.mod-color .color-native,
+.opts.mod-color .color-native::-webkit-color-swatch,
+.opts.mod-color .color-native::-moz-color-swatch {
+  border-radius: var(--radius-circular);
+}
+
+/* Amount Slider:上方数字可直接编辑,并与滑杆双向同步。
+   轨道不再放刻度点;数值位置由滑块本身和进度色共同表达。 */
+.opts.mod-slider { display: block; padding: 0 11px 10px; }
+.amount-slider {
+  --range-pct: 25%;
+  --amount-track-height: 16px;
+  --amount-thumb-size: calc(var(--amount-track-height) - 2px);
+  --amount-active: #00FF08;
+  display: grid; gap: 7px;
+}
+.amount-readout {
+  min-height: 42px; display: flex; align-items: flex-start; justify-content: center; gap: 4px;
+  color: var(--text-strong); font-variant-numeric: tabular-nums;
+}
+.amount-value-input {
+  box-sizing: border-box; width: 1.35em; height: 42px; padding: 3px 2px;
+  appearance: textfield; border: var(--stroke-thin) solid var(--border); border-radius: var(--radius-sm); outline: none;
+  background: transparent; color: inherit;
+  font-family: var(--sans); font-size: 32px; font-weight: 600; line-height: 34px; text-align: center;
+}
+.amount-value-input::-webkit-outer-spin-button,
+.amount-value-input::-webkit-inner-spin-button { margin: 0; appearance: none; }
+.amount-value-input:hover { border-color: var(--border-strong); background: var(--bg-fill-secondary); }
+.amount-value-input:focus-visible {
+  border-color: var(--selected); box-shadow: 0 0 0 2px var(--selected-soft);
+  background: var(--bg);
+}
+.amount-unit { margin-top: 3px; font-size: var(--t-cap); color: var(--text-muted); }
+.amount-rail {
+  position: relative; height: var(--amount-track-height); overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--amount-active) 22%, var(--bg-panel)) 0 var(--range-pct),
+    var(--bg-panel) var(--range-pct) 100%);
+}
+.amount-range {
+  position: absolute; inset: 0; z-index: 1;
+  appearance: none; width: 100%; height: var(--amount-track-height); margin: 0;
+  border-radius: var(--radius-pill); background: transparent; cursor: grab;
+}
+.amount-range:active { cursor: grabbing; }
+.amount-range:focus-visible { outline: 1px solid var(--selected); outline-offset: -1px; }
+.amount-range::-webkit-slider-runnable-track {
+  height: var(--amount-track-height); border-radius: var(--radius-pill); background: transparent;
+}
+.amount-range::-webkit-slider-thumb {
+  appearance: none; width: var(--amount-thumb-size); height: var(--amount-thumb-size); margin-top: 1px;
+  border: 0; border-radius: var(--radius-circular); background: var(--amount-active);
+  box-shadow: var(--shadow-sm);
+}
+.amount-range::-moz-range-track {
+  height: var(--amount-track-height); border: 0; border-radius: var(--radius-pill); background: transparent;
+}
+.amount-range::-moz-range-thumb {
+  width: var(--amount-thumb-size); height: var(--amount-thumb-size);
+  border: 0; border-radius: var(--radius-circular); background: var(--amount-active);
+  box-shadow: var(--shadow-sm);
+}
+.amount-limits {
+  display: flex; justify-content: space-between;
+  color: var(--text-muted); font-size: var(--t-cap); font-variant-numeric: tabular-nums;
+}
+
+/* ---- 视觉方向:看图选择 ----
+   来源 specs/current/studio-chat-visual-discovery.md:
+   风格这类问题不能用文字选项 ——「Modern minimal」「Editorial」这种抽象词,
+   用户只能生成完才知道自己选了什么。规格要求按产物类型筛 3–5 个方向,
+   每个给预览图,并且【同一份示例内容、同一画幅】,让人比的是风格不是题材。
+
+   下面每张预览是 CSS 画的结构缩影,四个方向的差别落在版式本身
+   (留白量、字重块的粗细、圆角、信息密度),不是同一个模板换颜色 ——
+   规格里专门点了这一条。正式素材是"内置精选预览图",到位后替换 .vpv
+   内部即可,外框和交互不用动。 */
+/* 排布(叠放 / 网格)整套挪到 visual-fan.css:这一层现在只是外壳,
+   真正决定四张怎么排的是里面的 .vwrap，随 data-view 切换。 */
+.vopt {
+  position: relative;
+  display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg); text-align: left;
+  transition: border-color var(--duration-faster) var(--ease-out), background-color var(--duration-faster) var(--ease-out);
+}
+.vopt:hover { border-color: var(--border-strong); }
+.vopt.is-on {
+  border-color: color-mix(in srgb, var(--brand) 82%, var(--border-strong));
+  background: color-mix(in srgb, var(--brand-soft) 88%, var(--bg-panel));
+}
+/* 预览图 1:1 —— 跟附件缩略图同一个比例,面板里只有一种预览画幅。
+   四张要比的是风格不是题材,画幅统一才比得出来;方形也让两列排布
+   在 380px 的消息宽度下高度可控。 */
+.vpv { position: relative; display: block; aspect-ratio: 1/1; background: var(--bg-subtle); overflow: hidden; }
+
+/* 选中标记:光靠一圈边框,四张图并排时不够跳 —— 边框只在卡的外沿,
+   眼睛落在图上时看不到。所以在图内角上放一个明确的勾选圈。
+   ------------------------------------------------------------
+   用【圆形】而不是方形:这是 4 选 1,圆=单选是文件里已经立下的规矩
+   (见 .opts.mod-single / .mod-multi),视觉方向卡不该破例。
+   未选中也画空圈,不是选中才冒出来 —— 空圈在告诉人"这几张是可选的",
+   要是平时没有、选中才出现,人得先点一下才知道能点。
+   带白底和一圈描边,是为了压住底下任意深浅的预览图。 */
+.vpv .pick {
+  position: absolute; inset-inline-end: 6px; top: 6px;
+  display: grid; place-items: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--bg); border: 1.5px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  transition: background-color var(--duration-faster) var(--ease-out),
+              border-color var(--duration-faster) var(--ease-out);
+}
+.vpv .pick svg { width: 11px; height: 11px; opacity: 0; color: var(--brand-text); }
+.vopt:hover .vpv .pick { border-color: var(--text-soft); }
+.vopt.is-on .vpv .pick {
+  /* 同 .opts.mod-multi 那枚,两关一样:origin 掰成 border-box,尺寸给 120%
+     (contain 只能把圆画到 18 × 20/24 = 15,比这个 18 的圈小一圈)。 */
+  background: var(--tick-img) center / 120% no-repeat; background-origin: border-box;
+  border-color: transparent; box-shadow: none;
+}
+.vopt.is-on .vpv .pick svg { display: none; }   /* 同上,勾在图标里 */
+/* 方向名压在图上,不再单开一条白底。
+   ------------------------------------------------------------
+   那条白底是卡里的第二块地:图已经占满了卡,底下再挂一条,卡就成了
+   "图 + 一行说明"两段式,叠成一沓时四张的白边还会连成一片横条。
+   名字本来就是这张图的标注,贴着图的左下角说完就够了。 */
+.vmeta { position: absolute; inset-inline-start: 0; inset-block-end: 0; display: block; padding: 7px 9px; }
+/* 图底那层兜底渐变 —— 上面那条注释里预告过的,真预览图进来就得补。
+   ------------------------------------------------------------
+   占位是浅灰时,--text-strong 直接压上去就读得出;换成真图之后四张里有两张
+   是暗调的(夜色、林子),深字压深图直接糊掉。所以在图的下沿盖一层由下往上
+   化开的底,方向名落在这层底上,不落在图上。
+   底色取 --bg 而不是写死白色:浅色稿里它是白的、暗色稿里它是近黑的,而字
+   (--text-strong / 选中时 --brand-text)在两套里本来就是跟 --bg 相反的一端 ——
+   同一条规则,两个主题都成立。
+   高度 52px 只盖住名字那一条,图的主体一点没动;pointer-events 关掉,
+   免得它挡住整张卡的点击。挂在 .vpv::after 上、而不是给 .vmeta 加背景:
+   .vmeta 的宽度是跟着文字走的,给它上底会变成名字后面一块方补丁,
+   而这层底要的是横贯整张图、从下往上化开。 */
+.vpv::after {
+  content: ""; position: absolute; inset-inline: 0; inset-block-end: 0; height: 52px;
+  background: linear-gradient(to top,
+    var(--bg) 0%,
+    color-mix(in srgb, var(--bg) 62%, transparent) 45%,
+    transparent 100%);
+  pointer-events: none;
+}
+.vt { display: flex; align-items: center; gap: 5px; font-size: var(--t-mini); font-weight: 600; color: var(--text-strong); }
+.vopt.is-on .vt { color: var(--brand-text); }
+/* 【不设「推荐」标】。原来第一张挂一枚深绿药丸,标它是我们建议的那个方向。
+   撤掉的理由:这张卡存在的前提是"风格这种事文字说不清,所以给你看图" ——
+   既然承认了要靠眼睛判断,再替人先挑一个,等于把刚交出去的判断权收回来一半。
+   有推荐标的时候,四张图不再是平等的四张:另外三张得先说服你"为什么不选那个
+   被标出来的",而它们本该只跟你的眼睛打交道。
+   连带删掉了「选的不是推荐项 · 推荐标签不跟着变绿」那一态 —— 它整条状态就是
+   在讲这枚药丸的行为,标没了,那一格和上面「选中一张」只差选中的是哪张。 */
+/* 方向名底下【不挂一句描述】。
+   「大留白、细字重,一屏只讲一件事」这种话是在把图上看得见的东西翻译成文字 ——
+   四张都写就是四段要读的句子,横在图和图之间,挑图这个动作反倒被文字打断。
+   这张卡存在的理由恰恰是"抽象词说不清,所以给你看图";再补描述等于承认图没说清。
+   名字留着,是因为选完之后「已确认」那条陈述要有个词可写。 */
+
+/* 预览位与附件缩略图同一处理:一块纯灰压住图片该占的范围,不画内容。
+   这是占位不是效果图 —— 真正的"内置精选预览图"到位后换掉 .mini 即可,
+   外框、勾选圈、方向名都不用动。
+   代价说明白:四张现在长得一样,这份稿子里没法判断"能不能比出风格差异",
+   那要等真图。能判断的是版式、勾选和"帮我决定"的出口。 */
+
+/* 底栏不铺底色,也不画线 —— 就跟卡里其它内容同一片底。
+   ------------------------------------------------------------
+   这一格前后改过三版:灰带 → 一条 1px 分割线 → 上两角带圆的浅底面板。
+   现在回到最省的一版:什么都不加。
+   底栏本来就靠【位置】说话 —— 它在最下面、按钮在右边,这两件事已经说清了
+   "这是收口"。再垫一层灰是拿颜色重讲一遍位置已经讲过的事,而这张卡上半截
+   是四张图,底下再压一条灰带,整张卡就成了"图 + 灰条"两截。
+   圆角和 border-top 一并删掉:它们是那层底色的形状,底色没了就没有东西可圆。 */
+/* 上内距收掉。最后一个选项到「下一步」之间原本是三段 8 叠出来的 24 ——
+   选项自己的下内距 8 + 选项区的下内距 8 + 底栏的上内距 8。三段说的是同一个
+   间隙,却分给三个盒子各出一点,谁都不知道自己在决定什么。
+   底栏没有底色也没有边(见上),它的上内距不划分任何东西,纯粹是往下推按钮,
+   所以由它退场:剩下的 8 + 8 = 16,既是"最后一条选项到底栏上缘",也是
+   "到下一步按钮" —— 同一个数,量哪儿都对得上。 */
+.cbody > .foot {
+  display: flex; align-items: center; gap: 8px; padding: 0 11px 8px;
+}
+/* 左起那个动作(跳过 / 换一批)顶掉自己的左内距,文字直接落在 11px 上 ——
+   和上面的问句、每个选项的控件同一条竖线。原来它自带 11px,于是文字落在 22,
+   比整张卡里所有别的东西都往里缩一格,读起来像另起了一栏。
+   只收左起这一个:右边的「随机」挨着「下一步」,它要的是和按钮之间的距离,
+   不是和卡边界对齐。 */
+.cbody > .foot > .btn:first-child { padding-inline: 0; }
+/* 底栏的次要动作 hover 不铺灰底,只加深文字。
+   ------------------------------------------------------------
+   贴着左边界之后那层灰会一直漫到卡的内边距上,看着像凭空多出一张小卡片;
+   而这一行本来就是"一句可点的话",不是一个有形状的按钮。
+   加深文字已经够说明它能点 —— 别处的 .mod-ghost(导出、联系支持、取消)
+   不在这条里,它们没贴边,那层灰仍然是有用的。 */
+.cbody > .foot .btn.mod-ghost:hover { background: none; color: var(--text-strong); }
+.cbody > .foot .sp { flex: 1; }
+/* 「下一步」的高度产品指定 32px(原来靠 .mod-sm 的内边距撑出来是 24)。
+   ------------------------------------------------------------
+   写死高度而不是加内边距:这是个被指定的数值,以后字号一动,靠 padding 撑出来
+   的高度就跟着漂,写死的 32 不会 —— 按钮本身是 inline-flex 居中,文字在 32 里
+   自己找中线,不用管上下各留多少。
+   只给主按钮:同一排左边那个「跳过 / 换一批」是幽灵按钮,上面刚定过它 hover
+   不铺底、只加深文字 —— 它根本没有可见的高度,拉到 32 只会让命中区悄悄变大,
+   屏幕上一点变化都没有。两个都要 32 的话,把选择器里的 .mod-primary 去掉。 */
+.cbody > .foot .btn.mod-primary { height: 32px; }
+/* 意图澄清这张卡的圆角比通用卡大一档(8 → 12)。
+   ------------------------------------------------------------
+   .card 是好几个模块共用的壳,这里只挑【带底栏的那一张】—— 全稿只有意图澄清
+   有 .foot,所以 :has(> .foot) 正好圈住它,不用去认模块 id(场景稿里那张同样
+   命中,两份稿子不会长成两个样)。
+   为什么单独给它大圆角:它是这一屏唯一【拦住你、等你答】的卡,其余的卡是流水里
+   滚过去的记录。圆角大一档把它从那条流水里拎出来一点 —— 挡路的东西该有个
+   自己的形状。12px 不是随手写的,是 token 阶梯上 --radius 的下一档。 */
+/* 意图澄清:两个各自封边的盒子,上下贴成一条线。
+   ------------------------------------------------------------
+   结构上是两块 —— 上面那块只放一句话(这一轮要问你什么事),下面那块放你要
+   动手的东西(问题、选项、下一步)。各自封边,不是一个大框里靠一条线切两段:
+   两块的内边距、底色、圆角都能各管各的,改一块不会牵动另一块。
+   但外轮廓仍然是【一张卡】:它们贴在一起,结合处两条 1px 的描边重叠成一条。
+   ------------------------------------------------------------
+   和 Plan 卡同一套骨架:一张灰卡打底,白块盖在它上面。
+   ------------------------------------------------------------
+   只有一圈描边(在最外面那张卡上),里面不再有第二圈。标题那一行直接坐在灰底上,
+   白块从标题下面开始、一直铺到卡底 —— 上两角带圆、下两角交给外卡的 overflow
+   切,于是白块看着是"盖上去的一张",而灰底从它上沿露出一条,正好当标题的底。
+   层次因此由【底色 + 一个圆角】说,不用线也不用第二圈框:
+     灰 = 这一轮要问你什么事(标签)
+     白 = 你要动手的地方(问题、选项、下一步)
+   ------------------------------------------------------------
+   之前试过两版都不对:
+     ① 切平叠成一条线 —— 白块上两角被迫是直角,主体看着像被切掉一截;
+     ② 各自封边留 4px 缝 —— 两圈描边、两个圆角,一张卡里画了两次边。
+   这一版两个问题都没有:白块上两角是圆的,而全卡只有一圈边。
+   圆角取 --radius-lg(12),和外卡同一档 —— 白块的上弧要正好贴着外卡的上弧
+   往下走,差一档就会看出两个半径。 */
+.card:has(.foot) {
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg-panel); overflow: hidden;
+}
+.card:has(.foot) > .h {
+  border-bottom: 0; border-radius: 0; background: none;
+}
+.cbody {
+  border: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--bg);
+}
+/* ---- Plan 卡的收起态:一枚「第 N / M 步」的药丸 ----
+   ------------------------------------------------------------
+   展开那张卡把四步全摊开,占掉两百来 px;可它多数时候只回答一个问题:
+   "现在到第几步了"。收起之后这句话就是药丸上的六个字,清单退到悬停时再看 ——
+   要摊开的时刻是你自己想核对的时刻,不是每一轮都得占屏。
+   药丸里那颗球用 thinking-orbs 的 solving,原生 20(上游 inline-text 那一档,
+   不缩放)。卡头那颗跟着走同一档 —— 收起态的药丸和展开态的卡头是同一层级的
+   「这一轮在跑」,该长一个样。
+   清单里【每一步】的"正在跑"仍是绿球(.mk.is-run):那一列的四种状态是同一个
+   圆的四种画法,球是其中一档,换成 orb 会把这套系统拆开。
+   一句话:轮次级别的用 orb,步骤级别的用绿球。
+   清单浮层【复用 .steps 那套四态圆】,不另画一套:做完打勾并划掉、当前转弧、
+   没开始留一圈虚线 —— 和展开态一模一样,人不用重新学一遍这几个记号。 */
+/* 这一层只为【稿子】存在:浮层是往上开的,而这张卡有 overflow:hidden,
+   不给它留出头顶那段高度,清单会被卡的上边缘切掉。真实场景里药丸钉在
+   流水底部,上方本来就是空的,不需要这一层。 */
+.pdemo { padding-top: 136px; }
+/* Plan 的文字色只在本组件内使用;展开清单与收起浮层共用。 */
+.steps, .pmini {
+  --plan-current-text: #353535;
+  --plan-other-text: #848484;
+}
+.pmini { position: relative; display: inline-flex; }
+.pmini .pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border); background: var(--bg);
+  font-size: var(--t-mini); font-weight: 600; color: var(--plan-current-text); cursor: default;
+  transition: border-color var(--duration-faster) var(--ease-out);
+}
+.pmini:hover .pill, .pmini.is-hover .pill { border-color: var(--border-strong); }
+/* 浮层落在药丸【上方】:药丸自己钉在流水底部,往下开会顶到输入框。 */
+.pmini .pop {
+  position: absolute; left: 50%; bottom: calc(100% + 8px); z-index: 7;
+  transform: translateX(-50%);
+  width: max-content; min-width: 232px; max-width: 320px;
+  padding: 6px 4px; border-radius: var(--radius-lg);
+  background: var(--bg); box-shadow: var(--shadow-lg);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--duration-faster) var(--ease-out);
+}
+.pmini:hover .pop, .pmini.is-hover .pop { opacity: 1; }
+/* 浮层里的清单不限高:一共就几步,收起态本来就是为了省地方,
+   到了要看的这一下,就该一次看全。 */
+.pmini .pop .steps { max-height: none; overflow: visible; padding: 0; }
+
+.card.is-stale { background: var(--bg-panel); opacity: 0.75; }
+.card.is-stale > .h { color: var(--amber); }
+
+/* 限高约 5 步,其余滚动。
+   ------------------------------------------------------------
+   文档没有规定 Plan 最多几步 —— 正因为没有上限,卡片高度才必须自己封顶,
+   否则一个 20 步的计划会把整条流水撑开、后面的内容全被推走。
+   5 步的来历:每行 = 5px 上下内边距 + 18px 行高(12×1.5)= 28px,
+   5 行 140px 再加容器 8px。步骤文案换行时会露出小半行 —— 那不是缺陷,
+   正好当"下面还有"的提示。
+   同理,卡头的「N 步」不能去掉:限高之后它是唯一能知道总数的地方。 */
+/* 圆角落在【正文】上,不在卡头上 —— 正文是从卡头底下抬出来的一块白。
+   ------------------------------------------------------------
+   做法:卡的底色换成卡头那一档灰(卡头因此不用再自己铺底,也不用画分割线),
+   正文块自己铺白并把上两角收圆;两个角的缺口露出底下的灰,那道"接缝"就是
+   圆角本身,不再需要一条 1px 的线去说同一件事。
+   只作用在带步骤清单的这张卡(.h + .steps):意图澄清那张的卡头是独立一小张,
+   它跟正文之间本来就留着缝,不走这一套。 */
+.card:has(> .h + .steps) { background: var(--bg-panel); }
+.card:has(> .h + .steps) > .h { border-bottom: 0; background: none; }
+.steps { padding: 4px 0; max-height: 148px; overflow-y: auto; }
+.card > .h + .steps {
+  background: var(--bg);
+  border-start-start-radius: var(--radius); border-start-end-radius: var(--radius);
+}
+.steps li { display: flex; gap: 8px; padding: 5px 11px; font-size: var(--t-mini); font-weight: 400; line-height: var(--lh-row); color: var(--plan-other-text); list-style: none; }
+/* 记号那一格现在是一枚四态图标,画法见 plan-todo.css。
+   ------------------------------------------------------------
+   这里原先记着三条演进:文字 ✓ 换成 SVG 勾、裸勾换成 .mk.is-ok 的绿底片、
+   正在做的那条把序号换成转圈。三条说的是同一件事 —— 这一列要让人一眼看出
+   「做到哪儿了」,而不是「这是第几条」。四态图标是这条线的终点:
+   未开始 / 进行中 / 做完了 / 取消了 全是同一个圆的四种画法,尺寸也统一了。
+   .steps li .k(等宽序号)和 .steps li .mk(下移 1.5px 对齐首行)因此都退场,
+   对齐改由 .steps li .tk 自己负责。 */
+.steps li.is-done { color: var(--plan-other-text); }
+.steps li.is-now { color: var(--plan-current-text); font-weight: 600; }
+
+/* ---- 答后陈述 ---- */
+/* 已回答:卡片收成一条陈述。三种问法收出来的形状不同,但壳是同一个。
+   ------------------------------------------------------------
+   「已确认」这个词固定在左侧顶格,右边放答案本身:
+     单选 → 一句话
+     多选 → 勾了几条就列几条,不压成"已选 3 项"。数字是给待选时用的
+             (那时你在数还差几个),而回头看这条陈述时,你要知道的是
+             【具体哪几条】—— 只写个 3,等于把刚做完的决定又藏起来。
+     视觉方向 → 带上你选中的那张缩略图。风格名是抽象词,「编辑杂志」
+             四个字回头看根本想不起来长什么样,而那张图当时就在你眼前。
+   顶对齐而不是居中:多选那一列可能好几行,居中会让「已确认」掉到中间。 */
+/* 「已确认」单独占一行,答案在下面另起一行铺满。
+   原来是左右两栏(标签在左、答案在右),多选那几条被挤在右半边,
+   一句稍长的就折行,读起来像被夹住;而标签的宽度还随字数变,
+   三种问法收出来的答案起始位置对不齐。
+   改成上下两行之后,答案永远从同一个左边界开始,宽度也是整卡。 */
+/* 卡宽跟着内容走,不拉满。已回答的澄清多半是一行短句,拉满会在右边留一
+   大片空白 —— 那片空白不表示任何东西,只是让人以为还有内容没加载出来。
+   写 width 而不是 align-self:flex-start,是为了在 block 和 flex 两种父容器里
+   都成立(cross-size 不是 auto,flex 的 stretch 就不生效)。 */
+/* 已确认结果统一加浅灰底,浅色主题复用 --bg-panel(#FAFAFA)。
+   16px 圆角只属于答案块,不改变其它卡片的圆角;12px 内边距让文字避开圆角。 */
+.answered {
+  --answered-radius: 16px;
+  --answered-padding: 12px;
+  width: fit-content; max-width: 100%; padding: var(--answered-padding);
+  background: var(--bg-panel); border-radius: var(--answered-radius);
+  font-size: var(--t-mini); line-height: var(--lh-row);
+}
+/* 视觉方向答案带缩略图,使用内容卡同档的 12px 圆角。 */
+.answered.mod-visual-answer { --answered-radius: var(--radius-lg); }
+/* 「已确认」用绿 —— 绿在这套系统里只有一个意思:这件事定了。
+   之前它是灰的,和「执行计划」「读了 3 个文件」那些过程行同一档颜色,
+   回看时一眼扫过去分不出哪条是【你做的决定】、哪条只是 agent 干过的活。
+   决定是这一屏里最该被认出来的东西,它值这一点颜色。
+   不加勾:绿色本身已经说完了"这件事定了",再挂一枚绿勾是同一句话说两遍。
+   而且旁边的执行计划、工具行、已完成任务全带 .mk.is-ok 那枚绿勾,
+   「已确认」再挂一枚,就混进那一列勾里去了 —— 恰恰丢掉了要它显眼的初衷。
+   一个不带勾的绿词在一屏绿勾里反而更跳。 */
+.answered .k { margin-bottom: 3px; font-size: var(--t-lead); color: var(--brand-text); }
+.answered .ab { color: var(--text); }
+/* 颜色和数值的短答案行内部垂直居中;卡片位置及其它回答的排版不变。 */
+.answered .ab.mod-value { display: flex; align-items: center; }
+.answered .ab.mod-value > .ak { flex: none; }
+.answered .ab.mod-value > :last-child { min-width: 0; }
+/* 只用颜色分层,不再叠字重。答案是 --text-strong、旁边的关键词 .ak 是 --text-soft,
+   两档颜色已经把"这是答案"和"这是问的哪件事"分开了;再加一档字重是同一件事
+   说两遍。规则不能删 —— <b> 有浏览器默认的 700,删了反而更重。 */
+.answered b { color: var(--text-strong); font-weight: inherit; }
+.answered .al { margin: 0; padding: 0; list-style: none; }
+.answered .al li { color: var(--text-strong); }
+/* 每条前面先写问题的重点词,后面才是答案。
+   这条陈述会被后面的内容顶上去,过一会儿回头看时问题早滚没了 ——
+   没有重点词的话,「商品详情页」四个字孤零零挂在那儿,不知道它在回答什么。
+   加上之后每一行都自足:扫一眼就知道"这是在说页面"。
+   词用常规字重的灰,答案才是深色 600 —— 重点词是坐标不是内容,
+   两个都加粗就分不出哪个是你的回答。 */
+.answered .ak { margin-inline-end: 6px; color: var(--text-soft); font-weight: 500; }
+.answered .al li + li { margin-top: 2px; }
+/* 缩略图另起一行,放在文字下面,不跟文字并排。
+   并排时它跟一行字的高度对不上 —— 字有基线,方块没有,怎么对都差一点,
+   看着像布局没写好。而且缩略图的尺寸一旦变,那一行的高度就跟着跳。
+   另起一行之后两者各占各的,对齐问题不存在了。
+   尺寸沿用面板里唯一那个缩略图尺寸 57px,不为这一处另开一档。 */
+.answered .av { display: block; margin-top: 5px; width: 57px; aspect-ratio: 1/1; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
+
+/* ---- 工具调用行 ---- */
+/* 工具行只有【跑完了】才落下来 —— 没有"执行中"这个状态。
+   ------------------------------------------------------------
+   这一行是一条记录:动了哪个文件、结果如何(耗时 / 改动量 / 失败原因)。
+   调用还没回来的时候,这三样一个都拿不到,摆出去只能是一行光有名字的占位,
+   几秒后再当场变形。一次任务几十次调用,就是几十次"冒出来 — 变形",底下的
+   内容跟着往下挪几十回,想读的东西一直在动。
+   "它正在干活"这件事由上面那一行(正在跑的那一步)的转圈说,一处就够;
+   同一件事让每一行都各说一遍,反而看不出到底卡在哪儿。
+   —— 所以工具行上没有"正在跑"这个样子:它前面那枚图标标的是【哪类调用】
+   (读 / 写 / 跑命令 / 生图),状态点 .mk 只留在【步骤】那一层。
+   ------------------------------------------------------------
+   生图是唯一一种"还没跑完就该落行"的调用:它出一张落一张,已经到的几张就在
+   这一行下面看着 —— 那不是等着变形的占位,是正在长出来的结果。它右边写计数
+   (2/4)而不是耗时,进度由计数和下面那排格子自己说,不需要再转一个圈。
+   判断口诀:【下面有没有东西在长】,有就能提前落行。 */
+.tool {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 11px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); font-size: var(--t-body); color: #A3A3A3; line-height: var(--lh-row);
+}
+/* 已完成的配套插图结果行更紧凑,圆角使用 4px 控件档。 */
+.tool.mod-image-result { border-radius: var(--radius-sm); }
+.tool + .tool { margin-top: 6px; }
+/* 折叠块一律满宽,卡片跟着内容。
+   ------------------------------------------------------------
+   折叠块是一摞流水记录 —— Thinking、计划、记忆、每一步、命令输出,一行行往下
+   读,左右对齐才成行;宽度参差会让人以为它们不是一组。而且它们展开后都是一段
+   更宽的内容,收起窄、展开宽会让整块在开合时跳。
+   卡片是另一回事:生图卡由图的张数撑出来,提问卡固定 380(见下),它们各自有
+   自己的形状。装着终端输出的那张例外 —— 里面是代码,断行位置不该由卡宽决定。 */
+.card:has(.term) { width: auto; }
+/* 生图那条例外:满宽会把缩略图甩到最右边,和标签之间隔着一片空。 */
+/* 带缩略图条的那行跟着满宽 —— 它是产物,和上下的折叠行、产物卡同一层,窄着像
+   落单的。缩略图靠右:.tool .nm 默认 flex:1 会吃掉剩余空间,把图顶到行尾,
+   这里正是要这个效果 —— 左边一句"生成了什么",右边是生成的东西本身。 */
+.tool .nm {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 400;
+}
+.tool .nm code { font-family: var(--mono); font-size: var(--t-mini); color: #A3A3A3; }
+.tool .ms { flex: none; font-family: var(--mono); font-size: var(--t-cap); color: #A3A3A3; }
+
+/* 工具行前面那枚图标标【是哪类调用】,不标成没成。
+   ------------------------------------------------------------
+   一摞行里,"这一行是干什么的"比"这一行成没成"更值得占那 15px:
+   成功是默认 —— 一整列绿勾等于把"一切正常"重复十几遍,信息量是零;
+   而读文件 / 写文件 / 跑命令 / 生图是四件不同的事,没有图标就得逐字读动词
+   才知道这一段到底在干嘛。图标一分,扫一眼就看得出这一步的形状:
+   读了两个、写了两个,还是跑了一条命令。
+   出事的那几行照样一眼可见:图标转红,后面跟着红的「失败」二字 ——
+   颜色只标要注意的那一个,这条没破。
+   状态点 .mk 留在【步骤】那一层:一步成没成才是需要逐条核对的事,
+   而步骤只有一种形状,那 15px 拿来标状态才划算。 */
+/* 动作行前面【不是分类图标,是一颗点】。
+   ------------------------------------------------------------
+   按调用类型换图标(读 / 写 / 搜索 / 生图 / 代码执行,一类一枚)试过,退回来了。
+   退的理由不是图标画得不好,是【那一格不该抢戏】:类型这件事,行里第一个词
+   已经写着 —— 读取、新建、改写、写、执行。图标说的是同一件事的第二遍,而它
+   比字更抢眼:一摞行扫下来,先看见的是左缘那一列形状各异的记号,真正在变的
+   文件名反倒退到第二眼。一列相同的点则是【行首的标点】,它只负责说"这里另起
+   一条",把注意力原样让给后面那串字。
+   ------------------------------------------------------------
+   15px 的格子一点没改,点画 5px 居中 —— 后面文字的左缘纹丝不动,这一摞行跟
+   旁边用序号的计划行(.pk 也是 15)仍然对齐。
+   点走 currentColor,失败那行由下面 .tool.is-fail .ti 转红,记号照样一眼可见。
+   点由 .ti:empty::before 画:标记里 .ti 留空就有,不必再挂一枚 svg。
+   下面 .ti > svg 那两条留着 —— 哪天某一类真需要单独标一枚图标,塞进去即可用。 */
+.tool .ti { flex: none; width: 15px; height: 15px; display: grid; place-items: center; color: #A3A3A3; }
+.ti > svg { width: 16px; height: 16px; color: #A3A3A3; }
+.tool.is-fail .ti > svg,
+.fold.is-fail > summary .ti > svg { color: var(--red); }
+/* 计划里的序号占图标那一格 —— 计划的每一条还没跑,没有"哪类调用"可标,
+   序号才是它此刻唯一的身份。宽度对齐 .ti,一摞行的左缘不会因为换了内容而错开。 */
+.tool .pk { flex: none; width: 15px; text-align: center; font-family: var(--mono); font-size: var(--t-cap); color: #A3A3A3; }
+.tool.is-fail .ti { color: var(--red); }
+/* 非主产物的文件:文件名【就是】打开它的入口,不另立卡片。
+   ------------------------------------------------------------
+   主产物(那两张能预览/发布/导出的大卡)是这一轮交出去的东西;
+   顺手生成的 csv、md、组件文件、配套插图都不是 —— 给它们各来一张大卡,
+   一轮下来十几张卡,真正的交付物反而被埋了。
+   但"不是主产物"不等于"拿不到":生图那一行给缩略图(图的身份是它的像素,
+   文件名说明不了什么),写文件这一行给文件名 —— 文件的身份就是它的名字和
+   路径,一个 csv 的缩略图是四条灰线,什么也没说。两者是同一条规则的两面:
+   【把这类东西的身份物做成可点的】,点开就是它。
+   用真的 <button> 并让 <code> 默认带下划线:这是个能点的东西,
+   不需要先 hover 才发现;键盘也要够得着,focus 环也得有。 */
+.tool .fn { font: inherit; color: inherit; border-radius: var(--radius-sm); }
+.tool .fn code { font-family: var(--mono); font-size: var(--t-mini); color: inherit;
+  text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
+.tool.is-fail .fn code { color: #A3A3A3; }
+/* 跑命令这一行本身就是可折叠的:输出是它吐出来的,不是它旁边的另一块。
+   ------------------------------------------------------------
+   终端块动辄几十行,摊在流水里会把它上下的记录顶得老远,而多数时候你只想
+   知道"这条命令跑通了没有" —— 那一行标题已经答了(成 / 失败 + 耗时)。
+   所以收起来是默认,想看原文再点开;出事的那次例外,默认开着,因为报错原文
+   正是这时候唯一要读的东西。
+   顺带把「失败」从按钮改成标记:展开这一行【就是】查看原因,不必再摆一个
+   按钮做同一件事 —— 而且按钮嵌在 summary 里,点它会连带把折叠也切了。 */
+/* 折叠行里的那一格同理 —— 同一个动作行,收起和摊开不该长两个样。 */
+.fold > summary .ti { flex: none; width: 15px; height: 15px; display: grid; place-items: center; color: var(--text-strong); }
+/* 工具调用图标占 16px;没有图标的行首圆点和计划序号保持原尺寸。 */
+.tool .ti:has(> svg),
+.fold > summary .ti:has(> svg) { width: 16px; height: 16px; }
+.ti:empty::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.fold.is-fail > summary .ti { color: var(--red); }
+.fold > summary .why { flex: none; font-size: var(--t-cap); font-weight: 600; color: var(--red); }
+.fold > summary .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 改动量紧跟在文件名后面,不甩到行尾。
+   ------------------------------------------------------------
+   「+182 -0」回答的是"这个文件被动了多少",它属于文件名,不属于这一行 ——
+   甩到最右边,眼睛得在文件名和数字之间来回跳,一摞行读下来全是横向扫视。
+   所以 .nm 在有改动量时收成 flex:0 1 auto(只占文字宽),由 .dst 接过那份
+   auto 外边距去顶住右侧的耗时。 */
+.tool:has(.dst) .nm { flex: 0 1 auto; }
+.tool .dst { flex: none; margin-inline-end: auto; font-family: var(--mono); font-size: var(--t-cap); font-variant-numeric: tabular-nums; color: #A3A3A3; }
+.tool .dst i { font-style: normal; }
+.tool .dst i + i { margin-inline-start: 5px; }
+/* 红只标错误本身,不染内容。
+   原来整行(读取什么、耗时)全是红,"读取 规范.pdf"是这一步在做的事,
+   不是错误;耗时更只是数据。一整行红反而让真正的错误标记淹没在里面。
+   现在:行文字回正常色、耗时回常规灰,只剩「失败」两个字是红的。 */
+.tool.is-fail { border-color: var(--red-border); background: var(--red-bg); color: #A3A3A3; }
+/* 同上:不加下划线,与「重发」保持同一条规则 */
+.tool.is-fail .why { font-size: var(--t-cap); font-weight: 600; color: var(--red); }
+.tool.is-fail .why:hover { color: color-mix(in srgb, var(--red) 70%, var(--text-strong)); }
+/* 任务进度里的中性内容与步骤标题同色；成功绿和失败红仍由各自状态规则控制。 */
+.fold.mod-flat .tool:not(.is-fail),
+.fold.mod-flat .tool:not(.is-fail) :is(.ti, .ti > svg, .pk, .nm code, .ms, .dst),
+.fold.mod-flat .tool.is-fail,
+.fold.mod-flat .tool.is-fail :is(.nm code, .ms, .dst) { color: var(--text-strong); }
+
+.mk { flex: none; display: grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; }
+.mk svg { width: 10px; height: 10px; }
+/* 「过了」这枚标记全稿只此一种画法。
+   ------------------------------------------------------------
+   原来是【15px 的 --brand-weak 实心圆底 + 里面一枚 10px 的描边勾】,两层拼出来的。
+   现在换成一枚整图标(.tick):圆是实心的,勾是从圆里【挖掉】的 —— 挖掉意味着勾
+   永远等于它背后那片底,不用再挑一个"压在绿上够不够深"的勾色,深浅两套主题也
+   因此不用各配一个。
+   底片那两条(background / color)因此退场:圆本身就是图标的一部分,再垫一层
+   底就成了两个圆。.mk 那 15px 的盒子留着 —— 它是这一列图标的公共占位,
+   四种状态(过了 / 在跑 / 失败)轮流占同一格,尺寸不能各写各的。 */
+.mk.is-ok { background: none; color: var(--brand-weak); }
+/* 换图标这件事只写一处:下面这三个选择器是全稿"过了"的记号,原来各画各的
+   (整图标 / 描边圆+勾 / 描边勾),现在一起指到 --tick-img。
+   原来的画法用 > * 关掉而不是删标记:.tk 那四态共用同一份 svg,删了它的
+   ring/arc/x 别的状态就没得画了。 */
+.tick,
+.steps li.is-done .tk,
+.card > .h .ic-ok { background: var(--tick-img) center / contain no-repeat; }
+.tick > *,
+.steps li.is-done .tk > *,
+.card > .h .ic-ok > * { display: none; }
+.mk.is-ok > .tick { width: 15px; height: 15px; }
+/* 失败标记不加底色圆:圆占掉 15px,里面的感叹号只剩 10px,显得很小。
+   去掉底后同一个 15px 全给图标本身。通过态 .is-ok 保留绿底圆 ——
+   它需要底色把"完成"标出来,而失败已经有整行红边红底在说话了。 */
+.mk.is-fail { background: none; color: var(--red); }
+.mk.is-fail svg { width: 15px; height: 15px; }
+/* 进行中那一枚换成 Siri Orb 的【四色直接替换】配色。
+   ------------------------------------------------------------
+   来源:自己那份《Siri Orb 霓虹调色》里的第二格。七层锥形渐变各自绕不同的
+   圆心、以不同倍速转,叠出一颗会翻涌的球;原来那圈"缺口环转圈"只说得出
+   "在转",说不出"在长东西"。
+   配色一个字没改,照抄那一格:c1 #00ff08、c2 #00eaff、c3 #00ffae、c4 #eaffeb,
+   bg 仍是 oklch(92% 0.03 300)、saturate 1.4。四支色刚好填满四个槽位。
+   ------------------------------------------------------------
+   【三处按 15px 这个尺寸做的取舍,都不是配色上的改动】:
+   ① 原稿最小只做到 24px,这里 15px —— 几何量按 s24 那档等比缩:blur 1px、
+      contrast 1.1、rim = 尺寸 × 0.0625。
+   ② 网点那一层(原 .orb::after)去掉了。它的 mask 在小尺寸下收到 0%,本来
+      就看不见,而它带 backdrop-filter —— 一个看不见还要合成一遍的图层,
+      页面上同时有好几颗,不值当。
+   ③ 外发光(原 .orb-glow)去掉了。它是按 28% 半径糊出去的一圈光晕,在
+      15px 上正好糊到旁边的字上。
+   转速从原稿的 20s 提到 6s:那颗球是常驻的氛围球,这一枚是"这一步正在跑"
+   的读数 —— 20s 一圈在 15px 上等于静止,读不出还在动。
+   ------------------------------------------------------------
+   缝隙【故意不补】。那份稿子里"优化后"那一格给球垫了一层底色,堵住七层渐变
+   同时透明时露出的洞;这里要的是"三色直接替换"那一格,洞就是它本来的样子。
+   要换成优化后的:c3 改 oklch(58% 0.15 200)(暗面)、c4 改 #00ffae、bg 改
+   oklch(24% 0.06 182)、saturate 1.12,给 .mk.is-run 加
+   background: oklch(55% 0.12 195),再把 #eaffeb 单独拆成第八层锥形渐变
+   插在第三位当高光。 */
+@property --orb-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+/* 荧光绿球的色板 —— 用 siri-orb-neon 那份对照页里【优化后】的一套,
+   不是四色直接替换的那版。四支原色一支不动,动的是它们各自的槽位:
+     c1 #00FF08  最亮的一击,占 8 层里的 2 层,管高光区
+     c2 #00FFAE  薄荷绿。外发光固定取 c2,黑留在这一槽 bloom 会直接熄灭
+     c3 #202020  暗面,上限就是 2 层 —— 再多一层,转到某些相位整颗球会被吃成黑饼
+     c4 48% 暗绿 【桥】。24% 的黑直接挨着 87% 的荧光会切出硬边,
+                 垫这一档之后黑读作阴影,不是啃出来的洞
+     c5 #EAFFEB  高光,靠 CSS 补成第八层,插在第三位 —— 上面还压着两层荧光,
+                 边缘不会切出硬白边,转到暗面上方时闪一道湿光
+   --orb-bg 跟着 c3 同一支黑:原来是浅紫白,把荧光衬灰。
+   --orb-fill 是补的底色:七八层锥形渐变在某些转角会同时透明,不垫就直接漏出页面;
+   垫上中调绿之后,缺口变成球体自己的暗面。
+   饱和从 1.4 收到 1.12 —— 换了槽位之后再顶着推,绿会泛出荧光笔的塑料感。 */
+.mk.is-run {
+  --c1: #00ff08; --c2: #00ffae; --c3: #202020;
+  --c4: oklch(48% 0.13 152); --c5: #eaffeb;
+  --orb-bg: #202020; --orb-fill: oklch(48% 0.12 158);
+  --orb-blur: 1px; --orb-contrast: 1.1; --orb-sat: 1.12;
+  --orb-shadow: 0.5px; --orb-rim: calc(15px * 0.0625);
+  position: relative; display: grid; grid-template-areas: "stack"; place-items: stretch;
+  border: 0; border-radius: 50%; overflow: hidden; isolation: isolate;
+  background: var(--orb-fill);
+  animation: none;
+}
+.mk.is-run::before, .mk.is-run > i {
+  content: ""; display: block; grid-area: stack;
+  width: 100%; height: 100%; border-radius: 50%;
+}
+.mk.is-run::before {
+  background:
+    conic-gradient(from calc(var(--orb-angle) * 2)    at 25% 70%, var(--c3), transparent 20% 80%, var(--c3)),
+    conic-gradient(from calc(var(--orb-angle) * 2)    at 45% 75%, var(--c2), transparent 30% 60%, var(--c2)),
+    conic-gradient(from calc(var(--orb-angle) * -1.5) at 32% 26%, var(--c5), transparent 14% 86%, var(--c5)),
+    conic-gradient(from calc(var(--orb-angle) * -3)   at 80% 20%, var(--c1), transparent 40% 60%, var(--c1)),
+    conic-gradient(from calc(var(--orb-angle) * 1.5)  at 60% 35%, var(--c4), transparent 25% 75%, var(--c4)),
+    conic-gradient(from calc(var(--orb-angle) * 2)    at 15% 5%,  var(--c2), transparent 10% 90%, var(--c2)),
+    conic-gradient(from calc(var(--orb-angle) * 1)    at 20% 80%, var(--c1), transparent 10% 90%, var(--c1)),
+    conic-gradient(from calc(var(--orb-angle) * -2)   at 85% 10%, var(--c3), transparent 20% 80%, var(--c3));
+  box-shadow: inset var(--orb-bg) 0 0 var(--orb-shadow) calc(var(--orb-shadow) * 0.2);
+  filter: blur(var(--orb-blur)) contrast(var(--orb-contrast)) saturate(var(--orb-sat));
+  animation: orb-spin 6s linear infinite;
+}
+.mk.is-run > .sheen {
+  background:
+    radial-gradient(circle at 30% 24%, hsl(0 0% 100% / 0.32), transparent 34%),
+    radial-gradient(circle at 72% 80%, hsl(0 0% 100% / 0.07), transparent 48%);
+  mix-blend-mode: screen;
+  animation: orb-drift 3.2s ease-in-out infinite alternate;
+}
+/* 动作行里【正在跑的那一条】也换这枚球:.ti 的黑点换成 .mk.is-run。
+   ------------------------------------------------------------
+   黑点是"这里有一件事"的占位,不表状态 —— 跑完的、跑砸的、正在跑的都是同一颗,
+   靠后面的耗时/「失败」二字去分。但"正在跑"是这一摞行里唯一【还会变】的一条,
+   它值得一个自己就在动的标记:生成配套插图 2/4 那个数字下一秒会变成 3/4,
+   前面立着一颗在翻涌的球,两件事说的是同一句话。
+   跑完的行仍是黑点、跑砸的仍是红点,这条只加在【没有耗时、只有计数】的那几行:
+   任务进度里的「生成配套插图 2/4」、12 · 生图的同一行、11 · 代码执行「执行中」
+   那一格的「构建产物」。9/10 · 读/写没有这一档 —— 它们的状态标题本来就写着
+   「没有『执行中』,跑完才落下这一行」。
+   用的还是同一个 .mk.is-run,不另起一套:这份稿子里"正在跑"从此只有一种画法,
+   出现在三个层级上(卡头、步骤、动作行),同一枚球。 */
+.mk.is-run > .rim {
+  box-shadow:
+    inset 0 0 0 1px hsl(0 0% 100% / 0.16),
+    inset 0 var(--orb-rim) calc(var(--orb-rim) * 2) hsl(0 0% 100% / 0.22),
+    inset 0 calc(var(--orb-rim) * -1.2) calc(var(--orb-rim) * 2.4) hsl(0 0% 0% / 0.4);
+  pointer-events: none;
+}
+@keyframes orb-spin { to { --orb-angle: 360deg; } }
+@keyframes orb-drift {
+  0%   { transform: translate(-6%, -4%) scale(1.05); }
+  100% { transform: translate(7%, 6%) scale(1.12); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 点「重试」时图标转一圈,复用上面那条 spin。
+   ------------------------------------------------------------
+   只转一圈就停:这是「我收到了」的回执,不是「正在跑」的状态 ——
+   后者归缩略图自己的 loading 态管(.shot.is-load 的 shimmer),
+   两个都转会让人分不清是点动了还是真的在重跑。
+   .is-spinning 由 interactions.js 在点击时挂上、动效结束摘掉,
+   所以连点每次都会重新转。 */
+.rt.is-spinning svg,
+.msg-act .keep.is-spinning svg { animation: spin 0.5s var(--ease-out); }
+
+/* ---- 终端 ---- */
+/* 代码块的外壳:一圈边,里面两段。
+   ------------------------------------------------------------
+   来历是 ibelick 的 code-block「with header」(有边的块 + 顶上一条头带)。
+   头带这一半后来撤了(见下面那条),留下的是【一圈边 + 命令 + 输出】——
+   这一块要交代的本来就只有"执行了什么、吐出了什么"两件事,
+   块里不再有任何一样东西是在讲这个块自己。
+   底色收到最浅的那一档灰(--bg-panel #fafafa),不再是原来的 #ededed。
+   这一块在流水里是嵌在折叠块【里面】的第三层:外面已经有卡的白、折叠块的底,
+   再压一层明显的灰,同一屏上就有三级越来越深的底 —— 越往里越重,读着像
+   "越深处的东西越要紧",而实情正相反,这是可以不看的执行细节。
+   浅到 #fafafa 之后它靠【边框】立轮廓,不靠底色的重量:--border #dbdbdb
+   压在 #fafafa 上比压在 #ededed 上还清楚,块的边界反而更稳。 */
+/* 选择器要写到 .fold .body.mod-stack 这一层:流水里有一条
+   `.fold .body.mod-stack > * { border: 0; background: none; border-radius: 0; padding: 5px 11px }`
+   的归一化规则(0,3,0),光写 .code(0,1,0)会被它整条抹掉。padding 也要显式
+   归零 —— 那条规则给每个直接子元素派了 5px 11px,不归零两段正文就跟边框脱开了。 */
+/* 圆角走 --radius(8px),不是最小那一档 4px。
+   ------------------------------------------------------------
+   4px 是这份稿子里【小控件】的圆角(按钮、标签片、图标底);这一块有两段正文、
+   能滚,它是一张卡的体量,却顶着控件的圆角,看着就比同屏的卡"硬"。
+   12px 和报错卡、Plan 卡、澄清卡是同一档 —— 同样体量的东西用同样的角。 */
+.fold .body.mod-stack .code {
+  --term-section-gap: 8px;
+  padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg-panel); overflow: hidden;
+}
+/* 【没有头带】。原来块顶挂着一条:左边一枚 bash 标签,右边一枚复制键。
+   两样都撤掉了 ——
+   语言标签:这一块出现的位置本来就说明了它是什么(工具调用「执行命令」
+   那一步底下),bash 三个字没有再说出任何新东西;而它是块里唯一带底色的
+   小片,眼睛第一下总先落在它上面,落完发现是句废话。
+   复制键:命令就在下面一行、四个词,人要重跑一遍是自己敲,不是搬运;
+   为一个几乎不点的动作常驻一枚按钮,块顶就得多出一整条。
+   撤掉之后这一块只剩它真正要给的东西:执行了什么、吐出了什么。 */
+.term {
+  max-height: 104px; overflow-y: auto; padding: 9px 11px;
+  font-family: var(--mono); font-size: var(--t-cap); line-height: 1.65; color: #A3A3A3;
+}
+.term div { white-space: pre-wrap; }
+/* 命令自己占一块,不塞在卡头当标题。
+   ------------------------------------------------------------
+   卡头原来直接写命令,这份稿子里一直拿「npm run build」当例子 —— 14 个
+   字符,正好把问题藏住了。真实的命令动辄一整行路径加七八个参数,挤进
+   卡头只能截断,而那恰恰是最该完整看到的东西:出了问题第一件事就是
+   "它到底执行了什么"。
+   所以卡头改放【一句人话】(这条命令是干嘛的),命令进正文第一块,
+   跟输出块上下排开。长了就在块内滚动,卡片高度不受影响。
+   两块用同一副终端底色,靠开头的 $ 区分输入和输出 —— 那是终端本身的
+   约定,不用另发明标记。 */
+/* 命令和输出【不划线】。
+   ------------------------------------------------------------
+   原来两块之间有一条实线(收进 11px、不贯穿)。撤掉的理由和撤头带是同一条:
+   这条线要分的两样东西,已经被行首那个 $ 分清了 —— 那是终端自己的约定,
+   有 $ 的是我输入的,没有的是它吐出来的,不需要再画一道线复述一遍。
+   一块里两道横线(这里一道、外框一圈)对一段四行的日志来说也已经够重了。 */
+.term.mod-cmd {
+  border-top: none; border-bottom: none; color: #A3A3A3;
+}
+.term.mod-cmd + .term { border-top: none; }
+/* 命令与输出之间总间距 8px,两块相接处各占一半;外侧留白保持不变。 */
+.fold .body.mod-stack .code > .term.mod-cmd:has(+ .term) { padding-bottom: calc(var(--term-section-gap) / 2); }
+.fold .body.mod-stack .code > .term.mod-cmd + .term { padding-top: calc(var(--term-section-gap) / 2); }
+.term.mod-cmd div { padding-inline-start: 13px; text-indent: -13px; }
+.term.mod-cmd div::before { content: "$ "; color: var(--text-faint); }
+.term .ok { color: var(--brand-text); }
+/* 终端正文用正常深色,不整行红 —— 那是代码/日志内容,不是错误状态本身。
+   只有行首的 ✗ 标记是红的。 */
+.term .er { color: #A3A3A3; }
+.term .er::first-letter { color: var(--red); font-weight: 700; }
+/* 卡头右侧的「失败」二字,是这张卡唯一的红 */
+/* 状态在前、耗时在后 —— 全文件统一这一个顺序。
+   两条理由:
+   ① 出没出事是要先知道的,耗时是知道之后才想看的补充;
+      读到「2.1s」再读到「失败」,等于先给了一个用不上的数。
+   ② 工具调用那一行早就是这个顺序(失败 1.2s),而卡头是反的,
+      同一份稿子里两种排法,实现时必然各写各的。
+   .fx 接过 auto 外边距(原来靠后面的 .n 把自己推到最右),
+   换位之后由它来顶住右侧,.n 跟在它后面。 */
+.card > .h .fx { flex: none; margin-inline-start: auto; font-size: var(--t-cap); font-weight: 600; color: var(--red); }
+.card > .h .fx + .n { margin-left: 6px; }
+
+/* ---- 生图 ---- */
+/* 列宽写死而不是 1fr:格子数跟着图的张数走,两张就是两张的宽度,不铺满。
+   .shot 是空元素 + aspect-ratio,max-content 宽为 0 —— 用 1fr 的话父级一旦
+   fit-content 就会整块塌成 0。 */
+.imgs { display: grid; grid-auto-flow: column; grid-auto-columns: 84px; gap: 6px; width: fit-content; max-width: 100%; }
+/* 独立出现时不带内边距;套进卡里就得跟卡的其他行一样留边,否则图贴着卡边。 */
+.card > .imgs { padding: 10px 11px; }
+.shot { position: relative; aspect-ratio: 3/4; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); background: var(--bg-subtle); }
+/* 生图的占位跟附件缩略图共用 .mini —— 全站只有一种占位灰。
+   ① 那是凭空发明的"四张图不一样"的效果,而占位图的职责只是压住范围,
+      画出差异反而抢注意力(绿色那块尤其像个状态,不像一张图);
+   ② 规则写成了 .shot .fill,缩略图条里的 .th 不在 .shot 下面,
+      于是四个小图标全是空白 —— 只有当初手写了 inline 样式的那一个显形。
+   统一到 .mini 之后这两件事一起消失。 */
+/* 占位格的动效改成点阵,见 dither-shot.css / .js —— 原来的整块明灭
+   和它独占的 @keyframes shimmer 一并退场。 */
+/* 失败格不上红框红底,跟旁边的图保持同一副外壳。
+   ------------------------------------------------------------
+   这里的格子是 3:4 的一整块,红框加红底铺开就是一大片红 ——
+   四格里有一格整个泛红,眼睛先看到的是"这排里有个红东西",
+   而不是"这一张没出来"。附件卡后来也照这条把红框收了,
+   所以现在失败态全站是同一副样子:外壳照旧,红只落在「重试」上。
+   信号交给内容本身:旁边三格都填着图,这一格是空的,中间还摆着
+   「↻ 重试」—— 空 + 一个动作按钮,已经说完了"这张没成功、你可以再来一次"。
+   红只留给「重试」两个字,那是要点的那一个点。 */
+.shot.is-fail { display: grid; place-items: center; border-radius: var(--radius); }
+/* 跟附件托盘里那枚重试同一副样子:图标在上、文字在下,整格都是热区。
+   两处是同一个动作(这一张没成,再来一次),不该有两种画法 ——
+   原来这里是横排 inline-flex,而且标记里连图标都没有,只剩两个红字。 */
+.shot.is-fail .rt {
+  display: grid; place-items: center; align-content: center; gap: 1px;
+  width: 100%; height: 100%; padding: 0;
+  font-size: var(--t-cap); font-weight: 600; line-height: 1.3; color: var(--red);
+}
+.shot.is-fail .rt svg { width: 14px; height: 14px; }
+.shot.is-fail .rt:hover { color: var(--text-strong); }
+.strip { display: flex; align-items: center; gap: 5px; }
+/* 收起之后小图仍然是【按钮】。
+   卡片收成一行,只是把"四张图铺开"换成"四张图缩着",能看大图这件事
+   一点没变 —— 规格写的是「点缩略图条中任一张,弹层大图」,收起态是这条
+   规则最常被用到的地方(大部分时候你是回头去翻,那时它早就收起来了)。
+   所以 .th 是 <button> 不是 <span>:有 hover、有键盘焦点、有 tip。
+   26×34 已经小到看不出内容了,tip 是它唯一能自报家门的方式。 */
+.strip .th {
+  width: 26px; height: 34px; border-radius: 3px; overflow: hidden;
+  border: 1px solid var(--border); position: relative; padding: 0;
+  transition: border-color var(--duration-faster) var(--ease-out);
+}
+.strip .th:hover { border-color: var(--text-soft); }
+
+/* ---- 产物卡片 ---- */
+.arts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+/* 卡上不能有 overflow:hidden —— 它会把 ⋯ 的 tooltip 和弹出的菜单切成半截。
+   缩略图自己圆自己的角就够了。 */
+.art { position: relative; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); }
+/* 图占满整张卡。
+   ------------------------------------------------------------
+   卡面上【不写文件名、不摆按钮】。这张卡要回答的只有一件事:"这是不是我要的
+   那一版" —— 而这件事只有图答得了。product-list.html 说不出它长什么样,一排
+   等宽小字反倒把图压窄。动作压在图的【下缘】而不是另切一条工具条:切了之后
+   卡就成了"图 + 工具条"两段,图要为工具条让出高度,而图才是这张卡的正文。
+   16:10 是网页/应用界面的常见比例,卡宽变了高度自己跟上。 */
+.art .thumb { position: relative; display: block; aspect-ratio: 16/10; height: auto; background: var(--bg-subtle);
+  border-radius: calc(var(--radius) - 1px); overflow: hidden; }
+/* 【卡上没有「⋯」了】。
+   ------------------------------------------------------------
+   它原来收着 预览 / 发布 / 导出。预览撤了(卡面本身就是预览),剩下的两枚挪到
+   右上角明摆着 —— 菜单里就没东西了。一个空菜单不该留着,一枚点开只有一条的
+   菜单更不该:那是把一次点击换成两次。
+   代价是【发布只有 HTML 产物有】,md / csv 那类卡右上角会少一枚,同一排看过去
+   略有参差 —— 这一版认下这个代价。换来的是"这张卡能不能发布"一眼可见,
+   而不是点开菜单才发现少一条;少一个按钮比多一次点击便宜。 */
+
+/* ---- 视频产物 ---- */
+/* 视频这张卡【面上要有播放键】,不像图那样把动作全收进「⋯」。
+   ------------------------------------------------------------
+   收起来的前提是"一帧缩略图就能回答『这是不是我要的那一版』"。视频回答不了:
+   它的内容是动起来之后才成立的东西,封面那一帧只说了第 0 秒长什么样。
+   所以这张卡上播放键必须在面上 —— 它不是"动作",是这段内容自己的读法,
+   跟图片卡的缩略图同一个位置:让人不点开就能判断。
+   「⋯」照旧在右上角,里面还是 预览 / 导出(视频不是 HTML,没有「发布」)。
+   ------------------------------------------------------------
+   控制条压在画面底部、垫一层从下往上的黑渐变:视频每一帧的颜色都不一样,
+   白图标直接压上去有一半几率糊掉;渐变只在底部这一条,不遮画面主体。 */
+.art.mod-video .thumb { position: relative; display: grid; place-items: center; background: var(--bg-panel); }
+/* 竖屏片子按 9:16 居中,两边留白 —— 卡是 16:10 的横框,把竖视频拉满会变形,
+   留白本身也是信息:这是一条竖片。 */
+.art.mod-video .mini { width: auto; aspect-ratio: 9 / 16; height: 100%; background: var(--bg-muted); }
+/* 【卡面上什么都不压】。
+   ------------------------------------------------------------
+   这里先后压过两样东西,都撤了:一条播放控制条(时间、进度、预览),和一枚
+   居中的「查看」。撤的是同一条理由 —— 这是【产物卡】,人扫这一排要判断的是
+   "这条片子长什么样、我拿它干什么",不是逐秒拖,也不需要谁告诉他"能点开"。
+   一张铺满卡的画面看着就该能点,再压一枚「查看」是把这件事说第二遍,而它正好
+   落在画面中央偏下 —— 那是竖片里最常有内容的一截。
+   右上角那一枚「导出」留着:它不是"打开",是"拿走",这件事画面自己说不了。 */
+/* 动作那一排挪到【右上角】,并且【不再有「预览」】。
+   ------------------------------------------------------------
+   预览撤掉的理由:卡面本身就是预览 —— 一张 16:10 的图铺满整张卡,"这是不是我
+   要的那一版"当场就答了。再挂一枚「预览」是把已经看得见的东西再给一个入口,
+   而它排在最前,还挡着真正要拿的那两个动作。要看大图,点图本身。
+   位置从下缘挪到右上角的理由:下缘是【图的正文区】—— 界面截图的下面那一截
+   常常是内容(列表最后几行、底栏),一排按钮压上去正好糊住;右上角在任何一张
+   界面截图里都是最空的一块。而且这一排现在只剩"拿走"这一类动作(发布 / 导出),
+   它们本来就该待在角上,不该横在画面中央。
+   数量随产物类型变(HTML 两个、其余一个),所以用 flex 靠右而不是各自定位 ——
+   少一个的时候整排自己往右收,右缘始终齐。
+   8px 的边距四角同一个数:图卡、视频卡并排时,贴边的距离对得上。 */
+.art .acts {
+  position: absolute; inset-inline-end: 8px; top: 8px; z-index: 2;
+  display: flex; justify-content: flex-end; gap: 4px;
+}
+/* 一枚胶囊:压在产物图上的东西只有一类 —— "拿这份产物干什么"。
+   深色半透明底保留白字对比,背景模糊让缩略图透出柔和的颜色。
+   inline-flex + 6px 的缝是给「导出」前面那枚箭头留的:圈里一支向下的箭头,
+   它说的是"落到本地",而「发布」说的是"送出去" —— 两个方向相反的动作并排,
+   给其中一个加上方向,那一排就不必逐字读了。 */
+.art .acts button {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border-radius: var(--radius-pill);
+  /* 只虚化按钮背后的缩略图;内描边不占尺寸,文字与图标保持清晰。 */
+  background: rgb(18 18 18 / 60%); color: #fff;
+  -webkit-backdrop-filter: blur(var(--glass-regular-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-regular-blur)) saturate(140%);
+  box-shadow: inset 0 0 0 1px var(--overlay-glass-edge), 0 2px 8px rgb(0 0 0 / 12%);
+  font-size: var(--font-size-12); font-weight: 600; cursor: pointer;
+  transition: background-color var(--duration-faster) var(--ease-out);
+}
+/* 图标保留 12px; -1px 的 margin 吃掉 svg 自带的视觉留白。 */
+.art .acts button svg { flex: none; width: 12px; height: 12px; margin-inline-start: -1px; }
+/* 悬停加深半透明底,继续保留磨砂效果。 */
+.art .acts button:hover { background: rgb(18 18 18 / 72%); }
+/* 不支持背景模糊时保留原来的深色底,保证任意缩略图上的可读性。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .art .acts button { background: #353535; }
+  .art .acts button:hover { background: #202020; }
+}
+
+/* ---- 全局弹窗:联系支持 ---- */
+/* 求助不挂在报错卡里,单独开一个压在整个应用上的弹窗。
+   出事的时候人正在读报错原因,往那块里再塞两个社群入口,等于让求助和诊断
+   抢同一片版面;而这个弹窗从设置、帮助菜单也进得来,它本来就不只属于报错。
+   弹窗里【直接给东西】:两条链接各一键复制,不做"点进去再看看"的二级跳转 ——
+   会来点这里的人已经卡住了。 */
+.ovl { display: grid; place-items: center; padding: 18px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--text-strong) 26%, transparent); }
+.modal { width: 100%; max-width: 316px; border-radius: var(--radius-2xl); background: var(--bg); box-shadow: var(--shadow-lg); overflow: hidden; }
+/* 标题线不贯穿:左右各收 13px,跟正文的内边距对齐 —— 线的两端落在内容的
+   左右边界上,而不是撞到弹窗的圆角边上。贯穿的线是"把这张卡切成两半",
+   收进来的线才是"标题到这儿为止"。
+   用伪元素画而不是 border-bottom:border 只能满宽。 */
+.modal .mh { position: relative; display: flex; align-items: center; padding: 11px 13px; font-size: var(--t-mini); color: var(--text-strong); }
+.modal .mh::after {
+  content: ''; position: absolute; inset-inline: 13px; bottom: 0;
+  height: 1px; background: var(--border-soft);
+}
+.modal .mh b { font-weight: 600; }
+.modal .mh .x { margin-inline-start: auto; display: grid; place-items: center; width: 24px; height: 24px;
+  border-radius: var(--radius-sm); color: var(--text-soft);
+  transition: background-color var(--duration-faster) var(--ease-out), color var(--duration-faster) var(--ease-out); }
+.modal .mh .x svg { width: 14px; height: 14px; }
+.modal .mh .x:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+/* 正文上内边距归零:第一行渠道自己带 11px 的上留白,两处叠起来是 22px,
+   在一个只有两行的弹窗里,标题线和第一个 logo 之间空出这么一段太散。 */
+.modal .mb { padding: 0 13px 13px; }
+.modal .mt { margin: 0 0 10px; font-size: var(--t-mini); line-height: var(--lh-body); color: var(--text-muted); }
+/* 两个渠道一样的行壳:左边一块方的(二维码 / 图标),右边名字 + 一句话 + 一个动作。
+   飞书那块是二维码所以大一档 —— 它要能被扫,不是装饰。 */
+/* 两个渠道同一副行壳:左边 logo + 名字,右边「加入」。
+   给飞书单独配一块二维码、Discord 配一行,是在说这两件事不一样 ——
+   可它们其实是同一件事:进群。形状一分,人就要先判断
+   "为什么这个要扫、那个要点",而这个判断没有任何用处。 */
+/* 上下 7px:两枚「加入」之间因此是 15.5px(≈ 16)。
+   不是 8px —— 行高由左边 26px 的 logo 撑,按钮只有 24.5px,两者差的
+   1.5px 也算在两枚按钮的间距里。 */
+.chan { display: flex; align-items: center; gap: 9px; padding: 7px 0; }
+.chan .ci { flex: none; display: grid; place-items: center; width: 26px; height: 26px; }
+.chan .ci svg { width: 24px; height: 24px; }
+/* 名字降到 500:这一行的主角是「加入」那个动作,名字只要认得出是哪家就够了。 */
+.chan .cn { flex: 1; min-width: 0; font-size: var(--t-mini); font-weight: 500; color: var(--text-strong); }
+/* 两行之间不画线:一共就两条,而且左边各有一枚彩色 logo —— 谁跟谁一行
+   靠图标本身就分得开,线只是又画了一遍这件事。 */
+
+/* ---- Tooltip:纯图标按钮唯一的名字 ----
+   面板里所有只有图标、没有文字的按钮(赞/踩/复制/Fork、Queue 行的
+   立即发送/编辑/取消排队/拖动、气泡上的复制)都挂 data-tip。
+   ------------------------------------------------------------
+   这不是装饰:图标是压缩过的词,压缩率越高越省地方也越容易解错 ——
+   「Fork」那三个圆点没人第一次就读得出是"以此为上下文新开会话",
+   「↑」和纸飞机同屏时到底哪个是发送也是靠 tip 才分得开。
+   之前只写了 aria-label,那只有读屏软件听得到,用眼睛的人反而没有。
+
+   走 ::after + attr() 而不是原生 title:原生 tip 要等半秒到两秒
+   (各家浏览器不一,不可控),等到时手已经点下去了,起不到"先告诉你
+   再点"的作用;而且原生样式跟不上这套配色。
+   同时挂 :focus-visible —— 键盘走到这个按钮时也要出,否则纯键盘用户
+   还是只能猜。
+   .is-tip 是给稿子用的常开态:评审看的是静态截图,鼠标停不上去。 */
+[data-tip] { position: relative; }
+/* 浅色气泡,不带小三角。
+   ------------------------------------------------------------
+   深色实心的气泡太抢:它是被动的标签,只在你把鼠标停住时出现,不该比它解释
+   的那个按钮还重。浅底 + 细边 + 软阴影已经足够把它从正文里分出来。
+   —— 和 23 · 选中浮条 / 注释全文那种深色磨砂是两回事:那两个是你要伸手去点
+   的浮层,该跳出来;这个只是个名字。
+   小三角一并去掉:它一直是这份稿子里最容易出错的东西(浅底之后还得叠两层
+   三角才画得出边框),而气泡贴着按钮出现,指向本来就不含糊。 */
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 6px); left: 50%; translate: -50% 0;
+  z-index: 5; padding: 5px 9px; border-radius: var(--radius);
+  background: var(--bg-elevated); color: var(--text-strong);
+  border: 1px solid var(--border); box-shadow: var(--shadow-md);
+  font-size: var(--t-cap); line-height: 1.4; font-weight: 500;
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity var(--duration-faster) var(--ease-out);
+}
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after,
+[data-tip].is-tip::after { opacity: 1; }
+
+/* 贴边补正。气泡默认居中在按钮上方,而按钮常常就贴在一个 overflow 容器的边上:
+   队列限了高(一轴非 visible,另一轴也跟着变裁剪区),面板头部贴着面板顶边,
+   产物卡的 ⋯ 贴着滚动区右缘。居中的气泡有一半在容器外,被切成半截比不出还糟。
+   这几个 modifier 只改锚点,不改样式。 */
+[data-tip].mod-tip-s::after { left: 0; translate: 0 0; }              /* 左缘对齐按钮左缘 */
+[data-tip].mod-tip-e::after { left: auto; right: 0; translate: 0 0; } /* 右缘对齐按钮右缘 */
+/* 队列第一行:卡头去掉之后它上面已经没有东西,朝上的气泡会顶出限高容器。 */
+[data-tip].mod-tip-b::after,
+.queue .q:first-child [data-tip]::after { bottom: auto; top: calc(100% + 6px); }
+
+
+/* ---- 中断状态行(手动暂停 / 断线) ---- */
+/* 「停下来了」只是一句话:一枚图标 + 一句话,没有按钮,不出卡。
+   ------------------------------------------------------------
+   两种停法(20 断线 / 21 手动暂停)都只报【为什么停】。
+   剩余步骤是复述 —— 剩下哪几步,上面那段执行记录本来就写着。
+   接着跑也不归这一行:断线走 23 · 重连,任务挂了走 19 · 报错。
+   ------------------------------------------------------------
+   句首那枚暂停符跟正文【同色】(currentColor 继承 --text-muted),不另染。
+   这一行报的是"停住了"这个事实,不是一条要人处理的告警;染色会把它抬成
+   一条状态提示,而它下面通常什么都没有 —— 一行安静的灰字正好说明
+   "到此为止"。图标在这里只是把这句话认出来的速度提前一点。 */
+.stopline { display: flex; align-items: center; gap: 6px; font-size: var(--t-mini); color: var(--text-muted); }
+.stopline svg { flex: none; width: 14px; height: 14px; }
+
+/* ---- 反馈行 ---- */
+/* 回合状态:这一轮结束了没有、花了多少。
+   ------------------------------------------------------------
+   面板是流式的,不给一个明确的收尾,人分不清"答完了"和"还在想" ——
+   尤其在最后一段文字停下来之后,屏幕上没有任何东西宣布结束。
+   所以这一行的开头放【状态词 + 耗时用量】,末尾才是那几个动作。
+   耗时和用量只有配上状态词才读得懂:单看「12.4s」不知道是什么的 12.4 秒。
+   跟右端的「14:32」不重复 —— 一个是这轮跑了多久,一个是它发生在几点,
+   回头翻记录时要的是后者,判断这次贵不贵要的是前者。
+   异常结束时状态词换成「已停止」,而"怎么接着跑"由上面那一块说 ——
+   停下来只是一行(20 · 暂停任务),说清为什么停;
+   怎么接着跑走本来就有的入口:断线是 22 · 重连,任务挂了是 19 · 报错。
+   两边不重复:这一行只负责宣布"这轮到此为止"。 */
+.fb { display: flex; align-items: center; gap: 2px; }
+.fb .sp { flex: 1; }
+.fb .fin {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-inline-end: 4px; font-size: var(--font-size-14); color: var(--brand-text);
+}
+/* 停止不跟着变绿:绿是"跑通了",而停止只是没跑完 —— 中性灰,红留给真的错误。
+   这也正是这行只有一个词该染色的原因:颜色只标要注意的那一个。 */
+.fb .fin.mod-stop { color: var(--text-muted); }
+/* 完成整句用绿(点 + 字) —— 绿在这套系统里就是"通过了",和 .mk.is-ok 同一个
+   --brand-text,一屏里"绿=成"只此一解。停止用中性灰:
+   它不是出事,只是没跑完,红要留给真的错误。
+   ------------------------------------------------------------
+   停止时状态词写【是谁停的】:「已手动停止」。
+   不写「仍有未完成任务」那种限定语 —— 剩没剩、剩几步,上面那段执行记录
+   本来就写着(进行中 · 31s 停在那儿),这一行只负责宣布"这轮到此为止"。 */
+/* 「已完成」前面那一枚从 5px 的圆点换成和别处同一枚勾。
+   ------------------------------------------------------------
+   点只说"有个状态",勾说的是"过了" —— 这一行报的正是后者,而同一句话在
+   执行记录里(工具行、步骤、已完成任务)全程都由这枚勾说,回合状态行是这段
+   流水的收尾,没有理由在最后一行换一种说法。
+   16px 跟着状态词走,不跟右边那排动作图标:状态词是 14px 的中文,16px 的勾
+   与它字面等高,勾和字读成一个词;右边那几枚是 13px,它们是另一组东西
+   ——可点的动作 —— 本来就不必和这个词同一尺寸。
+   「已手动停止」仍是灰点:它不是"过了",没有勾可画;点在那儿只占位报状态。 */
+.fb .fin > .tick { flex: none; width: 16px; height: 16px; color: var(--brand-weak); }
+.fb .fin.mod-stop i { flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--text-faint); }
+.fb button {
+  display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: var(--radius-sm); color: var(--message-muted-ink);
+  transition: background-color var(--duration-faster) var(--ease-out), color var(--duration-faster) var(--ease-out);
+}
+.fb button:hover { background: var(--bg-fill-secondary); color: var(--message-muted-ink); }
+/* 赞选中的底比「过了」那一档【浅一级】:同一个 #00FF04,掺 55% 白。
+   ------------------------------------------------------------
+   色号没换,换的是浓度 —— 这枚底是 26×26 的实心方块,而 .mk.is-ok 那枚
+   绿勾底片只有 14px。同一个饱和度铺在近四倍的面积上,读起来就重了一档;
+   何况它旁边就是踩,踩用的是 --red-bg(#F04142 掺到 10%)那种淡红底,
+   一浓一淡并排,两枚本该对称的按钮看着不像一对。掺白之后两边同量级,
+   前景仍是 --brand-text,对比约 9:1。
+   暗色里 --brand-weak 是深绿 #2f781d,掺的是近黑的 --bg —— 掺出来只会更深、
+   不是更浅,所以那一档原样用 token。 */
+.fb button.is-on { color: var(--brand-text); background: color-mix(in srgb, var(--brand-weak) 45%, var(--bg)); }
+[data-theme="dark"] .fb button.is-on { background: var(--brand-weak); }
+.fb button.is-on.mod-down { color: var(--red); background: var(--red-bg); }
+.fb button svg { width: 13px; height: 13px; }
+.fb .tm { margin-left: 6px; font-size: var(--t-cap); color: var(--text-soft); }
+
+/* 点过「新开会话」之后,原地落下的那条分界。
+   ------------------------------------------------------------
+   Fork 是【以这条回复为上下文另起一轮】,不是跳走 —— 所以它的结果得留在
+   原处看得见:上面是老会话说完的话,线以下是新会话。要是点完什么都不留,
+   人只会以为这个按钮没反应。
+   中间那行字是【承接过来的会话标题】,不是新写的一句说明:新会话认领的就是
+   老会话的题目,把题目摆在分界上,说的正是"下面这一段还在同一件事里"。
+   两侧各一条线,都从外沿的透明化到贴着字的实色 —— 渐变是为了让它读起来
+   像"一段的开头",而不是把这一列切成两半的硬横线;实色只出现在字的两端,
+   眼睛落点仍然在标题上。线用 --border-strong:这条线要盖过卡片自己的边框
+   (--border)才立得住,否则和背景里的框混成一片。
+   标题过长时截断而不是换行:它是一枚标记,不是一段内容;
+   换行的话两侧的线会跟着错位,分界本身就散了。 */
+.fork-sep { display: flex; align-items: center; gap: 9px; padding: 9px 0; }
+.fork-sep i {
+  flex: 1; height: 1px;
+  background: linear-gradient(to right, transparent, var(--border-strong));
+}
+.fork-sep i:last-child { background: linear-gradient(to left, transparent, var(--border-strong)); }
+/* 标题用品牌绿(--brand-text,#0d5400)。这条线是"从这儿起是新的一轮"的记号,
+   而绿在这套系统里就是自家那一支色 —— 上下都是灰字的一列里,只有这一处染色,
+   眼睛扫过去先落在分界上,正是它该有的位置。
+   用 --brand-text 而不是 --brand(#87ea5c):后者是给底片和填充用的浅绿,
+   当字压在白底上只有 1.9:1,读不出来。 */
+.fork-sep span {
+  flex: none; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--t-cap); font-weight: 500; color: var(--brand-text);
+}
+/* 线底下那一句。新会话此刻只有上下文、还没有话 —— 所以这里不编一段对话出来,
+   只交代"带过来的是什么、接下来轮到谁"。它比标题还轻一档(#A3A3A3):
+   分界上的标题是这一段的名字,这句只是脚注。 */
+/* 跟着上面那条分界【居中】:它是这条线的脚注,不是新会话里的第一条消息 ——
+   左对齐会让它读成"新会话已经开口说了一句",而这一刻新会话还没有内容。
+   居中就还它一个附注的身份,和线、标题共用同一条中轴。 */
+.fork-note { display: flex; align-items: center; justify-content: center; gap: 6px; padding-bottom: 2px; font-size: var(--t-cap); color: var(--message-muted-ink); }
+.fork-note svg { flex: none; width: 12px; height: 12px; }
+/* 点出来的那两块要"落"一下:静态稿里它们本来就在,分不出是点击的结果;
+   落这一下(4px + 淡入)说的是"这是刚才那一下带来的"。
+   钉住展示的那一格不挂 .is-new,页面一加载就该是已经落好的样子。 */
+@keyframes fork-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+.fork-sep.is-new,
+.fork-note.is-new { animation: fork-in var(--duration-normal) var(--ease-out) both; }
+.fork-note.is-new { animation-delay: 60ms; }
+
+.rsn { margin-top: 8px; padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); }
+/* 「哪里不对?」是这个弹窗的问句,不是标注 —— 给 --t-lead(14px),
+   比下面的选项和补充框都大一档,一眼看出先读哪一行。 */
+.rsn .t { font-size: var(--t-lead); font-weight: 600; color: var(--text-strong); }
+.rsn .ch { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+/* 补充那一栏【不套框】,只在底下留一条线。
+   ------------------------------------------------------------
+   这个弹窗里已经有一圈框(弹窗自己)和一排框(四枚原因胶囊)。补充框再套一个,
+   同一小块地方就是三层框,而它还是可选项 —— 最不重要的那一项占了最重的形状。
+   一条底线足够说"这儿能写字":输入这件事本来就是靠一条线立起来的。
+   去掉左右内边距,让线和上面那排胶囊、下面那排按钮左端对齐;底色也撤掉 ——
+   浅灰底是框的另一种画法,框都不要了,底更不必留。 */
+/* 只留一行高:线要贴着字走。两行高的时候字在上、线在下,中间空着一截,
+   那条线就不像是这行字的底线,而像另一块区域的分界。
+   field-sizing:content 让它随着输入自己长高(Chrome 123+),不支持的浏览器
+   保持一行、多出来的内容滚动 —— 两种都不会把线甩开。 */
+.rsn .ta { display: block; width: 100%; margin-top: 8px; padding: 2px 0 5px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; font-family: inherit; font-size: var(--t-mini); line-height: var(--lh-row); color: var(--text-strong); field-sizing: content; resize: none; outline: none; }
+.rsn .ta::placeholder { color: var(--text-soft); }
+.rsn .ta:focus { border-bottom-color: var(--border-strong); }
+
+/* ---- 下一步引导 ---- */
+/* 三条建议是【一组】,不是三个独立物件 —— 但这件事【不靠线来说】。
+   ------------------------------------------------------------
+   演进记在这儿,免得来回改:最早每条各有一圈边框,一屏里多出三个方框、
+   三道圆角、三条描边,碎成三件东西;后来收成"一个外框 + 内部发丝分割线";
+   现在【线全去掉】。
+   去掉的理由是这块位置特殊:它在整轮的最末尾,是收尾之后的一句"接下来还能
+   做什么",本身不是这一屏要你读的内容。一个带框的块在版面上是个"东西",
+   会跟上面刚交付的产物卡抢一次注意力;而它其实只需要在你想继续时被看见。
+   ------------------------------------------------------------
+   线没了之后,三条还成组吗?成 —— 靠贴在一起的行距(它们之间没有间隙,
+   而跟上面那块隔着一整段),和三行完全一样的左缘、字号、箭头。
+   "有三条"这件事由三个箭头说,不由两道线说。
+   点得动这件事由 hover 底色说:指到哪一行,哪一行整条亮起来,那一刻它才
+   显出自己的形状。静止时不显形,是这一块想要的分寸。
+   ------------------------------------------------------------
+   圆角和 overflow:hidden 留着:外框虽然没有描边了,hover 的底色仍然要被圆角
+   裁齐,否则首尾两行的高亮会露出直角。 */
+.nexts {
+  border-radius: var(--radius);
+  background: var(--bg); overflow: hidden;
+}
+.nexts button {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 9px 11px; border: none;
+  background: none; font-size: var(--t-mini); font-weight: 500; color: var(--text); text-align: left;
+  transition: background-color var(--duration-faster) var(--ease-out), color var(--duration-faster) var(--ease-out);
+}
+.nexts button:hover { background: var(--bg-panel); color: var(--text-strong); }
+.nexts button svg { flex: none; width: 12px; height: 12px; color: var(--text-soft); }
+.nexts button:hover svg { color: var(--text-strong); }
+/* hover 高亮只落在被指的那一行 —— 文档「包含的状态」写的就是"hover 单条高亮" */
+.nexts button.is-hover { background: var(--bg-panel); color: var(--text-strong); }
+.nexts button.is-hover svg { color: var(--text-strong); }
+
+/* ---- Queue ---- */
+/* 限高约三行半,其余滚动。
+   ------------------------------------------------------------
+   队列钉在输入框上方,它长一分,对话流水就少一分 —— 而队列是"待办",
+   流水才是你正在看的东西,不能让待办把正在看的挤出屏幕。
+   三行半的来历:单行 = 7px 上下内边距 + 20px 行高 = 34px,加 1px 分隔线;
+   3.5 × 35 ≈ 122。露出的半行不是缺陷,正好当"下面还有"的提示 ——
+   跟附件条行尾裁掉的半张卡是同一招。
+   两行的消息会吃掉更多高度,那时可见条数不足三条半,这是对的:
+   限的是【高度】不是【条数】,占屏幕多少才是这里要控制的东西。
+   不再单起一行卡头写「排队中 · N 条」:队列就贴在输入框底下,是什么一目了然;
+   行首的序号已经把"第几条"说清楚了,标题和计数都是复述。代价是滚在顶部时
+   看不到总数 —— 换来的是少占一行、少一层框。 */
+/* 【不套框、不铺底】。队列贴在输入框上方,输入框自己已经是一个有边的东西,
+   队列再套一圈,两个框上下叠着,人得先分辨"这两块是不是一回事"。
+   队列靠【条与条之间那道线】立起来就够了:它是一叠待办,不是一个独立面板。
+   限高和滚动留着 —— 那两条管的是"别把流水挤出屏幕",跟框无关。 */
+.queue {
+  max-height: 122px; overflow-y: auto;
+}
+.queue .q {
+  /* 顶对齐而不是居中:消息可能两行,居中会让序号、手柄、动作按钮
+     一起掉到文字块中间,和第一行错开。顶对齐后它们始终跟第一行一条线。 */
+  display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px;
+  border-top: 1px solid var(--border-soft); font-size: var(--t-mini); color: var(--text);
+}
+.queue .q:first-child { border-top: none; }
+/* 调序用拖拽手柄,不用向上箭头。
+   在聊天界面里向上箭头本身就是「发送」的通用约定,把它放在一个真的
+   发送键旁边表示「上移」,必然被读岔 —— 而且「上移一位」也表达不了
+   文档要的「移动顺序」(那是任意调序,不是一格一格挪)。
+   手柄放最左:这是拖拽把手的惯例位置,也和右侧那组动作按钮分开,
+   一眼能看出\"左边是排序、右边是动作\"。 */
+.queue .q .grip {
+  flex: none; display: grid; place-items: center; width: 16px; height: 22px;
+  margin-inline-start: -2px; margin-top: -2px; color: var(--text-faint); cursor: grab;
+}
+.queue .q .grip:hover { color: var(--text-muted); }
+.queue .q .grip svg { width: 12px; height: 12px; }
+.queue .q .ix { flex: none; font-family: var(--mono); font-size: var(--t-cap); color: var(--text-soft); }
+/* 排队消息最多两行,第三行起截断。
+   ------------------------------------------------------------
+   这一段是用户自己写的话,长度不可控。压成一行会把话截在半截,
+   人就认不出自己要取消/调序的是哪一条 —— 而认出它正是这个列表存在的
+   全部意义。给两行:一句正常的指令基本装得下;再长就截,列表才不会
+   被一条长消息撑开。
+   注意本文件里另外三处 nowrap 是【故意】保留的,不要一起改:
+     .att-i .nm .base  文件名 —— 后缀已单独保住,主名本就该一行
+     .tool .nm         日志行 —— 单行截断是终端/日志的惯例
+     .btn              按钮文案 —— 按钮换行就散了 */
+.queue .q .tx {
+  flex: 1; min-width: 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: var(--lh-row);
+}
+/* 22px 的按钮盒对 18px 的首行,上移 2px 才与第一行同心 */
+.qops { flex: none; display: flex; gap: 1px; margin-top: -2px; }
+.qops button { display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--radius-sm); color: var(--text-soft); }
+.qops button.mod-steer {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  width: auto; padding: 0 4px; font-size: inherit; white-space: nowrap;
+}
+.qops button:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+.qops button svg { width: 14px; height: 14px; }
+
+/* ---- 升级 ---- */
+/* 额度卡采用上下两区;身份说明表继续使用原有浅色外壳。 */
+.up { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); overflow: hidden; }
+.up:not(.branch) {
+  --upgrade-card-bg: #121212;
+  --upgrade-card-text: #ffffff;
+  --upgrade-button-ink: #121212;
+  position: relative; isolation: isolate;
+  padding: 16px; border: none; border-radius: 16px;
+  background: var(--upgrade-card-bg); color: var(--upgrade-card-text);
+}
+/* 保留提供的 SVG,旋转后放在右上角:小星在上、大星在下。 */
+.up.mod-glow::after {
+  content: ''; position: absolute; inset-inline-end: 0; top: 0; z-index: -1;
+  width: 48px; height: 62px; pointer-events: none; transform: rotate(180deg);
+  background: url("data:image/svg+xml,%3Csvg%20width%3D%2267%22%20height%3D%2287%22%20viewBox%3D%220%200%2067%2087%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Cpath%20opacity%3D%220.5%22%20d%3D%22M25.1408%2059.8603L30.3371%2053.7463C34.9617%2048.3057%2041.3853%2044.8059%2048.3422%2043.9371L57.9258%2042.7402C60.9727%2042.3598%2062.1548%2038.4443%2059.8294%2036.4355L52.7432%2030.3142C47.2969%2025.6094%2043.8543%2018.9176%2043.1264%2011.6212L42.2837%203.17174C41.9709%200.036192%2038.1292%20-1.12822%2036.1342%201.30788L30.7582%207.87237C26.1159%2013.5412%2019.5483%2017.199%2012.4125%2018.0902L3.12809%2019.2497C0.0811039%2019.6301%20-1.10108%2023.5456%201.22452%2025.5544L8.53913%2031.873C13.8488%2036.4597%2017.2591%2042.9402%2018.0982%2050.0367L19.041%2058.0115C19.4035%2061.0766%2023.1432%2062.2101%2025.1408%2059.8603ZM50.6955%2086.3266L52.1573%2084.6058C54.7633%2081.5378%2058.3849%2079.5636%2062.3081%2079.0724L65.3252%2078.6944C66.957%2078.4901%2067.5894%2076.3956%2066.3442%2075.3194L64.1711%2073.4405C61.1003%2070.7862%2059.1599%2067.0126%2058.7507%2062.8995L58.5112%2060.4887C58.3439%2058.8085%2056.2838%2058.1841%2055.2151%2059.4896L53.682%2061.3632C51.0662%2064.5595%2047.3636%2066.6227%2043.3392%2067.1265L40.4908%2067.4833C38.8593%2067.6877%2038.2269%2069.7822%2039.4718%2070.8584L41.7738%2072.8486C44.7678%2075.4363%2046.6895%2079.0907%2047.1613%2083.0916L47.4263%2085.3357C47.6199%2086.9783%2049.6254%2087.5862%2050.6955%2086.3266Z%22%20fill%3D%22url%28%23paint0_linear_1975_81%29%22%2F%3E%0A%3Cdefs%3E%0A%3ClinearGradient%20id%3D%22paint0_linear_1975_81%22%20x1%3D%2247.8253%22%20y1%3D%2296.362%22%20x2%3D%2247.8253%22%20y2%3D%220%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%0A%3Cstop%20stop-color%3D%22%2300FF08%22%2F%3E%0A%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23121212%22%2F%3E%0A%3C%2FlinearGradient%3E%0A%3C%2Fdefs%3E%0A%3C%2Fsvg%3E") center / contain no-repeat;
+}
+.up .h {
+  display: flex; align-items: center;
+  padding: 0 48px 8px 0; border-bottom: 1px solid rgb(83 83 83 / 40%);
+}
+.up .h .amt { flex: 1; min-width: 0; }
+/* 延续已确认的 16px 字号;标签保持白色,金额用颜色区分余额状态。 */
+.up .h .amt .n {
+  display: block; font-size: var(--font-size-16); line-height: 1.5;
+  font-weight: 400; color: var(--upgrade-card-text);
+}
+.up .h .amt b {
+  font: inherit; font-size: var(--font-size-20); line-height: 1.2; color: #f49624;
+}
+.up .h .amt.is-out b { color: var(--red); }
+/* 下方说明与按钮并排;宽度不足时由内容自动换行,不绑定页面断点。 */
+.up .up-bottom {
+  display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap;
+  gap: 12px 16px; padding-top: 8px;
+}
+.up .why {
+  flex: 1 1 180px; min-width: 0; margin: 0;
+  font-size: var(--font-size-13); line-height: 1.5; font-weight: 400;
+  color: var(--upgrade-card-text);
+}
+.up .up-bottom .btn.mod-primary,
+.up .up-bottom .btn.mod-primary:hover {
+  background: var(--upgrade-surface); color: var(--upgrade-button-ink);
+}
+.up .up-bottom .btn {
+  flex: none; gap: 8px; min-height: 44px; padding: 12px 16px 12px 12px;
+  font-size: var(--font-size-14); line-height: 20px; font-weight: 400;
+}
+.up .up-bottom .btn svg { flex: none; width: 20px; height: 20px; }
+/* 保留旧刻度样式,当前额度卡不显示刻度。 */
+.up .meter {
+  --tick: repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 6px);
+  height: 10px; margin: 10px 11px; background: var(--border-soft);
+  -webkit-mask-image: var(--tick); mask-image: var(--tick);
+}
+.up .meter i { display: block; height: 100%; background: var(--amber); }
+.up .meter i.is-out { background: var(--border-strong); }
+.branch { border-top: 1px solid var(--border-soft); }
+.branch .r { display: flex; gap: 8px; padding: 6px 11px; border-top: 1px solid var(--border-soft); font-size: var(--t-cap); line-height: var(--lh-row); color: var(--text-muted); }
+.branch .r:first-child { border-top: none; }
+.branch .r .who { flex: none; width: 148px; color: var(--text); }
+.branch .r b { color: var(--text-strong); font-weight: 600; }
+
+/* ---- 报错 / 网络 / 暂停 ---- */
+/* 卡面是白的,不铺红底。
+   ------------------------------------------------------------
+   原来整张卡糊一层 --red-bg。红底把这张卡整个染成"警告物",可这张卡上真正
+   要读的是【出了什么事】和【接下来点哪个】—— 一整片粉底既压着正文的对比度,
+   又和下面那三个按钮抢注意力,尤其是「从失败处重试」那颗实底黑按钮压在粉底上,
+   两块色斑挨着,反倒不容易一眼落到按钮上。
+   描边也不再是红的,跟别的卡同一档 --border —— 一张卡的【外形】不该由它的
+   状态决定:形状归形状,状态归内容。这份稿子里所有卡都是同一副白底灰边的壳,
+   报错卡自己描一圈红,等于在"这是一张卡"之外又说了一遍"这是坏消息",而那句话
+   下一行的红标题已经说了。
+   红最后只剩两处:那枚感叹号和「任务失败」四个字 —— 它们在内容里,不在外壳上,
+   扫视时先看到的是一张卡,读进去才知道是失败,这个顺序才对。 */
+.errb { border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--bg); padding: 10px 11px; }
+/* 标题那一行底下压一条线,把「出了什么事」和「详情」分开。
+   线【不贯穿】—— 它落在内容宽度上(卡的左右内距各 11px 天然把它收进来),
+   而不是从卡的这一边拉到那一边:贯穿的线是把一张卡切成两张卡的画法,
+   而这里两段说的是同一件事,只是一个是结论、一个是原委。
+   用 --border-soft,比卡的描边(--border)浅一档 —— 这是这份稿子里卡内分割线
+   的通例(卡头、弹窗头、渠道行都是这一档):外圈的边圈住"这是一块东西",
+   里面的线只分"这块东西的两段",两条一样重的话,卡就被切成了两半。 */
+/* 标题给到 16(--t-head,阶段标题那一档)—— 这一行是整块唯一报结局的地方,
+   底下那段是原委、按钮是出路,都得先读过这一句才有用;
+   12 跟正文同档时它只是"第一行",不是"结论"。
+   图标跟着长到 16:比字小的图标挂在句首会像个上标,一样高才是并排的两样东西。 */
+.errb .t { display: flex; align-items: center; gap: 7px; padding-bottom: 8px; border-bottom: 1px solid var(--border-soft); font-size: var(--t-head); font-weight: 600; color: var(--red); }
+.errb .t svg { flex: none; width: 16px; height: 16px; }
+.errb .d { margin-top: 8px; font-size: var(--t-mini); line-height: var(--lh-body); color: var(--text-muted); }
+.errb .ops { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 9px; }
+/* 三个动作【挨在一起、整组靠右】。
+   ------------------------------------------------------------
+   这一排是一件事的三个出口:联系支持(找人)、导出日志(拿去问人)、重试(接着跑)。
+   原来把求助那一枚孤零零丢在左端、另两枚推到右边,用中间的空白当分组线。
+   现在收回来了 —— 分组是有代价的:那道空白把一排三个平级的动作说成了两类,
+   而人扫到这一行时要做的判断本来只有一个"我接下来按哪个",多一层分类
+   等于先要求他先读懂分类。三个等距排在一起,按哪个只是往左往右挪一格。
+   整组靠右(justify-content:flex-end)保留原来的收口:一行里最后、最重的那个
+   就是默认要按的那个,眼睛沿着文字读到行尾正好落在它上面;
+   和澄清卡的「下一步」、升级卡的「Upgrade」是同一个位置。
+   换行时(flex-wrap)每一行各自靠右,不需要 auto 外边距那套补正。 */
+/* 纯图标按钮:方的,和同排文字按钮一样高。
+   收成图标是因为它跟这次失败没关系 —— 一行里三个并排的词会让人以为
+   要在三者里选一个,而实际上「联系支持」和另外两个不是同一类选择。
+   图标+tooltip 把它降一档,但仍然点得到、读屏也念得出(aria-label)。 */
+/* 高度不写死:align-self:stretch 让它跟着这一排最高的那个长 —— 字号或按钮内距
+   一改它自己跟上,不会像写死 26px 那样悄悄比旁边矮一像素。
+   宽度靠左右内距撑出来(14 的图标 + 7×2 = 28,对着 27 的排高,差的那 1px
+   看不出来)。不用 aspect-ratio:弹性行里宽度由内容定,比例算不出来。
+   图标本身给到 14 而不是按钮里那档 11:11 是【跟着字走】的尺寸,旁边有字托着;
+   这一枚没有字,它自己就是全部内容,再按 11 画会小得像个记号而不是个按钮。 */
+.errb .ops .btn.mod-icon { padding: 0 7px; align-self: stretch; justify-content: center; }
+.errb .ops .btn.mod-icon svg { width: 14px; height: 14px; }
+
+/* ---- 重连:流水里的一行,不是全局横幅 ----
+   它跟工具调用共用 .tool 那副行壳 —— 断线是"这次会话正在发生的一件事",
+   跟"读了哪个文件"是同一类流水事件,理当排在同一条时间线上。
+   ------------------------------------------------------------
+   为什么不做成钉在面板顶部/底部的全局条:那需要在应用外壳上开一个位置,
+   而外壳是所有页面共用的 —— 一个只跟这次会话有关的状态挂到那里,
+   实现要一路传下去,样式和层级也会跟别的常驻条抢地方。
+   进流水就没有这些事:面板本来就会渲染流水的每一行,多一种行而已。
+   代价是滚上去会看不见 —— 可以接受,因为它本来就是短暂的,
+   而真正需要你动手的那一态(次数用尽)会停在流水末尾不动。 */
+/* ---- 输入框 ---- */
+/* 不在文档那 21 行里,但没有它就不成其为一个面板;23 · 选中文字的第三态也要落在
+   这里。只画到"能承接上面那些组件"为止 —— 它自己的状态(聚焦、禁用、拖入文件)
+   不在这份稿的范围内。 */
+.composer { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); }
+.composer .tray { padding: 9px 9px 0; }
+.composer .ta {
+  display: block; padding: 10px 12px 2px;
+  font-size: var(--t-body); line-height: var(--lh-body); color: var(--text-faint);
+}
+.composer .bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px 8px; }
+.composer .bar .sp { flex: 1; }
+/* 底栏这几个(+、模型名)都给最深的一档。
+   ------------------------------------------------------------
+   它们不是"辅助说明",是这一刻你要伸手去够的东西 —— 加附件、看现在用的哪个
+   模型。原来 + 在 soft(3.7:1)、模型名在 muted(6.7:1),比上面的正文还浅,
+   等于把可操作的部分排在了可读内容后面。
+   提到最深之后 hover 不能再靠变深,只留底色(和折叠块标题同一处理)。 */
+.composer .bar button {
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: var(--radius-sm); color: var(--text-strong);
+}
+.composer .bar button:hover { background: var(--bg-fill-secondary); }
+.composer .bar button svg { width: 16px; height: 16px; }
+.composer .bar .model {
+  width: auto; padding: 0 8px; font-size: var(--t-cap);
+}
+.composer .bar .send {
+  width: 28px; height: 28px; background: var(--text-strong); color: var(--bg);
+  border-radius: var(--radius-pill);
+}
+.composer .bar .send:hover { background: var(--text); color: var(--bg); }
+
+/* ---- 选中文字 → 添加到对话 ---- */
+/* 只放一个动作。
+   ------------------------------------------------------------
+   选中一段话之后真正想做的只有一件事:拿它接着说。复制是系统右键已有的,
+   「更多详情」「到侧边提问」都是把一个明确动作稀释成一道选择题 —— 浮条一旦
+   超过一个按钮,人就得先读完再决定,而这条浮条出现的那一刻人手还按在鼠标上。
+   所以它不是"工具栏",就是一颗按钮:形状本身已经说明只有一条路。 */
+/* 定位参照是【选区】不是整段:浮条要对准你选的那几个字,
+   段落居中会在长句里偏出去老远。 */
+.sel { position: relative; background: var(--selected-soft); border-radius: var(--radius-xs); }
+/* 它不是按钮,是一条浮层。
+   ------------------------------------------------------------
+   药丸形 + 实心底会被读成"表单里的主按钮",而这东西是悬在正文上方的
+   临时 chrome:该更高、圆角更小、底面半透明,让下面的字透出来一点 ——
+   人才知道它是【浮着的】,不是版面的一部分。 */
+.selbar {
+  position: absolute; left: 50%; translate: -50% 0; bottom: calc(100% + 7px);
+  z-index: 6; white-space: nowrap;
+  padding: 3px; border-radius: var(--radius);
+  background: var(--overlay-glass);
+  border: 1px solid var(--overlay-glass-edge);
+  -webkit-backdrop-filter: blur(var(--glass-regular-blur));
+  backdrop-filter: blur(var(--glass-regular-blur));
+  box-shadow: var(--shadow-md);
+}
+.selbar button {
+  display: block; padding: 7px 12px; border-radius: var(--radius-sm);
+  font-size: var(--t-mini); font-weight: 500; color: var(--overlay-glass-text);
+  background: none; border: 0; cursor: pointer;
+}
+.selbar button:hover { background: var(--overlay-glass-edge); }
+/* 选区贴着面板顶边时翻到下方 —— 和 tooltip 那套边界补正同一个道理:
+   浮层默认朝上,而容器上面就没地方了。 */
+.selbar.mod-below { bottom: auto; top: calc(100% + 6px); }
+
+/* 点完之后:输入框里多一枚芯片,不是一段引用。
+   ------------------------------------------------------------
+   输入框是给你写字的地方,把原文摊在里面等于先占掉你要写的空间;选中好几段时
+   引用块还会堆成一叠。芯片只占一行,选了几段就只是数字变 —— 一条和五条长得
+   一样高。
+   全文和 × 都只在 hover 出现:刚选的那段你自己清楚,不需要一直摆着;要核对时
+   再看。静止时它是一条状态,不是一个待办。 */
+.refs {
+  position: relative; display: inline-flex; align-items: center; gap: 5px;
+  margin: 9px 9px 0; padding: 4px 9px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: var(--t-mini); color: var(--text-strong); cursor: default;
+}
+.refs .ic { flex: none; width: 13px; height: 13px; color: var(--text-soft); }
+.refs .del {
+  position: static; flex: none; width: 16px; height: 16px; margin-inline-start: 1px;
+  opacity: 0; transition: opacity var(--duration-faster) var(--ease-out);
+}
+.refs:hover .del, .refs.mod-open .del { opacity: 1; }
+/* 浮出的全文:和选中浮条同一种深色磨砂 —— 两者都是悬在内容之上的临时层,
+   长一个样人才知道它们是同一类东西。 */
+.refs .pop {
+  position: absolute; left: 0; bottom: calc(100% + 7px); z-index: 7;
+  width: max-content; max-width: 300px;
+  padding: 9px 11px; border-radius: var(--radius);
+  background: var(--overlay-glass); border: 1px solid var(--overlay-glass-edge);
+  -webkit-backdrop-filter: blur(var(--glass-regular-blur));
+  backdrop-filter: blur(var(--glass-regular-blur));
+  box-shadow: var(--shadow-md);
+  color: var(--overlay-glass-text); font-size: var(--t-mini); line-height: var(--lh-body);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--duration-faster) var(--ease-out);
+}
+.refs:hover .pop, .refs.mod-open .pop { opacity: 1; }
+.refs .pop ol { margin: 0; padding: 0; list-style: none; counter-reset: r; }
+.refs .pop li { display: flex; gap: 8px; overflow-wrap: anywhere; }
+.refs .pop li + li { margin-top: 6px; }
+.refs .pop li::before {
+  counter-increment: r; content: counter(r) "."; flex: none;
+  font-variant-numeric: tabular-nums; opacity: .6;
+}
+
+
+/* 重连是一条状态,不是一张卡。
+   ------------------------------------------------------------
+   它随时会自己消失,而且刻意不该抢注意力 —— 重连时人该做的是接着看别的。
+   套上边框和底色,它就成了和输入框并列的第二个块,等于把「别管它」说成了
+   「看这里」。三个状态都去框:形状不随状态变,只有失败那格把图标变红 ——
+   颜色留给真需要注意的那一个。 */
+/* 重连这三行都去框(形状不随状态变)。前两行的图标换成 searching 球之后
+   选择器不能只认 .wifi,否则那两行会莫名长出行卡描边。 */
+.tool:has(.wifi), .tool:has(.orb) { border-color: transparent; background: none; padding: 5px 2px; }
+/* 球的画布 20px 比原来 17×14 的 wifi 高一截,把它压回图标那一档的
+   视觉重量:.orb 自带的 -2px 负边距收的是画布空边,这里再补齐左缘。 */
+.tool .orb { margin-inline-start: -1px; }
+/* 球的墨色不在这里定 —— .orb 的规则整块归 thinking-orb.css,
+   那份文件拼在本文件之后,同特异度会压过这里。它已经改走 --anim-ink。 */
+/* 这个图标要的不是更大的盒子,是更满的盒子。
+   ------------------------------------------------------------
+   wifi 的三条弧在 24 的 viewBox 里只占 x 5~19、y 7.75~18,墨迹连一半都不到,
+   把 width 从 14 调到 18 只是把空白一起放大 —— 实测墨迹仍只有 7.2px,而旁边
+   中文有 12.5px,所以糊。把 viewBox 裁到墨迹本身(4 6.5 16 13)之后,同样的
+   同样的框里画的全是线。量的是【看得见的墨】,不是元素的框 ——
+   和失败标记去掉底色圆是同一条。
+   ------------------------------------------------------------
+   裁完之后又走到了另一头:30x24 的框,墨迹 26x19,而它旁边的中文只有 13px、
+   同一列位置上的完成标记只有 15px —— 一个"别管它"的状态图标比谁都大。
+   现在 17x14,墨迹 14.9x10.9 —— 【和同一列位置上的完成标记(15px 圆)等宽】。
+   这个数不是挑的:那颗圆是这一列的既有基准,重连既然占同一个位置,就该占同一个
+   宽度,眼睛扫下来才是一条直线而不是忽大忽小。
+   顺带记一句:viewBox 裁到墨迹之后,墨迹恒等于框的 0.877(14÷16),
+   想改墨迹只能改框 —— 这两个数从此是一个数。
+   描边改用 non-scaling-stroke:之前 stroke-width 写在 viewBox 单位里,
+   跟着框一起缩放 —— 上一轮把框放大一倍,描边也悄悄粗了一倍,只好再回头
+   补一个 1.1 去抵消。现在描边锁死 1.6px,和 .ck 的勾同一档,
+   以后再改尺寸不会连累粗细。 */
+.tool .wifi { flex: none; width: 17px; height: 14px; color: var(--text-soft);
+  stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+/* 失败那一行不换图标,只换颜色。
+   三态用同一枚 wifi:图标说的是"连接"这件事,它没变;变的是结果,
+   而结果已经由红色和文案说清楚了。再换一个打叉的 wifi,等于把同一个
+   意思说三遍,而那枚打叉的线稿在 14px 上只剩一团糊。 */
+.tool.is-fail .wifi { color: var(--red); }
+/* 断线那一枚是【实心】图标,不是上面那组线稿弧。
+   ------------------------------------------------------------
+   上面 .tool .wifi 的 17×14 和 1.6 描边是按三条弧调的:那个 viewBox 已经
+   裁到墨迹(4 6.5 16 13),所以框≈墨。这枚不一样 —— 斜杠几乎占满 0 0 24 24,
+   框就是墨,再套 17×14 会被拉扁。给它自己一档正方形,仍然按【看得见的墨】
+   量:14px 的框在这里就是约 13.5px 的墨,跟旁边 13px 的中文同一个重量。
+   实心不需要描边,把继承来的 stroke 相关值清掉,免得以后有人给 svg 加
+   全局 stroke 时它突然变粗。 */
+.tool .wifi.mod-off {
+  width: 14px; height: 14px;
+  stroke: none; stroke-width: 0;
+}
+/* 第几次 / 共几次:等宽数字,数字跳动时这一行不会跟着抖。
+   字重跟前面那句话一样是 400 —— 这一行整句("正在重新连接 2/5")是一条状态,
+   不是一条要你读重点的通知,把次数单独加粗等于在里面挑一个词喊出来。 */
+.tool .cnt { margin-inline-start: 6px; font-variant-numeric: tabular-nums; font-weight: 500; color: inherit; }
+/* 这一行的字也走流光,和 3 · Thinking 那句同一条动画(15 秒扫一次)——
+   两处说的是同一件事:「有个东西在自己跑,你不用管」。既然是同一句话,
+   就该长同一个样,而不是一处在扫、一处干站着。
+   ------------------------------------------------------------
+   流光挂在 .nm 【里面】的一层 inline span 上,不直接挂 .nm:后者是 flex:1 的
+   撑满盒(靠它把右边那枚 ⌄ 顶到行尾),而流光的渐变按元素盒宽算 ——
+   挂在撑满盒上,亮带大半程都在文字右边的空白里扫,看着就是"隔一会儿闪一下"。
+   套一层收缩到文字宽的 inline 盒,亮带才正好扫过这几个字。
+   次数那一段跟着一起扫:-webkit-text-fill-color 是继承的,所以 .cnt 只要
+   不自己写死颜色(上面已改成 inherit),就跟着父级一起透出底下的渐变。 */
+.tool .nm > .shimmer { display: inline-block; max-width: 100%; }
+/* 展开箭头:跟 Queue 行的动作按钮同一副尺寸 */
+.tool .ch {
+  flex: none; display: grid; place-items: center; width: 22px; height: 22px;
+  margin-inline-end: -4px; border-radius: var(--radius-sm); color: var(--text-soft);
+  transition: background-color var(--duration-faster) var(--ease-out), color var(--duration-faster) var(--ease-out);
+}
+.tool .ch svg { width: 12px; height: 12px; }
+.tool .ch:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+/* 重连中不上色:它还没出事,只是在等。颜色留给真正要你动手的那一态。 */
+
+/* 表外新增标记。飞书文档那张表是 21 行,22/23 是评审时加的 ——
+   标出来,免得下一个人拿表逐条核对时以为自己数错了。 */
+.ext-mark {
+  flex: none; margin-inline-start: 6px; padding: 1px 6px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  font-size: var(--t-cap); font-weight: 500; color: var(--text-soft);
+}
+
+/* ---- 通用按钮(承 components.css:主按钮墨色,绿不做大面积填充) ---- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: var(--radius-pill);
+  font-size: var(--t-body); font-weight: 600; white-space: nowrap;
+  transition: background-color var(--duration-faster) var(--ease-out),
+              border-color var(--duration-faster) var(--ease-out),
+              transform var(--duration-faster) var(--ease-out);
+}
+.btn:active { transform: scale(0.98); }
+.btn svg { width: 13px; height: 13px; }
+.btn.mod-primary { background: var(--text-strong); color: var(--bg); }
+.btn.mod-primary:hover { background: var(--text); color: var(--bg); }
+.btn.mod-secondary { background: var(--bg); border: 1px solid var(--border); color: var(--text); }
+.btn.mod-secondary:hover { border-color: var(--border-strong); color: var(--text-strong); }
+.btn.mod-ghost { color: var(--text-muted); padding: 6px 10px; }
+.btn.mod-ghost:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+.btn.mod-sm { padding: 4px 11px; font-size: var(--t-mini); }
+.btn.mod-sm svg { width: 11px; height: 11px; }
+/* 禁用态 —— 没写字之前发不出去。这是唯一允许降对比的状态。 */
+.btn:disabled { background: var(--bg-subtle); border-color: transparent; color: var(--text-faint); cursor: not-allowed; }
+.btn:disabled:hover { background: var(--bg-subtle); color: var(--text-faint); }
+.btn:disabled:active { transform: none; }
+/* 注意位置:必须排在 .btn.mod-primary / mod-secondary 之后。
+   它们同为两个类的特异性,写在前面会被后面的变体整条盖掉 —— 之前就是
+   这么踩的坑,禁用的发送键渲染出来还是实心深色。 */
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border); background: var(--bg);
+  font-size: var(--t-mini); color: var(--text);
+  transition: border-color var(--duration-faster) var(--ease-out), color var(--duration-faster) var(--ease-out);
+}
+.chip:hover { border-color: var(--border-strong); color: var(--text-strong); }
+/* 选中态用产品面的 --selected,不用品牌绿。tokens/colors.css 注释里写明
+   --selected 是「这一项是当前选中的」专用色,刻意与 --accent 分开,
+   好让主 CTA 和选中态同屏共存不打架。绿只留给通过态(✓)。 */
+/* 同上:选中即绿,与 .opt.is-on 保持一套 */
+.chip.is-on {
+  /* 选中态不画描边:底色已经把「选中」说完了,再描一圈绿边是同一件事说两遍,
+     而且那圈边比未选中那几个的灰边更重,一排看过去选中的反而像是被框住了。
+     用 transparent 而不是 border:none —— 保住那 1px 的位置,选中/未选中
+     切换时这一颗不会跳。 */
+  border-color: transparent;
+  background: color-mix(in srgb, var(--brand-soft) 88%, var(--bg-panel));
+  color: var(--brand-text); font-weight: 600;
+}
+.chip.mod-sm { padding: 3px 9px; font-size: var(--t-cap); }
+/* 外部去向的 chip 带各自的标识 —— 这两条是跳出应用的链接,
+   认出目的地靠的是图形不是读字。
+   与产品其它图标同一套),不自己描摹商标。 */
+.chip svg { flex: none; width: 14px; height: 14px; }
+/* 平台标识:源文件在 docs/design/assets/{discord,feishu}.svg,
+   这里内联的是同一份路径。
+   ------------------------------------------------------------
+   必须内联,不能改成 <img src>:这份稿子评审时不启动本地服务,
+   file:// 下外链 SVG 会被浏览器按跨源拦掉,两枚图标会整个消失
+   (字体当初也是因为这个才 base64 进来的)。
+   所以那两个文件不是被引用的资源,是【内联路径的出处】——
+   换标识时先改那边,再把 path 同步过来。
+
+   平台标识用它自己的颜色,不跟按钮文字走。
+   灰色版本认得出形状但认不出"是谁" —— 而这两个按钮的全部作用就是
+   让人一眼知道点过去是哪个平台,颜色在这里是信息不是装饰。
+   飞书那枚恢复成三段各自上色:官方标识本来就是三色的,
+   之所以之前合并成一条,是单色下三段接缝会露裂纹 —— 上了色就不存在这个问题,
+   相邻的边本来就该是两种颜色的分界。 */
+.chip svg.mod-brand { stroke: none; }
