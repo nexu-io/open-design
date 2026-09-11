@@ -237,7 +237,7 @@ import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
-import { bedrockActiveProfile, resolveBedrockAuthMode } from '../utils/byokProvider';
+import { bedrockActiveProfile, byokRequestCredentials, resolveBedrockAuthMode } from '../utils/byokProvider';
 import {
   ENTRY_RAIL_STATE_EVENT,
   ENTRY_RAIL_TOGGLE_EVENT,
@@ -3322,14 +3322,14 @@ function OnboardingView({
     const inputKey = providerTestInputKey;
     const protocol = apiProtocol;
     const baseUrl = config.baseUrl;
-    // Profile mode signs through the AWS credential chain; never send a
-    // leftover bearer alongside it.
-    const apiKey = byokAwsProfile ? '' : config.apiKey;
     const model = config.model;
     const apiVersion =
       protocol === 'azure' ? config.apiVersion?.trim() || undefined : undefined;
-    const awsProfile = byokAwsProfile || undefined;
-    const awsSsoLogin = byokAwsProfile && options.awsSsoLogin ? true : undefined;
+    const credentials = byokRequestCredentials(
+      { apiProtocol, awsAuthMode: config.awsAuthMode, awsProfile: config.awsProfile },
+      config.apiKey,
+      { awsSsoLogin: options.awsSsoLogin === true },
+    );
     return startOrJoinInlineTest(providerTestRunRef, inputKey, async (signal) => {
       providerAutoTestKeyRef.current = inputKey;
       setProviderTestState({ status: 'running', inputKey });
@@ -3338,11 +3338,9 @@ function OnboardingView({
           {
             protocol,
             baseUrl,
-            apiKey,
             model,
             apiVersion,
-            ...(awsProfile ? { awsProfile } : {}),
-            ...(awsSsoLogin ? { awsSsoLogin } : {}),
+            ...credentials,
           },
           signal,
         );
@@ -4149,7 +4147,7 @@ function OnboardingCliSetupPanel({
   );
 }
 
-function OnboardingByokSetupPanel({
+export function OnboardingByokSetupPanel({
   apiProtocol,
   apiKey,
   baseUrl,
@@ -4300,9 +4298,9 @@ function OnboardingByokSetupPanel({
         </div>
       ) : null}
       {bedrockProfileMode ? (
-        <label className="onboarding-view__inline-field">
-          <span>{t('settings.bedrockProfile')}</span>
-          <span className="onboarding-view__field-row">
+        <>
+          <label className="onboarding-view__inline-field">
+            <span>{t('settings.bedrockProfile')}</span>
             <input
               type="text"
               placeholder="default"
@@ -4311,6 +4309,8 @@ function OnboardingByokSetupPanel({
               value={bedrock.profile}
               onChange={(event) => bedrock.onProfileChange(event.target.value.trim())}
             />
+          </label>
+          <div className="onboarding-view__field-row">
             <button
               type="button"
               data-testid="onboarding-bedrock-sso-sign-in"
@@ -4320,8 +4320,8 @@ function OnboardingByokSetupPanel({
             >
               {t('settings.bedrockSsoSignIn')}
             </button>
-          </span>
-        </label>
+          </div>
+        </>
       ) : (
         <label className="onboarding-view__inline-field">
           <span>{t('settings.apiKey')}</span>

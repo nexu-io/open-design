@@ -78,6 +78,9 @@ const PROFILE_SCOPE_LABELS: Record<string, string> = {
 
 function isTextModel(model: BedrockFoundationModelSummary): boolean {
   const active = (model.modelLifecycle?.status ?? 'ACTIVE') === 'ACTIVE';
+  // The control plane lists input modalities for every text model; a missing
+  // list is an embedding or image model, so it is excluded. Output modalities
+  // are omitted for some text models, so a missing list is read as text.
   const textIn = (model.inputModalities ?? []).includes('TEXT');
   const textOut = (model.outputModalities ?? ['TEXT']).includes('TEXT');
   return active && textIn && textOut;

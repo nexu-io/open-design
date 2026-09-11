@@ -143,7 +143,7 @@ import {
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
-import { bedrockActiveProfile, byokProviderRequiresApiKey, resolveBedrockAuthMode } from '../utils/byokProvider';
+import { bedrockActiveProfile, byokProviderRequiresApiKey, byokRequestCredentials, resolveBedrockAuthMode } from '../utils/byokProvider';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -2657,25 +2657,20 @@ export function SettingsDialog({
       }
     };
     try {
-      const bedrockProfile =
-        apiProtocol === 'bedrock'
-        && resolveBedrockAuthMode(cfg.awsAuthMode) === 'profile'
-          ? (cfg.awsProfile ?? '').trim()
-          : '';
       const result = await testApiProvider(
         {
           protocol: apiProtocol,
           baseUrl: cfg.baseUrl,
-          // Profile mode signs through the AWS credential chain; never send a
-          // leftover bearer alongside it.
-          apiKey: bedrockProfile ? '' : cleanByokApiKey(cfg.apiKey),
           model: cfg.model,
           apiVersion:
             apiProtocol === 'azure'
               ? cfg.apiVersion?.trim() || undefined
               : undefined,
-          ...(bedrockProfile ? { awsProfile: bedrockProfile } : {}),
-          ...(bedrockProfile && options.awsSsoLogin ? { awsSsoLogin: true } : {}),
+          ...byokRequestCredentials(
+            { apiProtocol, awsAuthMode: cfg.awsAuthMode, awsProfile: cfg.awsProfile },
+            cleanByokApiKey(cfg.apiKey),
+            { awsSsoLogin: options.awsSsoLogin === true },
+          ),
         },
         controller.signal,
       );

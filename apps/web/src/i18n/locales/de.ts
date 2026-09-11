@@ -603,7 +603,7 @@ export const de: Dict = {
   'settings.bedrockAuthApiKey': 'Bedrock-API-Schlüssel',
   'settings.bedrockAuthProfile': 'AWS-Profil',
   'settings.bedrockProfile': 'Name des AWS-Profils',
-  'settings.bedrockProfileHint': 'Benanntes Profil aus ~/.aws/config. Bei IAM-Identity-Center-Profilen (SSO) öffnet „Verbindung testen“ die Browser-Anmeldung, wenn die Sitzung abgelaufen ist. Erfordert AWS CLI v2.',
+  'settings.bedrockProfileHint': 'Benanntes Profil aus ~/.aws/config. Erfordert AWS CLI v2. Bei IAM Identity Center (SSO)-Profilen verwenden Sie Mit AWS SSO anmelden, wenn die Sitzung abgelaufen ist.',
   'settings.bedrockSsoSignIn': 'Mit AWS SSO anmelden',
   'settings.bedrockRegionHint': 'Die Region {region} wird aus der Endpunkt-URL gelesen.',
   'settings.bedrockRegionUnknownHint': 'Die Endpunkt-URL enthält keine Region; {region} wird angenommen.',

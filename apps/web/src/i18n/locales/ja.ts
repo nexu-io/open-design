@@ -603,7 +603,7 @@ export const ja: Dict = {
   'settings.bedrockAuthApiKey': 'Bedrock API キー',
   'settings.bedrockAuthProfile': 'AWS プロファイル',
   'settings.bedrockProfile': 'AWS プロファイル名',
-  'settings.bedrockProfileHint': '~/.aws/config の名前付きプロファイル。IAM Identity Center (SSO) プロファイルの場合、セッション期限切れ時に「接続をテスト」がブラウザーでのサインインを開きます。AWS CLI v2 が必要です。',
+  'settings.bedrockProfileHint': '~/.aws/config の名前付きプロファイル。AWS CLI v2 が必要です。IAM Identity Center (SSO) プロファイルでは、セッションが失効したら「AWS SSO でサインイン」を使用してください。',
   'settings.bedrockSsoSignIn': 'AWS SSO でサインイン',
   'settings.bedrockRegionHint': 'リージョン {region} はエンドポイント URL から読み取られます。',
   'settings.bedrockRegionUnknownHint': 'エンドポイント URL にリージョンが含まれていないため、{region} と見なします。',

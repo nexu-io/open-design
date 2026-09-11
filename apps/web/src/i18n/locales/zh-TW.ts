@@ -604,7 +604,7 @@ export const zhTW: Dict = {
   "settings.bedrockAuthApiKey": "Bedrock API 金鑰",
   "settings.bedrockAuthProfile": "AWS 設定檔",
   "settings.bedrockProfile": "AWS 設定檔名稱",
-  "settings.bedrockProfileHint": "來自 ~/.aws/config 的命名設定檔。對於 IAM Identity Center (SSO) 設定檔，工作階段過期時「測試連線」會在瀏覽器中開啟登入。需要 AWS CLI v2。",
+  "settings.bedrockProfileHint": "來自 ~/.aws/config 的命名設定檔。需要 AWS CLI v2。對於 IAM Identity Center (SSO) 設定檔，工作階段過期後請使用「使用 AWS SSO 登入」。",
   "settings.bedrockSsoSignIn": "使用 AWS SSO 登入",
   "settings.bedrockRegionHint": "區域 {region} 從端點 URL 讀取。",
   "settings.bedrockRegionUnknownHint": "端點 URL 不包含區域，預設使用 {region}。",

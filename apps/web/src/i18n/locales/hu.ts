@@ -603,7 +603,7 @@ export const hu: Dict = {
   'settings.bedrockAuthApiKey': 'Bedrock API-kulcs',
   'settings.bedrockAuthProfile': 'AWS-profil',
   'settings.bedrockProfile': 'AWS-profil neve',
-  'settings.bedrockProfileHint': 'Nevesített profil a ~/.aws/config fájlból. IAM Identity Center (SSO) profil esetén a Kapcsolat tesztelése megnyitja a böngészős bejelentkezést, ha a munkamenet lejárt. AWS CLI v2 szükséges.',
+  'settings.bedrockProfileHint': 'Nevesített profil a ~/.aws/config fájlból. AWS CLI v2 szükséges. IAM Identity Center (SSO) profiloknál használja a Bejelentkezés AWS SSO-val gombot, ha a munkamenet lejárt.',
   'settings.bedrockSsoSignIn': 'Bejelentkezés AWS SSO-val',
   'settings.bedrockRegionHint': 'A {region} régió a végpont URL-jéből származik.',
   'settings.bedrockRegionUnknownHint': 'A végpont URL-je nem tartalmaz régiót; {region} lesz feltételezve.',

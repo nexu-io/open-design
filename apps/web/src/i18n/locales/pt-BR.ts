@@ -603,7 +603,7 @@ export const ptBR: Dict = {
   'settings.bedrockAuthApiKey': 'Chave de API do Bedrock',
   'settings.bedrockAuthProfile': 'Perfil da AWS',
   'settings.bedrockProfile': 'Nome do perfil da AWS',
-  'settings.bedrockProfileHint': 'Perfil nomeado de ~/.aws/config. Para perfis do IAM Identity Center (SSO), Testar conexão abre o login no navegador quando a sessão expirou. Requer AWS CLI v2.',
+  'settings.bedrockProfileHint': 'Perfil nomeado de ~/.aws/config. Requer AWS CLI v2. Para perfis do IAM Identity Center (SSO), use Entrar com AWS SSO quando a sessão expirar.',
   'settings.bedrockSsoSignIn': 'Entrar com AWS SSO',
   'settings.bedrockRegionHint': 'A região {region} é lida da URL do endpoint.',
   'settings.bedrockRegionUnknownHint': 'A URL do endpoint não contém região; {region} é assumida.',

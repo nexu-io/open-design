@@ -603,7 +603,7 @@ export const pl: Dict = {
   'settings.bedrockAuthApiKey': 'Klucz API Bedrock',
   'settings.bedrockAuthProfile': 'Profil AWS',
   'settings.bedrockProfile': 'Nazwa profilu AWS',
-  'settings.bedrockProfileHint': 'Nazwany profil z ~/.aws/config. Dla profili IAM Identity Center (SSO) Testuj połączenie otwiera logowanie w przeglądarce, gdy sesja wygasła. Wymaga AWS CLI v2.',
+  'settings.bedrockProfileHint': 'Nazwany profil z ~/.aws/config. Wymaga AWS CLI v2. Dla profili IAM Identity Center (SSO) użyj Zaloguj się przez AWS SSO, gdy sesja wygasła.',
   'settings.bedrockSsoSignIn': 'Zaloguj się przez AWS SSO',
   'settings.bedrockRegionHint': 'Region {region} jest odczytywany z adresu URL punktu końcowego.',
   'settings.bedrockRegionUnknownHint': 'Adres URL punktu końcowego nie zawiera regionu; przyjęto {region}.',

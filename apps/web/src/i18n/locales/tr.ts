@@ -603,7 +603,7 @@ export const tr: Dict = {
   'settings.bedrockAuthApiKey': 'Bedrock API anahtarı',
   'settings.bedrockAuthProfile': 'AWS profili',
   'settings.bedrockProfile': 'AWS profil adı',
-  'settings.bedrockProfileHint': '~/.aws/config içindeki adlandırılmış profil. IAM Identity Center (SSO) profillerinde, oturum süresi dolduğunda Bağlantıyı test et tarayıcıda oturum açmayı başlatır. AWS CLI v2 gerektirir.',
+  'settings.bedrockProfileHint': '~/.aws/config içindeki adlandırılmış profil. AWS CLI v2 gerekir. IAM Identity Center (SSO) profilleri için oturum süresi dolduğunda AWS SSO ile giriş yap seçeneğini kullanın.',
   'settings.bedrockSsoSignIn': 'AWS SSO ile oturum aç',
   'settings.bedrockRegionHint': '{region} bölgesi uç nokta URL’sinden okunur.',
   'settings.bedrockRegionUnknownHint': 'Uç nokta URL’si bölge içermiyor; {region} varsayılır.',

@@ -603,7 +603,7 @@ export const ar: Dict = {
   'settings.bedrockAuthApiKey': 'مفتاح Bedrock API',
   'settings.bedrockAuthProfile': 'ملف تعريف AWS',
   'settings.bedrockProfile': 'اسم ملف تعريف AWS',
-  'settings.bedrockProfileHint': 'ملف تعريف مسمّى من ~/.aws/config. لملفات IAM Identity Center (SSO)، يفتح اختبار الاتصال تسجيل الدخول في المتصفح عند انتهاء الجلسة. يتطلب AWS CLI v2.',
+  'settings.bedrockProfileHint': 'ملف تعريف مسمّى من ~/.aws/config. يتطلب AWS CLI v2. لملفات IAM Identity Center (SSO)، استخدم تسجيل الدخول عبر AWS SSO عند انتهاء الجلسة.',
   'settings.bedrockSsoSignIn': 'تسجيل الدخول عبر AWS SSO',
   'settings.bedrockRegionHint': 'تُقرأ المنطقة {region} من عنوان URL لنقطة النهاية.',
   'settings.bedrockRegionUnknownHint': 'عنوان URL لنقطة النهاية لا يحتوي على منطقة؛ يُفترض {region}.',

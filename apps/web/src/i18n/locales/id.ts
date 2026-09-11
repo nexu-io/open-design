@@ -603,7 +603,7 @@ export const id: Dict = {
   'settings.bedrockAuthApiKey': 'Kunci API Bedrock',
   'settings.bedrockAuthProfile': 'Profil AWS',
   'settings.bedrockProfile': 'Nama profil AWS',
-  'settings.bedrockProfileHint': 'Profil bernama dari ~/.aws/config. Untuk profil IAM Identity Center (SSO), Uji koneksi membuka login di browser saat sesi telah kedaluwarsa. Memerlukan AWS CLI v2.',
+  'settings.bedrockProfileHint': 'Profil bernama dari ~/.aws/config. Memerlukan AWS CLI v2. Untuk profil IAM Identity Center (SSO), gunakan Masuk dengan AWS SSO saat sesi telah berakhir.',
   'settings.bedrockSsoSignIn': 'Masuk dengan AWS SSO',
   'settings.bedrockRegionHint': 'Region {region} dibaca dari URL endpoint.',
   'settings.bedrockRegionUnknownHint': 'URL endpoint tidak memuat region; {region} diasumsikan.',

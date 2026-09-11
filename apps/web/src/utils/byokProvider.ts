@@ -33,6 +33,31 @@ export function bedrockActiveProfile(config: {
   return (config.awsProfile ?? '').trim();
 }
 
+/**
+ * Credential fields of a provider request (connection test, model discovery).
+ * In Bedrock profile mode the profile travels and the key is dropped, so a
+ * leftover bearer never rides along; the explicit SSO sign-in flag is only
+ * ever set by the dedicated button, never by a routine test. Shared by the
+ * Settings and onboarding surfaces so the two cannot drift.
+ */
+export function byokRequestCredentials(
+  config: {
+    apiProtocol?: ApiProtocol | undefined;
+    awsAuthMode?: BedrockAuthMode | undefined;
+    awsProfile?: string | undefined;
+  },
+  apiKey: string,
+  options: { awsSsoLogin?: boolean } = {},
+): { apiKey: string; awsProfile?: string; awsSsoLogin?: true } {
+  const awsProfile = bedrockActiveProfile(config);
+  if (!awsProfile) return { apiKey };
+  return {
+    apiKey: '',
+    awsProfile,
+    ...(options.awsSsoLogin ? { awsSsoLogin: true as const } : {}),
+  };
+}
+
 export function byokProviderRequiresApiKey(
   protocol: ApiProtocol,
   provider: KnownProvider | undefined,

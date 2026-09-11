@@ -603,7 +603,7 @@ export const ko: Dict = {
   'settings.bedrockAuthApiKey': 'Bedrock API 키',
   'settings.bedrockAuthProfile': 'AWS 프로필',
   'settings.bedrockProfile': 'AWS 프로필 이름',
-  'settings.bedrockProfileHint': '~/.aws/config의 명명된 프로필입니다. IAM Identity Center(SSO) 프로필의 경우 세션이 만료되면 연결 테스트가 브라우저 로그인을 엽니다. AWS CLI v2가 필요합니다.',
+  'settings.bedrockProfileHint': '~/.aws/config의 명명된 프로필입니다. AWS CLI v2가 필요합니다. IAM Identity Center(SSO) 프로필의 경우 세션이 만료되면 AWS SSO로 로그인을 사용하세요.',
   'settings.bedrockSsoSignIn': 'AWS SSO로 로그인',
   'settings.bedrockRegionHint': '리전 {region}은 엔드포인트 URL에서 읽어옵니다.',
   'settings.bedrockRegionUnknownHint': '엔드포인트 URL에 리전이 없어 {region}으로 간주합니다.',

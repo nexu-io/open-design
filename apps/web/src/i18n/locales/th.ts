@@ -603,7 +603,7 @@ export const th: Dict = {
   'settings.bedrockAuthApiKey': 'คีย์ API ของ Bedrock',
   'settings.bedrockAuthProfile': 'โปรไฟล์ AWS',
   'settings.bedrockProfile': 'ชื่อโปรไฟล์ AWS',
-  'settings.bedrockProfileHint': 'โปรไฟล์ที่ตั้งชื่อไว้จาก ~/.aws/config สำหรับโปรไฟล์ IAM Identity Center (SSO) การทดสอบการเชื่อมต่อจะเปิดการลงชื่อเข้าใช้ในเบราว์เซอร์เมื่อเซสชันหมดอายุ ต้องใช้ AWS CLI v2',
+  'settings.bedrockProfileHint': 'โปรไฟล์ที่มีชื่อจาก ~/.aws/config ต้องใช้ AWS CLI v2 สำหรับโปรไฟล์ IAM Identity Center (SSO) ให้ใช้ลงชื่อเข้าใช้ด้วย AWS SSO เมื่อเซสชันหมดอายุ',
   'settings.bedrockSsoSignIn': 'ลงชื่อเข้าใช้ด้วย AWS SSO',
   'settings.bedrockRegionHint': 'อ่านรีเจียน {region} จาก URL ของเอนด์พอยต์',
   'settings.bedrockRegionUnknownHint': 'URL ของเอนด์พอยต์ไม่มีรีเจียน จึงใช้ {region} เป็นค่าเริ่มต้น',

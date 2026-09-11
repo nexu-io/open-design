@@ -603,7 +603,7 @@ export const zhCN: Dict = {
   "settings.bedrockAuthApiKey": "Bedrock API 密钥",
   "settings.bedrockAuthProfile": "AWS 配置文件",
   "settings.bedrockProfile": "AWS 配置文件名称",
-  "settings.bedrockProfileHint": "来自 ~/.aws/config 的命名配置文件。对于 IAM Identity Center (SSO) 配置文件，会话过期时“测试连接”会在浏览器中打开登录。需要 AWS CLI v2。",
+  "settings.bedrockProfileHint": "来自 ~/.aws/config 的命名配置文件。需要 AWS CLI v2。对于 IAM Identity Center (SSO) 配置文件，会话过期后请使用“使用 AWS SSO 登录”。",
   "settings.bedrockSsoSignIn": "使用 AWS SSO 登录",
   "settings.bedrockRegionHint": "区域 {region} 从端点 URL 中读取。",
   "settings.bedrockRegionUnknownHint": "端点 URL 不包含区域，默认使用 {region}。",
