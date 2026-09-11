@@ -597,6 +597,38 @@ def normalize_product_archive(source: Path, destination: Path) -> None:
                     shutil.copyfileobj(input_file, output_file, length=1024 * 1024)
 
 
+def archive_product_directory(source: Path, destination: Path) -> None:
+    """Emit the existing normalized product envelope without a GitHub relay."""
+    if source.is_symlink() or not source.is_dir():
+        raise ConfigError("product source must be a real directory")
+    files = []
+    names: set[str] = set()
+    total = 0
+    for file in source.rglob("*"):
+        name = file.relative_to(source).as_posix()
+        if file.is_symlink() or re.search(r"[\\:\x00-\x1f]", name):
+            raise ConfigError("product directory contains unsafe paths")
+        if file.is_dir():
+            continue
+        if not file.is_file() or name.lower() in names:
+            raise ConfigError("product directory contains special or conflicting files")
+        names.add(name.lower())
+        files.append((name, file))
+        total += file.stat().st_size
+        if len(files) > 10000 or total > 2 * 1024 ** 3:
+            raise ConfigError("product directory exceeds inventory bounds")
+    if not files:
+        raise ConfigError("product directory is empty")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(destination, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for name, file in sorted(files):
+            entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            entry.compress_type = zipfile.ZIP_DEFLATED
+            entry.external_attr = 0o100644 << 16
+            with file.open("rb") as input_file, archive.open(entry, "w") as output_file:
+                shutil.copyfileobj(input_file, output_file, length=1024 * 1024)
+
+
 def resolve_results(
     base_url: str | None,
     repository_id: int,
@@ -775,13 +807,19 @@ def execution_command(args: argparse.Namespace, contract: ConvergenceContract) -
     return 0
 
 
-def product_inputs(pending: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def product_inputs(pending: dict[str, Any], contributions: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
     """Project acquired-result bindings as ordinary executor artifact inputs."""
     inputs = {}
     for identity, workload in pending["workloads"].items():
-        if not workload["scopeEnabled"] or workload["run"] or not workload["resultHit"]:
+        if not workload["scopeEnabled"]:
             continue
-        products = validate_products(workload["result"]["products"], f"{identity}.products", require_urls=True)
+        if identity in (contributions or {}):
+            raw_products = contributions[identity]["products"]
+        elif not workload["run"] and workload["resultHit"]:
+            raw_products = workload["result"]["products"]
+        else:
+            continue
+        products = validate_products(raw_products, f"{identity}.products", require_urls=True)
         for name, product in products.items():
             digest = product.get("data", {}).get("sha256")
             if not isinstance(digest, str) or not DIGEST_RE.fullmatch(digest):
@@ -790,12 +828,12 @@ def product_inputs(pending: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return inputs
 
 
-def batch_inputs(workflow: WorkflowContract, pending: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def batch_inputs(workflow: WorkflowContract, pending: dict[str, Any], contributions: dict[str, Any] | None = None) -> dict[str, list[dict[str, Any]]]:
     """Group execution without coarsening identities; emit only business fields
     and verified artifact inputs, never planner state to the executor."""
     if workflow.execution is None:
         return {}
-    products = product_inputs(pending)
+    products = product_inputs(pending, contributions)
     batches = {}
     for name, batch in workflow.execution.get("batches", {}).items():
         entries = []
@@ -805,7 +843,7 @@ def batch_inputs(workflow: WorkflowContract, pending: dict[str, Any]) -> dict[st
             if not selected["scopeEnabled"]:
                 continue
             request = {field: entry[source] for field, source in batch["fields"].items()}
-            if not selected["run"]:
+            if not selected["run"] or identity in (contributions or {}):
                 binding = products.get(f"{identity}/{batch['product']}")
                 if binding is None:
                     raise ConfigError(f"batch input lacks a verified artifact: {identity}")
@@ -836,10 +874,29 @@ def contribute_command(args: argparse.Namespace, contract: ConvergenceContract) 
     labels = execution_class["labels"]
     if not isinstance(labels, list) or not labels or any(not isinstance(label, str) or not label for label in labels):
         raise ConfigError("contribution execution labels are invalid")
-    products = validate_products({args.product: {"type": "job", "source": args.artifact}}, "contribution products", require_urls=False)
+    directory = getattr(args, "directory", None)
+    if directory is not None:
+        if workflow.workloads[identity].artifact is None or workflow.workloads[identity].artifact["product"] != args.product:
+            raise ConfigError("direct upload requires the declared workload product")
+        storage = storage_config(required=True)
+        origin = public_origin(storage["public_origin"])
+        client = storage_client(storage, args.timeout)
+        with tempfile.TemporaryDirectory(prefix="convergence-product-") as temporary:
+            archive = Path(temporary) / "product.zip"
+            archive_product_directory(directory, archive)
+            product = upload_product(client, origin, pending["repositoryId"], workflow.name,
+                                     workflow.policy, identity, args.product, archive, args.timeout)
+        products = {args.product: product}
+    else:
+        products = validate_products({args.product: {"type": "job", "source": args.artifact}}, "contribution products", require_urls=False)
     write_json_atomic(args.output / identity / "product-manifest.json", {
         "workload": identity, "digest": digest, "executionClass": execution_class, "products": products,
     })
+    if directory is not None:
+        # An explicit current-run input, not a trusted reusable result.
+        descriptor = {"url": product["source"], "sha256": product["data"]["sha256"]}
+        write_json_atomic(args.output / identity / f"{args.product}.json", descriptor)
+        print(compact_json(descriptor))
     return 0
 
 
@@ -859,10 +916,92 @@ def contribute_all_command(args: argparse.Namespace, contract: ConvergenceContra
             continue
         if workload.artifact is None:
             raise ConfigError(f"executed workload lacks an artifact declaration: {identity}")
+        manifest = args.output / identity / "product-manifest.json"
+        if manifest.exists():
+            validate_contribution(load_json(manifest), pending, workflow, identity)
+            continue
         contribute_command(argparse.Namespace(
             pending=args.pending, workload=identity, product=workload.artifact["product"],
             artifact=f"{workload.artifact['prefix']}-{args.source_commit}", output=args.output,
         ), contract)
+    return 0
+
+
+def validate_contribution(value: Any, pending: dict[str, Any], workflow: WorkflowContract, identity: str) -> dict[str, Any]:
+    manifest = object_value(value, "current-run product manifest")
+    selected = object_value(pending["workloads"].get(identity), "current-run workload")
+    declaration = workflow.workloads[identity]
+    if set(manifest) != {"workload", "digest", "executionClass", "products"}:
+        raise ConfigError("current-run product manifest fields differ")
+    if (selected.get("run") is not True or selected.get("scopeEnabled") is not True
+            or manifest["workload"] != identity or manifest["digest"] != selected["digest"]
+            or manifest["executionClass"] != selected["executionClass"]):
+        raise ConfigError("current-run product execution binding differs")
+    products = validate_products(manifest["products"], "current-run products", require_urls=True)
+    if declaration.artifact is None or set(products) != {declaration.artifact["product"]}:
+        raise ConfigError("current-run product inventory differs")
+    for name, product in products.items():
+        data = product.get("data", {})
+        if type(data.get("size")) is not int or data["size"] <= 0:
+            raise ConfigError("current-run product requires a positive byte size")
+        key = product_key(pending["repositoryId"], workflow.name, workflow.policy, identity, name, data.get("sha256"))
+        parsed = urllib.parse.urlparse(product["source"])
+        if parsed.query or parsed.fragment or parsed.path != f"/{key}":
+            raise ConfigError("current-run product cache namespace differs")
+    return manifest
+
+
+def contribution_batch(args: argparse.Namespace, contract: ConvergenceContract):
+    pending = object_value(load_json(args.pending), "pending convergence")
+    workflow = contract.workflow(require_string(pending.get("workflow"), "pending workflow"))
+    if pending.get("schemaVersion") != 1 or pending.get("protocol") != PROTOCOL or pending.get("policy") != workflow.policy:
+        raise ConfigError("pending convergence contract differs")
+    execution = workflow.execution or {}
+    batch = execution.get("batches", {}).get(args.batch)
+    if batch is None:
+        raise ConfigError("unknown contribution batch")
+    entries = [entry for entry in execution["matrices"][batch["matrix"]]["include"]
+               if pending["workloads"][entry["workload"]]["run"]
+               and pending["workloads"][entry["workload"]]["scopeEnabled"]]
+    return pending, workflow, batch, entries
+
+
+def contribute_batch_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
+    pending, workflow, batch, entries = contribution_batch(args, contract)
+    field = batch["fields"].get(args.directory_field)
+    if field is None:
+        raise ConfigError("product directory field is not declared by the batch")
+    requests = []
+    for entry in entries:
+        directory = args.products_root / require_identity(entry[field], "product directory") / "artifact"
+        declaration = workflow.workloads[entry["workload"]].artifact
+        if declaration is None or declaration["product"] != batch["product"]:
+            raise ConfigError("batch product declaration differs")
+        if not directory.is_dir() or directory.is_symlink():
+            raise ConfigError("executed batch product directory is missing")
+        requests.append(argparse.Namespace(pending=args.pending, workload=entry["workload"],
+            product=batch["product"], directory=directory, output=args.output, timeout=args.timeout))
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(lambda request: contribute_command(request, contract), requests))
+    manifests = {entry["workload"]: load_json(args.output / entry["workload"] / "product-manifest.json") for entry in entries}
+    append_outputs({"products": compact_json(manifests)})
+    return 0
+
+
+def bind_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
+    pending, workflow, batch, entries = contribution_batch(args, contract)
+    manifests = object_value(json.loads(args.products_json), "current-run products")
+    if set(manifests) != {entry["workload"] for entry in entries}:
+        raise ConfigError("current-run batch product inventory differs")
+    for identity, manifest in manifests.items():
+        validate_contribution(manifest, pending, workflow, identity)
+    # Re-project consumer inputs without altering plan decisions or trusted hits.
+    for name, descriptor in product_inputs(pending, manifests).items():
+        write_json_atomic(args.output / f"{name}.json", descriptor)
+    sources = batch_inputs(workflow, pending, manifests)[args.batch]
+    write_json_atomic(args.output / "batches" / f"{args.batch}.json", {"sources": sources})
+    for identity, manifest in manifests.items():
+        write_json_atomic(args.products_root / identity / "product-manifest.json", manifest)
     return 0
 
 
@@ -1375,6 +1514,44 @@ def storage_status_command() -> int:
     return 0
 
 
+def storage_client(storage: dict[str, str], timeout: float) -> R2Client:
+    return R2Client(endpoint=storage["endpoint"], bucket=storage["bucket"],
+                    credentials=R2Credentials(storage["access_key_id"], storage["secret_access_key"]),
+                    timeout=timeout)
+
+
+def verify_product(client: R2Client, origin: str, key: str, data: dict[str, Any], timeout: float) -> None:
+    existing = client.head(key=key)
+    if existing is None or existing.get("content-length") != str(data["size"]):
+        raise ConfigError(f"immutable workload product missing or size collision: {key}")
+    if sha256_url(f"{origin}/{key}", timeout) != data["sha256"]:
+        raise ConfigError(f"immutable workload product collision: {key}")
+
+
+def upload_product(client: R2Client, origin: str, repository_id: int, workflow: str,
+                   policy: str, identity: str, name: str, archive: Path, timeout: float,
+                   declared: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Producer writes have no caller-supplied key or trusted-result operation.
+
+    This is an application guard, not credential-level isolation. The same
+    bucket credential is temporarily shared by the controlled exact lane.
+    """
+    data = dict(declared or {})
+    digest = sha256_file(archive)
+    if data.get("sha256", digest) != digest:
+        raise ConfigError(f"declared product digest differs from artifact: {identity}/{name}")
+    data.update(sha256=digest, size=archive.stat().st_size)
+    key = product_key(repository_id, workflow, policy, identity, name, digest)
+    if client.head(key=key) is None:
+        try:
+            client.put_file(key=key, file=archive, content_type="application/zip")
+        except R2PreconditionFailed:
+            verify_product(client, origin, key, data, timeout)
+    else:
+        verify_product(client, origin, key, data, timeout)
+    return {"type": "url", "source": f"{origin}/{key}", "data": data}
+
+
 def stage_products_command(args: argparse.Namespace) -> int:
     repository = require_string(os.environ.get("GITHUB_REPOSITORY"), "GITHUB_REPOSITORY")
     run_id = args.run_id
@@ -1384,8 +1561,9 @@ def stage_products_command(args: argparse.Namespace) -> int:
         raise ConfigError("a positive producing run id is required")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     staged = []
-    artifacts = run_artifacts(repository, run_id)
-    for source in candidate_product_sources(args.candidate):
+    sources = candidate_product_sources(args.candidate)
+    artifacts = run_artifacts(repository, run_id) if sources else []
+    for source in sources:
         artifact = unique_artifact(artifacts, source)
         if artifact is None:
             raise ConfigError(f"current-run product artifact is missing: {source}")
@@ -1552,12 +1730,7 @@ def self_check() -> None:
 def publish_command(args: argparse.Namespace) -> int:
     storage = storage_config(required=True)
     origin = public_origin(storage["public_origin"])
-    client = R2Client(
-        endpoint=storage["endpoint"],
-        bucket=storage["bucket"],
-        credentials=R2Credentials(storage["access_key_id"], storage["secret_access_key"]),
-        timeout=args.timeout,
-    )
+    client = storage_client(storage, args.timeout)
     with tempfile.TemporaryDirectory() as temporary:
         prepare_publication(args.candidate, Path(temporary), require_urls=False)
     candidate = object_value(load_json(args.candidate), "convergence candidate")
@@ -1572,6 +1745,13 @@ def publish_command(args: argparse.Namespace) -> int:
         products = validate_products(receipt["products"], "receipt.products", require_urls=False)
         for name, product in products.items():
             if product["type"] != "job":
+                data = product.get("data", {})
+                if type(data.get("size")) is not int or data["size"] <= 0:
+                    raise ConfigError("direct product requires a positive byte size")
+                key = product_key(repository_id, workflow, policy, identity, name, data.get("sha256"))
+                if product["source"] != f"{origin}/{key}":
+                    raise ConfigError("direct product URL differs from its declared cache namespace")
+                verify_product(client, origin, key, data, args.timeout)
                 continue
             source = product["source"]
             source_archive = args.products_root / f"{source}.zip"
@@ -1579,29 +1759,8 @@ def publish_command(args: argparse.Namespace) -> int:
                 raise ConfigError(f"current-run product artifact is missing: {source}")
             archive = args.output_dir / "products" / f"{identity}-{name}.zip"
             normalize_product_archive(source_archive, archive)
-            content_digest = sha256_file(archive)
-            key = product_key(repository_id, workflow, policy, identity, name, content_digest)
-            data = dict(product.get("data", {}))
-            declared_digest = data.get("sha256")
-            if declared_digest is not None and declared_digest != content_digest:
-                raise ConfigError(f"declared product digest differs from artifact: {identity}/{name}")
-            data["sha256"] = content_digest
-            data["size"] = archive.stat().st_size
-            existing_product = client.head(key=key)
-            if existing_product is not None:
-                if existing_product.get("content-length") != str(data["size"]):
-                    raise ConfigError(f"immutable workload product size collision: {key}")
-                if sha256_url(f"{origin}/{key}", args.timeout) != content_digest:
-                    raise ConfigError(f"immutable workload product collision: {key}")
-            else:
-                try:
-                    client.put_file(key=key, file=archive, content_type="application/zip")
-                except R2PreconditionFailed:
-                    if sha256_url(f"{origin}/{key}", args.timeout) != content_digest:
-                        raise ConfigError(f"immutable workload product collision: {key}")
-            promoted = {"type": "url", "source": f"{origin}/{key}"}
-            promoted["data"] = data
-            receipt["products"][name] = promoted
+            receipt["products"][name] = upload_product(client, origin, repository_id, workflow, policy,
+                                                       identity, name, archive, args.timeout, product.get("data"))
             promoted_products += 1
     promoted_candidate = args.output_dir / "promoted-candidate.json"
     write_json_atomic(promoted_candidate, candidate)
@@ -1665,12 +1824,26 @@ def parse_args() -> argparse.Namespace:
     contribute.add_argument("--pending", type=Path, required=True)
     contribute.add_argument("--workload", required=True)
     contribute.add_argument("--product", required=True)
-    contribute.add_argument("--artifact", required=True)
+    source = contribute.add_mutually_exclusive_group(required=True)
+    source.add_argument("--artifact")
+    source.add_argument("--directory", type=Path)
+    contribute.add_argument("--timeout", type=float, default=120.0)
     contribute.add_argument("--output", type=Path, required=True)
     contribute_all = sub.add_parser("contribute-all")
     contribute_all.add_argument("--pending", type=Path, required=True)
     contribute_all.add_argument("--source-commit", required=True)
     contribute_all.add_argument("--output", type=Path, required=True)
+    for command in ("contribute-batch", "bind"):
+        batch = sub.add_parser(command)
+        batch.add_argument("--pending", type=Path, required=True)
+        batch.add_argument("--batch", required=True)
+        batch.add_argument("--products-root", type=Path, required=True)
+        batch.add_argument("--output", type=Path, required=True)
+        if command == "contribute-batch":
+            batch.add_argument("--directory-field", required=True)
+            batch.add_argument("--timeout", type=float, default=120.0)
+        else:
+            batch.add_argument("--products-json", required=True)
     handoff = sub.add_parser("handoff")
     handoff.add_argument("--pending", type=Path, required=True)
     handoff.add_argument("--products-root", type=Path, required=True)
@@ -1736,6 +1909,10 @@ def main() -> int:
         return contribute_command(args, contract)
     if args.command == "contribute-all":
         return contribute_all_command(args, contract)
+    if args.command == "contribute-batch":
+        return contribute_batch_command(args, contract)
+    if args.command == "bind":
+        return bind_command(args, contract)
     if args.command == "handoff":
         return handoff_command(args, contract)
     return admit_command(args, contract)

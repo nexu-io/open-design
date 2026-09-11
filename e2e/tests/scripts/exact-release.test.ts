@@ -436,13 +436,19 @@ describe("exact Electron release topology", () => {
     expect(action).toContain("resource materialize");
     expect(action).toContain("artifacts/batches/data.execution.json");
     expect(data).toContain("if: ${{ fromJSON(needs.plan.outputs.batch_run).data }}");
-    for (const id of dataIds) expect(action).toContain(`name: exact-data-cache-${id}-`);
+    expect(action).not.toContain("actions/upload-artifact");
+    expect(action).toContain("contribute-batch");
+    expect(action).toContain("--directory-field id");
+    expect(data).toContain(`plan-config: .github/config/plan/release-${channel}.json`);
+    expect(data).toContain("products: ${{ steps.data.outputs.products }}");
     expect(data).not.toContain("build:resources");
     expect(data).not.toContain("@open-design/daemon");
     expect(data).not.toContain("@open-design/web");
     const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
     expect(prepare).toContain('--data-resources "$RUNNER_TEMP/data-products"');
-    expect(prepare).toContain("pattern: exact-data-product-*-${{ inputs.source_sha }}");
+    expect(prepare).not.toContain("pattern: exact-data-product-");
+    expect(prepare).toContain("needs.data.outputs.products");
+    expect(prepare).toContain("--products-json");
     expect(prepare).not.toContain("needs.data.result");
     expect(prepare).toContain("tools-release resource acquire");
     expect(prepare).toContain('artifacts/batches/data.json');
@@ -656,8 +662,14 @@ describe("exact Electron release topology", () => {
       expect(workflow).toContain("secrets.CLOUDFLARE_R2_RELEASES_URL");
       expect(workflow).toContain("vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN || secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN");
       expect(workflow).not.toContain("secrets.EXACT_RELEASE_");
-      expect(workflow).not.toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_AK");
-      expect(workflow).not.toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_SK");
+      // Maintainer-approved single-bucket bootstrap: only product upload receives
+      // this credential; do not mistake script guards for permission isolation.
+      const dataJob = workflow.split("\n  data:")[1]!.split("\n  prepare:")[0]!;
+      for (const suffix of ["AK", "SK"]) {
+        const credential = `CLOUDFLARE_R2_WORKLOAD_RESULTS_${suffix}`;
+        expect(dataJob).toContain(credential);
+        expect(workflow.replace(dataJob, "")).not.toContain(credential);
+      }
       const distributionBuild = workflow.split("- name: Build native distribution")[1]!.split("- uses:")[0]!;
       const distributionSetup = workflow.split("- name: Restore distribution scene")[0]!.split("- uses: actions/setup-node@v6").at(-1)!;
       expect(distributionSetup).not.toContain("cache:");

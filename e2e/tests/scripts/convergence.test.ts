@@ -95,6 +95,123 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("binds an aggregated direct-product miss batch without converting uploads into cache hits", () => {
+    const code = `
+import sys,json,tempfile,hashlib
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+sys.path.insert(0,sys.argv[1])
+import convergence as c
+contract=c.ConvergenceContract(Path(sys.argv[2]));workflow=contract.workflow('release-exact')
+matrix=workflow.execution['matrices']['data_matrix']['include'];selected={entry['workload'] for entry in matrix[:2]}
+pending={'schemaVersion':1,'protocol':c.PROTOCOL,'repositoryId':42,'workflow':workflow.name,'policy':workflow.policy,'workloads':{}}
+for name,declaration in workflow.workloads.items():
+ pending['workloads'][name]={'digest':'a'*64,'executionClass':{'runnerClass':declaration.runner_class,'labels':['linux']},'scopeEnabled':name in selected,'run':name in selected,'resultHit':False,'reusable':declaration.reusable,'result':None}
+with tempfile.TemporaryDirectory() as temporary:
+ root=Path(temporary);c.write_json_atomic(root/'pending.json',pending)
+ for entry in matrix[:2]:
+  directory=root/'products'/entry['resource_id']/'artifact';directory.mkdir(parents=True);(directory/'resource').write_text(entry['resource_id'])
+ args=SimpleNamespace(pending=root/'pending.json',batch='data',directory_field='id',products_root=root/'products',output=root/'contributions',timeout=1)
+ objects={};writes=[]
+ class Storage:
+  def __init__(self,**kwargs): pass
+  def head(self,*,key): return {'content-length':str(len(objects[key]))} if key in objects else None
+  def put_file(self,*,key,file,**kwargs):
+   assert key.startswith('workload-products/v2/');assert key not in objects
+   objects[key]=file.read_bytes();writes.append(key)
+ storage={'endpoint':'https://storage.invalid','bucket':'plan','public_origin':'https://cache.invalid','access_key_id':'ak','secret_access_key':'sk'}
+ with patch.object(c,'R2Client',Storage),patch.object(c,'storage_config',return_value=storage),patch.object(c,'append_outputs') as output:
+  assert c.contribute_batch_command(args,contract)==0
+  manifests=json.loads(output.call_args.args[0]['products']);assert set(manifests)==selected
+  assert len(writes)==2
+ bound=SimpleNamespace(pending=args.pending,batch='data',products_json=json.dumps(manifests),output=root/'inputs',products_root=root/'bound')
+ assert c.bind_command(bound,contract)==0
+ assert c.load_json(args.pending)==pending
+ sources=c.load_json(bound.output/'batches/data.json')['sources']
+ assert len(sources)==2 and all(set(source)=={'id','artifact'} for source in sources)
+ assert {source['artifact']['url'] for source in sources}=={m['products']['resource']['source'] for m in manifests.values()}
+ # Trusted handoff collection retains direct manifests, without inventing job sources.
+ assert c.contribute_all_command(SimpleNamespace(pending=args.pending,source_commit='b'*40,output=bound.products_root),contract)==0
+ for name,manifest in manifests.items(): assert c.load_json(bound.products_root/name/'product-manifest.json')==manifest
+ for changed in [{},dict(manifests,unknown=next(iter(manifests.values())))]:
+  bound.products_json=json.dumps(changed)
+  try: c.bind_command(bound,contract)
+  except c.ConfigError: pass
+  else: raise AssertionError('accepted missing or foreign producer')
+ stale=json.loads(json.dumps(manifests));next(iter(stale.values()))['digest']='b'*64;bound.products_json=json.dumps(stale)
+ try: c.bind_command(bound,contract)
+ except c.ConfigError: pass
+ else: raise AssertionError('accepted stale execution identity')
+`;
+    const result = spawnSync("python3", ["-c", code, path.join(repoRoot, ".github/scripts"),
+      path.join(repoRoot, ".github/config/plan/release-exact.json")], { encoding: "utf8" });
+    expect(result, result.stderr).toMatchObject({ status: 0, stderr: "" });
+  });
+  test("direct products preserve the envelope and require verified cache references before admission", () => {
+    const code = `
+import sys,json,tempfile,zipfile,hashlib
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+sys.path.insert(0,sys.argv[1])
+import convergence as c
+with tempfile.TemporaryDirectory() as temporary:
+ root=Path(temporary);source=root/'source';source.mkdir()
+ (source/'tool').write_bytes(b'portable');(source/'nested').mkdir();(source/'nested'/'receipt.json').write_text('{}')
+ c.archive_product_directory(source,root/'direct.zip')
+ with zipfile.ZipFile(root/'github.zip','w') as z:
+  z.write(source/'nested'/'receipt.json','nested/receipt.json');z.write(source/'tool','tool')
+ c.normalize_product_archive(root/'github.zip',root/'normalized.zip')
+ assert (root/'direct.zip').read_bytes()==(root/'normalized.zip').read_bytes()
+ (source/'link').symlink_to(source/'tool')
+ try: c.archive_product_directory(source,root/'unsafe.zip')
+ except c.ConfigError: pass
+ else: raise AssertionError('accepted symlink')
+ assert not (root/'unsafe.zip').exists()
+ (source/'link').unlink()
+ config={'schema':{'version':2},'suites':{'convergence-control':['control.txt']},'workflows':{'ci':{'policy':'test-v1','workloads':{'tool':{'inputs':['control.txt'],'runnerClass':'worker','products':'manifest','reusable':True,'artifact':{'product':'bundle','prefix':'tool'}}}}}}
+ c.write_json_atomic(root/'config.json',config);contract=c.ConvergenceContract(root/'config.json')
+ pending={'schemaVersion':1,'protocol':c.PROTOCOL,'repositoryId':42,'workflow':'ci','policy':'test-v1','workloads':{'tool':{'scopeEnabled':True,'run':True,'digest':'a'*64,'executionClass':{'runnerClass':'worker','labels':['linux']}}}}
+ c.write_json_atomic(root/'pending.json',pending)
+ objects={};writes=[]
+ class Storage:
+  def __init__(self,**kwargs): pass
+  def head(self,*,key): return {'content-length':str(len(objects[key]))} if key in objects else None
+  def put_file(self,*,key,file,**kwargs):
+   assert key.startswith('workload-products/v2/')
+   assert key not in objects
+   objects[key]=file.read_bytes();writes.append(key)
+ storage={'endpoint':'https://storage.invalid','bucket':'plan','public_origin':'https://cache.invalid','access_key_id':'ak','secret_access_key':'sk'}
+ args=SimpleNamespace(pending=root/'pending.json',workload='tool',product='bundle',directory=source,output=root/'out',timeout=1)
+ with patch.object(c,'R2Client',Storage),patch.object(c,'storage_config',return_value=storage),patch.object(c,'sha256_url',side_effect=lambda url,timeout:hashlib.sha256(objects[url.removeprefix('https://cache.invalid/')]).hexdigest()):
+  assert c.contribute_command(args,contract)==0
+  assert c.contribute_command(args,contract)==0
+  assert len(writes)==1
+  manifest=c.load_json(root/'out/tool/product-manifest.json')
+  product=manifest['products']['bundle']
+  assert c.load_json(root/'out/tool/bundle.json')=={'url':product['source'],'sha256':product['data']['sha256']}
+  candidate={'repositoryId':42,'workflow':'ci','policy':'test-v1','results':[{'receipt':{'workload':'tool','digest':'a'*64,'products':{'bundle':product}}}]}
+  publication=SimpleNamespace(candidate=root/'candidate.json',output_dir=root/'publication',products_root=root/'absent',timeout=1)
+  with patch.object(c,'prepare_publication',return_value=[]),patch.object(c,'normalize_product_archive',side_effect=AssertionError('direct product must not be repacked')):
+   c.write_json_atomic(publication.candidate,candidate)
+   assert c.publish_command(publication)==0
+   assert len(writes)==1
+   for replacement in [dict(product,source=product['source'].replace('/workload-products/','/versions/')),dict(product,data={'sha256':product['data']['sha256'],'size':True})]:
+    candidate['results'][0]['receipt']['products']['bundle']=replacement
+    c.write_json_atomic(publication.candidate,candidate)
+    try: c.publish_command(publication)
+    except c.ConfigError: pass
+    else: raise AssertionError('admitted foreign or invalid product')
+  pending['workloads']['tool']['run']=False;c.write_json_atomic(args.pending,pending)
+  try: c.contribute_command(args,contract)
+  except c.ConfigError: pass
+  else: raise AssertionError('uploaded cache hit')
+  assert len(writes)==1
+`;
+    const result = spawnSync("python3", ["-c", code, path.join(repoRoot, ".github/scripts")], { encoding: "utf8" });
+    expect(result, result.stderr).toMatchObject({ status: 0, stderr: "" });
+  });
   test("does not re-upload content-addressed products when execution identities change", () => {
     const code = `
 import sys,json,tempfile,hashlib,shutil

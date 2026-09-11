@@ -862,9 +862,11 @@ jobs:
           retention-days: 1
 
   data:
-    name: Build Closure data resources (misses)
+    name: "[build] Closure data resources · misses"
     needs: [tools, plan]
     if: ${{ fromJSON(needs.plan.outputs.batch_run).data }}
+    outputs:
+      products: ${{ steps.data.outputs.products }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -888,9 +890,14 @@ jobs:
           chmod +x "$RUNNER_TEMP/release-tools/tools-release"
           echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
       - uses: ./.github/actions/release-data
+        id: data
         with:
-          source-sha: ${{ inputs.source_sha }}
-          run: ${{ needs.plan.outputs.run }}
+          plan-config: .github/config/plan/release-stable.json
+          storage-endpoint: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          storage-bucket: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          public-origin: ${{ vars.OD_WORKLOAD_RESULTS_BASE_URL || secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          access-key-id: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          secret-access-key: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
 
   prepare:
     name: Prepare signed exact content
@@ -960,14 +967,17 @@ jobs:
           --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/platforms.json"
           --output "$RUNNER_TEMP/platforms"
 
-      - uses: actions/download-artifact@v8
-        if: ${{ fromJSON(needs.plan.outputs.batch_run).data }}
-        with:
-          pattern: exact-data-product-*-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/data-built
-          merge-multiple: true
 
-      - name: Acquire complete version data resources
+      - name: "[validate] Closure data references · current run"
+        env:
+          PRODUCT_RECEIPTS: ${{ needs.data.outputs.products || '{}' }}
+        run: >-
+          python3 .github/scripts/convergence.py --config .github/config/plan/release-stable.json bind
+          --pending "$RUNNER_TEMP/exact-plan/pending.json" --batch data
+          --products-json "$PRODUCT_RECEIPTS" --output "$RUNNER_TEMP/exact-plan/artifacts"
+          --products-root "$RUNNER_TEMP/convergence-products"
+
+      - name: "[fetch] Closure data resources · complete version set"
         run: >-
           tools-release resource acquire
           --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/data.json"

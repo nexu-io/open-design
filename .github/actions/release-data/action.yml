@@ -1,16 +1,32 @@
-name: Produce independent data resources
-description: Build only the selected misses while retaining independent workload cache contributions
+name: Build and publish independent data resources
+description: Execute the miss batch and publish content-addressed plan products directly
 inputs:
-  source-sha:
+  plan-config:
     required: true
-    description: Immutable checkout identity
-  run:
+    description: This release lane's independent Python plan declaration
+  storage-endpoint:
     required: true
-    description: Python-selected workload execution flags, used only for artifact transport
+    description: Existing plan bucket S3 endpoint
+  storage-bucket:
+    required: true
+    description: Existing plan bucket
+  public-origin:
+    required: true
+    description: Public plan object origin
+  access-key-id:
+    required: true
+    description: Plan storage credential, injected only into product publication
+  secret-access-key:
+    required: true
+    description: Plan storage credential, injected only into product publication
+outputs:
+  products:
+    description: Current-run product manifests; not trusted reusable results
+    value: ${{ steps.products.outputs.products }}
 runs:
   using: composite
   steps:
-    - name: Build missing data resources
+    - name: "[build] Closure data resources · misses"
       shell: bash
       run: >-
         "$RUNNER_TEMP/release-tools/tools-release" resource materialize
@@ -18,72 +34,18 @@ runs:
         --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/data.execution.json"
         --output "$RUNNER_TEMP/exact-data"
         --receipt "$RUNNER_TEMP/exact-data-result.json"
-    - uses: actions/upload-artifact@v7.0.1
-      with:
-        name: exact-data-product-all-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/products
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_skills_darwin_arm64 }}
-      with:
-        name: exact-data-cache-skills-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/skills/artifact
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_design_templates_darwin_arm64 }}
-      with:
-        name: exact-data-cache-design-templates-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/design-templates/artifact
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_design_systems_darwin_arm64 }}
-      with:
-        name: exact-data-cache-design-systems-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/design-systems/artifact
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_craft_darwin_arm64 }}
-      with:
-        name: exact-data-cache-craft-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/craft/artifact
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_plugins_darwin_arm64 }}
-      with:
-        name: exact-data-cache-plugins-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/plugins/artifact
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_frames_darwin_arm64 }}
-      with:
-        name: exact-data-cache-frames-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/frames/artifact
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_community_pets_darwin_arm64 }}
-      with:
-        name: exact-data-cache-community-pets-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/community-pets/artifact
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_prompt_templates_darwin_arm64 }}
-      with:
-        name: exact-data-cache-prompt-templates-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/prompt-templates/artifact
-        if-no-files-found: error
-        retention-days: 1
-    - uses: actions/upload-artifact@v7.0.1
-      if: ${{ fromJSON(inputs.run).closure_data_plugin_previews_darwin_arm64 }}
-      with:
-        name: exact-data-cache-plugin-previews-${{ inputs.source-sha }}
-        path: ${{ runner.temp }}/exact-data/contributions/plugin-previews/artifact
-        if-no-files-found: error
-        retention-days: 1
+    - name: "[publish] Closure data products · plan cache"
+      id: products
+      shell: bash
+      env:
+        PLAN_CONFIG: ${{ inputs.plan-config }}
+        CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ inputs.storage-endpoint }}
+        CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ inputs.storage-bucket }}
+        OD_WORKLOAD_RESULTS_BASE_URL: ${{ inputs.public-origin }}
+        CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ inputs.access-key-id }}
+        CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ inputs.secret-access-key }}
+      run: >-
+        python3 .github/scripts/convergence.py --config "$PLAN_CONFIG" contribute-batch
+        --pending "$RUNNER_TEMP/exact-plan/pending.json" --batch data --directory-field id
+        --products-root "$RUNNER_TEMP/exact-data/contributions"
+        --output "$RUNNER_TEMP/convergence-products"
