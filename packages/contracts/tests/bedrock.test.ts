@@ -53,6 +53,9 @@ describe('bedrockInferenceModelId', () => {
     expect(bedrockInferenceModelId('amazon.nova-lite-v1:0', 'eu-west-1')).toBe('eu.amazon.nova-lite-v1:0');
     expect(bedrockInferenceModelId('anthropic.claude-sonnet-5', 'ap-northeast-1')).toBe('jp.anthropic.claude-sonnet-5');
     expect(bedrockInferenceModelId('anthropic.claude-sonnet-5', 'ap-southeast-1')).toBe('apac.anthropic.claude-sonnet-5');
+    // No APAC profile is served from Hong Kong or New Zealand: the bare id stays.
+    expect(bedrockInferenceModelId('anthropic.claude-sonnet-5', 'ap-east-1')).toBe('anthropic.claude-sonnet-5');
+    expect(bedrockInferenceModelId('anthropic.claude-sonnet-5', 'ap-southeast-6')).toBe('anthropic.claude-sonnet-5');
   });
 
   it('does not prefix models served on demand or GovCloud regions', () => {

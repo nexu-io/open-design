@@ -118,7 +118,22 @@ export function bedrockInferenceModelId(model: string, region: string): string {
         }
         return modelId;
       }
-      if (includesAny(['claude', 'nova-lite', 'nova-micro', 'nova-pro'])) {
+      // Regions served by the APAC geographic profiles (Bedrock cross-region
+      // inference docs). Hong Kong (ap-east-1) and New Zealand (ap-southeast-6)
+      // are not, so a bare id is the only valid form there.
+      const regionRequiresPrefix = [
+        'ap-northeast-1',
+        'ap-northeast-2',
+        'ap-northeast-3',
+        'ap-south-1',
+        'ap-south-2',
+        'ap-southeast-1',
+        'ap-southeast-3',
+        'ap-southeast-5',
+        'ap-southeast-7',
+        'ap-east-2',
+      ].includes(region);
+      if (regionRequiresPrefix && includesAny(['claude', 'nova-lite', 'nova-micro', 'nova-pro'])) {
         return `${isTokyo ? 'jp' : 'apac'}.${modelId}`;
       }
       return modelId;
