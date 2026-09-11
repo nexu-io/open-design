@@ -3446,6 +3446,7 @@ export const zhTW: Dict = {
     "正在匯出第 {current}/{total} 張 · 約剩 {seconds} 秒",
   "fileViewer.exportFailed": "匯出失敗，請重試。",
   "fileViewer.exportDone": "匯出完成",
+  "fileViewer.exportDegradedFallback": "無法取得專案檔案，此 ZIP 僅包含算繪後的頁面。",
   "fileViewer.exportImageFailed":
     "圖片擷取失敗，請重試或使用瀏覽器的截圖工具。",
   "fileViewer.exportImageModalSubtitle":

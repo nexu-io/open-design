@@ -7590,6 +7590,17 @@ function HtmlViewer({
               if (toastFormats.has(format)) setExportToast(null);
               return;
             }
+            // A 'degraded' export handed the browser a fallback artifact
+            // instead of the one that was requested. The download succeeded,
+            // so it must not be reported as a plain success: the request
+            // failed, and the user has to be told which artifact they got.
+            if (result === 'degraded') {
+              void finish('failed', 'degraded_fallback_artifact');
+              if (toastFormats.has(format)) {
+                setExportToast({ message: t('fileViewer.exportDegradedFallback'), tone: 'error' });
+              }
+              return;
+            }
             void finish('success');
             if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
           },
@@ -7603,6 +7614,13 @@ function HtmlViewer({
         if (out === 'cancelled') {
           void finish('cancelled');
           if (toastFormats.has(format)) setExportToast(null);
+          return;
+        }
+        if (out === 'degraded') {
+          void finish('failed', 'degraded_fallback_artifact');
+          if (toastFormats.has(format)) {
+            setExportToast({ message: t('fileViewer.exportDegradedFallback'), tone: 'error' });
+          }
           return;
         }
         void finish('success');
