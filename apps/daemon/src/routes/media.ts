@@ -1155,9 +1155,20 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const authorizationHeader = req.get('authorization');
-    // Once a caller chooses the tool-token lane, invalid, expired, or
-    // under-scoped credentials must not downgrade to project authorization.
-    const toolGrant = typeof authorizationHeader === 'string'
+    // Only a Bearer credential chooses the tool-token lane: that is the sole
+    // shape `bearerTokenFromRequest` parses. A reverse proxy that
+    // authenticates browsers itself forwards its own `Authorization: Basic
+    // ...`, which can never satisfy the lane, so claiming it here failed
+    // every proxied wait with TOOL_TOKEN_MISSING. Once a Bearer caller does
+    // choose the lane, invalid, expired, or under-scoped credentials must not
+    // downgrade to project authorization.
+    // Classify the scheme independently of whether a token follows it: a bare
+    // `Bearer` (or `Bearer ` trimmed to it) is still a caller reaching for the
+    // tool-token lane and must keep failing closed with TOOL_TOKEN_MISSING
+    // rather than downgrading to browser project authority.
+    const usesToolTokenLane = typeof authorizationHeader === 'string'
+      && /^Bearer(?:\s|$)/i.test(authorizationHeader.trim());
+    const toolGrant = usesToolTokenLane
       ? authorizeToolRequest(
           req,
           res,
@@ -1165,7 +1176,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           { endpoint: MEDIA_TASK_WAIT_TOOL_ENDPOINT },
         )
       : null;
-    if (typeof authorizationHeader === 'string' && !toolGrant) return;
+    if (usesToolTokenLane && !toolGrant) return;
     if (
       toolGrant
       && !await ctx.authorizeProjectToolRequest(
