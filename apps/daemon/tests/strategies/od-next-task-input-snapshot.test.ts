@@ -458,6 +458,70 @@ describe('OD Next task-scoped input snapshots', () => {
     expect(readFileSync(canonical.attachmentPaths[1]!, 'utf8')).toBe('canonical text');
   });
 
+  it('leaves the access root writable and clears sandbox mount targets on teardown', () => {
+    const f = fixture();
+    writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'canonical text');
+    const descriptor = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'odnext_teardown',
+      projectAttachments: ['brief.txt'],
+    });
+    const projectionsRoot = path.join(f.root, 'data', 'run-inputs');
+    const projection = createOdNextRunInputProjection({
+      descriptor,
+      snapshotsRoot: f.snapshotsRoot,
+      projectionsRoot,
+      runId: 'run-teardown',
+    });
+
+    // The projected inputs stay immutable one level down...
+    expect(statSync(projection.projectionDir).mode & 0o777).toBe(
+      process.platform === 'win32' ? statSync(projection.projectionDir).mode & 0o777 : 0o555,
+    );
+    // ...while the access root itself must stay owner-writable, because codex's
+    // Linux sandbox creates and then unlinks synthetic mount targets inside
+    // every writable root it is given. A read-only root made that teardown
+    // abort with `failed to remove synthetic bubblewrap mount target`.
+    if (process.platform !== 'win32') {
+      expect(statSync(projection.projectionAccessRoot).mode & 0o200).toBe(0o200);
+    }
+
+    // Simulate what the sandbox leaves behind next to the projection.
+    for (const target of ['.codex', '.agents', '.git']) {
+      mkdirSync(path.join(projection.projectionAccessRoot, target), { mode: 0o755 });
+    }
+
+    removeOdNextRunInputProjection(projection);
+    expect(existsSync(projection.projectionDir)).toBe(false);
+    expect(existsSync(projection.projectionAccessRoot)).toBe(false);
+  });
+
+  it('keeps the access root when a leftover entry still carries data', () => {
+    const f = fixture();
+    writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'canonical text');
+    const descriptor = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'odnext_teardown_data',
+      projectAttachments: ['brief.txt'],
+    });
+    const projectionsRoot = path.join(f.root, 'data', 'run-inputs');
+    const projection = createOdNextRunInputProjection({
+      descriptor,
+      snapshotsRoot: f.snapshotsRoot,
+      projectionsRoot,
+      runId: 'run-teardown-data',
+    });
+
+    const survivor = path.join(projection.projectionAccessRoot, 'unexpected');
+    mkdirSync(survivor, { mode: 0o700 });
+    writeFileSync(path.join(survivor, 'keep.txt'), 'not ours to delete');
+
+    removeOdNextRunInputProjection(projection);
+    expect(existsSync(projection.projectionDir)).toBe(false);
+    expect(existsSync(projection.projectionAccessRoot)).toBe(true);
+    expect(readFileSync(path.join(survivor, 'keep.txt'), 'utf8')).toBe('not ours to delete');
+  });
+
   it('rejects an intermediate attachments-directory symlink even with identical bytes', () => {
     const f = fixture();
     writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'identical frozen bytes');
