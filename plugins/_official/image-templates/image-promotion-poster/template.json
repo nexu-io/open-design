@@ -1,0 +1,17 @@
+{
+  "id": "image-promotion-poster",
+  "surface": "image",
+  "title": "High-Impact Promotion Poster",
+  "summary": "A bright commercial poster that makes the exact offer, product, and urgency readable through one tactile visual action.",
+  "category": "Brand Marketing",
+  "tags": ["promotion", "poster", "retail", "campaign", "product"],
+  "model": "vela/gpt-image-2",
+  "aspect": "4:5",
+  "prompt": "Create a flat 4:5 beverage promotion poster using only these exact text strings: 'DOUBLE UP', 'BUY 1 GET 1', 'FRIDAY ONLY', and 'FIZZ/01'. Show exactly two slim silver aluminum cans with realistic pull tabs and cold condensation. Each can has one acid-lime vertical label with cobalt FIZZ/01 lettering and one cobalt dot; keep both packages consistent and unbranded beyond the supplied text. Build one physical hook: the two cans punch through enormous torn-paper letterforms spelling DOUBLE UP. Use a bright pale-aqua background, huge saturated tangerine DOUBLE UP typography, an acid-lime BUY 1 GET 1 block with cobalt letters, and one hot-pink FRIDAY ONLY ticket with dark navy type. Let the cans overlap the torn letters with believable ripped fibers, curled paper edges, small scraps, adhesive shadows, and open daylight shadows. Arrange the offer as the first readable message, the two products as the second focal point, and the timing as the third. Keep the result vivid, clean, tactile, and immediately understandable at social-feed size. No extra text, price, currency, QR code, logo, watermark, extra can, malformed tab, floating product, glossy black pedestal, dark background, generic radial burst, smooth CGI paper, liquid-metal 3D type, neon glow, or fake legal copy. Output only the finished poster.",
+  "source": {
+    "repo": "nexu-io/open-design",
+    "license": "Apache-2.0",
+    "author": "OpenDesign",
+    "url": "https://github.com/nexu-io/open-design"
+  }
+}

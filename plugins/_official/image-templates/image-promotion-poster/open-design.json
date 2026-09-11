@@ -1,0 +1,32 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-skill-promotion-poster",
+  "title": "High-Impact Promotion Poster",
+  "version": "0.1.0",
+  "description": "A bright commercial poster that makes the exact offer, product, and urgency readable through one tactile visual action.",
+  "license": "Apache-2.0",
+  "author": {"name": "OpenDesign", "url": "https://github.com/nexu-io/open-design"},
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/image-templates/image-promotion-poster",
+  "tags": ["image-skill", "first-party", "image", "promotion", "poster", "retail", "campaign", "product"],
+  "compat": {"agentSkills": [{"path": "./SKILL.md"}]},
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {"type": "image", "poster": "./example.webp"},
+    "useCase": {
+      "query": "Create a flat 4:5 beverage promotion poster using only these exact text strings: 'DOUBLE UP', 'BUY 1 GET 1', 'FRIDAY ONLY', and 'FIZZ/01'. Show exactly two slim silver aluminum cans with realistic pull tabs and cold condensation. Each can has one acid-lime vertical label with cobalt FIZZ/01 lettering and one cobalt dot; keep both packages consistent and unbranded beyond the supplied text. Build one physical hook: the two cans punch through enormous torn-paper letterforms spelling DOUBLE UP. Use a bright pale-aqua background, huge saturated tangerine DOUBLE UP typography, an acid-lime BUY 1 GET 1 block with cobalt letters, and one hot-pink FRIDAY ONLY ticket with dark navy type. Let the cans overlap the torn letters with believable ripped fibers, curled paper edges, small scraps, adhesive shadows, and open daylight shadows. Arrange the offer as the first readable message, the two products as the second focal point, and the timing as the third. Keep the result vivid, clean, tactile, and immediately understandable at social-feed size. No extra text, price, currency, QR code, logo, watermark, extra can, malformed tab, floating product, glossy black pedestal, dark background, generic radial burst, smooth CGI paper, liquid-metal 3D type, neon glow, or fake legal copy. Output only the finished poster.",
+      "exampleOutputs": [{"path": "./example.webp", "title": "High-Impact Promotion Poster"}]
+    },
+    "inputs": [
+      {"name": "model", "label": "Model", "type": "select", "options": ["vela/gpt-image-2"], "default": "vela/gpt-image-2"},
+      {"name": "aspect", "label": "Aspect ratio", "type": "select", "options": ["1:1", "16:9", "9:16", "4:5", "3:2"], "default": "4:5"}
+    ],
+    "context": {"skills": [{"path": "./SKILL.md"}], "assets": ["./template.json", "./example.webp"]},
+    "pipeline": {"stages": [{"id": "generate", "atoms": ["media-image"]}]},
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}
