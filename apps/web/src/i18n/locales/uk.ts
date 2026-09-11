@@ -4060,6 +4060,7 @@ export const uk: Dict = {
   'updater.reinstallReadyGeneric': 'Це оновлення потребує повного перевстановлення. OpenDesign закриється та відкриє інсталятор.',
   'updater.reinstallReadyVersion': 'OpenDesign {version} потребує повного перевстановлення. OpenDesign закриється та відкриє інсталятор.',
   'updater.restartAnyway': 'Усе одно перезапустити',
+  'updater.tryAgain': 'Спробувати ще раз',
   'updater.upToDate': 'У вас уже встановлено найновішу версію.',
   'updater.viewVersionFeatures': 'Переглянути нові функції',
   'updater.manualDownload': 'Завантажити вручну',
