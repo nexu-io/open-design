@@ -142,8 +142,8 @@ function turn(overrides: Partial<ChatMessage> = {}): ChatMessage {
   } as ChatMessage;
 }
 
-function renderTurn(message: ChatMessage) {
-  return render(
+function turnElement(message: ChatMessage) {
+  return (
     <CollabProvider value={projectCollabValue()}>
       <AssistantMessage
         message={message}
@@ -152,8 +152,12 @@ function renderTurn(message: ChatMessage) {
         projectFiles={ALL_PRODUCED}
         isLast
       />
-    </CollabProvider>,
+    </CollabProvider>
   );
+}
+
+function renderTurn(message: ChatMessage) {
+  return render(turnElement(message));
 }
 
 /**
@@ -182,6 +186,128 @@ function resultPanelNames(): string[] {
 function focusEvent(show: string[]): NonNullable<ChatMessage['events']>[number] {
   return { kind: 'artifact_focus', show } as never;
 }
+
+describe('OPEND-2774: the chosen HTML leads the completed artifact cards', () => {
+  const notes = { ...pf('NOTES.md', 'text', 'text/markdown'), mtime: ENDED_AT - 1 };
+  // associateRunProducedFiles persists newest-first: the clone writes index.html,
+  // then its notes. Tool events still retain the actual write order.
+  const newestFirst = [notes, DELIVERABLE];
+  const cardOrder = () => [...document.querySelectorAll('[data-artifact-card]')]
+    .map((node) => node.getAttribute('data-testid')?.replace('artifact-card-', ''));
+
+  for (const withTools of [true, false]) {
+    it(`keeps the explicit open target first after restore (tool records: ${withTools})`, () => {
+      const message = turn({
+        producedFiles: newestFirst,
+        events: [
+          ...(withTools ? writeEvents([DELIVERABLE, notes])! : []),
+          { kind: 'artifact_focus', open: 'index.html' },
+          focusEvent(['index.html', 'NOTES.md']),
+        ],
+      });
+      const mounted = renderTurn(message);
+      expect(cardOrder()).toEqual(['index.html', 'NOTES.md']);
+      mounted.unmount();
+      renderTurn(JSON.parse(JSON.stringify(message)) as ChatMessage);
+      expect(cardOrder()).toEqual(['index.html', 'NOTES.md']);
+    });
+
+    it(`uses declared show order when no open target exists (tool records: ${withTools})`, () => {
+      renderTurn(turn({
+        producedFiles: newestFirst,
+        events: [
+          ...(withTools ? writeEvents([DELIVERABLE, notes])! : []),
+          focusEvent(['index.html', 'NOTES.md']),
+        ],
+      }));
+      expect(cardOrder()).toEqual(['index.html', 'NOTES.md']);
+    });
+
+    it(`puts HTML before notes without a focus marker (tool records: ${withTools})`, () => {
+      renderTurn(turn({
+        producedFiles: newestFirst,
+        events: withTools ? writeEvents([DELIVERABLE, notes]) : [],
+      }));
+      expect(cardOrder()).toEqual(['index.html', 'NOTES.md']);
+    });
+  }
+
+  it('honors an explicitly chosen document ahead of HTML and show order', () => {
+    renderTurn(turn({
+      producedFiles: [DELIVERABLE, notes],
+      events: [focusEvent(['index.html', 'NOTES.md']), { kind: 'artifact_focus', open: 'NOTES.md' }],
+    }));
+    expect(cardOrder()).toEqual(['NOTES.md', 'index.html']);
+  });
+
+  it('keeps explicit show order ahead of the HTML fallback', () => {
+    renderTurn(turn({
+      producedFiles: [DELIVERABLE, notes],
+      events: [focusEvent(['NOTES.md', 'index.html'])],
+    }));
+    expect(cardOrder()).toEqual(['NOTES.md', 'index.html']);
+  });
+
+  it('uses the final open selection when the same assistant message rerenders', () => {
+    const message = turn({
+      producedFiles: newestFirst,
+      events: [focusEvent(['index.html', 'NOTES.md']), { kind: 'artifact_focus', open: 'index.html' }],
+    });
+    const mounted = renderTurn(message);
+    expect(cardOrder()).toEqual(['index.html', 'NOTES.md']);
+    mounted.rerender(turnElement({
+      ...message,
+      events: [...message.events!, { kind: 'artifact_focus', open: 'NOTES.md' }],
+    }));
+    expect(cardOrder()).toEqual(['NOTES.md', 'index.html']);
+    expect(message.producedFiles?.map((file) => file.name)).toEqual(['NOTES.md', 'index.html']);
+  });
+
+  it('keeps root index, other HTML, notes and media stable across file-order changes', () => {
+    const files = [
+      pf('hero.png', 'image', 'image/png'),
+      notes,
+      pf('pages/index.html', 'html', 'text/html'),
+      DELIVERABLE,
+      pf('about.html', 'html', 'text/html'),
+    ];
+    const message = turn({ producedFiles: files, events: [] });
+    const mounted = renderTurn(message);
+    const expected = ['index.html', 'about.html', 'pages/index.html', 'NOTES.md', 'hero.png'];
+    expect(cardOrder()).toEqual(expected);
+    mounted.rerender(turnElement({
+      ...message,
+      producedFiles: [...files].reverse().map((file) => ({ ...file, mtime: file.mtime + 10_000 })),
+    }));
+    expect(cardOrder()).toEqual(expected);
+    expect(files[0]?.name).toBe('hero.png');
+  });
+
+  it('does not reintroduce an open target excluded from show', () => {
+    renderTurn(turn({
+      producedFiles: newestFirst,
+      events: [{ kind: 'artifact_focus', open: 'index.html' }, focusEvent(['NOTES.md'])],
+    }));
+    expect(cardOrder()).toEqual(['NOTES.md']);
+  });
+
+  it('prefers the exact selected relative path over another index.html basename', () => {
+    const nestedPage = pf('pages/index.html', 'html', 'text/html');
+    renderTurn(turn({
+      producedFiles: [DELIVERABLE, nestedPage],
+      events: [{ kind: 'artifact_focus', open: 'pages/index.html' }],
+    }));
+    expect(cardOrder()).toEqual(['pages/index.html', 'index.html']);
+  });
+
+  it('does not invent an untouched open target', () => {
+    renderTurn(turn({
+      producedFiles: [notes],
+      events: [{ kind: 'artifact_focus', open: 'index.html' }, focusEvent(['index.html', 'NOTES.md'])],
+    }));
+    expect(cardOrder()).toEqual(['NOTES.md']);
+  });
+});
 
 describe('agent 声明的 show,决定这一轮出哪些卡', () => {
   /*
