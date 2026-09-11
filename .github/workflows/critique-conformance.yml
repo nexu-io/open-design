@@ -60,7 +60,7 @@ jobs:
       # instead of uploading an empty history snapshot.
       - name: Run conformance harness (synthetic adapters)
         run: |
-          node --import tsx apps/daemon/src/critique/__fixtures__/run-nightly.ts
+          node --import tsx apps/daemon/src/critique/__fixtures__/run-prerelease.ts
 
       - name: Upload history snapshot
         if: always()
