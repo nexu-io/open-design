@@ -41,7 +41,7 @@ import {
 } from './rpc.js';
 import {
   acpRawEventShape,
-  isAcpTerminalFailureStatus,
+  isAcpToolUpdateError,
   acpToolCallId,
   isAcpArtifactWriteLabel,
   isAcpArtifactWriteUpdate,
@@ -316,6 +316,8 @@ export function attachAcpSession({
     path: string | null;
     pathRank: number;
     resultContent: string;
+    /** Explicit failure evidence survives partial and status-only updates. */
+    failed: boolean;
     /** Sticky: once true, never cleared by later status-only frames. */
     thinkOnly: boolean;
     firstSeenAt: number;
@@ -401,7 +403,7 @@ export function attachAcpSession({
   const emitTerminalToolPair = (
     toolCallId: string,
     st: AcpToolRunState,
-    isError: boolean,
+    isError = false,
     origin: AcpTerminalToolOrigin = 'agent_frame',
   ) => {
     if (st.emitted) return;
@@ -441,14 +443,14 @@ export function attachAcpSession({
       // Bash/execute stdout can dump private files (cat .env). Langfuse only
       // lexically masks Bash, so redact before the canonical transcript ships.
       content: acpSafeToolResultContent(st.name, st.resultContent),
-      isError,
+      isError: isError || st.failed,
     }, meta), meta);
     // Concrete only on terminal tool_result for a real (non-think) tool.
     emittedConcreteToolEvent = true;
   };
 
   // Flush tools that never received a terminal `tool_call_update`. Clean
-  // completion uses isError=false (best-effort close); fail paths use
+  // completion preserves accumulated tool failures; fail paths use
   // isError=true so Langfuse/PostHog and the persisted transcript keep the
   // open tool as an errored result instead of dropping it entirely.
   //
@@ -1222,6 +1224,7 @@ export function attachAcpSession({
               path: nextPath?.path ?? null,
               pathRank: nextPath?.rank ?? 0,
               resultContent: nextResult,
+              failed: isAcpToolUpdateError(update),
               thinkOnly: nextThinkOnly,
               firstSeenAt: Date.now(),
               emitted: false,
@@ -1249,14 +1252,14 @@ export function attachAcpSession({
             }
             // Keep last non-empty result payload (terminal may be status-only).
             if (nextResult) st.resultContent = nextResult;
+            st.failed ||= isAcpToolUpdateError(update);
             // Sticky think-only: once classified, never clear on later frames
             // (terminal status-only frames have no title and would otherwise
             // flip thinkOnly false and emit a fake concrete tool).
             if (nextThinkOnly) st.thinkOnly = true;
           }
           if (isAcpTerminalToolStatus(update)) {
-            const failed = isAcpTerminalFailureStatus(update);
-            emitTerminalToolPair(toolCallId, st, failed);
+            emitTerminalToolPair(toolCallId, st);
             // Keep the entry (emitted=true) so a repeated terminal cannot re-emit.
           } else {
             // Not terminal: the call is running, so say so now rather than after
@@ -1272,7 +1275,7 @@ export function attachAcpSession({
           dsmlArtifactSuppressorArmedAfterText = emittedTextBuffer.length > 0;
           dsmlArtifactSuppressorSawIncrementalProse = false;
           if (toolCallId) acpArtifactWriteToolCallIds.delete(toolCallId);
-        } else if (toolCallId && isAcpTerminalFailureStatus(update)) {
+        } else if (toolCallId && isAcpToolUpdateError(update)) {
           const ownsPendingWriteSuppression = toolCallId === dsmlArtifactSuppressorToolCallId;
           const ownsPendingWriteCall = acpArtifactWriteToolCallIds.has(toolCallId);
           acpArtifactWriteToolCallIds.delete(toolCallId);
