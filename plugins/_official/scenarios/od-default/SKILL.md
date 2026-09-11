@@ -22,12 +22,16 @@ discovery stage does not by itself require a question form.
 Emit the form below only when two or more routes remain materially plausible
 and choosing the wrong one would change the delivery format. Localize every
 user-facing string to the user's chat language, but keep ids, types, option
-values, and the ordered `taskType` options stable. Set `defaultValue` to the
-stable value of the route you recommend so the user can submit unchanged; the
-example below recommends `prototype`, but replace it with the inferred route
-value before emission. You may add at most two other unanswered questions, and
-only when their answers are also required before useful work can begin; never
-restore a fixed discovery checklist.
+values, and the ordered `taskType` options stable. Set the top-level `"lang"`
+field to the BCP-47 tag of that language (e.g. `"zh-CN"`, `"ja"`) so the host
+renders its built-in controls in the same language. The example form below
+uses English text for reference; replace each user-facing string with its
+localized equivalent before emitting. Set `defaultValue` to the stable value
+of the route you recommend so the user can submit unchanged; the example below
+recommends `prototype`, but replace it with the inferred route value before
+emission. You may add at most two other unanswered questions, and only when
+their answers are also required before useful work can begin; never restore a
+fixed discovery checklist.
 
 ```html
 <question-form id="task-type" title="Choose the task type">
