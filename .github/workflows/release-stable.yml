@@ -1334,16 +1334,10 @@ jobs:
     environment: standalone-stable-release
     timeout-minutes: 15
     steps:
-      - name: "[fetch] Repository source · pinned SHA"
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ inputs.source_sha }}
-          persist-credentials: false
-
       - name: "[setup] Node.js · declared toolchain"
         uses: actions/setup-node@v6
         with:
-          node-version-file: .node-version
+          node-version: ${{ needs.plan.outputs.node_version }}
 
       - name: "[fetch] Release metadata and bound Capsule · workflow artifact"
         uses: actions/download-artifact@v8
@@ -1356,12 +1350,6 @@ jobs:
         with:
           pattern: exact-distribution-*-${{ inputs.release_version }}
           path: ${{ runner.temp }}/distributions
-
-      - name: "[fetch] exact-convergence-plan · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/exact-plan
 
       - name: "[fetch] release-tools · workflow artifact"
         uses: actions/download-artifact@v8
@@ -1648,12 +1636,6 @@ jobs:
     environment: standalone-stable-release
     timeout-minutes: 10
     steps:
-      - name: "[fetch] Repository source · pinned SHA"
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ inputs.source_sha }}
-          persist-credentials: false
-
       - name: "[fetch] release-tools · workflow artifact"
         uses: actions/download-artifact@v8
         with:
@@ -1666,16 +1648,10 @@ jobs:
           chmod +x "$RUNNER_TEMP/release-tools/tools-release"
           echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
 
-      - name: "[fetch] release-policy · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: release-policy-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-policy
-
       - name: "[setup] Node.js · declared toolchain"
         uses: actions/setup-node@v6
         with:
-          node-version-file: .node-version
+          node-version: ${{ needs.plan.outputs.node_version }}
 
       - name: "[fetch] exact-published-stable · workflow artifact"
         uses: actions/download-artifact@v8

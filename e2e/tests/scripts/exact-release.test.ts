@@ -474,6 +474,13 @@ describe("exact Electron release topology", () => {
     expect(activate).not.toContain("needs.acceptance.result == 'success'");
     expect(activate).toContain("tools-release acceptance acquire");
     expect(activate).toContain("artifacts/batches/acceptance.json");
+    const publish = workflow.split("\n  publish:")[1]!.split("\n  acceptance:")[0]!;
+    for (const consumer of [publish, activate]) {
+      expect(consumer).not.toContain("actions/checkout");
+      expect(consumer).toContain("node-version: ${{ needs.plan.outputs.node_version }}");
+    }
+    expect(publish).not.toContain("exact-convergence-plan");
+    expect(activate).not.toContain('path: ${{ runner.temp }}/release-policy');
     if (lane !== "exact") expect(acceptance).toContain("fromJSON(needs.plan.outputs.acceptance_full_matrix)");
   });
 
