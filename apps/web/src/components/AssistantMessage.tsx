@@ -995,10 +995,10 @@ function AssistantMessageImpl({
    * 取**最后一条**:一轮里理应只有一条,但重试会在同一条消息上再来一轮,
    * 那时新的一条才是当前这一轮的。
    *
-   * 旧会话没有这个事件 —— 于是这里是空数组,下一步引导整块不出。这是产品
-   * 明确要的兼容口径:不退回工具箱、不出空壳。
+   * 无事件通常不出建议。OPEND-2776 为成功交付图片的回合增加了下方的
+   * 媒体兜底;它只使用本轮权威产物,不从附件或项目旧文件猜测。
    */
-  const nextStepSuggestions = useMemo(() => {
+  const agentNextStepSuggestions = useMemo(() => {
     for (let i = events.length - 1; i >= 0; i -= 1) {
       const event = events[i];
       if (event?.kind !== 'next_steps') continue;
@@ -1010,6 +1010,26 @@ function AssistantMessageImpl({
     }
     return [];
   }, [events]);
+  const fallbackImagePaths = useMemo(() => {
+    if (!runSucceeded || message.runStatus !== 'succeeded' || message.strategyTaskBlocked || effectiveNextStepVariant !== 'default') return [];
+    const files = artifactFocus.show
+      ? declaredArtifactCards(message.producedFiles ?? [], artifactFocus.show)
+      : message.producedFiles ?? [];
+    // A website's supporting images must not turn a non-image delivery into
+    // an image-generation workflow. Explicit focus may select its image output.
+    if (!files.length || !files.every(file => file.size > 0 &&
+      (file.kind === 'image' || file.mime?.startsWith('image/')))) return [];
+    return [...new Set(files.map(file => file.path || file.name).filter(Boolean))];
+  }, [artifactFocus.show, effectiveNextStepVariant, message.producedFiles, message.runStatus, message.strategyTaskBlocked, runSucceeded]);
+  const useImageNextStepFallback = agentNextStepSuggestions.length === 0 && fallbackImagePaths.length > 0;
+  const nextStepSuggestions = useImageNextStepFallback
+    ? [t('nextStep.imageContinue'), t('nextStep.imageVariants'), t('nextStep.imageStyle')]
+    : agentNextStepSuggestions;
+  const handleNextStepSuggestion = useCallback((text: string) => {
+    onNextStepSuggestion?.(useImageNextStepFallback
+      ? `${text}\n\n${fallbackImagePaths.join('\n')}`
+      : text);
+  }, [fallbackImagePaths, onNextStepSuggestion, useImageNextStepFallback]);
   const hasNextStepPrimary =
     effectiveNextStepVariant === 'brand-extraction'
       ? !!onNextStepAiOptimize || !!onNextStepCreateDesign || !!onNextStepContinueExtraction
@@ -1458,7 +1478,7 @@ function AssistantMessageImpl({
             createDesignSystemBusy={Boolean(ownsTrailingNextStep && nextStepCreateDesignSystemBusy)}
             onPickSkill={ownsTrailingNextStep ? onPickSkill : undefined}
             suggestions={ownsTrailingNextStep ? nextStepSuggestions : undefined}
-            onSuggestion={ownsTrailingNextStep ? onNextStepSuggestion : undefined}
+            onSuggestion={ownsTrailingNextStep && onNextStepSuggestion ? handleNextStepSuggestion : undefined}
             onDownload={
               ownsTrailingNextStep && nextStepFileName ? onArtifactDownload : undefined
             }
