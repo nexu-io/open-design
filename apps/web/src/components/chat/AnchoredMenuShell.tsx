@@ -215,6 +215,7 @@ export function AnchoredMenuShell({
        * 它连 `data-placement` 都不写 —— 给它算 `above` 只会让竖向预算配错方向。
        */
       flipEnabled: Boolean(anchorId),
+      blockSizeBoundary: anchorId ? 'viewport' : 'clippingAncestors',
     },
   );
 

@@ -3571,6 +3571,8 @@ export const fa: Dict = {
   "chat.input.expandFull": "نمایش کامل پیام",
   "chat.input.viewAll": "نمایش همه",
   "chat.artifact.export": "خروجی گرفتن",
+  'chat.artifacts.htmlCount': "HTML: {count}",
+  'chat.artifacts.documentCount': "سند: {count}",
   "chat.artifact.pending": "در حال ساخت…",
   "chat.artifact.publish": "اشتراک‌گذاری",
   "chat.edge.paused": "وظیفه به صورت دستی متوقف شد",

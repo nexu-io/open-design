@@ -65,6 +65,11 @@ function mount(opts: {
   naturalHeight: number;
   naturalWidth?: number;
 }) {
+  // Portaled menus use viewport height. Translate the original clipping box so
+  // the available space and all flip/size/oscillation assertions stay identical.
+  const anchorTop = opts.anchor.top - opts.clip.top;
+  const viewportHeight = opts.clip.bottom - opts.clip.top;
+  Object.defineProperty(window, 'innerHeight', { value: viewportHeight, configurable: true });
   const aLeft = opts.anchor.left ?? 600;
   const aWidth = opts.anchor.width ?? 58;
   const cLeft = opts.clip.left ?? 0;
@@ -74,15 +79,15 @@ function mount(opts: {
   const scroller = document.createElement('div');
   scroller.className = 'scroller';
   scroller.style.overflowY = 'auto';
-  scroller.getBoundingClientRect = () => box(cLeft, opts.clip.top, cRight - cLeft, opts.clip.bottom - opts.clip.top);
+  scroller.getBoundingClientRect = () => box(cLeft, 0, cRight - cLeft, viewportHeight);
   document.body.appendChild(scroller);
 
   const anchor = document.createElement('button');
   anchor.setAttribute('data-artifact-anchor', ANCHOR_ID);
-  anchor.getBoundingClientRect = () => box(aLeft, opts.anchor.top, aWidth, opts.anchor.height);
+  anchor.getBoundingClientRect = () => box(aLeft, anchorTop, aWidth, opts.anchor.height);
   scroller.appendChild(anchor);
 
-  const aBottom = opts.anchor.top + opts.anchor.height;
+  const aBottom = anchorTop + opts.anchor.height;
 
   HTMLElement.prototype.getBoundingClientRect = function () {
     if (this.classList.contains('share-menu-popover')) {
@@ -91,7 +96,7 @@ function mount(opts: {
       const capW = Number.parseFloat(this.style.maxWidth);
       const width = Number.isFinite(capW) ? Math.min(natW, capW) : natW;
       const above = this.getAttribute('data-placement') === 'above';
-      const top = above ? opts.anchor.top - GAP - height : aBottom + GAP;
+      const top = above ? anchorTop - GAP - height : aBottom + GAP;
       // `right: 0` 贴着包裹盒右缘
       const host = this.parentElement as HTMLElement | null;
       const hostLeft = Number.parseFloat(host?.style.left ?? String(aLeft)) || aLeft;

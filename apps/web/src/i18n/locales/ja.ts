@@ -3571,6 +3571,8 @@ export const ja: Dict = {
   "chat.input.expandFull": "メッセージ全文を表示",
   "chat.input.viewAll": "すべて表示",
   "chat.artifact.export": "エクスポート",
+  'chat.artifacts.htmlCount': "HTML {count} 件",
+  'chat.artifacts.documentCount': "ドキュメント {count} 件",
   "chat.artifact.pending": "生成中…",
   "chat.artifact.publish": "共有",
   "chat.edge.paused": "タスクを手動で一時停止しました",

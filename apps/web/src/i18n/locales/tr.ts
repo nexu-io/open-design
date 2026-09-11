@@ -3571,6 +3571,8 @@ export const tr: Dict = {
   "chat.input.expandFull": "Mesajın tamamını göster",
   "chat.input.viewAll": "Tümünü göster",
   "chat.artifact.export": "Dışa aktar",
+  'chat.artifacts.htmlCount': "{count} HTML",
+  'chat.artifacts.documentCount': "{count} belge",
   "chat.artifact.pending": "Oluşturuluyor…",
   "chat.artifact.publish": "Paylaş",
   "chat.edge.paused": "Görev el ile duraklatıldı",
