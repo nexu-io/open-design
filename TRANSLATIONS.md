@@ -103,7 +103,7 @@ OpenDesign currently supports **19 languages** across different surfaces:
 | العربية (Arabic)     | `ar`    | ✅     | ✅      | —         | active |
 | Deutsch              | `de`    | ✅     | ✅      | ✅        | active |
 | Español              | `es-ES` | ✅     | ✅      | —         | active |
-| فارسی (Persian)      | `fa`    | —      | ✅      | —         | active |
+| فارسی (Persian)      | `fa`    | ✅     | ✅      | —         | active |
 | Français             | `fr`    | ✅     | ✅      | ✅        | active |
 | Magyar (Hungarian)   | `hu`    | —      | ✅      | —         | active |
 | Bahasa Indonesia     | `id`    | —      | ✅      | —         | active |
