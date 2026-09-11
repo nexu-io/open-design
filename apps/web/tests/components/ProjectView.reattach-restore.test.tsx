@@ -46,6 +46,7 @@ const chatPaneHarness = vi.hoisted(() => ({
   ) => unknown),
   onStop: null as null | (() => void),
   onTabsStateChange: null as null | ((state: { tabs: string[]; active: string | null }) => void),
+  activeTab: null as string | null,
   openRequestNames: [] as string[],
   messages: [] as ChatMessage[],
 }));
@@ -147,11 +148,14 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   FileWorkspace: ({
     openRequest,
     onTabsStateChange,
+    tabsState,
   }: {
     openRequest?: { name?: string; openBatch?: readonly string[] } | null;
     onTabsStateChange: NonNullable<typeof chatPaneHarness.onTabsStateChange>;
+    tabsState: { tabs: string[]; active: string | null };
   }) => {
     chatPaneHarness.onTabsStateChange = onTabsStateChange;
+    chatPaneHarness.activeTab = tabsState.active;
     const name = openRequest?.name;
     // A finished turn's other artifacts ride in `openBatch` (OPEND-2588).
     // Recording only `.name` would quietly make the "never opened ghost.html"
@@ -534,6 +538,7 @@ describe('ProjectView daemon reattach restore', () => {
     chatPaneHarness.onSend = null;
     chatPaneHarness.onStop = null;
     chatPaneHarness.onTabsStateChange = null;
+    chatPaneHarness.activeTab = null;
     chatPaneHarness.openRequestNames = [];
     chatPaneHarness.messages = [];
     window.sessionStorage.clear();
@@ -926,7 +931,7 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
-  it.each([
+  it.each(([
     { change: 'created', cachedListing: false, userTakesOver: false, terminalReplay: false },
     { change: 'rewritten', cachedListing: false, userTakesOver: false, terminalReplay: false },
     { change: 'created', cachedListing: true, userTakesOver: false, terminalReplay: false },
@@ -934,16 +939,22 @@ describe('ProjectView daemon reattach restore', () => {
     { change: 'created', cachedListing: false, userTakesOver: false, terminalReplay: true },
     { change: 'created', cachedListing: true, userTakesOver: false, terminalReplay: true },
     { change: 'created', cachedListing: false, userTakesOver: true, terminalReplay: true },
-  ] as const)(
-    'restores a one-hour, 206-artifact clone ($change entry, cached listing: $cachedListing, user takeover: $userTakesOver, terminal replay: $terminalReplay)',
-    async ({ change, cachedListing, userTakesOver, terminalReplay }) => {
+  ] as const).flatMap((scenario) => [
+    { ...scenario, initialTabs: 'saved' as const },
+    { ...scenario, initialTabs: 'automatic' as const },
+  ]))(
+    'restores a one-hour, 206-artifact clone ($change entry, cached listing: $cachedListing, user takeover: $userTakesOver, terminal replay: $terminalReplay, initial tabs: $initialTabs)',
+    async ({ change, cachedListing, userTakesOver, terminalReplay, initialTabs }) => {
       const endedAt = Date.now();
       const startedAt = endedAt - (59 * 60 + 53) * 1000;
       const notes: ProjectFile = {
-        name: 'notes.md', path: 'notes.md', size: 10, mtime: startedAt - 60_000,
-        kind: 'text', mime: 'text/markdown',
+        name: initialTabs === 'automatic' ? 'previous.html' : 'notes.md',
+        path: initialTabs === 'automatic' ? 'previous.html' : 'notes.md',
+        size: 10, mtime: startedAt - 60_000,
+        kind: initialTabs === 'automatic' ? 'html' : 'text',
+        mime: initialTabs === 'automatic' ? 'text/html' : 'text/markdown',
       };
-      const review: ProjectFile = { ...notes, name: 'review.md', path: 'review.md' };
+      const review: ProjectFile = { ...notes, name: 'review.md', path: 'review.md', kind: 'text', mime: 'text/markdown' };
       const index: ProjectFile = {
         name: 'index.html', path: 'index.html', size: 4096,
         mtime: startedAt + 1000, kind: 'html', mime: 'text/html',
@@ -967,8 +978,11 @@ describe('ProjectView daemon reattach restore', () => {
         events: terminalReplay ? [{ kind: 'text', text: 'Clone complete.' }, focus] : [focus],
       } satisfies ChatMessage]);
       fetchPreviewComments.mockResolvedValue([]);
-      // A saved unrelated tab must not consume the turn's final auto-open.
-      loadTabs.mockResolvedValue({ tabs: [notes.name], active: notes.name, hasSavedState: true });
+      // Preserve the original saved-tab matrix. Also exercise the real initial
+      // primary-file effect: automatic previous.html must not count as a click.
+      loadTabs.mockResolvedValue(initialTabs === 'saved'
+        ? { tabs: [notes.name], active: notes.name, hasSavedState: true }
+        : { tabs: [], active: null, hasSavedState: false });
       fetchProjectFiles.mockResolvedValue([notes, review]);
       fetchLiveArtifacts.mockResolvedValue([]);
       fetchSkill.mockResolvedValue(null);
@@ -994,6 +1008,7 @@ describe('ProjectView daemon reattach restore', () => {
       renderProjectView({ intent: 'web-clone' });
       if (terminalReplay) await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalled());
       else await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(chatPaneHarness.activeTab).toBe(notes.name));
       expect(chatPaneHarness.openRequestNames).toEqual([]);
       fetchChatRunStatus.mockResolvedValue(terminalStatus);
       const finish = async () => {

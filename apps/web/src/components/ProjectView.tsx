@@ -4584,6 +4584,9 @@ export function ProjectView({
     );
     if (!primaryFile) return;
     hasAppliedInitialPrimaryOpenRef.current = true;
+    // This default is a host selection, just like requestOpenFile. Persisting
+    // it must not turn an automatically opened search image into a user veto.
+    lastHostRequestedOpenRef.current = primaryFile.name;
     persistTabsState({ tabs: [primaryFile.name], active: primaryFile.name });
   }, [
     openTabsState.active,
