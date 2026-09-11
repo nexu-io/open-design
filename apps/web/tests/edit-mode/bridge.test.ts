@@ -1005,6 +1005,105 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('keeps an emptied text target eligible for a later preview update', () => {
+    const dom = new JSDOM(
+      `<main><h1 data-od-id="title">Original title</h1></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]') as HTMLElement;
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-preview-text', id: 'title', value: '' },
+    }));
+    expect(title.textContent).toBe('');
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-preview-text', id: 'title', value: 'Retyped' },
+    }));
+    expect(title.textContent).toBe('Retyped');
+
+    dom.window.close();
+  });
+
+  it('treats Shift+Enter as repeatable soft line breaks without committing the inline edit', () => {
+    const dom = new JSDOM(
+      `<main><p data-od-id="body">First line</p></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const body = dom.window.document.querySelector('[data-od-id="body"]') as HTMLElement;
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    body.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    const firstBreak = new dom.window.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+      shiftKey: true,
+    });
+    const secondBreak = new dom.window.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+      shiftKey: true,
+    });
+
+    body.dispatchEvent(firstBreak);
+    body.dispatchEvent(secondBreak);
+
+    expect(firstBreak.defaultPrevented).toBe(true);
+    expect(secondBreak.defaultPrevented).toBe(true);
+    expect(body.textContent).toBe('First line\n\n');
+    expect(body.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-text-commit',
+    }), '*');
+
+    body.textContent = 'First line\n\nThird line';
+    body.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+    }));
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-text-commit',
+      id: 'body',
+      value: 'First line\n\nThird line',
+    }, '*');
+    expect(body.innerHTML).toBe('First line<br><br>Third line');
+
+    body.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(body.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(body.textContent).toBe('First line\n\nThird line');
+
+    dom.window.close();
+  });
+
+  it('leaves Enter to the IME while inline text composition is active', () => {
+    const dom = new JSDOM(
+      `<main><p data-od-id="body">输入中</p></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const body = dom.window.document.querySelector('[data-od-id="body"]') as HTMLElement;
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    body.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    const composingEnter = new dom.window.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+      isComposing: true,
+    });
+    body.dispatchEvent(composingEnter);
+
+    expect(composingEnter.defaultPrevented).toBe(false);
+    expect(body.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-text-commit',
+    }), '*');
+
+    dom.window.close();
+  });
+
   // #3646 focus-loss half: once editing, blurring the iframe (e.g. moving the
   // pointer to the host's floating inspector) must NOT end the session or
   // commit. Only an explicit finish (Enter/Escape/od-edit-text-finish) commits.
