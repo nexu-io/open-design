@@ -16,6 +16,11 @@ import { dedupeToolUsesById, isInFlightToolUse } from './tool-events';
 export type FileOpKind = 'read' | 'write' | 'edit' | 'delete';
 export type FileOpStatus = 'running' | 'done' | 'error';
 
+export interface FileOpReadRange {
+  offset: number;
+  limit: number;
+}
+
 export interface FileOpEntry {
   /**
    * 这一条记录**在项目里的身份** —— 显示用它,右侧工作区也用它开档。
@@ -47,6 +52,8 @@ export interface FileOpEntry {
   total: number;
   /** Worst status across all calls for this file: error > running > done. */
   status: FileOpStatus;
+  /** Read slices requested for this file, in encounter order. */
+  readRanges?: FileOpReadRange[];
 }
 
 const READ_NAMES = new Set(['Read', 'read_file']);
@@ -90,6 +97,13 @@ function mergeStatus(a: FileOpStatus, b: FileOpStatus): FileOpStatus {
   if (a === 'error' || b === 'error') return 'error';
   if (a === 'running' || b === 'running') return 'running';
   return 'done';
+}
+
+function extractReadRange(input: unknown): FileOpReadRange | null {
+  if (!input || typeof input !== 'object') return null;
+  const { offset, limit } = input as { offset?: unknown; limit?: unknown };
+  if (typeof offset !== 'number' || typeof limit !== 'number') return null;
+  return { offset, limit };
 }
 
 /**
@@ -149,7 +163,12 @@ export function deriveFileOps(
   }
 
   const byPath = new Map<string, FileOpEntry>();
-  const add = (fullPath: string, kind: FileOpKind, status: FileOpStatus) => {
+  const add = (
+    fullPath: string,
+    kind: FileOpKind,
+    status: FileOpStatus,
+    readRange?: FileOpReadRange | null,
+  ) => {
     if (!fullPath || fullPath === '(unnamed)') return;
     const existing = byPath.get(fullPath);
     if (existing) {
@@ -157,6 +176,9 @@ export function deriveFileOps(
       existing.opCounts[kind] += 1;
       existing.total += 1;
       existing.status = mergeStatus(existing.status, status);
+      if (kind === 'read' && readRange) {
+        (existing.readRanges ??= []).push(readRange);
+      }
       return;
     }
     const opCounts: Record<FileOpKind, number> = { read: 0, write: 0, edit: 0, delete: 0 };
@@ -168,6 +190,7 @@ export function deriveFileOps(
       opCounts,
       total: 1,
       status,
+      readRanges: kind === 'read' && readRange ? [readRange] : [],
     });
   };
 
@@ -186,7 +209,7 @@ export function deriveFileOps(
     if (!kind) continue;
     const fullPath = extractPath(ev.input);
     if (!fullPath) continue;
-    add(fullPath, kind, status);
+    add(fullPath, kind, status, kind === 'read' ? extractReadRange(ev.input) : null);
   }
 
   return Array.from(byPath.values());
