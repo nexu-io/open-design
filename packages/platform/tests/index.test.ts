@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -1131,6 +1131,7 @@ describe("wellKnownUserToolchainBins", () => {
       // System-wide Nix paths must NOT appear when includeSystemBins is false
       expect(dirs).not.toContain("/run/current-system/sw/bin");
       expect(dirs).not.toContain("/nix/var/nix/profiles/default/bin");
+      expect(dirs).not.toContain(`/etc/profiles/per-user/${userInfo().username}/bin`);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -1143,6 +1144,17 @@ describe("wellKnownUserToolchainBins", () => {
       expect(dirs).toContain("/run/current-system/sw/bin");
       expect(dirs).toContain("/nix/var/nix/profiles/default/bin");
       expect(dirs).toContain(join(home, ".nix-profile", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("includes Home Manager per-user profile bin when includeSystemBins is true (issue #7790)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-nix-hm-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: true });
+      // Prefer os.userInfo().username — launchd GUI may leave $USER unset
+      expect(dirs).toContain(`/etc/profiles/per-user/${userInfo().username}/bin`);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
