@@ -1,3 +1,4 @@
+import type { UpdateLifecycleObservation } from "@open-design/desktop/main";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -187,14 +188,20 @@ export async function waitForLauncherAfterQuit(
   paths: PackagedNamespacePaths,
   logger: LauncherAfterQuitLogger = console,
   controls: Partial<LauncherProcessControls> = {},
+  observe?: (event: UpdateLifecycleObservation) => Promise<void>,
 ): Promise<boolean> {
   if (request == null) return true;
+  const startedAt = Date.now();
+  const report = async (outcome: "completed" | "forced" | "failed") => {
+    try { await observe?.({ stage: "predecessor_wait_completed", outcome, duration_ms: Date.now() - startedAt }); } catch {}
+  };
   const waitForExit = controls.waitForExit ?? waitForProcessExit;
   const stop = controls.stopProcesses ?? stopProcesses;
   await writeLauncherAfterQuitLog(paths, `armed targetPid=${request.targetPid} timeoutMs=${request.timeoutMs}`);
   const exited = await waitForExit(request.targetPid, request.timeoutMs);
   if (exited) {
     await writeLauncherAfterQuitLog(paths, `observed-exit targetPid=${request.targetPid}`);
+    await report("completed");
     return true;
   }
   // The old process outlived its quit grace and still holds the fixed socket.
@@ -202,7 +209,9 @@ export async function waitForLauncherAfterQuit(
   const message = `timed-out targetPid=${request.targetPid}; forcing stop`;
   await writeLauncherAfterQuitLog(paths, message);
   logger.warn(`[open-design launcher] ${message}`);
-  return await forceStopLingeringDesktop(request.targetPid, "after-quit-timeout", paths, logger, stop);
+  const stopped = await forceStopLingeringDesktop(request.targetPid, "after-quit-timeout", paths, logger, stop);
+  await report(stopped ? "forced" : "failed");
+  return stopped;
 }
 
 export async function inspectExistingDesktopForLauncher(

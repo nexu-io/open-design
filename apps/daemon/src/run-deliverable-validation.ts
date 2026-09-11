@@ -10,6 +10,7 @@ import type {
 } from '@open-design/contracts';
 
 import { listFiles, resolveProjectDir } from './projects.js';
+import { findTouchedLinkedPage } from './artifacts/linked-page-delivery.js';
 
 export type RunDeliverableValidation =
   | 'valid'
@@ -26,6 +27,8 @@ export interface RunDeliverableValidationResult {
   validation: RunDeliverableValidation;
   entryFile?: string;
   artifactKind?: ProjectFileKind;
+  /** Internal syntax-finalization input; entryFile remains the canonical entry. */
+  linkedPage?: string;
 }
 
 interface ValidateRunDeliverableInput {
@@ -37,6 +40,15 @@ interface ValidateRunDeliverableInput {
   /** Exact artifact paths changed by this run. Undefined means the runtime
    *  could not produce a reliable per-file diff (for example contention). */
   touchedPaths?: string[];
+  /** Unambiguous HTML entry observed by the host before this run wrote files. */
+  baselineEntryFile?: string;
+}
+
+export function inferBaselineHtmlEntry(projectRoot: string, paths: Iterable<string>): string | undefined {
+  const rootHtml = [...paths]
+    .map((file) => path.relative(projectRoot, file).replaceAll(path.sep, '/'))
+    .filter((file) => !file.includes('/') && /\.html?$/i.test(file));
+  return rootHtml.includes('index.html') ? 'index.html' : rootHtml.length === 1 ? rootHtml[0] : undefined;
 }
 
 const PROJECT_KIND_FILE_KINDS: Partial<
@@ -251,10 +263,15 @@ async function resolveDeliverable(
   }
 
   const acceptedKinds = acceptedDeliverableKinds(input.projectMetadata);
+  const isPrototype = projectKind(input.projectMetadata) === 'prototype';
   const declared = safeRelativeFile(input.projectMetadata?.entryFile);
+  const baselineEntry = isPrototype && input.touchedPaths
+    ? safeRelativeFile(input.baselineEntryFile)
+    : null;
   const selected = declared
     ? files.find((file) => filePath(file) === declared) ?? null
-    : inferredEntry(files, acceptedKinds);
+    : (baselineEntry ? files.find((file) => filePath(file) === baselineEntry) ?? null : null)
+      ?? inferredEntry(files, acceptedKinds);
   if (!selected) {
     return { valid: false, validation: 'entry_missing' };
   }
@@ -264,6 +281,7 @@ async function resolveDeliverable(
     entryFile,
     artifactKind: selected.kind,
   };
+  let linkedPage: string | null = null;
   if (runScoped && input.touchedPaths) {
     const touched = new Set(
       input.touchedPaths.flatMap((candidate) => {
@@ -283,11 +301,17 @@ async function resolveDeliverable(
       }),
     );
     if (!touched.has(entryFile)) {
-      return {
-        valid: false,
-        validation: 'entry_not_touched',
-        ...facts,
-      };
+      if (isPrototype && selected.kind === 'html') {
+        linkedPage = await findTouchedLinkedPage({
+          projectRoot,
+          entryFile,
+          htmlPaths: new Set(files.filter((file) => file.kind === 'html').map(filePath)),
+          touchedPaths: touched,
+        });
+      }
+      if (!linkedPage) {
+        return { valid: false, validation: 'entry_not_touched', ...facts };
+      }
     }
   }
   if (!matchesAcceptedKinds(acceptedKinds, selected.kind)) {
@@ -318,5 +342,6 @@ async function resolveDeliverable(
     valid: true,
     validation: 'valid',
     ...facts,
+    ...(linkedPage ? { linkedPage } : {}),
   };
 }

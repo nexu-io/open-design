@@ -185,6 +185,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'chat-scroll-takeover-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   // A synchronous rAF makes both the probe and the takeover deterministic:
   // one wheel in, one applied frame out, nothing to await.

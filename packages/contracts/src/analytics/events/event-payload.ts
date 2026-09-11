@@ -1,3 +1,4 @@
+import type { UpdateLifecycleObservedProps } from '../update-lifecycle.js';
 /**
  * @module analytics/events/event-payload
  * Discriminated union of all analytics event payloads.
@@ -40,6 +41,7 @@ export type AnalyticsEventPayload =
   | { event: 'update_install_result'; props: UpdateInstallResultProps }
   | { event: 'update_check_result'; props: UpdateCheckResultProps }
   | { event: 'update_apply_observed'; props: UpdateApplyObservedProps }
+  | { event: 'update_lifecycle_observed'; props: UpdateLifecycleObservedProps }
   | { event: 'file_upload_result'; props: FileUploadResultProps }
   | { event: 'context_link_result'; props: ContextLinkResultProps }
   | { event: 'speaker_notes_save_result'; props: SpeakerNotesSaveResultProps }

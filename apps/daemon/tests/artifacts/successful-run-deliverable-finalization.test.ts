@@ -2,7 +2,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as repairDecision from '../../src/artifacts/deliverable-syntax-repair.js';
+import { projectDeliverableSyntaxTelemetry } from '../../src/langfuse-bridge.js';
 
 import { finalizeSuccessfulRunDeliverable } from '../../src/artifacts/successful-run-deliverable-finalization.js';
 import { deliverableSyntaxFinalizerEnabled } from '../../src/artifacts/successful-run-deliverable-finalization.js';
@@ -10,6 +12,7 @@ import { deliverableSyntaxFinalizerEnabled } from '../../src/artifacts/successfu
 const roots: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
 });
 
@@ -24,6 +27,30 @@ async function projectFixture(file: string, content: string) {
 }
 
 describe('successful physical Run deliverable finalization', () => {
+  it('records an internal error at the delivery boundary without withholding the original artifact', async () => {
+    const source = '<script>const items = [1;</script>';
+    const fixture = await projectFixture('index.html', source);
+    vi.spyOn(repairDecision, 'decideDeliverableSyntaxRepair').mockReturnValue({ action: 'accept', next: undefined });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const result = await finalizeSuccessfulRunDeliverable({
+      ...fixture, projectMetadata: { kind: 'prototype', entryFile: 'index.html' },
+      artifactCount: 1, touchedPaths: ['index.html'], processTreeQuiescent: true,
+    });
+    expect(result).toMatchObject({ deliverable: { valid: true }, syntax: {
+      action: 'warn', reason: 'internal_error', validation: {
+        status: 'incomplete', reason: 'internal_error',
+        finalization: { action: 'warn', reason: 'internal_error', committedPatchCount: 0 },
+      },
+    } });
+    expect(log).toHaveBeenCalledWith('[deliverable-syntax] internal_error');
+    expect(JSON.stringify(log.mock.calls)).not.toContain(source);
+    await expect(fs.readFile(fixture.target, 'utf8')).resolves.toBe(source);
+    if (result.syntax.action === 'skip') throw new Error('Missing syntax evidence');
+    expect(projectDeliverableSyntaxTelemetry({ deliverableSyntaxValidation: result.syntax.validation, status: 'succeeded' })).toMatchObject({
+      finalization: { reason: 'internal_error' }, recoveredDeliveryCount: 0, deliveredWithSyntaxWarningCount: 1,
+    });
+  });
+
   it('provides an environment kill switch while defaulting the candidate on', () => {
     expect(deliverableSyntaxFinalizerEnabled({})).toBe(true);
     expect(deliverableSyntaxFinalizerEnabled({ OD_DELIVERABLE_SYNTAX_FINALIZER: 'off' }))
@@ -60,7 +87,7 @@ describe('successful physical Run deliverable finalization', () => {
       .resolves.toBe('<!doctype html><script>const items = [1, 2];</script>');
   });
 
-  it('fails closed on a known unsafe syntax error without changing the file', async () => {
+  it('warns on a known unsafe syntax error without changing the file', async () => {
     const source = '<!doctype html><script>const value = ;</script>';
     const fixture = await projectFixture('index.html', source);
 
@@ -73,7 +100,7 @@ describe('successful physical Run deliverable finalization', () => {
       processTreeQuiescent: true,
     });
 
-    expect(result.syntax).toMatchObject({ action: 'fail', reason: 'no_safe_fix' });
+    expect(result.syntax).toMatchObject({ action: 'warn', reason: 'no_safe_fix' });
     await expect(fs.readFile(fixture.target, 'utf8')).resolves.toBe(source);
   });
 
@@ -91,6 +118,29 @@ describe('successful physical Run deliverable finalization', () => {
       deliverable: { valid: false, validation: 'entry_not_touched' },
       syntax: { action: 'skip' },
     });
+  });
+
+  it('checks the changed linked page while retaining the canonical entry (OPEND-2887)', async () => {
+    const entry = '<!doctype html><a href="catalog.html">Catalog</a>';
+    const source = '<!doctype html><script>const value = ;</script>';
+    const fixture = await projectFixture('index.html', entry);
+    const linkedPage = path.join(fixture.projectsRoot, fixture.projectId, 'catalog.html');
+    await fs.writeFile(linkedPage, source, 'utf8');
+
+    const result = await finalizeSuccessfulRunDeliverable({
+      ...fixture,
+      projectMetadata: { kind: 'prototype', entryFile: 'index.html' },
+      artifactCount: 1,
+      touchedPaths: ['catalog.html'],
+      processTreeQuiescent: true,
+    });
+
+    expect(result).toMatchObject({
+      deliverable: { valid: true, entryFile: 'index.html', linkedPage: 'catalog.html' },
+      syntax: { action: 'warn', reason: 'no_safe_fix' },
+    });
+    await expect(fs.readFile(linkedPage, 'utf8')).resolves.toBe(source);
+    await expect(fs.readFile(fixture.target, 'utf8')).resolves.toBe(entry);
   });
 
   it('skips syntax mutation when the kill switch is off', async () => {

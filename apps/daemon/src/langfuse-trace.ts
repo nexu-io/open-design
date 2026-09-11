@@ -1977,6 +1977,7 @@ export function buildTracePayload(
 
   const success = ctx.run.status === 'succeeded';
   const traceId = ctx.run.runId;
+  const environment = readTelemetryEnvironment();
   const langfuseDelivery =
     ctx.langfuse ??
     deriveLangfuseDeliveryState(ctx.prefs, readRunTelemetrySinkConfig());
@@ -2024,7 +2025,7 @@ export function buildTracePayload(
   // keys best). All entries are anonymous — no PII, no credentials.
   const traceMetadata: Record<string, unknown> = {
     success,
-    env: readTelemetryEnvironment(),
+    env: environment,
     status: ctx.run.status,
     error: safeRunError,
     error_code: ctx.run.errorCode,
@@ -2142,6 +2143,8 @@ export function buildTracePayload(
       ctx.deliverableSyntax?.recoveredDeliveryCount,
     deliverable_syntax_blocked_broken_delivery_count:
       ctx.deliverableSyntax?.blockedBrokenDeliveryCount,
+    deliverable_syntax_delivered_with_syntax_warning_count:
+      ctx.deliverableSyntax?.deliveredWithSyntaxWarningCount,
     ...promptStackFlatMetadata,
     ...promptStackBlameMetadata,
   };
@@ -2175,6 +2178,7 @@ export function buildTracePayload(
         sessionId,
         userId: ctx.installationId ?? undefined,
         tags: buildTagList(ctx),
+        environment,
         input: inputText,
         output: outputText,
         metadata: traceMetadata,
@@ -2211,6 +2215,18 @@ export function buildTracePayload(
       },
     },
   ];
+
+  if (ctx.deliverableSyntax?.finalization?.reason === 'internal_error') {
+    batch.push({
+      id: randomUUID(), type: 'event-create', timestamp: nowIso,
+      body: {
+        id: `${traceId}-syntax-internal-error`, traceId, parentObservationId: agentSpanId,
+        name: 'deliverable-syntax-internal-error', startTime: endTimeIso,
+        level: 'ERROR', statusMessage: 'Syntax finalizer internal error',
+        metadata: { reason: 'internal_error', deliveryStatus: ctx.run.status },
+      },
+    });
+  }
 
   if (createGeneration) {
     batch.push({

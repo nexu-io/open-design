@@ -51,8 +51,35 @@ type GithubJob = {
   started_at?: unknown;
   completed_at?: unknown;
 };
-type GithubRun = { id?: unknown; name?: unknown; html_url?: unknown; status?: unknown };
-type DispatchedRun = { completed: boolean; id: string; url: string };
+type GithubRun = {
+  id?: unknown;
+  name?: unknown;
+  html_url?: unknown;
+  status?: unknown;
+  conclusion?: unknown;
+  run_attempt?: unknown;
+  updated_at?: unknown;
+};
+type DispatchedRun = {
+  /**
+   * The run is completed AS OF THIS OBSERVATION — never "the run is finished
+   * forever". GitHub re-runs a workflow in place, so no run is ever permanently
+   * terminal and this field has to be re-read, not remembered.
+   */
+  completed: boolean;
+  id: string;
+  url: string;
+  /**
+   * Everything a re-run changes about the run, as one comparable string.
+   *
+   * A re-run increments `run_attempt`, sends `status` back to `in_progress`,
+   * rewrites `conclusion`, and bumps `updated_at` — all under the same run id.
+   * Any one of them can in principle be missed (a whole re-run could land
+   * between two polls, leaving `status`/`conclusion` where they were), so the
+   * fingerprint carries all four and changes if any of them does.
+   */
+  fingerprint: string;
+};
 
 function required(name: string): string {
   const value = process.env[name];
@@ -248,11 +275,43 @@ async function findDispatchedRun(workflowFile: string): Promise<DispatchedRun | 
     if (!name.includes(runMarker)) continue;
     return {
       completed: run.status === "completed",
+      fingerprint: [run.status, run.conclusion, run.run_attempt, run.updated_at]
+        .map((field) => (field == null ? "" : String(field)))
+        .join("|"),
       id: String(run.id),
       url: typeof run.html_url === "string" ? run.html_url : "",
     };
   }
   return null;
+}
+
+/**
+ * One dispatched lane, re-read every cycle, with its job list refreshed only
+ * when the run itself says something moved.
+ *
+ * GitHub re-runs IN PLACE: `run_attempt` increments and `status` returns to
+ * `in_progress` under the SAME run id. "Completed" is therefore a reading, not
+ * a fact — a watcher that stops looking at a finished run reports the first
+ * attempt's verdict for the rest of its life, which is how a card kept saying
+ * ❌ E2E Vitest · 未通过 after a re-run had already turned that run green.
+ *
+ * The cost of watching for that is nothing new: `findDispatchedRun` is one
+ * list-runs call the lane already made on every cycle before it completed, and
+ * that response already carries every field a re-run touches. Only the
+ * paginated `listJobs` is gated, and only for a run that is both completed and
+ * unchanged since the jobs in hand were read — an in-flight run still re-lists
+ * every cycle, because its jobs move without the run's own fields settling.
+ */
+async function refreshDispatchedLane(
+  workflowFile: string,
+  previousRun: DispatchedRun | null,
+  previousJobs: GithubJob[],
+): Promise<{ run: DispatchedRun | null; jobs: GithubJob[] }> {
+  const run = (await findDispatchedRun(workflowFile)) ?? previousRun;
+  if (run == null) return { jobs: previousJobs, run: null };
+  const unmoved = previousRun != null && previousRun.id === run.id && previousRun.fingerprint === run.fingerprint;
+  if (unmoved && run.completed) return { jobs: previousJobs, run };
+  return { jobs: await listJobs(run.id), run };
 }
 
 const ARTIFACT_BASENAME: Record<PlatformKey, string> = {
@@ -348,24 +407,32 @@ async function collect(previous: Watch): Promise<Watch> {
   // finished with can still carry a stale or absent stamp.
   const publishCompletedAt = isTerminal(publish) ? timingOf(publishJob).completedAt : null;
 
-  // Re-listed every cycle rather than cached, because the run's own
+  // Re-read every cycle rather than cached, because the run's own
   // completion is what tells a MISSING job apart from a job the API has not
   // created yet. A run that has only just started reports a partial job list,
-  // and reading that as "skipped" would fabricate green.
+  // and reading that as "skipped" would fabricate green. A run that already
+  // finished is re-read too — GitHub re-runs it in place, so its verdict can
+  // change under the same run id for as long as this watch is awake.
   let testsRun = previous.testsRun;
   let testsJobs = previous.testsJobs;
-  if (expectTests && !(previous.testsRun?.completed ?? false)) {
-    testsRun = (await findDispatchedRun(testsWorkflowFile)) ?? previous.testsRun;
-    if (testsRun != null) testsJobs = await listJobs(testsRun.id);
+  if (expectTests) {
+    ({ jobs: testsJobs, run: testsRun } = await refreshDispatchedLane(
+      testsWorkflowFile,
+      previous.testsRun,
+      previous.testsJobs,
+    ));
   }
 
   let smokeRun = previous.smokeRun;
   let smokeJobs = previous.smokeJobs;
   // The smoke run is only dispatched once publish succeeds, so do not even look
   // for it before then — an early lookup would only burn API budget.
-  if (expectSmoke && publish === "success" && !(previous.smokeRun?.completed ?? false)) {
-    smokeRun = (await findDispatchedRun(smokeWorkflowFile)) ?? previous.smokeRun;
-    if (smokeRun != null) smokeJobs = await listJobs(smokeRun.id);
+  if (expectSmoke && publish === "success") {
+    ({ jobs: smokeJobs, run: smokeRun } = await refreshDispatchedLane(
+      smokeWorkflowFile,
+      previous.smokeRun,
+      previous.smokeJobs,
+    ));
   }
 
   return {

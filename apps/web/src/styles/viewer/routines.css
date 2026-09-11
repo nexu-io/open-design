@@ -1932,20 +1932,6 @@
 .app .op-card-head:hover {
   background: var(--bg-fill-tertiary);
 }
-/* `.app .op-card` above resets border/background to none; re-assert the live
-   code box framing inside the app scope so the streaming panel stays boxed. */
-.app .live-code-box {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-fill-secondary);
-}
-.app .live-code-box .live-code-head {
-  cursor: default;
-  border-radius: 0;
-}
-.app .live-code-box .live-code-head:hover {
-  background: transparent;
-}
 .app .op-status {
   width: 24px;
   height: 24px;
@@ -1977,8 +1963,7 @@
   max-width: 100%;
   animation: task-activity-current-enter 200ms var(--ease-out);
 }
-.app .task-activity-current-row .op-card,
-.app .task-activity-current-row .live-code-box {
+.app .task-activity-current-row .op-card {
   width: fit-content;
   max-width: 100%;
   padding: 0;
@@ -2008,7 +1993,6 @@
    the run is in progress (incident recvqgLmAkUM6G). */
 .app .task-activity-current-row .op-expand-chev,
 .app .task-activity-current-row .op-card .accordion-collapsible,
-.app .task-activity-current-row .live-code-pre,
 .app .task-activity-current-row .op-output {
   display: none;
 }

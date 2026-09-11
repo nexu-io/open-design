@@ -16,6 +16,7 @@ import {
 } from '@/vitest/packaged-failure-evidence';
 import {
   assertPackagedHomeFirstRunResult,
+  codexAppServerInvocationsCompleted,
   describePackagedHomeFirstRunStall,
   PACKAGED_HOME_FIRST_RUN_OUTPUT,
   PACKAGED_HOME_FIRST_RUN_PROMPT,
@@ -491,10 +492,7 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(invocation).toBeDefined();
       const receipts = (await readFile(invocation!.path, 'utf8')).trim().split('\n')
         .map((line) => JSON.parse(line));
-      expect(receipts.length).toBeGreaterThan(0);
-      expect(receipts.every((entry) => entry.nonce === invocation!.nonce && entry.mode === 'app-server')).toBe(true);
-      expect(receipts.map((entry) => entry.method)).toEqual(expect.arrayContaining(['initialize', 'thread/start', 'turn/start']));
-      expect(receipts.some((entry) => entry.event === 'completed' && entry.failed === false)).toBe(true);
+      expect(codexAppServerInvocationsCompleted(receipts, invocation!.nonce)).toBe(true);
       expect(firstRun.submitClicked).toBe(true);
       expect(firstRun.projectId).toEqual(expect.any(String));
       expect(firstRun.hrefBefore).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/$)/);

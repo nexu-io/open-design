@@ -2213,6 +2213,69 @@ describe('OD Next automatic production through the real server', () => {
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(invocationCount);
   });
 
+  it.each([
+    { declaredEntry: true, childFile: 'plant-taxonomy-guide.html' },
+    { declaredEntry: false, childFile: 'plant-taxonomy-guide.html' },
+    { declaredEntry: false, childFile: 'index.html' },
+  ])('completes a linked $childFile write without Runtime State (declared entry: $declaredEntry, OPEND-2887)', async ({ declaredEntry, childFile }) => {
+    const fixture = await createFixture('repair');
+    const entryFile = 'plant-science-landing.html';
+    const upload = await fetch(`${started!.url}/api/projects/${fixture.projectId}/files`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: entryFile, content: `<!doctype html><a href="${childFile}">分类导览</a>` }),
+    });
+    expect(upload.ok).toBe(true);
+    if (declaredEntry) {
+      const update = await fetch(`${started!.url}/api/projects/${fixture.projectId}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ metadata: { kind: 'prototype', entryFile } }),
+      });
+      expect(update.ok).toBe(true);
+    }
+    await writeFile(`${fixture.logPath}.linked-page`, childFile);
+    queueFixtureIds(fixture);
+    const created = await postRun(started!.url, createRunRequest(fixture, 'Build the taxonomy page linked from the existing landing page.'));
+    const terminal = await waitForRunTerminal(started!.url, created.runId as string);
+    expect(terminal).toMatchObject({
+      status: 'succeeded', deliverableValid: true, deliverableEntryFile: entryFile,
+      strategyTask: { outcome: 'completed', terminal: true },
+    });
+    const task = getStrategyTaskExecution(database(), terminal.strategyTask!.taskExecutionId)!;
+    expect(task.runs).toHaveLength(1);
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(1);
+    expect(parseOdNextPromptBundleV2(invocations[0]!.stdin).coreSystemPrompt.outputContract)
+      .toContain('Emit exactly one Runtime State block on every response.');
+    const reloaded = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+    const { messages } = await reloaded.json() as { messages: Array<{ runId?: string; strategyTaskDelivered?: boolean }> };
+    expect(messages.find((message) => message.runId === task.latestRunId)?.strategyTaskDelivered).toBe(true);
+    const cli = await runOdCli(['run', 'info', task.latestRunId!, '--daemon-url', started!.url, '--json']);
+    expect(JSON.parse(cli.stdout)).toMatchObject({ strategyTask: { outcome: 'completed' } });
+    if (!declaredEntry) {
+      const project = await fetch(`${started!.url}/api/projects/${fixture.projectId}`);
+      expect(await project.json()).toMatchObject({ project: { metadata: { entryFile } } });
+      await writeFile(`${fixture.logPath}.linked-page-edit`, '1');
+    }
+    const followup = await postRun(started!.url, {
+      ...createRunRequest(fixture, declaredEntry ? 'Confirm the delivered page.' : 'Update the taxonomy page.'),
+      userMessageId: `followup-user-${fixture.projectId}`,
+      assistantMessageId: `followup-assistant-${fixture.projectId}`,
+      clientRequestId: `followup-request-${fixture.projectId}`,
+    });
+    const followupTerminal = await waitForRunTerminal(started!.url, followup.runId as string);
+    expect(followupTerminal).toMatchObject(declaredEntry ? {
+      deliverableValid: false, deliverableValidation: 'no_artifact',
+      strategyTask: { outcome: 'blocked', terminal: true },
+    } : {
+      deliverableValid: true, deliverableEntryFile: entryFile,
+      strategyTask: { outcome: 'completed', terminal: true },
+    });
+    expect(followupTerminal.strategyTask!.taskExecutionId).not.toBe(task.taskExecutionId);
+    const resumed = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(resumed).toHaveLength(2);
+    expect(resumed[1]!.argv).toContain('resume');
+  });
+
   it('does not report unfinished work when the task delivered under a stale plan', async () => {
     // QA on project 3ffc55f1: the turn wrote its deliverable and OD Next
     // settled the task `completed`, but the agent's last plan snapshot still
@@ -3036,7 +3099,14 @@ function finish() {
     process.exit(2);
   }
   let text;
-  if (mode === 'direct') {
+  if (fs.existsSync(logPath + '.linked-page')) {
+    const childFile = fs.readFileSync(logPath + '.linked-page', 'utf8');
+    const edited = fs.existsSync(logPath + '.linked-page-edit');
+    if (edited || !fs.existsSync(path.join(process.cwd(), childFile))) {
+      fs.writeFileSync(path.join(process.cwd(), childFile), '<!doctype html><title>Taxonomy</title><a href="plant-science-landing.html">Home</a>' + (edited ? '<p>Updated taxonomy</p>' : ''));
+    }
+    text = '已交付 ' + childFile + '。';
+  } else if (mode === 'direct') {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Direct</title>');
     text = ${JSON.stringify(direct)};
   } else if (mode === 'complex' && stdin.includes('native continuation — production')) {

@@ -4,7 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { captureUntrackedSourceIdentity, collectRealEvidence, loadReplayFixtures, replayCaseVerdict, runSyntaxAcceptance } from '../../scripts/syntax-acceptance.ts';
+import { createToolsDevSuite } from '../../lib/tools-dev/runtime.ts';
+import { runToolsDevJson } from '../../lib/tools-dev/cli.ts';
+import { captureUntrackedSourceIdentity, collectRealEvidence, loadReplayFixtures, replayCaseVerdict, runSyntaxAcceptance, resolveSyntaxTelemetryCanary, syntaxTelemetryDeliveryOutcome, syntaxTelemetryFinalizationMessage } from '../../scripts/syntax-acceptance.ts';
 
 const { runtime } = vi.hoisted(() => ({ runtime: {
   startWeb: vi.fn(), logs: vi.fn(async () => ({})), stopWeb: vi.fn(async () => ({ stopped: true })),
@@ -12,7 +14,11 @@ const { runtime } = vi.hoisted(() => ({ runtime: {
 } }));
 vi.mock('../../lib/tools-dev/runtime.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../../lib/tools-dev/runtime.ts')>(),
-  createToolsDevSuite: () => runtime,
+  createToolsDevSuite: vi.fn(() => runtime),
+}));
+vi.mock('../../lib/tools-dev/cli.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../../lib/tools-dev/cli.ts')>(),
+  runToolsDevJson: vi.fn(async () => ({})),
 }));
 
 const scratchRoots: string[] = [];
@@ -24,9 +30,58 @@ const scratch = async () => {
 afterEach(async () => {
   await Promise.all(scratchRoots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-const metrics = { strategyRoute: 'od-next', agent: 'open-design:amr', model: 'deepseek-v4-flash', deliverableSyntax: { status: 'pass' } };
+const metrics = { strategyRoute: 'od-next', agent: 'open-design:amr', model: 'deepseek-v4-flash', deliverableSyntax: {
+  status: 'pass', terminalRunStatus: 'succeeded', recoveredDeliveryCount: 0,
+  finalization: { action: 'allow', summaryVersion: 1, repairEngine: 'host-safe-fixer@2', initialStatus: 'pass', stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [] },
+} };
+const warningFinalization = {
+  action: 'warn', reason: 'no_safe_fix', refusal: 'unsupported_syntax_error', summaryVersion: 1,
+  repairEngine: 'host-safe-fixer@2', initialStatus: 'repairable', stagedPatchCount: 0,
+  committedPatchCount: 0, committedRepairRules: [],
+};
 
 describe('syntax acceptance evidence contract', () => {
+  it('[P1] keeps telemetry offline unless explicitly requested', () => {
+    expect(resolveSyntaxTelemetryCanary({ enabled: false, mode: 'real', externalInputs: true, profile: 'prod', isolatedRoot: '/tmp/synthetic' })).toBeNull();
+  });
+
+  it('[P1] finalizes only the matching durable terminal message without inventing telemetry', () => {
+    const run = { id: 'run-1', assistantMessageId: 'message-1', status: 'succeeded' };
+    const message = { id: 'message-1', runId: 'run-1', role: 'assistant', runStatus: 'succeeded', content: 'actual output', producedFiles: [{ path: 'index.html' }] };
+    const result = syntaxTelemetryFinalizationMessage([message], run);
+    expect(result).toEqual({ ...message, telemetryFinalized: true });
+    expect(result).not.toHaveProperty('metrics');
+    expect(message).not.toHaveProperty('telemetryFinalized');
+    for (const invalid of [[], [{ ...message, runId: 'other' }], [{ ...message, runStatus: 'running' }], [{ ...message, role: 'user' }]]) {
+      expect(() => syntaxTelemetryFinalizationMessage(invalid, run)).toThrow();
+    }
+  });
+
+  it('[P1] confines upload to one repeat of built-in synthetic fixtures and the test relay', () => {
+    const input = { enabled: true, mode: 'replay', externalInputs: false, profile: 'test', isolatedRoot: '/tmp/synthetic', token: 'abc12345', relayUrl: 'https://telemetry-test.open-design.ai/api/langfuse' };
+    const plan = resolveSyntaxTelemetryCanary(input)!;
+    expect(plan.prefs).toEqual({ metrics: true, content: true, artifactManifest: false });
+    expect(plan.env).toMatchObject({ AMR_HOME: '/tmp/synthetic/amr', OD_INSTALLATION_DIR: '', OD_LEGACY_DATA_DIR: '', VELA_CONTROL_KEY: '', VELA_RUNTIME_KEY: '', POSTHOG_KEY: '', LANGFUSE_PUBLIC_KEY: '', LANGFUSE_SECRET_KEY: '', OD_TELEMETRY_ENV: 'synthetic-test-abc12345' });
+    expect(plan.env).not.toHaveProperty('OPEN_DESIGN_VELA_TELEMETRY');
+    expect(plan.fixtures.map(fixture => fixture.id)).toEqual(['synthetic-clean', 'synthetic-repaired', 'synthetic-warning']);
+    expect(plan.fixtures.every(fixture => fixture.source.length < 256 && fixture.expected !== undefined)).toBe(true);
+    for (const invalid of [{ mode: 'real' }, { externalInputs: true }, { repeat: '2' }, { profile: 'prod' }, { relayUrl: 'https://telemetry.open-design.ai/api/langfuse' }, { relayUrl: undefined }]) {
+      expect(() => resolveSyntaxTelemetryCanary({ ...input, ...invalid })).toThrow();
+    }
+  });
+
+  it('[P1] never treats a completed Run or skipped telemetry as accepted delivery', () => {
+    expect(syntaxTelemetryDeliveryOutcome({ status: 'succeeded' })).toBe('pending');
+    expect(syntaxTelemetryDeliveryOutcome({ telemetryDelivery: { status: 'in_flight' } })).toBe('pending');
+    for (const status of ['failed', 'not_expected']) {
+      expect(syntaxTelemetryDeliveryOutcome({ telemetryDelivery: { status, finalizedAt: 1 } })).toBe('failed');
+      expect(syntaxTelemetryDeliveryOutcome({ telemetryDelivery: { status, attemptCount: 1, crashWindow: false } })).toBe('failed');
+    }
+    expect(syntaxTelemetryDeliveryOutcome({ telemetryDelivery: { status: 'accepted', attemptCount: 0, finalizedAt: 1 } })).toBe('failed');
+    expect(syntaxTelemetryDeliveryOutcome({ telemetryDelivery: { status: 'accepted', attemptCount: 1 } })).toBe('pending');
+    expect(syntaxTelemetryDeliveryOutcome({ telemetryDelivery: { status: 'accepted', attemptCount: 1, finalizedAt: 1 } })).toBe('accepted');
+  });
+
   it('[P1] includes sorted untracked source paths and detects helper content changes outside git diff', async () => {
     const root = await scratch();
     const exec = promisify(execFile);
@@ -64,7 +119,7 @@ describe('syntax acceptance evidence contract', () => {
     expect(fixture.expected).toBe(after);
     const run = { status: 'succeeded', deliverableSyntaxValidation: { status: 'pass', repairState: { attempt: 1 }, metrics: { appliedRepairRules: ['insert_missing_closing_delimiter'] }, finalization: { action: 'allow', summaryVersion: 1, repairEngine: 'host-safe-fixer@2', initialStatus: 'repairable', stagedPatchCount: 1, committedPatchCount: 1, committedRepairRules: ['insert_missing_closing_delimiter'] } } };
     expect(replayCaseVerdict(fixture, run, after).passed).toBe(true);
-    expect(replayCaseVerdict(fixture, run, after.replace('untouched', 'wrong')).passed).toBe(false);
+    expect(replayCaseVerdict(fixture, run, after.replace('untouched', 'wrong'))).toMatchObject({ passed: false, repairVerified: false });
     expect(await readFile(path.join(root, 'before.html'), 'utf8')).toBe(before);
   });
 
@@ -95,11 +150,70 @@ describe('syntax acceptance evidence contract', () => {
     }
   });
 
-  it('[P1] failed finalization requires unchanged bytes and does not count terminal timing as delivery', () => {
-    const fixture = { id: 'rejected', source: '<script>const x = ;</script>', expected: '<script>const x = ;</script>', action: 'fail' as const, refusal: 'unsupported_syntax_error' };
-    const run = { status: 'failed', deliverableSyntaxValidation: { status: 'repairable', metrics: { repairToDeliveryDurationMs: 194 }, finalization: { action: 'fail', refusal: 'unsupported_syntax_error', summaryVersion: 1, repairEngine: 'host-safe-fixer@2', initialStatus: 'repairable', stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [] } } };
-    expect(replayCaseVerdict(fixture, run, fixture.source)).toMatchObject({ passed: true, beforeAfterEqual: true, expectedAfterEqual: true, discoveryToDeliveryMs: null, discoveryToBlockedTerminalMs: 194 });
-    expect(replayCaseVerdict(fixture, run, 'changed').passed).toBe(false);
+  it('[P1] delivers unrepaired original bytes with a warning without claiming a repair', () => {
+    const fixture = { id: 'rejected', source: '<script>const x = ;</script>', expected: '<script>const x = ;</script>', action: 'warn' as const, status: 'repairable' as const, refusal: 'unsupported_syntax_error' };
+    const run = { status: 'succeeded', deliverableSyntaxValidation: { status: 'repairable', metrics: { repairToDeliveryDurationMs: 194 }, finalization: warningFinalization } };
+    expect(replayCaseVerdict(fixture, run, fixture.source)).toMatchObject({ passed: true, deliveredWithWarning: true, repairVerified: false, beforeAfterEqual: true, expectedAfterEqual: true, discoveryToDeliveryMs: 194, discoveryToWarningDeliveryMs: 194, discoveryToRepairedDeliveryMs: null });
+    expect(replayCaseVerdict(fixture, run, 'changed')).toMatchObject({ passed: false, deliveredWithWarning: false });
+    expect(replayCaseVerdict(fixture, { ...run, status: 'failed', errorCode: 'HTML_VERSION_SNAPSHOT_FAILED' }, fixture.source)).toMatchObject({ passed: false, deliveredWithWarning: false, repairVerified: false, discoveryToDeliveryMs: null });
+    expect(replayCaseVerdict(fixture, { ...run, status: 'canceled' }, fixture.source).passed).toBe(false);
+  });
+
+  it('[P1] loads warning fixtures only with an unchanged byte oracle and rejects the retired syntax fail policy', async () => {
+    const root = await scratch();
+    await writeFile(path.join(root, 'before.html'), '<script>const x = ;</script>');
+    await writeFile(path.join(root, 'after.html'), '<script>const x = 1;</script>');
+    const manifest = path.join(root, 'fixtures.json');
+    await writeFile(manifest, JSON.stringify({ fixtures: [{ id: 'ambiguous', before: 'before.html', action: 'warn', status: 'repairable', attempts: 0 }] }));
+    const [fixture] = await loadReplayFixtures(manifest);
+    expect(fixture).toMatchObject({ action: 'warn', status: 'repairable', expected: '<script>const x = ;</script>' });
+    for (const entry of [
+      { id: 'modified-warning', before: 'before.html', after: 'after.html', action: 'warn' },
+      { id: 'old-policy', before: 'before.html', action: 'fail' },
+    ]) {
+      await writeFile(manifest, JSON.stringify({ fixtures: [entry] }));
+      await expect(loadReplayFixtures(manifest)).rejects.toThrow();
+    }
+  });
+
+  it('[P1] warning acceptance requires complete terminal evidence and retains the checker status', () => {
+    const fixture = { id: 'warning', source: 'original', expected: 'original', action: 'warn' as const, status: 'repairable' as const };
+    const run = { status: 'succeeded', deliverableSyntaxValidation: { status: 'repairable', finalization: warningFinalization } };
+    for (const finalization of [
+      undefined, { ...warningFinalization, summaryVersion: undefined },
+      { ...warningFinalization, repairEngine: undefined }, { ...warningFinalization, initialStatus: undefined },
+      { ...warningFinalization, reason: undefined }, { ...warningFinalization, committedPatchCount: 1 },
+      { ...warningFinalization, stagedPatchCount: 9 }, { ...warningFinalization, committedRepairRules: undefined },
+    ]) {
+      expect(replayCaseVerdict(fixture, { ...run, deliverableSyntaxValidation: { ...run.deliverableSyntaxValidation, finalization } }, fixture.source)).toMatchObject({ passed: false, deliveredWithWarning: false, repairVerified: false });
+    }
+    expect(replayCaseVerdict(fixture, { ...run, deliverableSyntaxValidation: { ...run.deliverableSyntaxValidation, status: 'pass' } }, fixture.source).passed).toBe(false);
+    const incomplete = { ...run, deliverableSyntaxValidation: { status: 'incomplete', finalization: { ...warningFinalization, initialStatus: 'incomplete', reason: 'check_incomplete', refusal: undefined } } };
+    expect(replayCaseVerdict({ ...fixture, status: 'incomplete' }, incomplete, fixture.source)).toMatchObject({ passed: true, deliveredWithWarning: true, repairVerified: false });
+  });
+
+  it('[P1] a staged passing candidate with a commit conflict is warning delivery, not recovered delivery', () => {
+    const fixture = { id: 'commit-conflict', source: 'original', expected: 'original', action: 'warn' as const, status: 'pass' as const, attempts: 1 };
+    const run = { status: 'succeeded', deliverableSyntaxValidation: { status: 'pass', repairState: { attempt: 1 }, metrics: { appliedRepairRules: ['close_unterminated_string'] }, finalization: { ...warningFinalization, stagedPatchCount: 1, reason: 'commit_conflict', refusal: undefined } } };
+    expect(replayCaseVerdict(fixture, run, fixture.source)).toMatchObject({ passed: true, deliveredWithWarning: true, repairVerified: false });
+  });
+
+  it('[P1] accepts complete warning delivery in real evidence but not missing evidence or real execution failure', async () => {
+    const root = await scratch();
+    const syntax = { status: 'repairable', finalization: warningFinalization, terminalRunStatus: 'succeeded', deliveredWithSyntaxWarningCount: 1, recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0 };
+    const cases = [
+      { evalId: 'warning', status: 'succeeded', metrics: { ...metrics, deliverableSyntax: syntax } },
+      { evalId: 'missing-summary', status: 'succeeded', metrics: { ...metrics, deliverableSyntax: { ...syntax, finalization: undefined } } },
+      { evalId: 'false-recovery', status: 'succeeded', metrics: { ...metrics, deliverableSyntax: { ...syntax, recoveredDeliveryCount: 1 } } },
+      { evalId: 'protocol-failed', status: 'failed', metrics: { ...metrics, deliverableSyntax: syntax } },
+      { evalId: 'no-artifact-evidence', status: 'succeeded', metrics: { ...metrics, deliverableSyntax: undefined } },
+      { evalId: 'staged-pass-without-summary', status: 'succeeded', metrics: { ...metrics, deliverableSyntax: { status: 'pass' } } },
+    ];
+    await writeFile(path.join(root, 'result.json'), JSON.stringify({ cases }));
+    const result = await collectRealEvidence(root, cases.map(entry => entry.evalId));
+    expect(result.collection.complete).toBe(true);
+    expect(result.cases.map(entry => entry.passed)).toEqual([true, false, false, false, false, false]);
+    expect(result.cases[0]).toMatchObject({ deliveredWithWarning: true, repairVerified: false });
   });
 
   it('[P1] retains completed cases from events after runner interruption and separates unfinished from not started', async () => {
@@ -143,8 +257,13 @@ describe('syntax acceptance evidence contract', () => {
       expect(result.status).toBe('BLOCKED');
       expect(result.error).toContain('requires --profile test');
       expect(runtime.startWeb).not.toHaveBeenCalled();
+      const [spec, dependencies] = vi.mocked(createToolsDevSuite).mock.calls.at(-1)!;
+      expect(dependencies?.runJson).toBeTypeOf('function');
+      await dependencies!.runJson!('workspace', spec, ['status', '--json'], {}, {});
+      expect(runToolsDevJson).toHaveBeenLastCalledWith('workspace', spec, ['status', '--json', '--no-env-file'], {}, {});
       expect(result.sourceAfter).toMatchObject({ branch: expect.any(String), commit: expect.any(String), harnessSha256: expect.any(String) });
       expect(result.cleanup).toMatchObject({ attempted: true, stopped: true });
+      expect(runtime.stopWeb).toHaveBeenLastCalledWith(expect.objectContaining({ OD_INSTALLATION_DIR: '', OD_LEGACY_DATA_DIR: '' }));
       const persisted = JSON.parse(await readFile(path.join(result.root, 'report.json'), 'utf8'));
       expect(persisted.sourceAfter).toEqual(result.sourceAfter);
       expect(persisted.cleanup.stopped).toBe(true);

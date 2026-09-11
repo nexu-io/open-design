@@ -55,6 +55,7 @@ describe('packaged sidecar shutdown', () => {
     const root = mkdtempSync(join(tmpdir(), 'od-sidecar-close-'));
     const logPath = join(root, 'latest.log');
     const closeLog = vi.fn(async () => undefined);
+    const observe = vi.fn(async () => undefined);
     const stop = vi.fn(async () => ({
       alreadyStopped: false,
       forcedPids: [42],
@@ -77,10 +78,11 @@ describe('packaged sidecar shutdown', () => {
         logHandle: { close: closeLog },
         logPath,
         stamp: testStamp(),
-      } as unknown as Parameters<typeof closeManagedChild>[0])).rejects.toThrow(
+      } as unknown as Parameters<typeof closeManagedChild>[0], observe)).rejects.toThrow(
         'failed to stop packaged daemon sidecar processes: 42',
       );
       expect(closeLog).toHaveBeenCalledOnce();
+      expect(observe).toHaveBeenCalledWith({ stage: 'cleanup_daemon', outcome: 'failed', duration_ms: expect.any(Number), forced_process_count: 1, remaining_process_count: 1 });
       expect(readFileSync(logPath, 'utf8')).toContain('shutdown requested');
       expect(readFileSync(logPath, 'utf8')).not.toContain('exited app=daemon');
     } finally {

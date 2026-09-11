@@ -724,7 +724,7 @@ export function odNextTurnMayInferProductionCompletion(
  * Recover a Direct Edit completion the agent performed but failed to declare.
  *
  * Observed on real runs: the agent writes the canonical deliverable correctly —
- * `validateRunDeliverable` resolves a root `index.html` that this Run touched —
+ * `validateRunDeliverable` verifies this Run changed the entry or a linked page —
  * then answers in prose without emitting a single machine block. The turn is
  * refused, the logical task lands terminal-`blocked`, and the user is shown a
  * generic failure even though the artifact they asked for is sitting in their

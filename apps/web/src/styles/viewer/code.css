@@ -1746,37 +1746,3 @@
   min-width: 0;
   flex: 1;
 }
-
-/* Live code box — code streaming in real time while a Write/Edit tool's JSON
-   input is still arriving (before the full tool_use event). */
-.live-code-box {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: transparent;
-  overflow: hidden;
-}
-.live-code-box .live-code-head {
-  cursor: default;
-  border-radius: 0;
-}
-.live-code-box .live-code-head:hover {
-  background: transparent;
-}
-.live-code-pre {
-  margin: 0;
-  padding: 8px 12px 10px;
-  max-height: 240px;
-  overflow-y: auto;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text);
-  background: transparent;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  border-top: 1px solid var(--border);
-  scrollbar-width: thin;
-}
-.live-code-pre code {
-  font-family: inherit;
-}

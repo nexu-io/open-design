@@ -33,12 +33,67 @@
 // `capture_exceptions: false` on the posthog-js init — this module is the
 // single source of truth for browser exception capture.
 
+import {
+  EVENT_SCHEMA_VERSION,
+  type AnalyticsClientType,
+} from '@open-design/contracts/analytics';
 import { scrubExceptionList, scrubFilePath } from './scrub';
+
+export type BrowserOsName =
+  | 'Mac OS X'
+  | 'Windows'
+  | 'Linux'
+  | 'Android'
+  | 'iOS'
+  | 'Chrome OS'
+  | 'unknown';
+
+interface BrowserOsSignals {
+  platform?: string;
+  userAgent?: string;
+  userAgentDataPlatform?: string;
+  maxTouchPoints?: number;
+}
+
+/** Keep direct-fetch telemetry on the same low-cardinality OS vocabulary as PostHog. */
+export function classifyBrowserOsName(signals: BrowserOsSignals): BrowserOsName {
+  const platform = `${signals.userAgentDataPlatform ?? ''} ${signals.platform ?? ''}`.toLowerCase();
+  const userAgent = (signals.userAgent ?? '').toLowerCase();
+  const combined = `${platform} ${userAgent}`;
+
+  if (combined.includes('android')) return 'Android';
+  if (
+    /iphone|ipad|ipod/u.test(combined)
+    || (platform.includes('mac') && (signals.maxTouchPoints ?? 0) > 1)
+  ) {
+    return 'iOS';
+  }
+  if (/windows|win32|win64/u.test(combined)) return 'Windows';
+  if (/macintosh|mac os|macintel|darwin/u.test(combined)) return 'Mac OS X';
+  if (/cros|chrome os/u.test(combined)) return 'Chrome OS';
+  if (/linux|x11/u.test(combined)) return 'Linux';
+  return 'unknown';
+}
+
+export function detectBrowserOsName(): BrowserOsName {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const navigatorWithUaData = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  return classifyBrowserOsName({
+    platform: navigator.platform,
+    userAgent: navigator.userAgent,
+    userAgentDataPlatform: navigatorWithUaData.userAgentData?.platform,
+    maxTouchPoints: navigator.maxTouchPoints,
+  });
+}
 
 interface ExceptionTrackingContext {
   apiKey: string;
   host: string;
   distinctId: string;
+  clientType: AnalyticsClientType;
+  osName: BrowserOsName;
   appVersion?: string;
   sessionId?: string;
   telemetryEnv?: string;
@@ -245,7 +300,13 @@ function dispatch(item: BufferedSafetyEvent): void {
     distinct_id: context.distinctId,
     properties: {
       ...item.body.properties,
+      // Keep the direct-fetch web safety envelope aligned with daemon and
+      // packaged-runtime telemetry. Stamp this after caller properties so a
+      // stale producer cannot accidentally override the canonical version.
+      event_schema_version: EVENT_SCHEMA_VERSION,
       $lib: 'web/error-tracking',
+      $os: context.osName,
+      client_type: context.clientType,
       ...(context.telemetryEnv ? { env: context.telemetryEnv } : {}),
       ...(context.appVersion ? { app_version: context.appVersion, ui_version: context.appVersion } : {}),
       ...(context.sessionId ? { session_id: context.sessionId } : {}),
