@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OneHub · Facebook Post Studio</title>
+<style>
+  :root {
+    --bg: #000000;
+    --surface: #0c0c0f;
+    --surface-2: #141417;
+    --surface-3: #1a1a1f;
+    --border: #26262e;
+    --fg: #ffffff;
+    --muted: #a1a1aa;
+    --muted-2: #6b6b76;
+    --violet: #8b5cf6;
+    --pink: #ec4899;
+    --accent-grad: linear-gradient(135deg, #8b5cf6 0%, #c026d3 45%, #ec4899 100%);
+    --accent-soft: rgba(139, 92, 246, 0.14);
+    --radius: 12px;
+    --radius-sm: 9px;
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .dotgrid {
+    background-image: radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, textarea { font-family: inherit; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #2c2c34; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------- App frame ---------- */
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; border-bottom: 1px solid var(--border);
+    background: rgba(8,8,10,0.8); backdrop-filter: blur(10px);
+    flex-shrink: 0;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-logo {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: var(--accent-grad);
+    display: grid; place-items: center; font-weight: 800; font-size: 13px;
+    color: #fff; letter-spacing: 0.5px;
+    box-shadow: 0 4px 14px rgba(139,92,246,0.4);
+  }
+  .brand-name { font-weight: 700; font-size: 15px; letter-spacing: 0.2px; }
+  .brand-sub { color: var(--muted-2); font-size: 11px; font-weight: 500; }
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    color: var(--muted); transition: all .15s;
+  }
+  .tab.active { background: var(--surface-3); color: var(--fg); }
+  .tab:hover:not(.active) { color: var(--fg); }
+
+  /* ---------- Layout ---------- */
+  .workspace { display: flex; flex: 1; min-height: 0; }
+  .panel-left {
+    width: 430px; flex-shrink: 0; border-right: 1px solid var(--border);
+    background: var(--surface); display: flex; flex-direction: column;
+    overflow-y: auto; padding: 18px;
+  }
+  .panel-right { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+
+  /* ---------- Mode switch ---------- */
+  .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+  .mode-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 13px; border-radius: var(--radius-sm); font-weight: 700; font-size: 13px;
+    background: var(--surface-3); color: var(--muted); border: 1px solid transparent;
+    transition: all .15s; letter-spacing: 0.3px;
+  }
+  .mode-btn svg { width: 16px; height: 16px; }
+  .mode-btn.active {
+    background: linear-gradient(135deg, rgba(139,92,246,0.22), rgba(236,72,153,0.18));
+    color: #fff; border-color: rgba(139,92,246,0.5);
+    box-shadow: inset 0 0 0 1px rgba(139,92,246,0.25);
+  }
+
+  /* ---------- Sections ---------- */
+  .section { margin-bottom: 18px; }
+  .label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+    text-transform: uppercase; color: var(--muted-2); margin-bottom: 8px;
+  }
+  .label .hint-ic { margin-left: auto; }
+  .field {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--fg); padding: 12px 14px;
+    font-size: 14px; resize: vertical; transition: border-color .15s;
+  }
+  .field:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .field-wrap { position: relative; }
+  .char-count { position: absolute; top: 10px; right: 12px; font-size: 11px; color: var(--muted-2); font-variant-numeric: tabular-nums; }
+  .helper { font-size: 11.5px; color: var(--muted-2); margin-top: 6px; }
+
+  /* ---------- Hook library ---------- */
+  .chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    padding: 7px 11px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: var(--surface-3); color: var(--muted); border: 1px solid var(--border);
+    transition: all .15s; white-space: nowrap;
+  }
+  .chip:hover { color: #fff; border-color: rgba(139,92,246,0.5); background: var(--surface-2); }
+  .chip.active { background: var(--accent-grad); color: #fff; border-color: transparent; }
+
+  /* ---------- Variation slider ---------- */
+  .slider-head { display: flex; align-items: center; justify-content: space-between; }
+  .slider-badge {
+    font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px;
+    background: var(--accent-soft); color: #d8b4fe; border: 1px solid rgba(139,92,246,0.35);
+  }
+  input[type=range] {
+    -webkit-appearance: none; width: 100%; height: 6px; border-radius: 4px; margin-top: 14px;
+    background: linear-gradient(90deg, var(--violet) var(--fill,51%), #2a2a32 var(--fill,51%));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--violet); cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  .slider-scale { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted-2); margin-top: 7px; }
+
+  /* ---------- Post type toggles ---------- */
+  .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .type-chip {
+    display: flex; align-items: center; gap: 8px; padding: 10px 11px;
+    border-radius: var(--radius-sm); background: var(--surface-3);
+    border: 1px solid var(--border); color: var(--muted); font-size: 12px; font-weight: 600;
+    transition: all .12s; text-align: left;
+  }
+  .type-chip .ic { width: 15px; height: 15px; flex-shrink: 0; opacity: .8; }
+  .type-chip .cnt { margin-left: auto; font-size: 10px; color: var(--muted-2); }
+  .type-chip.active { background: var(--accent-soft); color: #fff; border-color: rgba(139,92,246,0.55); }
+  .type-chip.active .cnt { color: #d8b4fe; }
+
+  /* ---------- Dropzone ---------- */
+  .dropzone {
+    border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 22px;
+    text-align: center; color: var(--muted); transition: all .15s; cursor: pointer;
+    background: var(--surface-2);
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--violet); background: var(--accent-soft); color: #fff; }
+  .dropzone .dz-ic { width: 30px; height: 30px; margin: 0 auto 8px; opacity: .7; }
+  .dropzone .dz-title { font-weight: 600; font-size: 13px; }
+  .dropzone .dz-sub { font-size: 11px; color: var(--muted-2); margin-top: 3px; }
+  .file-pill {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 10px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 12.5px;
+  }
+  .file-pill .fp-ic { width: 16px; height: 16px; color: var(--violet); flex-shrink: 0; }
+  .file-pill .fp-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-pill .fp-meta { color: var(--muted-2); font-size: 11px; }
+  .file-pill .fp-x { color: var(--muted-2); }
+  .file-pill .fp-x:hover { color: var(--pink); }
+
+  /* ---------- Primary CTA ---------- */
+  .cta {
+    width: 100%; padding: 15px; border-radius: var(--radius-sm); font-weight: 700; font-size: 14px;
+    letter-spacing: 0.4px; color: #fff; background: var(--accent-grad);
+    box-shadow: 0 6px 20px rgba(139,92,246,0.35); transition: transform .12s, box-shadow .12s;
+    display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 4px;
+  }
+  .cta:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(139,92,246,0.5); }
+  .cta:active { transform: translateY(0); }
+  .cta svg { width: 17px; height: 17px; }
+  .cta-sub { display: flex; gap: 8px; margin-top: 9px; }
+  .cta-sub button {
+    flex: 1; padding: 11px; border-radius: var(--radius-sm); font-weight: 600; font-size: 12.5px;
+    background: var(--surface-3); color: var(--muted); border: 1px solid var(--border); transition: all .15s;
+  }
+  .cta-sub button:hover { color: #fff; border-color: rgba(139,92,246,0.5); }
+
+  /* ---------- Right panel ---------- */
+  .preview-head {
+    display: flex; align-items: center; gap: 13px; padding: 18px 24px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .avatar {
+    width: 46px; height: 46px; border-radius: 50%; background: var(--accent-grad);
+    display: grid; place-items: center; font-weight: 800; font-size: 16px; color: #fff;
+    box-shadow: 0 3px 12px rgba(139,92,246,0.4);
+  }
+  .avatar.sm { width: 32px; height: 32px; font-size: 12px; }
+  .ph-name { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15px; }
+  .verified { width: 16px; height: 16px; color: #3897f0; }
+  .ph-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-2); }
+  .ph-tools { margin-left: auto; display: flex; gap: 4px; }
+  .ph-tools button {
+    width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center;
+    color: var(--muted); transition: all .15s;
+  }
+  .ph-tools button:hover { background: var(--surface-3); color: #fff; }
+  .ph-tools svg { width: 17px; height: 17px; }
+
+  .preview-scroll { flex: 1; overflow-y: auto; padding: 22px 24px 60px; }
+  .preview-inner { max-width: 760px; margin: 0 auto; }
+
+  .empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; color: var(--muted-2); text-align: center; gap: 12px; padding: 40px;
+  }
+  .empty svg { width: 54px; height: 54px; opacity: .35; }
+  .empty .e-title { font-size: 16px; font-weight: 700; color: var(--muted); }
+  .empty .e-sub { font-size: 13px; max-width: 320px; }
+
+  /* ---------- Post cards ---------- */
+  .post-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 18px; overflow: hidden; animation: rise .35s ease both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .pc-head {
+    display: flex; align-items: center; gap: 10px; padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pc-type-ic { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft);
+    display: grid; place-items: center; color: #d8b4fe; flex-shrink: 0; }
+  .pc-type-ic svg { width: 16px; height: 16px; }
+  .pc-type { font-weight: 700; font-size: 13.5px; }
+  .pc-type-sub { font-size: 11px; color: var(--muted-2); }
+  .pc-copy {
+    margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 7px 12px;
+    border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--muted);
+    border: 1px solid var(--border); background: var(--surface-2); transition: all .15s;
+  }
+  .pc-copy:hover { color: #fff; border-color: var(--violet); }
+  .pc-copy.done { color: #4ade80; border-color: rgba(74,222,128,0.4); }
+  .pc-copy svg { width: 13px; height: 13px; }
+
+  .pc-body { padding: 16px; }
+  .pc-text { font-size: 14.5px; line-height: 1.62; white-space: pre-wrap; word-break: break-word; }
+  .pc-text b { color: #fff; }
+  .pc-text .hashtag { color: #60a5fa; }
+  .pc-text .mention { color: #c084fc; }
+
+  .pc-meta { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .pc-chars { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted-2); }
+  .pc-chars.warn { color: #fbbf24; }
+  .pc-chars.over { color: var(--pink); }
+  .pc-tag { font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 20px;
+    background: var(--accent-soft); color: #d8b4fe; }
+
+  /* carousel / image strip */
+  .strip { display: grid; gap: 8px; margin-top: 12px; }
+  .strip.g2 { grid-template-columns: 1fr 1fr; }
+  .strip.g3 { grid-template-columns: repeat(3,1fr); }
+  .strip-item {
+    border-radius: 10px; padding: 14px; min-height: 92px; display: flex; flex-direction: column;
+    justify-content: space-between; font-size: 12.5px; line-height: 1.45;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .strip-item .si-num { font-size: 10px; font-weight: 800; opacity: .65; letter-spacing: 1px; }
+  .strip-item .si-txt { font-weight: 500; }
+
+  .bg-swatch { display: flex; align-items: center; gap: 10px; margin-top: 12px;
+    padding: 10px 12px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); }
+  .bg-swatch .sw { width: 34px; height: 34px; border-radius: 7px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.12); }
+  .bg-swatch .sw-info { font-size: 11.5px; }
+  .bg-swatch .sw-name { font-weight: 700; }
+  .bg-swatch .sw-hex { color: var(--muted-2); font-family: var(--mono); }
+
+  .steps { margin-top: 12px; display: flex; flex-direction: column; gap: 9px; }
+  .step { display: flex; gap: 10px; align-items: flex-start; }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    background: var(--accent-grad); display: grid; place-items: center;
+    font-size: 11px; font-weight: 800; color: #fff; }
+  .step-txt { font-size: 13px; line-height: 1.5; color: #e4e4e7; }
+
+  .foot-note { text-align: center; font-size: 11px; color: var(--muted-2); padding: 8px; }
+
+  .hidden { display: none !important; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--surface-3); border: 1px solid var(--violet); color: #fff;
+    padding: 11px 18px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6); opacity: 0; transition: all .25s; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- Tabs / views ---------- */
+  .tab { cursor: pointer; }
+  .tab:hover:not(.active) { color: var(--fg); }
+
+  .view { display: none; flex: 1; min-height: 0; }
+  .view.active { display: flex; }
+
+  /* Center-stage views (Library / Brand) */
+  .center-view { flex: 1; overflow-y: auto; padding: 30px 34px 60px; }
+  .cv-head { max-width: 980px; margin: 0 auto 22px; }
+  .cv-title { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+  .cv-sub { color: var(--muted-2); font-size: 13.5px; margin-top: 5px; }
+  .cv-inner { max-width: 980px; margin: 0 auto; }
+
+  /* Library */
+  .lib-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .lib-toolbar .field { width: auto; flex: 1; min-width: 200px; padding: 10px 13px; }
+  .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px,1fr)); gap: 14px; }
+  .lib-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 15px 16px; display: flex; flex-direction: column; gap: 10px; transition: border-color .15s;
+  }
+  .lib-card:hover { border-color: rgba(139,92,246,0.5); }
+  .lib-card .lc-type { font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: #d8b4fe; }
+  .lib-card .lc-text { font-size: 13.5px; line-height: 1.5; color: #e4e4e7; white-space: pre-wrap; word-break: break-word; flex: 1; }
+  .lib-card .lc-actions { display: flex; gap: 7px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .lc-btn {
+    flex: 1; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--muted);
+    background: var(--surface-2); border: 1px solid var(--border); transition: all .15s;
+  }
+  .lc-btn:hover { color: #fff; border-color: rgba(139,92,246,0.5); }
+  .lc-btn.danger:hover { color: var(--pink); border-color: rgba(236,72,153,0.5); }
+  .lc-edit { width: 100%; min-height: 70px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; color: var(--fg); padding: 10px; font-size: 13px; line-height: 1.5; resize: vertical; }
+  .section-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  .section-card .sc-title { font-size: 13px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted-2); margin-bottom: 14px; }
+
+  /* Hooks manager (library) */
+  .hook-list { display: flex; flex-direction: column; gap: 8px; }
+  .hook-row { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; }
+  .hook-row .hr-text { flex: 1; font-size: 13px; }
+  .hook-row .hr-x { color: var(--muted-2); padding: 4px; }
+  .hook-row .hr-x:hover { color: var(--pink); }
+  .hook-add { display: flex; gap: 8px; margin-top: 12px; }
+  .hook-add .field { flex: 1; padding: 10px 12px; }
+
+  /* Brand settings */
+  .brand-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .brand-form .full { grid-column: 1 / -1; }
+  .brand-form .field { padding: 11px 13px; }
+  .grad-presets { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 10px; }
+  .grad-swatch { width: 46px; height: 34px; border-radius: 9px; cursor: pointer; border: 2px solid transparent; transition: all .12s; }
+  .grad-swatch:hover { transform: translateY(-2px); }
+  .grad-swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(139,92,246,0.6); }
+  .grad-custom { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+  .grad-custom label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
+  .grad-custom input[type=color] { width: 42px; height: 34px; border: none; background: none; border-radius: 8px; cursor: pointer; }
+  .brand-preview {
+    margin-top: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px; display: flex; align-items: center; gap: 14px;
+  }
+  .brand-preview .bp-avatar { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 18px; color: #fff; }
+  .brand-preview .bp-name { font-weight: 700; font-size: 16px; }
+  .brand-preview .bp-handle { color: var(--muted-2); font-size: 13px; }
+
+  /* Modal */
+  .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 60; }
+  .modal-back.show { display: flex; }
+  .modal {
+    width: 420px; max-width: 92vw; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px; box-shadow: 0 24px 70px rgba(0,0,0,0.7); animation: rise .25s ease both;
+  }
+  .modal h3 { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+  .modal p { font-size: 12.5px; color: var(--muted-2); margin-bottom: 16px; }
+  .modal .field { padding: 11px 13px; margin-bottom: 12px; }
+  .modal-actions { display: flex; gap: 9px; margin-top: 6px; }
+  .modal-actions button { flex: 1; padding: 11px; border-radius: 9px; font-weight: 600; font-size: 13px; }
+  .btn-ghost { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: #fff; }
+  .btn-primary { background: var(--accent-grad); color: #fff; }
+
+  /* inline edit card */
+  .lib-card.editing { background: var(--surface-2); }
+
+  /* ---------- Planner / calendar ---------- */
+  .planner-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .planner-bar .lc-btn { flex: 0 0 auto; padding: 9px 14px; width: auto; }
+  .cal-month { font-size: 16px; font-weight: 800; letter-spacing: -0.2px; min-width: 160px; text-align: center; }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7,1fr); gap: 8px; margin-bottom: 8px; }
+  .cal-weekdays span { text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: var(--muted-2); text-transform: uppercase; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 8px; }
+  .cal-cell {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    min-height: 92px; padding: 9px; display: flex; flex-direction: column; gap: 5px;
+    cursor: pointer; transition: border-color .15s, background .15s; position: relative;
+  }
+  .cal-cell:hover { border-color: rgba(139,92,246,0.55); }
+  .cal-cell.muted { opacity: 0.38; }
+  .cal-cell.today { border-color: rgba(236,72,153,0.6); box-shadow: inset 0 0 0 1px rgba(236,72,153,0.4); }
+  .cal-cell .cd-num { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .cal-cell.today .cd-num { color: #fff; }
+  .cal-pill {
+    font-size: 11px; line-height: 1.3; padding: 3px 7px; border-radius: 6px; color: #fff;
+    background: var(--accent-grad); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cal-more { font-size: 10.5px; color: var(--muted-2); font-weight: 600; }
+  .day-panel { margin-top: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; display: none; }
+  .day-panel.show { display: block; }
+  .dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .dp-head span { font-size: 15px; font-weight: 800; }
+  .dp-head .lc-btn { width: auto; padding: 8px 14px; flex: 0 0 auto; }
+  .dp-list { display: flex; flex-direction: column; gap: 10px; }
+  .dp-empty { color: var(--muted-2); font-size: 13px; padding: 8px 0; }
+  .dp-item { display: flex; gap: 12px; align-items: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .dp-item .dp-time { font-size: 12px; font-weight: 800; color: #d8b4fe; font-variant-numeric: tabular-nums; min-width: 48px; }
+  .dp-item .dp-body { flex: 1; }
+  .dp-item .dp-type { font-size: 10.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: var(--pink); }
+  .dp-item .dp-text { font-size: 13px; line-height: 1.5; color: #e4e4e7; white-space: pre-wrap; word-break: break-word; margin-top: 3px; }
+  .dp-item .dp-x { color: var(--muted-2); padding: 4px; flex-shrink: 0; }
+  .dp-item .dp-x:hover { color: var(--pink); }
+  .dp-pick { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .dp-pick select { flex: 1; min-width: 200px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; color: var(--fg); padding: 9px 11px; font-family: inherit; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-logo">OH</div>
+      <div>
+        <div class="brand-name">OneHub</div>
+        <div class="brand-sub">Facebook Post Studio</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tab-studio" data-view="studio">Post Studio</button>
+      <button class="tab" id="tab-library" data-view="library">Content Library</button>
+      <button class="tab" id="tab-planner" data-view="planner">Planner</button>
+      <button class="tab" id="tab-brand" data-view="brand">Brand Settings</button>
+    </div>
+  </div>
+
+  <div class="view active" id="view-studio">
+  <div class="workspace">
+    <!-- LEFT PANEL -->
+    <div class="panel-left">
+      <!-- Mode -->
+      <div class="mode-switch">
+        <button class="mode-btn active" id="mode-create" data-mode="create">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          CREATE
+        </button>
+        <button class="mode-btn" id="mode-repurp" data-mode="repurpose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h13l-3-3M21 17H8l3 3"/></svg>
+          REPURPOSE
+        </button>
+      </div>
+
+      <!-- CREATE MODE -->
+      <div id="panel-create">
+        <div class="section">
+          <div class="label">Niche / Topic or Description</div>
+          <div class="field-wrap">
+            <textarea id="topic" class="field" rows="2" placeholder="e.g. AI agents replacing busywork" style="padding-right:60px"></textarea>
+            <span class="char-count" id="topic-count">0 chars</span>
+          </div>
+          <div class="helper">Enter a topic, niche, audience, offer, product, or short description.</div>
+        </div>
+
+        <div class="section">
+          <div class="label">Viral AI Hook Library <span class="hint-ic" style="font-size:10px">(click to load)</span></div>
+          <div class="chip-row" id="hook-library"></div>
+        </div>
+
+        <div class="section">
+          <div class="slider-head">
+            <div class="label" style="margin:0">Variation Strength</div>
+            <span class="slider-badge" id="var-badge">51% · Fresh Angle</span>
+          </div>
+          <input type="range" id="variation" min="0" max="100" value="51" />
+          <div class="slider-scale"><span>Strict Formula</span><span>Balanced</span><span>Freestyle ⚡</span></div>
+        </div>
+      </div>
+
+      <!-- REPURPOSE MODE -->
+      <div id="panel-repurp" class="hidden">
+        <div class="section">
+          <div class="label">Source Input</div>
+          <div class="dropzone" id="dropzone">
+            <svg class="dz-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <div class="dz-title">Drop file or click to upload</div>
+            <div class="dz-sub">CSV (scraped posts) or screenshot PNG/JPG</div>
+            <input type="file" id="file-input" accept=".csv,image/*" class="hidden" />
+          </div>
+          <div id="file-list"></div>
+        </div>
+
+        <div class="section">
+          <div class="label">…or Paste Text / Transcript / URL</div>
+          <textarea id="repurpose-text" class="field" rows="4" placeholder="Paste your article, blog, video transcript, or a URL you want to repurpose into Facebook posts."></textarea>
+          <div class="helper">We'll extract the core angles and spin them into each post type.</div>
+        </div>
+      </div>
+
+      <!-- POST TYPES -->
+      <div class="section">
+        <div class="label">Post Types <span id="type-count-label" style="margin-left:auto;font-size:10px;color:var(--muted-2)"></span></div>
+        <div class="type-grid" id="type-grid"></div>
+      </div>
+
+      <!-- CTA -->
+      <button class="cta" id="generate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.4L4.6 10l5.5 1.9L12 17l1.9-5.1L19.4 10l-5.5-1.6L12 3ZM19 15l-.8 2.2L16 18l2.2.8L19 21l.8-2.2L22 18l-2.2-.8L19 15Z"/></svg>
+        GENERATE <span id="gen-count">5</span> POSTS
+      </button>
+      <div class="cta-sub">
+        <button id="hook-only">Hook / Single Only</button>
+        <button id="all-types">Select All Types</button>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="panel-right dotgrid">
+      <div class="preview-head">
+        <div class="avatar" id="ph-avatar">RJ</div>
+        <div>
+          <div class="ph-name" id="ph-name">Ryan Jordan <svg class="verified" id="ph-verified-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.1 3.1-.4.6 3.1 2.9 1.3-1 3 1 3-2.9 1.3-.6 3.1-3.1-.4L12 22l-2.4-2.1-3.1.4-.6-3.1L3 15.9l1-3-1-3 2.9-1.3.6-3.1 3.1.4L12 2Zm-1.2 13.5 4.8-4.8-1.4-1.4-3.4 3.4-1.6-1.6L7.2 12l3.6 3.5Z"/></svg></div>
+          <div class="ph-meta"><span id="stamp">2026-07-14 08:01 PM</span> · <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></div>
+        </div>
+        <div class="ph-tools">
+          <button title="Save" id="ph-save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
+          <button title="Schedule" id="ph-schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
+          <button title="Edit" id="ph-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+          <button title="Delete" id="ph-delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        </div>
+      </div>
+      <div class="preview-scroll" id="preview">
+        <div class="empty" id="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.9 5.4L19.4 10l-5.5 1.9L12 17l-1.9-5.1L4.6 10l5.5-1.6L12 3Z"/><path d="M19 15l-.8 2.2L16 18l2.2.8L19 21l.8-2.2L22 18l-2.2-.8L19 15Z"/></svg>
+          <div class="e-title">Nothing generated yet</div>
+          <div class="e-sub">Pick a topic (or load a viral hook from the library), choose your post types, and hit Generate.</div>
+        </div>
+        <div class="preview-inner hidden" id="results"></div>
+        <div class="foot-note hidden" id="foot-note">Generated client-side · mock copy — wire to your model API for production</div>
+      </div>
+    </div>
+  </div>
+  </div><!-- /view-studio -->
+
+  <!-- ===================== CONTENT LIBRARY VIEW ===================== -->
+  <div class="view" id="view-library">
+    <div class="center-view">
+      <div class="cv-head">
+        <div class="cv-title">Content Library</div>
+        <div class="cv-sub">Saved posts from every generation. Edit, copy, or post them again. Your viral hook library lives here too.</div>
+      </div>
+      <div class="cv-inner">
+        <div class="section-card">
+          <div class="sc-title">Viral Hook Library</div>
+          <div class="hook-list" id="hook-list"></div>
+          <div class="hook-add">
+            <input class="field" id="hook-input" placeholder="Add a new viral hook…" />
+            <button class="cta" style="width:auto;margin:0;padding:11px 18px" id="hook-add-btn">Add</button>
+          </div>
+        </div>
+        <div class="lib-toolbar">
+          <input class="field" id="lib-search" placeholder="Search saved posts…" />
+          <button class="lc-btn" id="lib-export" style="flex:0 0 auto;padding:10px 16px">Export JSON</button>
+          <button class="lc-btn danger" id="lib-clear" style="flex:0 0 auto;padding:10px 16px">Clear All</button>
+        </div>
+        <div class="lib-grid" id="lib-grid"></div>
+        <div class="empty hidden" id="lib-empty" style="height:auto;padding:50px">
+          <div class="e-title">No saved posts yet</div>
+          <div class="e-sub">Generate posts in the Studio, then hit Save on any card to keep it here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PLANNER / CALENDAR VIEW ===================== -->
+  <div class="view" id="view-planner">
+    <div class="center-view">
+      <div class="cv-head">
+        <div class="cv-title">Content Planner</div>
+        <div class="cv-sub">Plan your Facebook posting cadence. Schedule saved library posts onto days, see what's queued, and jump back to the Studio to create more.</div>
+      </div>
+      <div class="cv-inner">
+        <div class="planner-bar">
+          <button class="lc-btn" id="cal-prev">‹ Prev</button>
+          <div class="cal-month" id="cal-month">July 2026</div>
+          <button class="lc-btn" id="cal-next">Next ›</button>
+          <button class="lc-btn" id="cal-today" style="margin-left:auto">Today</button>
+        </div>
+        <div class="cal-weekdays">
+          <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="day-panel" id="day-panel">
+          <div class="dp-head"><span id="dp-date">Select a day</span><button class="lc-btn" id="dp-close">Close</button></div>
+          <div class="dp-list" id="dp-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== BRAND SETTINGS VIEW ===================== -->
+  <div class="view" id="view-brand">
+    <div class="center-view">
+      <div class="cv-head">
+        <div class="cv-title">Brand Settings</div>
+        <div class="cv-sub">Set your creator identity. It updates the Studio header and every generated post's byline live.</div>
+      </div>
+      <div class="cv-inner">
+        <div class="section-card">
+          <div class="sc-title">Creator Profile</div>
+          <div class="brand-form">
+            <div>
+              <div class="label">Display Name</div>
+              <input class="field" id="b-name" placeholder="Ryan Jordan" />
+            </div>
+            <div>
+              <div class="label">Handle</div>
+              <input class="field" id="b-handle" placeholder="@ryanjordan" />
+            </div>
+            <div>
+              <div class="label">Avatar Initials</div>
+              <input class="field" id="b-initials" placeholder="RJ" maxlength="3" />
+            </div>
+            <div>
+              <div class="label">Verified</div>
+              <input class="field" id="b-verified" placeholder="yes / no" />
+            </div>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="sc-title">Accent Gradient</div>
+          <div class="grad-presets" id="grad-presets"></div>
+          <div class="grad-custom">
+            <label>From <input type="color" id="g-from" value="#8b5cf6" /></label>
+            <label>To <input type="color" id="g-to" value="#ec4899" /></label>
+            <button class="lc-btn" id="g-apply" style="flex:0 0 auto;padding:9px 16px">Apply Custom</button>
+          </div>
+          <div class="brand-preview" id="brand-preview">
+            <div class="bp-avatar" id="bp-avatar">RJ</div>
+            <div>
+              <div class="bp-name" id="bp-name">Ryan Jordan <span id="bp-verified"></span></div>
+              <div class="bp-handle" id="bp-handle">@ryanjordan</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Schedule modal -->
+  <div class="modal-back" id="modal-back">
+    <div class="modal">
+      <h3>Schedule this post</h3>
+      <p>Pick a date and time. Saved to your library with a scheduled flag.</p>
+      <input class="field" id="sch-date" type="date" />
+      <input class="field" id="sch-time" type="time" value="09:00" />
+      <div class="modal-actions">
+        <button class="btn-ghost" id="sch-cancel">Cancel</button>
+        <button class="btn-primary" id="sch-confirm">Schedule</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+/* ===================== Post type registry ===================== */
+const TYPES = [
+  { id:"hook",    name:"Hook Post",       sub:"Single text post",   icon:"lightning", default:true,  char:280 },
+  { id:"125",     name:"125-Char Post",   sub:"Colored bg + text",  icon:"badge",     default:true,  char:125 },
+  { id:"carousel",name:"Carousel",        sub:"Multi-image set",    icon:"grid",      default:true,  char:220 },
+  { id:"single",  name:"Single Image",    sub:"Photo + caption",    icon:"image",     default:true,  char:240 },
+  { id:"short",   name:"Short-Form",      sub:"Reel / script",      icon:"film",      default:true,  char:200 },
+  { id:"question",name:"Question Post",   sub:"Poll-style prompt",  icon:"help",      default:false, char:200 },
+  { id:"listicle",name:"Listicle",        sub:"Numbered thread",    icon:"list",      default:false, char:400 },
+  { id:"caption", name:"Caption",          sub:"Image caption",      icon:"quote",     default:false, char:300 },
+  { id:"longform",name:"Long-Form",       sub:"Story / essay",      icon:"doc",       default:false, char:63206 },
+];
+
+const ICONS = {
+  lightning:'<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/>',
+  badge:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h6M7 14h4"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+  film:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  quote:'<path d="M7 7H4v6h3l-2 4M17 7h-3v6h3l-2 4"/>',
+  doc:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h8M8 9h2"/>'
+};
+
+/* ===================== Hook library ===================== */
+const HOOKS = [
+  "AI agents that do your busywork while you sleep",
+  "The app that replaced my $2k/month VA",
+  "Why everyone's quiet-quitting their SaaS stack",
+  "AI just made junior devs 10x overnight",
+  "The viral AI tool nobody's talking about",
+  "I let an AI run my business for 24 hours",
+  "This prompt turned me into a content machine",
+  "The AI app that writes, designs & ships",
+  "Stop paying for 9 subscriptions — one app does it all",
+  "Autonomous builders are the new startup founders"
+];
+
+/* ===================== Helpers ===================== */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const rnd = arr => arr[Math.floor(Math.random()*arr.length)];
+const pick = (arr,n) => [...arr].sort(()=>Math.random()-0.5).slice(0,n);
+const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
+const variation = () => +$("#variation").value;
+
+function activeTypes(){ return TYPES.filter(t=>state.types.has(t.id)); }
+function topicText(){
+  if(state.mode==="repurpose"){
+    const t = $("#repurpose-text").value.trim();
+    if(t) return t;
+    if(state.sourceText) return state.sourceText;
+    return "";
+  }
+  return $("#topic").value.trim();
+}
+
+/* ===================== Build UI ===================== */
+function buildHookLibrary(){
+  const wrap = $("#hook-library");
+  HOOKS.forEach(h=>{
+    const c = document.createElement("button");
+    c.className="chip"; c.textContent=h.length>26?h.slice(0,24)+"…":h;
+    c.title=h;
+    c.onclick=()=>{
+      $("#topic").value=h; updateTopicCount();
+      $$(".chip").forEach(x=>x.classList.remove("active")); c.classList.add("active");
+    };
+    wrap.appendChild(c);
+  });
+}
+function buildTypeGrid(){
+  const g = $("#type-grid");
+  TYPES.forEach(t=>{
+    const b=document.createElement("button");
+    b.className="type-chip"+(t.default?" active":"");
+    b.dataset.id=t.id;
+    b.innerHTML=`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${ICONS[t.icon]}</svg><span>${t.name}</span><span class="cnt">${t.char>=63206?"∞":t.char}</span>`;
+    b.onclick=()=>{ b.classList.toggle("active"); state.types.has(t.id)?state.types.delete(t.id):state.types.add(t.id); updateTypeCount(); };
+    g.appendChild(b);
+  });
+  TYPES.filter(t=>t.default).forEach(t=>state.types.add(t.id));
+  updateTypeCount();
+}
+
+/* ===================== Generators ===================== */
+// Each generator: (ctx) -> { body, extra?, bg? }  body = plain text; extra = html blocks
+function genHook(t){
+  const v=variation();
+  const openers = v>66
+    ? ["What if I told you","Plot twist:","Nobody is ready for this —","The future just leaked:","Unpopular opinion:"]
+    : v>33
+    ? ["Stop scrolling.","This changes everything.","I was today years old when I realized","The hard truth about","Here's what they won't tell you about"]
+    : ["Why","How","The real reason","A simple framework for","The secret to"];
+  const angles = [
+    `${t} isn't a feature. It's a new way of working.`,
+    `${t} just made the old playbook obsolete.`,
+    `${t} is what separates the 1% from everyone else.`,
+    `Most people sleep on ${t}. The smart ones are cashing in.`,
+    `${t} is the leverage you've been missing.`
+  ];
+  const close = ["Save this.","Follow for more.","Try it today.","Don't say I didn't warn you.","Tag someone who needs this."];
+  return { body: `${rnd(openers)} ${rnd(angles)} ${rnd(close)}` };
+}
+function gen125(t){
+  const lines = [
+    `AI didn't replace the work.\nIt replaced the excuse.`,
+    `Your competitor\njust shipped with AI.\nYou're still planning.`,
+    `One app.\nEvery channel.\nZero busywork.`,
+    `Stop paying for\nten tools.\nOne does it all.`,
+    `The 9-to-5 died.\nAutonomous builders\nkilled it.`
+  ];
+  const bgs=[
+    {name:"Violet Rush",g:"linear-gradient(135deg,#6d28d9,#a855f7)"},
+    {name:"Hot Magenta",g:"linear-gradient(135deg,#be185d,#f43f5e)"},
+    {name:"Neon Bloom",g:"linear-gradient(135deg,#7c3aed,#ec4899)"},
+    {name:"Electric Plum",g:"linear-gradient(135deg,#4c1d95,#db2777)"},
+    {name:"Sunset Voltage",g:"linear-gradient(135deg,#9333ea,#fb7185)"}
+  ];
+  const bg=rnd(bgs); const body=rnd(lines);
+  return { body, bg, bgName:bg.name };
+}
+function genCarousel(t){
+  const themes=[
+    ["The Problem","People drown in busywork nobody audits.","You can't scale chaos."],
+    ["The Shift","AI agents now handle the 80% that drains you.","Autonomy > activity."],
+    ["The Stack","One app: write, design, ship.","Kill the 9 subscriptions."],
+    ["The Win","10x output, same hours.","Founders run on leverage."],
+    ["The Move","Start with one workflow.","Then let it compound."]
+  ];
+  const set=pick(themes,3).map((s,i)=>({n:i+1,t:s[0],d:s[1]}));
+  return { body:"Swipe → the ${t} playbook nobody's running yet.", carousel:set };
+}
+function genSingle(t){
+  const caps=[
+    `Shot this with ${t}. The output honestly scared me a little.`,
+    `One app, one afternoon, a finished product. That's the new normal.`,
+    `Behind every viral post now: a quiet AI doing the heavy lifting.`,
+    `Tried ${t} on a whim. Three hours later I'd shipped a week of work.`,
+    `The before/after on my workflow is not subtle.`
+  ];
+  return { body:rnd(caps)+"\n\n📸 [attach your hero image]", img:true };
+}
+function genShort(t){
+  const beats=[
+    ["Hook (0-2s)","\"I replaced my whole team's busywork with one app.\""],
+    ["Problem (2-6s)","Show the chaos: 9 tabs, 9 subscriptions, 0 output."],
+    ["Reveal (6-12s)","Cut to ${t} doing it autonomously in one take."],
+    ["Proof (12-18s)","Quick montage: post, design, ship — in one sitting."],
+    ["CTA (18-25s)","\"Link in bio. Your 9-to-5 just got an upgrade.\""]
+  ];
+  const set=pick(beats,4);
+  return { body:"🎬 25-sec Reel script — "+t, script:set };
+}
+function genQuestion(t){
+  const qs=[
+    `Hot take: will ${t} replace your role — or just the parts you hate?`,
+    `Be honest — would you trust an AI to run your content for a week?`,
+    `What's the ONE task you'd hand to an AI agent tomorrow?`,
+    `Agree or disagree: solo founders now out-ship small teams thanks to AI.`,
+    `If you could automate just ONE thing this month, what would it be?`
+  ];
+  return { body:rnd(qs)+"\n\n👇 Drop your answer below." };
+}
+function genListicle(t){
+  const items=[
+    `Define the outcome, not the task.`,
+    `Let the agent draft — you edit, don't author.`,
+    `Batch your prompts; run them on a schedule.`,
+    `Repurpose one idea into 5 formats automatically.`,
+    `Review weekly; kill what doesn't convert.`
+  ];
+  const set=pick(items, Math.min(5,3+Math.round(variation()/40)));
+  return { body:`5 ways ${t} 10x's your output:\n`+set.map((s,i)=>`${i+1}. ${s}`).join("\n") };
+}
+function genCaption(t){
+  const caps=[
+    `When the tool works faster than your coffee brews. ☕⚡`,
+    `Built in an afternoon. Live by sunset.`,
+    `Quietly shipping while everyone debates the hype.`,
+    `The app that turns a blank page into a finished thing.`,
+    `Proof that leverage beats labor.`
+  ];
+  return { body:rnd(caps)+" #AI #buildinpublic #"+t.split(" ")[0] };
+}
+function genLongform(t){
+  const paras=[
+    `We've been sold the lie that more tools mean more output. They don't. They mean more tabs, more logins, more mental overhead — and the same eight hours.`,
+    `${cap(t)} flips that. Instead of juggling a stack, you describe an outcome and let an autonomous agent handle the execution. The human stays in the loop where it matters: taste, judgment, the final yes.`,
+    `The teams winning right now aren't the ones with the biggest budgets. They're the ones who removed the boring 80% and pointed all their energy at the 20% that actually moves the number.`,
+    `Start small. Pick one recurring workflow — your weekly post, your onboarding email, your product shot. Hand it to the agent. Watch what comes back. Then scale the trust, not the headcount.`,
+    `The future of work isn't human vs. machine. It's human directing machine, at a speed and scale that used to require a whole department.`
+  ];
+  return { body:paras.join("\n\n") };
+}
+
+const GEN = { hook:genHook, "125":gen125, carousel:genCarousel, single:genSingle, short:genShort, question:genQuestion, listicle:genListicle, caption:genCaption, longform:genLongform };
+
+/* ===================== Render ===================== */
+function renderCard(type, ctx){
+  const res = GEN[type.id](ctx);
+  const bodyText = res.body.replace(/\$\{t\}/g, ctx.topic);
+  const typeMeta = TYPES.find(t=>t.id===type.id);
+  let html = "";
+
+  // colored bg post special
+  if(type.id==="125"){
+    const lines = bodyText.split("\n");
+    html += `<div class="bg-swatch"><div class="sw" style="background:${res.bg}"></div>
+      <div class="sw-info"><div class="sw-name">${res.bgName}</div><div class="sw-hex">colored background · 125-char limit</div></div></div>
+      <div style="margin-top:12px;padding:18px;border-radius:10px;background:${res.bg};font-weight:800;font-size:15px;line-height:1.45;text-align:center;color:#fff;letter-spacing:.2px" data-edit contenteditable="true">${lines.map(l=>escapeHtml(l)||"&nbsp;").join("<br>")}</div>`;
+  }
+  // carousel
+  else if(res.carousel){
+    html += `<div class="strip g3">`+res.carousel.map(s=>`<div class="strip-item" style="background:linear-gradient(135deg,#1c1430,#2a1838)"><div class="si-num">SLIDE ${s.n}</div><div class="si-txt" data-edit contenteditable="true">${escapeHtml(s.t)}<br><span style="opacity:.7;font-weight:400">${escapeHtml(s.d)}</span></div></div>`).join("")+`</div>`;
+  }
+  // short-form script
+  else if(res.script){
+    html += `<div class="steps">`+res.script.map(s=>`<div class="step"><div class="step-num">▶</div><div class="step-txt" data-edit contenteditable="true"><b>${escapeHtml(s[0])}</b><br>${escapeHtml(s[1].replace(/\$\{t\}/g,ctx.topic))}</div></div>`).join("")+`</div>`;
+  }
+  // image placeholder note
+  else if(res.img){
+    html += `<div class="bg-swatch" style="margin-top:12px"><div class="sw" style="background:linear-gradient(135deg,#312e81,#831843)"></div><div class="sw-info"><div class="sw-name">Hero image slot</div><div class="sw-hex">attach your photo in Facebook</div></div></div>
+      <div class="pc-text" data-edit contenteditable="true" style="margin-top:12px">${formatText(bodyText)}</div>`;
+  }
+  else {
+    html += `<div class="pc-text" data-edit contenteditable="true">${formatText(bodyText)}</div>`;
+  }
+
+  const chars = bodyText.length;
+  const over = chars > typeMeta.char;
+  const warn = !over && chars > typeMeta.char*0.9;
+  const charClass = over ? "over" : warn ? "warn" : "";
+  const charLabel = typeMeta.char>=63206 ? `${chars} chars` : `${chars}/${typeMeta.char}`;
+
+  return `<div class="post-card" data-type="${type.id}" data-tname="${type.name}">
+    <div class="pc-head">
+      <div class="pc-type-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${ICONS[type.icon]}</svg></div>
+      <div><div class="pc-type">${type.name}</div><div class="pc-type-sub">${type.sub}</div></div>
+      <button class="pc-copy" data-act="copy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+      <button class="pc-copy" data-act="save" style="margin-left:6px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        Save
+      </button>
+    </div>
+    <div class="pc-body">
+      ${html}
+      <div class="pc-meta">
+        <span class="pc-chars ${charClass}">${charLabel}</span>
+        ${type.id==="125"?'<span class="pc-tag">Visual post</span>':type.id==="carousel"?'<span class="pc-tag">5 slides</span>':type.id==="short"?'<span class="pc-tag">Reel</span>':""}
+      </div>
+    </div>
+  </div>`;
+}
+
+// Collect live (edited) text from a rendered card
+function cardText(card){
+  const edits = Array.from(card.querySelectorAll("[data-edit]"));
+  return edits.map(e=>e.innerText.trim()).join("\n\n").replace(/\n{3,}/g,"\n\n").trim();
+}
+function collectCards(){
+  return Array.from($("#results").querySelectorAll(".post-card")).map(c=>({
+    type: c.dataset.tname, text: cardText(c)
+  })).filter(c=>c.text);
+}
+
+function formatText(t){
+  return escapeHtml(t)
+    .replace(/(#[\w]+)/g,'<span class="hashtag">$1</span>')
+    .replace(/(@[\\w]+)/g,'<span class="mention">$1</span>');
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ===================== Generate ===================== */
+function generate(){
+  const types = activeTypes();
+  if(!types.length){ toast("Select at least one post type"); return; }
+  const raw = topicText();
+  if(!raw){ toast(state.mode==="repurpose"?"Add source text, a file, or a URL":"Enter a topic or pick a hook"); return; }
+  const ctx = { topic: raw.split(/[\n.]+/)[0].slice(0,60) || raw.slice(0,60) };
+  const results = $("#results");
+  results.innerHTML = types.map(t=>renderCard(t,ctx)).join("");
+  $("#empty-state").classList.add("hidden");
+  results.classList.remove("hidden");
+  $("#foot-note").classList.remove("hidden");
+  results.scrollTop = 0;
+  // wire copy + save on each post card
+  $$("#results .post-card").forEach(card=>{
+    card.querySelectorAll(".pc-copy").forEach(btn=>{
+      btn.onclick=()=>{
+        const txt = cardText(card);
+        const act = btn.dataset.act;
+        if(act==="copy"){
+          navigator.clipboard.writeText(txt).then(()=>{
+            btn.classList.add("done");
+            const old=btn.innerHTML; btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> Copied';
+            setTimeout(()=>{btn.classList.remove("done");btn.innerHTML=old;},1400);
+          });
+        } else if(act==="save"){
+          saveToLibrary(card.dataset.tname, txt);
+          toast("Saved to Content Library");
+        }
+      };
+    });
+  });
+}
+
+/* ===================== CSV parse ===================== */
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length) return [];
+  // Find the header row that actually contains a text-ish column (some CSVs have a title prefix line)
+  let hRow=0;
+  for(let r=0;r<Math.min(lines.length,3);r++){
+    const h=lines[r].split(",");
+    if(h.some(c=>/(sharedpost\/text|post\s*text|post_text|title)/i.test(c.trim()))){ hRow=r; break; }
+  }
+  const header=lines[hRow].split(",").map(h=>h.trim());
+  const idx=header.findIndex(h=>/(sharedpost\/text|post\s*text|post_text|"post text")/i.test(h));
+  const titleIdx=header.findIndex(h=>/title/i.test(h));
+  const rows=[];
+  for(let i=1;i<lines.length;i++){
+    const cols=lines[i].split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    const val = idx>=0 ? (cols[idx]||"").replace(/^"|"$/g,"") : "";
+    const ttl = titleIdx>=0 ? (cols[titleIdx]||"").replace(/^"|"$/g,"") : "";
+    const text = (val||ttl).trim();
+    if(text && text.length>15) rows.push(text);
+  }
+  return rows;
+}
+function loadCSV(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const rows=parseCSV(e.target.result);
+    if(!rows.length){ toast("No 'Post text' rows found"); return; }
+    state.sourceText = rows.slice(0,6).join("\n\n");
+    // switch to repurpose mode automatically
+    setMode("repurpose");
+    $("#repurpose-text").value = state.sourceText.slice(0,1500);
+    addFilePill(file.name, rows.length+" posts parsed", "csv");
+    toast(`Parsed ${rows.length} posts from ${file.name}`);
+  };
+  reader.readAsText(file);
+}
+function handleImage(file){
+  addFilePill(file.name, "screenshot ready", "img");
+  // For a real build we'd OCR here; for the prototype we note it as a visual source.
+  toast("Screenshot attached — add the caption text below to repurpose it");
+}
+
+/* ===================== File UI ===================== */
+function addFilePill(name, meta, kind){
+  const list=$("#file-list");
+  const ic = kind==="csv"
+    ? '<svg class="fp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>'
+    : '<svg class="fp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>';
+  const pill=document.createElement("div");
+  pill.className="file-pill";
+  pill.innerHTML=`${ic}<span class="fp-name">${escapeHtml(name)}</span><span class="fp-meta">${meta}</span><button class="fp-x"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
+  pill.querySelector(".fp-x").onclick=()=>pill.remove();
+  list.appendChild(pill);
+}
+
+/* ===================== State + wiring ===================== */
+const LS = {
+  lib:    "oh_fb_library",
+  sched:  "oh_fb_scheduled",
+  hooks:  "oh_fb_hooks",
+  brand:  "oh_fb_brand"
+};
+const load = (k,d)=>{ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } };
+const save = (k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+
+const state = { mode:"create", types:new Set(), sourceText:"",
+  library: load(LS.lib, []),
+  scheduled: load(LS.sched, []),
+  hooks: load(LS.hooks, null),
+  brand: load(LS.brand, null) };
+
+function setMode(m){
+  state.mode=m;
+  $("#mode-create").classList.toggle("active", m==="create");
+  $("#mode-repurp").classList.toggle("active", m==="repurpose");
+  $("#panel-create").classList.toggle("hidden", m!=="create");
+  $("#panel-repurp").classList.toggle("hidden", m!=="repurpose");
+  $("#gen-count").textContent = activeTypes().length;
+}
+function updateTypeCount(){
+  const n=activeTypes().length;
+  $("#gen-count").textContent=n;
+  $("#type-count-label").textContent = `${n} selected`;
+}
+function updateTopicCount(){
+  const v=$("#topic").value;
+  $("#topic-count").textContent = `${v.length} chars`;
+}
+
+/* ---------- Library ---------- */
+function saveToLibrary(type, text){
+  if(!text || !text.trim()) return;
+  state.library.unshift({ id: Date.now()+"_"+Math.random().toString(36).slice(2,7), type, text: text.trim(), ts: Date.now() });
+  save(LS.lib, state.library);
+  renderLibrary();
+}
+function renderLibrary(){
+  const grid=$("#lib-grid"), empty=$("#lib-empty");
+  const q=$("#lib-search").value.trim().toLowerCase();
+  const items=state.library.filter(p=>!q || p.text.toLowerCase().includes(q) || p.type.toLowerCase().includes(q));
+  grid.innerHTML = items.map(p=>`
+    <div class="lib-card" data-id="${p.id}">
+      <div class="lc-type">${escapeHtml(p.type)}</div>
+      <div class="lc-text">${escapeHtml(p.text)}</div>
+      <div class="lc-actions">
+        <button class="lc-btn" data-act="copy">Copy</button>
+        <button class="lc-btn" data-act="edit">Edit</button>
+        <button class="lc-btn" data-act="schedule">Schedule</button>
+        <button class="lc-btn danger" data-act="del">Delete</button>
+      </div>
+    </div>`).join("");
+  empty.classList.toggle("hidden", state.library.length>0);
+  grid.querySelectorAll(".lib-card").forEach(card=>{
+    const id=card.dataset.id;
+    card.querySelector('[data-act="copy"]').onclick=()=>copyText(state.library.find(x=>x.id===id).text);
+    card.querySelector('[data-act="del"]').onclick=()=>{ state.library=state.library.filter(x=>x.id!==id); save(LS.lib,state.library); renderLibrary(); toast("Deleted"); };
+    card.querySelector('[data-act="edit"]').onclick=()=>startEdit(card,id);
+    card.querySelector('[data-act="schedule"]').onclick=()=>{ openSchedule(null, id); };
+  });
+}
+function startEdit(card,id){
+  const p=state.library.find(x=>x.id===id); if(!p) return;
+  if(card.classList.contains("editing")) return;
+  card.classList.add("editing");
+  const ta=document.createElement("textarea"); ta.className="lc-edit"; ta.value=p.text;
+  card.querySelector(".lc-text").replaceWith(ta);
+  const actions=card.querySelector(".lc-actions");
+  actions.innerHTML='<button class="lc-btn" data-act="save-edit">Save</button><button class="lc-btn" data-act="cancel-edit">Cancel</button>';
+  actions.querySelector('[data-act="save-edit"]').onclick=()=>{ p.text=ta.value.trim(); save(LS.lib,state.library); renderLibrary(); toast("Saved"); };
+  actions.querySelector('[data-act="cancel-edit"]').onclick=()=>renderLibrary();
+}
+function copyText(txt){
+  navigator.clipboard.writeText(txt).then(()=>toast("Copied to clipboard"));
+}
+function exportLibrary(){
+  const blob=new Blob([JSON.stringify(state.library,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="facebook-posts.json"; a.click(); URL.revokeObjectURL(a.href);
+  toast("Exported "+state.library.length+" posts");
+}
+
+/* ---------- Hook library management ---------- */
+function renderHookList(){
+  const list=$("#hook-list");
+  const hooks = state.hooks && state.hooks.length ? state.hooks : HOOKS;
+  list.innerHTML = hooks.map((h,i)=>`
+    <div class="hook-row"><span class="hr-text">${escapeHtml(h)}</span>
+      <button class="hr-x" data-h="${i}" title="Remove"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`).join("");
+  list.querySelectorAll(".hr-x").forEach(b=>b.onclick=()=>{
+    const arr = state.hooks && state.hooks.length ? state.hooks.slice() : HOOKS.slice();
+    arr.splice(+b.dataset.h,1); state.hooks=arr; save(LS.hooks,arr); renderHookList(); toast("Hook removed");
+  });
+}
+
+/* ---------- Brand settings ---------- */
+const GRADS = [
+  {name:"OneHub", from:"#8b5cf6", to:"#ec4899"},
+  {name:"Violet", from:"#7c3aed", to:"#a855f7"},
+  {name:"Sunset", from:"#f97316", to:"#ec4899"},
+  {name:"Cyber", from:"#06b6d4", to:"#3b82f6"},
+  {name:"Lime", from:"#22c55e", to:"#84cc16"},
+  {name:"Ember", from:"#ef4444", to:"#f59e0b"}
+];
+function applyAccent(from,to){
+  document.documentElement.style.setProperty("--violet", from);
+  document.documentElement.style.setProperty("--pink", to);
+  document.documentElement.style.setProperty("--accent-grad", `linear-gradient(135deg, ${from} 0%, ${mixHex(from,to)} 45%, ${to} 100%)`);
+  document.documentElement.style.setProperty("--accent-soft", hexA(from,0.14));
+}
+function mixHex(a,b){ // simple mid blend
+  const pa=h2r(a), pb=h2r(b);
+  const m=pa.map((v,i)=>Math.round((v+pb[i])/2));
+  return rgb2h(m);
+}
+function h2r(h){ h=h.replace("#",""); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+function rgb2h(a){ return "#"+a.map(v=>v.toString(16).padStart(2,"0")).join(""); }
+function hexA(h,a){ const [r,g,b]=h2r(h); return `rgba(${r},${g},${b},${a})`; }
+
+function applyBrand(){
+  const b=state.brand || { name:"Ryan Jordan", handle:"@ryanjordan", initials:"RJ", verified:"yes", from:"#8b5cf6", to:"#ec4899" };
+  $("#ph-name").childNodes[0].nodeValue = b.name+" ";
+  $("#ph-avatar").textContent = b.initials || b.name.slice(0,2).toUpperCase();
+  $("#ph-verified-svg").style.display = (/^(y|yes|true|1)/i.test(b.verified||""))?"":"none";
+  $("#bp-avatar").textContent = b.initials || b.name.slice(0,2).toUpperCase();
+  $("#bp-name").childNodes[0].nodeValue = b.name+" ";
+  $("#bp-handle").textContent = b.handle || "";
+  $("#bp-verified").textContent = (/^(y|yes|true|1)/i.test(b.verified||""))?" ✓":"";
+  $("#bp-verified").style.color = "var(--violet)";
+  applyAccent(b.from||"#8b5cf6", b.to||"#ec4899");
+}
+function buildGradPresets(){
+  const wrap=$("#grad-presets");
+  wrap.innerHTML = GRADS.map(g=>`<div class="grad-swatch" data-from="${g.from}" data-to="${g.to}" title="${g.name}" style="background:linear-gradient(135deg,${g.from},${g.to})"></div>`).join("");
+  wrap.querySelectorAll(".grad-swatch").forEach(s=>{
+    s.onclick=()=>{ const from=s.dataset.from, to=s.dataset.to; $("#g-from").value=from; $("#g-to").value=to; applyAccent(from,to); saveBrand(); };
+  });
+}
+function saveBrand(){
+  state.brand={ name:$("#b-name").value.trim()||"Ryan Jordan", handle:$("#b-handle").value.trim()||"@ryanjordan",
+    initials:$("#b-initials").value.trim().toUpperCase()||"RJ", verified:$("#b-verified").value.trim()||"yes",
+    from:$("#g-from").value, to:$("#g-to").value };
+  save(LS.brand,state.brand); applyBrand();
+}
+
+/* ---------- Schedule modal ---------- */
+let scheduleTarget = null; // { libId } or null (current studio post)
+function openSchedule(libId){
+  scheduleTarget = libId || null;
+  const d=new Date(); const iso=d.toISOString().slice(0,10);
+  $("#sch-date").value=iso; $("#sch-time").value="09:00";
+  $("#modal-back").classList.add("show");
+}
+function closeSchedule(){ $("#modal-back").classList.remove("show"); }
+function confirmSchedule(){
+  const date=$("#sch-date").value, time=$("#sch-time").value;
+  if(!date){ toast("Pick a date"); return; }
+  let post;
+  if(scheduleTarget){
+    const p=state.library.find(x=>x.id===scheduleTarget);
+    if(!p){ toast("Post not found"); return; }
+    post={ type:p.type, text:p.text };
+  } else {
+    const cards=collectCards();
+    if(!cards.length){ toast("Generate or select a post first"); closeSchedule(); return; }
+    post={ type:cards[0].type, text:cards[0].text };
+  }
+  state.scheduled.unshift({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), date, time, type:post.type, text:post.text });
+  save(LS.sched, state.scheduled);
+  closeSchedule();
+  renderCalendar();
+  toast(`Scheduled for ${date} ${time}`);
+}
+
+/* ---------- Planner / calendar ---------- */
+const cal = { y: new Date().getFullYear(), m: new Date().getMonth() };
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function renderCalendar(){
+  const grid=$("#cal-grid");
+  $("#cal-month").textContent = `${MONTHS[cal.m]} ${cal.y}`;
+  const first=new Date(cal.y,cal.m,1).getDay();
+  const days=new Date(cal.y,cal.m+1,0).getDate();
+  const today=new Date(); const todayKey=`${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  let cells="";
+  for(let i=0;i<first;i++) cells+=`<div class="cal-cell muted"></div>`;
+  for(let d=1;d<=days;d++){
+    const key=`${cal.y}-${cal.m}-${d}`;
+    const items=state.scheduled.filter(s=>s.date===key || sameDay(s.date, cal.y,cal.m,d));
+    const pills=items.slice(0,3).map(s=>`<div class="cal-pill">${escapeHtml(s.type)} · ${s.time}</div>`).join("");
+    const more = items.length>3 ? `<div class="cal-more">+${items.length-3} more</div>` : "";
+    const isToday = todayKey===key;
+    cells+=`<div class="cal-cell ${isToday?'today':''}" data-day="${d}">
+      <div class="cd-num">${d}</div>${pills}${more}</div>`;
+  }
+  grid.innerHTML=cells;
+  grid.querySelectorAll(".cal-cell[data-day]").forEach(c=>{
+    c.onclick=()=>openDay(+c.dataset.day);
+  });
+}
+function sameDay(iso,y,m,d){
+  // iso like 2026-07-20 -> compare to y,m(0-based),d
+  const parts=(iso||"").split("-");
+  return +parts[0]===y && +parts[1]===m+1 && +parts[2]===d;
+}
+function openDay(d){
+  const items=state.scheduled.filter(s=>sameDay(s.date, cal.y, cal.m, d)).sort((a,b)=>a.time.localeCompare(b.time));
+  $("#dp-date").textContent = `${MONTHS[cal.m]} ${d}, ${cal.y}`;
+  const dpList=$("#dp-list");
+  // scheduler picker
+  let picker="";
+  if(state.library.length){
+    const opts=state.library.map(p=>`<option value="${p.id}">${escapeHtml(p.type)} — ${escapeHtml(p.text.slice(0,40))}${p.text.length>40?'…':''}</option>`).join("");
+    picker=`<div class="dp-pick"><select id="dp-select">${opts}</select>
+      <input class="field" id="dp-time" type="time" value="09:00" style="flex:0 0 120px" />
+      <button class="lc-btn" id="dp-add" style="flex:0 0 auto;padding:9px 16px">Add to day</button></div>`;
+  }
+  const body = items.length ? items.map(s=>`
+    <div class="dp-item" data-id="${s.id}">
+      <div class="dp-time">${s.time}</div>
+      <div class="dp-body"><div class="dp-type">${escapeHtml(s.type)}</div><div class="dp-text">${escapeHtml(s.text)}</div></div>
+      <button class="dp-x" title="Remove"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>`).join("") : `<div class="dp-empty">Nothing scheduled. ${state.library.length?'Pick a saved post above to queue it.':'Save posts in the Studio first.'}</div>`;
+  dpList.innerHTML = picker + body;
+  $("#day-panel").classList.add("show");
+  dpList.querySelectorAll(".dp-x").forEach(b=>b.onclick=()=>{
+    const id=b.closest(".dp-item").dataset.id;
+    state.scheduled=state.scheduled.filter(x=>x.id!==id); save(LS.sched,state.scheduled); openDay(d);
+  });
+  const addBtn=$("#dp-add");
+  if(addBtn) addBtn.onclick=()=>{
+    const pid=$("#dp-select").value, tm=$("#dp-time").value;
+    const p=state.library.find(x=>x.id===pid); if(!p) return;
+    const key=`${cal.y}-${cal.m}-${d}`;
+    state.scheduled.unshift({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), date:key, time:tm, type:p.type, text:p.text });
+    save(LS.sched,state.scheduled); renderCalendar(); openDay(d); toast("Added to calendar");
+  };
+}
+
+/* ---------- Tab switching ---------- */
+function switchTab(view){
+  $$(".tab").forEach(t=>t.classList.toggle("active", t.dataset.view===view));
+  $$(".view").forEach(v=>v.classList.toggle("active", v.id==="view-"+view));
+  if(view==="library") renderLibrary();
+  if(view==="planner") renderCalendar();
+}
+
+/* ---------- Toast ---------- */
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+/* events */
+$$(".tab").forEach(t=> t.onclick=()=>switchTab(t.dataset.view));
+$("#mode-create").onclick=()=>setMode("create");
+$("#mode-repurp").onclick=()=>setMode("repurpose");
+$("#topic").oninput=updateTopicCount;
+$("#variation").oninput=()=>{
+  const v=$("#variation").value;
+  $("#variation").style.setProperty("--fill",v+"%");
+  const label = v<25?"Strict Formula":v<50?"On Formula":v<70?"Fresh Angle":v<88?"Bold Remix":"Freestyle ⚡";
+  $("#var-badge").textContent=`${v}% · ${label}`;
+};
+$("#generate").onclick=generate;
+$("#hook-only").onclick=()=>{
+  state.types.clear(); state.types.add("hook");
+  $$(".type-chip").forEach(b=>b.classList.toggle("active",b.dataset.id==="hook"));
+  updateTypeCount(); generate();
+};
+$("#all-types").onclick=()=>{
+  TYPES.forEach(t=>state.types.add(t.id));
+  $$(".type-chip").forEach(b=>b.classList.add("active"));
+  updateTypeCount();
+};
+
+/* file handling */
+const dz=$("#dropzone"), fi=$("#file-input");
+dz.onclick=()=>fi.click();
+fi.onchange=e=>{ if(e.target.files[0]) routeFile(e.target.files[0]); };
+["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag");}));
+["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag");}));
+dz.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) routeFile(f); });
+function routeFile(f){
+  if(/\.csv$/i.test(f.name)) loadCSV(f);
+  else if(/image\//.test(f.type)) handleImage(f);
+  else toast("Unsupported file — use CSV or image");
+}
+
+/* library events */
+$("#lib-search").oninput=renderLibrary;
+$("#lib-export").onclick=exportLibrary;
+$("#lib-clear").onclick=()=>{ if(confirm("Clear all saved posts?")){ state.library=[]; save(LS.lib,state.library); renderLibrary(); } };
+$("#hook-add-btn").onclick=()=>{
+  const v=$("#hook-input").value.trim(); if(!v) return;
+  const arr = state.hooks && state.hooks.length ? state.hooks.slice() : HOOKS.slice();
+  arr.unshift(v); state.hooks=arr; save(LS.hooks,arr); $("#hook-input").value=""; renderHookList(); toast("Hook added");
+};
+$("#hook-input").onkeydown=e=>{ if(e.key==="Enter") $("#hook-add-btn").click(); };
+
+/* brand events */
+$("#g-apply").onclick=()=>{ applyAccent($("#g-from").value,$("#g-to").value); saveBrand(); toast("Accent updated"); };
+["#b-name","#b-handle","#b-initials","#b-verified"].forEach(id=> $(id).oninput=saveBrand);
+$("#b-initials").oninput=()=>{ if($("#b-initials").value.length>3) $("#b-initials").value=$("#b-initials").value.slice(0,3); };
+
+/* studio header tools */
+$("#ph-save").onclick=()=>{ const cards=collectCards(); if(!cards.length){ toast("Generate a post first"); return; } cards.forEach(c=>saveToLibrary(c.type,c.text)); toast("Saved "+cards.length+" to library"); switchTab("library"); };
+$("#ph-schedule").onclick=()=>{ const cards=collectCards(); if(!cards.length){ toast("Generate a post first"); return; } openSchedule(); };
+$("#ph-edit").onclick=()=>{ $$("#results .post-card [data-edit]").forEach(e=>e.focus()); toast("Edit the text directly, then Save"); };
+$("#ph-delete").onclick=()=>{ $("#results").innerHTML=""; $("#results").classList.add("hidden"); $("#empty-state").classList.remove("hidden"); $("#foot-note").classList.add("hidden"); toast("Cleared"); };
+
+/* schedule modal */
+$("#sch-cancel").onclick=closeSchedule;
+$("#sch-confirm").onclick=confirmSchedule;
+$("#modal-back").onclick=e=>{ if(e.target===$("#modal-back")) closeSchedule(); };
+
+/* planner events */
+$("#cal-prev").onclick=()=>{ cal.m--; if(cal.m<0){cal.m=11;cal.y--;} renderCalendar(); };
+$("#cal-next").onclick=()=>{ cal.m++; if(cal.m>11){cal.m=0;cal.y++;} renderCalendar(); };
+$("#cal-today").onclick=()=>{ const n=new Date(); cal.y=n.getFullYear(); cal.m=n.getMonth(); renderCalendar(); };
+$("#dp-close").onclick=()=>$("#day-panel").classList.remove("show");
+
+/* init */
+$("#variation").style.setProperty("--fill","51%");
+buildHookLibrary();
+buildTypeGrid();
+updateTopicCount();
+renderHookList();
+buildGradPresets();
+// hydrate brand form from saved state
+if(state.brand){
+  $("#b-name").value=state.brand.name; $("#b-handle").value=state.brand.handle;
+  $("#b-initials").value=state.brand.initials; $("#b-verified").value=state.brand.verified;
+  $("#g-from").value=state.brand.from; $("#g-to").value=state.brand.to;
+}
+applyBrand();
+renderLibrary();
+// set stamp
+const d=new Date();
+$("#stamp").textContent = d.toLocaleString("en-US",{month:"2-digit",day:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:true}).replace(","," ");
+</script>
+
+</body>
+</html>
