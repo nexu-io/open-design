@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  'settings.mcpLocalRuntimeOnly': '로컬 실행 환경 전용: 이 설정은 OpenDesign을 실행하는 컴퓨터 또는 컨테이너가 필요합니다. 다른 컴퓨터의 코딩 에이전트에는 SSH/Docker 브리지를 사용하세요.',
+  'settings.mcpRemoteSetup': '원격 Docker 설정',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

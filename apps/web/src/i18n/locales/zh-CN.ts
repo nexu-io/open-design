@@ -1,6 +1,8 @@
 import type { Dict } from "../types";
 
 export const zhCN: Dict = {
+  'settings.mcpLocalRuntimeOnly': '仅适用于本地运行环境：此配置需要在运行 OpenDesign 的机器或容器中使用。其他机器上的编程助手请通过 SSH/Docker 桥接连接。',
+  'settings.mcpRemoteSetup': '远程 Docker 配置',
   'invite.header.eyebrow': "团队邀请",
   'invite.loading': "正在加载邀请…",
   'invite.landing.title': "加入团队",

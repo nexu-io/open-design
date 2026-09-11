@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const en: Dict = {
+  'settings.mcpLocalRuntimeOnly': 'Local runtime only: this setup requires the machine or container running OpenDesign. For a coding agent on another machine, use an SSH/Docker bridge.',
+  'settings.mcpRemoteSetup': 'Remote Docker setup',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

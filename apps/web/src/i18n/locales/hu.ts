@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+  'settings.mcpLocalRuntimeOnly': 'Csak helyi környezetben: ez a beállítás az OpenDesignt futtató gépet vagy konténert igényli. Másik gépen futó ügynökhöz használjon SSH/Docker hidat.',
+  'settings.mcpRemoteSetup': 'Távoli Docker beállítása',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

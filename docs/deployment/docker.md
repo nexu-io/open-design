@@ -91,6 +91,68 @@ networking override is required.
 ![OpenDesign home (desktop)](../screenshots/deployment/docker/01-open-design-home.png)
 ![OpenDesign home (mobile)](../screenshots/deployment/docker/03-open-design-mobile.png)
 
+## Connect a remote coding agent over MCP
+
+The setup snippets in **Settings -> MCP server** are local-runtime only. They
+launch a stdio helper using the executable, CLI entrypoint, and environment of
+the running OpenDesign daemon. With Docker, those belong to the container, not
+to the workstation displaying the Settings page. The same restriction applies
+to the install buttons and deep links in that panel.
+
+Changing the snippet's loopback URL to your public URL is not enough: the
+executable and CLI paths would still refer to the container. Forwarding only
+the HTTP port does not make those paths available either.
+
+For a coding agent on another machine, run the stdio helper inside the existing
+container through SSH. This is a deployment-specific bridge, not a remote HTTP
+MCP endpoint. First verify SSH access and Docker permissions from the workstation:
+
+```bash
+ssh user@docker-host docker inspect --format '{{.State.Running}}' open-design
+```
+
+Replace `user@docker-host` with your SSH destination and `open-design` with your
+running container name. Complete host-key verification and configure SSH key or
+agent authentication before configuring MCP; the client cannot answer interactive
+SSH prompts. The command above should print `true`.
+
+For a client that accepts `mcpServers` JSON, use this configuration on the
+workstation:
+
+```json
+{
+  "mcpServers": {
+    "open-design": {
+      "command": "ssh",
+      "args": [
+        "-T", "-o", "BatchMode=yes",
+        "user@docker-host",
+        "docker", "exec", "-i", "open-design",
+        "node", "/app/apps/daemon/dist/cli.js",
+        "mcp", "--daemon-url", "http://127.0.0.1:7456"
+      ]
+    }
+  }
+}
+```
+
+The CLI path and port above match the repository Docker image. Adjust them if
+your image differs. The workstation needs `ssh`; Node and the OpenDesign helper
+run inside the container. For a client running on the Docker host itself, use
+`docker` as the command and start the argument list at `exec`.
+
+Keep stdin open with `docker exec -i`, disable SSH terminal allocation with `-T`,
+and do not add Docker's `-t`: stdout carries the MCP protocol and must not contain
+terminal formatting or shell startup messages. The helper inherits the existing
+container environment. Preserve the deployment's data-root configuration as
+defined in [the daemon data directory contract](../../AGENTS.md#daemon-data-directory-contract).
+
+Reconnect the MCP client and confirm it can list OpenDesign tools and read a
+project you have access to. If SSH exits immediately, check authentication and
+Docker permissions; if the helper cannot reach the daemon, check container health
+and its internal port. This bridge does not require publishing another port or
+disabling the deployment's API authentication.
+
 ## Common Issues
 
 - `failed to connect to the docker API`: Docker Desktop is not running yet

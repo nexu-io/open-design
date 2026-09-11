@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  'settings.mcpLocalRuntimeOnly': 'สำหรับสภาพแวดล้อมภายในเท่านั้น: การตั้งค่านี้ต้องใช้เครื่องหรือคอนเทนเนอร์ที่รัน OpenDesign หากเอเจนต์เขียนโค้ดอยู่บนเครื่องอื่น ให้เชื่อมต่อผ่าน SSH/Docker',
+  'settings.mcpRemoteSetup': 'ตั้งค่า Docker ระยะไกล',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

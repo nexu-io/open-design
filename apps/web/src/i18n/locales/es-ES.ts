@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const esES: Dict = {
+  'settings.mcpLocalRuntimeOnly': 'Solo entorno local: esta configuración requiere la máquina o el contenedor que ejecuta OpenDesign. Para un agente en otra máquina, usa un puente SSH/Docker.',
+  'settings.mcpRemoteSetup': 'Configuración de Docker remoto',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
