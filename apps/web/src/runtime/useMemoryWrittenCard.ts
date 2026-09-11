@@ -51,9 +51,9 @@ export interface MemoryWrittenBatch {
   entries: MemoryWrittenEntry[];
 }
 
-export interface UseMemoryWrittenCard {
+export interface UseMemoryWrittenCard<Context = undefined> {
   /** The batch awaiting a card, or null. Consume it, then `dismiss()`. */
-  batch: MemoryWrittenBatch | null;
+  batch: (MemoryWrittenBatch & { context: Context | undefined }) | null;
   dismiss: () => void;
 }
 
@@ -108,8 +108,11 @@ function wroteMemory(record: MemoryExtractionRecord): boolean {
  * that started inside the window and wrote at least one entry becomes one batch,
  * once. Nothing is polled while no turn has run in this mount.
  */
-export function useMemoryWrittenCard(runActive: boolean): UseMemoryWrittenCard {
-  const [batch, setBatch] = useState<MemoryWrittenBatch | null>(null);
+export function useMemoryWrittenCard<Context = undefined>(
+  runActive: boolean,
+  context?: Context,
+): UseMemoryWrittenCard<Context> {
+  const [batch, setBatch] = useState<UseMemoryWrittenCard<Context>['batch']>(null);
   const [pollsLeft, setPollsLeft] = useState(0);
   // Attempts already turned into a card. Survives dismiss so a still-open
   // window cannot post the same batch twice.
@@ -117,6 +120,7 @@ export function useMemoryWrittenCard(runActive: boolean): UseMemoryWrittenCard {
   // When the current turn started. Records older than this belong to an earlier
   // turn (or to Settings → Memory) and are not this conversation's news.
   const turnStartedAtRef = useRef<number | null>(null);
+  const turnContextRef = useRef(context);
   const wasActiveRef = useRef(false);
 
   useEffect(() => {
@@ -124,24 +128,28 @@ export function useMemoryWrittenCard(runActive: boolean): UseMemoryWrittenCard {
     wasActiveRef.current = runActive;
     if (runActive && !wasActive) {
       turnStartedAtRef.current = Date.now();
+      turnContextRef.current = context;
       return;
     }
     // A turn just ended. Extraction runs after child close, so start looking.
     if (!runActive && wasActive) setPollsLeft(MAX_POLLS);
-  }, [runActive]);
+  }, [runActive, context]);
 
   useEffect(() => {
     if (pollsLeft <= 0) return undefined;
     // Hold the window open while a batch is waiting to be consumed, so a second
     // attempt cannot overwrite a card the caller has not posted yet.
     if (batch) return undefined;
+    // Keep the turn's owner across both requests. Navigation or a new turn
+    // while summaries are in flight must not reassign this extraction.
+    const turnContext = turnContextRef.current;
+    const since = turnStartedAtRef.current ?? 0;
     let cancelled = false;
     const timer = setTimeout(async () => {
       if (cancelled) return;
       try {
         const records = await fetchExtractionRecords();
         if (cancelled) return;
-        const since = turnStartedAtRef.current ?? 0;
         const fresh = records
           .filter((record) => record.id
             && !seenRef.current.has(record.id)
@@ -163,6 +171,7 @@ export function useMemoryWrittenCard(runActive: boolean): UseMemoryWrittenCard {
               type: entry.type,
             }));
           setBatch({
+            context: turnContext,
             key: record.id,
             count: record.writtenCount ?? entries.length,
             entries,
