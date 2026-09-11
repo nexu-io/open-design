@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -1190,6 +1191,7 @@ winDescribe('packaged windows runtime smoke', () => {
   const rollbackTest =
     !verifyCoreOnly && updateFixture === 'tools-serve' && updateFixtureMode === 'payload' ? test : test.skip;
   rollbackTest('rolls back a crashing payload and self-heals on the next good update', async () => {
+    const { report } = await createPackagedSmokeReport('win');
     const updateEnv = captureUpdateEnv();
     let corruptFixture: ToolsServeUpdaterFixture | null = null;
     let goodFixture: ToolsServeUpdaterFixture | null = null;
@@ -1255,12 +1257,17 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(strandedRuntime.lastSuccessful?.version).toBe(updateScenario.expectedCurrentVersion);
       expect(strandedAttempt.generation).toBe(strandedRuntime.active?.generation);
 
+      await report.json('rollback/stranded.json', { attempt: strandedAttempt, runtime: strandedRuntime });
+      await report.json('rollback/crash-logs.json', await runToolsPackJson('logs'));
+
       // Cold start rolls back: the installed outer sees the unconfirmed
       // attempt, selects lastSuccessful, and serves the base version again.
       const rollbackStart = await runToolsPackJson<WinStartResult>('start');
       cleanupStarted = true;
       expect(rollbackStart.source).toBe('installed');
+      await report.json('rollback/start.json', rollbackStart);
       const rolledBack = await waitForHealthyDesktopVersion(updateScenario.expectedCurrentVersion, start.pid, false);
+      await report.json('rollback/healthy-base.json', rolledBack);
       expect(rolledBack.launcher.lastSuccessful?.version).toBe(updateScenario.expectedCurrentVersion);
       // Degraded steady state: the broken pointer stays active with its
       // attempt as evidence until a healthy release replaces it.
@@ -1306,6 +1313,12 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(healed.launcher.active?.version).toBe(healedVersion);
       expect(healed.launcher.lastSuccessful?.version).toBe(healedVersion);
       expect(healed.launcher.attempt).toBeNull();
+      await report.json('rollback/healed.json', healed);
+    } catch (error) {
+      await report.json('rollback/failure.json', { error: formatUnknown(error) });
+      await report.json('rollback/failure-logs.json', await runToolsPackJson('logs').catch(formatUnknown));
+      await printPackagedLogs().catch(console.error);
+      throw error;
     } finally {
       restoreUpdateEnv(updateEnv);
       await corruptFixture?.close().catch((error: unknown) => {
@@ -1849,7 +1862,7 @@ function assertWorkingWinInstallerOverwriteLog(lines: string[]): void {
   // transactional installer failed fresh installs. Keep the full release
   // smoke aligned with the generated installer until a transactional redesign
   // lands together with real installer coverage.
-  expect(missingWorkingWinInstallerOverwriteMarkers(lines)).toEqual([]);
+  expect(missingWorkingWinInstallerOverwriteMarkers(lines), lines.join("\n")).toEqual([]);
 }
 
 async function runDirectInstaller(
@@ -1857,7 +1870,11 @@ async function runDirectInstaller(
   installDir: string,
   nsisLogPath = join(outputNamespaceRoot, 'logs', 'nsis.log'),
 ): Promise<DirectInstallerResult> {
-  const previousLogLines = await readNsisLogLines(nsisLogPath);
+  // Portable NSIS writes under $TEMP; build-tree logs only contain the
+  // tools-pack wrapper's install/exit events. Capture deltas from both so
+  // downloaded portable installers retain the actual overwrite assertions.
+  const logPaths = [...new Set([nsisLogPath, join(tmpdir(), 'Open Design', namespace, 'nsis.log')])];
+  const previousLogs = await Promise.all(logPaths.map((path) => readNsisLogLines(path)));
   const command =
     process.platform === 'win32'
       ? execFileAsync(
@@ -1892,7 +1909,9 @@ async function runDirectInstaller(
   const code = isExecError(error) ? Number(error.code) : error == null ? 0 : null;
   return {
     code,
-    nsisLogTail: (await readNsisLogLines(nsisLogPath)).slice(previousLogLines.length),
+    nsisLogTail: (await Promise.all(logPaths.map(async (path, index) =>
+      (await readNsisLogLines(path)).slice(previousLogs[index]!.length),
+    ))).flat(),
   };
 }
 
