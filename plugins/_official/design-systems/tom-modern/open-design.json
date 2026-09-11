@@ -1,0 +1,113 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-tom-modern",
+  "title": "Tom Modern",
+  "title_i18n": {
+    "zh-CN": "Tom Modern",
+    "zh-TW": "Tom Modern",
+    "ja": "Tom Modern",
+    "ko": "Tom Modern",
+    "de": "Tom Modern",
+    "fr": "Tom Modern",
+    "ru": "Tom Modern",
+    "es": "Tom Modern",
+    "pt-BR": "Tom Modern",
+    "it": "Tom Modern",
+    "vi": "Tom Modern",
+    "pl": "Tom Modern",
+    "id": "Tom Modern",
+    "nl": "Tom Modern",
+    "ar": "Tom Modern",
+    "tr": "Tom Modern",
+    "uk": "Tom Modern",
+    "en": "Tom Modern"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-04T09:00:00Z",
+  "description": "Editorial-technical starter. Neutral canvas, vermillion accent, sharp corners, Geist type, hard shadows.",
+  "description_i18n": {
+    "zh-CN": "编辑向技术 starter。中性画布、朱红强调、锐角、Geist 字体、硬阴影。",
+    "zh-TW": "編輯向技術 starter。中性畫布、朱紅強調、銳角、Geist 字體、硬陰影。",
+    "ja": "編集的・技術的なスターター。ニュートラルなキャンバス、朱色のアクセント、シャープな角、Geist書体、ハードシャドウ。",
+    "ko": "에디토리얼-테크니컬 스타터. 중립 캔버스, 주홍 액센트, 날카로운 모서리, Geist 타이포, 하드 섀도.",
+    "de": "Editorial-technischer Starter. Neutrale Leinwand, Zinnober-Akzent, scharfe Ecken, Geist-Typo, harte Schatten.",
+    "fr": "Starter éditorial-technique. Toile neutre, accent vermillon, coins nets, typo Geist, ombres dures.",
+    "ru": "Редакционно-технический starter. Нейтральный холст, киноварный акцент, острые углы, шрифт Geist, жёсткие тени.",
+    "es": "Starter editorial-técnico. Lienzo neutro, acento bermellón, esquinas nítidas, tipografía Geist, sombras duras.",
+    "pt-BR": "Starter editorial-técnico. Tela neutra, acento vermelhão, cantos nítidos, tipo Geist, sombras duras.",
+    "it": "Starter editoriale-tecnico. Tela neutra, accento vermiglio, angoli netti, type Geist, ombre dure.",
+    "vi": "Starter biên tập-kỹ thuật. Nền trung tính, điểm nhấn đỏ son, góc sắc, chữ Geist, bóng cứng.",
+    "pl": "Starter editorialno-techniczny. Neutralne płótno, cynobrowy akcent, ostre narożniki, krój Geist, twarde cienie.",
+    "id": "Starter editorial-teknis. Kanvas netral, aksen vermilion, sudut tajam, tipografi Geist, bayangan keras.",
+    "nl": "Editorial-technische starter. Neutraal canvas, vermiljoen accent, scherpe hoeken, Geist-type, harde schaduwen.",
+    "ar": "نظام بداية تحريري-تقني. لوحة محايدة، لمسة قرمزية، زوايا حادة، خط Geist، ظلال قاسية.",
+    "tr": "Editöryal-teknik başlangıç sistemi. Nötr tuval, vermilyon vurgu, keskin köşeler, Geist yazı tipi, sert gölgeler.",
+    "uk": "Редакційно-технічний starter. Нейтральне полотно, кіноварний акцент, гострі кути, шрифт Geist, жорсткі тіні.",
+    "en": "Editorial-technical starter. Neutral canvas, vermillion accent, sharp corners, Geist type, hard shadows."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "starter"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Tom Modern design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Tom Modern design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "tom-modern",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
