@@ -186,6 +186,7 @@ export function applySandboxRuntimeEnv(
   env.TMP = roots.tempDir;
   env.CODEX_HOME = codexHome;
   env.CLAUDE_CONFIG_DIR = claudeConfigDir;
+  env.HERMES_HOME = path.join(roots.agentHomeDir, '.hermes');
   env.OPENCODE_TEST_HOME = opencodeHome;
   env.OD_AGENT_PROFILES_CONFIG = sandboxAgentProfilesConfigPath(config);
   env.NPM_CONFIG_USERCONFIG = npmUserConfig;
