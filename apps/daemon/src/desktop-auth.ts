@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 let desktopAuthSecret: Buffer | null = null;
 let desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
@@ -27,8 +27,12 @@ export function isDesktopAuthGateActive(): boolean {
 }
 
 export function resetDesktopAuthForTests(): void {
-  desktopAuthSecret = null;
-  desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
+  // issue #5480: directory-binding routes always require an HMAC token.
+  // Set a default test secret so functional suites that exercise folder
+  // import don't need per-test setup. Tests that explicitly need the
+  // "no secret" state call setDesktopAuthSecret(null) after reset.
+  desktopAuthSecret = randomBytes(32);
+  desktopAuthEverRegistered = true;
   consumedImportNonces.clear();
 }
 

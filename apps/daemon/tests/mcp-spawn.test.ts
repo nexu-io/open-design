@@ -19,6 +19,7 @@ import { delimiter, join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { insertConversation } from '../src/db.js';
 import { startServer } from '../src/server.js';
+import { installImportTokenAutoMint } from './import-token-shim.js';
 
 async function withFakeClaude<T>(run: () => Promise<T>): Promise<T> {
   const dir = await fsp.mkdtemp(join(tmpdir(), 'od-mcp-spawn-bin-'));
@@ -97,6 +98,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
     };
     baseUrl = started.url;
     server = started.server;
+    installImportTokenAutoMint();
   });
 
   afterAll(async () => {
