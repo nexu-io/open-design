@@ -78,6 +78,14 @@ podSecurityContext:
   fsGroup: 1001
 
 authProxy:
+  # When true (default), a nginx sidecar proxies traffic and injects OD_API_TOKEN.
+  # The app binds to 127.0.0.1 (loopback) and only the sidecar talks to it.
+  #
+  # When false, the nginx sidecar is removed entirely.
+  # The app binds to 0.0.0.0 (all interfaces) since kube-proxy routes traffic
+  # directly to the pod. Set OD_DISABLE_API_AUTH=1 in config to trust the
+  # external auth proxy (Cloudflare Access, oauth2-proxy, etc.).
+  enabled: true
   image: "nginxinc/nginx-unprivileged:1.25-alpine-slim"
   port: 8080
   securityContext:

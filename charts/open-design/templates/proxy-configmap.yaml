@@ -4,6 +4,7 @@ metadata:
   name: {{ include "open-design.fullname" . }}-proxy
   labels:
     {{- include "open-design.labels" . | nindent 4 }}
+{{- if .Values.authProxy.enabled }}
 data:
   default.conf.template: |
     server {
@@ -41,3 +42,4 @@ data:
             http2_push_preload on;
         }
     }
+{{- end }}
