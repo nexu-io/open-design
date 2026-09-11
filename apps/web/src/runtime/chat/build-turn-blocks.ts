@@ -1712,7 +1712,7 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
  */
 function closeRunningSegments(shell: ExecutionShell): void {
   for (const seg of shell.segments) {
-    if (seg.status === 'in_progress') seg.status = 'stopped';
+    if (seg.status === 'pending' || seg.status === 'in_progress') seg.status = 'stopped';
   }
 }
 

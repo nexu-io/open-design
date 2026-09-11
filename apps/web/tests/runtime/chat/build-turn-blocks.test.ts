@@ -802,10 +802,18 @@ describe('轮次结束后没有东西还在转', () => {
     expect(shell.segments.map((s) => s.status)).not.toContain('in_progress');
   });
 
-  it('没关掉的那条不谎报成功 —— 是「没跑完」不是「做完了」', () => {
+  it('没关掉的那两条都不谎报成功 —— 是「没跑完」不是「做完了」', () => {
     const shell = last(shells(buildTurnBlocks({ events: openList, ...done('succeeded') })));
     expect(nth(shell.segments, 0).status).toBe('stopped');
-    expect(nth(shell.segments, 1).status).toBe('pending');
+    expect(nth(shell.segments, 1).status).toBe('stopped');
+  });
+
+  it('terminal 会保留已完成,只收停未完成的清单项', () => {
+    const shell = last(shells(buildTurnBlocks({
+      events: [...todo('p1', [['已完成', 'completed'], ['未开始', 'pending'], ['进行中', 'in_progress']])],
+      ...done('succeeded'),
+    })));
+    expect(shell.segments.map((s) => s.status)).toEqual(['completed', 'stopped', 'stopped']);
   });
 
   it('还在跑的时候当然照转', () => {
