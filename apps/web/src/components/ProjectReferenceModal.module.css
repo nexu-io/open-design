@@ -38,10 +38,16 @@
   font-weight: 650;
 }
 
+/*
+ * `padding: 0` is load-bearing: the global button primitive supplies
+ * `padding: 0 16px`, which eats the whole 30px box and collapses the icon to
+ * zero width, leaving an invisible-but-clickable close control.
+ */
 .close {
   appearance: none;
   width: 30px;
   height: 30px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -108,9 +114,18 @@
   scrollbar-width: thin;
 }
 
+/*
+ * A row is two lines of text beside a 28px icon, so its height belongs to its
+ * content, never to a shared button metric. `height` is load-bearing: without
+ * it the global `button { height: 36px }` primitive (styles/primitives.css,
+ * mirrored in packages/components/src/styles.css) wins this one property —
+ * `.item` declares every other button property but not this one — and pins each
+ * row ~18px shorter than the content it holds, spilling one row onto the next.
+ */
 .item {
   appearance: none;
   width: 100%;
+  height: auto;
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 10px;
