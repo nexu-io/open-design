@@ -245,16 +245,125 @@ describe('byok-opencode runtime config', () => {
 
   it('maps other native BYOK protocols to provider packages', () => {
     expect(buildOpenCodeByokProviderConfig(
-      { protocol: 'anthropic', apiKey: 'sk-ant', baseUrl: 'https://api.anthropic.com' },
+      { protocol: 'anthropic', apiKey: 'ak', baseUrl: 'https://api.anthropic.com' },
       'claude-sonnet-4-5',
     )?.config).toMatchObject({
       provider: { [BYOK_OPENCODE_PROVIDER_ID]: { npm: '@ai-sdk/anthropic' } },
     });
     expect(buildOpenCodeByokProviderConfig(
-      { protocol: 'google', apiKey: 'AIza', baseUrl: 'https://generativelanguage.googleapis.com' },
+      { protocol: 'google', apiKey: 'gk', baseUrl: 'https://generativelanguage.googleapis.com' },
       'gemini-2.5-flash',
     )?.config).toMatchObject({
       provider: { [BYOK_OPENCODE_PROVIDER_ID]: { npm: '@ai-sdk/google' } },
+    });
+  });
+
+  it('normalizes third-party Gemini-compatible base URLs to /v1beta for the run path', () => {
+    const withoutV1beta = buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gk', baseUrl: 'https://api.ofox.io/gemini' },
+      'google/gemini-3.7-flash',
+    );
+    expect(withoutV1beta?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/google',
+          options: { baseURL: 'https://api.ofox.io/gemini/v1beta' },
+        },
+      },
+    });
+
+    const withV1beta = buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gk', baseUrl: 'https://api.ofox.io/gemini/v1beta' },
+      'google/gemini-3.7-flash',
+    );
+    expect(withV1beta?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          options: { baseURL: 'https://api.ofox.io/gemini/v1beta' },
+        },
+      },
+    });
+
+    const withV1alpha = buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gk', baseUrl: 'https://api.ofox.io/gemini/v1alpha' },
+      'google/gemini-3.7-flash',
+    );
+    expect(withV1alpha?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          options: { baseURL: 'https://api.ofox.io/gemini/v1alpha' },
+        },
+      },
+    });
+
+    const withV1 = buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gk', baseUrl: 'https://api.ofox.io/gemini/v1' },
+      'google/gemini-3.7-flash',
+    );
+    expect(withV1?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          options: { baseURL: 'https://api.ofox.io/gemini/v1' },
+        },
+      },
+    });
+  });
+
+  it('preserves models/ routing for vendor-prefixed Gemini model ids on third-party gateways', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gk', baseUrl: 'https://api.ofox.io/gemini' },
+      'google/gemini-3.7-flash',
+    );
+    expect(out?.modelId).toBe('open-design-byok/models/google/gemini-3.7-flash');
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          models: {
+            'models/google/gemini-3.7-flash': {
+              name: 'google/gemini-3.7-flash',
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it.each([
+    { input: 'gemini-1.5-flash', expected: 'models/gemini-1.5-flash' },
+    { input: 'models/google/gemini-3.7-flash', expected: 'models/google/gemini-3.7-flash' },
+  ])(
+    'normalizes non-prefixed and already-prefixed Gemini model ids to models/ form: $input',
+    ({ input, expected }) => {
+      const out = buildOpenCodeByokProviderConfig(
+        { protocol: 'google', apiKey: 'gk', baseUrl: 'https://api.ofox.io/gemini' },
+        input,
+      );
+      expect(out?.modelId).toBe(`open-design-byok/${expected}`);
+      expect(out?.config).toMatchObject({
+        provider: {
+          [BYOK_OPENCODE_PROVIDER_ID]: {
+            models: {
+              [expected]: {
+                name: input,
+              },
+            },
+          },
+        },
+      });
+    },
+  );
+
+  it('falls back to the raw base URL when a Google base URL is malformed', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gk', baseUrl: 'not a url' },
+      'gemini-1.5-flash',
+    )?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/google',
+          options: { baseURL: 'not a url' },
+        },
+      },
     });
   });
 
