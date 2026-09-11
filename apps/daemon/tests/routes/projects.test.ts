@@ -215,6 +215,15 @@ describe('GET /api/projects/:id resolvedDir', () => {
         runId: 'source-run-1',
         runStatus: 'succeeded',
         lastRunEventId: 'evt-1',
+        events: [{ kind: 'status', label: 'completed', detail: 'first version' }],
+        producedFiles: [
+          { name: 'pangu-kaitian-lesson.html', size: 1, mtime: 1, kind: 'html' },
+          { name: 'pangu-kaitian-cover.png', size: 1, mtime: 1, kind: 'image' },
+          { name: 'pangu-kaitian-slide-01.png', size: 1, mtime: 1, kind: 'image' },
+          { name: 'pangu-kaitian-slide-02.png', size: 1, mtime: 1, kind: 'image' },
+          { name: 'pangu-kaitian-slide-03.png', size: 1, mtime: 1, kind: 'image' },
+          { name: 'pangu-kaitian-slide-04.png', size: 1, mtime: 1, kind: 'image' },
+        ],
       },
       { id: 'fork-user-2', role: 'user', content: 'second ask' },
       { id: 'fork-assistant-2', role: 'assistant', content: 'second answer' },
@@ -259,6 +268,8 @@ describe('GET /api/projects/:id resolvedDir', () => {
         runId?: string;
         runStatus?: string;
         lastRunEventId?: string;
+        events?: unknown[];
+        producedFiles?: unknown[];
       }>;
     };
     expect(forkMessagesBody.messages.map((message) => message.content)).toEqual([
@@ -277,6 +288,10 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(forkMessagesBody.messages[1]?.runId).toBeUndefined();
     expect(forkMessagesBody.messages[1]?.runStatus).toBe('succeeded');
     expect(forkMessagesBody.messages[1]?.lastRunEventId).toBeUndefined();
+    // A seeded fork clears run pointers, but should not present copied
+    // artifact/event history as newly produced in the fork.
+    expect(forkMessagesBody.messages[1]?.events).toBeUndefined();
+    expect(forkMessagesBody.messages[1]?.producedFiles).toBeUndefined();
 
     /*
      * 分叉分界线落在**新会话**里(2026-08-26 用户真机指认两次:
