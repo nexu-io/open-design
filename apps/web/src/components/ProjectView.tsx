@@ -8783,6 +8783,9 @@ export function ProjectView({
       // consuming a replacement run's colliding tool id.
       const pendingWrites = new Map<string, string>();
       const traceTouchedFilePaths = new Set<string>();
+      const currentRunTouchedFilePaths = new Set<string>();
+      const completedTaskArtifactPaths = new Set<string>();
+      let artifactTaskExecutionId: string | undefined;
       // Per-write file-list reads are intentionally fire-and-forget so a file
       // can open while the run is still streaming. Once terminal completion
       // has selected a turn-level artifact, however, an older Write refresh
@@ -8794,6 +8797,8 @@ export function ProjectView({
       const clearTraceTouchedFilePaths = () => {
         pendingWrites.clear();
         traceTouchedFilePaths.clear();
+        currentRunTouchedFilePaths.clear();
+        completedTaskArtifactPaths.clear();
       };
       const provenTraceTouchedFiles = () => [...traceTouchedFilePaths]
         .map((touchedPath, index) => {
@@ -8949,6 +8954,7 @@ export function ProjectView({
             pendingWrites.delete(ev.toolUseId);
             if (!ev.isError) {
               traceTouchedFilePaths.add(filePath);
+              currentRunTouchedFilePaths.add(filePath);
               // Absolute daemon tool paths can prove containment before the
               // asynchronous file-list refresh completes. Open the best
               // proven touched artifact immediately so a terminal status and
@@ -9074,6 +9080,10 @@ export function ProjectView({
       const controller = new AbortController();
       const cancelController = new AbortController();
       let authoritativeArtifactPaths: string[] | undefined;
+      const currentRunArtifactPaths = (): readonly string[] => authoritativeArtifactPaths
+        ?? [...currentRunTouchedFilePaths];
+      const completionTouchedPaths = (): string[] =>
+        [...new Set([...completedTaskArtifactPaths, ...currentRunArtifactPaths()])];
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
@@ -9290,9 +9300,10 @@ export function ProjectView({
               const produced = computeProducedFiles(
                 beforeFileNames,
                 nextFiles,
-                authoritativeArtifactPaths,
+                authoritativeArtifactPaths === undefined ? undefined : completionTouchedPaths(),
                 project.id,
                 projectDetail.resolvedDir,
+                completionTouchedPaths(),
               ) ?? [];
               // Completion half of the onboarding funnel: the first generation
               // in a recommendation-started project that actually produced a
@@ -9865,6 +9876,23 @@ export function ProjectView({
               && latestAssistantMsg.runId
               && latestAssistantMsg.runId !== runId,
             );
+            if (latestAssistantMsg.runId && latestAssistantMsg.runId !== runId) {
+              // The provider reports paths per physical run, but this message
+              // carries the logical task. Retain only a proven same-task
+              // predecessor; a new task must not inherit its artifacts.
+              if (strategyTask?.taskExecutionId
+                && strategyTask.taskExecutionId === artifactTaskExecutionId) {
+                for (const filePath of currentRunArtifactPaths()) {
+                  completedTaskArtifactPaths.add(filePath);
+                }
+              } else {
+                completedTaskArtifactPaths.clear();
+              }
+              authoritativeArtifactPaths = undefined;
+              currentRunTouchedFilePaths.clear();
+              pendingWrites.clear();
+            }
+            artifactTaskExecutionId = strategyTask?.taskExecutionId;
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
@@ -14600,25 +14628,31 @@ export function computeProducedFiles(
   authoritativePaths?: readonly string[],
   projectId?: string,
   projectRoot?: string | null,
+  fallbackTouchedPaths: readonly string[] = [],
 ): ProjectFile[] | undefined {
   const beforeSet = beforeNames
     ? beforeNames instanceof Set
       ? beforeNames
       : new Set(beforeNames)
     : null;
-  if (authoritativePaths !== undefined) {
+  if (authoritativePaths !== undefined || fallbackTouchedPaths.length > 0) {
     const byName = new Map<string, ProjectFile>();
-    // The daemon's authoritative list intentionally covers user-facing
-    // artifacts and render dependencies, not every file an agent can create
-    // (for example plugin manifests and Markdown). Preserve all files that are
-    // provably new from the turn baseline, then use authoritative paths to add
-    // modified existing artifacts without attributing untouched inputs.
+    // Run authority covers both new and modified HTML/media artifacts. A
+    // later /files response may also contain another run's newly added files.
+    // Keep the baseline fallback only outside the daemon's tracked extension
+    // set (runtimes/run-artifacts.ts), e.g. Markdown, plugin JSON and scripts.
+    // The UI's broader artifact classifier also includes untracked OGG.
     if (beforeSet) {
       for (const file of next) {
-        if (!beforeSet.has(file.name)) byName.set(file.name, file);
+        const trackedArtifact = /\.(html?|png|jpe?g|gif|webp|avif|svg|mp4|mov|webm|mp3|wav|m4a)$/i.test(file.name);
+        if (!beforeSet.has(file.name) && (authoritativePaths === undefined || !trackedArtifact)) {
+          byName.set(file.name, file);
+        }
       }
     }
-    for (const rawPath of authoritativePaths) {
+    // An absent authority may use successful tool writes; an explicit empty
+    // list is a verdict and must not be replaced by those fallback paths.
+    for (const rawPath of authoritativePaths ?? fallbackTouchedPaths) {
       const file = findTouchedProjectFile(rawPath, next, projectId, projectRoot);
       if (file) byName.set(file.name, file);
     }
