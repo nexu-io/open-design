@@ -555,6 +555,12 @@ function ArtifactCard({
 }) {
   const t = useT();
   const { workspaceContext } = useProjectCollabContext();
+  // A static snapshot is an optimization, not the only representation of the
+  // artifact. If it disappears or cannot be decoded, let the normal kind
+  // specific rendering below take over (HTML uses the existing live-cover
+  // iframe fallback) instead of leaving the browser's broken-image shell in
+  // the card.
+  const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null);
   const src = projectFileUrl(projectId, item.name, workspaceContext);
   const pending = item.pending === true;
   /*
@@ -586,7 +592,7 @@ function ArtifactCard({
           <span className="artifact-card-mini is-loading">
             <PixelLiquid />
           </span>
-        ) : item.coverUrl && item.kind !== 'video' ? (
+        ) : item.coverUrl && item.kind !== 'video' && failedCoverUrl !== item.coverUrl ? (
           /*
            * **当轮的静态首屏截图**(HTML / 原型 / slide / 文档)。
            *
@@ -607,6 +613,7 @@ function ArtifactCard({
             src={item.coverUrl}
             alt=""
             loading="lazy"
+            onError={() => setFailedCoverUrl(item.coverUrl ?? null)}
           />
         ) : item.kind === 'html' ? (
           /*
