@@ -12,7 +12,7 @@
  *   · 选项分组:第一组直接展开并带组名;其余组各自收在一个可展开的开关后面,
  *     开关的字就是那一组的组名(稿子里是「常用语言」/「更多语言」);
  *   · 行尾副标(稿子里是 `ZH-CN`)+ 选中勾;
- *   · 展开的列表固定露出 6.5 行(32px × 6.5 = 208px),再多就内部滚动。
+ *   · 展开的列表以 6.5 行(32px × 6.5 = 208px)为上限,聊天可见空间不足时缩小并内部滚动。
  * 稿子那张中文语言表是**硬编码的**,我们不抄:选项永远来自 agent 的 `options`,
  * 这里做的是通用的「分组 / 行尾副标 / 高度上限」,不是一个语言选择器组件。
  *
@@ -353,20 +353,10 @@ describe('旧会话数据的兼容性', () => {
 });
 
 describe('查找型单选 · 菜单的量', () => {
-  it('展开的列表固定露出 6.5 行就开始内部滚动', () => {
-    const { container } = mount(lookupForm);
-    const list = container.querySelector<HTMLElement>('.qf-select-more-list')!;
-    const cs = getComputedStyle(list);
-    // 稿子写死的数:32px 一行 × 6.5 = 208px。露半行是「下面还有」的提示,
-    // 收在 6 行整会读成「就这些了」。
-    expect(cs.maxHeight).toBe('208px');
-    expect(cs.overflowY).toBe('auto');
-    // 滚到底之后不许把整条会话一起带走
-    expect(cs.overscrollBehavior).toBe('contain');
-    expect(getComputedStyle(container.querySelector<HTMLElement>('.qf-select-option')!).minHeight)
-      .toBe('32px');
-  });
-
+  // OPEND-2876 的 208px 上限、内滚和末项可命中由真实 Chrome 几何规格验收：
+  // 在 composer 上方展开长组，只在列表内原生滚到底并选择末项；短组作正控。
+  // jsdom 不计算布局；读取 maxHeight 的 CSS 文本不能证明这些行为，尤其在
+  // 可见空间不足时需要比 208px 更低的上限。本文件保留分组、折叠和选值守卫。
   it('菜单里的选项不继承全局 button 的 nowrap', () => {
     const { container } = mount(lookupForm);
     const option = container.querySelector<HTMLElement>('.qf-select-option')!;

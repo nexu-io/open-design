@@ -1568,9 +1568,10 @@
 }
 /* 稿子写死的那条高度上限:**32px × 6.5 = 208px**。露半行是给「下面还有」的提示,
    收在 6 行整会读成「就这些了」。`overscroll-behavior: contain` 挡住滚到底之后
-   把整条会话一起带走。 */
+   把整条会话一起带走。展开时还受当前 chat-log 可视高度限制,避免内部滚到底后
+   末项仍落在祖先裁切区之外;空间充足时保留原 208px 上限。 */
 .qf-select-more-list {
-  max-height: 208px;
+  max-height: min(208px, var(--qf-select-viewport-height, 208px));
   overflow-y: auto;
   overscroll-behavior: contain;
   border-top: 1px solid var(--border);
