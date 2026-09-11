@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { exactStorageObject, isReleaseChannel } from "@open-design/release";
 import { storageConfigFromEnv } from "../storage/common.ts";
 import { requestStorageObject } from "../storage/s3-upload.ts";
+import { mapWithConcurrency } from "../storage/concurrency.ts";
 
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { createAcceptedShellBaselineReceipt, resolveAcceptedShellBaseline, type AcceptedShellTarget } from "./accepted-baseline.ts";
@@ -132,25 +133,28 @@ export async function publishExactRelease(input: JsonObject, receiptPath: string
   validateReleaseArtifactTrust(policy, pack.requiredAcceptances as JsonObject[]);
   const storagePrefix = `${policy.target.endpointUrl}/${policy.target.bucket}/${channel}/${version}`;
   const publicPrefix = `${policy.target.publicBaseUrl}/${channel}/${version}`;
-  const objects: JsonObject[] = [], names = new Set<string>();
-  let allReplayed = true;
-  for (const kind of ["artifacts", "documents"] as const) {
-    for (const value of pack[kind] as JsonObject[]) {
-      const path = await checkedFile(value, kind.slice(0, -1));
-      const name = basename(path);
-      if (names.has(name)) throw new Error(`duplicate exact object name: ${name}`);
-      names.add(name);
-      const encodedName = encodeURIComponent(name);
-      const body = await readFile(path), storageUrl = `${storagePrefix}/${encodedName}`, publicUrl = `${publicPrefix}/${encodedName}`;
-      const contentType = kind === "artifacts" ? String(value.mediaType ?? "application/octet-stream") : "application/json; charset=utf-8";
-      const uploaded = await putImmutable(storageUrl, body, contentType); allReplayed &&= uploaded.replayed;
-      if (kind === "documents") {
-        const readback = await request(storageUrl);
-        if (!readback.ok || !Buffer.from(await readback.arrayBuffer()).equals(body)) throw new Error(`exact document readback failed: ${storageUrl}`);
-      }
-      objects.push({ kind: kind.slice(0, -1), name, url: publicUrl, etag: uploaded.etag, sha256: value.sha256, size: value.size });
-    }
+  const names = new Set<string>();
+  const entries = (["artifacts", "documents"] as const).flatMap(kind =>
+    (pack[kind] as JsonObject[]).map(value => ({ kind, value })));
+  for (const { value } of entries) {
+    const name = basename(String(value.file));
+    if (names.has(name)) throw new Error(`duplicate exact object name: ${name}`);
+    names.add(name);
   }
+  let allReplayed = true;
+  const objects = await mapWithConcurrency(entries, 4, async ({ kind, value }) => {
+    const path = await checkedFile(value, kind.slice(0, -1));
+    const name = basename(path);
+    const encodedName = encodeURIComponent(name);
+    const body = await readFile(path), storageUrl = `${storagePrefix}/${encodedName}`, publicUrl = `${publicPrefix}/${encodedName}`;
+    const contentType = kind === "artifacts" ? String(value.mediaType ?? "application/octet-stream") : "application/json; charset=utf-8";
+    const uploaded = await putImmutable(storageUrl, body, contentType); allReplayed &&= uploaded.replayed;
+    if (kind === "documents") {
+      const readback = await request(storageUrl);
+      if (!readback.ok || !Buffer.from(await readback.arrayBuffer()).equals(body)) throw new Error(`exact document readback failed: ${storageUrl}`);
+    }
+    return { kind: kind.slice(0, -1), name, url: publicUrl, etag: uploaded.etag, sha256: value.sha256, size: value.size };
+  });
   const publicByName = new Map(objects.map((value) => [value.name, value]));
   const requiredAcceptances = (pack.requiredAcceptances as JsonObject[]).map((acceptance) => {
     const artifact = publicByName.get(publicObjectName(acceptance.artifact.url)), shellMetadata = publicByName.get(publicObjectName(acceptance.shellMetadata.url));

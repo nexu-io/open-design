@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { mapWithConcurrency } from "./concurrency.ts";
 import { appendFileSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
@@ -171,34 +172,6 @@ async function publishImmutableObject(
     throw new Error(`immutable catalog object already exists with different content: ${objectKey}`);
   }
   return "reused";
-}
-
-async function mapWithConcurrency<T, R>(
-  values: readonly T[],
-  concurrency: number,
-  mapper: (value: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(values.length);
-  let nextIndex = 0;
-  let failure: { error: unknown } | undefined;
-
-  async function worker(): Promise<void> {
-    while (failure == null) {
-      const index = nextIndex;
-      nextIndex += 1;
-      if (index >= values.length) return;
-      try {
-        results[index] = await mapper(values[index]!, index);
-      } catch (error) {
-        failure ??= { error };
-      }
-    }
-  }
-
-  const workerCount = Math.min(concurrency, values.length);
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
-  if (failure != null) throw failure.error;
-  return results;
 }
 
 /**
