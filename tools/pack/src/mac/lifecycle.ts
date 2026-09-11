@@ -419,19 +419,17 @@ export async function stopPackedMacApp(config: ToolPackConfig): Promise<MacStopR
 }
 
 export async function recoverPackedMacApp(config: ToolPackConfig, options: Readonly<{
-  userDataRoot?: string;
   presentation?: "headless" | "interactive";
   capsuleManifestSha256?: string;
   closureGenerationId?: string;
   online?: boolean;
 }>) {
-  if (options.userDataRoot == null) throw new Error("mac recovery requires --user-data-root for the existing Electron session");
   if ((options.capsuleManifestSha256 == null) !== (options.closureGenerationId == null)) throw new Error("explicit recovery requires both Capsule and Closure identities");
   const target = await resolvePackedMacStartTarget(config);
   const { recoverElectronStartup } = await import("@open-design/shell-electron/lifecycle");
   return recoverElectronStartup({ schemaVersion: 1, installation: "installed", resourceRoot: join(target.appPath, "Contents", "Resources"),
     allowNetwork: options.online === true,
-    session: { baseUserDataRoot: resolve(options.userDataRoot), channel: runtimeChannel(config), namespace: config.namespace,
+    session: { channel: runtimeChannel(config), namespace: config.namespace,
       presentation: options.presentation ?? "headless" },
     ...(options.capsuleManifestSha256 == null ? {} : { target: { capsuleManifestSha256: options.capsuleManifestSha256, closureGenerationId: options.closureGenerationId! } }),
   });

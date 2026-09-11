@@ -4,12 +4,15 @@ import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp, waitForElectronShutdown } from "@/adapters/tools/lifecycle/inspection.ts";
 const cdp = vi.hoisted(() => vi.fn());
+const platform = vi.hoisted(() => ({ home: "" }));
+vi.mock("node:os", async original => ({ ...await original<typeof import("node:os")>(), homedir: () => platform.home }));
 vi.mock("@open-design/electron-kit/cdp", () => ({ executeElectronCdpContractControl: cdp }));
 const roots: string[] = [];
 afterEach(async () => { vi.resetAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "startup-inspection-")); roots.push(root);
-  const session = { baseUserDataRoot: root, channel: "betahyx", namespace: "fixture", presentation: "headless" as const };
+  platform.home = root;
+  const session = { productName: "Fixture", channel: "betahyx", namespace: "fixture", presentation: "headless" as const };
   const log = describeElectronRuntimeDiagnostics(session).runtimeLog;
   await mkdir(dirname(log), { recursive: true });
   return { session, log };

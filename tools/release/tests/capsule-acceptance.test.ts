@@ -29,8 +29,8 @@ async function fixture() {
   calls.startup.mockResolvedValue({ attemptId: "upgraded", results: [{ lines: { shell: { state: "current" } } }] });
   calls.shutdown.mockResolvedValue(undefined); calls.close.mockResolvedValue(undefined);
   return { before, after, input: { publication: "publication.json", policy: "policy.json", shell: "electron", target: "darwin-arm64",
-    baseUserDataRoot: join(root, "user-data"), installedRoot: join(root, "old"), firstInstallRoot,
-    firstInstallUserDataRoot: join(root, "first-user-data"), receipt: join(root, "proof.json") } };
+    namespace: "hot-acceptance", installedRoot: join(root, "old"), firstInstallRoot,
+    firstInstallNamespace: "first-acceptance", receipt: join(root, "proof.json") } };
 }
 it("uses the isolated Closure updater when the authenticated Capsule is unchanged", async () => {
   const f = await fixture(); calls.inspect.mockReset().mockResolvedValueOnce(f.after).mockResolvedValue({ ...f.before, shell: f.after.shell }); calls.closure.mockResolvedValue({ operation: "closure-proof" });

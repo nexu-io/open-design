@@ -1,7 +1,6 @@
 const CLI_COMMANDS = new Set(["prepare", "start", "run", "status", "stop", "restart", "recover", "logs", "inspect", "check", "help"]);
 const OPTIONS_WITH_VALUE = new Set([
   "--resource-root",
-  "--user-data-root",
   "--presentation",
   "--capsule-manifest-sha256",
   "--closure-generation-id",

@@ -171,6 +171,8 @@ export interface ElectronStandaloneAuthority {
 }
 
 export type ElectronStandaloneAuthorityFactory = (input: Readonly<{
+  scope: StandaloneScope;
+  presentation: "headless" | "interactive";
   nodeRuntime: NodeRuntimeBinding;
   installedShellPath?: string;
   namespaceRoot: string;

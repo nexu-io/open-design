@@ -7,12 +7,12 @@ import { canonicalBytes, checkedFile, readObject, writeObject } from "./control-
 import { acceptInstalledRelease } from "./control-release.ts";
 import { readPublishedAcceptance } from "./installed-acceptance.ts";
 
-type AcceptanceInput = Readonly<{ publication: string; policy: string; shell: string; target: string; receipt: string; baseUserDataRoot?: string }>;
+type AcceptanceInput = Readonly<{ publication: string; policy: string; shell: string; target: string; receipt: string; namespace?: string }>;
 async function session(input: AcceptanceInput): Promise<ElectronDiagnosticSession> {
-  if (input.shell !== "electron" || !input.baseUserDataRoot) throw new Error("Electron acceptance requires --base-user-data-root");
+  if (input.shell !== "electron" || !input.namespace) throw new Error("Electron acceptance requires --namespace");
   const { required, policy } = await readPublishedAcceptance({ publishReceipt: input.publication, policyReceipt: input.policy, shellType: input.shell, target: input.target });
   if (typeof required.installIdentity?.namespace !== "string") throw new Error("published Electron acceptance lacks namespace");
-  return { baseUserDataRoot: input.baseUserDataRoot, channel: policy.channel, namespace: required.installIdentity.namespace, presentation: "headless" };
+  return { namespace: input.namespace, channel: policy.channel, productName: required.installIdentity.productName, presentation: "headless" };
 }
 
 export async function updateAcceptanceClosure(input: AcceptanceInput): Promise<void> {
@@ -21,13 +21,13 @@ export async function updateAcceptanceClosure(input: AcceptanceInput): Promise<v
 
 /** Same carrier, two public update paths. Capsule replacement owns its exact
  * Closure transition; never fake a second Closure apply after that transition. */
-export async function updateAcceptanceSameCarrier(input: AcceptanceInput & Readonly<{ installedRoot: string; firstInstallRoot: string; firstInstallUserDataRoot: string }>) {
+export async function updateAcceptanceSameCarrier(input: AcceptanceInput & Readonly<{ installedRoot: string; firstInstallRoot: string; firstInstallNamespace: string }>) {
   const diagnosticSession = await session(input);
   const installation = await readObject(join(input.firstInstallRoot, "standalone-installation.json"));
   const manifestFile = await checkedFile(installation.capsule.manifest, "current first-install Capsule",
     join(input.firstInstallRoot, installation.capsule.manifest.file));
   const expected = await readObject(manifestFile);
-  const first = await inspectElectronSelectedCapsule({ ...diagnosticSession, baseUserDataRoot: input.firstInstallUserDataRoot }, input.firstInstallRoot);
+  const first = await inspectElectronSelectedCapsule({ ...diagnosticSession, namespace: input.firstInstallNamespace }, input.firstInstallRoot);
   if (!canonicalBytes(first.envelope).equals(canonicalBytes(expected))) throw new Error("First installation did not commit its bound Capsule");
   const before = await inspectElectronSelectedCapsule(diagnosticSession, input.installedRoot);
   // Per-version URLs/signatures are not a content upgrade. The verified owner
@@ -67,16 +67,16 @@ export async function updateAcceptanceSameCarrier(input: AcceptanceInput & Reado
 
 export async function collectReleaseAcceptance(input: AcceptanceInput & Readonly<{
   installedRoot: string; runtimeProofRoot: string; hotAcceptanceReceipt?: string;
-  firstInstallRoot?: string; firstInstallUserDataRoot?: string;
+  firstInstallRoot?: string; firstInstallNamespace?: string;
   baselineCandidate?: boolean;
 }>): Promise<void> {
   if (input.hotAcceptanceReceipt != null && input.shell !== "electron") throw new Error("hot acceptance requires Electron");
-  if ((input.firstInstallRoot != null || input.firstInstallUserDataRoot != null)
-    && (!input.hotAcceptanceReceipt || !input.firstInstallRoot || !input.firstInstallUserDataRoot)) throw new Error("first-install evidence requires both roots and a hot receipt");
+  if ((input.firstInstallRoot != null || input.firstInstallNamespace != null)
+    && (!input.hotAcceptanceReceipt || !input.firstInstallRoot || !input.firstInstallNamespace)) throw new Error("first-install evidence requires both roots and a hot receipt");
   const diagnostics = input.shell === "electron" ? describeElectronRuntimeDiagnostics(await session(input)) : undefined;
-  const first = input.firstInstallRoot == null ? undefined : describeElectronRuntimeDiagnostics(await session({ ...input, baseUserDataRoot: input.firstInstallUserDataRoot }));
+  const first = input.firstInstallRoot == null ? undefined : describeElectronRuntimeDiagnostics(await session({ ...input, namespace: input.firstInstallNamespace }));
   await acceptInstalledRelease({ installedRoot: input.installedRoot, runtimeProofRoot: input.runtimeProofRoot,
-    ...(input.baseUserDataRoot == null ? {} : { baseUserDataRoot: input.baseUserDataRoot }),
+    ...(input.namespace == null ? {} : { namespace: input.namespace }),
     ...(input.baselineCandidate ? { baselineCandidate: true } : {}),
     publishReceipt: input.publication, policyReceipt: input.policy, shellType: input.shell, target: input.target,
     ...(diagnostics == null ? {} : { runtimeLog: diagnostics.runtimeLog }),

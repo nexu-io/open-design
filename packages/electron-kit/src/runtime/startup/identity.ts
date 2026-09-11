@@ -24,7 +24,7 @@ export async function prepareElectronCarrierIdentity(input: Readonly<{
   if (input.platform === "darwin" && input.presentation === "headless") input.app.setActivationPolicy("prohibited");
   input.app.setName(input.productName);
   input.protocol.registerSchemesAsPrivileged([{ scheme: input.scheme, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
-  const paths = await prepareElectronNamespacePaths(input.app, { channel: input.channel, namespace: input.namespace });
+  const paths = await prepareElectronNamespacePaths(input.app, { channel: input.channel, namespace: input.namespace, productName: input.productName });
   if (!await claimElectronSingleInstanceLock(input.app)) return null;
   return Object.freeze({ paths, preflight });
 }

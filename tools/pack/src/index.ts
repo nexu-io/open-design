@@ -33,7 +33,6 @@ function printLogs(result: { logs: Record<string, { lines: string[]; logPath: st
 const cli = cac("tools-pack");
 
 const mac = cli.command("mac <action>", "Mac Electron Shell commands: build|install|start|stop|recover|logs|uninstall|cleanup|inspect")
-    .option("--user-data-root <path>", "Electron base userData root for explicit recovery")
     .option("--presentation <mode>", "recovery session: headless or interactive", { default: "headless" })
     .option("--capsule-manifest-sha256 <digest>", "explicit exact Capsule manifest identity")
     .option("--closure-generation-id <digest>", "explicit exact Closure generation identity")

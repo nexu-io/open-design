@@ -4,9 +4,9 @@ import { normalizeElectronDevArgv } from "@/commands/dev.js";
 
 describe("Electron dev command", () => {
   it("removes pnpm's script separator before forwarding Electron switches", () => {
-    expect(normalizeElectronDevArgv(["--", "--headless", "--user-data-dir=/tmp/isolated"])).toEqual([
+    expect(normalizeElectronDevArgv(["--", "--headless", "--namespace=isolated"])).toEqual([
       "--headless",
-      "--user-data-dir=/tmp/isolated",
+      "--namespace=isolated",
     ]);
     expect(normalizeElectronDevArgv(["--headless"])).toEqual(["--headless"]);
   });

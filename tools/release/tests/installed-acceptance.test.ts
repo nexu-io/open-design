@@ -14,6 +14,8 @@ import { createAcceptedShellBaselineReceipt, resolveAcceptedShellBaseline } from
 
 const roots: string[] = [];
 const capsuleInspection = vi.hoisted(() => vi.fn());
+const platform = vi.hoisted(() => ({ home: "" }));
+vi.mock("node:os", async original => ({ ...await original<typeof import("node:os")>(), homedir: () => platform.home }));
 vi.mock("@open-design/shell-electron/lifecycle/inspection", async original => ({
   ...await original<typeof import("@open-design/shell-electron/lifecycle/inspection")>(), inspectElectronSelectedCapsule: capsuleInspection,
 }));
@@ -131,15 +133,16 @@ it("binds installed evidence to the policy and published target", async () => {
 });
 
 it("collects through the public Shell diagnostic locations instead of caller-built private paths", async () => {
-  const f = await fixture(), baseUserDataRoot = join(f.root, "user-data");
-  const paths = describeElectronRuntimeDiagnostics({ baseUserDataRoot, channel: f.published.channel, namespace: "acceptance", presentation: "headless" });
+  const f = await fixture(), namespace = "acceptance";
+  platform.home = f.root;
+  const paths = describeElectronRuntimeDiagnostics({ productName: "OpenDesign", channel: f.published.channel, namespace, presentation: "headless" });
   await mkdir(dirname(paths.runtimeLog), { recursive: true }); await copyFile(f.input.runtimeLog, paths.runtimeLog);
   await collectReleaseAcceptance({ publication: f.input.publishReceipt, policy: f.input.policyReceipt, shell: "electron", target: f.input.target,
-    installedRoot: f.root, runtimeProofRoot: f.root, baseUserDataRoot, receipt: f.output });
+    installedRoot: f.root, runtimeProofRoot: f.root, namespace, receipt: f.output });
   expect(JSON.parse(await readFile(f.output, "utf8"))).toMatchObject({ operation: "exact.acceptance", status: "accepted" });
   await writeFile(paths.runtimeLog, JSON.stringify({ attemptId: "failed", event: "startup.failed" }));
   await expect(collectReleaseAcceptance({ publication: f.input.publishReceipt, policy: f.input.policyReceipt, shell: "electron", target: f.input.target,
-    installedRoot: f.root, runtimeProofRoot: f.root, baseUserDataRoot, receipt: f.output })).rejects.toThrow("latest installed Electron attempt");
+    installedRoot: f.root, runtimeProofRoot: f.root, namespace, receipt: f.output })).rejects.toThrow("latest installed Electron attempt");
 });
 
 it.each(["startup.failed", "startup.started"])("does not hide a final %s behind an earlier successful attempt", async (event) => {
@@ -297,7 +300,7 @@ it("requires an exact committed Capsule plus Closure restart and independent cur
   ];
   await f.log(events);
   const input = { ...f.input, hotAcceptanceReceipt, standaloneState, standaloneGenerationsRoot: f.root,
-    baseUserDataRoot: join(f.root, "session"), firstInstallRoot: first.root, firstInstallRuntimeLog: first.input.runtimeLog };
+    namespace: "hot-acceptance", firstInstallRoot: first.root, firstInstallRuntimeLog: first.input.runtimeLog };
   capsuleInspection.mockResolvedValue({ ...after, revision: 3 });
   await executeExactReleaseControl(input, f.output);
   expect(JSON.parse(await readFile(f.output, "utf8")).installed.proof.hotUpdate.capsule.after.revision).toBe(3);

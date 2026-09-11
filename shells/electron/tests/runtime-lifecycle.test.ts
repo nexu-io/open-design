@@ -19,7 +19,7 @@ describe("Electron runtime adapter contract", () => {
       runtimeRoot: resolve(".tmp/runtime"),
     })).toMatchObject({
       operation: "electron.runtime.start",
-      argv: ["--remote-debugging-port=0"],
+      argv: ["--remote-debugging-port=0", "--namespace=electron-runtime-test"],
     });
   });
 

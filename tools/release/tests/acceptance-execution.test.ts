@@ -7,10 +7,11 @@ import { collectExecutedAcceptance, exerciseReleaseInstallation } from "@/exact/
 
 const mocks = vi.hoisted(() => ({
   published: vi.fn(), install: vi.fn(), process: vi.fn(), update: vi.fn(), collect: vi.fn(), startup: vi.fn(), ready: vi.fn(),
+  root: "",
 }));
 vi.mock("@open-design/shell-electron/lifecycle/inspection", () => ({ inspectElectronStartupThroughCdp: mocks.startup,
   waitForElectronStartup: mocks.ready,
-  describeElectronRuntimeDiagnostics: ({ baseUserDataRoot }: { baseUserDataRoot: string }) => ({ runtimeLog: join(baseUserDataRoot, "runtime.jsonl") }) }));
+  describeElectronRuntimeDiagnostics: ({ namespace }: { namespace: string }) => ({ namespaceRoot: join(mocks.root, "namespaces", namespace), runtimeLog: join(mocks.root, "namespaces", namespace, "runtime.jsonl") }) }));
 vi.mock("@open-design/shell-electron/lifecycle/installed", () => ({ installMacElectronApp: mocks.install, withMacElectronProcess: mocks.process }));
 vi.mock("@/exact/installed-acceptance.ts", () => ({ readPublishedAcceptance: mocks.published }));
 vi.mock("@/exact/acceptance.ts", () => ({ updateAcceptanceSameCarrier: mocks.update, collectReleaseAcceptance: mocks.collect }));
@@ -19,10 +20,11 @@ afterEach(async () => { vi.resetAllMocks(); await Promise.all(roots.splice(0).ma
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "release-execution-")); roots.push(root);
+  mocks.root = root;
   const publication = join(root, "publication.json"), artifact = join(root, "installer.dmg");
   await writeFile(publication, "{}"); await writeFile(artifact, "fixture");
   const required = { shell: { version: "1.0.0", buildHash: "carrier" },
-    installIdentity: { executableName: "app", namespace: "fixture" }, artifact: await describeFile(artifact) };
+    installIdentity: { productName: "Fixture", executableName: "app", namespace: "fixture" }, artifact: await describeFile(artifact) };
   const policy = { channel: "betahyx", releaseVersion: "1.0.0-betahyx.2", target: { publicBaseUrl: "https://release.example" } };
   mocks.published.mockResolvedValue({ required, policy, published: { channelHead: { url: "https://release.example/betahyx/1.0.0-betahyx.2/channel-head.json" } } });
   mocks.install.mockImplementation(async ({ appPath }) => ({ resources: join(appPath, "Contents/Resources") }));
@@ -46,6 +48,11 @@ it.skipIf(process.platform !== "darwin")("keeps first install, hot update and su
   expect(mocks.process).toHaveBeenCalledTimes(3);
   expect(mocks.process.mock.calls[1]![0].args).toContain("--remote-debugging-port=0");
   expect(mocks.process.mock.calls[2]![0].args).toContain("--headless");
+  const firstArgs = mocks.process.mock.calls[0]![0].args as string[];
+  const hotArgs = mocks.process.mock.calls[1]![0].args as string[];
+  expect(firstArgs.some(arg => arg.startsWith("--user-data-dir"))).toBe(false);
+  expect(firstArgs.find(arg => arg.startsWith("--namespace="))).not.toBe(hotArgs.find(arg => arg.startsWith("--namespace=")));
+  expect(mocks.process.mock.calls[2]![0].args).toContain(hotArgs.find(arg => arg.startsWith("--namespace=")));
   expect(mocks.startup).toHaveBeenCalledTimes(2);
   expect(mocks.ready).toHaveBeenCalledTimes(1);
   expect(mocks.ready.mock.invocationCallOrder[0]).toBeLessThan(mocks.update.mock.invocationCallOrder[0]!);

@@ -7,6 +7,7 @@ import {
 } from "@open-design/sidecar";
 import { APP_KEYS, SIDECAR_MODES, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import { inspectElectronCdpStatus } from "@open-design/electron-kit/cdp";
+import { bindElectronLaunchNamespace } from "@open-design/electron-kit";
 import { observeElectronLifecycle, waitForElectronGeneration, stopElectronGeneration } from "./observation.ts";
 
 type RequestScope = Readonly<{
@@ -70,7 +71,7 @@ export function parseElectronRuntimeLifecycleRequest(input: unknown): ElectronRu
     ...scope,
     operation,
     appPath: absolutePath(value.appPath, "Electron runtime appPath"),
-    argv: Object.freeze([...value.argv] as string[]),
+    argv: bindElectronLaunchNamespace(scope.namespace, value.argv as string[]),
     executablePath: absolutePath(value.executablePath, "Electron runtime executablePath"),
     logPath: absolutePath(value.logPath, "Electron runtime logPath"),
     runtimeRoot: absolutePath(value.runtimeRoot, "Electron runtime root"),
@@ -99,6 +100,7 @@ export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLi
       remainingPids,
     });
   }
+  const argv = bindElectronLaunchNamespace(request.namespace, request.argv);
   await mkdir(dirname(request.logPath), { recursive: true });
   const log = await open(request.logPath, "w");
   let convergence: Awaited<ReturnType<typeof convergeSidecarLaunch>>;
@@ -107,7 +109,7 @@ export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLi
     const environment: NodeJS.ProcessEnv = { ...process.env, OD_ELECTRON_CONTROL_RESOURCES: JSON.stringify(resources) };
     for (const key of Object.keys(environment)) if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") delete environment[key];
     convergence = await convergeSidecarLaunch({
-      args: [...request.argv],
+      args: [...argv],
       command: request.executablePath,
       cwd: request.appPath,
       detached: true,

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { copyFile, mkdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { installMacElectronApp, withMacElectronProcess } from "@open-design/shell-electron/lifecycle/installed";
 import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp, waitForElectronStartup } from "@open-design/shell-electron/lifecycle/inspection";
@@ -10,10 +11,11 @@ import { collectReleaseAcceptance, updateAcceptanceSameCarrier } from "./accepta
 
 type Input = Readonly<{ publication: string; policy: string; shell: string; target: string; workRoot: string }>;
 const execute = promisify(execFile);
-type ExerciseInput = Input & Readonly<{ artifact: string; mode: string; baselineReceipt?: string }>;
+type ExerciseInput = Input & Readonly<{ artifact: string; mode: string; baselineReceipt?: string; namespace?: string }>;
 
 export async function exerciseReleaseInstallation(input: ExerciseInput) {
   if (!["first", "hot"].includes(input.mode)) throw new Error("Installation mode must be first or hot");
+  input = { ...input, namespace: input.namespace ?? `accept-${input.mode}-${randomUUID()}` };
   try { return await executeReleaseInstallation(input); }
   catch (error) {
     const failure = error as Error & { code?: unknown; signal?: unknown; killed?: boolean; stdout?: string; stderr?: string };
@@ -37,8 +39,8 @@ export async function exerciseReleaseInstallation(input: ExerciseInput) {
       try {
         const { required, policy } = await readPublishedAcceptance({ publishReceipt: input.publication,
           policyReceipt: input.policy, shellType: input.shell, target: input.target });
-        const diagnostics = describeElectronRuntimeDiagnostics({ baseUserDataRoot: join(resolve(input.workRoot), input.mode, "user-data"),
-          channel: policy.channel, namespace: required.installIdentity.namespace, presentation: "headless" });
+        const diagnostics = describeElectronRuntimeDiagnostics({ namespace: input.namespace!,
+          channel: policy.channel, productName: required.installIdentity.productName, presentation: "headless" });
         const output = join(resolve(input.workRoot), "diagnostics");
         await mkdir(output, { recursive: true });
         await copyFile(diagnostics.runtimeLog, join(output, input.mode + "-runtime.jsonl"));
@@ -77,10 +79,15 @@ async function executeReleaseInstallation(input: ExerciseInput) {
   const root = join(resolve(input.workRoot), input.mode);
   await mkdir(resolve(input.workRoot), { recursive: true });
   await mkdir(root); // Refuse evidence reuse or overwriting an earlier attempt.
-  const baseUserDataRoot = join(root, "user-data");
+  const namespace = input.namespace!;
   let installedRoot: string;
   let hotAcceptanceReceipt: string | undefined;
   if (input.shell === "electron") {
+    const scope = { namespace, channel: policy.channel, productName: required.installIdentity.productName, presentation: "headless" as const };
+    const diagnostics = describeElectronRuntimeDiagnostics(scope);
+    await mkdir(dirname(diagnostics.namespaceRoot), { recursive: true });
+    await mkdir(diagnostics.namespaceRoot); // Existing user state is never an acceptance fixture.
+    await writeObject(join(root, "scope.json"), { schemaVersion: 1, operation: "release.acceptance.scope", scope });
     const appPath = join(root, "installed.app");
     installedRoot = (await installMacElectronApp({ artifact: resolve(input.artifact), appPath })).resources;
     const executableName = required.installIdentity?.executableName;
@@ -88,7 +95,7 @@ async function executeReleaseInstallation(input: ExerciseInput) {
     // Enclose platform acquisition plus the product's bounded cold warmup;
     // readiness still requires committed startup and renderer evidence.
     const common = { appPath, executableName, timeoutMs: 600_000 };
-    const args = ["--headless", `--user-data-dir=${baseUserDataRoot}`, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"];
+    const args = ["--headless", `--namespace=${namespace}`, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"];
     if (input.mode === "hot") {
       const head = new URL(published.channelHead.url), base = new URL(policy.target.publicBaseUrl + "/");
       if (head.protocol !== "https:" || head.origin !== base.origin || head.username || head.password
@@ -99,19 +106,19 @@ async function executeReleaseInstallation(input: ExerciseInput) {
       async () => {
         // The freshly installed baseline has its own cold materialization;
         // only the subsequent updater interaction belongs to the CDP budget.
-        await waitForElectronStartup({ baseUserDataRoot, channel: policy.channel,
-          namespace: required.installIdentity.namespace, presentation: "headless" }, baselineStartedAfter, 420_000);
+        await waitForElectronStartup({ namespace, channel: policy.channel,
+          productName: required.installIdentity.productName, presentation: "headless" }, baselineStartedAfter, 420_000);
         const first = await readObject(join(resolve(input.workRoot), "first", "execution.json"));
         await checkedFile(first.publication, "first-install publication", input.publication);
         await updateAcceptanceSameCarrier({ ...input, installedRoot, firstInstallRoot: first.installedRoot,
-          firstInstallUserDataRoot: first.baseUserDataRoot,
-          baseUserDataRoot, receipt: hotAcceptanceReceipt! });
+          firstInstallNamespace: first.namespace,
+          namespace, receipt: hotAcceptanceReceipt! });
       });
     }
     const startedAfter = Date.now();
     await withMacElectronProcess({ ...common, args }, async () => {
-      const result = await inspectElectronStartupThroughCdp({ baseUserDataRoot, channel: policy.channel,
-        namespace: required.installIdentity.namespace, presentation: "headless" }, startedAfter);
+      const result = await inspectElectronStartupThroughCdp({ namespace, channel: policy.channel,
+        productName: required.installIdentity.productName, presentation: "headless" }, startedAfter);
       await writeObject(join(root, "startup-cdp.json"), result);
     });
   } else if (input.shell === "terminal") {
@@ -120,7 +127,6 @@ async function executeReleaseInstallation(input: ExerciseInput) {
     await mkdir(extracted);
     await execute("/usr/bin/tar", ["-xzf", resolve(input.artifact), "-C", extracted], { timeout: 120_000 });
     const source = join(extracted, "nexu-terminal");
-    const namespace = "exact-public-acceptance";
     const installed = await execute("/bin/sh", [join(source, "sh/install.sh"), "--source", source,
       "--root", installedRoot, "--channel", policy.channel, "--namespace", namespace], { timeout: 180_000 });
     await writeObject(join(root, "installed-proof.json"), JSON.parse(installed.stdout));
@@ -133,7 +139,7 @@ async function executeReleaseInstallation(input: ExerciseInput) {
   await writeObject(join(root, "execution.json"), {
     schemaVersion: 1, operation: "release.installation.exercise", shell: input.shell, target: input.target,
     publication: await describeFile(input.publication), installedRoot, runtimeProofRoot: root,
-    baseUserDataRoot, ...(hotAcceptanceReceipt == null ? {} : { hotAcceptanceReceipt }),
+    namespace, ...(hotAcceptanceReceipt == null ? {} : { hotAcceptanceReceipt }),
   });
 }
 
@@ -165,7 +171,7 @@ export async function collectExecutedAcceptance(input: Input & Readonly<{ inspec
   const selected = hot ? await readExecution("hot") : first;
   await collectReleaseAcceptance({ ...input, installedRoot: selected.installedRoot,
     baselineCandidate,
-    runtimeProofRoot: selected.runtimeProofRoot, baseUserDataRoot: selected.baseUserDataRoot,
+    runtimeProofRoot: selected.runtimeProofRoot, namespace: selected.namespace,
     ...(hot ? { hotAcceptanceReceipt: selected.hotAcceptanceReceipt,
-      firstInstallRoot: first.installedRoot, firstInstallUserDataRoot: first.baseUserDataRoot } : {}) });
+      firstInstallRoot: first.installedRoot, firstInstallNamespace: first.namespace } : {}) });
 }

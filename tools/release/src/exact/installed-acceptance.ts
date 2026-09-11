@@ -46,9 +46,9 @@ async function hotProof(input: JsonObject, published: JsonObject, required: Json
   const capsuleUpgrade = hot.operation === "electron.capsule.upgrade";
   let capsuleSnapshot;
   if (capsuleUpgrade) {
-    if (!nonempty(input.baseUserDataRoot)) throw new Error("Capsule upgrade requires the actual session root");
-    const current = capsuleSnapshot = await inspectElectronSelectedCapsule({ baseUserDataRoot: input.baseUserDataRoot,
-      channel: published.channel, namespace: required.installIdentity.namespace, presentation: "headless" }, input.installedRoot);
+    if (!nonempty(input.namespace)) throw new Error("Capsule upgrade requires the actual session namespace");
+    const current = capsuleSnapshot = await inspectElectronSelectedCapsule({ namespace: input.namespace,
+      channel: published.channel, productName: required.installIdentity.productName, presentation: "headless" }, input.installedRoot);
     const expectedInstallation = await readObject(join(input.firstInstallRoot, "standalone-installation.json"));
     await installedFile(input.firstInstallRoot, expectedInstallation.capsule?.manifest, "candidate Capsule manifest");
     const expected = await readObject(join(input.firstInstallRoot, expectedInstallation.capsule.manifest.file));

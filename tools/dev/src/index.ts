@@ -1066,20 +1066,19 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
 
 addSharedOptions(cli.command("recover <app>", "Explicitly recover a stopped desktop without starting its product"))
   .option("--resource-root <path>", "existing Electron development scene resource root")
-  .option("--user-data-root <path>", "Electron base userData root used by this session")
   .option("--presentation <mode>", "headless or interactive session", { default: "headless" })
   .option("--capsule-manifest-sha256 <digest>", "explicit exact Capsule manifest identity")
   .option("--closure-generation-id <digest>", "explicit exact Closure generation identity")
   .option("--online", "allow exact signed resource reacquisition during recovery")
-  .action(async (appName: string, options: CliOptions & { resourceRoot?: string; userDataRoot?: string; presentation: "headless" | "interactive"; capsuleManifestSha256?: string; closureGenerationId?: string; online?: boolean }) => {
+  .action(async (appName: string, options: CliOptions & { resourceRoot?: string; presentation: "headless" | "interactive"; capsuleManifestSha256?: string; closureGenerationId?: string; online?: boolean }) => {
     if (appName !== "desktop") throw new Error("tools-dev recover supports only desktop");
-    if (options.resourceRoot == null || options.userDataRoot == null) throw new Error("desktop recovery requires --resource-root and --user-data-root for the existing session");
+    if (options.resourceRoot == null) throw new Error("desktop recovery requires --resource-root for the existing session");
     if ((options.capsuleManifestSha256 == null) !== (options.closureGenerationId == null)) throw new Error("explicit recovery requires both Capsule and Closure identities");
     const config = resolveToolDevConfig(options);
     const { recoverElectronStartup } = await import("@open-design/shell-electron/lifecycle");
     output(await recoverElectronStartup({ schemaVersion: 1, installation: "development", resourceRoot: path.resolve(options.resourceRoot),
       allowNetwork: options.online === true,
-      session: { baseUserDataRoot: path.resolve(options.userDataRoot), channel: "dev", namespace: config.namespace, presentation: options.presentation },
+      session: { channel: "dev", namespace: config.namespace, presentation: options.presentation },
       ...(options.capsuleManifestSha256 == null ? {} : { target: { capsuleManifestSha256: options.capsuleManifestSha256, closureGenerationId: options.closureGenerationId! } }),
     }), options);
   });

@@ -1,17 +1,17 @@
 import { expect, it, vi, afterEach } from "vitest";
 import { inspectElectronSelectedCapsule } from "@/adapters/tools/lifecycle/capsule-inspection.ts";
 const mocks = vi.hoisted(() => ({ selection: vi.fn(), physical: vi.fn(), trust: vi.fn(), inspect: vi.fn() }));
-vi.mock("@open-design/electron-kit", () => ({ resolveElectronNamespacePaths: () => ({ runtimeRoot: "/owned/runtime" }),
+vi.mock("@open-design/electron-kit", () => ({ resolveElectronSessionPaths: () => ({ runtimeRoot: "/owned/runtime" }),
   resolveElectronSessionNamespace: () => "fixture-headless", readElectronCapsuleSelection: mocks.selection }));
 vi.mock("@open-design/electron-kit/capsule-loader", () => ({ inspectElectronCapsule: mocks.inspect }));
 vi.mock("@open-design/electron-kit/installation/inspection", () => ({ readElectronInstalledManifest: mocks.physical }));
 vi.mock("@/adapters/standalone/installation.ts", () => ({ loadElectronInstalledTrust: mocks.trust, resolveElectronStandaloneTarget: () => "darwin-arm64" }));
 afterEach(() => vi.resetAllMocks());
-const session = { baseUserDataRoot: "/owned", channel: "betahyx", namespace: "fixture", presentation: "headless" as const };
+const session = { productName: "Fixture", channel: "betahyx", namespace: "fixture", presentation: "headless" as const };
 it("authenticates selected Capsule bytes with sealed installation trust, without loading code", async () => {
   const current = { envelope: { document: {} }, root: "/cached/capsule", closureGenerationId: "a".repeat(64) };
   mocks.selection.mockResolvedValue({ current, pending: null, revision: 3 });
-  mocks.physical.mockResolvedValue({ manifest: { channel: "betahyx", shell: { buildHash: "carrier" } } });
+  mocks.physical.mockResolvedValue({ manifest: { channel: "betahyx", productName: "Fixture", shell: { buildHash: "carrier" } } });
   mocks.trust.mockResolvedValue({ trustedKeys: { sealed: "key" } });
   mocks.inspect.mockResolvedValue({ shell: { buildHash: "logical" }, entrypoint: { sha256: "verified" } });
   expect(await inspectElectronSelectedCapsule(session, "/installed/Resources")).toMatchObject({ revision: 3,

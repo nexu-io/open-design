@@ -244,6 +244,8 @@ export async function runElectronCapsule(
       [ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE]: async ({ signal }) => {
         signal.throwIfAborted();
         authority = definition.createStandaloneAuthority({
+          scope,
+          presentation,
           nodeRuntime,
           installedShellPath: process.platform === "darwin" ? resolve(dirname(process.execPath), "../..") : process.execPath,
           namespaceRoot: paths.namespaceRoot,

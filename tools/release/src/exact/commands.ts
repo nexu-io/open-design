@@ -75,21 +75,21 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Directory for public-shell-artifact with native suffix")
     .option("--receipt <file>", "Selected required acceptance, unchanged")
     .option("--github-env <file>", "Optional installed identity projection for GitHub")
-    .option("--base-user-data-root <directory>", "Explicit Electron bootstrap user-data root (collect/hot-update)")
+    .option("--namespace <name>", "Electron runtime namespace (collect/hot-update)")
     .option("--installed-root <directory>", "Installed resource root (collect)")
     .option("--runtime-proof-root <directory>", "Terminal lifecycle receipts (collect)")
     .option("--hot-receipt <file>", "Completed CDP hot-update receipt (collect)")
     .option("--first-install-root <directory>", "Current release installed resources, separate from upgraded baseline (collect)")
-    .option("--first-install-user-data-root <directory>", "Current release first-install runtime evidence (collect)")
+    .option("--first-install-namespace <name>", "Current release first-install namespace (collect)")
     .action(async (operation: string, options: Options) => {
       const common = { publication: required(options, "publication"), policy: required(options, "policy"),
         shell: required(options, "shell"), target: required(options, "target"), receipt: required(options, "receipt"),
-        ...(options.baseUserDataRoot == null ? {} : { baseUserDataRoot: required(options, "baseUserDataRoot") }) };
+        ...(options.namespace == null ? {} : { namespace: required(options, "namespace") }) };
       if (operation === "fetch") await fetchAcceptanceArtifact({ ...common, output: required(options, "output"), ...(options.githubEnv == null ? {} : { githubEnv: required(options, "githubEnv") }) });
       else if (operation === "hot-update") await updateAcceptanceClosure(common);
       else if (operation === "collect") await collectReleaseAcceptance({ ...common, installedRoot: required(options, "installedRoot"), runtimeProofRoot: required(options, "runtimeProofRoot"),
         ...(options.firstInstallRoot == null ? {} : { firstInstallRoot: required(options, "firstInstallRoot") }),
-        ...(options.firstInstallUserDataRoot == null ? {} : { firstInstallUserDataRoot: required(options, "firstInstallUserDataRoot") }),
+        ...(options.firstInstallNamespace == null ? {} : { firstInstallNamespace: required(options, "firstInstallNamespace") }),
         ...(options.hotReceipt == null ? {} : { hotAcceptanceReceipt: required(options, "hotReceipt") }) });
       else throw new Error("acceptance operation must be fetch or hot-update or collect");
     });

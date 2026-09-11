@@ -7,7 +7,7 @@ const control = vi.hoisted(() => ({
   runtime: null as { startedAt: string } | null,
   register: vi.fn(),
   handoff: vi.fn(),
-  stamp: vi.fn((): { app: string } | null => ({ app: "electron" })),
+  stamp: vi.fn((): { app: string; channel: string; namespace: string } | null => ({ app: "electron", channel: "betahyx", namespace: "control-test" })),
 }));
 const app = new EventEmitter() as EventEmitter & { getPath: () => string; quit: ReturnType<typeof vi.fn>; relaunch: ReturnType<typeof vi.fn> };
 app.getPath = () => "/namespace/electron";
@@ -33,12 +33,19 @@ vi.mock("@open-design/sidecar/authority", () => ({
 }));
 
 describe("Electron control during product startup", () => {
+  it("rejects scope mismatch before process registration or product startup", async () => {
+    const { runControlledElectronShell } = await import("@/adapters/standalone/electron-control.js");
+    const run = vi.fn();
+    await expect(runControlledElectronShell(run, 360000, { channel: "betahyx", namespace: "another-test" })).rejects.toThrow("conflicts");
+    expect(control.register).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.stubEnv("OD_ELECTRON_CONTROL_RESOURCES", JSON.stringify({ dataRoot: null, ownerPid: null, port: 0, runtimeRoot: "/control" }));
     control.lifecycle = null;
     control.runtime = null;
     vi.clearAllMocks();
-    control.stamp.mockReturnValue({ app: "electron" });
+    control.stamp.mockReturnValue({ app: "electron", channel: "betahyx", namespace: "control-test" });
     control.handoff.mockResolvedValue(undefined);
   });
   afterEach(() => { vi.unstubAllEnvs(); app.removeAllListeners(); });
@@ -69,7 +76,7 @@ describe("Electron control during product startup", () => {
     const { scheduleElectronShellRestart } = await import("@/adapters/standalone/electron-control.js");
     control.stamp.mockReturnValue(null);
     await scheduleElectronShellRestart();
-    expect(app.relaunch).toHaveBeenCalledOnce();
+    expect(app.relaunch).toHaveBeenCalledWith({ args: process.argv.slice(1) });
     expect(control.handoff).not.toHaveBeenCalled();
     expect(app.quit).not.toHaveBeenCalled();
   });
@@ -78,7 +85,7 @@ describe("Electron control during product startup", () => {
     const { runControlledElectronShell } = await import("@/adapters/standalone/electron-control.js");
     const ready = Promise.withResolvers<void>();
     const run = vi.fn(() => { expect(control.register).toHaveBeenCalledOnce(); return ready.promise; });
-    const pending = runControlledElectronShell(run, 360000);
+    const pending = runControlledElectronShell(run, 360000, { channel: "betahyx", namespace: "control-test" });
     expect(run).toHaveBeenCalledOnce();
     await Promise.resolve();
     expect(await control.lifecycle!.status(control.runtime!)).toMatchObject({
@@ -93,7 +100,7 @@ describe("Electron control during product startup", () => {
   it("can stop during startup even when quit emits synchronously", async () => {
     const { runControlledElectronShell } = await import("@/adapters/standalone/electron-control.js");
     const ready = Promise.withResolvers<void>();
-    const pending = runControlledElectronShell(() => ready.promise, 360000);
+    const pending = runControlledElectronShell(() => ready.promise, 360000, { channel: "betahyx", namespace: "control-test" });
     await Promise.resolve();
     await control.lifecycle!.stop(control.runtime!);
     expect(app.quit).toHaveBeenCalledOnce();
@@ -105,7 +112,7 @@ describe("Electron control during product startup", () => {
   it("does not turn a rejected startup into running", async () => {
     const { runControlledElectronShell } = await import("@/adapters/standalone/electron-control.js");
     const failure = new Error("carrier failed");
-    await expect(runControlledElectronShell(() => Promise.reject(failure), 360000)).rejects.toBe(failure);
+    await expect(runControlledElectronShell(() => Promise.reject(failure), 360000, { channel: "betahyx", namespace: "control-test" })).rejects.toBe(failure);
     expect(await control.lifecycle!.status(control.runtime!)).toMatchObject({ state: "failed" });
   });
 });

@@ -121,10 +121,16 @@ consumers: an Electron cold-start attempt cannot be silently retried or rolled
 back by another launcher. Generation records remain schema 4. Regenerate local
 experimental state rather than editing it into the new shape.
 
+Distributed and development Electron select a logical session with `--namespace`;
+omitting it retains the installed manifest default. Channel and signed installation
+identity do not change. Chromium paths, diagnostics and recovery derive from the
+platform application-data root, product identity and selected channel/namespace.
+`--user-data-dir` is forbidden, including an override equal to the derived path.
+Headless presentation retains the existing derived namespace suffix.
+
 `tools-dev recover desktop` accepts `--resource-root` for the existing development
-scene and `--user-data-root` for that Electron session's base userData location.
-`tools-pack mac recover` selects the existing installed/built app through its pack
-receipt and also requires `--user-data-root`. Both accept `--presentation`
+scene. `tools-pack mac recover` selects the existing installed/built app through its
+pack receipt. Both use `--namespace` and accept `--presentation`
 (`headless` by default), and optional paired `--capsule-manifest-sha256` /
 `--closure-generation-id` for an explicit exact target. The Capsule identity is
 the SHA-256 of its canonical signed envelope. Do not substitute daemon data roots;

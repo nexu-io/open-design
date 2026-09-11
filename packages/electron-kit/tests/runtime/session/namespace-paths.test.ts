@@ -33,10 +33,12 @@ describe("Electron namespace paths", () => {
       setPath: vi.fn((name: string, path: string) => { calls.push(`set:${name}:${path}`); }),
     };
     const ensureDirectory = vi.fn((path: string) => { calls.push(`mkdir:${path}`); });
-    const preparing = prepareElectronNamespacePaths(app, { channel: "betahyx", namespace: "installed-win" }, ensureDirectory);
+    const preparing = prepareElectronNamespacePaths(app, { channel: "betahyx", namespace: "installed-win", productName: "Example" }, ensureDirectory);
     // Chromium may initialize as soon as this turn yields, before await resumes.
     expect(app.setPath).toHaveBeenCalledTimes(3);
     const paths = await preparing;
+    expect(app.getPath).toHaveBeenCalledExactlyOnceWith("appData");
+    expect(paths.namespaceRoot).toBe(join("/product-data", "Example", "exact", "channels", "betahyx", "namespaces", "installed-win"));
     expect(ensureDirectory).toHaveBeenCalledTimes(4);
     expect(calls.slice(0, 4).every((call) => call.startsWith("mkdir:"))).toBe(true);
     expect(app.setPath.mock.calls).toEqual([
@@ -48,7 +50,7 @@ describe("Electron namespace paths", () => {
 
   it("rejects path traversal before touching Electron paths", async () => {
     const app = { getPath: vi.fn(() => "/product-data"), setPath: vi.fn() };
-    await expect(prepareElectronNamespacePaths(app, { channel: "betahyx", namespace: "../shared" }))
+    await expect(prepareElectronNamespacePaths(app, { channel: "betahyx", namespace: "../shared", productName: "Example" }))
       .rejects.toThrow("invalid Electron namespace scope");
     expect(app.setPath).not.toHaveBeenCalled();
   });

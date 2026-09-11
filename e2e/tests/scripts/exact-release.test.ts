@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { createPackage } from "@electron/asar";
@@ -757,7 +757,7 @@ describe("exact Electron release topology", () => {
     }
   });
 
-  it("binds published macOS platform trust into installed Electron acceptance", async () => {
+  it.skipIf(process.platform !== "darwin")("binds published macOS platform trust into installed Electron acceptance", async () => {
     const root = await mkdtemp(join(tmpdir(), "exact-installed-acceptance-"));
     roots.push(root);
     const publishedRoot = join(root, "published"), installedRoot = join(root, "installed"), acceptanceRoot = join(root, "acceptance");
@@ -805,8 +805,16 @@ describe("exact Electron release topology", () => {
       trust: installedFiles[3],
       capsule: { manifest: installedFiles[5], archive: installedFiles[6] },
     }));
-    const baseUserDataRoot = join(root, "user-data");
-    const runtimeRoot = join(baseUserDataRoot, "exact/channels/betahyx/namespaces/acceptance-headless/runtime/electron");
+    const namespace = `acceptance-${randomUUID()}`, firstNamespace = `first-${randomUUID()}`;
+    const namespacesRoot = join(homedir(), "Library/Application Support/OpenDesign/exact/channels/betahyx/namespaces");
+    await mkdir(namespacesRoot, { recursive: true });
+    const sessionRoot = join(namespacesRoot, `${namespace}-headless`);
+    const firstSessionRoot = join(namespacesRoot, `${firstNamespace}-headless`);
+    for (const owned of [sessionRoot, firstSessionRoot]) {
+      await mkdir(owned); // Refuse existing state, and only register successful exclusive creation for cleanup.
+      roots.push(owned);
+    }
+    const runtimeRoot = join(sessionRoot, "runtime/electron");
     const runtimeLog = join(runtimeRoot, "logs/electron-runtime.jsonl");
     await mkdir(dirname(runtimeLog), { recursive: true });
     await writeFile(runtimeLog, [
@@ -814,15 +822,15 @@ describe("exact Electron release topology", () => {
       { attemptId: "acceptance-attempt", event: "shutdown.complete" },
     ].map((event) => JSON.stringify(event)).join("\n"));
 
-    const firstInstallRoot = join(root, "first-installed"), firstInstallUserDataRoot = join(root, "first-user-data");
+    const firstInstallRoot = join(root, "first-installed");
     await cp(installedRoot, firstInstallRoot, { recursive: true });
-    await cp(baseUserDataRoot, firstInstallUserDataRoot, { recursive: true });
+    await cp(sessionRoot, firstSessionRoot, { recursive: true });
     const collect = async (hotReceipt?: string) => {
       await run(process.execPath, [resolve(workspaceRoot, "tools/release/dist/tools-release"), "acceptance", "collect",
         "--publication", publishReceipt, "--policy", policyReceipt, "--installed-root", installedRoot, "--runtime-proof-root", root,
-        "--shell", "electron", "--target", "darwin-arm64", "--base-user-data-root", baseUserDataRoot,
+        "--shell", "electron", "--target", "darwin-arm64", "--namespace", namespace,
         ...(hotReceipt == null ? [] : ["--hot-receipt", hotReceipt, "--first-install-root", firstInstallRoot,
-          "--first-install-user-data-root", firstInstallUserDataRoot]), "--receipt", join(acceptanceRoot, "electron-darwin-arm64.json")]);
+          "--first-install-namespace", firstNamespace]), "--receipt", join(acceptanceRoot, "electron-darwin-arm64.json")]);
     };
     await collect();
     const credential = JSON.parse(await readFile(join(acceptanceRoot, "electron-darwin-arm64.json"), "utf8"));
@@ -845,7 +853,7 @@ describe("exact Electron release topology", () => {
     }));
     const generationId = "e".repeat(64);
     const store = join(runtimeRoot, "standalone-store/channels/betahyx");
-    const standaloneState = join(store, "namespaces/acceptance-headless/state.json"), standaloneGenerations = join(store, "generations");
+    const standaloneState = join(store, "namespaces", `${namespace}-headless`, "state.json"), standaloneGenerations = join(store, "generations");
     await mkdir(standaloneGenerations, { recursive: true }); await mkdir(dirname(standaloneState), { recursive: true });
     await writeFile(standaloneState, JSON.stringify({
       schemaVersion: 5, active: generationId, lastHealthy: generationId, prepared: null,

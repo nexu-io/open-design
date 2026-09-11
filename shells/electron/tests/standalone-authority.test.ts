@@ -129,12 +129,23 @@ function isProcessAlive(pid: number): boolean {
 const physicalResources = validateElectronPhysicalResourceSet(physicalResourceDeclaration);
 
 describe("Electron production Standalone authority", () => {
-  it("accepts only the interactive and derived headless namespaces for its channel", () => {
+  it("accepts lawful explicit namespaces without changing the installation channel", () => {
     const manifest = { channel: "betahyx", namespace: "electron-foundation" } as ElectronShellManifest;
     expect(isElectronStandaloneScope(manifest, { channel: "betahyx", namespace: "electron-foundation" })).toBe(true);
     expect(isElectronStandaloneScope(manifest, { channel: "betahyx", namespace: "electron-foundation-headless" })).toBe(true);
     expect(isElectronStandaloneScope(manifest, { channel: "dev", namespace: "electron-foundation-headless" })).toBe(false);
-    expect(isElectronStandaloneScope(manifest, { channel: "betahyx", namespace: "other-headless" })).toBe(false);
+    expect(isElectronStandaloneScope(manifest, { channel: "betahyx", namespace: "other-headless" })).toBe(true);
+    expect(isElectronStandaloneScope(manifest, { channel: "betahyx", namespace: "../other" })).toBe(false);
+  });
+
+  it("binds an authority to its established session rather than any lawful namespace", async () => {
+    const manifest = { channel: "betahyx", namespace: "installed" } as ElectronShellManifest;
+    const scope = { channel: "betahyx", namespace: "first-headless" };
+    const authority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell)({
+      scope, presentation: "headless", namespaceRoot: "/unused", resourceRoot: "/unused", runtimeRoot: "/unused", nodeRuntime: { command: process.execPath, env: {} },
+    });
+    scope.namespace = "hot-headless";
+    await expect(authority.prepare({ correlationId: "cross-scope", scope, shell: manifest.shell })).rejects.toThrow("escaped its Shell scope");
   });
 
   it("closes signed cold start, readiness rollback, and Shell-only replacement through the production host", async () => {
@@ -230,6 +241,8 @@ describe("Electron production Standalone authority", () => {
     };
     const feedback: { generationId?: string; phase: string; state: string }[] = [];
     const authority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell, authorityOptions)({
+      scope: { channel: manifest.channel, namespace: manifest.namespace },
+        presentation: "interactive",
       installedShellPath: join(root, "Current.app"),
       namespaceRoot: join(runtimeRoot, "namespace"),
       nodeRuntime: { command: process.execPath, env: {} },
@@ -278,6 +291,8 @@ describe("Electron production Standalone authority", () => {
       const beforeCapsule = await getSidecarStatus<{ hostPid: number; generationPid: number }>(stamp);
       const nextCapability = { ...manifest.shell, digest: "c".repeat(64) };
       const capsuleAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, nextCapability, authorityOptions)({
+        scope: { channel: manifest.channel, namespace: manifest.namespace },
+        presentation: "interactive",
         installedShellPath: join(root, "Current.app"), namespaceRoot: join(runtimeRoot, "namespace"),
         nodeRuntime: { command: process.execPath, env: {} }, observeFeedback() {}, resourceRoot: root, runtimeRoot,
       });
@@ -314,6 +329,8 @@ describe("Electron production Standalone authority", () => {
       expect(await handle.readStatus()).toMatchObject({ state: "running", references: 1 });
 
       const incompatible = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell, authorityOptions)({
+        scope: { channel: manifest.channel, namespace: manifest.namespace },
+        presentation: "interactive",
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "other-namespace"),
         nodeRuntime: { command: process.execPath, env: {} },
@@ -542,6 +559,8 @@ describe("Electron production Standalone authority", () => {
       await expect(prepared.armShellInstallation({ request: installationRequest, install })).rejects.toThrow("requires explicit recovery");
       expect(installerCalls).toBe(0);
       const abandonAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell, authorityOptions)({
+        scope: { channel: manifest.channel, namespace: manifest.namespace },
+        presentation: "interactive",
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
         nodeRuntime: { command: process.execPath, env: {} },
@@ -619,6 +638,8 @@ describe("Electron production Standalone authority", () => {
       })).rejects.toThrow("injected second crash after sealed claim");
       expect(await restoredHandle.close()).toMatchObject({ state: "stopped", generationId: applied.generation.id, bindingDigest: applied.binding.digest });
       const retryAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell, authorityOptions)({
+        scope: { channel: manifest.channel, namespace: manifest.namespace },
+        presentation: "interactive",
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
         nodeRuntime: { command: process.execPath, env: {} },
@@ -680,6 +701,8 @@ describe("Electron production Standalone authority", () => {
       };
       const replacementShell = { ...replacementManifest.shell, version: "9.0.0", buildHash: "e".repeat(64), digest: "f".repeat(64) };
       const replacementAuthority = createElectronStandaloneAuthorityFactory(replacementManifest, physicalResources, replacementShell, authorityOptions)({
+        scope: { channel: replacementManifest.channel, namespace: replacementManifest.namespace },
+        presentation: "interactive",
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
         nodeRuntime: { command: process.execPath, env: {} },

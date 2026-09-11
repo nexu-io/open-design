@@ -24,7 +24,7 @@ export function isElectronShellPackaged(): boolean {
  * as an orphan, so controlled sessions retain the existing generation root. */
 export async function scheduleElectronShellRestart(): Promise<void> {
   if (readOptionalCurrentSidecarStamp() == null) {
-    app.relaunch();
+    app.relaunch({ args: process.argv.slice(1) });
     return;
   }
   await handoffCurrentSidecarGeneration({ command: process.execPath,
@@ -55,11 +55,12 @@ function resources(): Readonly<Pick<SidecarResources, "dataRoot" | "ownerPid" | 
   return Object.freeze({ dataRoot: null, ownerPid: candidate.ownerPid as number | null, port: 0, runtimeRoot: candidate.runtimeRoot });
 }
 
-export async function runControlledElectronShell(run: () => Promise<void>, startupTimeoutMs: number): Promise<void> {
+export async function runControlledElectronShell(run: () => Promise<void>, startupTimeoutMs: number, scope: Readonly<{ channel: string; namespace: string }>): Promise<void> {
   if (!Number.isSafeInteger(startupTimeoutMs) || startupTimeoutMs <= 0 || startupTimeoutMs > 3_600_000) throw new Error("invalid Electron carrier startup timeout");
   const stamp = readOptionalCurrentSidecarStamp();
   if (stamp == null) return await run();
   if (stamp.app !== APP_KEYS.ELECTRON) throw new Error(`Electron Shell cannot run Sidecar app ${stamp.app}`);
+  if (stamp.channel !== scope.channel || stamp.namespace !== scope.namespace) throw new Error("Electron launch scope conflicts with its Sidecar identity");
   const controlResources = resources();
   if (isCurrentSidecarLauncher()) {
     const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();

@@ -1,6 +1,6 @@
 import { lstat, readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
-import { recoverElectronStartup, resolveElectronNamespacePaths, resolveElectronSessionNamespace,
+import { recoverElectronStartup, resolveElectronSessionPaths, resolveElectronSessionNamespace,
   armElectronCapsuleSelection, readElectronCapsuleSelection,
   type ElectronRecoveryTarget } from "@open-design/electron-kit";
 import { inspectElectronCapsule } from "@open-design/electron-kit/capsule-loader";
@@ -21,7 +21,7 @@ export type ElectronStartupRecoveryRequest = Readonly<{
   schemaVersion: 1;
   resourceRoot: string;
   installation: "development" | "installed";
-  session: Readonly<{ baseUserDataRoot: string; channel: string; namespace: string; presentation: "headless" | "interactive" }>;
+  session: Readonly<{ channel: string; namespace: string; presentation: "headless" | "interactive" }>;
   target?: ElectronRecoveryTarget;
   allowNetwork?: boolean;
 }>;
@@ -33,7 +33,8 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
   if (request.schemaVersion !== 1 || !["development", "installed"].includes(request.installation)
     || !["headless", "interactive"].includes(request.session.presentation)
     || (request.allowNetwork != null && typeof request.allowNetwork !== "boolean")) throw new Error("invalid Electron recovery request");
-  for (const path of [request.resourceRoot, request.session.baseUserDataRoot]) {
+  if (Object.keys(request.session).sort().join(",") !== "channel,namespace,presentation") throw new Error("invalid Electron recovery session scope");
+  for (const path of [request.resourceRoot]) {
     if (!isAbsolute(path) || resolve(path) !== path) throw new Error("Electron recovery paths must be absolute and normalized");
   }
   let manifest: ElectronShellManifest;
@@ -43,9 +44,9 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
     if (!info.isFile() || info.isSymbolicLink()) throw new Error("development Shell manifest must be a regular file");
     manifest = validateElectronShellManifest(JSON.parse(await readFile(path, "utf8")) as ElectronShellManifest);
   }
-  if (manifest.channel !== request.session.channel || manifest.namespace !== request.session.namespace) throw new Error("Electron recovery escaped its physical installation scope");
-  const scope = { channel: manifest.channel, namespace: resolveElectronSessionNamespace(manifest.namespace, request.session.presentation) };
-  const paths = resolveElectronNamespacePaths(request.session.baseUserDataRoot, scope);
+  if (manifest.channel !== request.session.channel) throw new Error("Electron recovery escaped its physical installation scope");
+  const scope = { channel: manifest.channel, namespace: resolveElectronSessionNamespace(request.session.namespace, request.session.presentation) };
+  const paths = resolveElectronSessionPaths({ ...request.session, productName: manifest.productName });
   const store = new StandaloneStore(resolveElectronStandaloneStoreRoot(paths.runtimeRoot), scope);
   const platformTarget = resolveElectronStandaloneTarget();
   let seedAcquisition: ReturnType<typeof loadElectronInstalledCapsuleSeed> | undefined;

@@ -33,7 +33,7 @@ import {
   type UpdateActivationPolicy,
   type SignedStandaloneChannelHead,
 } from "@open-design/standalone";
-import { readElectronCapsuleSelection } from "@open-design/electron-kit";
+import { readElectronCapsuleSelection, serializeElectronSessionLaunch } from "@open-design/electron-kit";
 import { assertElectronPendingCapsule } from "./capsule.js";
 import type {
   ElectronInstallerConfirmationReceipt,
@@ -103,7 +103,7 @@ type HostStatus = Readonly<{
 
 export function isElectronStandaloneScope(manifest: ElectronShellManifest, scope: Readonly<{ channel: string; namespace: string }>): boolean {
   return scope.channel === manifest.channel
-    && (scope.namespace === manifest.namespace || scope.namespace === `${manifest.namespace}-headless`);
+    && /^[a-z][a-z0-9.-]{1,127}$/u.test(scope.namespace) && !scope.namespace.includes("..");
 }
 
 function exactHostStatus(value: unknown, expected: Omit<HostStatus, "control" | "generationPid" | "hostPid">): value is HostStatus {
@@ -202,9 +202,13 @@ export function createElectronStandaloneAuthorityFactory(
   const resources = validateElectronPhysicalResourceSet(resourcesInput);
   const runtimeResource = resources.resources.find(({ id }) => id === "standalone-runtime");
   if (runtimeResource == null) throw new Error("Electron physical resource set lacks standalone-runtime");
-  return ({ installedShellPath, namespaceRoot, nodeRuntime, observeFeedback, resourceRoot, runtimeRoot }) => ({
+  return ({ scope, presentation, installedShellPath, namespaceRoot, nodeRuntime, observeFeedback, resourceRoot, runtimeRoot }) => {
+    if (!isElectronStandaloneScope(manifest, scope)) throw new Error("Electron Standalone authority has invalid session scope");
+    const boundScope = Object.freeze({ ...scope });
+    const sessionLaunchArguments = serializeElectronSessionLaunch(scope.namespace, presentation);
+    return ({
     async prepare(request) {
-      if (!isElectronStandaloneScope(manifest, request.scope)) throw new Error("Electron Standalone authority request escaped its Shell scope");
+      if (request.scope.channel !== boundScope.channel || request.scope.namespace !== boundScope.namespace) throw new Error("Electron Standalone authority request escaped its Shell scope");
       if (canonicalJson(request.shell) !== canonicalJson(shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
       const installation = await loadElectronStandaloneInstallation({ resourceRoot, channel: request.scope.channel, target: resolveElectronStandaloneTarget() });
       const channelHeadUrl = options.channelHeadUrl ?? installation.declaration.update.channelHeadUrl;
@@ -771,7 +775,7 @@ export function createElectronStandaloneAuthorityFactory(
                 nodeExecutablePath: nodeRuntime.command,
                 parentPid: process.pid,
                 runtimeRoot: claim.runtimeRoot,
-                relaunchArguments: serializeInstallerRecoveryIntent({ action: "abandon-and-restore", recoveryId: claim.restoration!.recoveryId, expected: claim.restoration!.expected }),
+                relaunchArguments: [...sessionLaunchArguments, ...serializeInstallerRecoveryIntent({ action: "abandon-and-restore", recoveryId: claim.restoration!.recoveryId, expected: claim.restoration!.expected })],
                 mode: restoreTrust.mode,
               });
               const next = Object.freeze({
@@ -1090,4 +1094,5 @@ export function createElectronStandaloneAuthorityFactory(
       });
     },
   });
+  };
 }

@@ -34,7 +34,7 @@ describe("built tools-pack CLI", () => {
     await expect(invocation).rejects.toMatchObject({
       stderr: expect.stringContaining("unsupported mac action: unsupported-built-smoke"),
     });
-    await expect(execFileAsync(process.execPath, ["dist/index.mjs", "mac", "recover"], { cwd: toolPackRoot }))
-      .rejects.toMatchObject({ stderr: expect.stringContaining("recovery requires --user-data-root") });
+    await expect(execFileAsync(process.execPath, ["dist/index.mjs", "mac", "recover", "--user-data-root", "/forbidden"], { cwd: toolPackRoot }))
+      .rejects.toMatchObject({ stderr: expect.stringContaining("Unknown option") });
   });
 });

@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
   readState: vi.fn(), armCapsule: vi.fn(), readCapsules: vi.fn(), verifyCapsule: vi.fn(),
   blob: vi.fn(), candidate: vi.fn(), fetchCapsule: vi.fn(), prepareCapsule: vi.fn(),
   lifecycle: vi.fn(), seal: vi.fn(), abandon: vi.fn(), updater: vi.fn(), updateLedger: vi.fn(),
-  manifest: { channel: "betahyx", namespace: "test-shell", shell: { version: "0.2.0", type: "electron" } },
+  manifest: { productName: "Fixture", channel: "betahyx", namespace: "test-shell", shell: { version: "0.2.0", type: "electron" } },
 }));
 vi.mock("@open-design/electron-kit/installation/inspection", () => ({ readElectronInstalledManifest: async () => ({ manifest: state.manifest }) }));
 vi.mock("@open-design/electron-kit/contracts", async original => ({ ...await original<typeof import("@open-design/electron-kit/contracts")>(),
@@ -64,7 +64,7 @@ vi.mock("@open-design/sidecar/authority", async original => ({
 }));
 
 const request: ElectronStartupRecoveryRequest = { schemaVersion: 1, resourceRoot: "/installed/Resources", installation: "installed",
-  session: { baseUserDataRoot: "/test-data", channel: "betahyx", namespace: "test-shell", presentation: "headless" } };
+  session: { channel: "betahyx", namespace: "test-shell", presentation: "headless" } };
 const envelope = { document: { archive: { sha256: "a".repeat(64), size: 12, treeSha256: "b".repeat(64) }, entrypoint: "capsule.cjs" } };
 const selected = { capsuleManifestSha256: sha256Hex(canonicalJson(envelope)), closureGenerationId: "c".repeat(64) };
 

@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { executeElectronCdpContractControl } from "@/cdp/control.js";
+import { resolveElectronSessionPaths } from "@/runtime/session/namespace-paths.js";
+const platform = vi.hoisted(() => ({ home: "" }));
+vi.mock("node:os", async original => ({ ...await original<typeof import("node:os")>(), homedir: () => platform.home }));
 
 const roots: string[] = [];
 
@@ -16,7 +19,8 @@ afterEach(async () => {
 async function userDataRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "electron-cdp-control-"));
   roots.push(root);
-  const sessionData = join(root, "exact/channels/betahyx/namespaces/cdp-test-headless/electron-session");
+  platform.home = root;
+  const sessionData = resolveElectronSessionPaths({ productName: "Fixture", channel: "betahyx", namespace: "cdp-test", presentation: "headless" }).sessionDataRoot;
   await mkdir(sessionData, { recursive: true });
   await writeFile(join(sessionData, "DevToolsActivePort"), "43123\n/devtools/browser/test\n");
   // A different session's stale bootstrap receipt must never be consumed.
@@ -27,7 +31,7 @@ async function userDataRoot(): Promise<string> {
 function request(root: string) {
   return {
     schemaVersion: 1, operation: "electron.cdp.contract.invoke",
-    session: { baseUserDataRoot: root, channel: "betahyx", namespace: "cdp-test", presentation: "headless" },
+    session: { productName: "Fixture", channel: "betahyx", namespace: "cdp-test", presentation: "headless" as const },
     timeoutMs: 1_000, close: false, invocations: [{ path: ["updater", "status"], args: [] }],
   };
 }
@@ -109,7 +113,7 @@ describe("Electron CDP contract control", () => {
 
   it("bounds malformed discovery instead of polling forever", async () => {
     const root = await userDataRoot();
-    await writeFile(join(root, "exact/channels/betahyx/namespaces/cdp-test-headless/electron-session/DevToolsActivePort"), "not-a-port");
+    await writeFile(join(resolveElectronSessionPaths(request(root).session).sessionDataRoot, "DevToolsActivePort"), "not-a-port");
     await expect(executeElectronCdpContractControl(request(root))).rejects.toThrow("discovery timed out");
   });
 

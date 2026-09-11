@@ -12,6 +12,7 @@ import { installElectronLaunchIngress } from "./session/launch-ingress.js";
 import { ElectronRuntimeLog } from "./session/logging.js";
 import { resolveElectronPresentationMode } from "./window/presentation.js";
 import { resolveElectronSessionNamespace } from "./session/namespace-paths.js";
+import { resolveElectronLaunchNamespace } from "./session/launch-scope.js";
 import { attachElectronProcessErrorHandlers, type ElectronProcessErrorLease } from "./session/process-errors.js";
 import { prepareElectronCarrierIdentity, loadElectronCarrierCapsule } from "./startup/identity.js";
 import { ElectronStartupAttemptFence } from "./startup/attempt.js";
@@ -26,6 +27,7 @@ import type { ElectronPreflightTopology } from "./startup/preflight/index.js";
 export * from "./session/logging.js";
 export * from "./session/cdp.js";
 export * from "./session/namespace-paths.js";
+export * from "./session/launch-scope.js";
 export * from "./session/process-errors.js";
 export * from "./session/shutdown.js";
 export * from "./session/single-instance.js";
@@ -70,7 +72,7 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
   Object.freeze(manifest.shell);
   Object.freeze(manifest);
   const presentation = resolveElectronPresentationMode({ explicitHeadless: input.headless });
-  const namespace = resolveElectronSessionNamespace(manifest.namespace, presentation);
+  const namespace = resolveElectronSessionNamespace(resolveElectronLaunchNamespace(manifest.namespace), presentation);
   const ingress = installElectronLaunchIngress({ app, protocol: manifest.protocol, argv: process.argv });
   context.ingress = ingress;
   const identity = await prepareElectronCarrierIdentity({ app, protocol, platform: process.platform,

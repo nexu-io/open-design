@@ -25,8 +25,9 @@ Channel version and Shell compatibility version are independent values. The
 release version may include its channel as a defensive naming convention;
 Shell compatibility remains declared by `shells/electron/config/shell.json`.
 
-Explicit stopped-session recovery uses `mac recover --user-data-root` with the
-Electron session's base userData location. See the [Shell recovery contract](../../shells/electron/README.md)
+Explicit stopped-session recovery uses `mac recover --namespace` with the
+same logical namespace as startup; paths are derived, not overridden.
+See the [Shell recovery contract](../../shells/electron/README.md)
 for presentation, exact target, offline/online behavior and current limitations.
 Recovery is not cleanup, a reinstall, or an automatic relaunch.
 

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { createElectronContractInvocationExpression } from "@open-design/electron-contract/automation";
 
 import { parseElectronCdpActivePort, type ElectronCdpDiscovery } from "../runtime/session/cdp.js";
-import { resolveElectronNamespacePaths, resolveElectronSessionNamespace } from "../runtime/session/namespace-paths.js";
+import { resolveElectronSessionPaths, type ElectronSessionScope } from "../runtime/session/namespace-paths.js";
 import { listElectronCdpTargets } from "./inspection.js";
 
 type JsonObject = Record<string, any>;
@@ -166,13 +166,11 @@ export async function executeElectronCdpContractControl(value: unknown): Promise
     throw new Error("Electron CDP contract request is invalid");
   }
   const session = record(input.session, "Electron CDP session");
-  exactKeys(session, ["baseUserDataRoot", "channel", "namespace", "presentation"], "Electron CDP session");
-  if (typeof session.baseUserDataRoot !== "string" || session.baseUserDataRoot.length === 0
+  exactKeys(session, ["productName", "channel", "namespace", "presentation"], "Electron CDP session");
+  if (typeof session.productName !== "string" || session.productName.length === 0
     || typeof session.channel !== "string" || typeof session.namespace !== "string"
     || (session.presentation !== "interactive" && session.presentation !== "headless")) throw new Error("Electron CDP session is invalid");
-  const paths = resolveElectronNamespacePaths(session.baseUserDataRoot, {
-    channel: session.channel, namespace: resolveElectronSessionNamespace(session.namespace, session.presentation),
-  });
+  const paths = resolveElectronSessionPaths(session as ElectronSessionScope);
   const invocations = input.invocations.map((value: unknown, index: number) => {
     const invocation = record(value, `Electron CDP invocation ${index}`);
     allowedKeys(invocation, ["args", "path", "settleOnContextDestroyed"], `Electron CDP invocation ${index}`);
