@@ -150,9 +150,11 @@ and host MCP are rejected explicitly. Pi has its own OD Next continuation
 evidence from a real Vela/Pi replay against a loopback model: file writes,
 cross-process session loading, cancellation, and host deadlines. It can enter
 planning and simple production. The planner receives unverified native-child
-capability, and a complex plan remains blocked. Codex, DSH, and direct-model AMR
-paths remain outside OD Next admission. None of these paths reuse OpenCode's
-native-child evidence.
+capability, and a complex plan remains blocked. Codex, Claude, DSH and the
+direct-model path each carry their own single-agent replay and are likewise
+admitted to planning and simple production only; a complex plan stays blocked
+for all of them because none has verified native-child evidence. None of these
+paths reuse OpenCode's native-child evidence.
 Daemon-owned data continues to follow the root
 [`AGENTS.md` data-directory contract](../AGENTS.md#daemon-data-directory-contract).
 

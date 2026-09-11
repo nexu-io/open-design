@@ -191,10 +191,13 @@ describe('OD Next runtime capability gate', () => {
     expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'complex')).toEqual({ eligible: false, reason: 'native_subagents_not_verified' });
     expect(evaluateOdNextAdmissionEligibility({ ...capability.snapshot!, agentId: 'claude' }).eligible).toBe(false);
   });
-  it('keeps direct-model execution outside OD Next until its text-artifact strategy is verified', () => {
+  it('admits direct-model continuation without claiming tools or native children', () => {
     const capability = resolveBundledOdNextRuntimeCapability({ agentId: 'amr', amrRuntime: 'none' });
-    expect(capability.reason).toBe('runtime_out_of_scope');
-    expect(capability.snapshot).toBeNull();
+    expect(capability.reason).toBe('capability_resolved');
+    expect(evaluateOdNextAdmissionEligibility(capability.snapshot!).eligible).toBe(true);
+    expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'complex').eligible).toBe(false);
+    const entry = OD_NEXT_RUNTIME_CAPABILITY_REGISTRY.find((item) => item.runtimePath === 'vela-none')!;
+    expect(entry.evidence.caseResults.find((item) => item.id === 'tool')?.outcome).toBe('unavailable');
   });
   it.each(['opencode', 'pi', 'codex', 'claude', 'dsh', 'none'] as const)('records actual %s HTTP/ACP observations independently of declared outcomes', (runtime) => {
     const seed = JSON.parse(readFileSync(join(fixtureDir, `vela-${runtime}-six-local.sanitized-real-seed.json`), 'utf8'));
@@ -211,7 +214,7 @@ describe('OD Next runtime capability gate', () => {
     if (manifest) {
       expect(manifest.provenance).toMatchObject({ kind: 'sanitized_real', recordingDigest: digest });
       expect(manifest.agentCliVersion).toBe(seed.velaVersion);
-      expect(manifest.runtimeCompanionVersion).toBe(seed.companionVersion);
+      expect(manifest.runtimeCompanionVersion ?? null).toBe(seed.companionVersion);
       const entry = OD_NEXT_RUNTIME_CAPABILITY_REGISTRY.find((entry) => entry.fixtureVersion === manifest.fixtureVersion)!;
       expect(entry.evidence.caseResults).toEqual(seed.cases.map(({ caseId, outcome }: { caseId: string; outcome: string }) => ({ id: caseId, outcome })));
     }
@@ -223,7 +226,7 @@ describe('OD Next runtime capability gate', () => {
   });
 
   it('registers every reviewed tuple, Vela included', () => {
-    expect(OD_NEXT_RUNTIME_CAPABILITY_REGISTRY).toHaveLength(10);
+    expect(OD_NEXT_RUNTIME_CAPABILITY_REGISTRY).toHaveLength(11);
     expect(OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS).toEqual([
       CODEX_0_147_0_BEST_EFFORT_MANIFEST,
       CLAUDE_2_1_233_BEST_EFFORT_MANIFEST,

@@ -12576,9 +12576,9 @@ export async function startServer({
       // them, so the reap targets THIS attempt's group and never the next one.
       const priorChild = run.child;
       const priorProcessGroupId = run.processGroupId;
-      // Release the previous child's stdio streams before letting the
-      // reference drop — see destroyChildStdio for rationale.
-      destroyChildStdio(priorChild);
+      // Keep the read ends open during shutdown: a CLI may flush its final
+      // response before releasing its session lease. Closing these pipes first
+      // can terminate it with EPIPE/SIGPIPE before deferred cleanup runs.
       // Disband the WHOLE process group of the failed attempt, not just the
       // direct child. A same-run retry that only SIGTERMs run.child leaves the
       // CLI's spawned descendants (MCP servers, tool subprocesses) orphaned
@@ -12591,7 +12591,7 @@ export async function startServer({
         priorChild,
         priorProcessGroupId,
         { reason: 'retry_generation_replaced' },
-      );
+      ).finally(() => destroyChildStdio(priorChild));
       run.status = 'queued';
       run.updatedAt = Date.now();
       run.child = null;
