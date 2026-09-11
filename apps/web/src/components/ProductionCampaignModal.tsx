@@ -48,8 +48,25 @@ type Decision = {
 	staticActions: TouchpointStaticAction[];
 	content: WebTouchpointContent;
 };
-const closedKey = (subject: string, activity: string) =>
-	`touchpoint-closed:${subject}:${activity}`;
+const displayedKey = (subject: string, activity: string) =>
+	`touchpoint-displayed:v1:${encodeURIComponent(subject)}:${encodeURIComponent(activity)}`;
+
+/** Local impressions gate automatic presentation only, independently of publication. */
+function wasDisplayed(subject: string, activity: string): boolean {
+	try {
+		return localStorage.getItem(displayedKey(subject, activity)) === "1";
+	} catch {
+		return false;
+	}
+}
+
+function recordDisplayed(subject: string, activity: string): void {
+	try {
+		localStorage.setItem(displayedKey(subject, activity), "1");
+	} catch {
+		// Storage may be unavailable or full; presentation and dismissal still work.
+	}
+}
 
 /**
  * Parses an internal action at execution time. Browser URL normalization treats
@@ -265,8 +282,7 @@ export function ProductionCampaignModal({
 					next.placementKey !== PLACEMENT ||
 					next.content?.placementKey !== PLACEMENT ||
 					!Number.isFinite(deadline) ||
-					deadline <= Date.now() ||
-					sessionStorage.getItem(closedKey(subject, next.activityId))
+					deadline <= Date.now()
 				) {
 					if (
 						next.placementKey !== PLACEMENT ||
@@ -293,6 +309,12 @@ export function ProductionCampaignModal({
 					return;
 				}
 				if (expiry.current > Date.now()) return;
+				// Keep an already-open activity authorized; the marker only prevents a new automatic opening.
+				if (
+					decisionRef.current?.activityId !== next.activityId &&
+					wasDisplayed(subject, next.activityId)
+				)
+					return;
 				// Revoke the old mount and cancel its lease timer before scheduling React's replacement cleanup.
 				++authorizationGeneration.current;
 				const nextLeaseGeneration = ++leaseGeneration.current;
@@ -359,6 +381,27 @@ export function ProductionCampaignModal({
 		) as OpenDesignTouchpointElement;
 		setCloseControlAvailable(null);
 		let closeControlObserver: MutationObserver | undefined;
+		let visibleFrame: number | undefined;
+		let mounted = false;
+		let recorded = false;
+		const recordWhenVisible = () => {
+			if (!mounted || recorded || visibleFrame !== undefined) return;
+			visibleFrame = requestAnimationFrame(() => {
+				visibleFrame = undefined;
+				if (
+					!current() ||
+					decision.authorizationDeadline <= Date.now() ||
+					document.hidden ||
+					!element.isConnected ||
+					element.hidden ||
+					element.getClientRects().length === 0
+				)
+					return;
+				recordDisplayed(decision.sessionSubject, decision.activityId);
+				recorded = true;
+			});
+		};
+		document.addEventListener("visibilitychange", recordWhenVisible);
 		let elementDisposed = false;
 		let verifiedDisposed = false;
 		const disposeElement = () => {
@@ -442,6 +485,8 @@ export function ProductionCampaignModal({
 					dispose();
 					return;
 				}
+				mounted = true;
+				recordWhenVisible();
 				setCloseControlAvailable(hasWebTouchpointCloseControl(element));
 				closeControlObserver = new MutationObserver(() => {
 					if (!current()) return;
@@ -489,6 +534,8 @@ export function ProductionCampaignModal({
 		})();
 		return () => {
 			cancelled = true;
+			document.removeEventListener("visibilitychange", recordWhenVisible);
+			if (visibleFrame !== undefined) cancelAnimationFrame(visibleFrame);
 			closeControlObserver?.disconnect();
 			setCloseControlAvailable(null);
 			++authorizationGeneration.current;
@@ -522,7 +569,6 @@ export function ProductionCampaignModal({
 	}, [decision]);
 	useEffect(() => {
 		if (!closed || !decision || !sessionSubject) return;
-		sessionStorage.setItem(closedKey(sessionSubject, decision.activityId), "1");
 		clear();
 		setClosed(false);
 	}, [closed, decision, sessionSubject]);

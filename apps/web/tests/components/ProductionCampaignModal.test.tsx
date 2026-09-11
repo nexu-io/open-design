@@ -30,6 +30,7 @@ import {
 	ProductionCampaignModal,
 	internalActionNavigationUrl,
 } from "../../src/components/ProductionCampaignModal";
+import { ProductionCampaignBadge } from "../../src/components/ProductionCampaignBadge";
 import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
 
@@ -108,6 +109,9 @@ function decision(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 beforeEach(() => {
+	vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({
+		length: 1,
+	} as DOMRectList);
 	vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
 		async function (this: OpenDesignTouchpointElement) {
 			this.shadowRoot?.replaceChildren(
@@ -122,6 +126,7 @@ afterEach(() => {
 	delete (globalThis as CampaignHostGlobal).__openDesignCampaignTestHost;
 	openExternalUrlMock.mockClear();
 	vi.unstubAllGlobals();
+	localStorage.clear();
 	sessionStorage.clear();
 	vi.useRealTimers();
 	vi.restoreAllMocks();
@@ -157,7 +162,7 @@ describe("ProductionCampaignModal", () => {
 		await act(async () => {});
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
-	it("suppresses a closed campaign for the same subject while leaving a normal update in the current bounded lease", async () => {
+	it("suppresses a displayed campaign for the same subject while leaving a normal update in the current bounded lease", async () => {
 		const registerContent = vi.fn(async () => ({ ok: true }));
 		const removeContent = vi.fn(async () => ({ ok: true }));
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
@@ -198,6 +203,11 @@ describe("ProductionCampaignModal", () => {
 		// The fixture declares the SDK capability but exposes no actual close
 		// control, so the host fallback remains available.
 		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+		await waitFor(() =>
+			expect(
+				localStorage.getItem("touchpoint-displayed:v1:user-a:campaign-1"),
+			).toBe("1"),
+		);
 		fireEvent.keyDown(document, { key: "Escape" });
 		expect(document.body.style.overflow).toBe("");
 		expect(screen.queryByRole("dialog")).toBeNull();
@@ -662,9 +672,11 @@ describe("ProductionCampaignModal mount lifetime", () => {
 		);
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(JSON.stringify(decision()), { status: 200 }),
-			),
+			vi
+				.fn()
+				.mockResolvedValue(
+					new Response(JSON.stringify(decision()), { status: 200 }),
+				),
 		);
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
 		await waitFor(() =>
@@ -972,5 +984,240 @@ describe("ProductionCampaignModal mount lifetime", () => {
 		});
 		await waitFor(() => expect(release).toHaveBeenCalledTimes(1));
 		expect(mount).not.toHaveBeenCalled();
+	});
+});
+
+describe("ProductionCampaignModal device impressions", () => {
+	const marker = (subject = "user-a", activity = "campaign-1") =>
+		`touchpoint-displayed:v1:${encodeURIComponent(subject)}:${encodeURIComponent(activity)}`;
+	beforeEach(() => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () => new Response(JSON.stringify(decision()), { status: 200 }),
+			),
+		);
+	});
+	it("persists successful display without dismissal across restart and login, isolating accounts and profiles", async () => {
+		const first = render(
+			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
+		);
+		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
+		expect(screen.getByRole("dialog")).toBeTruthy();
+		first.unmount();
+		sessionStorage.clear();
+		const restarted = render(
+			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
+		);
+		await act(async () => {});
+		expect(screen.queryByRole("dialog")).toBeNull();
+		restarted.rerender(
+			<ProductionCampaignModal authenticated={false} sessionSubject={null} />,
+		);
+		restarted.rerender(
+			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
+		);
+		await act(async () => {});
+		expect(screen.queryByRole("dialog")).toBeNull();
+		restarted.rerender(
+			<ProductionCampaignModal authenticated sessionSubject="user-b" />,
+		);
+		await waitFor(() =>
+			expect(localStorage.getItem(marker("user-b"))).toBe("1"),
+		);
+		restarted.unmount();
+		localStorage.clear(); // A different local browser/device profile has its own storage.
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
+	});
+	it("suppresses republication of the same activity but permits a new activity", async () => {
+		localStorage.setItem(marker(), "1");
+		vi.mocked(fetch).mockImplementation(
+			async () =>
+				new Response(
+					JSON.stringify(
+						decision({
+							deploymentId: "republished",
+							content: { ...content, id: "version-2" },
+						}),
+					),
+					{ status: 200 },
+				),
+		);
+		const view = render(
+			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
+		);
+		await act(async () => {});
+		expect(screen.queryByRole("dialog")).toBeNull();
+		view.unmount();
+		vi.mocked(fetch).mockImplementation(
+			async () =>
+				new Response(JSON.stringify(decision({ activityId: "campaign-2" })), {
+					status: 200,
+				}),
+		);
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await waitFor(() =>
+			expect(localStorage.getItem(marker("user-a", "campaign-2"))).toBe("1"),
+		);
+	});
+	it("does not consume an impression during verification or on failed mount and dismissal", async () => {
+		let finish!: () => void;
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			() =>
+				new Promise<void>((_, reject) => {
+					finish = () => reject(new Error("mount failed"));
+				}),
+		);
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await waitFor(() => expect(finish).toBeTypeOf("function"));
+		expect(localStorage.getItem(marker())).toBeNull();
+		await act(async () => finish());
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(localStorage.getItem(marker())).toBeNull();
+	});
+	it("waits for a hidden document to become visible before recording", async () => {
+		const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await screen.findByRole("button", { name: "Close" });
+		await act(async () => {
+			window.dispatchEvent(new Event("focus"));
+		});
+		expect(localStorage.getItem(marker())).toBeNull();
+		hidden.mockReturnValue(false);
+		fireEvent(document, new Event("visibilitychange"));
+		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
+	});
+	it("keeps the existing badge and its manual static action usable after automatic suppression", async () => {
+		localStorage.setItem(marker(), "1");
+		const placementKey = "opend.home.account-badge";
+		const badgeManifest = {
+			...manifest,
+			placements: [
+				{
+					...manifest.placements[0]!,
+					key: placementKey,
+					requiredCapabilities: ["static-action"],
+				},
+			],
+		};
+		const badgeDecision = decision({
+			placementKey,
+			requiredCapabilities: ["static-action"],
+			content: {
+				...content,
+				placementKey,
+				manifest: badgeManifest,
+				manifestHash: digest(JSON.stringify(badgeManifest)),
+			},
+		});
+		let click!: (id: string) => Promise<void>;
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			async function (
+				this: OpenDesignTouchpointElement,
+				_entry,
+				_digest,
+				_context,
+				_urls,
+				_actions,
+				options,
+			) {
+				click = options!.dispatchAction!;
+				this.shadowRoot?.replaceChildren(
+					document.createTextNode("Open campaign"),
+				);
+			},
+		);
+		vi.mocked(fetch).mockImplementation(
+			async (input, init) =>
+				new Response(
+					JSON.stringify(
+						init?.method === "POST"
+							? { ok: true }
+							: String(input).includes(placementKey)
+								? badgeDecision
+								: decision(),
+					),
+					{ status: 200 },
+				),
+		);
+		Object.defineProperty(navigator, "userActivation", {
+			configurable: true,
+			value: { isActive: true },
+		});
+		render(
+			<>
+				<ProductionCampaignModal authenticated sessionSubject="user-a" />
+				<ProductionCampaignBadge authenticated sessionSubject="user-a" />
+			</>,
+		);
+		await waitFor(() => expect(click).toBeTypeOf("function"));
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(screen.getByTestId("production-campaign-badge")).toBeTruthy();
+		await click("learn");
+		expect(openExternalUrlMock).toHaveBeenCalledWith("https://example.com");
+	});
+	it("does not record a verified mount with no visible geometry", async () => {
+		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({
+			length: 0,
+		} as DOMRectList);
+		let paint!: FrameRequestCallback;
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			paint = callback;
+			return 1;
+		});
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await waitFor(() => expect(paint).toBeTypeOf("function"));
+		await act(async () => paint(0));
+		expect(localStorage.getItem(marker())).toBeNull();
+	});
+	it("does not persist rejected verification, and permits a subsequent successful retry", async () => {
+		const verify = vi
+			.spyOn(touchpointComponent, "verifyWebTouchpoint")
+			.mockRejectedValueOnce(new Error("digest mismatch"));
+		const view = render(
+			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
+		);
+		await screen.findByRole("button", { name: "Close" });
+		expect(localStorage.getItem(marker())).toBeNull();
+		view.unmount();
+		verify.mockRestore();
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
+	});
+	it("does not record a successful mount that completes after unmount", async () => {
+		let finish!: () => void;
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const view = render(
+			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
+		);
+		await waitFor(() => expect(finish).toBeTypeOf("function"));
+		view.unmount();
+		await act(async () => finish());
+		expect(localStorage.getItem(marker())).toBeNull();
+	});
+	it("remains displayable and dismissible when local storage access fails", async () => {
+		vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+			throw new Error("storage denied");
+		});
+		const write = vi
+			.spyOn(Storage.prototype, "setItem")
+			.mockImplementation(() => {
+				throw new Error("quota");
+			});
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await screen.findByRole("button", { name: "Close" });
+		await waitFor(() => expect(write).toHaveBeenCalled());
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		expect(screen.queryByRole("dialog")).toBeNull();
 	});
 });
