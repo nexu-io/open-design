@@ -3,6 +3,9 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import hmac
+import os
+import re
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,6 +20,15 @@ class R2Error(RuntimeError):
 
 class R2PreconditionFailed(R2Error):
     pass
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        raise R2Error("R2 authenticated requests must not redirect")
+
+
+def _open(request, timeout):
+    return urllib.request.build_opener(_NoRedirect()).open(request, timeout=timeout)
 
 
 @dataclass(frozen=True)
@@ -77,13 +89,19 @@ class R2Client:
     ) -> None:
         if not file.is_file() or file.stat().st_size == 0:
             raise R2Error(f"R2 upload source must be a non-empty file: {file}")
-        self.put_bytes(
-            key=key,
-            body=file.read_bytes(),
-            content_type=content_type,
-            cache_control=cache_control,
-            if_none_match=if_none_match,
-        )
+        # A bounded second pass sends the same open file, rather than buffering
+        # native toolchains in memory. S3 validates the signed payload digest.
+        with file.open("rb") as body:
+            digest = hashlib.sha256()
+            while chunk := body.read(1024 * 1024):
+                digest.update(chunk)
+            size = body.tell()
+            body.seek(0)
+            request = self._request(key, "PUT", digest.hexdigest(), {
+                "content-type": content_type, "cache-control": cache_control,
+                "content-length": str(size), **({"if-none-match": "*"} if if_none_match else {}),
+            }, body)
+            self._put(request, key)
 
     def put_bytes(
         self,
@@ -94,34 +112,36 @@ class R2Client:
         cache_control: str = "public, max-age=31536000, immutable",
         if_none_match: bool = True,
     ) -> None:
-        if not key or key.startswith("/") or ".." in key.split("/"):
-            raise R2Error("R2 object key must be a safe relative key")
         if not body:
             raise R2Error("R2 object body must not be empty")
+        request = self._request(key, "PUT", hashlib.sha256(body).hexdigest(), {
+            "content-type": content_type, "cache-control": cache_control,
+            **({"if-none-match": "*"} if if_none_match else {}),
+        }, body)
+        self._put(request, key)
 
+    def _request(self, key, method, payload_hash, extra_headers=None, body=None):
+        if not key or any(part in {"", ".", ".."} for part in key.split("/")) or "\\" in key or any(ord(c) < 32 or ord(c) == 127 for c in key):
+            raise R2Error("R2 object key must be a safe relative key")
         now = dt.datetime.now(dt.timezone.utc)
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
         date = now.strftime("%Y%m%d")
-        payload_hash = hashlib.sha256(body).hexdigest()
         canonical_uri = "/" + urllib.parse.quote(f"{self.bucket}/{key}", safe="/-_.~")
         url = f"{self.endpoint}{canonical_uri}"
         host = urllib.parse.urlparse(self.endpoint).netloc
         headers = {
-            "cache-control": cache_control,
-            "content-type": content_type,
+            **(extra_headers or {}),
             "host": host,
             "x-amz-content-sha256": payload_hash,
             "x-amz-date": amz_date,
         }
-        if if_none_match:
-            headers["if-none-match"] = "*"
         if self.credentials.session_token:
             headers["x-amz-security-token"] = self.credentials.session_token
 
         signed_headers = ";".join(sorted(headers))
         canonical_headers = "".join(f"{name}:{headers[name].strip()}\n" for name in sorted(headers))
         canonical_request = "\n".join(
-            ["PUT", canonical_uri, "", canonical_headers, signed_headers, payload_hash]
+            [method, canonical_uri, "", canonical_headers, signed_headers, payload_hash]
         )
         scope = f"{date}/{self.region}/s3/aws4_request"
         string_to_sign = "\n".join(
@@ -141,9 +161,11 @@ class R2Client:
             f"AWS4-HMAC-SHA256 Credential={self.credentials.access_key_id}/{scope}, "
             f"SignedHeaders={signed_headers}, Signature={signature}"
         )
-        request = urllib.request.Request(url, data=body, headers=headers, method="PUT")
+        return urllib.request.Request(url, data=body, headers=headers, method=method)
+
+    def _put(self, request, key):
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with _open(request, timeout=self.timeout) as response:
                 if response.status not in {200, 201}:
                     raise R2Error(f"R2 PUT returned HTTP {response.status}")
         except urllib.error.HTTPError as error:
@@ -153,6 +175,51 @@ class R2Client:
             raise R2Error(f"R2 PUT failed with HTTP {error.code}: {detail}") from error
         except urllib.error.URLError as error:
             raise R2Error(f"R2 PUT failed: {error.reason}") from error
+
+    def head(self, *, key: str) -> dict[str, str] | None:
+        request = self._request(key, "HEAD", hashlib.sha256(b"").hexdigest())
+        try:
+            with _open(request, timeout=self.timeout) as response:
+                if response.status != 200:
+                    raise R2Error(f"R2 HEAD returned HTTP {response.status}")
+                return {name.lower(): value for name, value in response.headers.items()}
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return None
+            raise R2Error(f"R2 HEAD failed with HTTP {error.code}") from error
+        except urllib.error.URLError as error:
+            raise R2Error(f"R2 HEAD failed: {error.reason}") from error
+
+    def get_file(self, *, key: str, file: Path, sha256: str, size: int) -> None:
+        """Acquire exact bytes to a new destination; no partial file is exposed."""
+        if not re.fullmatch(r"[a-f0-9]{64}", sha256) or type(size) is not int or size < 1:
+            raise R2Error("R2 download requires an exact SHA-256 and positive size")
+        request = self._request(key, "GET", hashlib.sha256(b"").hexdigest())
+        file.parent.mkdir(parents=True, exist_ok=True)
+        if file.exists() or file.is_symlink():
+            raise R2Error("R2 download destination already exists")
+        fd, temporary = tempfile.mkstemp(prefix=".r2-download-", dir=file.parent)
+        try:
+            digest, received = hashlib.sha256(), 0
+            with os.fdopen(fd, "wb") as output, _open(request, timeout=self.timeout) as response:
+                if response.status != 200:
+                    raise R2Error(f"R2 GET returned HTTP {response.status}")
+                length = response.headers.get("Content-Length")
+                if length is not None and length != str(size):
+                    raise R2Error("R2 object length mismatch")
+                while chunk := response.read(min(1024 * 1024, size - received + 1)):
+                    received += len(chunk)
+                    if received > size:
+                        raise R2Error("R2 object exceeds declared size")
+                    digest.update(chunk)
+                    output.write(chunk)
+            if received != size or digest.hexdigest() != sha256:
+                raise R2Error("R2 object integrity mismatch")
+            os.link(temporary, file)  # Atomic create, including concurrent destinations.
+        except (urllib.error.HTTPError, urllib.error.URLError) as error:
+            raise R2Error("R2 object acquisition failed") from error
+        finally:
+            os.unlink(temporary)
 
 
 def self_check() -> None:
@@ -176,7 +243,7 @@ def self_check() -> None:
         bucket="results",
         credentials=R2Credentials("access", "secret"),
     )
-    with patch("urllib.request.urlopen", open_request):
+    with patch(__name__ + "._open", open_request):
         client.put_bytes(key="path/result.json", body=b"{}")
     if len(captured) != 1:
         raise R2Error("R2 self-check did not issue exactly one request")

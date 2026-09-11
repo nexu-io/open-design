@@ -415,16 +415,23 @@ def result_key(repository_id: int, workflow: str, policy: str, identity: str, di
 
 
 def product_key(
-    repository_id: int,
-    workflow: str,
-    policy: str,
-    identity: str,
-    digest: str,
-    product: str,
+    repository_id: int, workflow: str, policy: str, identity: str, product: str, sha256: str,
 ) -> str:
+    """Byte identity is independent of execution identity and release versions.
+
+    Producers may create these objects, never workload-results records. Different
+    executions producing the same bytes share an object; trusted admission still
+    rejects conflicting successful results for one workload identity.
+    """
+    if type(repository_id) is not int or repository_id < 1:
+        raise ConfigError("product requires a positive repository id")
+    for name, value in {"workflow": workflow, "policy": policy, "workload": identity, "product": product}.items():
+        require_identity(value, name)
+    if not isinstance(sha256, str) or not DIGEST_RE.fullmatch(sha256):
+        raise ConfigError("product requires a content SHA-256")
     return (
-        f"workload-products/v1/repos/{repository_id}/workflows/{workflow}/policies/{policy}"
-        f"/workloads/{identity}/digests/{digest}/products/{product}.zip"
+        f"workload-products/v2/repos/{repository_id}/workflows/{workflow}/policies/{policy}"
+        f"/workloads/{identity}/products/{product}/sha256/{sha256}.zip"
     )
 
 
@@ -1572,22 +1579,26 @@ def publish_command(args: argparse.Namespace) -> int:
                 raise ConfigError(f"current-run product artifact is missing: {source}")
             archive = args.output_dir / "products" / f"{identity}-{name}.zip"
             normalize_product_archive(source_archive, archive)
-            key = product_key(repository_id, workflow, policy, identity, digest, name)
             content_digest = sha256_file(archive)
+            key = product_key(repository_id, workflow, policy, identity, name, content_digest)
             data = dict(product.get("data", {}))
             declared_digest = data.get("sha256")
             if declared_digest is not None and declared_digest != content_digest:
                 raise ConfigError(f"declared product digest differs from artifact: {identity}/{name}")
             data["sha256"] = content_digest
-            try:
-                client.put_file(
-                    key=key,
-                    file=archive,
-                    content_type="application/zip",
-                )
-            except R2PreconditionFailed:
+            data["size"] = archive.stat().st_size
+            existing_product = client.head(key=key)
+            if existing_product is not None:
+                if existing_product.get("content-length") != str(data["size"]):
+                    raise ConfigError(f"immutable workload product size collision: {key}")
                 if sha256_url(f"{origin}/{key}", args.timeout) != content_digest:
                     raise ConfigError(f"immutable workload product collision: {key}")
+            else:
+                try:
+                    client.put_file(key=key, file=archive, content_type="application/zip")
+                except R2PreconditionFailed:
+                    if sha256_url(f"{origin}/{key}", args.timeout) != content_digest:
+                        raise ConfigError(f"immutable workload product collision: {key}")
             promoted = {"type": "url", "source": f"{origin}/{key}"}
             promoted["data"] = data
             receipt["products"][name] = promoted

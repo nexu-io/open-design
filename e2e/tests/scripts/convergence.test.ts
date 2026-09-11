@@ -95,6 +95,117 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("does not re-upload content-addressed products when execution identities change", () => {
+    const code = `
+import sys,json,tempfile,hashlib,shutil
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+sys.path.insert(0,sys.argv[1])
+import convergence as c
+objects={}; writes=[]
+class Storage:
+ def __init__(self,**kwargs): pass
+ def head(self,*,key): return {'content-length':str(len(objects[key]))} if key in objects else None
+ def put_file(self,*,key,file,**kwargs):
+  assert key not in objects
+  objects[key]=file.read_bytes();writes.append(key)
+config={'endpoint':'https://storage.invalid','bucket':'cache','access_key_id':'ak','secret_access_key':'sk','public_origin':'https://cache.invalid'}
+with tempfile.TemporaryDirectory() as directory:
+ root=Path(directory);(root/'input.zip').write_bytes(b'canonical-product')
+ args=SimpleNamespace(candidate=root/'candidate.json',output_dir=root/'out',products_root=root,timeout=1)
+ def normalize(source,destination):
+  destination.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,destination)
+ with patch.object(c,'R2Client',Storage),patch.object(c,'storage_config',return_value=config),patch.object(c,'prepare_publication',return_value=[]),patch.object(c,'normalize_product_archive',side_effect=normalize),patch.object(c,'sha256_url',side_effect=lambda url,timeout:hashlib.sha256(objects[url.removeprefix('https://cache.invalid/')]).hexdigest()):
+  for digest in ['a'*64,'b'*64]:
+   args.candidate.write_text(json.dumps({'repositoryId':42,'workflow':'release-exact','policy':'exact-v1','results':[{'receipt':{'workload':'toolchain','digest':digest,'products':{'toolchain':{'type':'job','source':'input'}}}}]}))
+   assert c.publish_command(args)==0
+  assert len(writes)==1
+  saved=json.loads((args.output_dir/'promoted-candidate.json').read_text())['results'][0]['receipt']['products']['toolchain']
+  assert saved['data']['size']==len(b'canonical-product')
+  objects[writes[0]]=b'x'*len(b'canonical-product')
+  try: c.publish_command(args)
+  except c.ConfigError: pass
+  else: raise AssertionError('accepted existing corrupt product')
+  assert len(writes)==1
+`;
+    expect(spawnSync("python3", ["-c", code, path.join(repoRoot, ".github/scripts")], { encoding: "utf8" }))
+      .toMatchObject({ status: 0, stderr: "" });
+  });
+  test("addresses reusable product bytes independently of run, execution digest and release version", () => {
+    const code = `
+import sys,inspect
+sys.path.insert(0,sys.argv[1])
+from convergence import product_key,ConfigError
+args=dict(repository_id=42,workflow='release-exact',policy='exact-v1',identity='electron_toolchain',product='toolchain',sha256='a'*64)
+key=product_key(**args)
+assert key=='workload-products/v2/repos/42/workflows/release-exact/policies/exact-v1/workloads/electron_toolchain/products/toolchain/sha256/'+('a'*64)+'.zip'
+assert 'run' not in inspect.signature(product_key).parameters
+assert 'digest' not in inspect.signature(product_key).parameters
+assert 'release_version' not in inspect.signature(product_key).parameters
+for field,value in [('repository_id',43),('workflow','release-stable'),('policy','other'),('identity','other'),('product','other'),('sha256','b'*64)]:
+ assert product_key(**dict(args,**{field:value}))!=key
+for field,value in [('repository_id',True),('repository_id',0),('workflow','../release'),('product','../installer'),('identity','a/b'),('sha256','invalid')]:
+ try: product_key(**dict(args,**{field:value}))
+ except ConfigError: pass
+ else: raise AssertionError('accepted invalid key input')
+`;
+    expect(spawnSync("python3", ["-c", code, path.join(repoRoot, ".github/scripts")], { encoding: "utf8" }))
+      .toMatchObject({ status: 0, stderr: "" });
+  });
+  test("transfers exact R2 objects with bounded reads and without partial destinations or redirects", () => {
+    const code = `
+import sys,hashlib,io,tempfile,urllib.error
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0,sys.argv[1])
+import lib.r2 as r
+r.self_check()
+client=r.R2Client(endpoint='https://account.r2.cloudflarestorage.com',bucket='results',credentials=r.R2Credentials('ak','sk','session'))
+body=b'x'*(2*1024*1024+7)
+digest=hashlib.sha256(body).hexdigest()
+class Response(io.BytesIO):
+ status=200
+ headers={'Content-Length':str(len(body))}
+ def read(self,n=-1):
+  assert 0<n<=1024*1024
+  return super().read(n)
+def upload(req,timeout):
+ assert req.method=='PUT' and not isinstance(req.data,bytes)
+ assert req.get_header('Content-length')==str(len(body))
+ assert req.get_header('X-amz-content-sha256')==digest
+ assert req.get_header('X-amz-security-token')=='session'
+ assert req.get_header('If-none-match')=='*'
+ assert req.data.read()==body
+ return Response()
+with tempfile.TemporaryDirectory() as directory:
+ root=Path(directory); source=root/'source'; source.write_bytes(body)
+ with patch.object(r,'_open',side_effect=upload): client.put_file(key='products/object',file=source)
+ with patch.object(r,'_open',side_effect=lambda request,timeout:Response(body)):
+  client.get_file(key='products/object',file=root/'good',sha256=digest,size=len(body))
+  assert (root/'good').read_bytes()==body
+  try: client.get_file(key='products/object',file=root/'good',sha256=digest,size=len(body))
+  except r.R2Error: pass
+  else: raise AssertionError('overwrote destination')
+  for name,expected_size,expected_digest in [('digest',len(body),'0'*64),('size',len(body)+1,digest)]:
+   try: client.get_file(key='products/object',file=root/name,sha256=expected_digest,size=expected_size)
+   except r.R2Error: pass
+   else: raise AssertionError('accepted corrupt object')
+   assert not (root/name).exists()
+ assert not list(root.glob('.r2-download-*'))
+for key in ['/escape','a/../b','a//b','a/./b','a\\\\b','bad'+chr(0)]:
+ try: client._request(key,'HEAD',digest)
+ except r.R2Error: pass
+ else: raise AssertionError('accepted unsafe key')
+with patch.object(r,'_open',side_effect=urllib.error.HTTPError('https://example',404,'missing',{},None)):
+ assert client.head(key='missing') is None
+try: r._NoRedirect().redirect_request(None,None,307,'redirect',{},'https://other.invalid')
+except r.R2Error: pass
+else: raise AssertionError('followed authenticated redirect')
+`;
+    expect(spawnSync("python3", ["-c", code, path.join(repoRoot, ".github/scripts")], { encoding: "utf8" }))
+      .toMatchObject({ status: 0, stderr: "" });
+  });
   test("reads independent cached results with bounded concurrency and stable ordering", () => {
     const code = `
 import sys, threading
