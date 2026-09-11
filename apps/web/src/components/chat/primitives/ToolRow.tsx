@@ -148,11 +148,18 @@ export function ToolRow({
    * 读取一律不做,写 / 改要拿得到「这个路径属于当前项目」的正面证据。
    */
   const openPath = openableRecordFilePath(row, fileScope);
+  const readParameters = row.tool === 'read' && row.readRange
+    ? [
+      row.readRange.offset != null ? `offset=${row.readRange.offset}` : null,
+      row.readRange.limit != null ? `limit=${row.readRange.limit}` : null,
+    ].filter((value) => value !== null).join(', ')
+    : '';
   const fileName = (): ReactElement | null => (row.file
     ? (
       <FileButton
         path={openPath ?? row.file.path}
         label={row.file.label}
+        title={readParameters ? `${row.file.path}\n${readParameters}` : undefined}
         onOpen={openPath ? onOpenFile : undefined}
         elide
       />

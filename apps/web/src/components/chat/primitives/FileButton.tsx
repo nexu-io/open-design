@@ -15,7 +15,7 @@ import { elideFileName } from '../../../runtime/chat/format';
 import type { FileButtonProps } from './contract';
 import styles from './record.module.css';
 
-export function FileButton({ path, label, onOpen, elide }: FileButtonProps): ReactElement {
+export function FileButton({ path, label, onOpen, elide, title: detailTitle }: FileButtonProps): ReactElement {
   const t = useT();
   /*
    * 只有**文件名**能省略。命令行、grep 模式这些也走这个按钮,但它们不是文件名 ——
@@ -23,7 +23,7 @@ export function FileButton({ path, label, onOpen, elide }: FileButtonProps): Rea
    * 截成 `wc -l a.md tr….html`,读起来像另一条命令。默认不省,由调用方按语义开。
    */
   const shown = elide ? elideFileName(label) : label;
-  const title = shown === label ? undefined : label;
+  const title = detailTitle ?? (shown === label ? undefined : label);
 
   /*
    * 没有 `onOpen` = 这个名字打不开,那就**不要长成按钮**。
