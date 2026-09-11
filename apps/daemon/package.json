@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.22.1",
+  "version": "0.22.3",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
