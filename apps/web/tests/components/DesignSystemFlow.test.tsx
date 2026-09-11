@@ -2614,6 +2614,50 @@ describe('DesignSystemCreationFlow', () => {
 });
 
 describe('DesignSystemDetailView', () => {
+  it('offers a per-project Use system fonts dismissal on the detail banner', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:font-banner-audit',
+      title: 'Font Banner Audit',
+      category: 'Custom',
+      summary: 'Audit fixture',
+      swatches: [],
+      surface: 'web',
+      body: '# Font Banner Audit',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'font-banner-audit-project',
+    };
+    const project: Project = {
+      id: system.projectId!,
+      name: system.title,
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: { kind: 'other', importedFrom: 'design-system' },
+    };
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+    mocks.getProject.mockResolvedValue(project);
+
+    render(
+      <I18nProvider locale="en">
+        <DesignSystemDetailView
+          id={system.id}
+          selectedId={system.id}
+          config={{ mode: 'daemon', agentId: 'agent-1' } as AppConfig}
+          agents={[]}
+          onBack={() => {}}
+          onSetDefault={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByText(/missing brand fonts/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /use system fonts/i })).toBeTruthy();
+  });
+
   it('keeps a fresh R2 file snapshot when an older R1 resolves afterward', async () => {
     const system: DesignSystemDetail = {
       id: 'user:refresh-race-design-system',
