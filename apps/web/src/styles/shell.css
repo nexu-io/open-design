@@ -978,8 +978,8 @@ html.od-radial-open .workspace-shell {
 }
 .chrome-share-menu--unified .chrome-unified-popover {
   /* Hug the content instead of a fixed 360px: the rows are short labels, so a
-     fixed width left a wide empty gutter on the right. The floor keeps narrow
-     menus (Export) from looking cramped; the ceiling keeps long ones (a
+     fixed width left a wide empty gutter on the right. The floor keeps Share
+     controls from looking cramped; the ceiling keeps long ones (a
      published URL, deploy labels) from running off the viewport. */
   width: max-content;
   min-width: min(248px, calc(100vw - 32px));
@@ -988,6 +988,19 @@ html.od-radial-open .workspace-shell {
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-md);
+}
+/* HTML artifact Export is a list of labels: fit its longest row, keeping the
+   shared padding and viewport ceiling without Share's minimum width. */
+.chrome-share-menu--unified .chrome-unified-popover--export {
+  min-width: 0;
+}
+.chrome-unified-popover--export .share-menu-item {
+  /* Long translations can reach the viewport ceiling: let the row grow
+     instead of inheriting the global button reset's single-line height. */
+  height: auto;
+  min-height: 36px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .chrome-unified-panel {
   display: flex;

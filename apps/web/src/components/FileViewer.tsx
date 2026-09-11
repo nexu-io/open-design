@@ -16968,7 +16968,7 @@ function HtmlViewer({
                   <AnchoredMenuShell
                     anchorId={menuAnchorId}
                     wrapperClassName="share-menu chrome-share-menu chrome-share-menu--unified"
-                    className="share-menu-popover chrome-unified-popover"
+                    className={`share-menu-popover chrome-unified-popover${unifiedActionTab === 'export' ? ' chrome-unified-popover--export' : ''}`}
                     portalRef={anchoredMenuRef}
                     /*
                      * 锚点滚出可视区(或整条消息被虚拟化掉)就把菜单收起来 ——
