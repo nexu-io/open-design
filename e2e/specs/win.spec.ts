@@ -33,7 +33,7 @@ import {
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from '@/vitest/packaged-win-identity';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
-import { missingWorkingWinInstallerOverwriteMarkers } from '@/vitest/win-installer-log';
+import { missingWorkingWinInstallerOverwriteMarkers, winInstallerRuntimeSyncPhase, type WinInstallerRuntimeSyncPhase } from '@/vitest/win-installer-log';
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -557,6 +557,7 @@ type SmokeTiming = {
 };
 
 type DirectInstallerResult = {
+  runtimeSync: WinInstallerRuntimeSyncPhase;
   code: number | null;
   nsisLogTail: string[];
 };
@@ -961,7 +962,7 @@ winDescribe('packaged windows runtime smoke', () => {
         );
         started = false;
         expect(reinstall.code).toBe(0);
-        assertWorkingWinInstallerOverwriteLog(reinstall.nsisLogTail);
+        assertWorkingWinInstallerOverwriteLog(reinstall);
         expect(reinstall.nsisLogTail.join('\n')).toContain('running instances detected before silent install');
         expect(reinstall.nsisLogTail.join('\n')).toMatch(/running instances close via (?:pwsh|powershell)\.exe exit=0/);
 
@@ -1512,6 +1513,7 @@ type PayloadUpdateSummary = {
 type InstallerFallbackSummary = {
   coldStart: {
     health: HealthEvalValue;
+    launcher: LauncherSnapshot;
     start: WinStartResult;
     stop: WinStopResult;
   };
@@ -1756,7 +1758,7 @@ async function runInstallerFallbackAcceptance(options: {
     join(fixtureNamespaceRoot, 'logs', 'nsis.log'),
   );
   expect(install.code).toBe(0);
-  assertWorkingWinInstallerOverwriteLog(install.nsisLogTail);
+  assertWorkingWinInstallerOverwriteLog(install);
   process.env.OD_UPDATE_CURRENT_VERSION = targetVersion;
 
   const start = await runToolsPackJsonForVersion<WinStartResult>('start', targetVersion);
@@ -1798,8 +1800,14 @@ async function runInstallerFallbackAcceptance(options: {
   expect(coldHealth.status).toBe(200);
   expect(coldHealth.health.ok).toBe(true);
   expect(coldHealth.health.version).toBe(targetVersion);
+  // Portable installers defer reconciliation to startup: verify its result,
+  // not build-machine runtime writes that the installer intentionally omits.
+  expect(settledLauncherGeneration(coldInspect.launcher, targetVersion)).not.toBeNull();
+  expect(coldInspect.launcher.active?.version).toBe(targetVersion);
+  expect(coldInspect.launcher.lastSuccessful?.version).toBe(targetVersion);
+  expect(coldInspect.launcher.attempt).toBeNull();
   return {
-    coldStart: { health: coldHealth, start: coldStart, stop },
+    coldStart: { health: coldHealth, launcher: coldInspect.launcher, start: coldStart, stop },
     downloaded: downloadedInspect.update,
     downloadedSha256,
     fixtureSha256: options.fixture.info.artifactSha256,
@@ -1857,12 +1865,13 @@ async function runToolsPackJsonForVersion<T>(
   }
 }
 
-function assertWorkingWinInstallerOverwriteLog(lines: string[]): void {
+function assertWorkingWinInstallerOverwriteLog(install: DirectInstallerResult): void {
+  const lines = install.nsisLogTail;
   // #6008 deliberately restored this working replace flow after the
   // transactional installer failed fresh installs. Keep the full release
   // smoke aligned with the generated installer until a transactional redesign
   // lands together with real installer coverage.
-  expect(missingWorkingWinInstallerOverwriteMarkers(lines), lines.join("\n")).toEqual([]);
+  expect(missingWorkingWinInstallerOverwriteMarkers(lines, install.runtimeSync), lines.join("\n")).toEqual([]);
 }
 
 async function runDirectInstaller(
@@ -1907,8 +1916,12 @@ async function runDirectInstaller(
     (caught: unknown) => caught,
   );
   const code = isExecError(error) ? Number(error.code) : error == null ? 0 : null;
+  const installedConfig = JSON.parse(await readFile(
+    join(installDir, 'resources', 'open-design-config.json'), 'utf8',
+  ));
   return {
     code,
+    runtimeSync: winInstallerRuntimeSyncPhase(installedConfig),
     nsisLogTail: (await Promise.all(logPaths.map(async (path, index) =>
       (await readNsisLogLines(path)).slice(previousLogs[index]!.length),
     ))).flat(),
