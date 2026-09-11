@@ -1,0 +1,1776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Deliver a Digital-Transformation Roadmap like a Big-Four Partner - Consulting</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<script>
+/**
+ * <deck-stage> — reusable web component for HTML decks.
+ *
+ * Handles:
+ *  (a) speaker notes — reads <script type="application/json" id="speaker-notes">
+ *      and posts {slideIndexChanged: N} to the parent window on nav.
+ *  (b) keyboard navigation — ←/→, PgUp/PgDn, Space, Home/End, number keys.
+ *  (c) press R to reset to slide 0 (with a tasteful keyboard hint).
+ *  (d) bottom-center overlay showing slide count + hints, fades out on idle.
+ *  (e) auto-scaling — inner canvas is a fixed design size (default 1920×1080)
+ *      scaled with `transform: scale()` to fit the viewport, letterboxed.
+ *      Set the `noscale` attribute to render at authored size (1:1) — the
+ *      PPTX exporter sets this so its DOM capture sees unscaled geometry.
+ *  (f) print — `@media print` lays every slide out as its own page at the
+ *      design size, so the browser's Print → Save as PDF produces a clean
+ *      one-page-per-slide PDF with no extra setup.
+ *
+ * Slides are HIDDEN, not unmounted. Non-active slides stay in the DOM with
+ * `visibility: hidden` + `opacity: 0`, so their state (videos, iframes,
+ * form inputs, React trees) is preserved across navigation.
+ *
+ * Lifecycle event — the component dispatches a `slidechange` CustomEvent on
+ * itself whenever the active slide changes (including the initial mount).
+ * The event bubbles and composes out of shadow DOM, so you can listen on
+ * the <deck-stage> element or on document:
+ *
+ *   document.querySelector('deck-stage').addEventListener('slidechange', (e) => {
+ *     e.detail.index         // new 0-based index
+ *     e.detail.previousIndex // previous index, or -1 on init
+ *     e.detail.total         // total slide count
+ *     e.detail.slide         // the new active slide element
+ *     e.detail.previousSlide // the prior slide element, or null on init
+ *     e.detail.reason        // 'init' | 'keyboard' | 'click' | 'tap' | 'api'
+ *   });
+ *
+ * Persistence: none at the deck level. The host app keeps the current slide
+ * in its own URL (?slide=) and re-delivers it via location.hash on load, so a
+ * bare load with no hash always starts at slide 1.
+ *
+ * Usage:
+ *   <deck-stage width="1920" height="1080">
+ *     <section data-label="Title">...</section>
+ *     <section data-label="Agenda">...</section>
+ *   </deck-stage>
+ *
+ * Slides are the direct element children of <deck-stage>. Each slide is
+ * automatically tagged with:
+ *   - data-screen-label="NN Label"   (1-indexed, for comment flow)
+ *   - data-om-validate="no_overflowing_text,no_overlapping_text,slide_sized_text"
+ */
+
+(() => {
+  const DESIGN_W_DEFAULT = 1920;
+  const DESIGN_H_DEFAULT = 1080;
+  const OVERLAY_HIDE_MS = 1800;
+  const VALIDATE_ATTR = 'no_overflowing_text,no_overlapping_text,slide_sized_text';
+
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  const stylesheet = `
+    :host {
+      position: fixed;
+      inset: 0;
+      display: block;
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    .stage {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .canvas {
+      position: relative;
+      transform-origin: center center;
+      flex-shrink: 0;
+      background: #fff;
+      will-change: transform;
+    }
+
+    /* Slides live in light DOM (via <slot>) so authored CSS still applies.
+       We absolutely position each slotted child to stack them. */
+    ::slotted(*) {
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      box-sizing: border-box !important;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+    ::slotted([data-deck-active]) {
+      opacity: 1;
+      pointer-events: auto;
+      visibility: visible;
+    }
+
+    /* Tap zones for mobile — back/forward thirds like Stories.
+       Transparent, no visible UI, don't block the overlay. */
+    .tapzones {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      z-index: 2147482000;
+      pointer-events: none;
+    }
+    .tapzone {
+      flex: 1;
+      pointer-events: auto;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Only activate tap zones on coarse pointers (touch devices). */
+    @media (hover: hover) and (pointer: fine) {
+      .tapzones { display: none; }
+    }
+
+    .overlay {
+      position: fixed;
+      left: 50%;
+      bottom: 22px;
+      transform: translate(-50%, 8px);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      background: #000;
+      color: #fff;
+      border-radius: 999px;
+      font-size: 12px;
+      font-feature-settings: "tnum" 1;
+      letter-spacing: 0.01em;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease, transform 200ms cubic-bezier(.2,.8,.2,1);
+      transform-origin: center bottom;
+      z-index: 2147483000;
+      user-select: none;
+    }
+    .overlay[data-visible] {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate(-50%, 0);
+    }
+
+    .btn {
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      border: 0;
+      margin: 0;
+      padding: 0;
+      color: inherit;
+      font: inherit;
+      cursor: default;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 28px;
+      min-width: 28px;
+      border-radius: 999px;
+      color: rgba(255,255,255,0.72);
+      transition: background 140ms ease, color 140ms ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .btn:active { background: rgba(255,255,255,0.18); }
+    .btn:focus { outline: none; }
+    .btn:focus-visible { outline: none; }
+    .btn::-moz-focus-inner { border: 0; }
+    .btn svg { width: 14px; height: 14px; display: block; }
+    .btn.reset {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding: 0 10px 0 12px;
+      gap: 6px;
+      color: rgba(255,255,255,0.72);
+    }
+    .btn.reset .kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 10px;
+      line-height: 1;
+      color: rgba(255,255,255,0.88);
+      background: rgba(255,255,255,0.12);
+      border-radius: 4px;
+    }
+
+    .count {
+      font-variant-numeric: tabular-nums;
+      color: #fff;
+      font-weight: 500;
+      padding: 0 8px;
+      min-width: 42px;
+      text-align: center;
+      font-size: 12px;
+    }
+    .count .sep { color: rgba(255,255,255,0.45); margin: 0 3px; font-weight: 400; }
+    .count .total { color: rgba(255,255,255,0.55); }
+
+    .divider {
+      width: 1px;
+      height: 14px;
+      background: rgba(255,255,255,0.18);
+      margin: 0 2px;
+    }
+
+    /* ── Print: one page per slide, no chrome ────────────────────────────
+       The screen layout stacks every slide at inset:0 inside a scaled
+       canvas; for print we want them in document flow at the authored
+       design size so the browser paginates one slide per sheet. The
+       @page size is set from the width/height attributes via the inline
+       <style id="deck-stage-print-page"> that connectedCallback injects
+       into <head> (the @page at-rule has no effect inside shadow DOM). */
+    @media print {
+      :host {
+        position: static;
+        inset: auto;
+        background: none;
+        overflow: visible;
+        color: inherit;
+      }
+      .stage { position: static; display: block; }
+      .canvas {
+        transform: none !important;
+        width: auto !important;
+        height: auto !important;
+        background: none;
+        will-change: auto;
+      }
+      ::slotted(*) {
+        position: relative !important;
+        inset: auto !important;
+        width: var(--deck-design-w) !important;
+        height: var(--deck-design-h) !important;
+        box-sizing: border-box !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto;
+        break-after: page;
+        page-break-after: always;
+        break-inside: avoid;
+        overflow: hidden;
+      }
+      ::slotted(*:last-child) {
+        break-after: auto;
+        page-break-after: auto;
+      }
+      .overlay, .tapzones { display: none !important; }
+    }
+  `;
+
+  class DeckStage extends HTMLElement {
+    static get observedAttributes() { return ['width', 'height', 'noscale']; }
+
+    constructor() {
+      super();
+      this._root = this.attachShadow({ mode: 'open' });
+      this._index = 0;
+      this._slides = [];
+      this._notes = [];
+      this._hideTimer = null;
+      this._mouseIdleTimer = null;
+
+      this._onKey = this._onKey.bind(this);
+      this._onResize = this._onResize.bind(this);
+      this._onSlotChange = this._onSlotChange.bind(this);
+      this._onMouseMove = this._onMouseMove.bind(this);
+      this._onTapBack = this._onTapBack.bind(this);
+      this._onTapForward = this._onTapForward.bind(this);
+    }
+
+    get designWidth() {
+      return parseInt(this.getAttribute('width'), 10) || DESIGN_W_DEFAULT;
+    }
+    get designHeight() {
+      return parseInt(this.getAttribute('height'), 10) || DESIGN_H_DEFAULT;
+    }
+
+    connectedCallback() {
+      this._render();
+      this._loadNotes();
+      this._syncPrintPageRule();
+      window.addEventListener('keydown', this._onKey);
+      window.addEventListener('resize', this._onResize);
+      window.addEventListener('mousemove', this._onMouseMove, { passive: true });
+      // Initial collection + layout happens via slotchange, which fires on mount.
+    }
+
+    disconnectedCallback() {
+      window.removeEventListener('keydown', this._onKey);
+      window.removeEventListener('resize', this._onResize);
+      window.removeEventListener('mousemove', this._onMouseMove);
+      if (this._hideTimer) clearTimeout(this._hideTimer);
+      if (this._mouseIdleTimer) clearTimeout(this._mouseIdleTimer);
+    }
+
+    attributeChangedCallback() {
+      if (this._canvas) {
+        this._canvas.style.width = this.designWidth + 'px';
+        this._canvas.style.height = this.designHeight + 'px';
+        this._canvas.style.setProperty('--deck-design-w', this.designWidth + 'px');
+        this._canvas.style.setProperty('--deck-design-h', this.designHeight + 'px');
+        this._fit();
+        this._syncPrintPageRule();
+      }
+    }
+
+    _render() {
+      const style = document.createElement('style');
+      style.textContent = stylesheet;
+
+      const stage = document.createElement('div');
+      stage.className = 'stage';
+
+      const canvas = document.createElement('div');
+      canvas.className = 'canvas';
+      canvas.style.width = this.designWidth + 'px';
+      canvas.style.height = this.designHeight + 'px';
+      canvas.style.setProperty('--deck-design-w', this.designWidth + 'px');
+      canvas.style.setProperty('--deck-design-h', this.designHeight + 'px');
+
+      const slot = document.createElement('slot');
+      slot.addEventListener('slotchange', this._onSlotChange);
+      canvas.appendChild(slot);
+      stage.appendChild(canvas);
+
+      // Tap zones (mobile): left third = back, right third = forward.
+      const tapzones = document.createElement('div');
+      tapzones.className = 'tapzones export-hidden';
+      tapzones.setAttribute('aria-hidden', 'true');
+      tapzones.setAttribute('data-noncommentable', '');
+      const tzBack = document.createElement('div');
+      tzBack.className = 'tapzone tapzone--back';
+      const tzMid = document.createElement('div');
+      tzMid.className = 'tapzone tapzone--mid';
+      tzMid.style.pointerEvents = 'none';
+      const tzFwd = document.createElement('div');
+      tzFwd.className = 'tapzone tapzone--fwd';
+      tzBack.addEventListener('click', this._onTapBack);
+      tzFwd.addEventListener('click', this._onTapForward);
+      tapzones.append(tzBack, tzMid, tzFwd);
+
+      // Overlay: compact, solid black, with clickable controls.
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay export-hidden';
+      overlay.setAttribute('role', 'toolbar');
+      overlay.setAttribute('aria-label', 'Deck controls');
+      overlay.setAttribute('data-noncommentable', '');
+      overlay.innerHTML = `
+        <button class="btn prev" type="button" aria-label="Previous slide" title="Previous (←)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5"/></svg>
+        </button>
+        <span class="count" aria-live="polite"><span class="current">1</span><span class="sep">/</span><span class="total">1</span></span>
+        <button class="btn next" type="button" aria-label="Next slide" title="Next (→)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg>
+        </button>
+        <span class="divider"></span>
+        <button class="btn reset" type="button" aria-label="Reset to first slide" title="Reset (R)">Reset<span class="kbd">R</span></button>
+      `;
+
+      overlay.querySelector('.prev').addEventListener('click', () => this._go(this._index - 1, 'click'));
+      overlay.querySelector('.next').addEventListener('click', () => this._go(this._index + 1, 'click'));
+      overlay.querySelector('.reset').addEventListener('click', () => this._go(0, 'click'));
+
+      this._root.append(style, stage, tapzones, overlay);
+      this._canvas = canvas;
+      this._slot = slot;
+      this._overlay = overlay;
+      this._countEl = overlay.querySelector('.current');
+      this._totalEl = overlay.querySelector('.total');
+    }
+
+    /** @page must live in the document stylesheet — it's a no-op inside
+     *  shadow DOM. Inject/update a single <head> style tag so the print
+     *  sheet matches the design size and Save-as-PDF yields one slide per
+     *  page with no margins. */
+    _syncPrintPageRule() {
+      const id = 'deck-stage-print-page';
+      let tag = document.getElementById(id);
+      if (!tag) {
+        tag = document.createElement('style');
+        tag.id = id;
+        document.head.appendChild(tag);
+      }
+      tag.textContent =
+        '@page { size: ' + this.designWidth + 'px ' + this.designHeight + 'px; margin: 0; } ' +
+        '@media print { html, body { margin: 0 !important; padding: 0 !important; background: none !important; overflow: visible !important; height: auto !important; } ' +
+        '* { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }';
+    }
+
+    _onSlotChange() {
+      this._collectSlides();
+      this._restoreIndex();
+      this._applyIndex({ showOverlay: false, broadcast: true, reason: 'init' });
+      this._fit();
+    }
+
+    _collectSlides() {
+      const assigned = this._slot.assignedElements({ flatten: true });
+      this._slides = assigned.filter((el) => {
+        // Skip template/style/script nodes even if someone slots them.
+        const tag = el.tagName;
+        return tag !== 'TEMPLATE' && tag !== 'SCRIPT' && tag !== 'STYLE';
+      });
+
+      this._slides.forEach((slide, i) => {
+        const n = i + 1;
+        // Determine a label for comment flow: prefer explicit data-label,
+        // then an existing data-screen-label, then first heading, else "Slide".
+        let label = slide.getAttribute('data-label');
+        if (!label) {
+          const existing = slide.getAttribute('data-screen-label');
+          if (existing) {
+            // Strip any leading number the author may have included.
+            label = existing.replace(/^\s*\d+\s*/, '').trim() || existing;
+          }
+        }
+        if (!label) {
+          const h = slide.querySelector('h1, h2, h3, [data-title]');
+          if (h) label = (h.textContent || '').trim().slice(0, 40);
+        }
+        if (!label) label = 'Slide';
+        slide.setAttribute('data-screen-label', `${pad2(n)} ${label}`);
+
+        // Validation attribute for comment flow / auto-checks.
+        if (!slide.hasAttribute('data-om-validate')) {
+          slide.setAttribute('data-om-validate', VALIDATE_ATTR);
+        }
+
+        slide.setAttribute('data-deck-slide', String(i));
+      });
+
+      if (this._totalEl) this._totalEl.textContent = String(this._slides.length || 1);
+      if (this._index >= this._slides.length) this._index = Math.max(0, this._slides.length - 1);
+    }
+
+    _loadNotes() {
+      const tag = document.getElementById('speaker-notes');
+      if (!tag) { this._notes = []; return; }
+      try {
+        const parsed = JSON.parse(tag.textContent || '[]');
+        if (Array.isArray(parsed)) this._notes = parsed;
+      } catch (e) {
+        console.warn('[deck-stage] Failed to parse #speaker-notes JSON:', e);
+        this._notes = [];
+      }
+    }
+
+    _restoreIndex() {
+      // The host's ?slide= param is delivered as a #<int> hash (1-indexed) on
+      // the iframe src. No hash → slide 1; the deck itself keeps no position
+      // state across loads.
+      const h = (location.hash || '').match(/^#(\d+)$/);
+      if (h) {
+        const n = parseInt(h[1], 10) - 1;
+        if (n >= 0 && n < this._slides.length) this._index = n;
+      }
+    }
+
+    _applyIndex({ showOverlay = true, broadcast = true, reason = 'init' } = {}) {
+      if (!this._slides.length) return;
+      const prev = this._prevIndex == null ? -1 : this._prevIndex;
+      const curr = this._index;
+      // Keep the iframe's own hash in sync so an in-iframe location.reload()
+      // (reload banner path in viewer-handle.ts) lands on the current slide,
+      // not the stale deep-link hash from initial load.
+      try { history.replaceState(null, '', '#' + (curr + 1)); } catch (e) {}
+      this._slides.forEach((s, i) => {
+        if (i === curr) s.setAttribute('data-deck-active', '');
+        else s.removeAttribute('data-deck-active');
+      });
+      if (this._countEl) this._countEl.textContent = String(curr + 1);
+
+      if (broadcast) {
+        // (1) Legacy: host-window postMessage for speaker-notes renderers.
+        try { window.postMessage({ slideIndexChanged: curr }, '*'); } catch (e) {}
+
+        // (2) In-page CustomEvent on the <deck-stage> element itself.
+        //     Bubbles and composes out of shadow DOM so slide code can listen:
+        //       document.querySelector('deck-stage').addEventListener('slidechange', e => {
+        //         e.detail.index, e.detail.previousIndex, e.detail.total, e.detail.slide, e.detail.reason
+        //       });
+        const detail = {
+          index: curr,
+          previousIndex: prev,
+          total: this._slides.length,
+          slide: this._slides[curr] || null,
+          previousSlide: prev >= 0 ? (this._slides[prev] || null) : null,
+          reason: reason, // 'init' | 'keyboard' | 'click' | 'tap' | 'api'
+        };
+        this.dispatchEvent(new CustomEvent('slidechange', {
+          detail,
+          bubbles: true,
+          composed: true,
+        }));
+      }
+
+      this._prevIndex = curr;
+      if (showOverlay) this._flashOverlay();
+    }
+
+    _flashOverlay() {
+      if (!this._overlay) return;
+      this._overlay.setAttribute('data-visible', '');
+      if (this._hideTimer) clearTimeout(this._hideTimer);
+      this._hideTimer = setTimeout(() => {
+        this._overlay.removeAttribute('data-visible');
+      }, OVERLAY_HIDE_MS);
+    }
+
+    _fit() {
+      if (!this._canvas) return;
+      // PPTX export sets noscale so the DOM capture sees authored-size
+      // geometry — the scaled canvas is in shadow DOM, so the exporter's
+      // resetTransformSelector can't reach .canvas.style.transform directly.
+      if (this.hasAttribute('noscale')) {
+        this._canvas.style.transform = 'none';
+        return;
+      }
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const s = Math.min(vw / this.designWidth, vh / this.designHeight);
+      this._canvas.style.transform = `scale(${s})`;
+    }
+
+    _onResize() { this._fit(); }
+
+    _onMouseMove() {
+      // Keep overlay visible while mouse moves; hide after idle.
+      this._flashOverlay();
+    }
+
+    _onTapBack(e) {
+      e.preventDefault();
+      this._go(this._index - 1, 'tap');
+    }
+
+    _onTapForward(e) {
+      e.preventDefault();
+      this._go(this._index + 1, 'tap');
+    }
+
+    _onKey(e) {
+      // Ignore when the user is typing.
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const key = e.key;
+      let handled = true;
+
+      if (key === 'ArrowRight' || key === 'PageDown' || key === ' ' || key === 'Spacebar') {
+        this._go(this._index + 1, 'keyboard');
+      } else if (key === 'ArrowLeft' || key === 'PageUp') {
+        this._go(this._index - 1, 'keyboard');
+      } else if (key === 'Home') {
+        this._go(0, 'keyboard');
+      } else if (key === 'End') {
+        this._go(this._slides.length - 1, 'keyboard');
+      } else if (key === 'r' || key === 'R') {
+        this._go(0, 'keyboard');
+      } else if (/^[0-9]$/.test(key)) {
+        // 1..9 jump to that slide; 0 jumps to 10.
+        const n = key === '0' ? 9 : parseInt(key, 10) - 1;
+        if (n < this._slides.length) this._go(n, 'keyboard');
+      } else {
+        handled = false;
+      }
+
+      if (handled) {
+        e.preventDefault();
+        this._flashOverlay();
+      }
+    }
+
+    _go(i, reason = 'api') {
+      if (!this._slides.length) return;
+      const clamped = Math.max(0, Math.min(this._slides.length - 1, i));
+      if (clamped === this._index) {
+        this._flashOverlay();
+        return;
+      }
+      this._index = clamped;
+      this._applyIndex({ showOverlay: true, broadcast: true, reason });
+    }
+
+    // Public API ------------------------------------------------------------
+
+    /** Current slide index (0-based). */
+    get index() { return this._index; }
+    /** Total slide count. */
+    get length() { return this._slides.length; }
+    /** Programmatically navigate. */
+    goTo(i) { this._go(i, 'api'); }
+    next() { this._go(this._index + 1, 'api'); }
+    prev() { this._go(this._index - 1, 'api'); }
+    reset() { this._go(0, 'api'); }
+  }
+
+  if (!customElements.get('deck-stage')) {
+    customElements.define('deck-stage', DeckStage);
+  }
+})();
+
+</script>
+<style>
+  :root {
+    --paper:    #F2EEDF;     /* warm cream page */
+    --paper-2:  #ECE6D2;
+    --ink:      #2A241B;     /* warm near-black */
+    --ink-soft: #5C5345;
+    --pink:     #E1A4C2;     /* dusty pink */
+    --lemon:    #D6DD63;     /* chartreuse */
+    --blush:    #E8C9B6;     /* soft peach */
+    --sage:     #B7C7A8;     /* sage (extra) */
+    --ink-tint: #453D30;     /* body text on tinted blocks (AA on every pastel) */
+    --rose-ink: #B25A85;     /* deepened pink, thin data strokes only */
+    --olive-ink:#7E8826;     /* deepened lemon, thin data strokes only */
+    --hairline: rgba(42,36,27,.22);
+  }
+  html, body { margin:0; padding:0; background:#1a1a1a; }
+  body { font-family: "Work Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); }
+  deck-stage { background: #1a1a1a; }
+
+  section.slide {
+    background: var(--paper);
+    color: var(--ink);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Header / footer chrome shared across slides */
+  .eyebrow {
+    position: absolute;
+    top: 66px; left: 80px;
+    font-family: "Work Sans", sans-serif;
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .footer {
+    position: absolute;
+    left: 80px; right: 80px; bottom: 50px;
+    display: flex;
+    justify-content: space-between;
+    font-family: "Cormorant Garamond", "Garamond", serif;
+    font-size: 21px;
+    font-style: italic;
+    letter-spacing: 0.01em;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--hairline);
+    padding-top: 16px;
+  }
+  .pagedot {
+    position: absolute;
+    right: 80px; top: 60px;
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--ink-soft);
+  }
+
+  /* Typography */
+  h1, h2, h3, p { margin: 0; }
+  .serif      { font-family: "Cormorant Garamond", "Garamond", serif; font-weight: 500; }
+  .serif-it   { font-family: "Cormorant Garamond", serif; font-style: italic; font-weight: 500; }
+  .body {
+    font-family: "Work Sans", sans-serif;
+    font-weight: 400;
+    font-size: 26px;
+    line-height: 1.5;
+  }
+
+  /* Entrance motion: opacity only (layout containers rely on centering
+     transforms, so we never animate transform here), reduced-motion safe */
+  @keyframes settle {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  section.slide[data-deck-active] > :not(.eyebrow):not(.pagedot):not(.footer) {
+    animation: settle .6s cubic-bezier(.16,1,.3,1) both;
+  }
+  section.slide[data-deck-active] > :not(.eyebrow):not(.pagedot):not(.footer) ~ :not(.eyebrow):not(.pagedot):not(.footer) {
+    animation-delay: .08s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    section.slide > * { animation: none !important; }
+  }
+  @media print {
+    section.slide > * { animation: none !important; }
+  }
+
+  /* ============== 1. COVER ================================== */
+  .s-cover .stack {
+    position: absolute;
+    left: 80px; right: 80px; top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 44px;
+  }
+  .s-cover .kicker {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 38px;
+    color: var(--ink-soft);
+  }
+  .s-cover h1 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 232px;
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+  }
+  .s-cover h1 em { font-style: italic; font-weight: 400; }
+  .s-cover .lede {
+    font-size: 30px;
+    line-height: 1.4;
+    max-width: 60ch;
+    color: var(--ink-soft);
+  }
+  .s-cover .swatches {
+    position: absolute;
+    right: 80px; top: 80px;
+    display: flex; gap: 14px;
+  }
+  .s-cover .swatches i {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: block;
+  }
+
+  /* ============== 2. FOREWORD =============================== */
+  .s-foreword .col-l {
+    position: absolute;
+    left: 80px; top: 50%; width: 760px;
+    transform: translateY(-50%);
+  }
+  .s-foreword .col-l .opener {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 56px;
+    line-height: 1.1;
+    color: var(--ink);
+    margin-bottom: 36px;
+  }
+  .s-foreword .col-l .opener:first-letter {
+    font-size: 132px;
+    float: left;
+    line-height: 0.85;
+    padding: 8px 14px 0 0;
+    font-style: normal;
+    font-weight: 500;
+  }
+  .s-foreword .col-r {
+    position: absolute;
+    right: 80px; top: 200px; width: 760px;
+  }
+  .s-foreword .col-r p {
+    font-size: 24px;
+    line-height: 1.55;
+    margin-bottom: 22px;
+    color: var(--ink-soft);
+  }
+  .s-foreword .col-r p:first-child { color: var(--ink); }
+  .s-foreword .signoff {
+    margin-top: 24px;
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 30px;
+    color: var(--ink);
+  }
+
+  /* ============== 3. THE METHOD ============================= */
+  .s-method .grid {
+    position: absolute;
+    left: 80px; right: 80px; top: 220px; bottom: 140px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 28px;
+  }
+  .s-method .step {
+    border-radius: 28px;
+    padding: 36px 32px;
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+  }
+  .s-method .step .n {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 92px;
+    line-height: 0.9;
+    color: var(--ink);
+  }
+  .s-method .step h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1.05;
+    margin-top: 16px;
+  }
+  .s-method .step p {
+    font-size: 24px;
+    line-height: 1.45;
+    color: var(--ink-tint);
+  }
+  .s-method .step.pink  { background: var(--pink); }
+  .s-method .step.lemon { background: var(--lemon); }
+  .s-method .step.blush { background: var(--blush); }
+  .s-method .step.sage  { background: var(--sage); }
+
+  /* ============== 4. INSIGHTS (reference layout) ============ */
+  .s-insights .row {
+    position: absolute;
+    left: 80px; right: 80px; top: 200px; bottom: 200px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+  }
+  .s-insights .card {
+    border-radius: 28px;
+    padding: 64px 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 36px;
+  }
+  .s-insights .card.pink  { background: var(--pink); }
+  .s-insights .card.lemon { background: var(--lemon); }
+  .s-insights .card.blush { background: var(--blush); }
+  .s-insights .card .head h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 72px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    margin-bottom: 12px;
+    white-space: nowrap;
+  }
+  .s-insights .card .head .sub {
+    font-family: "Work Sans", sans-serif;
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.1;
+  }
+  .s-insights .card p {
+    font-size: 24px;
+    line-height: 1.45;
+    max-width: 26ch;
+  }
+
+  /* ============== 5. A CLOSER LOOK (full-bleed) ============= */
+  .s-closer { background: var(--pink); }
+  .s-closer .eyebrow,
+  .s-closer .pagedot,
+  .s-closer .footer { color: var(--ink); }
+  .s-closer .footer { color: rgba(42,36,27,.85); border-top-color: rgba(42,36,27,.3); }
+  .s-closer .center {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 1100px;
+    text-align: center;
+  }
+  .s-closer .marker {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 38px;
+    color: var(--ink);
+    margin-bottom: 32px;
+  }
+  .s-closer h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 168px;
+    line-height: 0.95;
+    letter-spacing: -0.015em;
+    margin-bottom: 36px;
+  }
+  .s-closer h2 em { font-style: italic; font-weight: 400; }
+  .s-closer p {
+    font-size: 28px;
+    line-height: 1.5;
+    max-width: 56ch;
+    margin: 0 auto;
+  }
+
+  /* ============== 6. BY THE NUMBERS ========================= */
+  .s-numbers .grid {
+    position: absolute;
+    left: 80px; right: 80px; top: 200px; bottom: 140px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: 1fr 1fr;
+    gap: 28px;
+  }
+  .s-numbers .stat {
+    border-radius: 28px;
+    padding: 42px 44px;
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+  }
+  .s-numbers .stat .v {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 200px;
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+  }
+  .s-numbers .stat .v em { font-style: italic; font-weight: 400; }
+  .s-numbers .stat .lab {
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink);
+    max-width: 28ch;
+  }
+  .s-numbers .a { background: var(--lemon); grid-column: span 2; grid-row: span 2; }
+  .s-numbers .a .v { font-size: 320px; }
+  .s-numbers .b { background: var(--pink); }
+  .s-numbers .c { background: var(--blush); }
+
+  /* ============== 7. IN THEIR WORDS ========================= */
+  .s-quote .center {
+    position: absolute;
+    left: 80px; right: 80px; top: 50%;
+    transform: translateY(-50%);
+    text-align: center;
+  }
+  .s-quote .qmark {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 220px;
+    line-height: 0.7;
+    color: var(--pink);
+    margin-bottom: 12px;
+  }
+  .s-quote blockquote {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 88px;
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    margin: 0 auto;
+    max-width: 28ch;
+    color: var(--ink);
+  }
+  .s-quote blockquote em { font-style: italic; font-weight: 400; }
+  .s-quote .attr {
+    margin-top: 48px;
+    font-family: "Work Sans", sans-serif;
+    font-weight: 500;
+    font-size: 24px;
+    color: var(--ink);
+  }
+  .s-quote .attr .role {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 24px;
+    color: var(--ink-soft);
+    display: block;
+    margin-top: 4px;
+  }
+
+  /* ============== 8. WHAT WE'LL DO NEXT ===================== */
+  .s-next .grid {
+    position: absolute;
+    left: 80px; right: 80px; top: 200px; bottom: 140px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+  }
+  .s-next .panel {
+    border-radius: 36px;
+    padding: 48px 52px;
+    display: flex; flex-direction: column;
+    gap: 18px;
+  }
+  .s-next .panel.l {
+    border-top: 1px solid var(--hairline);
+    border-radius: 0;
+    padding-left: 0;
+    justify-content: center;
+  }
+  .s-next .panel.l h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 124px;
+    line-height: 0.95;
+    letter-spacing: -0.015em;
+  }
+  .s-next .panel.l h2 em { font-style: italic; font-weight: 400; }
+  .s-next .panel.l p {
+    font-size: 24px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 36ch;
+    margin-top: 12px;
+  }
+  .s-next .panel.r {
+    background: transparent;
+    padding: 0;
+    gap: 20px;
+  }
+  .s-next .item {
+    border-radius: 28px;
+    padding: 24px 32px;
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 20px;
+    align-items: center;
+  }
+  .s-next .item.pink  { background: var(--pink); }
+  .s-next .item.lemon { background: var(--lemon); }
+  .s-next .item.blush { background: var(--blush); }
+  .s-next .item .n {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 64px;
+    line-height: 1;
+  }
+  .s-next .item h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 38px;
+    line-height: 1.05;
+    margin-bottom: 4px;
+  }
+  .s-next .item p {
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink-tint);
+  }
+
+  /* ============== CONSULT (text-dense) ====================== */
+  .s-consult .eyebrow,
+  .s-consult .pagedot,
+  .s-consult .footer { color: var(--ink-soft); }
+  .s-consult .action {
+    position: absolute;
+    left: 80px; right: 80px; top: 130px;
+    background: var(--lemon);
+    border-radius: 24px;
+    padding: 24px 36px;
+    display: flex; align-items: center; gap: 24px;
+  }
+  .s-consult .action .tag {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--ink);
+    flex-shrink: 0;
+    border-right: 1px solid rgba(42,36,27,.3);
+    padding-right: 24px;
+  }
+  .s-consult .action h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 40px;
+    line-height: 1.15;
+    letter-spacing: -0.005em;
+  }
+  .s-consult .body {
+    position: absolute;
+    left: 80px; right: 80px; top: 290px; bottom: 130px;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1fr;
+    gap: 28px;
+  }
+  .s-consult .col {
+    border-top: 1px solid rgba(42,36,27,.4);
+    padding: 28px 6px 0 0;
+    display: flex; flex-direction: column;
+    gap: 16px;
+  }
+  .s-consult .col h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-style: italic;
+    font-size: 32px;
+    line-height: 1.05;
+    color: var(--ink);
+    border-bottom: 1px solid rgba(42,36,27,.18);
+    padding-bottom: 14px;
+  }
+  .s-consult .col .meta {
+    font-family: "Work Sans", sans-serif;
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .s-consult .col p {
+    font-size: 24px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+  }
+  .s-consult .col ul {
+    margin: 0; padding-left: 18px;
+    font-size: 24px; line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .s-consult .col ul li { margin-bottom: 8px; }
+  .s-consult .col ul li strong { color: var(--ink); font-weight: 500; }
+  .s-consult .source {
+    margin-top: auto;
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--ink-soft);
+    padding-top: 12px;
+    border-top: 1px dashed rgba(42,36,27,.18);
+  }
+
+  /* ============== CHART =================================== */
+  .s-chart .left {
+    position: absolute;
+    left: 80px; top: 200px; bottom: 130px; width: 540px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+  .s-chart .left h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 96px;
+    line-height: 0.98;
+    letter-spacing: -0.01em;
+  }
+  .s-chart .left h2 em { font-style: italic; font-weight: 400; }
+  .s-chart .left p {
+    font-size: 24px; line-height: 1.5; color: var(--ink-soft);
+  }
+  .s-chart .left .legend {
+    display: flex; flex-direction: column; gap: 10px;
+    margin-top: auto;
+  }
+  .s-chart .left .legend .li {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 24px; color: var(--ink);
+  }
+  .s-chart .left .legend .li i {
+    width: 28px; height: 12px; border-radius: 6px;
+  }
+  .s-chart .right {
+    position: absolute;
+    right: 80px; top: 200px; bottom: 200px; left: 680px;
+    padding: 36px 40px 30px 80px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .s-chart .right .yhead {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+  }
+  .s-chart .right .plot {
+    flex: 1; min-height: 0; position: relative;
+    border-left: 1.5px solid rgba(42,36,27,.35);
+    border-bottom: 1.5px solid rgba(42,36,27,.35);
+    padding: 12px 12px 0 12px;
+  }
+  .s-chart .right .gline {
+    position: absolute; left: 0; right: 0;
+    border-top: 1px dashed rgba(42,36,27,.12);
+  }
+  .s-chart .right .yticks {
+    position: absolute; left: -56px; top: 0; bottom: 0;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-size: 24px; color: var(--ink-soft);
+    font-family: "Cormorant Garamond", serif; font-style: italic;
+  }
+  .s-chart .right svg { width: 100%; height: 100%; display: block; position: absolute; inset: 12px 12px 0 12px; overflow: visible; }
+  .s-chart .right .xticks {
+    display: flex; justify-content: space-between;
+    margin-top: 12px;
+    font-size: 24px; color: var(--ink-soft);
+    font-family: "Cormorant Garamond", serif; font-style: italic;
+  }
+
+  /* ============== PROCESS DIAGRAM ========================= */
+  .s-process .head {
+    position: absolute;
+    left: 80px; right: 80px; top: 130px;
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .s-process .head h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 88px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .s-process .head h2 em { font-style: italic; font-weight: 400; }
+  .s-process .head .sub {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--ink-soft);
+    max-width: 32ch;
+    text-align: right;
+  }
+  .s-process .flow {
+    position: absolute;
+    left: 80px; right: 80px; top: 320px; bottom: 240px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 24px;
+    align-items: stretch;
+  }
+  .s-process .node {
+    border-radius: 28px;
+    padding: 26px 24px;
+    display: flex; flex-direction: column; gap: 10px;
+    position: relative;
+  }
+  .s-process .node .n {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 56px;
+    line-height: 0.9;
+  }
+  .s-process .node h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.05;
+  }
+  .s-process .node p {
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink-tint);
+  }
+  .s-process .node.n1 { background: var(--pink); }
+  .s-process .node.n2 { background: var(--blush); }
+  .s-process .node.n3 { background: var(--lemon); }
+  .s-process .node.n4 { background: var(--sage); }
+  .s-process .node.n5 { background: var(--pink); }
+  .s-process .node .arrow {
+    position: absolute;
+    right: -20px; top: 50%; transform: translateY(-50%);
+    width: 32px; height: 32px;
+    z-index: 2;
+    color: var(--ink);
+  }
+  .s-process .node.n5 .arrow { display: none; }
+  .s-process .timeline {
+    position: absolute;
+    left: 80px; right: 80px; bottom: 140px; top: auto;
+    height: 60px;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    padding: 14px 28px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--ink);
+  }
+
+  /* ============== COMPARISON MATRIX ======================= */
+  .s-matrix .head {
+    position: absolute;
+    left: 80px; right: 80px; top: 130px;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 40px;
+  }
+  .s-matrix .head h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 76px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    flex-shrink: 0;
+  }
+  .s-matrix .head h2 em { font-style: italic; font-weight: 400; }
+  .s-matrix .head .sub {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 26px;
+    color: var(--ink-soft);
+    max-width: 36ch;
+    text-align: right;
+    margin-top: 8px;
+  }
+  .s-matrix .table {
+    position: absolute;
+    left: 80px; right: 80px; top: 320px; bottom: 130px;
+    border-top: 1.5px solid rgba(42,36,27,.4);
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    grid-auto-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .s-matrix .table .cell {
+    padding: 22px 24px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink);
+    border-bottom: 1px dashed rgba(42,36,27,.18);
+    border-right: 1px dashed rgba(42,36,27,.18);
+  }
+  .s-matrix .table .cell:nth-child(4n) { border-right: 0; }
+  .s-matrix .table .cell.head-row {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--ink);
+    border-bottom: 1.5px solid rgba(42,36,27,.4);
+    align-items: center;
+  }
+  .s-matrix .table .cell.row-label {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 28px;
+    color: var(--ink);
+    align-items: center;
+  }
+  .s-matrix .table .cell.last { border-bottom: 0; }
+  .s-matrix .pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+  .s-matrix .pill.yes  { background: var(--lemon); }
+  .s-matrix .pill.part { background: var(--blush); }
+  .s-matrix .pill.no   { background: var(--pink); }
+  .s-matrix .pill.note { background: transparent; border: 1px solid rgba(42,36,27,.3); color: var(--ink-soft); font-style: italic; font-family: "Cormorant Garamond", serif; font-weight: 400; }
+
+  /* Hover lift on color blocks: transform only, quiet */
+  .s-method .step, .s-insights .card, .s-numbers .stat, .s-next .item, .s-process .node {
+    transition: transform .3s cubic-bezier(.16,1,.3,1);
+  }
+  .s-method .step:hover, .s-insights .card:hover, .s-numbers .stat:hover,
+  .s-next .item:hover, .s-process .node:hover {
+    transform: translateY(-3px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .s-method .step, .s-insights .card, .s-numbers .stat, .s-next .item, .s-process .node {
+      transition: none;
+    }
+  }
+</style>
+</head>
+<body data-density="reader">
+
+<deck-stage width="1920" height="1080">
+
+  <!-- 1. COVER -->
+  <section class="slide s-cover" data-label="01 Cover" data-layout="cover">
+    <div class="eyebrow">Consulting</div>
+    <div class="swatches" aria-hidden="true">
+      <i style="background:var(--pink)"></i>
+      <i style="background:var(--lemon)"></i>
+      <i style="background:var(--blush)"></i>
+    </div>
+    <div class="stack">
+      <div class="kicker">Meridian Mutual Insurance · Digital-Transformation Roadmap</div>
+      <h1>Modernize <em>Now.</em></h1>
+      <div class="lede">A 90-day diagnosis, three sequenced bets, and the operating rhythm to land them — built for Meridian's executive committee and board risk committee.</div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>Digital-Transformation Roadmap</span>
+    </div>
+  </section>
+
+  <!-- 2. FOREWORD -->
+  <section class="slide s-foreword" data-label="02 Foreword" data-layout="foreword">
+    <div class="eyebrow">Governing Thought</div>
+    <div class="pagedot">ii</div>
+    <div class="col-l">
+      <p class="opener">Meridian's core systems are now the constraint on growth, not the balance sheet.</p>
+    </div>
+    <div class="col-r">
+      <p>Underwriting talent is strong. Capital is strong. But a 34-year-old policy administration system caps how fast Meridian can price, bind, and pay — and every competitor built after 2015 already prices in seconds.</p>
+      <p>This is not a technology refresh. It is a three-year capital allocation decision: where to modernize, where to partner, and where to retire complexity outright.</p>
+      <p>What follows is the diagnosis, the three paths we evaluated, the recommended sequence, and the specific decisions we need from this steering committee before quarter-end.</p>
+      <div class="signoff">— Engagement team, Digital Transformation Practice</div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>Governing Thought</span>
+    </div>
+  </section>
+
+  <!-- 3. THE METHOD -->
+  <section class="slide s-method" data-label="03 Diagnosis" data-layout="diagnosis">
+    <div class="eyebrow">Diagnosis</div>
+    <div class="pagedot">iii</div>
+    <div class="grid">
+      <div class="step pink">
+        <div class="n">i.</div>
+        <div>
+          <h3>A 34-year-old core</h3>
+          <p>The policy administration system was built for paper renewals; every digital feature since has been bolted on, not designed in.</p>
+        </div>
+      </div>
+      <div class="step lemon">
+        <div class="n">ii.</div>
+        <div>
+          <h3>Pricing takes 11 days</h3>
+          <p>Actuarial changes queue behind a single mainframe release train shared with claims and billing.</p>
+        </div>
+      </div>
+      <div class="step blush">
+        <div class="n">iii.</div>
+        <div>
+          <h3>Claims leak $40M a year</h3>
+          <p>Manual triage and rekeyed data drive an 18% error rate on first-notice-of-loss, feeding loss-ratio drift.</p>
+        </div>
+      </div>
+      <div class="step sage">
+        <div class="n">iv.</div>
+        <div>
+          <h3>Talent is voting with its feet</h3>
+          <p>Two senior underwriting leads left this year citing tooling, not comp — the system is now a retention risk.</p>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>Diagnosis</span>
+    </div>
+  </section>
+
+  <!-- 4. INSIGHTS (reference) -->
+  <section class="slide s-insights" data-label="04 Options" data-layout="options">
+    <div class="eyebrow">Three paths considered</div>
+    <div class="pagedot">iv</div>
+    <div class="row">
+      <div class="card pink">
+        <div class="head">
+          <h3 class="serif">Modernize</h3>
+          <div class="sub">the core</div>
+        </div>
+        <p>Replatform policy administration onto a modern core over 30 months. Highest capability upside, highest execution risk.</p>
+      </div>
+      <div class="card lemon">
+        <div class="head">
+          <h3 class="serif">Partner</h3>
+          <div class="sub">& embed</div>
+        </div>
+        <p>License a modern core-as-a-service and integrate via API, preserving underwriting IP while renting the plumbing.</p>
+      </div>
+      <div class="card blush">
+        <div class="head">
+          <h3 class="serif">Sunset</h3>
+          <div class="sub">& migrate</div>
+        </div>
+        <p>Retire the legacy core into a managed run-off and migrate only active books, freeing budget for growth lines.</p>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>Options</span>
+    </div>
+  </section>
+
+  <!-- 5. A CLOSER LOOK (full bleed) -->
+  <section class="slide s-closer" data-label="05 The Recommendation" data-layout="recommendation">
+    <div class="eyebrow">The recommendation</div>
+    <div class="pagedot">v</div>
+    <div class="center">
+      <div class="marker">the governing thought</div>
+      <h2>Rent the <em>core.</em></h2>
+      <p>Meridian doesn't need to build a policy admin system from scratch to compete on speed. License a proven core-as-a-service for the two growth lines now, and reserve a full core replatform for year three, once the operating model has proven it can absorb change.</p>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>The Recommendation</span>
+    </div>
+  </section>
+
+  <!-- 6. BY THE NUMBERS -->
+  <section class="slide s-numbers" data-label="06 By the Numbers" data-layout="numbers">
+    <div class="eyebrow">By the numbers</div>
+    <div class="pagedot">vi</div>
+    <div class="grid">
+      <div class="stat a">
+        <div class="lab serif-it" style="font-size:30px">Combined ratio,<br/>three points above the peer median.</div>
+        <div class="v">106<em>%</em></div>
+      </div>
+      <div class="stat b">
+        <div class="v">11<em>d</em></div>
+        <div class="lab">average days to push a rate change through the shared release train.</div>
+      </div>
+      <div class="stat c">
+        <div class="v">$40<em>M</em></div>
+        <div class="lab">in annual claims leakage traced to manual FNOL rekeying.</div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>By the Numbers</span>
+    </div>
+  </section>
+
+  <!-- 7. IN THEIR WORDS -->
+  <section class="slide s-quote" data-label="07 In Their Words" data-layout="quote">
+    <div class="eyebrow">In their words</div>
+    <div class="pagedot">vii</div>
+    <div class="center">
+      <div class="qmark">"</div>
+      <blockquote>We've debated a core replacement for <em>six</em> years. This is the first plan where I can tell the board exactly what changes in year one.</blockquote>
+      <div class="attr">
+        Chief Operating Officer
+        <span class="role">Meridian Mutual Insurance</span>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>In Their Words</span>
+    </div>
+  </section>
+
+  <!-- 8. WHAT WE'LL DO NEXT -->
+  <section class="slide s-next" data-label="08 Priorities" data-layout="priorities">
+    <div class="eyebrow">Priorities for the next 90 days</div>
+    <div class="pagedot">viii</div>
+    <div class="grid">
+      <div class="panel l">
+        <h2>Three moves,<br/><em>then</em> we scale.</h2>
+        <p>Each priority ships a working capability before the next one starts — no big-bang cutover, no 18-month blackout.</p>
+      </div>
+      <div class="panel r">
+        <div class="item pink">
+          <div class="n">i.</div>
+          <div>
+            <h3>Stand up the integration layer</h3>
+            <p>API gateway between the legacy core and the new partner platform, live by week six.</p>
+          </div>
+        </div>
+        <div class="item lemon">
+          <div class="n">ii.</div>
+          <div>
+            <h3>Pilot on one growth line</h3>
+            <p>Route small-commercial quoting through the new core; legacy stays system of record until parity is proven.</p>
+          </div>
+        </div>
+        <div class="item blush">
+          <div class="n">iii.</div>
+          <div>
+            <h3>Instrument the leakage</h3>
+            <p>Deploy FNOL triage automation in claims, targeting a 30% cut in rekeying errors this quarter.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>Priorities</span>
+    </div>
+  </section>
+
+  <!-- 9. CONSULT -->
+  <section class="slide s-consult" data-label="09 Workstream Detail" data-layout="workstream">
+    <div class="eyebrow">Workstream Detail</div>
+    <div class="pagedot">ix</div>
+    <div class="action">
+      <div class="tag">Steering brief</div>
+      <h2>Three workstreams carry the roadmap — governance, the investment case, and the guardrails that keep the board comfortable.</h2>
+    </div>
+    <div class="body">
+      <div class="col">
+        <h3>Governance</h3>
+        <div class="meta">Weekly steering, monthly board flash</div>
+        <p>A joint Meridian–vendor steering committee owns scope; the CIO chairs, and the transformation office runs the cadence.</p>
+        <ul>
+          <li><strong>Decision log</strong> — every scope call recorded with an owner and a date.</li>
+          <li><strong>RAID register</strong> reviewed every Monday before the pilot standup.</li>
+          <li><strong>Change advisory board</strong> gates every production release.</li>
+        </ul>
+        <div class="source">Operating model per the Target Operating Model workstream.</div>
+      </div>
+      <div class="col">
+        <h3>Investment case</h3>
+        <div class="meta">$18M over 3 years, breakeven month 22</div>
+        <p>Partner licensing plus integration costs roughly $6M in year one, funded by claims-leakage savings starting month nine.</p>
+        <p>A full core replatform — the year-three decision gate — adds $12M, contingent on the pilot's proof points.</p>
+        <div class="source">Finance-validated business case, v4.</div>
+      </div>
+      <div class="col">
+        <h3>Risk & guardrails</h3>
+        <ul>
+          <li><strong>Data migration</strong> — dual-write with reconciliation before any cutover.</li>
+          <li><strong>Regulatory</strong> — state filings reviewed before each release.</li>
+          <li><strong>Vendor lock-in</strong> — contract break clause at month 18.</li>
+        </ul>
+        <div class="source">Risk committee sign-off, March 2026.</div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>Workstream Detail</span>
+    </div>
+  </section>
+
+  <!-- 10. CHART -->
+  <section class="slide s-chart" data-label="10 Value Capture" data-layout="chart">
+    <div class="eyebrow">Value capture, by horizon</div>
+    <div class="pagedot">x</div>
+    <div class="left">
+      <h2>Savings <em>outpace</em><br/>spend by month 14.</h2>
+      <p>Claims-leakage recovery and faster quote-to-bind start paying back before the core-replatform decision gate, de-risking the year-three commitment. (Curve shapes are illustrative.)</p>
+      <div class="legend">
+        <div class="li"><i style="background:var(--rose-ink)"></i> Cumulative savings</div>
+        <div class="li"><i style="background:var(--olive-ink)"></i> Cumulative spend</div>
+        <div class="li"><i style="background:var(--ink); height:14px"></i> Net value</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="yhead">% of year-3 target value, by quarter</div>
+      <div class="plot">
+        <div class="yticks">
+          <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+        </div>
+        <div class="gline" style="top:0%"></div>
+        <div class="gline" style="top:25%"></div>
+        <div class="gline" style="top:50%"></div>
+        <div class="gline" style="top:75%"></div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <polyline fill="none" stroke="#B25A85" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
+            points="0,98 16,90 32,78 48,62 64,44 80,24 100,2" />
+          <polyline fill="none" stroke="#7E8826" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
+            points="0,96 16,86 32,72 48,56 64,40 80,22 100,2" />
+          <polyline fill="none" stroke="#2A241B" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
+            points="0,99 16,94 32,84 48,68 64,46 80,24 100,2" />
+        </svg>
+      </div>
+      <div class="xticks">
+        <span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span><span>Q5</span><span>Q6</span><span>Q7</span>
+      </div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>Value Capture</span>
+    </div>
+  </section>
+
+  <!-- 11. PROCESS -->
+  <section class="slide s-process" data-label="11 The Roadmap" data-layout="roadmap">
+    <div class="eyebrow">The roadmap</div>
+    <div class="pagedot">xi</div>
+    <div class="head">
+      <h2>Five phases,<br/><em>36</em> months.</h2>
+      <div class="sub">The same operating rhythm each phase follows, from diagnosis to institutionalized change.</div>
+    </div>
+    <div class="flow">
+      <div class="node n1">
+        <div class="n">i.</div>
+        <h3>Diagnose</h3>
+        <p>Root-cause the core constraint and quantify leakage. Complete — this deck.</p>
+        <svg class="arrow" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n2">
+        <div class="n">ii.</div>
+        <h3>Design the target state</h3>
+        <p>Target operating model, API contracts, and the investment case, board-approved.</p>
+        <svg class="arrow" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n3">
+        <div class="n">iii.</div>
+        <h3>Pilot</h3>
+        <p>One growth line live on the partner core; legacy stays system of record.</p>
+        <svg class="arrow" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n4">
+        <div class="n">iv.</div>
+        <h3>Scale</h3>
+        <p>Expand to remaining commercial lines; begin core-replatform discovery.</p>
+        <svg class="arrow" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n5">
+        <div class="n">v.</div>
+        <h3>Institutionalize</h3>
+        <p>The new core is system of record; the change cadence becomes business as usual.</p>
+      </div>
+    </div>
+    <div class="timeline">
+      <span>Month 0</span><span>Month 6</span><span>Month 12</span><span>Month 24</span><span>Month 36</span>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>The Roadmap</span>
+    </div>
+  </section>
+
+  <!-- 12. COMPARISON MATRIX -->
+  <section class="slide s-matrix" data-label="12 Options, Scored" data-layout="matrix">
+    <div class="eyebrow">Options, scored</div>
+    <div class="pagedot">xii</div>
+    <div class="head">
+      <h2>Where <em>partner-first</em><br/>earns its keep.</h2>
+      <div class="sub">The three paths, scored against the levers that matter to the board: cost, time-to-value, and risk to the balance sheet.</div>
+    </div>
+    <div class="table">
+      <div class="cell head-row">Lever</div>
+      <div class="cell head-row">Partner-First (Recommended)</div>
+      <div class="cell head-row">Full Replatform</div>
+      <div class="cell head-row">Sunset & Migrate</div>
+
+      <div class="cell row-label">Time to first value</div>
+      <div class="cell"><span class="pill yes">6 months</span></div>
+      <div class="cell"><span class="pill no">22 months</span></div>
+      <div class="cell"><span class="pill part">9 months</span></div>
+
+      <div class="cell row-label">3-year cost</div>
+      <div class="cell"><span class="pill yes">$18M</span></div>
+      <div class="cell"><span class="pill no">$41M</span></div>
+      <div class="cell"><span class="pill note">$9M, capped upside</span></div>
+
+      <div class="cell row-label">Execution risk</div>
+      <div class="cell"><span class="pill yes">Moderate</span></div>
+      <div class="cell"><span class="pill no">High</span></div>
+      <div class="cell"><span class="pill part">Low</span></div>
+
+      <div class="cell row-label last">Capability retained</div>
+      <div class="cell last"><span class="pill yes">Underwriting IP stays in-house</span></div>
+      <div class="cell last"><span class="pill no">Full control, slower</span></div>
+      <div class="cell last"><span class="pill note">Growth lines only</span></div>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>Options, Scored</span>
+    </div>
+  </section>
+
+  <!-- 13. CLOSING CTA (reuses s-closer master) -->
+  <section class="slide s-closer" data-label="13 The Ask" data-layout="closing">
+    <div class="eyebrow">The ask</div>
+    <div class="pagedot">xiii</div>
+    <div class="center">
+      <div class="marker">Steering Committee · July 2026</div>
+      <h2>Approve the <em>pilot.</em></h2>
+      <p>We need three decisions from this committee by Friday: fund the $6M year-one partner integration, name the pilot line owner, and set the month-22 breakeven review as a standing board item. Everything else in this roadmap follows from those three signatures.</p>
+    </div>
+    <div class="footer">
+      <span>Meridian Mutual Insurance</span>
+      <span>The Ask</span>
+    </div>
+  </section>
+</deck-stage>
+
+</body>
+</html>
