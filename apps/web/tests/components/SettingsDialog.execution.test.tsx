@@ -915,6 +915,32 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
   });
 
+  it('drops an override the newly selected model cannot accept', async () => {
+    // The model-aware bound means an override valid for one model can exceed
+    // the next model's ceiling. Without re-validating on model change the field
+    // would keep showing a number that `effectiveMaxTokens` silently discards,
+    // so Settings would claim one value while requests used another.
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-ant-test', model: 'deepseek-v4-pro' });
+
+    const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
+    fireEvent.change(maxTokensInput, { target: { value: '300000' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(300000);
+    });
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+    fireEvent.click(within(modelPopover).getByRole('option', { name: 'claude-sonnet-4-5' }));
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.model).toBe('claude-sonnet-4-5');
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(maxTokensInput.value).toBe('');
+  });
+
   it('lets Anthropic and Google users customize the default base URL', () => {
     renderSettingsDialog();
 

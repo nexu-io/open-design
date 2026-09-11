@@ -1543,6 +1543,11 @@ export function SettingsDialog({
   const [maxTokensInput, setMaxTokensInput] = useState(
     initialFormConfig.maxTokens == null ? '' : String(initialFormConfig.maxTokens),
   );
+  // Re-display the override whenever the model changes, so the text follows
+  // whatever survived the bound check above instead of stranding the previous
+  // model's number in the field. Keyed on the model alone: mirroring every
+  // cfg.maxTokens change would wipe what the user is part-way through typing.
+  const lastModelForMaxTokens = useRef(initialFormConfig.model);
   const [pendingMediaProviderEditIds, setPendingMediaProviderEditIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -1551,6 +1556,12 @@ export function SettingsDialog({
   const lastSavedAppearanceRef = useRef({
     accentColor: resolveAccentColor(initial.accentColor),
   });
+
+  useEffect(() => {
+    if (lastModelForMaxTokens.current === cfg.model) return;
+    lastModelForMaxTokens.current = cfg.model;
+    setMaxTokensInput(cfg.maxTokens == null ? '' : String(cfg.maxTokens));
+  }, [cfg.model, cfg.maxTokens]);
 
   useEffect(() => {
     onDraftChange?.(cfg);
@@ -2320,7 +2331,16 @@ export function SettingsDialog({
     });
   };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
-    setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
+    setCfg((c) => {
+      const next = updateCurrentApiProtocolConfig(c, patch);
+      // Selecting another model can lower the ceiling below an override that
+      // was valid for the previous one. Keeping it would leave Settings
+      // showing a number that `effectiveMaxTokens` discards at request time.
+      if (next.maxTokens != null && next.maxTokens > maxTokensUpperBound(next.model)) {
+        return { ...next, maxTokens: undefined };
+      }
+      return next;
+    });
   const updateMaxTokensInput = (raw: string) => {
     setMaxTokensInput(raw);
     const trimmed = raw.trim();
