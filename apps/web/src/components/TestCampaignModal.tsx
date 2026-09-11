@@ -1,32 +1,32 @@
 import {
+	TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
+	TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
+	TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION,
+} from "@open-design/contracts";
+import { getOpenDesignHost, OPEN_DESIGN_HOST_VERSION } from "@open-design/host";
+import {
 	useCallback,
 	useEffect,
 	useRef,
 	useState,
 	useSyncExternalStore,
 } from "react";
-import { getOpenDesignHost, OPEN_DESIGN_HOST_VERSION } from "@open-design/host";
-import {
-	TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
-	TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION,
-	TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
-} from "@open-design/contracts";
+import styles from "./TestCampaignModal.module.css";
 import {
 	emitWebTouchpointDiagnostic,
 	ensureWebTouchpointElement,
+	hasWebTouchpointCloseControl,
+	type OpenDesignTouchpointElement,
 	readWebTouchpointHostContext,
 	supportsWebTouchpointCapabilities,
 	verifyWebTouchpoint,
-	webTouchpointContext,
-	hasWebTouchpointCloseControl,
-	type OpenDesignTouchpointElement,
 	type WebTouchpointContent,
+	webTouchpointContext,
 } from "./touchpoint-component";
 import {
-	touchpointStaticActionsMatch,
 	type TouchpointStaticAction,
+	touchpointStaticActionsMatch,
 } from "./touchpoint-static-actions";
-import styles from "./TestCampaignModal.module.css";
 
 export const TEST_CAMPAIGN_MODAL_PLACEMENT =
 	"opend.home.campaign-modal" as const;
@@ -495,6 +495,13 @@ export function TestCampaignModal({
 	sessionSubject?: string | null;
 }) {
 	const compatible = supportsHost(authenticated);
+	const [showControls] = useState(
+		() =>
+			typeof window !== "undefined" &&
+			new URLSearchParams(window.location.search).get("cmsTestControls") ===
+				"1",
+	);
+	const deploymentsOwner = useRef<string | null | undefined>(undefined);
 	const [deployments, setDeployments] = useState<TestDeployment[]>([]);
 	const [deployment, setDeployment] = useState<TestDeployment | null>(null);
 	const [context, setContext] = useState<TestContext | null>(null);
@@ -514,9 +521,6 @@ export function TestCampaignModal({
 		setDeployment(null);
 		setContext(null);
 	}, []);
-	useEffect(() => {
-		clear();
-	}, [clear, sessionSubject]);
 
 	useEffect(() => {
 		ensureWebTouchpointElement();
@@ -529,8 +533,10 @@ export function TestCampaignModal({
 		[],
 	);
 	useEffect(() => {
+		clear();
+		deploymentsOwner.current = undefined;
+		setDeployments([]);
 		if (!compatible) {
-			setDeployments([]);
 			clear();
 			return;
 		}
@@ -544,7 +550,8 @@ export function TestCampaignModal({
 					: { deployments: [] },
 			)
 			.then((value) => {
-				if (!cancelled)
+				if (!cancelled) {
+					deploymentsOwner.current = sessionSubject ?? null;
 					setDeployments(
 						(value.deployments ?? []).filter(
 							(candidate) =>
@@ -552,6 +559,7 @@ export function TestCampaignModal({
 								testPlacementIds(candidate).length > 0,
 						),
 					);
+				}
 			})
 			.catch(() => {
 				if (!cancelled) setDeployments([]);
@@ -559,7 +567,7 @@ export function TestCampaignModal({
 		return () => {
 			cancelled = true;
 		};
-	}, [clear, compatible]);
+	}, [clear, compatible, sessionSubject]);
 
 	const select = useCallback(
 		async (deploymentId: string, scenario: Scenario) => {
@@ -712,7 +720,20 @@ export function TestCampaignModal({
 		[clear, deployments],
 	);
 
-	if (!compatible || deployments.length === 0) return null;
+	useEffect(() => {
+		// The API orders available Test deployments newest first. Normal clients
+		// preview that snapshot directly; clock/selection controls are opt-in.
+		if (
+			showControls ||
+			!compatible ||
+			deploymentsOwner.current !== (sessionSubject ?? null)
+		)
+			return;
+		const latest = deployments[0];
+		if (latest) void select(latest.id, "active");
+	}, [compatible, deployments, select, sessionSubject, showControls]);
+
+	if (!showControls || !compatible || deployments.length === 0) return null;
 	const active = decisions.size > 0;
 	return (
 		<div className={styles.control} data-testid="touchpoint-test-selector">

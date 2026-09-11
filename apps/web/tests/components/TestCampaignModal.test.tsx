@@ -9,6 +9,7 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 type CampaignHostGlobal = typeof globalThis & {
 	__openDesignCampaignTestHost?: unknown;
 };
@@ -17,13 +18,14 @@ vi.mock("@open-design/host", () => ({
 	getOpenDesignHost: () =>
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost,
 }));
+
+import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
+import type { TestDecision } from "../../src/components/TestCampaignModal";
 import {
 	TestCampaignModal,
 	TestTouchpointMount,
 	useTestRuntime,
 } from "../../src/components/TestCampaignModal";
-import type { TestDecision } from "../../src/components/TestCampaignModal";
-import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
 
@@ -208,12 +210,14 @@ function TestCampaignHarness({
 	);
 }
 beforeEach(() => {
+	window.history.replaceState(null, "", "/?cmsTestControls=1");
 	(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 		version: 2,
 		client: { type: "desktop" },
 	};
 });
 afterEach(() => {
+	window.history.replaceState(null, "", "/");
 	delete (globalThis as CampaignHostGlobal).__openDesignCampaignTestHost;
 	cleanup();
 	vi.unstubAllGlobals();
@@ -227,6 +231,25 @@ describe("TestCampaignModal", () => {
 		expect(screen.queryByTestId("touchpoint-test-selector")).toBeNull();
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
+	it("automatically presents the Test campaign without client debug controls", async () => {
+		window.history.replaceState(null, "", "/");
+		const fetchMock = fetches();
+		vi.stubGlobal("fetch", fetchMock);
+		render(<TestCampaignHarness authenticated />);
+		await screen.findByRole("dialog");
+		expect(screen.queryByTestId("touchpoint-test-selector")).toBeNull();
+		expect(screen.queryByTestId("touchpoint-test-clock")).toBeNull();
+		expect(fetchMock).toHaveBeenCalledWith(
+			"/api/touchpoints/test-runtime/context",
+			expect.objectContaining({
+				body: JSON.stringify({
+					deploymentId: "deployment-1",
+					scenario: "active",
+				}),
+			}),
+		);
+	});
+
 	it("uses the selected Test decision to create a v2 ShadowRoot custom element, never iframe or webview", async () => {
 		vi.stubGlobal("fetch", fetches());
 		render(<TestCampaignHarness authenticated />);
@@ -340,9 +363,13 @@ describe("TestCampaignModal host guards", () => {
 				onCloseControlChange={onCloseControlChange}
 			/>,
 		);
-		await waitFor(() => expect(onCloseControlChange).toHaveBeenCalledWith(false));
+		await waitFor(() =>
+			expect(onCloseControlChange).toHaveBeenCalledWith(false),
+		);
 		closeControl.disabled = false;
-		await waitFor(() => expect(onCloseControlChange).toHaveBeenCalledWith(true));
+		await waitFor(() =>
+			expect(onCloseControlChange).toHaveBeenCalledWith(true),
+		);
 	});
 
 	it("does not let a rejected stale Test mount overwrite a replacement close control", async () => {
@@ -398,7 +425,9 @@ describe("TestCampaignModal host guards", () => {
 			</div>,
 		);
 		await waitFor(() => expect(mountCount).toBe(2));
-		await waitFor(() => expect(onCloseControlChange).toHaveBeenLastCalledWith(true));
+		await waitFor(() =>
+			expect(onCloseControlChange).toHaveBeenLastCalledWith(true),
+		);
 		rejectOldMount(new Error("stale Test mount failed"));
 		await Promise.resolve();
 		expect(onCloseControlChange).toHaveBeenLastCalledWith(true);
