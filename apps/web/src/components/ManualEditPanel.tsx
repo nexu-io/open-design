@@ -602,6 +602,7 @@ const FONT_OPTS = [
   { label: 'monospace', value: 'SFMono-Regular, Consolas, "Liberation Mono", monospace' },
 ] as const;
 const WEIGHT_OPTS = ['', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
+const TEXT_TRANSFORM_OPT_VALUES = ['', 'uppercase', 'lowercase', 'capitalize', 'none'];
 const ALIGN_OPTS = ['', 'left', 'center', 'right', 'justify', 'start', 'end'];
 const DIRECTION_OPTS = ['', 'row', 'column', 'row-reverse', 'column-reverse'];
 const JUSTIFY_OPTS = ['', 'flex-start', 'center', 'flex-end', 'space-between', 'space-around', 'space-evenly'];
@@ -627,7 +628,7 @@ type NormalizeResult =
   | { ok: false; error: string };
 
 const PX_STYLE_PROPS = new Set<keyof ManualEditStyles>([
-  'fontSize', 'letterSpacing', 'width', 'height', 'minHeight', 'gap',
+  'fontSize', 'letterSpacing', 'wordSpacing', 'width', 'height', 'minHeight', 'gap',
   'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
@@ -638,6 +639,7 @@ const SELECT_STYLE_OPTIONS: Partial<Record<keyof ManualEditStyles, ReadonlyArray
   fontFamily: FONT_OPTS.map((option) => option.value),
   fontWeight: WEIGHT_OPTS,
   textAlign: ALIGN_OPTS,
+  textTransform: TEXT_TRANSFORM_OPT_VALUES,
   flexDirection: DIRECTION_OPTS,
   justifyContent: JUSTIFY_OPTS,
   alignItems: ITEMS_OPTS,
@@ -834,7 +836,11 @@ function StyleInspector({
             substitute for a typographic nudge. */}
         <PairRow>
           <UnitRow label={t('manualEdit.lineHeight')} value={styles.lineHeight} placeholder={summary?.lineHeight} onChange={(v) => u('lineHeight', v)} unit="" onFocus={() => activate('lineHeight', t('manualEdit.lineHeight'))} />
+          <DropdownRow label={t('manualEdit.textTransform')} value={styles.textTransform} onChange={(v) => u('textTransform', v)} options={textTransformOptions(t)} />
+        </PairRow>
+        <PairRow>
           <UnitRow label={t('manualEdit.letterSpacing')} value={styles.letterSpacing} placeholder={summary?.letterSpacing} onChange={(v) => u('letterSpacing', v)} unit="px" autoUnit onFocus={() => activate('letterSpacing', t('manualEdit.letterSpacing'))} />
+          <UnitRow label={t('manualEdit.wordSpacing')} value={styles.wordSpacing} onChange={(v) => u('wordSpacing', v)} unit="px" autoUnit />
         </PairRow>
         <UnitRow label={t('manualEdit.radius')} value={styles.borderRadius} placeholder={summary?.borderRadius} onChange={(v) => u('borderRadius', v)} unit="px" autoUnit onFocus={() => activate('borderRadius', t('manualEdit.radius'))} />
         <PairRow>
@@ -929,6 +935,16 @@ function layoutDirectionOptions(t: ManualEditTranslator): DropdownOption[] {
     { value: 'row-reverse', label: t('manualEdit.directionRowReverse') },
     { value: 'column', label: t('manualEdit.directionColumn') },
     { value: 'column-reverse', label: t('manualEdit.directionColumnReverse') },
+  ];
+}
+
+function textTransformOptions(t: ManualEditTranslator): DropdownOption[] {
+  return [
+    { value: '', label: '-' },
+    { value: 'uppercase', label: t('manualEdit.textTransformUppercase') },
+    { value: 'lowercase', label: t('manualEdit.textTransformLowercase') },
+    { value: 'capitalize', label: t('manualEdit.textTransformCapitalize') },
+    { value: 'none', label: t('manualEdit.textTransformNone') },
   ];
 }
 
