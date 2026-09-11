@@ -1,9 +1,12 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   formatDesignFilesWorkspaceHint,
   formatProjectAttachmentHint,
   resolveSafeProjectAttachments,
+  resolveWebChatAttachmentsForAcp,
 } from '../src/server.js';
 
 describe('resolveSafeProjectAttachments', () => {
@@ -43,6 +46,50 @@ describe('resolveSafeProjectAttachments', () => {
         'When the user says "first attachment", "second file", or similar, map those references to the numbered list above.',
       ].join('\n'),
     );
+  });
+});
+
+describe('resolveWebChatAttachmentsForAcp', () => {
+  it('converts a normal web Kilo chat payload (attachments, no imagePaths) into ACP transport', () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'od-kilo-web-chat-'));
+    const files = {
+      'screenshot.png': 'image',
+      'photo.JPEG': 'image',
+      'still.webp': 'image',
+      'anim.gif': 'image',
+      'brief.pdf': 'resource',
+      'icon.svg': 'omit',
+      'hdr.avif': 'omit',
+      'scan.bmp': 'omit',
+      'notes.txt': 'omit',
+    } as const;
+    for (const name of Object.keys(files)) {
+      fs.writeFileSync(path.join(cwd, name), name);
+    }
+
+    // This is the ChatRequest shape streamViaDaemon / ProjectView send today:
+    // composer files as project-relative attachments, never imagePaths.
+    const webAttachments = Object.keys(files);
+    const transport = resolveWebChatAttachmentsForAcp(cwd, webAttachments, {
+      enabled: true,
+      mimePolicy: 'kilo',
+    });
+
+    expect(transport.imagePaths.sort()).toEqual(
+      ['anim.gif', 'photo.JPEG', 'screenshot.png', 'still.webp']
+        .map((name) => path.resolve(cwd, name))
+        .sort(),
+    );
+    expect(transport.resourcePaths).toEqual([path.resolve(cwd, 'brief.pdf')]);
+  });
+
+  it('does not invent ACP transport when the agent is not file-url', () => {
+    expect(
+      resolveWebChatAttachmentsForAcp('/tmp/project', ['shot.png'], {
+        enabled: false,
+        mimePolicy: 'kilo',
+      }),
+    ).toEqual({ imagePaths: [], resourcePaths: [] });
   });
 });
 

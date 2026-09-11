@@ -41,6 +41,12 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('kiro cli')).toBe('Kiro');
     expect(agentDisplayName('kiro-cli')).toBe('Kiro');
   });
+
+  it('resolves Kilo Code CLI names and both executable aliases to Kilo', () => {
+    expect(agentDisplayName('Kilo Code CLI')).toBe('Kilo');
+    expect(agentDisplayName('kilo-cli')).toBe('Kilo');
+    expect(agentDisplayName('kilocode')).toBe('Kilo');
+  });
 });
 
 describe('exactAgentDisplayName', () => {
@@ -63,6 +69,12 @@ describe('exactAgentDisplayName', () => {
   it('resolves kiro-related aliases through exactAgentDisplayName (consistent with Qoder CLI)', () => {
     expect(exactAgentDisplayName('kiro cli')).toBe('Kiro');
     expect(exactAgentDisplayName('kiro-cli')).toBe('Kiro');
+  });
+
+  it('resolves Kilo Code CLI aliases through exactAgentDisplayName', () => {
+    expect(exactAgentDisplayName('kilo')).toBe('Kilo');
+    expect(exactAgentDisplayName('Kilo Code')).toBe('Kilo');
+    expect(exactAgentDisplayName('kilocode.exe')).toBe('Kilo');
   });
 });
 

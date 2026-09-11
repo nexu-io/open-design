@@ -1,6 +1,13 @@
 import { test } from 'vitest';
 import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../../src/mcp-live-artifacts-server.js';
-import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes, kimi } from './helpers/test-helpers.js';
+import {
+  AGENT_DEFS,
+  assert,
+  buildLiveArtifactsMcpServersForAgent,
+  hermes,
+  kilo,
+  kimi,
+} from './helpers/test-helpers.js';
 
 test('live artifact MCP discovery is limited to mature ACP agents', () => {
   for (const agent of AGENT_DEFS) {
@@ -36,6 +43,19 @@ test('Kimi retains ACP live-artifacts and external MCP wiring', () => {
   assert.equal(kimi.mcpDiscovery, 'mature-acp');
   assert.equal(kimi.externalMcpInjection, 'acp-merge');
   assert.deepEqual(buildLiveArtifactsMcpServersForAgent(kimi), [
+    {
+      name: 'open-design-live-artifacts',
+      command: 'od',
+      args: ['mcp', 'live-artifacts'],
+      env: [{ name: 'ELECTRON_RUN_AS_NODE', value: '1' }],
+    },
+  ]);
+});
+
+test('Kilo exposes live-artifacts and external MCP over ACP', () => {
+  assert.equal(kilo.mcpDiscovery, 'mature-acp');
+  assert.equal(kilo.externalMcpInjection, 'acp-merge');
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(kilo), [
     {
       name: 'open-design-live-artifacts',
       command: 'od',
