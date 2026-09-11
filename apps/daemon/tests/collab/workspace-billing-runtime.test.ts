@@ -1297,6 +1297,41 @@ describe('WorkspaceBillingRuntimeCoordinator', () => {
     runtime.dispose();
   });
 
+  it('fences old profile projections and clears every retained interest', async () => {
+    const oldRead = deferred<VelaWorkspaceBillingProjection>();
+    const interestSets: string[][] = [];
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      fetchProjection: async () => oldRead.promise,
+      onInterestSetChange: (interests) => {
+        interestSets.push(interests.map((interest) => interest.workspaceId));
+      },
+    });
+    runtime.setClientInterests({
+      clientId: 'renderer',
+      clientGeneration: '1',
+      interests: [KEY_A],
+    });
+    const pending = runtime.read(KEY_A, {
+      clientId: 'renderer',
+      clientGeneration: '1',
+    });
+    await vi.waitFor(() => expect(runtime.interestedKeys()).toEqual([KEY_A]));
+
+    runtime.resetIdentity();
+
+    expect(runtime.interestedKeys()).toEqual([]);
+    expect(runtime.peek(KEY_A)).toBeNull();
+    expect(interestSets.at(-1)).toEqual([]);
+    await expect(pending).resolves.toMatchObject({
+      projection: { snapshot: null, workspaceBalance: null },
+      state: { reason: 'workspace-identity-changed' },
+    });
+    oldRead.resolve(projection('workspace-a', 'member-a', '99.00'));
+    await Promise.resolve();
+    expect(runtime.peek(KEY_A)).toBeNull();
+    runtime.dispose();
+  });
+
   it('expires a crashed renderer lease and evicts its inactive snapshot', async () => {
     vi.useFakeTimers();
     const runtime = createWorkspaceBillingRuntimeCoordinator({

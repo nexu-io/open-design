@@ -354,6 +354,41 @@ export class WorkspaceBillingRuntimeCoordinator {
       .map((key) => ({ ...key }));
   }
 
+  /**
+   * Fence all projections and leases created under a previous AMR profile.
+   * In-flight reads are allowed to settle, but their incremented attempt token
+   * prevents them from publishing into the new environment.
+   */
+  resetIdentity(): void {
+    this.assertUsable();
+    this.clients.clear();
+    this.realtimeHealthyWorkspaces.clear();
+    if (this.refreshQueueTimer) this.scheduler.clearTimeout(this.refreshQueueTimer);
+    this.refreshQueueTimer = null;
+    this.refreshQueue.length = 0;
+    for (const entry of this.entries.values()) {
+      entry.attempt += 1n;
+      entry.inFlight = null;
+      entry.queued = false;
+      entry.queuedReason = null;
+      entry.pending = false;
+      entry.pendingReason = null;
+      if (entry.retryTimer) this.scheduler.clearTimeout(entry.retryTimer);
+      entry.retryTimer = null;
+      entry.retryAt = null;
+      entry.legacyInterestExpiresAt = null;
+      entry.projection = EMPTY_PROJECTION;
+      entry.status = 'loading';
+      entry.errorCode = null;
+      entry.reason = 'workspace-identity-changed';
+      entry.observedAt = null;
+      entry.revision += 1n;
+      this.resolveWaiters(entry);
+    }
+    this.entries.clear();
+    this.publishInterestSet();
+  }
+
   async read(
     keyInput: WorkspaceBillingRuntimeKey,
     options: WorkspaceBillingRuntimeReadOptions = {},

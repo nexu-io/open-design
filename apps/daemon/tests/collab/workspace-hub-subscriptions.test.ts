@@ -41,6 +41,32 @@ describe('WorkspaceHubSubscriptionManager', () => {
     expect(refreshEndpoint).toHaveBeenCalledTimes(2);
   });
 
+  it('drops billing and renderer scopes when the AMR environment changes', () => {
+    const started: string[] = [];
+    const stopped: string[] = [];
+    const manager = createWorkspaceHubSubscriptionManager({
+      start: (workspaceId) => {
+        started.push(workspaceId);
+        return {
+          connected: () => true,
+          refreshEndpoint: vi.fn(),
+          stop: () => stopped.push(workspaceId),
+        };
+      },
+    });
+    manager.setBillingInterests(['old-billing']);
+    const releaseOldRenderer = manager.retainEventInterest('old-renderer');
+
+    manager.resetForEnvironmentChange();
+
+    expect(stopped.sort()).toEqual(['old-billing', 'old-renderer']);
+    expect(manager.activeWorkspaceIds()).toEqual([]);
+    releaseOldRenderer();
+    manager.setBillingInterests(['new-billing']);
+    expect(started).toEqual(['old-billing', 'old-renderer', 'new-billing']);
+    expect(manager.activeWorkspaceIds()).toEqual(['new-billing']);
+  });
+
   it('dedupes explicit billing interests into one upstream per workspace', () => {
     const started: string[] = [];
     const stopped: string[] = [];

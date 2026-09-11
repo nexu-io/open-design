@@ -4040,20 +4040,35 @@ export async function startServer({
     readVelaControlApiContext,
     configuredAmrEnv(),
   );
+  let workspaceHubAmrProfile = resolveAmrProfile({
+    ...process.env,
+    ...configuredAmrEnv(),
+  });
   const resetWorkspaceIdentityCaches = (): void => {
     workspaceDirectoryAuthority.resetIdentity();
     workspaceExactAuthorityCache.resetIdentity();
     workspaceExactContextCache.resetIdentity();
   };
   const refreshWorkspaceHubAccountIdentity = (): void => {
+    const currentAmrProfile = resolveAmrProfile({
+      ...process.env,
+      ...configuredAmrEnv(),
+    });
     const currentIdentity = velaWorkspaceDirectoryIdentity(
       readVelaControlApiContext,
       configuredAmrEnv(),
     );
     if (currentIdentity === workspaceHubAccountIdentity) return;
+    const environmentChanged = currentAmrProfile !== workspaceHubAmrProfile;
     workspaceHubAccountIdentity = currentIdentity;
+    workspaceHubAmrProfile = currentAmrProfile;
     resetWorkspaceIdentityCaches();
-    workspaceHubSubscriptions?.refreshEndpoints();
+    if (environmentChanged) {
+      workspaceHubSubscriptions?.resetForEnvironmentChange();
+      workspaceBillingRuntime.resetIdentity();
+    } else {
+      workspaceHubSubscriptions?.refreshEndpoints();
+    }
   };
   const fetchWorkspaceDirectoryForAccountSurface = () => {
     refreshWorkspaceHubAccountIdentity();

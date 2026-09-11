@@ -76,6 +76,19 @@ export class WorkspaceHubSubscriptionManager {
     }
   }
 
+  /**
+   * Drop every scope retained under the previous daemon-global AMR profile.
+   * Workspace ids are environment-owned, so neither billing leases nor open
+   * renderer EventSources may carry an id across a profile switch.
+   */
+  resetForEnvironmentChange(): void {
+    this.assertUsable();
+    for (const subscriber of this.subscribers.values()) subscriber.stop();
+    this.subscribers.clear();
+    this.billingWorkspaceIds.clear();
+    this.eventWorkspaceReferences.clear();
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
