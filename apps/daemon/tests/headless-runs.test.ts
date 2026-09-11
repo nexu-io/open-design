@@ -290,6 +290,81 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(userMessages.some((m) => m.content === transcript)).toBe(false);
   });
 
+  // OPEND-2980: normal web requests carry both pins, while the optimistic
+  // PUT and daemon user seed can arrive in either order. Exercise the actual
+  // multipart upload response and reload the same user row after each write.
+  for (const clientWrite of ['before-seed', 'after-seed'] as const) {
+    for (const prompt of ['Inspect this diagnostic archive', '']) {
+      it(`retains uploaded ZIP size with UI pins, ${clientWrite}, ${prompt ? 'text' : 'attachments-only'}`, async () => {
+        started = await startTestServer();
+        const { projectId, conversationId } = await createProject(started.url, 'UI upload size');
+        const bytes = Buffer.from('UEsDBBQAAAAAAJOuK13X0oKVGAAAABgAAAAOAAAAZGlhZ25vc3RpYy50eHRhdHRhY2htZW50IHNpemUgZml4dHVyZQpQSwECFAMUAAAAAACTritd19KClRgAAAAYAAAADgAAAAAAAAAAAAAAgAEAAAAAZGlhZ25vc3RpYy50eHRQSwUGAAAAAAEAAQA8AAAARAAAAAAA', 'base64');
+        const upload = new FormData();
+        upload.append('files', new File([bytes], 'diagnostics.zip', { type: 'application/zip' }));
+        const uploadResponse = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/upload`, {
+          method: 'POST',
+          body: upload,
+        });
+        expect(uploadResponse.status).toBe(200);
+        const uploaded = await uploadResponse.json() as {
+          files: Array<{ path: string; name: string; originalName: string; size: number }>;
+        };
+        expect(uploaded.files).toHaveLength(1);
+        expect(uploaded.files[0]).toMatchObject({
+          path: 'diagnostics.zip', originalName: 'diagnostics.zip', size: bytes.length,
+        });
+        const attachment = {
+          path: uploaded.files[0]!.path,
+          name: uploaded.files[0]!.originalName,
+          kind: 'file' as const,
+          size: uploaded.files[0]!.size,
+        };
+        const userMessageId = randomUUID();
+        const assistantMessageId = randomUUID();
+        const messagesUrl = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`;
+        const assertReload = async () => {
+          const response = await fetch(messagesUrl);
+          expect(response.status).toBe(200);
+          const body = await response.json() as {
+            messages: Array<{ id: string; role: string; content: string; attachments?: Array<{ path: string; size?: number }> }>;
+          };
+          const rows = body.messages.filter((message) => message.id === userMessageId);
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toMatchObject({ role: 'user', content: prompt, attachments: [attachment] });
+        };
+        const saveClientMessage = async () => {
+          const response = await fetch(`${messagesUrl}/${encodeURIComponent(userMessageId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: userMessageId, role: 'user', content: prompt, attachments: [attachment],
+            }),
+          });
+          expect(response.status).toBe(200);
+          await assertReload();
+        };
+        if (clientWrite === 'before-seed') await saveClientMessage();
+        const runResponse = await fetch(`${started.url}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            // No provider budget: missing runtime fails after the real run
+            // admission/pinning path. This is metadata persistence coverage,
+            // not a successful agent or browser end-to-end claim.
+            agentId: `missing-agent-${randomUUID()}`,
+            projectId, conversationId, userMessageId, assistantMessageId,
+            message: prompt, currentPrompt: prompt,
+            attachments: [attachment.path],
+          }),
+        });
+        expect(runResponse.status).toBe(202);
+        // Check seed before a later client PUT can mask a lost size.
+        await assertReload();
+        if (clientWrite === 'after-seed') await saveClientMessage();
+      });
+    }
+  }
+
   it('preserves attachments and commentAttachments on omit-pin seeded user turns', async () => {
     started = await startTestServer();
     const { projectId, conversationId } = await createProject(
