@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,6 +17,7 @@ import { I18nProvider } from '../../src/i18n';
 import { fetchProjectFiles } from '../../src/providers/registry';
 import type { AgentInfo, AppConfig } from '../../src/types';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 
 const analyticsMocks = vi.hoisted(() => ({
   track: vi.fn(),
@@ -36,6 +37,18 @@ vi.mock('../../src/analytics/provider', async (importOriginal) => {
     useAppVersion: () => null,
   };
 });
+
+vi.mock('@open-design/host', async () => {
+  const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
+  return {
+    ...actual,
+    isOpenDesignHostAvailable: vi.fn(() => false),
+    pickHostWorkingDir: vi.fn(),
+  };
+});
+
+const mockedIsOpenDesignHostAvailable = vi.mocked(isOpenDesignHostAvailable);
+const mockedPickHostWorkingDir = vi.mocked(pickHostWorkingDir);
 
 const originalFetch = globalThis.fetch;
 const originalResizeObserver = globalThis.ResizeObserver;
@@ -323,6 +336,8 @@ beforeEach(() => {
   globalThis.fetch = originalFetch;
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   analyticsMocks.track.mockReset();
+  mockedIsOpenDesignHostAvailable.mockReturnValue(false);
+  mockedPickHostWorkingDir.mockReset();
 });
 
 describe('EntryShell settings menu', () => {
@@ -695,6 +710,44 @@ describe('EntryShell new project rail', () => {
 });
 
 describe('EntryShell Home submit handoff', () => {
+  it('promotes the Home working directory instead of classifying it as linked', async () => {
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/app-config')) return jsonResponse({ recentLinkedDirs: [] });
+      if (url.endsWith('/api/plugins')) return jsonResponse({ plugins: [] });
+      if (url.endsWith('/api/mcp/servers')) return jsonResponse({ servers: [] });
+      if (url.endsWith('/api/community/discord')) return jsonResponse({ stale: true });
+      if (url.endsWith('/api/github/open-design')) return jsonResponse({ stale: true });
+      return jsonResponse({});
+    }) as typeof fetch;
+    mockedIsOpenDesignHostAvailable.mockReturnValue(true);
+    mockedPickHostWorkingDir.mockResolvedValue({
+      ok: true,
+      baseDir: '/Users/me/workspace',
+      token: 'trusted-working-dir-token',
+    });
+    const onCreateProject = vi.fn((
+      _input: Parameters<ComponentProps<typeof EntryShell>['onCreateProject']>[0],
+    ) => true);
+    renderHome({ onCreateProject });
+
+    fireEvent.click(await screen.findByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-pick'));
+    await waitFor(() => expect(mockedPickHostWorkingDir).toHaveBeenCalledTimes(1));
+
+    setHomeHeroPrompt('Build in my repository');
+    fireEvent.click(await screen.findByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+    expect(onCreateProject).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        userWorkingDir: '/Users/me/workspace',
+      }),
+      userWorkingDirToken: 'trusted-working-dir-token',
+    }));
+    expect(onCreateProject.mock.calls[0]?.[0]?.metadata?.linkedDirs).toBeUndefined();
+  });
+
   it('keeps the Home run button in sending state until project creation resolves', async () => {
     globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
