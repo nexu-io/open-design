@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { build } from "esbuild";
 import { withStagedNodeRuntime, type StageNodeRuntimeInput } from "./node.js";
 export { archiveNodePlatformResource } from "./resource-build.js";
+export { deployWorkspacePackage, type DeployWorkspacePackageInput } from "./workspace-build.js";
 
 const execute = promisify(execFile);
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");

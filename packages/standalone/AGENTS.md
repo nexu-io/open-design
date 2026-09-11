@@ -45,6 +45,10 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
   packages or an independently authenticated exact platform resource. The latter
   uses `/packages/resource`, separate from the lightweight `/packages` leaf;
   it never defines a channel, latest feed, updater, or Closure business resource.
+  `/packages/build` also exports already-built workspace packages using pinned,
+  offline pnpm without lifecycle scripts. Retain its enclosing portable directory;
+  normalize only a verified package self-link and reject other external links.
+  This primitive owns no workflow identity, archive format or persistent cache.
   Resource callers authenticate the descriptor before acquisition and own
   explicit-recovery authorization. Normal preparation rejects damaged cache;
   executable permissions and native probes follow complete tree verification.
