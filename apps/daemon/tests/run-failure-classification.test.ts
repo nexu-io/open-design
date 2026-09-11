@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { decideSafeRunRetry } from '../src/run-retry-policy.js';
 
 vi.mock('../src/integrations/vela-errors.js', () => ({
   classifyAmrAccountFailure(text: string) {
@@ -2084,8 +2085,8 @@ describe('classifyRunFailure — AMR/vela reclassification out of execution_fail
   // Refs mrcfps blocking comment on PR #7248.  Antigravity emits:
   //   RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your
   //   administrator to enable overages. Resets in <H>h<M>m<S>s.
-  // to its log file.  The tightened pattern must recognise both `quota reached`
-  // and the bare `RESOURCE_EXHAUSTED` status code as hard quota exhaustion.
+  // to its log file. The explicit quota phrase remains exhaustion evidence;
+  // the status code alone does not identify which resource was exhausted.
   it('classifies Antigravity "RESOURCE_EXHAUSTED: Individual quota reached" as hard_quota', () => {
     const result = classify(
       'RATE_LIMITED',
@@ -2106,16 +2107,44 @@ describe('classifyRunFailure — AMR/vela reclassification out of execution_fail
     expect(result?.retryable).toBe(false);
   });
 
-  it('classifies bare RESOURCE_EXHAUSTED status code as hard_quota', () => {
-    // Antigravity log may surface the status code alone when the message is
-    // stripped by the log parser.
-    const result = classify(
-      'RATE_LIMITED',
-      'RESOURCE_EXHAUSTED',
-    );
-    expect(result?.failure_category).toBe('rate_limit');
-    expect(result?.failure_detail).toBe('hard_quota');
-    expect(result?.retryable).toBe(false);
+  it('preserves a structured rate limit without inferring hard quota from RESOURCE_EXHAUSTED', () => {
+    const result = classify('RATE_LIMITED', 'RESOURCE_EXHAUSTED');
+    expect(result).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'rate_limit_429',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('keeps the Cursor resource error recoverable without automatically replaying it', () => {
+    const message = 'RetriableError: [resource_exhausted] Error';
+    const result = classifyForAgent('cursor-agent', 'AGENT_EXECUTION_FAILED', message, [
+      { event: 'stderr', data: { chunk: message + '\n' } },
+      errorEvent('AGENT_EXECUTION_FAILED', message, true),
+      runtimeCloseEvent('exit_nonzero'),
+    ]);
+    expect(result).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'exit_nonzero',
+      retryable: true,
+      user_action: 'retry',
+    });
+    // Retryability exposes recovery to the user; an ambiguous error must not
+    // enter the automatic transient retry allowlist, even before side effects.
+    for (const sideEffects of [{}, { toolCallSeen: true }, { artifactWriteSeen: true }]) {
+      expect(decideSafeRunRetry({
+        result: 'failed', attemptCount: 0, failure: result!, sideEffects,
+      })).toMatchObject({ shouldRetry: false, retrySuppressedReason: 'non_retryable_category' });
+    }
+  });
+
+  it('keeps explicit Cursor billing exhaustion non-retryable', () => {
+    const message = 'RetriableError: [resource_exhausted] billing hard limit reached';
+    const result = classifyForAgent('cursor-agent', 'AGENT_EXECUTION_FAILED', message, [
+      errorEvent('AGENT_EXECUTION_FAILED', message, true),
+    ]);
+    expect(result).toMatchObject({ failure_detail: 'hard_quota', retryable: false });
   });
 
   // Advisory phrases from antigravityQuotaGuidance() — these are in the
