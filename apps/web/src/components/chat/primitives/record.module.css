@@ -1352,6 +1352,20 @@
   min-width: 0;
   overflow-x: auto;
 }
+/* Like the Thinking scrollport below, use a layout-consuming Blink scrollbar.
+   A native overlay covers these 34px previews while scrolling on macOS. */
+.strip::-webkit-scrollbar {
+  height: 8px;
+}
+.strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+.strip::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--chat-radius-pill);
+  background: color-mix(in srgb, var(--chat-text-muted) 30%, transparent);
+  background-clip: padding-box;
+}
 .strip .th {
   position: relative;
   flex-shrink: 0;
@@ -1366,6 +1380,7 @@
   transition: border-color var(--chat-dur-quick) var(--chat-ease-out);
 }
 .strip .th:hover { border-color: var(--chat-text-soft); }
+.strip .th:active { transform: none; }
 
 /* 占位图:一块纯灰压住图片该占的范围,不画界面细节 —— 评审看的是框和排布 */
 .mini { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--chat-bg-muted); }
