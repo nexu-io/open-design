@@ -567,10 +567,7 @@ function ArtifactCard({
 }) {
   const t = useT();
   const { workspaceContext } = useProjectCollabContext();
-  const src = artifactCardLiveUrl(
-    projectFileUrl(projectId, item.name, workspaceContext),
-    item.revision,
-  );
+  const src = projectFileUrl(projectId, item.name, workspaceContext);
   const pending = item.pending === true;
   /*
    * 图片:这一轮那张**不可变快照**才是这张卡的正文 —— 卡面、点击、导出三处都读它。
@@ -634,7 +631,7 @@ function ArtifactCard({
            * 文案显示在上面了?这感觉更奇怪呢」)。
            */
           <HtmlProjectCoverFrame
-            src={src}
+            src={artifactCardLiveUrl(src, item.revision)}
             initial=""
             iframeClassName="artifact-card-frame"
             glyphClassName="artifact-card-mini"
