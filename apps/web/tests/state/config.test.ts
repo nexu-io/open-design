@@ -1588,10 +1588,15 @@ describe('saveConfig', () => {
           OPENAI_BASE_URL: 'https://proxy.example/openai',
           CODEX_HOME: '~/.codex-alt',
         },
+        kimchi: {
+          KIMCHI_API_KEY: 'sk-kimchi',
+          KIMCHI_BIN: '/usr/local/bin/kimchi',
+        },
       },
       agentCliEnvIntent: {
         claude: { apiKeyOverride: true },
         codex: { apiKeyOverride: true },
+        kimchi: { apiKeyOverride: true },
       },
     });
 
@@ -1604,9 +1609,13 @@ describe('saveConfig', () => {
       OPENAI_BASE_URL: 'https://proxy.example/openai',
       CODEX_HOME: '~/.codex-alt',
     });
+    expect(saved.agentCliEnv.kimchi).toEqual({
+      KIMCHI_BIN: '/usr/local/bin/kimchi',
+    });
     expect(saved.agentCliEnvIntent).toEqual({
       claude: { apiKeyOverride: true },
       codex: { apiKeyOverride: true },
+      kimchi: { apiKeyOverride: true },
     });
   });
 });
