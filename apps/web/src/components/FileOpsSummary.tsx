@@ -28,6 +28,7 @@ import {
 } from '../runtime/file-ops';
 import { artifactExportNeedsFormatChoice } from '../runtime/chat/artifact-export';
 import { indexArtifactRefs } from '../runtime/chat/artifact-refs';
+import type { ProjectFile } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PixelLiquid } from './PixelLiquid';
 import { RemixIcon } from './RemixIcon';
@@ -71,6 +72,8 @@ interface Props {
   onExport?: ((name: string, anchorId: string) => void) | undefined;
   /** 这一轮还在跑吗 —— 决定产物卡能不能是「还在写」的 loading 态(见 cardItems) */
   turnIsLive?: boolean;
+  /** Current project files, used to invalidate live HTML previews after an overwrite. */
+  projectFiles?: readonly ProjectFile[];
   /**
    * 这条消息的产物**版本身份**(daemon 投影的 `ChatMessage.artifactRefs`)。
    *
@@ -126,6 +129,7 @@ export function FileOpsSummary({
   onPublish,
   onExport,
   turnIsLive = false,
+  projectFiles,
   artifactRefs,
 }: Props) {
   const t = useT();
@@ -169,6 +173,7 @@ export function FileOpsSummary({
             name: entry.path,
             kind,
             pending: turnIsLive && entry.status === 'running',
+            revision: projectFiles?.find((file) => file.name === entry.path)?.mtime,
             ...(refTargets.get(entry.path) ?? {}),
           },
         ];
@@ -454,6 +459,13 @@ export interface ArtifactCardItem {
    * 拿不到就读工作区当前同名文件 —— 旧会话就是这条,不出占位、不写「不可用」。
    */
   snapshotUrl?: string;
+  /** Current file revision for the live HTML fallback. */
+  revision?: string | number;
+}
+
+export function artifactCardLiveUrl(src: string, revision?: string | number): string {
+  if (revision === undefined || revision === null) return src;
+  return `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(revision))}`;
 }
 
 /*
@@ -555,7 +567,10 @@ function ArtifactCard({
 }) {
   const t = useT();
   const { workspaceContext } = useProjectCollabContext();
-  const src = projectFileUrl(projectId, item.name, workspaceContext);
+  const src = artifactCardLiveUrl(
+    projectFileUrl(projectId, item.name, workspaceContext),
+    item.revision,
+  );
   const pending = item.pending === true;
   /*
    * 图片:这一轮那张**不可变快照**才是这张卡的正文 —— 卡面、点击、导出三处都读它。
