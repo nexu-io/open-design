@@ -333,6 +333,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  * @param {string} args.projectRoot   - Repo root (.od/ lives directly under).
  * @param {string} args.projectsRoot  - Absolute path to <repo>/.od/projects.
  * @param {string} args.projectId
+ * @param {unknown} [args.metadata] Project metadata used to resolve imported-folder roots.
  * @param {'image'|'video'|'audio'} args.surface
  * @param {string} args.model
  * @param {string} [args.prompt]
@@ -346,7 +347,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
  */
 export async function generateMedia(args: {
-  projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
+  projectRoot: string; projectsRoot: string; projectId: string; metadata?: unknown; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; quality?: string; resolution?: string;
   length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
@@ -379,6 +380,7 @@ export async function generateMedia(args: {
     projectRoot,
     projectsRoot,
     projectId,
+    metadata,
     surface,
     model,
     prompt,
@@ -505,7 +507,7 @@ export async function generateMedia(args: {
     : durationClamp.value;
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
-  const dir = await ensureProject(projectsRoot, projectId);
+  const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeOut = sanitizeName(
     output || autoOutputName(surface, model, resolvedAudioKind),
   );
