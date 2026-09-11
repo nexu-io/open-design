@@ -1574,7 +1574,7 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
       for (const shell of [top, todoCard]) {
         if (!shell) continue;
         shell.stopped = true;
-        closeRunningSegments(shell);
+        closeRunningSegments(shell, input.endedWithUnfinishedWork === true);
       }
       return;
     }
@@ -1583,7 +1583,7 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
       if (!shell) continue;
       if (status === 'failed' && shell === (todoCard ?? top)) shell.status = 'failed';
       else if (shell.status === 'running') shell.status = 'done';
-      closeRunningSegments(shell);
+      closeRunningSegments(shell, input.endedWithUnfinishedWork === true);
     }
   }
 
@@ -1709,10 +1709,15 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
  * 收成 `stopped` 而不是 `completed`:我们只知道它**没跑完就结束了**,不知道它成没成。
  * 标成完成是替 agent 说了它没说过的话;`stopped` 画出来是中性灰,红留给真的错误。
  * 手动停止走的也是这一条 —— 对那条 todo 来说,两种结局是同一件事。
+ *
+ * `pending` 只有在 daemon 明确盖了 `endedWithUnfinishedWork` 时才收停。普通终态、
+ * 历史回放和已交付 done 标记都不能单凭 run 结束推断「尚未开始」已经变成「被截断」。
  */
-function closeRunningSegments(shell: ExecutionShell): void {
+function closeRunningSegments(shell: ExecutionShell, stopPending = false): void {
   for (const seg of shell.segments) {
-    if (seg.status === 'in_progress') seg.status = 'stopped';
+    if (seg.status === 'in_progress' || (stopPending && seg.status === 'pending')) {
+      seg.status = 'stopped';
+    }
   }
 }
 

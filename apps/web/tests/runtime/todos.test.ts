@@ -220,7 +220,7 @@ describe('todo event helpers', () => {
     expect(unfinishedTodosFromEvents(events)).toEqual([]);
   });
 
-  it('marks the active todo as stopped when a failed run ended without a final TodoWrite', () => {
+  it('marks every unfinished todo as stopped when a failed run ended without a final TodoWrite', () => {
     const input = latestTodoWriteInputForPinnedCard([
       {
         id: 'assistant-1',
@@ -247,11 +247,11 @@ describe('todo event helpers', () => {
     expect(parseTodoWriteInput(input)).toEqual([
       { content: 'Draft layout', status: 'completed', activeForm: undefined },
       { content: 'Build components', status: 'stopped', activeForm: 'Building components' },
-      { content: 'Run QA', status: 'pending', activeForm: undefined },
+      { content: 'Run QA', status: 'stopped', activeForm: undefined },
     ]);
   });
 
-  it('marks the active todo as stopped when a nominally successful run ended with stale progress', () => {
+  it('marks every unfinished todo as stopped when a nominally successful run ended with stale progress', () => {
     const input = latestTodoWriteInputForPinnedCard([
       {
         runStatus: 'succeeded',
@@ -274,7 +274,34 @@ describe('todo event helpers', () => {
 
     expect(parseTodoWriteInput(input)).toEqual([
       { content: 'Generate HTML', status: 'stopped', activeForm: undefined },
-      { content: 'Self-check', status: 'pending', activeForm: undefined },
+      { content: 'Self-check', status: 'stopped', activeForm: undefined },
+    ]);
+  });
+
+  it('marks every unfinished todo as stopped when a terminal run ends with stale progress', () => {
+    const input = latestTodoWriteInputForPinnedCard([
+      {
+        runStatus: 'succeeded',
+        endedAt: 3_000,
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-2989',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Build single-file HTML deck', status: 'in_progress' },
+                { content: 'Verify exactly one runnable root-level HTML entry', status: 'pending' },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(parseTodoWriteInput(input)).toEqual([
+      { content: 'Build single-file HTML deck', status: 'stopped', activeForm: undefined },
+      { content: 'Verify exactly one runnable root-level HTML entry', status: 'stopped', activeForm: undefined },
     ]);
   });
 
@@ -303,7 +330,7 @@ describe('todo event helpers', () => {
     expect(parseTodoWriteInput(input)).toEqual([
       { content: 'Inspect chat rendering', status: 'completed', activeForm: undefined },
       { content: 'Add annotation card', status: 'stopped', activeForm: undefined },
-      { content: 'Run focused tests', status: 'pending', activeForm: undefined },
+      { content: 'Run focused tests', status: 'stopped', activeForm: undefined },
     ]);
   });
 });

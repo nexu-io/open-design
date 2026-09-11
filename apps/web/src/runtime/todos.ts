@@ -290,7 +290,8 @@ function stoppedTodoWriteInput(input: unknown): unknown {
     [key]: items.map((todo) => {
       if (!todo || typeof todo !== 'object') return todo;
       const record = todo as Record<string, unknown>;
-      if (record.status !== 'in_progress') return todo;
+      const status = normalizeTodoStatus(record.status);
+      if (status === 'completed' || status === 'stopped') return todo;
       return {
         ...record,
         status: 'stopped',
