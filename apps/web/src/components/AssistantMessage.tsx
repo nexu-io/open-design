@@ -205,8 +205,8 @@ interface Props {
   isLast?: boolean;
   // True only for the most recent assistant message that actually ran a turn —
   // i.e. `isLast` with host-authored cards (the memory card, the brand assist
-  // card) skipped over. Only the next-step affordance reads it; see
-  // `ownsTrailingNextStep` below for why it is additive and not a replacement.
+  // card) skipped over. Recovery belongs to that real turn; next-step actions
+  // have their own ownership rule in `ownsTrailingNextStep` below.
   isLastTurn?: boolean;
   // Assistant message id whose run-failure error is rendered as ChatPane's
   // top-level error card; that message's per-message error pill is suppressed
@@ -1052,11 +1052,15 @@ function AssistantMessageImpl({
         hasPendingCompleteQuestionForm || hasUnterminatedQuestionForm(message.content),
     };
   }, [message.content, nextUserContent, suppressDirectionForms]);
-  // Continuing unfinished work belongs to the current turn, and must wait
-  // for a complete pending form, including when the Todo snapshot was inherited.
-  // A terminal truncated form has no answer control; keep its recovery action.
+  // Host notifications cannot own a run recovery action. When one follows a
+  // stopped turn, keep the action on that turn instead of hiding it altogether.
+  // Direct callers without a conversation-level owner retain their isLast gate.
+  const ownsContinuableTurn = (isLastTurn ?? isLast) && !assistantMessageNeverHadARun(message);
+  // A complete pending form must be answered first; terminal truncated forms
+  // have no answer control and retain recovery. Streaming turns already contribute
+  // no continuableTodos, including when their Todo snapshot was inherited.
   const continueRemaining =
-    isLast && !hasPendingCompleteQuestionForm && onContinueRemainingTasks && continuableTodos.length > 0
+    ownsContinuableTurn && !hasPendingCompleteQuestionForm && onContinueRemainingTasks && continuableTodos.length > 0
       ? () => onContinueRemainingTasks(continuableTodos)
       : undefined;
   /**
@@ -2083,8 +2087,8 @@ interface AssistantFooterProps {
   forking?: boolean;
   feedbackControls?: ReactNode;
   forceVisible?: boolean;
-  // Identifies the latest reply for UI/analytics hooks. Completed controls are
-  // hover/focus-gated on pointer devices and remain visible without hover.
+  // Marks the latest reply for footer visibility. The CSS data-last flag also
+  // keeps an actual continuation action visible without hover or focus.
   isLast?: boolean;
   // When the turn has an execution disclosure, its run state lives at the top
   // of the answer. The footer keeps only actions so run state is not repeated.
@@ -2137,7 +2141,9 @@ export function AssistantFooter({
       data-streaming={streaming ? "true" : "false"}
       // 中断的那一轮不能戴完成勾:它并没有跑完(稿子 15-6「绿点转灰」)
       data-canceled={canceled ? "true" : "false"}
-      data-last={isLast ? "true" : "false"}
+      // A real current turn may precede a host card. Its recovery action must
+      // stay visible without hover; ordinary historical controls keep isLast.
+      data-last={isLast || onContinueRemaining ? "true" : "false"}
     >
       {/* 稿子这一行的头是**一个**元素:`<span class="fin"><svg class="tick"/>已完成</span>` ——
           勾在字里面,不是它旁边的兄弟。原来 dot 和文字是平级的两个 span,
