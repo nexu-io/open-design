@@ -41,7 +41,6 @@ jobs:
     # cron. Keep the trusted publisher scoped to the canonical repository.
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout

@@ -31,8 +31,6 @@ jobs:
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:    runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
       contents: read
     steps:

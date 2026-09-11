@@ -41,7 +41,6 @@ jobs:
     # this publisher on push or on the copied nightly schedule.
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - name: Checkout
