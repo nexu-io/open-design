@@ -2836,7 +2836,12 @@ process.stdin.on("end", () => {
     expect(canary).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}");
     expect(canary).toContain("--namespace release-prerelease-canary-win");
     expect(canary).toContain('OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease');
-    expect(canary).toContain('OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core');
+    expect(canary).toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.smoke_profile || 'core' }}");
+    expect(canary).toContain("ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || 'main' }}");
+    expect(canary).toContain("if: ${{ inputs.smoke_profile == 'full' }}");
+    expect(canary).toContain("OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: tools-serve");
+    expect(canary).toContain("windows-tools-pack-update-build.json");
+    expect(canary).toContain("github.event_name != 'workflow_dispatch' && needs.smoke.result == 'failure'");
     expect(canary).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
     expect(canary).toContain("tools-pack win validate-payload");
     expect(canary).toContain("tools/release/src/notifications/feishu-notice.ts");
