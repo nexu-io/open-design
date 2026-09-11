@@ -1,4 +1,4 @@
-import { lstat } from "node:fs/promises";
+import { lstat, mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { openArtifactProduct, stageArtifactProduct, writeArtifactEntry } from "./artifact-product.ts";
 import { readObject } from "./control-common.ts";
@@ -17,6 +17,17 @@ export async function acquireSceneArtifacts(input: Readonly<{ sources: string; s
     const name = `exact-${source.shell}-scene-${source.target}-${input.sourceCommit}`;
     if (seen.has(name)) throw new Error("Duplicate scene acquisition target");
     seen.add(name);
+  }
+  // The workflow transport flattens a single downloaded artifact. Derive its
+  // sole owner from the complete business input set, never from directory guesses.
+  const fresh = value.sources.filter(source => source.artifact == null);
+  if (fresh.length === 1) {
+    const source = fresh[0], transport = join(input.output, "scene.tar");
+    const directory = join(input.output, `exact-${source.shell}-scene-${source.target}-${input.sourceCommit}`);
+    const status = await lstat(transport);
+    if (!status.isFile() || status.isSymbolicLink()) throw new Error("Built scene transport is not a regular file");
+    await mkdir(directory);
+    await rename(transport, join(directory, "scene.tar"));
   }
   const results = await Promise.allSettled(value.sources.map(async source => {
     const output = join(input.output, `exact-${source.shell}-scene-${source.target}-${input.sourceCommit}`);
