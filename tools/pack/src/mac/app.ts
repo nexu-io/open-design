@@ -1,3 +1,4 @@
+import { finalizeRuntimeManifest } from "../resources/runtime-manifest.js";
 import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
@@ -391,4 +392,5 @@ export async function writeAssembledApp(
     platform: "darwin",
   });
   await runMacElectronRebuild(config, paths.assembledAppRoot);
+  await finalizeRuntimeManifest(paths.assembledAppRoot);
 }

@@ -1,3 +1,4 @@
+import { renderPackagedMainEntry } from "../launcher/packaged-entry.js";
 import { readFile } from "node:fs/promises";
 
 import type { ToolPackConfig } from "../config/index.js";
@@ -144,7 +145,5 @@ export async function assertWinPrebundleMetafile(options: {
 }
 
 export function renderWinPackagedMainEntry(usePrebundle: boolean): string {
-  return usePrebundle
-    ? 'import("./prebundled/packaged-main.mjs").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n'
-    : 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
+  return renderPackagedMainEntry(usePrebundle);
 }
