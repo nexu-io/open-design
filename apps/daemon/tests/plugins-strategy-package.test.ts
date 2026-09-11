@@ -73,6 +73,9 @@ describe('bundled OD Next strategy package identity', () => {
       './assets/task-profiles/prototype/device-frames/iphone.html',
       './assets/task-profiles/prototype/device-frames/neutral.html',
       './assets/task-profiles/prototype/layout.css',
+      './assets/task-profiles/prototype/runtime/example.html',
+      './assets/task-profiles/prototype/runtime/od-proto.js',
+      './assets/task-profiles/prototype/runtime/vue.global.prod.js',
       './open-design.json',
       './references/task-profile-mapping.md',
     ]);
@@ -87,7 +90,7 @@ describe('bundled OD Next strategy package identity', () => {
     ]);
     expect(prototype.selectedTaskProfile).toEqual(expect.objectContaining({
       taskType: 'prototype',
-      version: '2.2.0',
+      version: '2.3.0',
       path: './assets/task-profiles/prototype.md',
     }));
     expect(hyperframes.packageHash).not.toBe(prototype.packageHash);
@@ -105,8 +108,27 @@ describe('bundled OD Next strategy package identity', () => {
       './assets/task-profiles/prototype/device-frames/android.html',
       './assets/task-profiles/prototype/device-frames/neutral.html',
       './assets/task-profiles/prototype/layout.css',
+      './assets/task-profiles/prototype/runtime/vue.global.prod.js',
+      './assets/task-profiles/prototype/runtime/od-proto.js',
+      './assets/task-profiles/prototype/runtime/example.html',
     ]);
     for (const resource of assets.taskResources) {
+      if (resource.path.endsWith('runtime/vue.global.prod.js')) {
+        expect(resource.text).toMatch(/^\/\*\*\n\* vue v3\.5\.\d+/);
+        expect(resource.text).toContain('@license MIT');
+        continue;
+      }
+      if (resource.path.endsWith('runtime/od-proto.js')) {
+        expect(resource.text).toContain('OD-PROTO-RUNTIME v1');
+        expect(resource.text).toContain('window.odProto');
+        continue;
+      }
+      if (resource.path.endsWith('runtime/example.html')) {
+        expect(resource.text).toContain('odProto.boot(');
+        expect(resource.text).toContain('data-screen=');
+        expect(resource.text).toContain('window.odFixtures');
+        continue;
+      }
       if (resource.path.endsWith('layout.css')) {
         expect(resource.text).toContain('OD-LAYOUT-PRIMITIVES v1');
         expect(resource.text).toContain('@layer od-layout');
@@ -282,7 +304,7 @@ describe('hash-gated internal strategy activation and snapshot persistence', () 
     if (!activated || !activated.ok) throw new Error('expected strategy snapshot');
     expect(activated.snapshot.strategy).toEqual(expect.objectContaining({
       id: 'od-next-strategy',
-      version: '2.0.4',
+      version: '2.0.5',
       packageHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       selectedTaskProfile: expect.objectContaining({ taskType: 'prototype' }),
     }));

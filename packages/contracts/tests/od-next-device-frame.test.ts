@@ -164,10 +164,23 @@ describe('layout primitives resource', () => {
   ];
 
   it('names the managed files and selects the stylesheet out of the resources', () => {
-    expect(OD_NEXT_MANAGED_RESOURCE_FILES).toEqual(['iphone.html', 'android.html', 'neutral.html', 'layout.css']);
+    expect(OD_NEXT_MANAGED_RESOURCE_FILES).toEqual([
+      'iphone.html',
+      'android.html',
+      'neutral.html',
+      'layout.css',
+      'runtime/vue.global.prod.js',
+      'runtime/od-proto.js',
+      'runtime/example.html',
+    ]);
     expect(odNextManagedResourceName('./x/device-frames/android.html')).toBe('android.html');
     expect(odNextManagedResourceName('./x/layout.css')).toBe('layout.css');
     expect(odNextManagedResourceName('./x/notes.md')).toBeNull();
+    // Runtime files are recognised by their parent directory, so a same-named
+    // file elsewhere in the package is not staged.
+    expect(odNextManagedResourceName('./x/prototype/runtime/od-proto.js')).toBe('runtime/od-proto.js');
+    expect(odNextManagedResourceName('./x/prototype/runtime/example.html')).toBe('runtime/example.html');
+    expect(odNextManagedResourceName('./x/prototype/od-proto.js')).toBeNull();
     expect(selectOdNextLayoutPrimitivesCss(resources)).toBe(css);
     expect(selectOdNextLayoutPrimitivesCss(resources.slice(0, 1))).toBeNull();
     expect(selectOdNextLayoutPrimitivesCss(undefined)).toBeNull();

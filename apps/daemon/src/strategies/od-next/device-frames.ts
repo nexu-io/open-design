@@ -166,9 +166,10 @@ async function readOwnership(root: string): Promise<OdNextDeviceFrameOwnership> 
 }
 
 /**
- * Stage the device shells into `<cwd>/.od-frames/` so the rule card's
- * `.od-frames/<shell>.html` paths resolve for every prototype run, whether or
- * not a platform was resolved up front.
+ * Stage the device shells, the layout primitives, and the prototype runtime
+ * into `<cwd>/.od-frames/` so the rule card's `.od-frames/<shell>.html` and
+ * `.od-frames/runtime/<file>` paths resolve for every prototype run, whether
+ * or not a platform was resolved up front.
  *
  * Non-destructive by construction. A managed name is written or removed only
  * when the manifest claims it *and* the bytes on disk still hash to what we
@@ -188,7 +189,9 @@ export async function materializeOdNextDeviceFrames(input: {
   // Shells and the layout primitives stylesheet share one root, one manifest,
   // and one ownership rule; anything else the profile declares stays in the
   // package and is never written to the project.
-  const shells = input.resources.filter((resource) => odNextManagedResourceName(resource.path));
+  const shells = input.resources
+    .map((resource) => ({ resource, name: odNextManagedResourceName(resource.path) }))
+    .filter((entry): entry is { resource: OdNextTaskResource; name: string } => entry.name !== null);
   if (shells.length === 0) return { staged: [], skipped: [] };
   const root = path.join(input.cwd, OD_NEXT_DEVICE_FRAME_ROOT);
   const rootStat = await lstat(root).catch(() => null);
@@ -206,7 +209,7 @@ export async function materializeOdNextDeviceFrames(input: {
       staged: [],
       skipped: [
         managedName(OD_NEXT_DEVICE_FRAME_MANIFEST),
-        ...shells.map((shell) => managedName(path.posix.basename(shell.path))),
+        ...shells.map((shell) => managedName(shell.name)),
       ].sort(),
     };
   }
@@ -215,9 +218,10 @@ export async function materializeOdNextDeviceFrames(input: {
   const staged: string[] = [];
   const skipped: string[] = [];
 
-  for (const shell of shells) {
-    const name = path.posix.basename(shell.path);
-    const target = path.join(root, name);
+  for (const { resource: shell, name } of shells) {
+    // Runtime files live one directory down (`runtime/<file>`); the manifest
+    // key is that relative name, and the parent is created on demand.
+    const target = path.join(root, ...name.split('/'));
     const recorded = Object.prototype.hasOwnProperty.call(previous, name) ? previous[name] : undefined;
     const existing = await lstat(target).catch(() => null);
     if (existing) {
@@ -232,6 +236,7 @@ export async function materializeOdNextDeviceFrames(input: {
         continue;
       }
     }
+    await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, shell.text, { encoding: 'utf8' });
     next[name] = digest(shell.text);
     staged.push(managedName(name));
@@ -244,7 +249,7 @@ export async function materializeOdNextDeviceFrames(input: {
   for (const [name, sha] of Object.entries(previous)) {
     if (!MANAGED_SHELL_FILES.has(name)) continue;
     if (name in next || skipped.includes(managedName(name))) continue;
-    const target = path.join(root, name);
+    const target = path.join(root, ...name.split('/'));
     const existing = await lstat(target).catch(() => null);
     if (!existing || existing.isSymbolicLink() || !existing.isFile()) continue;
     const current = await readFile(target, 'utf8').catch(() => null);

@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.2.0
+# OD Next Prototype Task Profile v2.3.0
 
 > Rollout: active
 
@@ -13,14 +13,33 @@ Resolve product surface and target device, audience, primary flow, required
 screens and interactions, fidelity, baseline artifact, content locks, brand
 references, and required output format. Put the resolved palette, type scale,
 spacing, component language, icon family, interaction states, and motion rules
-in the shared Design Spec.
+in the shared Design Spec, together with the content fixtures, scenarios,
+interaction table, and golden path described under "Plan the prototype as
+data, interactions, then screens".
 
-Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
-explicit assumption with its risk disclosed in prose. When fidelity is
-wireframe or low-fi, content and interaction-state requirements downgrade to
-structural sketches and the visual-direction rules below do not apply; when
-fidelity is unspecified, default to high fidelity.
+Never silently omit a missing field, and never spend the clarification round
+on one: every prototype field has a default, so a gap resolves by
+`missing_policy: default`, is recorded as an explicit assumption, and is
+disclosed with its risk in the delivery prose while the Build continues. The
+user redirects with a follow-up message if a default was wrong; a question
+form costs them the turn. The only request this profile does not build is one
+with nothing to design at all, which the orchestration Skill already settles
+as blocked.
+
+| Field | Default when the brief is silent |
+|---|---|
+| Product surface | A web application; a landing or marketing page only when the brief asks to sell, announce, or explain |
+| Target device | Desktop, unless Open Design resolved a handheld platform (see the device shell section) |
+| Fidelity | High fidelity |
+| Primary flow | The single task the brief most clearly wants a user to complete, end to end |
+| Screens | The smallest set that completes the primary flow, plus the screens its navigation exposes |
+| Audience and context | Inferred from the domain and vocabulary of the brief |
+| Brand | None: infer a direction from the scenario and state it in one sentence |
+| Output | `index.html` at the project root, with any further files beside it |
+
+When fidelity is wireframe or low-fi, content and interaction-state
+requirements downgrade to structural sketches and the visual-direction rules
+below do not apply; when fidelity is unspecified, default to high fidelity.
 
 Quality focus: information hierarchy, interaction clarity, flow completeness,
 visual consistency, responsive behavior, and reference adherence.
@@ -38,7 +57,9 @@ than acting as decoration.
 
 The default delivery is a prototype that opens, runs, and remains editable:
 core flows genuinely work end-to-end from the entry point, and buttons,
-navigation, and key controls are never mere decoration.
+navigation, and key controls are never mere decoration. Data carries across
+screens: an action on one screen changes every screen that shows the same
+data, because all screens render from one store fed by one fixtures file.
 
 Writing the primary HTML deliverable to disk IS the delivery: no opening, no
 previewing, no walkthroughs, no second pass of any kind after the write. Meet
@@ -54,6 +75,75 @@ ordering of its own. Where upper-level instructions and contracts are silent:
 modification tasks continue the confirmed brand, design system, and existing
 design language; user references apply only within their designated scope;
 and this profile's defaults fill only what is left unspecified.
+
+### Plan the prototype as data, interactions, then screens
+
+The prototype's backbone is its data, not its screens. Before any screen is
+written, the Design Spec carries three more decisions, in this order:
+
+1. **Content fixtures and scenarios.** Name the entities the product shows
+   (customer, order, listing, message …) and write one content table per
+   entity: several plausible, mutually consistent records with real-feeling
+   names, numbers, dates, and states — never lorem ipsum, never "Item 1".
+   Group them into named scenarios sharing the same shape: `default` (the
+   populated case the design was drawn for), `empty` (a first-time user with
+   nothing yet), `heavy` (long names, many records, missing optional fields),
+   and, when the flow has a request that can fail, `error`. Fixtures are the
+   first file the Build writes; every screen renders from them and no list is
+   hand-copied into markup.
+2. **Interaction table.** For every screen, list each interactive element with
+   its trigger and exactly one of four effects: navigate to a screen, open an
+   overlay (sheet, modal, drawer), toggle a state, or change data through a
+   named action. Every element that looks tappable appears in this table;
+   what is not in the table is not drawn as a control.
+3. **Golden path.** The one sequence of screens and actions a presenter walks
+   to show the product working, from the entry screen to a visible result.
+   Every screen and overlay on it must exist and every step must be bound.
+
+The Build then proceeds in this order, in one pass: fixtures file → design
+tokens on `:root` → the shared component styles (buttons, cards, rows, fields,
+navigation, overlay panels) → screens composed from those components and
+bound to the store → the interaction table's bindings and transitions. Screens
+only compose; a screen that needs a new component adds it to the shared
+layer first.
+
+### Prototype runtime
+
+Open Design stages a behaviour runtime beside the handset shells:
+`.od-frames/runtime/vue.global.prod.js` (the Vue 3 global build),
+`.od-frames/runtime/od-proto.js` (the OD thin layer), and
+`.od-frames/runtime/example.html`, a five-screen worked example. Before the
+first prototype Build in a session, read the example once for the
+composition pattern. Any prototype with more than one screen, any overlay, or
+any data that changes uses the runtime; a single static landing page may skip
+it. Never write a hand-rolled router, overlay manager, or store, and never
+hotlink a framework from a CDN.
+
+Copy both runtime files into the project (`runtime/vue.global.prod.js`,
+`runtime/od-proto.js`; one copy command) and load them relatively, in that
+order, before the fixtures and the app script. The staged copies under
+`.od-frames/` are read-only inputs.
+
+Runtime vocabulary (structure and behaviour only; the product's CSS owns every
+visual property):
+
+| Piece | How it is written |
+|---|---|
+| Fixtures | `window.odFixtures = { default: 'default', scenarios: { default: { label, data }, empty: { … }, heavy: { … }, error: { failRequests: true, latency: 900, data } } }` — each scenario's `data` shares one shape |
+| Boot | `odProto.boot({ el: '#app', start: 'home', actions, data, computed, methods, transition: 'od-push' })` after the fixtures; `data`, `computed`, and `methods` are available in the root template and in every screen alike (`data` is per screen instance, shared state lives in the store); `store` is available everywhere |
+| Screens | One `<template data-screen="name">` per screen, placed outside `#app`, with exactly one root element; `<od-router></od-router>` inside `#app` renders the current screen with a push/pop transition |
+| Navigation | `@click="$go('detail', { id: item.id })"`, `@click="$back('home')"` (falls back to the named screen when there is no history); `$route.name` and `$route.params.id` read the current route; the hash tracks it (`#/detail?id=3`) |
+| Overlays | `<od-overlay name="filters" kind="sheet" label="Filters" v-slot="{ payload, close }">…</od-overlay>` with `kind` sheet, modal, or drawer; `$open('filters', payload)`, `$close('filters')`; the runtime supplies scrim, ESC, scroll lock, focus, and the enter/exit motion; the panel's look comes from the product's own class on the slot content |
+| Data changes | `actions: { addToCart(data, id, qty) { … } }` mutate `store.data` in one place; templates call `$act('addToCart', id, 1)`; derived values are `computed` declared once in boot, never re-derived inline in a screen |
+| Async | `$run('checkout', () => $fake({ delay: 800 }))` sets `$status('checkout')` to `loading`, `success`, or `error` and `$error('checkout')` to the message; `$fake` honours the scenario's `failRequests` and `latency`, so the `error` scenario fails on its own |
+| Feedback | `$toast('Added to cart')`; place `<od-toasts></od-toasts>` once inside `#app`; list changes animate through `<transition-group name="od-list" tag="div">` |
+| Scenarios | `$scenario('empty')` swaps the data; `?scenario=empty` in the URL picks the start scenario; the switcher panel is hidden until `?proto-tools` or Alt+Shift+P, so the product never exposes presenter controls |
+| Inside a handset shell | The runtime mounts overlays and toasts into `[data-phone-screen]` and scrolls `[data-phone-content]`, so nothing else changes; `#app` sits inside `.phone-content` |
+
+Overlay and toast surfaces are styled by the product through the slot
+content's own classes (`.od-panel` and `.od-toast` receive only position and
+motion from the runtime). Templates inside `<template data-screen>` use
+lowercase attribute names, because the HTML parser lowercases them.
 
 ### Hold a clear design direction
 
@@ -117,15 +207,21 @@ record them in the Design Spec:
 - Mobile: prioritize touch reach, one-handed use, content scrolling, and
   system safe areas; tap targets no smaller than 44×44pt, with ≥8px between
   adjacent targets.
-- Web applications: prioritize varying window widths, content reflow, and
-  keyboard-and-mouse operation; give clickable elements a pointer cursor and
-  hover feedback.
+- Web applications: prioritize keyboard-and-mouse operation; give clickable
+  elements a pointer cursor and hover feedback.
 - Landing pages: establish a clear narrative order that surfaces the core
   value and the primary call to action early.
-- Responsive layouts organize breakpoints at 375 / 768 / 1024 / 1440,
-  reorganizing content rather than scaling the whole page; adapt at each
-  breakpoint without hiding essential actions or breaking reading order;
-  mobile never scrolls horizontally and never disables zoom.
+- Desktop and web surfaces design on a 1440px primary canvas: a centred
+  max-width container, and content that reflows between 1024px and 1920px
+  without leaving empty bands. A content section never takes its height from
+  the viewport (`100vh`, `100dvh`, `min-height: 100vh`) and a content box
+  never carries a fixed pixel height — height is content plus padding, so a
+  section with little content is short rather than hollow. Phone surfaces
+  take their viewport from the handset shell.
+- Only when the brief asks for responsive behaviour do layouts reorganize at
+  768 / 1024 / 1440, moving content rather than scaling the whole page, without
+  hiding essential actions or breaking reading order; a phone-width layout
+  never scrolls horizontally and never disables zoom.
 - Fixed headers, bottom bars, and floating controls reserve matching padding
   for the content they cover.
 
@@ -264,7 +360,8 @@ reaches product UI.
 - Prefer user-provided copy, images, brand assets, and real data.
 - Without real data, use plausible example content consistent with the
   business — never meaningless placeholder text; keep names, dates, numbers,
-  and states consistent.
+  and states consistent. All of it lives in the fixtures file's scenarios;
+  screens render from the store and never carry a second copy of a record.
 - Images, icons, and illustrations match the content's meaning and keep a
   unified style.
 - Never fabricate brand facts, feature promises, or business data the user
@@ -299,9 +396,15 @@ Meet the following in one pass, while writing the source:
   content regions never overlap, flow content stays in normal flow, and
   nothing reuses a chrome height constant as content padding.
 - Every step of the core flow is genuinely implemented; buttons, navigation,
-  and key controls are bound to real behavior, not decoration.
-- Responsive breakpoints cover 375px and wide screens; no horizontal
-  scrolling; fixed bars reserve padding for the content they cover.
+  and key controls are bound to real behavior, not decoration. Every screen
+  and overlay in the interaction table exists, every listed trigger is bound,
+  and the golden path runs from the entry screen to its result.
+- Data changes reach every screen that shows the data, through the one store;
+  the `empty` and `heavy` scenarios render without a blank screen or a broken
+  layout, and the `error` scenario shows its error state.
+- The primary canvas (1440px desktop, or the shell's screen) renders without
+  horizontal scrolling and without empty viewport-height bands; fixed bars
+  reserve padding for the content they cover.
 - Pick colors for ≥4.5:1 body-text-to-background contrast; pick dark-mode
   colors independently.
 - Primary interactions are keyboard-reachable, with focus styles and focus

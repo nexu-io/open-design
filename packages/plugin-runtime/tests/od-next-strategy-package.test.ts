@@ -38,7 +38,7 @@ describe('bundled OD Next Strategy V2 package', () => {
   it('declares the inactive versioned asset set and exact planning recipe identity', () => {
     expect(manifest).toMatchObject({
       name: 'od-next-strategy',
-      version: '2.0.4',
+      version: '2.0.5',
       od: {
         kind: 'scenario',
         hidden: true,
@@ -92,14 +92,35 @@ describe('bundled OD Next Strategy V2 package', () => {
     }
   });
 
-  it('ships the three handheld shells and the layout primitives as prototype resources', () => {
+  it('ships the three handheld shells, the layout primitives, and the prototype runtime as prototype resources', () => {
     const prototype = declaration.assets.taskProfiles.find((profile) => profile.taskType === 'prototype');
     expect(prototype?.resources?.map((resource) => resource.path)).toEqual([
       './assets/task-profiles/prototype/device-frames/iphone.html',
       './assets/task-profiles/prototype/device-frames/android.html',
       './assets/task-profiles/prototype/device-frames/neutral.html',
       './assets/task-profiles/prototype/layout.css',
+      './assets/task-profiles/prototype/runtime/vue.global.prod.js',
+      './assets/task-profiles/prototype/runtime/od-proto.js',
+      './assets/task-profiles/prototype/runtime/example.html',
     ]);
+    // The vendored framework build records its upstream version as the
+    // resource version, and the thin layer carries its own marker so a
+    // delivered document can be recognised as runtime-composed.
+    const vue = prototype?.resources?.find((resource) => resource.path.endsWith('vue.global.prod.js'));
+    const vueSource = readFileSync(`${pluginRoot}/assets/task-profiles/prototype/runtime/vue.global.prod.js`, 'utf8');
+    expect(vueSource).toContain(`vue v${vue?.version}`);
+    expect(vueSource).toContain('@license MIT');
+    const runtime = readFileSync(`${pluginRoot}/assets/task-profiles/prototype/runtime/od-proto.js`, 'utf8');
+    expect(runtime).toContain('OD-PROTO-RUNTIME v1');
+    expect(runtime).toContain('/* /OD-PROTO-RUNTIME v1 */');
+    // Structure and motion only: the runtime sets no palette or type for the product.
+    expect(runtime).not.toMatch(/font-family|border-radius:\s*\d+px;[^}]*background/);
+    const example = readFileSync(`${pluginRoot}/assets/task-profiles/prototype/runtime/example.html`, 'utf8');
+    expect(example).toContain('<script src="./vue.global.prod.js"></script>');
+    expect(example).toContain('<script src="./od-proto.js"></script>');
+    expect(example).toContain('window.odFixtures');
+    expect(example).toContain('odProto.boot(');
+    expect(example.match(/<template data-screen="/g)?.length).toBeGreaterThanOrEqual(4);
     const primitives = readFileSync(`${pluginRoot}/assets/task-profiles/prototype/layout.css`, 'utf8');
     expect(primitives).toContain('/* OD-LAYOUT-PRIMITIVES v1');
     expect(primitives).toContain('/* /OD-LAYOUT-PRIMITIVES v1 */');

@@ -1,0 +1,491 @@
+<!doctype html>
+<!--
+  Open Design · OD Next prototype runtime — worked example.
+  A five-screen desktop web prototype composed from the runtime: hash router,
+  one reactive store fed by named scenarios, overlays (sheet + modal), toasts,
+  a fake request with loading / success / error states, and list transitions.
+  Read it for the composition pattern; do not copy its palette or copy.
+
+  Load order: vue.global.prod.js → od-proto.js → fixtures → app script.
+  In a generated prototype the two runtime files are copied into the project
+  (`runtime/`) and referenced relatively; this example sits beside them.
+  The layout primitives are linked here so the example stays in step with the
+  staged stylesheet; a generated prototype inlines that block as its first
+  rule set, per the task profile.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Standing Order — subscription shop prototype</title>
+  <link rel="stylesheet" href="../layout.css" />
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --surface: #ffffff;
+      --fg: #17181b;
+      --muted: #676b73;
+      --border: #e1e3e8;
+      --accent: #1f6f5f;
+      --accent-ink: #ffffff;
+      --danger: #b4231f;
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+      --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+      --radius: 10px;
+      --space-1: 8px; --space-2: 16px; --space-3: 24px; --space-4: 32px; --space-5: 48px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 var(--font-body); }
+    body { min-width: 1024px; }
+    button, input, select { font: inherit; color: inherit; }
+    a { color: inherit; }
+
+    /* App shell on a 1440 canvas: fixed sidebar, content column that grows with its content. */
+    .app { max-width: 1440px; margin: 0 auto; display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100dvh; }
+    .sidebar { border-right: 1px solid var(--border); padding: var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: var(--space-4); }
+    .brand { font-family: var(--font-display); font-size: 22px; letter-spacing: -0.01em; }
+    .nav { display: grid; gap: 4px; }
+    .nav button { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); width: 100%; text-align: left; padding: 10px 12px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+    .nav button:hover { background: color-mix(in oklch, var(--fg) 6%, transparent); }
+    .nav button[aria-current="page"] { background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); font-weight: 600; }
+    .badge { font: 600 12px/1 var(--font-mono); background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 4px 8px; min-width: 24px; text-align: center; }
+    .screen { padding: var(--space-5) var(--space-5) var(--space-5); display: grid; gap: var(--space-4); align-content: start; }
+    .screen-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-3); }
+    h1, h2, h3 { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.015em; margin: 0; text-wrap: balance; }
+    h1 { font-size: 40px; line-height: 1.1; }
+    h2 { font-size: 24px; line-height: 1.2; }
+    .lead { color: var(--muted); max-width: 60ch; margin: 6px 0 0; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; white-space: nowrap; }
+    .btn:hover { border-color: color-mix(in oklch, var(--fg) 30%, var(--border)); }
+    .btn:focus-visible, .nav button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn-primary { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--fg) 88%, var(--surface)); }
+    .btn-danger { color: var(--danger); }
+    .btn[disabled] { opacity: .5; cursor: not-allowed; }
+    .btn-icon { min-width: 44px; padding: 0; }
+
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); position: relative; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3); display: grid; gap: var(--space-2); text-align: left; cursor: pointer; }
+    .card:hover { border-color: color-mix(in oklch, var(--fg) 30%, var(--border)); }
+    .swatch { aspect-ratio: 4 / 3; border-radius: 8px; display: grid; place-items: center; color: var(--surface); font: 500 28px/1 var(--font-display); }
+    .card-title { font-weight: 600; }
+    .meta { color: var(--muted); font-size: 14px; }
+    .price { font-family: var(--font-mono); font-size: 15px; }
+    .chips { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+    .chip { font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); }
+    .chip[aria-pressed="true"] { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+
+    .detail { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 4fr); gap: var(--space-5); align-items: start; }
+    .detail .swatch { aspect-ratio: 1; font-size: 64px; }
+    .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px var(--space-3); font-size: 15px; }
+    .facts dt { color: var(--muted); }
+    .facts dd { margin: 0; }
+    .qty { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .qty button { min-width: 44px; min-height: 44px; border: 0; background: transparent; cursor: pointer; }
+    .qty span { min-width: 40px; text-align: center; font-family: var(--font-mono); }
+
+    .list { display: grid; gap: var(--space-2); position: relative; }
+    .row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto auto; gap: var(--space-2); align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2); }
+    .row .swatch { aspect-ratio: 1; font-size: 20px; border-radius: 6px; }
+    .summary { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3); display: grid; gap: var(--space-2); max-width: 420px; }
+    .summary-line { display: flex; justify-content: space-between; gap: var(--space-2); }
+    .summary-total { font-weight: 600; font-size: 18px; border-top: 1px solid var(--border); padding-top: var(--space-2); }
+
+    .form { display: grid; gap: var(--space-3); max-width: 560px; }
+    .field { display: grid; gap: 6px; }
+    .field label { font-weight: 600; font-size: 14px; }
+    .field input, .field select { min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .field input[aria-invalid="true"] { border-color: var(--danger); }
+    .error { color: var(--danger); font-size: 14px; }
+    .hint { color: var(--muted); font-size: 14px; }
+
+    .empty, .notice { background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); padding: var(--space-5); text-align: center; display: grid; gap: var(--space-2); justify-items: center; }
+    .notice-error { border-style: solid; border-color: color-mix(in oklch, var(--danger) 40%, var(--border)); }
+    .skeleton { height: 96px; border-radius: var(--radius); background: color-mix(in oklch, var(--fg) 7%, transparent); animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .45; } }
+
+    .orders { display: grid; gap: var(--space-2); }
+    .order { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
+    .status { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: color-mix(in oklch, var(--fg) 8%, transparent); }
+    .status-shipped { background: color-mix(in oklch, var(--accent) 16%, transparent); color: var(--accent); }
+
+    /* Overlay panels: the runtime positions and animates them; the product styles them. */
+    .od-panel-inner.sheet { background: var(--surface); border-radius: 16px 16px 0 0; padding: var(--space-3) var(--space-4) var(--space-4); width: 100%; max-width: 640px; margin: 0 auto; display: grid; gap: var(--space-3); }
+    .od-panel-inner.modal { background: var(--surface); border-radius: 14px; padding: var(--space-4); width: min(440px, 100%); display: grid; gap: var(--space-3); }
+    .od-panel-inner .panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+    .od-panel-inner .panel-actions { display: flex; justify-content: flex-end; gap: var(--space-1); }
+    .od-toast { background: var(--fg); color: var(--surface); padding: 10px 16px; border-radius: 999px; font-size: 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+    .od-toast-error { background: var(--danger); }
+  </style>
+</head>
+<body>
+  <div id="app" class="app">
+    <aside class="sidebar">
+      <div class="brand">Standing Order</div>
+      <nav class="nav" aria-label="Sections">
+        <button type="button" @click="$go('catalog')" :aria-current="store.route.name === 'catalog' || store.route.name === 'detail' ? 'page' : null">Catalog</button>
+        <button type="button" @click="$go('cart')" :aria-current="store.route.name === 'cart' || store.route.name === 'checkout' ? 'page' : null">
+          <span>Cart</span>
+          <span class="badge" v-if="cartCount > 0">{{ cartCount }}</span>
+        </button>
+        <button type="button" @click="$go('orders')" :aria-current="store.route.name === 'orders' ? 'page' : null">
+          <span>Orders</span>
+          <span class="badge" v-if="store.data.orders.length > 0">{{ store.data.orders.length }}</span>
+        </button>
+      </nav>
+      <p class="meta">Signed in as {{ store.data.customer.name }}</p>
+    </aside>
+
+    <od-router></od-router>
+
+    <od-overlay name="filters" kind="sheet" label="Filter roasts" v-slot="{ close }">
+      <div class="od-panel-inner sheet">
+        <div class="panel-head">
+          <h2>Filter roasts</h2>
+          <button type="button" class="btn btn-icon" aria-label="Close" @click="close">×</button>
+        </div>
+        <div class="chips" role="group" aria-label="Roast level">
+          <button v-for="level in roastLevels" :key="level" type="button" class="chip" :aria-pressed="store.data.filters.roast === level ? 'true' : 'false'" @click="store.data.filters.roast = store.data.filters.roast === level ? null : level">{{ level }}</button>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn" @click="store.data.filters.roast = null">Clear</button>
+          <button type="button" class="btn btn-primary" @click="close">Show {{ filteredProducts.length }} roasts</button>
+        </div>
+      </div>
+    </od-overlay>
+
+    <od-overlay name="remove" kind="modal" label="Remove from cart" v-slot="{ payload, close }">
+      <div class="od-panel-inner modal">
+        <h2>Remove {{ payload ? payload.name : 'this item' }}?</h2>
+        <p class="meta">It leaves the cart now. You can add it again from the catalog.</p>
+        <div class="panel-actions">
+          <button type="button" class="btn" @click="close">Keep</button>
+          <button type="button" class="btn btn-danger" autofocus @click="$act('removeFromCart', payload.id); close(); $toast(payload.name + ' removed')">Remove</button>
+        </div>
+      </div>
+    </od-overlay>
+
+    <od-toasts></od-toasts>
+  </div>
+
+  <!-- Screens: one <template data-screen="…"> per screen, exactly one root element each. -->
+  <template data-screen="catalog">
+    <section class="screen" data-od-id="catalog">
+      <div class="screen-head">
+        <div>
+          <h1>Roasts this month</h1>
+          <p class="lead">Fresh-crop coffees roasted to order. Pick a bag, choose how often it ships, and change your mind any time.</p>
+        </div>
+        <button type="button" class="btn" @click="$open('filters')">Filter <span v-if="store.data.filters.roast">· {{ store.data.filters.roast }}</span></button>
+      </div>
+      <div v-if="filteredProducts.length === 0" class="empty">
+        <h2>No roasts match this filter</h2>
+        <p class="meta">Clear the filter to see every coffee in this month's list.</p>
+        <button type="button" class="btn" @click="store.data.filters.roast = null">Clear filter</button>
+      </div>
+      <transition-group v-else name="od-list" tag="div" class="grid">
+        <button v-for="product in filteredProducts" :key="product.id" type="button" class="card" @click="$go('detail', { id: product.id })">
+          <div class="swatch" :style="{ background: product.tone }">{{ product.name.slice(0, 1) }}</div>
+          <div class="od-stack" style="--od-gap: 2px">
+            <span class="card-title od-truncate">{{ product.name }}</span>
+            <span class="meta od-truncate">{{ product.origin }} · {{ product.roast }} roast</span>
+          </div>
+          <span class="price od-nowrap">${{ product.price.toFixed(2) }} / 250 g</span>
+        </button>
+      </transition-group>
+    </section>
+  </template>
+
+  <template data-screen="detail">
+    <section class="screen" data-od-id="detail">
+      <div>
+        <button type="button" class="btn" @click="$back('catalog')">← Back to roasts</button>
+      </div>
+      <div v-if="!currentProduct" class="empty">
+        <h2>This roast is no longer listed</h2>
+        <button type="button" class="btn" @click="$go('catalog')">See current roasts</button>
+      </div>
+      <div v-else class="detail">
+        <div class="swatch" :style="{ background: currentProduct.tone }">{{ currentProduct.name.slice(0, 1) }}</div>
+        <div class="od-stack" style="--od-gap: 24px">
+          <div>
+            <h1>{{ currentProduct.name }}</h1>
+            <p class="lead">{{ currentProduct.notes }}</p>
+          </div>
+          <dl class="facts">
+            <dt>Origin</dt><dd>{{ currentProduct.origin }}</dd>
+            <dt>Roast</dt><dd>{{ currentProduct.roast }}</dd>
+            <dt>Process</dt><dd>{{ currentProduct.process }}</dd>
+            <dt>Price</dt><dd class="price">${{ currentProduct.price.toFixed(2) }} per 250 g bag</dd>
+          </dl>
+          <div class="od-row" style="--od-gap: 16px">
+            <div class="qty" role="group" aria-label="Quantity">
+              <button type="button" aria-label="Fewer bags" @click="qty = Math.max(1, qty - 1)">−</button>
+              <span>{{ qty }}</span>
+              <button type="button" aria-label="More bags" @click="qty = Math.min(12, qty + 1)">+</button>
+            </div>
+            <button type="button" class="btn btn-primary" @click="$act('addToCart', currentProduct.id, qty); $toast(qty + ' × ' + currentProduct.name + ' added'); qty = 1">Add to cart</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </template>
+
+  <template data-screen="cart">
+    <section class="screen" data-od-id="cart">
+      <div class="screen-head">
+        <div>
+          <h1>Your cart</h1>
+          <p class="lead">{{ cartCount }} {{ cartCount === 1 ? 'bag' : 'bags' }} · ships {{ store.data.customer.cadence }}</p>
+        </div>
+      </div>
+      <div v-if="cartLines.length === 0" class="empty">
+        <h2>Nothing in the cart yet</h2>
+        <p class="meta">Add a roast from the catalog and it will show up here, with the total updated as you go.</p>
+        <button type="button" class="btn btn-primary" @click="$go('catalog')">Browse roasts</button>
+      </div>
+      <template v-else>
+        <transition-group name="od-list" tag="div" class="list">
+          <div v-for="line in cartLines" :key="line.id" class="row">
+            <div class="swatch" :style="{ background: line.product.tone }">{{ line.product.name.slice(0, 1) }}</div>
+            <div class="od-stack" style="--od-gap: 2px">
+              <span class="card-title od-truncate">{{ line.product.name }}</span>
+              <span class="meta od-truncate">{{ line.product.origin }}</span>
+            </div>
+            <div class="qty" role="group" :aria-label="'Quantity of ' + line.product.name">
+              <button type="button" aria-label="Fewer" @click="line.qty > 1 ? $act('setQty', line.id, line.qty - 1) : $open('remove', line.product)">−</button>
+              <span>{{ line.qty }}</span>
+              <button type="button" aria-label="More" @click="$act('setQty', line.id, line.qty + 1)">+</button>
+            </div>
+            <div class="od-row" style="--od-gap: 12px">
+              <span class="price od-nowrap">${{ (line.qty * line.product.price).toFixed(2) }}</span>
+              <button type="button" class="btn btn-icon" :aria-label="'Remove ' + line.product.name" @click="$open('remove', line.product)">×</button>
+            </div>
+          </div>
+        </transition-group>
+        <div class="summary">
+          <div class="summary-line"><span>Subtotal</span><span class="price">${{ subtotal.toFixed(2) }}</span></div>
+          <div class="summary-line"><span>Shipping</span><span class="price">{{ shipping === 0 ? 'Free' : '$' + shipping.toFixed(2) }}</span></div>
+          <div class="summary-line summary-total"><span>Total</span><span class="price">${{ total.toFixed(2) }}</span></div>
+          <button type="button" class="btn btn-primary" @click="$go('checkout')">Continue to checkout</button>
+        </div>
+      </template>
+    </section>
+  </template>
+
+  <template data-screen="checkout">
+    <section class="screen" data-od-id="checkout">
+      <div>
+        <button type="button" class="btn" @click="$back('cart')">← Back to cart</button>
+      </div>
+      <div class="screen-head">
+        <div>
+          <h1>Checkout</h1>
+          <p class="lead">One address, one card on file. The order total is {{ '$' + total.toFixed(2) }}.</p>
+        </div>
+      </div>
+      <form class="form" novalidate @submit.prevent="submitOrder">
+        <div class="field">
+          <label for="ship-name">Full name</label>
+          <input id="ship-name" v-model.trim="checkout.name" :aria-invalid="errors.name ? 'true' : 'false'" @blur="touched.name = true" autocomplete="name" />
+          <span v-if="errors.name" class="error" role="alert">{{ errors.name }}</span>
+        </div>
+        <div class="field">
+          <label for="ship-address">Street address</label>
+          <input id="ship-address" v-model.trim="checkout.address" :aria-invalid="errors.address ? 'true' : 'false'" @blur="touched.address = true" autocomplete="street-address" />
+          <span v-if="errors.address" class="error" role="alert">{{ errors.address }}</span>
+          <span v-else class="hint">Deliveries go out Tuesdays; a door code helps the courier.</span>
+        </div>
+        <div class="field">
+          <label for="ship-cadence">Ship every</label>
+          <select id="ship-cadence" v-model="store.data.customer.cadence">
+            <option value="every 2 weeks">2 weeks</option>
+            <option value="every 4 weeks">4 weeks</option>
+            <option value="once">Just once</option>
+          </select>
+        </div>
+        <div v-if="$status('checkout') === 'error'" class="notice notice-error" role="alert">
+          <strong>We couldn't place the order.</strong>
+          <span class="meta">{{ $error('checkout') }}</span>
+        </div>
+        <div class="od-row" style="--od-gap: 12px">
+          <button type="submit" class="btn btn-primary" :disabled="$status('checkout') === 'loading' || cartLines.length === 0">
+            {{ $status('checkout') === 'loading' ? 'Placing order…' : 'Place order · $' + total.toFixed(2) }}
+          </button>
+          <span v-if="cartLines.length === 0" class="hint">Your cart is empty.</span>
+        </div>
+      </form>
+    </section>
+  </template>
+
+  <template data-screen="orders">
+    <section class="screen" data-od-id="orders">
+      <div class="screen-head">
+        <div>
+          <h1>Orders</h1>
+          <p class="lead">Every order placed in this prototype appears here, newest first.</p>
+        </div>
+      </div>
+      <div v-if="$status('orders') === 'loading'" class="orders" aria-busy="true">
+        <div class="skeleton"></div><div class="skeleton"></div>
+      </div>
+      <div v-else-if="store.data.orders.length === 0" class="empty">
+        <h2>No orders yet</h2>
+        <p class="meta">Place your first order and it will land here with its ship date.</p>
+        <button type="button" class="btn btn-primary" @click="$go('catalog')">Browse roasts</button>
+      </div>
+      <transition-group v-else name="od-list" tag="div" class="orders">
+        <div v-for="order in store.data.orders" :key="order.id" class="order">
+          <div class="od-stack" style="--od-gap: 2px">
+            <span class="card-title od-truncate">{{ order.summary }}</span>
+            <span class="meta">{{ order.placedAt }} · ships {{ order.shipsOn }}</span>
+          </div>
+          <span class="price od-nowrap">${{ order.total.toFixed(2) }}</span>
+          <span class="status" :class="{ 'status-shipped': order.status === 'Shipped' }">{{ order.status }}</span>
+        </div>
+      </transition-group>
+    </section>
+  </template>
+
+  <script src="./vue.global.prod.js"></script>
+  <script src="./od-proto.js"></script>
+  <script>
+    // Fixtures: one content table, several scenarios. Screens read only from the store.
+    var PRODUCTS = [
+      { id: 'p1', name: 'Kirinyaga Peaberry', origin: 'Kenya', roast: 'Light', process: 'Washed', price: 21.00, tone: '#8a3b2f', notes: 'Blackcurrant, grapefruit, and a long brown-sugar finish. Bright without being sharp.' },
+      { id: 'p2', name: 'Huila Reserve', origin: 'Colombia', roast: 'Medium', process: 'Washed', price: 18.50, tone: '#6b4a2b', notes: 'Red apple and caramel with a round body. The house pour-over.' },
+      { id: 'p3', name: 'Yirgacheffe Lot 4', origin: 'Ethiopia', roast: 'Light', process: 'Natural', price: 22.00, tone: '#a3562a', notes: 'Jasmine, peach, and honey. Best as a slow filter brew.' },
+      { id: 'p4', name: 'Antigua Dark', origin: 'Guatemala', roast: 'Dark', process: 'Washed', price: 17.00, tone: '#3e2a22', notes: 'Cocoa, toasted nut, and a dense syrupy body. Built for espresso and milk.' },
+      { id: 'p5', name: 'Sidamo Decaf', origin: 'Ethiopia', roast: 'Medium', process: 'Sugarcane EA', price: 19.50, tone: '#7d5f3b', notes: 'Milk chocolate and dried fig. A decaf that tastes like the coffee it came from.' },
+      { id: 'p6', name: 'Cerrado Estate', origin: 'Brazil', roast: 'Medium', process: 'Pulped natural', price: 16.00, tone: '#5a3d2e', notes: 'Hazelnut and molasses, low acidity. The everyday batch-brew bag.' }
+    ];
+    window.odFixtures = {
+      default: 'default',
+      scenarios: {
+        default: {
+          label: 'Returning customer',
+          data: {
+            customer: { name: 'Maya Okafor', cadence: 'every 4 weeks' },
+            products: PRODUCTS,
+            filters: { roast: null },
+            cart: [{ id: 'c1', productId: 'p2', qty: 2 }],
+            orders: [
+              { id: 'o1', summary: '2 × Huila Reserve', total: 37.00, placedAt: 'Aug 14', shipsOn: 'Aug 19', status: 'Shipped' },
+              { id: 'o2', summary: '1 × Kirinyaga Peaberry, 1 × Antigua Dark', total: 38.00, placedAt: 'Jul 17', shipsOn: 'Jul 22', status: 'Shipped' }
+            ]
+          }
+        },
+        empty: {
+          label: 'New customer',
+          data: {
+            customer: { name: 'Jonas Lindqvist', cadence: 'every 4 weeks' },
+            products: PRODUCTS,
+            filters: { roast: null },
+            cart: [],
+            orders: []
+          }
+        },
+        heavy: {
+          label: 'Long names, big cart',
+          data: {
+            customer: { name: 'Anantharaman Venkatasubramanian', cadence: 'every 2 weeks' },
+            products: PRODUCTS.map(function (product) {
+              return Object.assign({}, product, { name: product.name + ' — Competition Lot, 2026 Harvest, Anaerobic Fermentation Trial' });
+            }),
+            filters: { roast: null },
+            cart: PRODUCTS.map(function (product, index) { return { id: 'c' + index, productId: product.id, qty: 3 + index }; }),
+            orders: []
+          }
+        },
+        error: {
+          label: 'Checkout fails',
+          failRequests: true,
+          latency: 900,
+          data: {
+            customer: { name: 'Maya Okafor', cadence: 'every 4 weeks' },
+            products: PRODUCTS,
+            filters: { roast: null },
+            cart: [{ id: 'c1', productId: 'p3', qty: 1 }],
+            orders: []
+          }
+        }
+      }
+    };
+
+    odProto.boot({
+      el: '#app',
+      start: 'catalog',
+      actions: {
+        addToCart: function (data, productId, qty) {
+          var line = data.cart.find(function (entry) { return entry.productId === productId; });
+          if (line) line.qty += qty; else data.cart.push({ id: 'c' + Date.now(), productId: productId, qty: qty });
+        },
+        setQty: function (data, lineId, qty) {
+          var line = data.cart.find(function (entry) { return entry.id === lineId; });
+          if (line) line.qty = Math.max(1, Math.min(12, qty));
+        },
+        removeFromCart: function (data, productId) {
+          data.cart = data.cart.filter(function (entry) { return entry.productId !== productId; });
+        },
+        placeOrder: function (data, total) {
+          var summary = data.cart.map(function (entry) {
+            var product = data.products.find(function (item) { return item.id === entry.productId; });
+            return entry.qty + ' × ' + (product ? product.name : 'roast');
+          }).join(', ');
+          data.orders.unshift({ id: 'o' + Date.now(), summary: summary, total: total, placedAt: 'Today', shipsOn: 'Tuesday', status: 'Processing' });
+          data.cart = [];
+        }
+      },
+      data: function () {
+        return {
+          qty: 1,
+          roastLevels: ['Light', 'Medium', 'Dark'],
+          checkout: { name: '', address: '' },
+          touched: { name: false, address: false }
+        };
+      },
+      computed: {
+        filteredProducts: function () {
+          var roast = this.store.data.filters.roast;
+          return this.store.data.products.filter(function (product) { return !roast || product.roast === roast; });
+        },
+        currentProduct: function () {
+          var id = this.store.route.params.id;
+          return this.store.data.products.find(function (product) { return product.id === id; }) || null;
+        },
+        cartLines: function () {
+          var products = this.store.data.products;
+          return this.store.data.cart.map(function (entry) {
+            return { id: entry.id, qty: entry.qty, product: products.find(function (product) { return product.id === entry.productId; }) };
+          }).filter(function (line) { return line.product; });
+        },
+        cartCount: function () { return this.cartLines.reduce(function (sum, line) { return sum + line.qty; }, 0); },
+        subtotal: function () { return this.cartLines.reduce(function (sum, line) { return sum + line.qty * line.product.price; }, 0); },
+        shipping: function () { return this.subtotal >= 40 || this.subtotal === 0 ? 0 : 6.00; },
+        total: function () { return this.subtotal + this.shipping; },
+        errors: function () {
+          var errors = {};
+          if (this.touched.name && this.checkout.name.length < 2) errors.name = 'Enter the name the parcel should be addressed to.';
+          if (this.touched.address && this.checkout.address.length < 6) errors.address = 'Enter a street address so the courier can find you.';
+          return errors;
+        }
+      },
+      methods: {
+        submitOrder: function () {
+          var self = this;
+          self.touched.name = true;
+          self.touched.address = true;
+          if (Object.keys(self.errors).length > 0) return;
+          var total = self.total;
+          self.$run('checkout', function () { return self.$fake({ delay: 900 }); }).then(function () {
+            self.$act('placeOrder', total);
+            self.$toast('Order placed · ships Tuesday');
+            self.$go('orders');
+          }).catch(function () { /* the error state renders inline on the form */ });
+        }
+      }
+    });
+  </script>
+</body>
+</html>

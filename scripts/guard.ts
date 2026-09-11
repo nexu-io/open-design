@@ -230,6 +230,12 @@ const residualAllowedPathPatterns: RegExp[] = [
   // assets are vendored runtime, never project-owned code, and must
   // not be retypecasted to TypeScript.
   /^plugins\/_official\/examples\/[^/]+\/(assets|references)\/.+$/,
+  // OD Next prototype task-profile runtime: the vendored Vue 3 global build
+  // (MIT) and the OD thin layer the daemon stages into `.od-frames/runtime/`
+  // for the agent to copy into the generated prototype. Both are browser-
+  // loadable runtime assets that ship inside the artifact, never project code,
+  // and must not be retypecast to TypeScript.
+  /^plugins\/_official\/scenarios\/od-next-strategy\/assets\/task-profiles\/prototype\/runtime\/[^/]+\.js$/,
 ];
 
 function isResidualAllowedPath(repositoryPath: string): boolean {

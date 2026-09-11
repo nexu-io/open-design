@@ -40,6 +40,11 @@ const SHELLS = [
   { path: './assets/task-profiles/prototype/notes.md', text: 'not a shell' },
 ];
 const PRIMITIVES = { path: './assets/task-profiles/prototype/layout.css', text: '/* OD-LAYOUT-PRIMITIVES v1 */\n@layer od-layout { .od-stack { display: flex; } }\n/* /OD-LAYOUT-PRIMITIVES v1 */\n' };
+const RUNTIME = [
+  { path: './assets/task-profiles/prototype/runtime/vue.global.prod.js', text: 'var Vue = {};' },
+  { path: './assets/task-profiles/prototype/runtime/od-proto.js', text: '/* OD-PROTO-RUNTIME v1 */' },
+  { path: './assets/task-profiles/prototype/runtime/example.html', text: '<!doctype html><title>example</title>' },
+];
 
 describe('materializeOdNextDeviceFrames', () => {
   it('stages the shells under .od-frames, records ownership, and leaves unrelated files alone', async () => {
@@ -203,6 +208,42 @@ describe('materializeOdNextDeviceFrames', () => {
     await expect(lstat(path.join(cwd, '.od-frames', 'layout.css'))).rejects.toThrow();
   });
 
+  it('stages the prototype runtime one directory down under the same ownership record', async () => {
+    const cwd = await projectDir();
+    const result = await materializeOdNextDeviceFrames({ cwd, resources: [...SHELLS, PRIMITIVES, ...RUNTIME] });
+    expect(result.staged).toEqual([
+      '.od-frames/android.html',
+      '.od-frames/iphone.html',
+      '.od-frames/layout.css',
+      '.od-frames/neutral.html',
+      '.od-frames/runtime/example.html',
+      '.od-frames/runtime/od-proto.js',
+      '.od-frames/runtime/vue.global.prod.js',
+    ]);
+    expect(await readFile(path.join(cwd, '.od-frames', 'runtime', 'od-proto.js'), 'utf8')).toBe(RUNTIME[1]!.text);
+    const manifest = JSON.parse(await readFile(path.join(cwd, '.od-frames', OD_NEXT_DEVICE_FRAME_MANIFEST), 'utf8'));
+    expect(Object.keys(manifest.files).sort()).toEqual([
+      'android.html',
+      'iphone.html',
+      'layout.css',
+      'neutral.html',
+      'runtime/example.html',
+      'runtime/od-proto.js',
+      'runtime/vue.global.prod.js',
+    ]);
+    // A runtime file the user edited is handed back like a shell; the others
+    // are refreshed, and a file the package stopped shipping is retired.
+    await writeFile(path.join(cwd, '.od-frames', 'runtime', 'od-proto.js'), 'edited by the user');
+    const again = await materializeOdNextDeviceFrames({
+      cwd,
+      resources: [...SHELLS, PRIMITIVES, RUNTIME[0]!, RUNTIME[1]!],
+    });
+    expect(again.skipped).toEqual(['.od-frames/runtime/od-proto.js']);
+    expect(again.staged).toContain('.od-frames/runtime/vue.global.prod.js');
+    expect(await readFile(path.join(cwd, '.od-frames', 'runtime', 'od-proto.js'), 'utf8')).toBe('edited by the user');
+    await expect(lstat(path.join(cwd, '.od-frames', 'runtime', 'example.html'))).rejects.toThrow();
+  });
+
   it('is a no-op without shells and refuses a symlinked staging root', async () => {
     const cwd = await projectDir();
     expect(await materializeOdNextDeviceFrames({ cwd, resources: [SHELLS[3]!] })).toEqual({ staged: [], skipped: [] });
@@ -240,6 +281,9 @@ describe('loadOdNextTaskResourcesForSnapshot', () => {
       'android.html',
       'neutral.html',
       'layout.css',
+      'vue.global.prod.js',
+      'od-proto.js',
+      'example.html',
     ]);
 
     expect(await loadOdNextTaskResourcesForSnapshot({

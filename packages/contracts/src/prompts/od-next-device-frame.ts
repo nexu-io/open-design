@@ -50,16 +50,51 @@ export const OD_NEXT_DEVICE_SHELL_MARKER = 'data-phone-shell' as const;
 export const OD_NEXT_LAYOUT_PRIMITIVES_FILE = 'layout.css' as const;
 export const OD_NEXT_LAYOUT_PRIMITIVES_MARKER = 'OD-LAYOUT-PRIMITIVES v1' as const;
 
-/** Every file name the daemon may stage under {@link OD_NEXT_DEVICE_FRAME_ROOT}. */
+/**
+ * Behaviour runtime the prototype profile ships beside the shells: the Vue 3
+ * global build, the OD thin layer (hash router with screen transitions,
+ * overlay manager, reactive store with named scenarios, toasts, fake requests,
+ * list transitions), and one worked example a Build reads before its first
+ * prototype. Staged under {@link OD_NEXT_DEVICE_FRAME_ROOT}/`runtime/` and
+ * never quoted into the prompt: the rule card carries the API, the files stay
+ * on disk for the Build to copy into the project.
+ */
+export const OD_NEXT_RUNTIME_DIR = 'runtime' as const;
+export const OD_NEXT_RUNTIME_FILES: ReadonlyArray<string> = [
+  'vue.global.prod.js',
+  'od-proto.js',
+  'example.html',
+];
+export const OD_NEXT_RUNTIME_MARKER = 'OD-PROTO-RUNTIME v1' as const;
+
+/**
+ * Every project-relative name (under {@link OD_NEXT_DEVICE_FRAME_ROOT}) the
+ * daemon may stage. Shells and the layout stylesheet sit at the root; runtime
+ * files sit one directory down so the agent-facing path reads as what it is.
+ */
 export const OD_NEXT_MANAGED_RESOURCE_FILES: ReadonlyArray<string> = [
   ...Object.values(OD_NEXT_DEVICE_FRAME_FILES),
   OD_NEXT_LAYOUT_PRIMITIVES_FILE,
+  ...OD_NEXT_RUNTIME_FILES.map((name) => `${OD_NEXT_RUNTIME_DIR}/${name}`),
 ];
 
-/** Basename of a task resource when it is one the daemon stages, else null. */
+/**
+ * Project-relative name (under the staging root) of a task resource when it is
+ * one the daemon stages, else null. Runtime files are recognised by their
+ * `runtime/` parent so a same-named file elsewhere in the package is not
+ * mistaken for one.
+ */
 export function odNextManagedResourceName(resourcePath: string): string | null {
-  const basename = resourcePath.split('/').pop() ?? '';
-  return OD_NEXT_MANAGED_RESOURCE_FILES.includes(basename) ? basename : null;
+  const segments = resourcePath.split('/');
+  const basename = segments.pop() ?? '';
+  const parent = segments.pop() ?? '';
+  if (parent === OD_NEXT_RUNTIME_DIR && OD_NEXT_RUNTIME_FILES.includes(basename)) {
+    return `${OD_NEXT_RUNTIME_DIR}/${basename}`;
+  }
+  if (Object.values(OD_NEXT_DEVICE_FRAME_FILES).includes(basename) || basename === OD_NEXT_LAYOUT_PRIMITIVES_FILE) {
+    return basename;
+  }
+  return null;
 }
 
 /** The layout primitives stylesheet out of the task profile's resources, if shipped. */
