@@ -16,6 +16,28 @@ function withTimeout(promise, timeoutMs, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
+async function waitForChildExit(child, timeoutMs) {
+  if (child.exitCode != null || child.signalCode != null) return;
+  await Promise.race([
+    new Promise((resolve) => child.once("exit", resolve)),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
+async function removeDirectoryWithRetries(directory) {
+  let lastError;
+  for (let attempt = 0; attempt < 7; attempt += 1) {
+    try {
+      await fs.promises.rm(directory, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 6) await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 class CdpConnection {
   constructor(url) {
     this.url = url;
@@ -85,6 +107,77 @@ class CdpConnection {
   }
 }
 
+class DaemonCdpConnection {
+  constructor(endpoint) {
+    this.endpoint = endpoint;
+    this.listeners = new Map();
+    this.closed = false;
+    this.after = 0;
+    this.pollController = new AbortController();
+    this.ready = Promise.resolve();
+    this.#poll().catch(() => {});
+  }
+
+  async send(method, params = {}, timeoutMs = COMMAND_TIMEOUT_MS) {
+    if (this.closed) throw new Error("CDP connection closed");
+    const response = await withTimeout(fetch(`${this.endpoint}/commands`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ method, params }),
+    }), timeoutMs, method);
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`daemon CDP command failed: HTTP ${response.status}${detail ? ` ${detail}` : ""}`);
+    }
+    const payload = await response.json();
+    return payload.result || {};
+  }
+
+  on(method, listener) {
+    const listeners = this.listeners.get(method) || new Set();
+    listeners.add(listener);
+    this.listeners.set(method, listeners);
+    return () => listeners.delete(listener);
+  }
+
+  close() {
+    this.closed = true;
+    this.pollController.abort();
+  }
+
+  async #poll() {
+    while (!this.closed) {
+      let response;
+      try {
+        response = await fetch(
+          `${this.endpoint}/events?after=${this.after}&timeout=20000`,
+          { signal: this.pollController.signal },
+        );
+      } catch (error) {
+        if (this.closed || error?.name === "AbortError") return;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        continue;
+      }
+      if (!response.ok) {
+        if (response.status === 404) return;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        continue;
+      }
+      const payload = await response.json();
+      for (const event of payload.events || []) {
+        this.after = Math.max(this.after, Number(event.sequence) || 0);
+        for (const listener of this.listeners.get(event.method) || []) {
+          try {
+            listener(event.params || {});
+          } catch {
+            // A consumer event handler must not break the broker poll.
+          }
+        }
+      }
+    }
+  }
+}
+
 function normalizeResourceType(value = "other") {
   const lower = String(value).toLowerCase();
   return lower === "xhr" || lower === "fetch" ? lower : lower;
@@ -135,7 +228,7 @@ class CdpPage {
   constructor(browser, target, options) {
     this.browser = browser;
     this.target = target;
-    this.connection = new CdpConnection(target.webSocketDebuggerUrl);
+    this.connection = target.connection || new CdpConnection(target.webSocketDebuggerUrl);
     this.listeners = new Map();
     this.requests = new Map();
     this.finishedRequests = new Map();
@@ -424,7 +517,7 @@ class CdpPage {
 
   async close() {
     this.connection.close();
-    await fetch(`${this.browser.httpBase}/json/close/${this.target.id}`).catch(() => undefined);
+    await this.browser.closePage(this.target.id);
   }
 }
 
@@ -469,16 +562,32 @@ class CdpContext {
 }
 
 class SystemBrowser {
-  constructor(child, profileDir, browserSocketUrl, closeRemote = null) {
+  constructor(child, profileDir, browserSocketUrl, closeRemote = null, remoteEndpoint = null) {
     this.child = child;
     this.profileDir = profileDir;
     this.closeRemote = closeRemote;
-    const socket = new URL(browserSocketUrl);
-    this.httpBase = `http://${socket.host}`;
+    this.remoteEndpoint = remoteEndpoint;
+    if (browserSocketUrl) {
+      const socket = new URL(browserSocketUrl);
+      this.httpBase = `http://${socket.host}`;
+    } else {
+      this.httpBase = null;
+    }
     this.closed = false;
   }
 
   async createPage(options = {}) {
+    if (this.remoteEndpoint) {
+      const response = await fetch(`${this.remoteEndpoint}/pages`, { method: "POST" });
+      if (!response.ok) throw new Error(`daemon target creation failed: HTTP ${response.status}`);
+      const payload = await response.json();
+      const target = payload.page;
+      if (!target?.id) throw new Error("daemon returned an invalid browser page");
+      target.connection = new DaemonCdpConnection(
+        `${this.remoteEndpoint}/pages/${encodeURIComponent(target.id)}`,
+      );
+      return CdpPage.create(this, target, options);
+    }
     const response = await fetch(`${this.httpBase}/json/new?${encodeURIComponent("about:blank")}`, { method: "PUT" });
     if (!response.ok) throw new Error(`Chrome target creation failed: HTTP ${response.status}`);
     const target = await response.json();
@@ -493,6 +602,14 @@ class SystemBrowser {
     return Promise.resolve(new CdpContext(this, options));
   }
 
+  async closePage(pageId) {
+    if (this.remoteEndpoint) {
+      await fetch(`${this.remoteEndpoint}/pages/${encodeURIComponent(pageId)}`, { method: "DELETE" }).catch(() => undefined);
+      return;
+    }
+    await fetch(`${this.httpBase}/json/close/${encodeURIComponent(pageId)}`).catch(() => undefined);
+  }
+
   async close() {
     if (this.closed) return;
     this.closed = true;
@@ -501,12 +618,12 @@ class SystemBrowser {
       return;
     }
     this.child.kill("SIGTERM");
-    await Promise.race([
-      new Promise((resolve) => this.child.once("exit", resolve)),
-      new Promise((resolve) => setTimeout(resolve, 2_000)),
-    ]);
-    if (this.child.exitCode == null) this.child.kill("SIGKILL");
-    fs.rmSync(this.profileDir, { recursive: true, force: true });
+    await waitForChildExit(this.child, 2_000);
+    if (this.child.exitCode == null && this.child.signalCode == null) {
+      this.child.kill("SIGKILL");
+      await waitForChildExit(this.child, 2_000);
+    }
+    await removeDirectoryWithRetries(this.profileDir);
   }
 }
 
@@ -520,10 +637,11 @@ async function connectOverDaemon({ daemonUrl, projectId }) {
   }
   const payload = await response.json();
   const session = payload.browserSession;
-  if (!session?.id || !session?.websocketUrl) throw new Error("daemon returned an invalid browser session");
-  return new SystemBrowser(null, null, session.websocketUrl, async () => {
+  if (!session?.id) throw new Error("daemon returned an invalid browser session");
+  const remoteEndpoint = `${endpoint}/${encodeURIComponent(session.id)}`;
+  return new SystemBrowser(null, null, null, async () => {
     await fetch(`${endpoint}/${encodeURIComponent(session.id)}`, { method: "DELETE" }).catch(() => undefined);
-  });
+  }, remoteEndpoint);
 }
 
 async function launchSystemBrowser({ executablePath }) {
@@ -531,8 +649,8 @@ async function launchSystemBrowser({ executablePath }) {
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-web-clone-browser-"));
   const child = spawn(executablePath, [
     "--headless=new",
+    "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=0",
-    "--remote-allow-origins=*",
     `--user-data-dir=${profileDir}`,
     "--no-first-run",
     "--no-default-browser-check",
@@ -555,9 +673,10 @@ async function launchSystemBrowser({ executablePath }) {
     child.stderr.on("data", inspect);
     child.once("error", reject);
     child.once("exit", (code) => reject(new Error(`System browser exited before CDP was ready (code ${code})`)));
-  }), 15_000, "system browser startup").catch((error) => {
+  }), 15_000, "system browser startup").catch(async (error) => {
     child.kill("SIGKILL");
-    fs.rmSync(profileDir, { recursive: true, force: true });
+    await waitForChildExit(child, 2_000);
+    await removeDirectoryWithRetries(profileDir);
     throw error;
   });
 
