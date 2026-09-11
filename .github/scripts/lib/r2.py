@@ -9,6 +9,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
@@ -120,14 +121,17 @@ class R2Client:
         }, body)
         self._put(request, key)
 
-    def _request(self, key, method, payload_hash, extra_headers=None, body=None):
-        if not key or any(part in {"", ".", ".."} for part in key.split("/")) or "\\" in key or any(ord(c) < 32 or ord(c) == 127 for c in key):
+    def _request(self, key, method, payload_hash, extra_headers=None, body=None, *, query=None):
+        listing = key == "" and method == "GET" and query is not None and query.get("list-type") == "2"
+        if not listing and (not key or any(part in {"", ".", ".."} for part in key.split("/")) or "\\" in key or any(ord(c) < 32 or ord(c) == 127 for c in key)):
             raise R2Error("R2 object key must be a safe relative key")
         now = dt.datetime.now(dt.timezone.utc)
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
         date = now.strftime("%Y%m%d")
         canonical_uri = "/" + urllib.parse.quote(f"{self.bucket}/{key}", safe="/-_.~")
-        url = f"{self.endpoint}{canonical_uri}"
+        canonical_query = "&".join(f"{urllib.parse.quote(k, safe='-_.~')}={urllib.parse.quote(v, safe='-_.~')}"
+                                   for k, v in sorted((query or {}).items()))
+        url = f"{self.endpoint}{canonical_uri}" + (f"?{canonical_query}" if canonical_query else "")
         host = urllib.parse.urlparse(self.endpoint).netloc
         headers = {
             **(extra_headers or {}),
@@ -141,7 +145,7 @@ class R2Client:
         signed_headers = ";".join(sorted(headers))
         canonical_headers = "".join(f"{name}:{headers[name].strip()}\n" for name in sorted(headers))
         canonical_request = "\n".join(
-            [method, canonical_uri, "", canonical_headers, signed_headers, payload_hash]
+            [method, canonical_uri, canonical_query, canonical_headers, signed_headers, payload_hash]
         )
         scope = f"{date}/{self.region}/s3/aws4_request"
         string_to_sign = "\n".join(
@@ -162,6 +166,46 @@ class R2Client:
             f"SignedHeaders={signed_headers}, Signature={signature}"
         )
         return urllib.request.Request(url, data=body, headers=headers, method=method)
+
+    def inventory(self, *, prefix: str, max_pages: int = 5) -> dict:
+        """Bounded read-only prefix inventory. Incomplete counts are lower bounds."""
+        if not prefix.endswith("/") or not 1 <= max_pages <= 20:
+            raise R2Error("R2 inventory requires a directory prefix and bounded pages")
+        self._request(prefix[:-1], "HEAD", hashlib.sha256(b"").hexdigest())  # Validate, no request.
+        token, seen, count, size = None, set(), 0, 0
+        for page in range(1, max_pages + 1):
+            query = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
+            if token is not None:
+                query["continuation-token"] = token
+            request = self._request("", "GET", hashlib.sha256(b"").hexdigest(), query=query)
+            try:
+                with _open(request, timeout=self.timeout) as response:
+                    if response.status != 200:
+                        raise R2Error(f"R2 inventory returned HTTP {response.status}")
+                    body = response.read(2 * 1024 * 1024 + 1)
+                if len(body) > 2 * 1024 * 1024 or b"<!DOCTYPE" in body.upper():
+                    raise R2Error("R2 inventory response exceeds XML bounds")
+                root = ET.fromstring(body)
+                if root.tag.split("}")[-1] != "ListBucketResult":
+                    raise R2Error("R2 inventory response is not a listing")
+                for item in root.findall("{*}Contents"):
+                    key, length = item.findtext("{*}Key", ""), item.findtext("{*}Size", "")
+                    if not key.startswith(prefix) or not re.fullmatch(r"[0-9]+", length):
+                        raise R2Error("R2 inventory contains a foreign key or invalid size")
+                    count += 1
+                    size += int(length)
+                truncated = root.findtext("{*}IsTruncated")
+                if truncated not in {"true", "false"}:
+                    raise R2Error("R2 inventory lacks pagination state")
+                if truncated == "false":
+                    return {"objects": count, "bytes": size, "pages": page, "complete": True}
+                token = root.findtext("{*}NextContinuationToken")
+                if not token or token in seen:
+                    raise R2Error("R2 inventory pagination did not advance")
+                seen.add(token)
+            except (urllib.error.URLError, ET.ParseError) as error:
+                raise R2Error("R2 inventory read failed") from error
+        return {"objects": count, "bytes": size, "pages": max_pages, "complete": False}
 
     def _put(self, request, key):
         try:

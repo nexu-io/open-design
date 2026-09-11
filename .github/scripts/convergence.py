@@ -1750,6 +1750,39 @@ def self_check() -> None:
             raise ConfigError("convergence self-check produced nondeterministic product archives")
 
 
+def cache_inventory(client: R2Client, repository_id: int, workflow: str) -> dict:
+    """Observe reusable storage only, including previous policies/key layouts.
+
+    Workload caches are workflow-scoped, not channel-owned. Do not attribute
+    these bytes to a channel or enumerate the version-distribution bucket.
+    """
+    suffix = f"repos/{repository_id}/workflows/{require_identity(workflow, 'workflow')}/"
+    prefixes = [f"{kind}/{suffix}" for kind in
+                ("workload-products/v1", "workload-products/v2", "workload-results/v1")]
+    try:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            groups = list(executor.map(lambda prefix: client.inventory(prefix=prefix), prefixes))
+        return {"status": "observed", "complete": all(group["complete"] for group in groups),
+                "objects": sum(group["objects"] for group in groups),
+                "bytes": sum(group["bytes"] for group in groups), "prefixes": dict(zip(prefixes, groups))}
+    except Exception as error:
+        # Observation never changes cache admission, publication or deletion.
+        return {"status": "unavailable", "complete": False, "errorType": type(error).__name__}
+
+
+def cache_usage_report(before: dict, after: dict, repository_id: int, workflow: str) -> dict:
+    budget = 50 * 1024 ** 3
+    complete = before["complete"] and after["complete"]
+    size = after.get("bytes")
+    return {"schemaVersion": 1, "operation": "workflow.cache.usage", "repositoryId": repository_id,
+            "workflow": workflow, "scope": "workflow-all-policies", "budgetBytes": budget,
+            "budgetStatus": "review" if size is not None and size > budget else
+                            "within" if after["complete"] else "unknown",
+            "before": before, "after": after,
+            "observedGrowthBytes": after["bytes"] - before["bytes"] if complete else None,
+            "growthScope": "observation-window-including-concurrent-writers"}
+
+
 def publish_command(args: argparse.Namespace) -> int:
     storage = storage_config(required=True)
     origin = public_origin(storage["public_origin"])
@@ -1760,6 +1793,8 @@ def publish_command(args: argparse.Namespace) -> int:
     repository_id = candidate["repositoryId"]
     workflow = candidate["workflow"]
     policy = candidate["policy"]
+    observer = storage_client(storage, min(args.timeout, 3))
+    before = cache_inventory(observer, repository_id, workflow)
     promoted_products = 0
     for item in candidate["results"]:
         receipt = item["receipt"]
@@ -1809,6 +1844,12 @@ def publish_command(args: argparse.Namespace) -> int:
             if raced is None or not same_reusable_result(raced, receipt):
                 raise ConfigError(f"immutable workload result publication race differs: {key}")
             unchanged += 1
+    usage = cache_usage_report(before, cache_inventory(observer, repository_id, workflow), repository_id, workflow)
+    write_json_atomic(args.output_dir / "cache-usage.json", usage)
+    append_summary("### Reusable workload cache capacity\n\n"
+                   "Workflow scope, all policies; not a channel total. Version distribution objects excluded.\n\n"
+                   "50 GiB is a review signal, never a deletion/eviction gate. Incomplete scans are lower bounds; "
+                   "growth includes concurrent writers.\n\n```json\n" + json.dumps(usage, sort_keys=True, indent=2) + "\n```")
     print(
         json.dumps(
             {"promotedProducts": promoted_products, "published": published, "unchanged": unchanged},

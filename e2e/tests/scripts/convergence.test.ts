@@ -339,6 +339,60 @@ else: raise AssertionError('followed authenticated redirect')
     expect(spawnSync("python3", ["-c", code, path.join(repoRoot, ".github/scripts")], { encoding: "utf8" }))
       .toMatchObject({ status: 0, stderr: "" });
   });
+  test("reports bounded cache inventory without mixing version objects or changing publication gates", () => {
+    const code = `
+import sys,io,urllib.parse
+from unittest.mock import patch
+sys.path.insert(0,sys.argv[1])
+import convergence as c
+import lib.r2 as r
+client=r.R2Client(endpoint='https://storage.invalid',bucket='plan',credentials=r.R2Credentials('ak','sk'))
+class Response(io.BytesIO):
+ status=200
+def page(key='cache/a',size='7',truncated='false',token=''):
+ return Response(('<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Contents><Key>'+key+'</Key><Size>'+size+'</Size></Contents><IsTruncated>'+truncated+'</IsTruncated><NextContinuationToken>'+token+'</NextContinuationToken></ListBucketResult>').encode())
+requests=[]
+def opening(request,timeout):
+ requests.append(request)
+ assert request.method=='GET' and request.get_header('Authorization')
+ return page(truncated='true',token='a+/=') if len(requests)==1 else page('cache/b','11')
+with patch.object(r,'_open',side_effect=opening):
+ assert client.inventory(prefix='cache/')=={'objects':2,'bytes':18,'pages':2,'complete':True}
+ assert 'continuation-token=a%2B%2F%3D' in requests[1].full_url
+ assert urllib.parse.parse_qs(urllib.parse.urlparse(requests[1].full_url).query)['prefix']==['cache/']
+with patch.object(r,'_open',side_effect=lambda *a,**k:page(truncated='true',token='next')):
+ assert client.inventory(prefix='cache/',max_pages=1)=={'objects':1,'bytes':7,'pages':1,'complete':False}
+ try: client.inventory(prefix='cache/')
+ except r.R2Error: pass
+ else: raise AssertionError('accepted repeated pagination token')
+for key,size in [('versions/file','7'),('cache/a','-1')]:
+ with patch.object(r,'_open',side_effect=lambda *a,**k:page(key,size)):
+  try: client.inventory(prefix='cache/')
+  except r.R2Error: pass
+  else: raise AssertionError('accepted foreign or malformed inventory')
+prefixes=[]
+class Inventory:
+ def inventory(self,*,prefix):
+  prefixes.append(prefix)
+  return {'objects':1,'bytes':7,'pages':1,'complete':True}
+snapshot=c.cache_inventory(Inventory(),42,'release-exact')
+assert snapshot['bytes']==21 and snapshot['objects']==3 and snapshot['complete']
+assert set(prefixes)=={p+'/repos/42/workflows/release-exact/' for p in ['workload-products/v1','workload-products/v2','workload-results/v1']}
+before={**snapshot,'bytes':10}
+report=c.cache_usage_report(before,snapshot,42,'release-exact')
+assert report['observedGrowthBytes']==11 and report['budgetStatus']=='within'
+assert report['scope']=='workflow-all-policies' and 'channel' not in report
+partial={**snapshot,'complete':False}
+assert c.cache_usage_report(before,partial,42,'release-exact')['budgetStatus']=='unknown'
+assert c.cache_usage_report(before,partial,42,'release-exact')['observedGrowthBytes'] is None
+assert c.cache_usage_report(before,{**partial,'bytes':51*1024**3},42,'release-exact')['budgetStatus']=='review'
+class Failed:
+ def inventory(self,**kwargs): raise r.R2Error('unavailable')
+assert c.cache_inventory(Failed(),42,'release-exact')=={'status':'unavailable','complete':False,'errorType':'R2Error'}
+`;
+    const result = spawnSync("python3", ["-c", code, path.join(repoRoot, ".github/scripts")], { encoding: "utf8" });
+    expect(result, result.stderr).toMatchObject({ status: 0, stderr: "" });
+  });
   test("reads independent cached results with bounded concurrency and stable ordering", () => {
     const code = `
 import sys, threading
