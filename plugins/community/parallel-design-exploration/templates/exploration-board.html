@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Subject Exploration</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;background:#f1efe9;color:#1c1c1a;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    a{color:inherit;text-decoration:none}
+    .pde-turn,.pde-baseline{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+    .pde-turn-head,.pde-baseline-head,.pde-option-head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+    .pde-turn-head,.pde-baseline-head{margin-bottom:20px}
+    .pde-turn-id,.pde-option-id,.pde-baseline-id{display:inline-flex;border-radius:5px;font:650 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+    .pde-turn-id{padding:4px 8px;background:#1c1c1a;color:#fff}
+    .pde-option-id,.pde-baseline-id{padding:4px 7px;background:rgba(0,0,0,.075)}
+    .pde-turn-title,.pde-baseline-title{font:650 13px/1.2 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .pde-options{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;overflow-x:auto;padding-bottom:4px}
+    .pde-option{flex:none;width:max-content;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+    .pde-option-head{color:rgba(0,0,0,.58);font:400 11px/1.3 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .pde-option-name{font-weight:600}
+    .pde-parent{color:rgba(0,0,0,.62)}
+    .pde-ref,.pde-parent{text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
+    .pde-design{overflow:hidden;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    .pde-turn:target .pde-turn-id,.pde-option:target .pde-option-id,.pde-baseline:target .pde-baseline-id{background:#2f6fd1;color:#fff}
+    .pde-next{margin:22px 0 0;color:rgba(0,0,0,.60);font:12px/1.5 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  </style>
+</head>
+<body>
+  <main class="pde-canvas">
+    <!-- On follow-up, insert the new pde-turn here as a local patch.
+         Previously delivered state subtrees remain untouched. -->
+    <section class="pde-turn" id="t1" data-turn="1">
+      <header class="pde-turn-head">
+        <a class="pde-turn-id" href="#t1">1</a>
+        <span class="pde-turn-title">What this turn explores</span>
+      </header>
+
+      <div class="pde-options">
+        <article class="pde-option" id="o-1a" data-option="1a">
+          <header class="pde-option-head">
+            <a class="pde-option-id" href="#o-1a">1a</a>
+            <span class="pde-option-name">Direction name</span>
+          </header>
+          <div class="pde-design" style="width:360px"><!-- Render the complete inline design here. --></div>
+        </article>
+
+        <article class="pde-option" id="o-1b" data-option="1b">
+          <header class="pde-option-head">
+            <a class="pde-option-id" href="#o-1b">1b</a>
+            <span class="pde-option-name">Direction name</span>
+          </header>
+          <div class="pde-design" style="width:360px"><!-- Render the complete inline design here. --></div>
+          <!-- Optional local explanation may sit here when useful. -->
+        </article>
+
+        <article class="pde-option" id="o-1c" data-option="1c">
+          <header class="pde-option-head">
+            <a class="pde-option-id" href="#o-1c">1c</a>
+            <span class="pde-option-name">Direction name</span>
+          </header>
+          <div class="pde-design" style="width:360px"><!-- Render the complete inline design here. --></div>
+        </article>
+      </div>
+
+      <p class="pde-next">Try next: “riff on <a class="pde-ref" href="#o-1b">1b</a>” · “combine <a class="pde-ref" href="#o-1a">1a</a> and <a class="pde-ref" href="#o-1c">1c</a>” · “explore a different axis”</p>
+    </section>
+
+    <!-- Optional oldest state when a reliable current design exists.
+    <section class="pde-baseline" id="baseline" data-baseline="0">
+      <header class="pde-baseline-head">
+        <a class="pde-baseline-id" href="#baseline">0</a>
+        <span class="pde-baseline-title">Baseline</span>
+      </header>
+      <div class="pde-design" style="width:360px">...faithful current design...</div>
+    </section>
+    -->
+  </main>
+</body>
+</html>
