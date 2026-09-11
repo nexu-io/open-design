@@ -16,6 +16,17 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("pairs accepted macOS sessions without duplicating first-start in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const first = workflow.split('- name: "[test] Install and exercise macOS Electron Shell"')[1]!.split("\n      - name:")[0]!;
+    const pair = workflow.split('- name: "[test] Installed Electron first start + hot update')[1]!.split("\n      - name:")[0]!;
+    expect(first).toContain("env.ELECTRON_ACCEPTANCE_MODE != 'hot'");
+    expect(pair).toContain("env.ELECTRON_ACCEPTANCE_MODE == 'hot'");
+    expect(pair).toContain("tools-release installation exercise-pair");
+    expect(pair).toContain('--baseline-artifact "$RUNNER_TEMP/baseline/baseline-shell-artifact.dmg"');
+    expect(workflow.indexOf("tools-release baseline fetch")).toBeLessThan(workflow.indexOf("tools-release installation exercise-pair"));
+    expect(workflow.indexOf("tools-release installation exercise-pair")).toBeLessThan(workflow.indexOf("tools-release installation collect"));
+  });
   it.each(["exact", "stable", "prerelease"])("names every job and step by operation in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const names = [...workflow.matchAll(/^ {4}name: (.+)$|^ {6}- name: (.+)$/gmu)];
@@ -533,12 +544,13 @@ describe("exact Electron release topology", () => {
   });
   it("cold-restarts after CDP hot update and delegates acceptance checks to tools-release", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
-    const hot = workflow.split("- name: \"[test] Exercise accepted macOS Shell through CDP hot update")[1]?.split("- name: \"[test] Install and exercise Windows Electron Shell")[0];
+    const hot = workflow.split("- name: \"[test] Installed Electron first start + hot update")[1]?.split("- name: \"[test] Install and exercise Windows Electron Shell")[0];
     expect(hot).toBeDefined();
-    expect(hot).toContain("tools-release installation exercise");
-    expect(hot).toContain("--mode hot");
+    expect(hot).toContain("tools-release installation exercise-pair");
+    expect(hot).not.toContain("--mode hot");
     expect(hot).toContain('--baseline-receipt "$RUNNER_TEMP/baseline/fetch-receipt.json"');
-    expect(hot).not.toContain('"$RUNNER_TEMP/public-shell-artifact.dmg"');
+    expect(hot).toContain('--artifact "$RUNNER_TEMP/public-shell-artifact.dmg"');
+    expect(hot).toContain('--baseline-artifact "$RUNNER_TEMP/baseline/baseline-shell-artifact.dmg"');
     expect(hot).not.toContain("python3");
     expect(hot).not.toContain("candidateVersion");
     expect(hot).toContain('CHANNEL: ${{ inputs.channel }}');

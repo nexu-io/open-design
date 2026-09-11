@@ -1581,7 +1581,7 @@ jobs:
           --artifact "$RUNNER_TEMP/public-shell-artifact.tar.gz" --work-root "$RUNNER_TEMP/installed-acceptance"
 
       - name: "[test] Install and exercise macOS Electron Shell"
-        if: ${{ matrix.shell == 'electron' && startsWith(matrix.target, 'darwin-') }}
+        if: ${{ matrix.shell == 'electron' && env.ELECTRON_ACCEPTANCE_MODE != 'hot' && startsWith(matrix.target, 'darwin-') }}
         shell: bash
         run: >-
           tools-release installation exercise
@@ -1612,16 +1612,17 @@ jobs:
             --source-commit "$SOURCE_SHA" --target "$TARGET" --output "$RUNNER_TEMP/baseline" \
             --receipt "$RUNNER_TEMP/baseline/fetch-receipt.json"
 
-      - name: "[test] Exercise accepted macOS Shell through CDP hot update"
+      - name: "[test] Installed Electron first start + hot update · isolated parallel sessions"
         if: ${{ matrix.shell == 'electron' && env.ELECTRON_ACCEPTANCE_MODE == 'hot' && startsWith(matrix.target, 'darwin-') }}
         env:
           CHANNEL: prerelease
         shell: bash
         run: >-
-          tools-release installation exercise
+          tools-release installation exercise-pair
           --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json"
-          --shell electron --target "${{ matrix.target }}" --mode hot
-          --artifact "$RUNNER_TEMP/baseline/baseline-shell-artifact.dmg" --work-root "$RUNNER_TEMP/installed-acceptance"
+          --shell electron --target "${{ matrix.target }}"
+          --artifact "$RUNNER_TEMP/public-shell-artifact.dmg" --work-root "$RUNNER_TEMP/installed-acceptance"
+          --baseline-artifact "$RUNNER_TEMP/baseline/baseline-shell-artifact.dmg"
           --baseline-receipt "$RUNNER_TEMP/baseline/fetch-receipt.json"
 
       - name: "[test] Install and exercise Windows Electron Shell"
