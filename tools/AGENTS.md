@@ -85,6 +85,18 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   holding both the stopped shared-resource guard and carrier session lease, and
   retaining runtime logs in the evidence workspace. Missing/mismatched ownership,
   live consumers, or retention failure preserve state; failed runs retain diagnosis.
+- `acceptance witness` retains actual installed evidence and authenticated
+  business content declarations; `acceptance acquire` consumes plan-projected
+  historical products or requires already-produced fresh credentials. Reused
+  credentials have operation `exact.acceptance.reuse`, retain original version
+  and update provenance, and have no current `installed` proof. Formal lanes
+  refuse them. Content declaration drift fails before activation; tools do not
+  recompute workload identity or implicitly run missing tests. Reuse preserves
+  the last physically tested installation baseline instead of relabeling it.
+- `distribution acquire` joins independent scene/base/toolchain acquisition
+  with fixed bounded fan-out, including on failure. It neither builds missing
+  inputs nor consumes plan state. Release-owned distribution stages separately
+  report installer integrity/publication and result retention, without secrets.
 - Experimental `baseline --mode candidate` is restricted to betahyx exact
   releases. It requires installed first-start evidence, marks that evidence as
   candidate-only and defers channel activation while advancing the test baseline

@@ -6,6 +6,7 @@ import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject }
 import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-product.ts";
 import { releaseObjects } from "./release-object.ts";
 import { publishArtifact } from "./publication-artifact.ts";
+import { distributionStage } from "./distribution-stage.ts";
 
 /** Reuse completed version-bound installer bytes, never an interrupted signing
  * workspace and never an installer from another release. */
@@ -30,7 +31,7 @@ export async function withDistributionResult(input: Readonly<{
       || ["result.json", "shell-contribution.json", "distribution-receipt.json"].includes(file)) throw new Error("Invalid completed installer name");
     return file;
   };
-  const existing = await objects.read(manifestName);
+  const existing = await distributionStage("result-lookup", () => objects.read(manifestName));
   if (existing != null) {
     const saved = JSON.parse(existing.toString("utf8")) as JsonObject;
     if (saved.schemaVersion !== 2 || saved.operation !== "exact.distribution.result"
@@ -48,13 +49,13 @@ export async function withDistributionResult(input: Readonly<{
   // A failed local assembly is not a resumable signed result. Require a fresh
   // output instead of allowing native assembly to erase prior signed bytes.
   await assertArtifactDestinationAbsent(input.output);
-  await input.build();
+  await distributionStage("native-assembly", input.build);
   // Native builders have different execution receipts. Their completed,
   // publication-facing contribution is the shared file-backed contract.
   const result = await readObject(join(input.output, "shell-contribution.json")), file = validate(result);
-  const path = await checkedFile(result.artifact, "Completed installer", join(input.output, file));
-  result.artifact.publication = await publishArtifact(input.policy, result.artifact, path);
-  await objects.create(manifestName, canonicalBytes({ schemaVersion: 2, operation: "exact.distribution.result", binding: input.binding, contribution: result }), "application/json");
+  const path = await distributionStage("installer-integrity", () => checkedFile(result.artifact, "Completed installer", join(input.output, file)));
+  result.artifact.publication = await distributionStage("installer-publication", () => publishArtifact(input.policy, result.artifact, path));
+  await distributionStage("result-publication", () => objects.create(manifestName, canonicalBytes({ schemaVersion: 2, operation: "exact.distribution.result", binding: input.binding, contribution: result }), "application/json"));
   await writeObject(join(input.output, "shell-contribution.json"), result);
   await writeObject(input.receipt, result);
   return result;

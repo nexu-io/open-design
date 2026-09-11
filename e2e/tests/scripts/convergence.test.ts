@@ -557,6 +557,36 @@ print('production evidence verified')
       .toContain("production evidence verified");
   });
 
+  test("admits installed witnesses only after their own exact-attempt job succeeds", () => {
+    const code = `
+import sys
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import convergence as c
+workflow=c.ConvergenceContract(Path(sys.argv[2]) / '.github/config/plan/release-exact.json').workflow('release-exact')
+identity='installed_electron_darwin_arm64'
+context={'repository':'nexu-io/open-design','run_id':12,'run_attempt':2,'head_sha':'a'*40}
+candidate={'results':[{'receipt':{'workload':'electron_base_darwin_arm64'}},{'receipt':{'workload':identity}}]}
+job={'name':workflow.result_jobs[identity],'run_id':12,'run_attempt':2,'head_sha':'a'*40,'status':'completed','conclusion':'success'}
+with patch.object(c,'api_json',return_value={'jobs':[job]}):
+    assert len(c.admit_result_jobs(candidate,workflow,context)['results'])==2
+invalids=[[],[job,job]]
+for key,value in [('run_id',13),('run_attempt',1),('head_sha','b'*40),('status','in_progress'),('conclusion','failure'),('conclusion','skipped'),('name','[test] Installed electron · darwin-arm64 · candidate baseline')]:
+    invalids.append([{**job,key:value}])
+for jobs in invalids:
+    with patch.object(c,'api_json',return_value={'jobs':jobs}):
+        assert c.admit_result_jobs(candidate,workflow,context)['results']==candidate['results'][:1]
+assert len(candidate['results'])==2
+for lane in ['stable','prerelease']:
+    formal=c.ConvergenceContract(Path(sys.argv[2]) / '.github/config/plan' / ('release-'+lane+'.json')).workflow('release-'+lane)
+    assert all(not formal.workloads[name].reusable for name in formal.result_jobs)
+print('installed witness admission verified')
+`;
+    expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript), repoRoot], { encoding: "utf8" }))
+      .toContain("installed witness admission verified");
+  });
+
   test("projects a mixed batch without leaking identities or changing independent decisions", () => {
     const fixture = createRepository();
     const code = `

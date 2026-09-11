@@ -89,7 +89,17 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
   when later delivery fails. Missing, duplicate, failed, skipped, foreign and
   prior-attempt jobs refuse. Cancelled/in-progress runs refuse; ordinary CI
   still requires whole-run success. This admission declaration does not change
-  workload hashing or turn release acceptance into a reusable test result.
+  workload hashing. Installed acceptance has separately declared
+  `admission.resultJobs`: the trusted consumer admits each such result only
+  after its own exact-attempt, same-SHA job succeeds. Failed, skipped, missing,
+  ambiguous and candidate-baseline jobs cannot publish installed witnesses;
+  unrelated successful production results remain admissible.
+- Experimental exact releases may reuse successful installed witnesses for
+  unchanged Shell/Capsule/Closure inputs. Formal stable/prerelease declarations
+  keep these workloads non-reusable. Python owns identities and miss-only
+  matrices; release tools consume ordinary evidence descriptors, preserve the
+  original installed version/update path, and never fabricate current installed
+  proof. Per-version signing, notarization and publication integrity still run.
 - Root `scripts/` remains for repo-level developer checks, product scripts, and guard/test logic. Do not move workflow-only handoff glue there just to make it look more general.
 
 New workflow-owned helpers should usually live under `.github/scripts/`. Prefer TypeScript for project-owned scripts in general, but Python is acceptable for small GitHub runner glue when stdlib portability and low setup cost matter. Keep such exceptions narrow and covered by `pnpm guard` policy.

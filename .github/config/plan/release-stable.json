@@ -377,11 +377,29 @@
       "packages/platform/",
       "packages/sidecar/",
       "packages/sidecar-proto/"
+    ],
+    "installed-acceptance": [
+      "suite://validation-control",
+      "suite://release-executor",
+      "tools/release/src/exact/acceptance*.ts",
+      "tools/release/src/exact/installed-acceptance.ts",
+      "tools/release/src/exact/installation-*.ts",
+      "tools/release/src/exact/control-release.ts",
+      "tools/release/tests/acceptance*.test.ts",
+      "tools/release/tests/installed-acceptance.test.ts",
+      "shells/electron/src/adapters/tools/lifecycle/",
+      "packages/electron-kit/src/cdp/"
     ]
   },
   "workflows": {
     "release-stable": {
-      "admission": { "productionJob": "[prepare] Release content · validated and signed" },
+      "admission": {
+        "productionJob": "[prepare] Release content · validated and signed",
+        "resultJobs": {
+          "installed_terminal_darwin_arm64": "[test] Installed terminal · darwin-arm64 · first start and update",
+          "installed_electron_darwin_arm64": "[test] Installed electron · darwin-arm64 · first start and update"
+        }
+      },
       "policy": "shell-scenes-v3",
       "workloads": {
         "electron_base_darwin_arm64": {
@@ -776,6 +794,71 @@
           "parameters": {
             "target": "darwin-arm64"
           }
+        },
+        "installed_terminal_darwin_arm64": {
+          "inputs": [
+            "suite://installed-acceptance"
+          ],
+          "runnerClass": "terminal_darwin_arm64",
+          "products": "manifest",
+          "reusable": false,
+          "dependsOn": [
+            "closure_data_community_pets_darwin_arm64",
+            "closure_data_craft_darwin_arm64",
+            "closure_data_design_systems_darwin_arm64",
+            "closure_data_design_templates_darwin_arm64",
+            "closure_data_frames_darwin_arm64",
+            "closure_data_plugin_previews_darwin_arm64",
+            "closure_data_plugins_darwin_arm64",
+            "closure_data_prompt_templates_darwin_arm64",
+            "closure_data_skills_darwin_arm64",
+            "closure_runtime_daemon_darwin_arm64",
+            "closure_runtime_web_darwin_arm64",
+            "terminal_scene_darwin_arm64"
+          ],
+          "parameters": {
+            "shell": "terminal",
+            "target": "darwin-arm64",
+            "protocol": "installed-v1"
+          },
+          "artifact": {
+            "product": "acceptance",
+            "prefix": "exact-acceptance-terminal-darwin-arm64"
+          }
+        },
+        "installed_electron_darwin_arm64": {
+          "inputs": [
+            "suite://installed-acceptance"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": false,
+          "dependsOn": [
+            "closure_data_community_pets_darwin_arm64",
+            "closure_data_craft_darwin_arm64",
+            "closure_data_design_systems_darwin_arm64",
+            "closure_data_design_templates_darwin_arm64",
+            "closure_data_frames_darwin_arm64",
+            "closure_data_plugin_previews_darwin_arm64",
+            "closure_data_plugins_darwin_arm64",
+            "closure_data_prompt_templates_darwin_arm64",
+            "closure_data_skills_darwin_arm64",
+            "closure_runtime_daemon_darwin_arm64",
+            "closure_runtime_web_darwin_arm64",
+            "electron_base_darwin_arm64",
+            "electron_capsule_darwin_arm64",
+            "electron_platform_darwin_arm64",
+            "electron_scene_darwin_arm64"
+          ],
+          "parameters": {
+            "shell": "electron",
+            "target": "darwin-arm64",
+            "protocol": "installed-v1"
+          },
+          "artifact": {
+            "product": "acceptance",
+            "prefix": "exact-acceptance-electron-darwin-arm64"
+          }
         }
       },
       "execution": {
@@ -800,7 +883,9 @@
           "validation_shell_darwin_arm64",
           "validation_closure_darwin_arm64",
           "closure_runtime_daemon_darwin_arm64",
-          "closure_runtime_web_darwin_arm64"
+          "closure_runtime_web_darwin_arm64",
+          "installed_terminal_darwin_arm64",
+          "installed_electron_darwin_arm64"
         ],
         "runners": {
           "terminal_darwin_arm64": [
@@ -829,7 +914,12 @@
             ]
           },
           "base_matrix": {
-            "include": [{ "target": "darwin-arm64", "workload": "electron_base_darwin_arm64" }]
+            "include": [
+              {
+                "target": "darwin-arm64",
+                "workload": "electron_base_darwin_arm64"
+              }
+            ]
           },
           "shell_matrix": {
             "include": [
@@ -1011,6 +1101,27 @@
                 "workload": "closure_runtime_web_darwin_arm64"
               }
             ]
+          },
+          "acceptance_matrix": {
+            "include": [
+              {
+                "shell": "terminal",
+                "target": "darwin-arm64",
+                "workload": "installed_terminal_darwin_arm64",
+                "runner_class": "terminal_darwin_arm64",
+                "runs_on": "macos-15"
+              },
+              {
+                "shell": "electron",
+                "target": "darwin-arm64",
+                "workload": "installed_electron_darwin_arm64",
+                "platform_workload": "electron_platform_darwin_arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "base_workload": "electron_base_darwin_arm64",
+                "toolchain_workload": "electron_toolchain_darwin_arm64"
+              }
+            ]
           }
         },
         "inputs": {
@@ -1037,32 +1148,47 @@
           },
           "capsules": {
             "matrix": "capsule_matrix",
-            "fields": { "target": "target" },
+            "fields": {
+              "target": "target"
+            },
             "product": "capsule"
           },
           "platforms": {
             "matrix": "platform_matrix",
-            "fields": { "target": "target" },
+            "fields": {
+              "target": "target"
+            },
             "product": "platform"
           },
           "bases": {
             "matrix": "base_matrix",
-            "fields": { "target": "target" },
+            "fields": {
+              "target": "target"
+            },
             "product": "base"
           },
           "scenes": {
             "matrix": "shell_matrix",
-            "fields": { "shell": "shell", "target": "target" },
+            "fields": {
+              "shell": "shell",
+              "target": "target"
+            },
             "product": "scene"
           },
           "electron_scenes": {
             "matrix": "electron_matrix",
-            "fields": { "shell": "shell", "target": "target" },
+            "fields": {
+              "shell": "shell",
+              "target": "target"
+            },
             "product": "scene"
           },
           "terminal_scenes": {
             "matrix": "terminal_matrix",
-            "fields": { "shell": "shell", "target": "target" },
+            "fields": {
+              "shell": "shell",
+              "target": "target"
+            },
             "product": "scene"
           },
           "data": {
@@ -1087,6 +1213,14 @@
               "id": "id"
             },
             "product": "resource"
+          },
+          "acceptance": {
+            "matrix": "acceptance_matrix",
+            "fields": {
+              "shell": "shell",
+              "target": "target"
+            },
+            "product": "acceptance"
           }
         }
       }

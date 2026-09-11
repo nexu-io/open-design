@@ -9,6 +9,7 @@ import { mapWithConcurrency } from "../storage/concurrency.ts";
 
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { createAcceptedShellBaselineReceipt, resolveAcceptedShellBaseline, type AcceptedShellTarget } from "./accepted-baseline.ts";
+import { validateReusedAcceptance } from "./acceptance-reuse.ts";
 import { fetchAcceptedShellBaseline } from "./baseline-acquisition.ts";
 import { bindReleaseValidation } from "./validation.ts";
 import { collectInstalledAcceptance, readPublishedAcceptance } from "./installed-acceptance.ts";
@@ -172,19 +173,20 @@ export async function publishExactRelease(input: JsonObject, receiptPath: string
   await writeObject(receiptPath, { schemaVersion: 1, operation: "exact.publish", profile: policy.profile, channel, releaseVersion: version, sourceCommit: pack.sourceCommit, target: policy.target, latestChannelHeadUrl: policy.target.latestChannelHeadUrl, channelHead: { ...head, file: headPath }, objects, requiredAcceptances, replayed: allReplayed });
 }
 
-async function validateAcceptances(published: JsonObject, paths: unknown): Promise<boolean> {
+async function validateAcceptances(published: JsonObject, paths: unknown, policy: ReleasePolicyReceipt): Promise<boolean> {
   if (!Array.isArray(paths)) throw new Error("exact.activate requires acceptanceCredentials");
   const credentials = await Promise.all(paths.map((path) => readObject(String(path))));
   const byKey = new Map<string, JsonObject>();
   for (const credential of credentials) {
     const key = `${credential.shell?.type}/${credential.target}`;
-    if (credential.schemaVersion !== 1 || credential.operation !== "exact.acceptance" || credential.status !== "accepted" || byKey.has(key)) throw new Error(`invalid or duplicate acceptance credential: ${key}`);
+    if (credential.schemaVersion !== 1 || !["exact.acceptance", "exact.acceptance.reuse"].includes(credential.operation) || credential.status !== "accepted" || byKey.has(key)) throw new Error(`invalid or duplicate acceptance credential: ${key}`);
     byKey.set(key, credential);
   }
   const required = new Map((published.requiredAcceptances as JsonObject[]).map((value) => [`${value.shell.type}/${value.target}`, value]));
   if (byKey.size !== required.size || [...required.keys()].some((key) => !byKey.has(key))) throw new Error(`acceptance topology mismatch: required=${[...required.keys()].sort()} actual=${[...byKey.keys()].sort()}`);
   for (const [key, expected] of required) {
     const credential = byKey.get(key)!;
+    if (credential.operation === "exact.acceptance.reuse") { validateReusedAcceptance(credential, expected, policy); continue; }
     for (const field of ["channel", "releaseVersion", "sourceCommit"]) if (credential[field] !== published[field]) throw new Error(`acceptance ${field} binding mismatch`);
     for (const field of ["shell", "artifact", "shellMetadata", "installIdentity", "platformTrust", "updater"]) if (!canonicalBytes(credential[field]).equals(canonicalBytes(expected[field]))) throw new Error("acceptance artifact or Shell binding mismatch");
     if (credential.installed == null || !canonicalBytes(credential.installed.shell).equals(canonicalBytes(expected.shell)) || credential.installed.target !== expected.target) throw new Error("acceptance lacks installed Shell proof");
@@ -318,7 +320,7 @@ export async function activateExactRelease(input: JsonObject, receiptPath: strin
     || published.latestChannelHeadUrl !== policy.target.latestChannelHeadUrl) {
     throw new Error("published release target binding mismatch");
   }
-  const candidate = await validateAcceptances(published, input.acceptanceCredentials);
+  const candidate = await validateAcceptances(published, input.acceptanceCredentials, policy);
   if (candidate) {
     baselineCandidateMode("candidate", policy);
     await writeObject(receiptPath, { schemaVersion: 1, operation: "exact.activation.deferred", profile: policy.profile,
@@ -372,6 +374,15 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
     if (!activeHead.ok || !Buffer.from(await activeHead.arrayBuffer()).equals(channelHeadBody)) throw new Error("accepted baseline requires the exact active channel head");
   }
 
+  const supplied = await readObject(String(input.acceptanceCredential ?? ""));
+  if (supplied.operation === "exact.acceptance.reuse") {
+    const expected = (published.requiredAcceptances as JsonObject[]).find(value => value.shell.type === "electron" && value.target === supplied.target);
+    if (candidate || expected == null) throw new Error("Reused acceptance cannot establish a candidate baseline");
+    validateReusedAcceptance(supplied, expected, policy);
+    await writeObject(receiptPath, { schemaVersion: 1, operation: "exact.baseline.preserved", channel, releaseVersion, sourceCommit,
+      reason: "reused-behavioral-evidence", validatedReleaseVersion: supplied.origin.releaseVersion });
+    return;
+  }
   const credential = await validatedElectronAcceptance(published, input.acceptanceCredential);
   if (candidate && credential.baselineCandidate !== true) throw new Error("candidate baseline requires explicit installed candidate evidence");
   const target = credential.target;

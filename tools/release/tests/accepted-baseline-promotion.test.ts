@@ -75,6 +75,28 @@ async function fixture() {
 }
 
 describe("accepted Electron baseline promotion", () => {
+  it("activates reused behavioral evidence without promoting an untested installed baseline", async () => {
+    const input = await fixture();
+    const original = JSON.parse(await readFile(input.acceptanceCredential, "utf8"));
+    const { installed: _installed, ...binding } = original;
+    await writeFile(input.acceptanceCredential, JSON.stringify({ ...binding, operation: "exact.acceptance.reuse",
+      origin: { ...original, releaseVersion: "1.2.3-betahyx.3" },
+      evidence: { url: "https://cache.invalid/witness.zip", sha256: "c".repeat(64) } }));
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (request, init) => {
+      expect(String(request)).toBe(`${storageBase}/betahyx/latest/channel-head.json`);
+      expect(init?.method ?? "GET").toBe("GET");
+      return new Response(new Uint8Array(input.channelHeadBody), { headers: { etag: '"head"' } });
+    });
+    await executeExactReleaseControl({ schemaVersion: 1, operation: "exact.activate", publishReceipt: input.publishReceipt,
+      policyReceipt: input.policyReceipt, acceptanceCredentials: [input.acceptanceCredential] }, input.activationReceipt);
+    const receipt = join(input.root, "preserved.json");
+    await executeExactReleaseControl({ schemaVersion: 1, operation: "exact.baseline.promote", publishReceipt: input.publishReceipt,
+      activationReceipt: input.activationReceipt, policyReceipt: input.policyReceipt, acceptanceCredential: input.acceptanceCredential }, receipt);
+    expect(JSON.parse(await readFile(receipt, "utf8"))).toMatchObject({ operation: "exact.baseline.preserved",
+      releaseVersion, validatedReleaseVersion: "1.2.3-betahyx.3" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("restricts candidate mode to the explicitly selected betahyx experiment", () => {
     expect(baselineCandidateMode(undefined, { channel: "stable", profile: "stable" } as never)).toBe(false);
     expect(baselineCandidateMode("candidate", { channel: "betahyx", profile: "exact-validation" })).toBe(true);

@@ -83,7 +83,7 @@ describe("exact Electron release topology", () => {
   it.each(["exact", "stable", "prerelease"])("continues mandatory delivery past intentionally skipped producers in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     for (const [job, dependencies] of Object.entries({ distribution: ["tools", "plan", "prepare"], publish: ["tools", "plan", "distribution"],
-      acceptance: ["tools", "plan", "publish"], activate: ["tools", "acceptance"] })) {
+      acceptance: ["tools", "plan", "publish"], activate: ["tools", "publish"] })) {
       const body = workflow.split(`\n  ${job}:`)[1]!.split(/\n  [a-z_]+:/u)[0]!;
       const condition = body.split("\n").find(line => line.startsWith("    if:")) ?? "";
       expect(condition).toContain("!cancelled()");
@@ -222,14 +222,14 @@ describe("exact Electron release topology", () => {
       "print(json.dumps({path:changed('tools/release/src/'+path) for path in ['index.ts','exact/commands.ts','exact/build-commands.ts','exact/resource-commands.ts','exact/distribution-commands.ts','exact/distribution-build.ts','exact/native-builder.ts']}))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
     const changed: Record<string, string[]> = JSON.parse(result.stdout);
-    const control = ["release_tools", "validation_closure_darwin_arm64", "validation_contract_darwin_arm64", "validation_shell_darwin_arm64"];
+    const control = ["installed_electron_darwin_arm64", "installed_terminal_darwin_arm64", "release_tools", "validation_closure_darwin_arm64", "validation_contract_darwin_arm64", "validation_shell_darwin_arm64"];
     expect(changed["index.ts"]).toEqual(control);
     expect(changed["exact/commands.ts"]).toEqual(control);
     expect(changed["exact/distribution-commands.ts"]).toEqual(["release_tools"]);
     expect(changed["exact/distribution-build.ts"]).toEqual(["release_tools"]);
     expect(changed["exact/native-builder.ts"]).toEqual(expect.arrayContaining(["electron_base_darwin_arm64", "electron_scene_darwin_arm64", "terminal_scene_darwin_arm64"]));
     expect(changed["exact/resource-commands.ts"]).toEqual([
-      ...dataIds.map(id => `closure_data_${id.replaceAll("-", "_")}_darwin_arm64`), "release_tools",
+      ...dataIds.map(id => `closure_data_${id.replaceAll("-", "_")}_darwin_arm64`), "installed_electron_darwin_arm64", "installed_terminal_darwin_arm64", "release_tools",
     ].sort());
     expect(changed["exact/build-commands.ts"]).toEqual(expect.arrayContaining([
       "electron_base_darwin_arm64", "electron_capsule_darwin_arm64", "electron_platform_darwin_arm64",
@@ -387,7 +387,7 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(21);
+    expect(candidate.results).toHaveLength(23);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
@@ -430,9 +430,8 @@ describe("exact Electron release topology", () => {
     expect(scene).toContain("path: ${{ runner.temp }}/base-contribution/artifact");
     expect(scene).not.toContain("path: ${{ runner.temp }}/base-contribution/products");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
-    expect(distribution).toContain('tools-release base unpack');
-    expect(distribution).toContain('tools-release base import');
-    expect(distribution).toContain('--base-directory "$RUNNER_TEMP/base"');
+    expect(distribution).toContain('tools-release distribution acquire --shell electron');
+    expect(distribution).toContain('--base-directory "$RUNNER_TEMP/native-inputs/base"');
     expect(distribution).toContain("name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}");
   });
 
@@ -440,9 +439,8 @@ describe("exact Electron release topology", () => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
     expect(distribution).not.toMatch(/pnpm|install --frozen-lockfile|POSTINSTALL/u);
-    expect(distribution).toContain("tools-release toolchain unpack");
-    expect(distribution).toContain("tools-release toolchain import");
-    expect(distribution).toContain('--toolchain "$RUNNER_TEMP/toolchain"');
+    expect(distribution).toContain("tools-release distribution acquire --shell electron");
+    expect(distribution).toContain('--toolchain "$RUNNER_TEMP/native-inputs/toolchain"');
     const scene = workflow.split("\n  scene:")[1]!.split("\n  terminal_scene:")[0]!;
     expect(scene).toContain("tools-release toolchain build");
     expect(scene).toContain("fromJSON(needs.plan.outputs.batch_run).toolchains");
@@ -451,6 +449,32 @@ describe("exact Electron release topology", () => {
     expect(config.workflows["release-" + lane].workloads.electron_toolchain_darwin_arm64)
       .toMatchObject({ reusable: true, artifact: { product: "toolchain" } });
     expect(config.suites["electron-toolchain"]).not.toEqual(expect.arrayContaining(["apps/web/", "apps/daemon/", "skills/"]));
+  });
+
+  it.each(["exact", "stable", "prerelease"])("declares complete installed evidence and lane-specific reuse in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
+    const contract = config.workflows[`release-${lane}`];
+    for (const shell of ["electron", "terminal"]) {
+      const id = `installed_${shell}_darwin_arm64`, declaration = contract.workloads[id];
+      expect(declaration.reusable).toBe(lane === "exact");
+      expect(declaration.dependsOn).toEqual(expect.arrayContaining([
+        `${shell}_scene_darwin_arm64`, "closure_runtime_daemon_darwin_arm64", "closure_runtime_web_darwin_arm64",
+        ...dataIds.map(id => `closure_data_${id.replaceAll("-", "_")}_darwin_arm64`),
+      ]));
+      expect(contract.admission.resultJobs[id]).toBe(`[test] Installed ${shell} · darwin-arm64 · first start and update`);
+    }
+    expect(contract.workloads.installed_electron_darwin_arm64.dependsOn).toEqual(expect.arrayContaining([
+      "electron_capsule_darwin_arm64", "electron_base_darwin_arm64", "electron_platform_darwin_arm64",
+    ]));
+    const acceptance = workflow.split("\n  acceptance:")[1]!.split("\n  activate:")[0]!;
+    expect(acceptance).toContain("fromJSON(needs.plan.outputs.batch_run).acceptance");
+    expect(acceptance).toContain("tools-release acceptance witness");
+    const activate = workflow.split("\n  activate:")[1]!.split("\n  notify:")[0]!;
+    expect(activate).not.toContain("needs.acceptance.result == 'success'");
+    expect(activate).toContain("tools-release acceptance acquire");
+    expect(activate).toContain("artifacts/batches/acceptance.json");
+    if (lane !== "exact") expect(acceptance).toContain("fromJSON(needs.plan.outputs.acceptance_full_matrix)");
   });
 
   it.each(["exact", "stable", "prerelease"])("builds only data misses and acquires the complete version set in release-%s prepare", async channel => {

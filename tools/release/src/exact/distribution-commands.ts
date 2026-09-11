@@ -2,6 +2,7 @@ import type { CAC } from "cac";
 import { required, type Options } from "./command-input.ts";
 import { buildReleaseDistribution } from "./distribution-build.ts";
 import { exportReleaseDistribution } from "./distribution-artifact.ts";
+import { acquireDistributionInputs } from "./distribution-inputs.ts";
 
 /** Version-bound delivery grammar is not a reusable production recipe. */
 export function registerDistributionCommands(cli: CAC): void {
@@ -22,8 +23,25 @@ export function registerDistributionCommands(cli: CAC): void {
     .option("--channel <name>", "Release channel")
     .option("--release-version <version>", "Release version")
     .option("--source-commit <sha>", "Exact source commit")
+    .option("--scene-descriptor <file>", "Verified scene artifact descriptor (acquire)")
+    .option("--scene-source <directory>", "Produced scene transport (acquire)")
+    .option("--base-descriptor <file>", "Verified base artifact descriptor (acquire)")
+    .option("--base-source <directory>", "Produced base transport (acquire)")
+    .option("--toolchain-descriptor <file>", "Verified toolchain descriptor (acquire)")
+    .option("--toolchain-source <directory>", "Produced toolchain transport (acquire)")
     .action(async (operation: string, options: Options) => {
-      if (operation !== "build") throw new Error("distribution operation must be build");
+      if (operation === "acquire") {
+        const source = (kind: string) => {
+          const descriptor = options[`${kind}Descriptor`], directory = options[`${kind}Source`];
+          if ((descriptor != null) === (directory != null)) throw new Error(`${kind} requires exactly one descriptor or source`);
+          return descriptor != null ? { descriptor: required(options, `${kind}Descriptor`) } : { directory: required(options, `${kind}Source`) };
+        };
+        const shell = required(options, "shell");
+        await acquireDistributionInputs({ shell, target: required(options, "target"), output: required(options, "output"),
+          scene: source("scene"), ...(shell === "electron" ? { base: source("base"), toolchain: source("toolchain") } : {}) });
+        return;
+      }
+      if (operation !== "build") throw new Error("distribution operation must be build or acquire");
       if (options.retainResult != null && !["true", "false"].includes(String(options.retainResult))) {
         throw new Error("--retain-result requires true or false");
       }

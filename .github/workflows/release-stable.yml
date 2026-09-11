@@ -41,6 +41,8 @@ jobs:
     outputs:
       run: ${{ steps.convergence.outputs.run }}
       batch_run: ${{ steps.convergence.outputs.batch_run }}
+      acceptance_matrix: ${{ toJSON(fromJSON(steps.convergence.outputs.execution_matrices).acceptance_matrix) }}
+      acceptance_full_matrix: ${{ steps.topology.outputs.acceptance_matrix }}
       node_version: ${{ steps.toolchain.outputs.node_version }}
       shell_matrix: ${{ steps.topology.outputs.shell_matrix }}
       electron_matrix: ${{ steps.topology.outputs.electron_matrix }}
@@ -1253,72 +1255,39 @@ jobs:
         with:
           node-version: ${{ needs.plan.outputs.node_version }}
 
-      - name: "[fetch] Acquire cached distribution scene directly"
-        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        env:
-          WORKLOAD: ${{ matrix.workload }}
-        run: >-
-          tools-release artifact acquire
-          --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/scene.json"
-          --output "$RUNNER_TEMP/scene-artifact"
-
-      - name: "[restore] Restore distribution scene"
-        shell: bash
-        run: |
-          tools-release scene unpack \
-            --archive "$RUNNER_TEMP/scene-artifact/scene.tar" --output "$RUNNER_TEMP/scene"
-
-      - name: "[fetch] exact-toolchain · workflow artifact"
+      - name: "[fetch] Produced Electron toolchain · misses"
         uses: actions/download-artifact@v8
         if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
         with:
           name: exact-toolchain-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/toolchain-artifact
 
-      - name: "[restore] Restore produced Electron toolchain"
-        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-        run: >-
-          tools-release toolchain unpack --target "$TARGET"
-          --source "$RUNNER_TEMP/toolchain-artifact" --output "$RUNNER_TEMP/toolchain"
-
-      - name: "[fetch] Acquire cached Electron toolchain"
-        if: ${{ matrix.shell == 'electron' && !fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          WORKLOAD: ${{ matrix.toolchain_workload }}
-        run: >-
-          tools-release toolchain import --target "$TARGET"
-          --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/toolchain.json"
-          --output "$RUNNER_TEMP/toolchain"
-
-      - name: "[fetch] exact-base-product · workflow artifact"
+      - name: "[fetch] Produced Electron base · misses"
         uses: actions/download-artifact@v8
         if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
         with:
           name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/base-transport
 
-      - name: "[restore] Restore distribution base"
-        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          tools-release base unpack \
-            --target "$TARGET" \
-            --source "$RUNNER_TEMP/base-transport" --output "$RUNNER_TEMP/base"
-
-      - name: "[fetch] Acquire cached Electron base directly"
-        if: ${{ matrix.shell == 'electron' && !fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          WORKLOAD: ${{ matrix.base_workload }}
+      - name: "[fetch] Electron inputs · concurrent verified acquisition"
+        if: ${{ matrix.shell == 'electron' }}
         run: >-
-          tools-release base import
-          --target "$TARGET" --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/base.json"
-          --output "$RUNNER_TEMP/base"
+          tools-release distribution acquire --shell electron --target "${{ matrix.target }}"
+          --output "$RUNNER_TEMP/native-inputs"
+          --scene-${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && 'source' || 'descriptor' }}
+          "$RUNNER_TEMP/${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && 'scene-artifact' || format('exact-plan/artifacts/{0}/scene.json', matrix.workload) }}"
+          --base-${{ fromJSON(needs.plan.outputs.run)[matrix.base_workload] && 'source' || 'descriptor' }}
+          "$RUNNER_TEMP/${{ fromJSON(needs.plan.outputs.run)[matrix.base_workload] && 'base-transport' || format('exact-plan/artifacts/{0}/base.json', matrix.base_workload) }}"
+          --toolchain-${{ fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] && 'source' || 'descriptor' }}
+          "$RUNNER_TEMP/${{ fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] && 'toolchain-artifact' || format('exact-plan/artifacts/{0}/toolchain.json', matrix.toolchain_workload) }}"
+
+      - name: "[fetch] Terminal input · verified scene acquisition"
+        if: ${{ matrix.shell == 'terminal' }}
+        run: >-
+          tools-release distribution acquire --shell terminal --target "${{ matrix.target }}"
+          --output "$RUNNER_TEMP/native-inputs"
+          --scene-${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && 'source' || 'descriptor' }}
+          "$RUNNER_TEMP/${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && 'scene-artifact' || format('exact-plan/artifacts/{0}/scene.json', matrix.workload) }}"
 
       - name: "[build] Build native distribution"
         env:
@@ -1341,10 +1310,10 @@ jobs:
         run: |
           set -euo pipefail
           tools-release distribution build \
-            --root "$GITHUB_WORKSPACE" --toolchain "$RUNNER_TEMP/toolchain" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --root "$GITHUB_WORKSPACE" --toolchain "$RUNNER_TEMP/native-inputs/toolchain" --shell "$SHELL_TYPE" --target "$TARGET" \
             --policy "$RUNNER_TEMP/release-policy/release-policy.json" \
             --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
-            --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" --base-directory "$RUNNER_TEMP/base" \
+            --scene "$RUNNER_TEMP/native-inputs/scene" --prepared "$RUNNER_TEMP/prepared" --base-directory "$RUNNER_TEMP/native-inputs/base" \
             --output "$RUNNER_TEMP/distribution" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json" \
             --transport-output "$RUNNER_TEMP/distribution-transport" --retain-result true
 
@@ -1485,10 +1454,10 @@ jobs:
   acceptance:
     name: "[test] Installed ${{ matrix.shell }} · ${{ matrix.target }} · first start and update"
     needs: [tools, plan, publish]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.publish.result == 'success' }}
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.publish.result == 'success' && fromJSON(needs.plan.outputs.batch_run).acceptance }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.shell_matrix) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.acceptance_full_matrix) }}
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 15
     steps:
@@ -1656,18 +1625,25 @@ jobs:
           --work-root "$RUNNER_TEMP/installed-acceptance" --inspection "$RUNNER_TEMP/baseline-inspection/receipt.json"
           --receipt "$RUNNER_TEMP/acceptance/${{ matrix.shell }}-${{ matrix.target }}.json"
 
+      - name: "[validate] Retain acceptance witness · business declarations"
+        run: >-
+          tools-release acceptance witness
+          --publication "$RUNNER_TEMP/published/publish-receipt.json"
+          --credential "$RUNNER_TEMP/acceptance/${{ matrix.shell }}-${{ matrix.target }}.json"
+          --output "$RUNNER_TEMP/acceptance/evidence/${{ matrix.shell }}-${{ matrix.target }}.json"
+
       - name: "[store] exact-acceptance · workflow artifact"
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: exact-acceptance-${{ matrix.shell }}-${{ matrix.target }}-${{ inputs.release_version }}
+          name: exact-acceptance-${{ matrix.shell }}-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/acceptance
           if-no-files-found: error
           retention-days: 30
 
   activate:
     name: "[publish] Channel head · accepted release"
-    needs: [tools, acceptance]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.acceptance.result == 'success' }}
+    needs: [tools, plan, publish, acceptance]
+    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     environment: standalone-stable-release
     timeout-minutes: 10
@@ -1710,9 +1686,23 @@ jobs:
       - name: "[fetch] exact-acceptance-set · workflow artifact"
         uses: actions/download-artifact@v8
         with:
-          pattern: exact-acceptance-*-${{ inputs.release_version }}
+          pattern: exact-acceptance-*-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/acceptances
           merge-multiple: true
+
+      - name: "[fetch] Acceptance inputs · complete evidence inventory"
+        uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - name: "[validate] Acceptance evidence · fresh or reused"
+        run: >-
+          tools-release acceptance acquire
+          --publication "$RUNNER_TEMP/published/publish-receipt.json"
+          --policy "$RUNNER_TEMP/published/release-policy.json"
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/acceptance.json"
+          --output "$RUNNER_TEMP/acceptances"
 
       - name: "[publish] Activate latest channel head after acceptance"
         env:

@@ -115,15 +115,20 @@ class WorkflowContract:
         self.name = require_identity(name, "convergence workflow")
         self.policy = require_identity(value["policy"], f"convergence.workflows.{name}.policy")
         self.production_gate = None
+        self.result_jobs = {}
         if "admission" in value:
             admission = object_value(value["admission"], "workflow admission")
-            if name not in {"release-exact", "release-prerelease", "release-stable"} or set(admission) != {"productionJob"}:
+            if name not in {"release-exact", "release-prerelease", "release-stable"} or not {"productionJob"} <= set(admission) or set(admission) - {"productionJob", "resultJobs"}:
                 raise ConfigError("production admission is restricted to release workflows")
             self.production_gate = require_string(admission["productionJob"], "admission.productionJob")
+            self.result_jobs = {require_identity(identity, "result job workload"): require_string(job, "result job")
+                                for identity, job in object_value(admission.get("resultJobs", {}), "admission.resultJobs").items()}
         workloads = object_value(value["workloads"], f"convergence.workflows.{name}.workloads")
         if not workloads:
             raise ConfigError(f"convergence.workflows.{name}.workloads must not be empty")
         self.workloads = {identity: Workload(name, identity, raw_workload) for identity, raw_workload in workloads.items()}
+        if set(self.result_jobs) - set(self.workloads):
+            raise ConfigError("result admission names an unknown workload")
         self.order: list[str] = []
         visiting: list[str] = []
 
@@ -1109,6 +1114,10 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
                 name: any(run[entry["workload"]] for entry in workflow.execution["matrices"][batch["matrix"]]["include"])
                 for name, batch in (workflow.execution or {}).get("batches", {}).items()
             }),
+            "execution_matrices": compact_json({
+                name: {"include": [entry for entry in matrix["include"] if run.get(entry.get("workload"), False)]}
+                for name, matrix in (workflow.execution or {}).get("matrices", {}).items()
+            }),
         }
     )
     lines = [
@@ -1463,6 +1472,36 @@ def source_command() -> int:
     return 0
 
 
+def admit_result_jobs(candidate: dict[str, Any], workflow: WorkflowContract, context: dict[str, Any]) -> dict[str, Any]:
+    """Production success cannot vouch for later installed acceptance. Exclude
+    results whose declared live job did not succeed in this exact attempt.
+    Unrelated production results survive a failed delivery or acceptance."""
+    gated = {item["receipt"]["workload"] for item in candidate["results"]} & set(workflow.result_jobs)
+    if not gated:
+        return candidate
+    jobs = []
+    for page in range(1, 101):
+        response = object_value(api_json(f"/repos/{context['repository']}/actions/runs/{context['run_id']}/attempts/{context['run_attempt']}/jobs?per_page=100&page={page}"), "result jobs")
+        batch = response.get("jobs")
+        if not isinstance(batch, list) or len(batch) > 100:
+            raise ConfigError("invalid result job response")
+        jobs.extend(batch)
+        if len(batch) < 100:
+            break
+    else:
+        raise ConfigError("result job inventory exceeds bound")
+    admitted = set()
+    for identity in gated:
+        name = workflow.result_jobs[identity]
+        matches = [job for job in jobs if isinstance(job, dict) and job.get("name") == name]
+        expected = {"name": name, "run_id": context["run_id"], "run_attempt": context["run_attempt"],
+                    "head_sha": context["head_sha"], "status": "completed", "conclusion": "success"}
+        if len(matches) == 1 and all(matches[0].get(key) == value for key, value in expected.items()):
+            admitted.add(identity)
+    return {**candidate, "results": [item for item in candidate["results"]
+                                    if item["receipt"]["workload"] not in gated or item["receipt"]["workload"] in admitted]}
+
+
 def admit_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
     context = validate_production_admission(admitted_source(), contract)
     if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
@@ -1510,6 +1549,10 @@ def admit_command(args: argparse.Namespace, contract: ConvergenceContract) -> in
     elif git_differs("HEAD", base_sha, control_paths):
         reason = "producer-control-plane-superseded"
         publish = False
+    if publish:
+        admitted = admit_result_jobs(object_value(load_json(Path(candidate)), "candidate"), workflow, context)
+        candidate = str(Path(candidate).with_name("admitted-candidate.json"))
+        write_json_atomic(Path(candidate), admitted)
     append_outputs(
         {
             "candidate": candidate,

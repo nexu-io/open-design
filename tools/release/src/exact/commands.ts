@@ -24,6 +24,7 @@ import { registerBuildCommands } from "./build-commands.ts";
 import { required, emit, type Options } from "./command-input.ts";
 import { acquireArtifactProduct } from "./artifact-product.ts";
 import { exportInstallationInput } from "./installation-input.ts";
+import { acquireAcceptanceEvidence, exportAcceptanceWitness } from "./acceptance-reuse.ts";
 
 function boolean(options: Options, key: string): boolean {
   const value = options[key];
@@ -71,6 +72,8 @@ export function registerExactCommands(cli: CAC): void {
   });
   cli.command("self-check", "Verify exact channel transition algebra").action(() => selfCheckExactReleaseControl());
   cli.command("acceptance <operation>", "Acquire the exact published installer selected for acceptance")
+    .option("--sources <file>", "Complete business acceptance inputs (acquire)")
+    .option("--credential <file>", "Actual installed credential (witness)")
     .option("--publication <file>", "Publication receipt")
     .option("--policy <file>", "Release policy")
     .option("--shell <name>", "electron or terminal")
@@ -85,6 +88,15 @@ export function registerExactCommands(cli: CAC): void {
     .option("--first-install-root <directory>", "Current release installed resources, separate from upgraded baseline (collect)")
     .option("--first-install-namespace <name>", "Current release first-install namespace (collect)")
     .action(async (operation: string, options: Options) => {
+      if (operation === "witness") {
+        await exportAcceptanceWitness({ publication: required(options, "publication"), credential: required(options, "credential"), output: required(options, "output") });
+        return;
+      }
+      if (operation === "acquire") {
+        await acquireAcceptanceEvidence({ publication: required(options, "publication"), policy: required(options, "policy"),
+          sources: required(options, "sources"), output: required(options, "output") });
+        return;
+      }
       const common = { publication: required(options, "publication"), policy: required(options, "policy"),
         shell: required(options, "shell"), target: required(options, "target"), receipt: required(options, "receipt"),
         ...(options.namespace == null ? {} : { namespace: required(options, "namespace") }) };
