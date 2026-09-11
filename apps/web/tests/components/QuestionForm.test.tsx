@@ -219,6 +219,13 @@ const pickedText = (): string | null =>
 describe('QuestionFormView', () => {
   afterEach(() => cleanup());
 
+  it('does not expose option descriptions through the browser native tooltip', () => {
+    render(<QuestionFormView form={richForm} interactive onSubmit={vi.fn()} />);
+
+    const describedOption = screen.getByRole('radio', { name: /Mobile \(iOS\/Android\)/ });
+    expect(describedOption).not.toHaveAttribute('title');
+  });
+
   it('updates locked answers when submitted history arrives after the initial render', () => {
     const onSubmit = vi.fn();
     const { container, rerender } = render(
