@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+	hasWebTouchpointCloseControl,
+	OpenDesignTouchpointElement,
 	verifyWebTouchpoint,
 	type WebTouchpointContent,
 } from "../../src/components/touchpoint-component";
@@ -100,6 +102,27 @@ function content(
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("hasWebTouchpointCloseControl", () => {
+	it("ignores disabled or hidden marker controls and accepts a usable control", () => {
+		const element = document.createElement(
+			"opend-touchpoint",
+		) as OpenDesignTouchpointElement;
+		const root = element.attachShadow({ mode: "open" });
+		const hidden = document.createElement("button");
+		hidden.dataset.touchpointClose = "true";
+		hidden.disabled = true;
+		root.append(hidden);
+		expect(hasWebTouchpointCloseControl(element)).toBe(false);
+		hidden.disabled = false;
+		hidden.hidden = true;
+		expect(hasWebTouchpointCloseControl(element)).toBe(false);
+		hidden.hidden = false;
+		expect(hasWebTouchpointCloseControl(element)).toBe(true);
+		element.hidden = true;
+		expect(hasWebTouchpointCloseControl(element)).toBe(false);
+	});
+});
 
 describe("verifyWebTouchpoint multi-placement resource closure", () => {
 	it("loads only OD resources from a mixed package containing a Vela subscription action", async () => {

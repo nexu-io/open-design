@@ -16,10 +16,14 @@ import {
 	trapWebTouchpointModalFocus,
 	verifyWebTouchpoint,
 	webTouchpointContext,
+	hasWebTouchpointCloseControl,
 	type OpenDesignTouchpointElement,
 	type WebTouchpointContent,
 } from "./touchpoint-component";
-import { emitProductionTouchpointLoadDiagnostic, loadProductionTouchpointDecision } from "./production-touchpoint-loader";
+import {
+	emitProductionTouchpointLoadDiagnostic,
+	loadProductionTouchpointDecision,
+} from "./production-touchpoint-loader";
 import {
 	TestTouchpointMount,
 	recordVisibleTestTouchpoint,
@@ -29,6 +33,7 @@ import type { TestCampaignPlacement, TestDecision } from "./TestCampaignModal";
 import styles from "./TestCampaignModal.module.css";
 const PLACEMENT = "opend.home.campaign-modal";
 const MAX_LEASE_MS = 5 * 60_000;
+export const PRODUCTION_ACTION_TELEMETRY_TIMEOUT_MS = 3_000;
 const supportedCapabilities = new Set(["close", "static-action"]);
 
 type Decision = {
@@ -93,10 +98,17 @@ export async function dispatchProductionCampaignAction(
 		});
 		return false;
 	}
+	let response: Response | undefined;
+	const telemetryController = new AbortController();
+	const telemetryTimeout = setTimeout(
+		() => telemetryController.abort(),
+		PRODUCTION_ACTION_TELEMETRY_TIMEOUT_MS,
+	);
 	try {
-		const response = await fetch("/api/touchpoints/production-runtime/events", {
+		response = await fetch("/api/touchpoints/production-runtime/events", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
+			signal: telemetryController.signal,
 			body: JSON.stringify({
 				touchpointDecisionId: decision.touchpointDecisionId,
 				activityId: decision.activityId,
@@ -105,21 +117,39 @@ export async function dispatchProductionCampaignAction(
 				kind: "click",
 			}),
 		});
-		if (
-			!response.ok ||
-			generation !== currentGeneration() ||
-			expiresAt <= Date.now()
-		) {
-			emitWebTouchpointDiagnostic({
-				code: "touchpoint_action_denied",
-				detail: actionId,
-			});
-			return false;
-		}
+	} catch {
+		emitWebTouchpointDiagnostic({
+			code: "touchpoint_action_telemetry_failed",
+			detail: "network",
+		});
+	} finally {
+		clearTimeout(telemetryTimeout);
+	}
+	if (response && !response.ok && response.status < 500) {
+		emitWebTouchpointDiagnostic({
+			code: "touchpoint_action_denied",
+			detail: actionId,
+		});
+		return false;
+	}
+	if (response && !response.ok && response.status >= 500) {
+		emitWebTouchpointDiagnostic({
+			code: "touchpoint_action_telemetry_failed",
+			detail: `http_${response.status}`,
+		});
+	}
+	if (generation !== currentGeneration() || expiresAt <= Date.now()) {
+		emitWebTouchpointDiagnostic({
+			code: "touchpoint_action_denied",
+			detail: actionId,
+		});
+		return false;
+	}
+	try {
 		if (action.target.kind === "https")
 			await openExternalUrl(action.target.url);
 		else if (internalTarget) window.location.assign(internalTarget.href);
-	else return false;
+		else return false;
 		return true;
 	} catch {
 		emitWebTouchpointDiagnostic({
@@ -145,8 +175,14 @@ export function ProductionCampaignModal({
 	const testRuntime = useTestRuntime();
 	const testDecision = testRuntime?.decisions.get(PLACEMENT);
 	const [testClosed, setTestClosed] = useState(false);
+	const [testCloseControlAvailable, setTestCloseControlAvailable] = useState<
+		boolean | null
+	>(null);
 	const decisionRef = useRef<AuthorizedDecision | null>(null);
 	const [closed, setClosed] = useState(false);
+	const [closeControlAvailable, setCloseControlAvailable] = useState<
+		boolean | null
+	>(null);
 	const elementRef = useRef<HTMLDivElement | null>(null);
 	const modalRef = useRef<HTMLDivElement | null>(null);
 	const expiry = useRef(0);
@@ -194,15 +230,29 @@ export function ProductionCampaignModal({
 			const nextRequestGeneration = ++requestGeneration.current;
 			try {
 				const loaded = await loadProductionTouchpointDecision(
-					PLACEMENT, locale, controller.signal, decisionRef.current?.touchpointDecisionId,
+					PLACEMENT,
+					locale,
+					controller.signal,
+					decisionRef.current?.touchpointDecisionId,
 				);
 				if (!current(nextRequestGeneration)) return;
 				if (loaded.kind === "revoked") {
 					const active = decisionRef.current;
-					if (active && loaded.receipt.touchpointDecisionId === active.touchpointDecisionId && loaded.receipt.deploymentId === active.deploymentId && loaded.receipt.activityId === active.activityId && loaded.receipt.contentVersionId === active.content.id) clear();
+					if (
+						active &&
+						loaded.receipt.touchpointDecisionId ===
+							active.touchpointDecisionId &&
+						loaded.receipt.deploymentId === active.deploymentId &&
+						loaded.receipt.activityId === active.activityId &&
+						loaded.receipt.contentVersionId === active.content.id
+					)
+						clear();
 					return;
 				}
-				if (loaded.kind === "no-decision") { if (!decisionRef.current) clear(); return; }
+				if (loaded.kind === "no-decision") {
+					if (!decisionRef.current) clear();
+					return;
+				}
 				const next = loaded.value as Decision;
 				if (!current(nextRequestGeneration)) return;
 				const deadline = Math.min(
@@ -262,7 +312,11 @@ export function ProductionCampaignModal({
 					Math.max(0, deadline - Date.now()),
 				);
 			} catch (error) {
-				if (!current(nextRequestGeneration) || (error instanceof DOMException && error.name === "AbortError")) return;
+				if (
+					!current(nextRequestGeneration) ||
+					(error instanceof DOMException && error.name === "AbortError")
+				)
+					return;
 				const diagnostic = emitProductionTouchpointLoadDiagnostic(error);
 				if (diagnostic) emitWebTouchpointDiagnostic(diagnostic);
 				clear();
@@ -303,6 +357,8 @@ export function ProductionCampaignModal({
 		const element = document.createElement(
 			"opend-touchpoint",
 		) as OpenDesignTouchpointElement;
+		setCloseControlAvailable(null);
+		let closeControlObserver: MutationObserver | undefined;
 		let elementDisposed = false;
 		let verifiedDisposed = false;
 		const disposeElement = () => {
@@ -355,6 +411,7 @@ export function ProductionCampaignModal({
 				);
 				if (!current() || !context) {
 					dispose();
+					if (current() && !context) setCloseControlAvailable(false);
 					if (current() && !context)
 						emitWebTouchpointDiagnostic({
 							code: "touchpoint_locale_unsupported",
@@ -381,20 +438,59 @@ export function ProductionCampaignModal({
 						onDiagnostic: emitWebTouchpointDiagnostic,
 					},
 				);
-				if (!current()) dispose();
+				if (!current()) {
+					dispose();
+					return;
+				}
+				setCloseControlAvailable(hasWebTouchpointCloseControl(element));
+				closeControlObserver = new MutationObserver(() => {
+					if (!current()) return;
+					setCloseControlAvailable(hasWebTouchpointCloseControl(element));
+				});
+				const closeControlObserverOptions: MutationObserverInit = {
+					attributes: true,
+					attributeFilter: [
+						"aria-label",
+						"aria-disabled",
+						"aria-hidden",
+						"class",
+						"disabled",
+						"hidden",
+						"style",
+						"title",
+					],
+					childList: true,
+					characterData: true,
+					subtree: true,
+				};
+				if (element.shadowRoot)
+					closeControlObserver.observe(
+						element.shadowRoot,
+						closeControlObserverOptions,
+					);
+				const dialog = element.closest('[role="dialog"]');
+				if (dialog)
+					closeControlObserver.observe(dialog, closeControlObserverOptions);
 			} catch (error) {
+				if (!current()) {
+					dispose();
+					return;
+				}
+				setCloseControlAvailable(false);
 				if (current()) {
 					emitWebTouchpointDiagnostic({
 						code:
 							error instanceof Error ? error.message : "touchpoint_load_failed",
 					});
-					clear();
+					setCloseControlAvailable(false);
 				}
 				dispose();
 			}
 		})();
 		return () => {
 			cancelled = true;
+			closeControlObserver?.disconnect();
+			setCloseControlAvailable(null);
 			++authorizationGeneration.current;
 			dispose();
 			container.replaceChildren();
@@ -413,7 +509,10 @@ export function ProductionCampaignModal({
 		};
 		document.addEventListener("keydown", key);
 		queueMicrotask(() =>
-			modalRef.current?.querySelector<HTMLElement>("button")?.focus(),
+			(
+				modalRef.current?.querySelector<HTMLElement>("button") ??
+				modalRef.current
+			)?.focus(),
 		);
 		return () => {
 			document.removeEventListener("keydown", key);
@@ -429,14 +528,22 @@ export function ProductionCampaignModal({
 	}, [closed, decision, sessionSubject]);
 	useEffect(() => {
 		if (!testDecision || testClosed || !authenticated) return;
-		const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		const previous =
+			document.activeElement instanceof HTMLElement
+				? document.activeElement
+				: null;
 		const releaseScrollLock = lockWebTouchpointModalScroll();
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") setTestClosed(true);
 			else trapWebTouchpointModalFocus(event, modalRef.current);
 		};
 		document.addEventListener("keydown", onKeyDown);
-		queueMicrotask(() => modalRef.current?.querySelector<HTMLElement>("button")?.focus());
+		queueMicrotask(() =>
+			(
+				modalRef.current?.querySelector<HTMLElement>("button") ??
+				modalRef.current
+			)?.focus(),
+		);
 		return () => {
 			document.removeEventListener("keydown", onKeyDown);
 			releaseScrollLock();
@@ -449,21 +556,32 @@ export function ProductionCampaignModal({
 	const closeTestModal = useCallback(() => setTestClosed(true), []);
 	const onTestVisible = useCallback(
 		(next: TestDecision, placementKey: TestCampaignPlacement) => {
-			if (testRuntime) recordVisibleTestTouchpoint(testRuntime, next, placementKey);
+			if (testRuntime)
+				recordVisibleTestTouchpoint(testRuntime, next, placementKey);
 		},
 		[testRuntime],
 	);
 	if (authenticated && testRuntime && testDecision && !testClosed) {
 		return (
-			<div className={styles.backdrop} role="dialog" aria-label="Test campaign" aria-modal="true">
+			<div
+				className={styles.backdrop}
+				role="dialog"
+				aria-label="Test campaign"
+				aria-modal="true"
+			>
 				<div className={styles.modal} ref={modalRef} tabIndex={-1}>
-					<Button type="button" onClick={() => setTestClosed(true)}>Close</Button>
+					{testCloseControlAvailable === false ? (
+						<Button type="button" onClick={() => setTestClosed(true)}>
+							Close
+						</Button>
+					) : null}
 					<TestTouchpointMount
 						decision={testDecision}
 						placementKey={PLACEMENT}
 						testId="campaign-custom-element"
 						onVisible={onTestVisible}
 						requestClose={closeTestModal}
+						onCloseControlChange={setTestCloseControlAvailable}
 					/>
 				</div>
 			</div>
@@ -477,9 +595,11 @@ export function ProductionCampaignModal({
 			aria-modal="true"
 		>
 			<div className={styles.modal} ref={modalRef} tabIndex={-1}>
-				<Button type="button" onClick={() => setClosed(true)}>
-					Close
-				</Button>
+				{closeControlAvailable === false ? (
+					<Button type="button" onClick={() => setClosed(true)}>
+						Close
+					</Button>
+				) : null}
 				<div ref={elementRef} data-testid="campaign-custom-element" />
 			</div>
 		</div>

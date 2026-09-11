@@ -156,16 +156,31 @@ function configuredAllowedDevHosts(): string[] {
   ]));
 }
 
-/** Files that define the client host contract reported with CMS Test acceptances. */
+/**
+ * Direct inputs to the client host contract reported with CMS Test acceptances.
+ *
+ * Keep this closure at the host boundary: the touchpoint adapters and their
+ * presentation assets, the production decision loader, and the app/shell
+ * modules that mount or position those hosts. Broad shared application styles
+ * are intentionally excluded; including the whole app graph would turn an
+ * unrelated shell change into a CMS host release.
+ */
 export const CMS_HOST_RELEASE_INPUTS = [
+  'apps/web/app/layout.tsx',
+  'apps/web/src/App.tsx',
+  'apps/web/src/components/EntryNavRail.tsx',
+  'apps/web/src/components/EntryShell.tsx',
   'apps/web/src/components/touchpoint-component.ts',
   'apps/web/src/components/touchpoint-static-actions.ts',
   'apps/web/src/components/TestCampaignModal.tsx',
+  'apps/web/src/components/TestCampaignModal.module.css',
   'apps/web/src/components/ProductionCampaignModal.tsx',
   'apps/web/src/components/ProductionCampaignBadge.tsx',
+  'apps/web/src/components/ProductionCampaignBadge.module.css',
   'apps/web/src/components/ProductionCampaignHover.tsx',
   'apps/web/src/components/HoverTouchpointOverlay.tsx',
   'apps/web/src/components/HoverTouchpointOverlay.module.css',
+  'apps/web/src/components/production-touchpoint-loader.ts',
   'packages/contracts/src/touchpoint-component-v2.ts',
 ] as const;
 
