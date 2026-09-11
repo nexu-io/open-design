@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extract } from "@open-design/archive";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { createRequire } from "node:module";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type { ElectronSceneReceipt } from "./contracts.js";
-import { readElectronRuntimeVersion } from "./runtime-version.js";
+import { resolveElectronDistributionArchive } from "./runtime-archive.js";
+import { inventoryNativeTree as inventory } from "./native-tree.js";
 
 const carrierFiles = ["main.cjs", "renderer-mount-preload.cjs", "carrier.json"] as const;
 export type ElectronDistributionBase = Readonly<{ root: string; manifestSha256: string }>;
@@ -33,28 +33,6 @@ async function verifyMacFrameworkLinks(runtime: string) {
     }
   }
 }
-/** Fingerprint native runtime files, permissions and internal framework links
- * without dereferencing links or multiplying large framework payloads. */
-async function inventory(root: string) {
-  const entries: { path: string; mode: number; sha256?: string; link?: string; directory?: true }[] = [];
-  async function walk(directory: string) {
-    for (const name of (await readdir(directory)).sort()) {
-      const path = join(directory, name), info = await lstat(path), entry = { path: relative(root, path).replaceAll("\\", "/"), mode: info.mode & 0o777 };
-      if (info.isDirectory()) { entries.push({ ...entry, directory: true }); await walk(path); }
-      else if (info.isFile()) entries.push({ ...entry, sha256: await fileHash(path) });
-      else if (info.isSymbolicLink()) {
-        const link = await readlink(path);
-        if (isAbsolute(link) || !contained(root, resolve(dirname(path), link))) throw new Error("Electron base runtime link escapes its root");
-        entries.push({ ...entry, link });
-      } else throw new Error("Electron base contains a special file");
-    }
-  }
-  if (!(await lstat(root)).isDirectory()) throw new Error("Electron base runtime must be a directory");
-  await walk(root);
-  if (!entries.length) throw new Error("Electron base runtime is empty");
-  return entries;
-}
-
 /** Neutral input assembly only. Tools own cache identity, transport and reuse;
  * no product manifest, Capsule, release metadata or signing enters this base. */
 export async function assembleElectronDistributionBase(input: Readonly<{
@@ -96,18 +74,6 @@ export async function verifyElectronDistributionBase(base: ElectronDistributionB
   return { runtimeDirectory: join(root, "runtime"), carrierDirectory: join(root, "carrier") };
 }
 
-export async function resolveElectronDistributionArchive(target: string) {
-  if (!["darwin-arm64", "darwin-x64", "win32-x64"].includes(target)) throw new Error("unsupported Electron archive target");
-  const packagePath = createRequire(import.meta.url).resolve("electron/package.json");
-  const installed = JSON.parse(await readFile(packagePath, "utf8"));
-  const version = await readElectronRuntimeVersion();
-  if (installed.version !== version) throw new Error("installed Electron differs from the pinned runtime contract");
-  const fileName = `electron-v${version}-${target}.zip`;
-  const checksums = JSON.parse(await readFile(join(dirname(packagePath), "checksums.json"), "utf8"));
-  const sha256 = checksums[fileName];
-  if (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(sha256)) throw new Error("Electron archive lacks a pinned checksum");
-  return { version, fileName, sha256, url: `https://github.com/electron/electron/releases/download/v${version}/${fileName}` };
-}
 
 export async function buildElectronDistributionBase(input: Readonly<{ sceneDirectory: string; sceneManifestSha256: string; archivePath: string; outputRoot: string }>) {
   if (process.platform !== "darwin" && process.platform !== "win32") throw new Error("unsupported Electron base platform");

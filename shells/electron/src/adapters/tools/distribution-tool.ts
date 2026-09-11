@@ -12,6 +12,7 @@ import { withElectronInstallation } from "../standalone/assemble-installation.ts
 import { assertElectronDistributionBinding } from "../../composition/release-identity.ts";
 import { parseElectronExactDistributionRequest } from "./exact-contract.ts";
 import { resolveElectronReleaseManifest } from "./manifests.ts";
+import { electronMacDistributionSigning } from "./platforms/macos/signing.ts";
 
 async function descriptor(path: string, file = basename(path)) {
   const bytes = await readFile(path);
@@ -57,9 +58,10 @@ return await withElectronInstallation({
   outputDirectory: dirname(input.outputDirectory), target: input.target, carrierVersion: manifest.shell.version, authority: { host, updaterProvider, supervisor },
 }, async ({ resourceDirectory }) => {
 const policy = JSON.parse(await readFile(fileURLToPath(new URL("../../../config/distribution.json", import.meta.url)), "utf8"));
-const windowsLifecycle = JSON.parse(await readFile(fileURLToPath(new URL("../../../config/platforms/windows.json", import.meta.url)), "utf8"));
+const windowsLifecycle = JSON.parse(await readFile(fileURLToPath(new URL("../../../config/platforms/windows/lifecycle.json", import.meta.url)), "utf8"));
 const built = await buildElectronDistribution({
   ...(input.base == null ? {} : { base: input.base }),
+  ...(input.base != null && input.target.startsWith("darwin-") ? { macSigning: await electronMacDistributionSigning() } : {}),
   scene,
   manifest,
   policy,
@@ -74,9 +76,8 @@ const artifact = await descriptor(artifactPath);
 const platformTrust = input.target.startsWith("darwin-") ? await (async () => {
   const appPath = built.artifacts.find((path) => path.toLowerCase().endsWith(".app"));
   if (appPath == null) throw new Error("Electron distribution lacks its signed app bundle");
-  let observation = await inspectMacElectronAppTrust({ appPath, mode: "verify-only" });
+  const observation = await inspectMacElectronAppTrust({ appPath, mode: "detect" });
   const mode = observation.teamIdentifier === "adhoc" ? "verify-only" as const : "formal" as const;
-  if (mode === "formal") observation = await inspectMacElectronAppTrust({ appPath, mode });
   if (observation.bundleId !== manifest.appId || observation.executableName !== manifest.executableName
     || observation.productName !== manifest.productName) throw new Error("Electron signed app identity differs from its release manifest");
   return Object.freeze({

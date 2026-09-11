@@ -17,11 +17,11 @@ readiness. `config/distribution.json` separately owns the finite macOS/Windows a
 presentation policy. `shell.json` schema 2 owns the physical publisher/product
 identity and Shell compatibility; Capsule-owned `config/appearance.json` owns
 window dimensions, per-channel titles and loading presentation. Old manifest
-presentation fields are rejected rather than merged. `config/platforms/windows.json`
+presentation fields are rejected rather than merged. `config/platforms/windows/lifecycle.json`
 owns install scope and uninstall data retention. electron-kit derives registry endpoints from those declarations, while this Shell
 schedules post-ready registry reconciliation. These policies are consumed only by the relevant
 runtime or pack projection; the assembled scene remains independent of distribution and release policy.
-`config/platforms/mac.json` declares a regular interactive application: electron-kit
+`config/platforms/macos/runtime.json` declares a regular interactive application: electron-kit
 uses `app.setActivationPolicy`, `app.dock.show()` and `app.dock.hide()` only for
 the current process presentation. A user's “Keep in Dock” choice is persisted
 and matched to the stable bundle identity by macOS; neither the Shell nor

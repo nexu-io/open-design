@@ -12,7 +12,7 @@ afterEach(async () => { vi.unstubAllGlobals(); await Promise.all(roots.splice(0)
 it.each([false, true])("restores portable base permissions and links, refusing identity corruption (%s)", async corrupt => {
   const root = await mkdtemp(join(tmpdir(), "base-cache-")); roots.push(root);
   const base = join(root, "source"); await mkdir(base);
-  const manifest = JSON.stringify({ schemaVersion: 1, operation: "electron.base.build", target: "darwin-arm64" });
+  const manifest = JSON.stringify({ schemaVersion: 1, operation: "electron.macos-base.build", target: "darwin-arm64" });
   await writeFile(join(base, "base.json"), manifest); await writeFile(join(base, "native"), "native", { mode: 0o755 }); await symlink("native", join(base, "link"));
   const input = { target: "darwin-arm64", descriptor: join(root, "descriptor.json"),
     output: join(root, "candidate"), buildReceipt: join(root, "build.json") };

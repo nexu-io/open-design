@@ -90,7 +90,8 @@ export function resolveElectronDistributionConfiguration(input: Readonly<{
     executableName: input.manifest.executableName,
     electronVersion: input.electronVersion,
     asar: true,
-    compression: "maximum",
+    // Payload splitting owns size reduction. Native wrapping prioritizes time.
+    compression: "store",
     directories: { output: input.outputRoot },
     files: ["main.cjs", "renderer-mount-preload.cjs", "shell.json", "carrier.json", "package.json"],
     npmRebuild: false,
@@ -98,7 +99,7 @@ export function resolveElectronDistributionConfiguration(input: Readonly<{
     mac: { category: policy.mac.category, target: [...policy.mac.targets] },
     // The standalone updater consumes complete installers, not electron-updater
     // blockmaps. Keep native wrapping free of unused update-side outputs.
-    dmg: { sign: policy.mac.dmg.sign, writeUpdateInfo: false },
+    dmg: { sign: policy.mac.dmg.sign, writeUpdateInfo: false, format: "UDRO" },
     win: { target: [...policy.windows.targets] },
     nsis: {
       ...policy.windows.nsis,

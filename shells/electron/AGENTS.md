@@ -7,6 +7,11 @@ Shell and the typed adapter boundary consumed by repository tools.
 
 - `config/` declares product identity, Shell compatibility, runtime policy,
   platform policy, and distribution policy.
+- Platform suites live under `config/platforms/<platform>/`: macOS runtime,
+  signing and entitlements belong to `macos/`; Windows lifecycle belongs to
+  `windows/`. Keep future platform-specific build/distribution declarations in
+  their platform directory, not as prefixed sibling files. Do not add Linux
+  capabilities or empty configuration placeholders in this delivery.
 - `src/` composes product handlers and adapters over `electron-kit`.
 - Public `/build` and `/lifecycle` exports own the tool-facing composition boundary.
   `/build/contracts` is the pure artifact metadata leaf; release controllers and

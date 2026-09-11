@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { buildReleaseDistribution } from "@/exact/distribution-build.ts";
-import { buildReleaseBase, buildReleaseCapsule, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
+import { buildReleaseBase } from "@/exact/base-build.ts";
+import { buildReleaseCapsule, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
 import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 
 const roots: string[] = [];
@@ -21,17 +22,15 @@ async function fixture() {
   return { root, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
 }
 
-it.skipIf(process.platform !== "darwin" || process.arch !== "arm64")("builds a physical base without planner state", async () => {
-  const f = await fixture(), scene = join(f.root, "scene");
-  await mkdir(scene);
-  await json(join(scene, "scene.json"), { target: f.target, shellBuildHash: "b".repeat(64) });
+it.skipIf(process.platform !== "darwin" || process.arch !== "arm64")("builds a channel-native base without scene, release version or planner state", async () => {
+  const f = await fixture();
   await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"),
     'export async function resolveElectronBaseArchive() { return { version: "41.3.0" }; }\n' +
-    'export async function buildElectronBase(input) { return { root: input.outputRoot, archivePath: input.archivePath, manifestSha256: "' + "f".repeat(64) + '" }; }');
+    'export async function buildElectronBase(input) { return { root: input.outputRoot, request: input, manifestSha256: "' + "f".repeat(64) + '" }; }');
   const runtimeArchive = join(f.root, "official-electron.zip");
-  const result = await buildReleaseBase({ ...f, scene, runtimeArchive });
+  const result = await buildReleaseBase({ ...f, channel: "betahyx", runtimeArchive });
   expect(result).toMatchObject({ operation: "electron.base.build", target: f.target });
-  expect(result.base).toHaveProperty("archivePath", runtimeArchive);
+  expect(result.base).toHaveProperty("request", { channel: "betahyx", target: f.target, archivePath: runtimeArchive, outputRoot: f.output });
   expect(result).not.toHaveProperty("planNode");
 });
 

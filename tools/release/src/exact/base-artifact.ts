@@ -14,9 +14,9 @@ function bound(receipt: JsonObject, target: string) {
 async function manifest(root: string, receipt: JsonObject) {
   const path = join(root, "base.json"), descriptor = await readObject(path);
   // The opaque transport is authenticated here; Kit verifies every native and
-  // carrier byte against this manifest before using the base for native signing.
+  // skeleton byte against this manifest before using the signed native base.
   if ((await describeFile(path)).sha256 !== receipt.base.manifestSha256
-    || descriptor.schemaVersion !== 1 || descriptor.operation !== "electron.base.build"
+    || descriptor.schemaVersion !== 1 || descriptor.operation !== "electron.macos-base.build"
     || descriptor.target !== receipt.target) throw new Error("base manifest binding mismatch");
 }
 /** A job-to-job transport uses exactly the same portable bytes as an R2 product. */
@@ -26,7 +26,9 @@ export async function packBase(input: Readonly<{ target: string; buildReceipt: s
   if (typeof receipt.base.root !== "string" || resolve(receipt.base.root) !== receipt.base.root) throw new Error("base root must be absolute");
   await manifest(receipt.base.root, receipt);
   await stageArtifactProduct(input.output, async stage => {
-    const archive = await pack(receipt.base.root, join(stage, ARCHIVE), { allowInternalLinks: true });
+    // macOS Framework aliases require ZIP's physical-link representation.
+    const archive = await pack(receipt.base.root, join(stage, ARCHIVE), { allowInternalLinks: true,
+      tool: { kind: "zip", executable: process.env.ARCHIVE_ZIP_PATH || "zip" } });
     await manifest(receipt.base.root, receipt);
     await writeObject(join(stage, RECEIPT), { schemaVersion: 1, operation: "electron.base.build", target,
       base: { manifestSha256: receipt.base.manifestSha256 }, archive: { sha256: archive.sha256, size: archive.size } });

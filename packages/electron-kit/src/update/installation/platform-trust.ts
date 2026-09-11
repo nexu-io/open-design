@@ -88,23 +88,25 @@ export function createMacSystemInstallerTrustVerifier(options: Readonly<{
 
 export async function inspectMacElectronAppTrust(input: Readonly<{
   appPath: string;
-  mode: ElectronMacInstallerTrustReceipt["mode"];
+  mode: ElectronMacInstallerTrustReceipt["mode"] | "detect";
   run?: CommandRunner;
 }>): Promise<ElectronMacInstallerTrustObservation> {
   if (process.platform !== "darwin" && input.run == null) throw new Error("macOS app trust inspection requires Darwin");
   const status = await lstat(input.appPath);
   if (!status.isDirectory() || status.isSymbolicLink() || !basename(input.appPath).endsWith(".app")) throw new Error("macOS app trust target is not an app bundle");
   const run = input.run ?? (async (executable, args) => await execFileAsync(executable, [...args]));
+  const details = await run("/usr/bin/codesign", ["--display", "--requirements", "-", "--verbose=4", input.appPath]);
+  const output = `${details.stdout}\n${details.stderr}`;
+  const team = teamIdentifier(output);
+  const formal = input.mode === "formal" || (input.mode === "detect" && team !== "adhoc");
   await run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", input.appPath]);
-  if (input.mode === "formal") {
+  if (formal) {
     await run("/usr/bin/xcrun", ["stapler", "validate", input.appPath]);
     await run("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", input.appPath]);
   }
-  const details = await run("/usr/bin/codesign", ["--display", "--requirements", "-", "--verbose=4", input.appPath]);
   const plistPath = join(input.appPath, "Contents", "Info.plist");
   const executableName = scalar(await run("/usr/bin/plutil", ["-extract", "CFBundleExecutable", "raw", "-o", "-", plistPath]), "CFBundleExecutable");
   const productName = scalar(await run("/usr/bin/plutil", ["-extract", "CFBundleName", "raw", "-o", "-", plistPath]), "CFBundleName");
-  const output = `${details.stdout}\n${details.stderr}`;
   return Object.freeze({
     provider: "macos-system",
     appBundleName: basename(input.appPath),
@@ -112,9 +114,9 @@ export async function inspectMacElectronAppTrust(input: Readonly<{
     executableName,
     productName,
     designatedRequirement: designatedRequirement(output),
-    teamIdentifier: teamIdentifier(output),
+    teamIdentifier: team,
     codesignVerified: true,
-    gatekeeperAssessed: input.mode === "formal",
+    gatekeeperAssessed: formal,
   });
 }
 

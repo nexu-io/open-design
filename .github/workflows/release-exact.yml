@@ -542,14 +542,16 @@ jobs:
         if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
         env:
           TARGET: ${{ matrix.target }}
-          WORKLOAD: ${{ matrix.base_workload }}
+          CHANNEL: ${{ inputs.channel }}
+          CSC_LINK: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
           ARCHIVE_ZIP_PATH: /usr/bin/zip
         shell: bash
         run: |
           set -euo pipefail
           tools-release build base \
             --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
-            --scene "$RUNNER_TEMP/exact-scene" \
+            --channel "$CHANNEL" \
             --output "$RUNNER_TEMP/exact-base" --receipt "$RUNNER_TEMP/base-build-receipt.json"
           tools-release base export \
             --target "$TARGET" \

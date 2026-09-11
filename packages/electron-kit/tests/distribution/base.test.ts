@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
-import { assembleElectronDistributionBase, buildElectronDistributionBase, resolveElectronDistributionArchive, verifyElectronDistributionBase } from "@/distribution/base.js";
+import { assembleElectronDistributionBase, buildElectronDistributionBase, verifyElectronDistributionBase } from "@/distribution/base.js";
+import { resolveElectronDistributionArchive } from "@/distribution/runtime-archive.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

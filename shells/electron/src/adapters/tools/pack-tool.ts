@@ -79,7 +79,7 @@ export async function executeElectronPack(request: ElectronPackRequest) {
     entryPath: electronShellSource("main.ts"),
     manifest,
     carrierConfigPath: fileURLToPath(new URL("../../../config/carrier.json", import.meta.url)),
-    windowsLifecyclePath: fileURLToPath(new URL("../../../config/platforms/windows.json", import.meta.url)),
+    windowsLifecyclePath: fileURLToPath(new URL("../../../config/platforms/windows/lifecycle.json", import.meta.url)),
     outputRoot: join(request.outputDirectory, "distribution"),
     projectRoot: fileURLToPath(new URL("../../..", import.meta.url)),
     rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),

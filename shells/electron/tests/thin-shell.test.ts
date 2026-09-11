@@ -38,9 +38,9 @@ describe("Electron product shell", () => {
   it("owns finite macOS and Windows distribution policy", async () => {
     const [policySource, macRuntimeSource, shellSource, windowsLifecycleSource] = await Promise.all([
       readFile(new URL("../config/distribution.json", import.meta.url), "utf8"),
-      readFile(new URL("../config/platforms/mac.json", import.meta.url), "utf8"),
+      readFile(new URL("../config/platforms/macos/runtime.json", import.meta.url), "utf8"),
       readFile(new URL("../config/shell.json", import.meta.url), "utf8"),
-      readFile(new URL("../config/platforms/windows.json", import.meta.url), "utf8"),
+      readFile(new URL("../config/platforms/windows/lifecycle.json", import.meta.url), "utf8"),
     ]);
     const policy = JSON.parse(policySource) as {
       mac: { targets: string[] };

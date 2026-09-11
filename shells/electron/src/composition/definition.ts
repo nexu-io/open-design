@@ -2,8 +2,8 @@ import runtime from "../../config/runtime.json" with { type: "json" };
 import appearance from "../../config/appearance.json" with { type: "json" };
 import splashMedia from "../../config/splash-media.json" with { type: "json" };
 import standalone from "../../config/standalone.json" with { type: "json" };
-import macRuntime from "../../config/platforms/mac.json" with { type: "json" };
-import windowsLifecycle from "../../config/platforms/windows.json" with { type: "json" };
+import macRuntime from "../../config/platforms/macos/runtime.json" with { type: "json" };
+import windowsLifecycle from "../../config/platforms/windows/lifecycle.json" with { type: "json" };
 
 import type {
   ElectronWarmupTopology,

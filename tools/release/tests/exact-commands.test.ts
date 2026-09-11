@@ -32,7 +32,7 @@ const policyArgs = ["policy", "resolve", ...identity, "--profile", "exact-valida
 it("hands off a portable base without workspace packages or a convergence hit", async () => {
   const f = await fixture(), base = join(f.root, "base"), buildReceipt = join(f.root, "build.json");
   await mkdir(base);
-  const manifest = JSON.stringify({ schemaVersion: 1, operation: "electron.base.build", target: "darwin-arm64" });
+  const manifest = JSON.stringify({ schemaVersion: 1, operation: "electron.macos-base.build", target: "darwin-arm64" });
   const node = { id: "electron.base.build", target: "darwin-arm64" };
   await writeFile(join(base, "base.json"), manifest); await writeFile(join(base, "native"), "native");
   await writeFile(buildReceipt, JSON.stringify({ schemaVersion: 1, operation: node.id, target: node.target,
@@ -93,7 +93,7 @@ it("rejects unknown commands, missing arguments and non-boolean switches", async
   await expect(f.invoke(["removed-command"])).rejects.toThrow("Unknown command");
   await expect(f.invoke(["publish"])).rejects.toThrow("--pack-receipt is required");
   await expect(f.invoke(["scene", "pack"])).rejects.toThrow("--output is required");
-  await expect(f.invoke(["scene", "erase", "--output", f.root])).rejects.toThrow("must be pack, unpack, import or verify");
+  await expect(f.invoke(["scene", "erase", "--output", f.root])).rejects.toThrow("must be acquire, pack, unpack, import or verify");
   await expect(f.invoke(policyArgs.map(value => value === "false" ? "yes" : value))).rejects.toThrow("must be true or false");
   await expect(f.invoke([...policyArgs, "--bypass"])).rejects.toThrow("Unknown option");
 });

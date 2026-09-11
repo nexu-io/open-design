@@ -1,5 +1,6 @@
 import type { CAC } from "cac";
-import { buildReleaseBase, buildReleaseCapsule, buildReleasePlatform, buildReleaseScene, buildReleaseSceneInputs } from "./native-build.ts";
+import { buildReleaseBase } from "./base-build.ts";
+import { buildReleaseCapsule, buildReleasePlatform, buildReleaseScene, buildReleaseSceneInputs } from "./native-build.ts";
 import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { required, type Options } from "./command-input.ts";
 
@@ -19,7 +20,7 @@ export function registerBuildCommands(cli: CAC): void {
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
     .option("--capsule-directory <directory>", "Portable Capsule products, indexed by target (scene; Electron consumes)")
     .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
-    .option("--scene <directory>", "Verified scene (base)")
+    .option("--channel <name>", "Native product identity (base; not a release version)")
     .action(async (operation: string, options: Options) => {
       if (operation === "runtime-resources") {
         const allowed = new Set(["root", "output", "receipt", "resourceIds", "--"]);
@@ -45,12 +46,17 @@ export function registerBuildCommands(cli: CAC): void {
         const allowed = new Set(["root", "shell", "target", "output", "receipt", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`Capsule build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
       }
+      if (operation === "base") {
+        const allowed = new Set(["root", "shell", "target", "output", "receipt", "channel", "runtimeArchive", "--"]);
+        for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`base build does not accept --${key}`);
+      }
       if (operation === "platform") {
         const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) {
           throw new Error(`platform build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
         }
       }
+      if (options.channel != null && operation !== "base") throw new Error("--channel is only supported by build base");
       const common = { root: required(options, "root"), shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt") };
       if (operation !== "scene" && (options.capsuleContent != null || options.capsuleArchive != null)) throw new Error("prebuilt Capsule inputs are only supported by build scene");
       if (operation === "scene-inputs") await buildReleaseSceneInputs(common);
@@ -61,7 +67,7 @@ export function registerBuildCommands(cli: CAC): void {
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "capsule") await buildReleaseCapsule(common);
-      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene"),
+      else if (operation === "base") await buildReleaseBase({ ...common, channel: required(options, "channel"),
         ...(options.runtimeArchive == null ? {} : { runtimeArchive: required(options, "runtimeArchive") }) });
       else if (operation === "platform") await buildReleasePlatform({ ...common,
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });

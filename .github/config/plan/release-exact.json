@@ -230,13 +230,31 @@
       "packages/download/"
     ],
     "electron-base": [
-      "suite://electron-carrier",
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
       "suite://release-executor",
+      "packages/electron-kit/*.json",
+      "packages/electron-kit/*.mjs",
+      "packages/electron-kit/src/contracts/",
+      "packages/electron-kit/src/lib/",
+      "packages/electron-kit/src/distribution/",
+      "packages/electron-kit/src/platform/",
+      "shells/electron/package.json",
+      "shells/electron/tsconfig.json",
+      "shells/electron/tsconfig.build.json",
+      "shells/electron/config/",
+      "shells/electron/src/build-api.ts",
+      "shells/electron/src/adapters/tools/manifests.ts",
+      "shells/electron/src/adapters/tools/platforms/",
+      "shells/electron/src/composition/release-identity.ts",
+      "packages/download/",
+      "tools/pack/",
       "tools/release/src/exact/base-artifact.ts",
       "tools/release/src/exact/native-builder.ts",
-      "tools/release/src/exact/native-build.ts",
-      "tools/release/src/exact/resource-build.ts",
-      "tools/release/src/policy/"
+      "tools/release/src/exact/base-build.ts"
     ],
     "electron-capsule": [
       ".node-version",
@@ -379,6 +397,7 @@
           },
           "parameters": {
             "target": "darwin-arm64",
+            "channel": "betahyx",
             "postinstall_level": "electron-build"
           }
         },

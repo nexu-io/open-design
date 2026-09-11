@@ -115,21 +115,3 @@ export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeAr
   await writeObject(input.receipt, receipt);
   return receipt;
 }
-
-export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: string; runtimeArchive?: string }>) {
-  if (input.shell !== "electron") throw new Error("base build requires electron");
-  const buildTarget = target(input), scene = resolve(input.scene);
-  const sceneManifest = await readObject(join(scene, "scene.json"));
-  if (sceneManifest.target !== buildTarget || buildTarget !== `${process.platform}-${process.arch}`) throw new Error("base build target mismatch");
-  const { buildElectronBase, resolveElectronBaseArchive } = await electronBuilder(input.root);
-  const source = await resolveElectronBaseArchive(buildTarget);
-  const archivePath = input.runtimeArchive ? resolve(input.runtimeArchive) : (await acquireBuildArchive({
-    cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: source.fileName, url: source.url, sha256: source.sha256,
-  })).path;
-  await mkdir(dirname(resolve(input.output)), { recursive: true });
-  const base = await buildElectronBase({ sceneDirectory: scene,
-    sceneManifestSha256: (await describeFile(join(scene, "scene.json"))).sha256, archivePath, outputRoot: resolve(input.output) });
-  const receipt = { schemaVersion: 1, operation: "electron.base.build", target: buildTarget, base };
-  await writeObject(input.receipt, receipt);
-  return receipt;
-}

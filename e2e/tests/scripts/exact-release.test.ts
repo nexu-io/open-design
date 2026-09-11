@@ -191,14 +191,17 @@ describe("exact Electron release topology", () => {
       "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in original(self,token)]",
       " with patch.object(GitFingerprinter,'records',records): after=compute()",
       " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
-      "print(json.dumps({path:changed('shells/electron/'+path) for path in ['tests/main.test.ts','tsconfig.tests.json','src/main.ts']}))",
+      "print(json.dumps({path:changed('shells/electron/'+path) for path in ['tests/main.test.ts','tsconfig.tests.json','src/main.ts','config/platforms/windows/lifecycle.json']}))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
     const changed = JSON.parse(result.stdout);
     expect(changed["tests/main.test.ts"]).toEqual(["validation_shell_darwin_arm64"]);
     expect(changed["tsconfig.tests.json"]).toEqual(["validation_shell_darwin_arm64"]);
     expect(changed["src/main.ts"]).toEqual(expect.arrayContaining([
-      "electron_base_darwin_arm64", "electron_capsule_darwin_arm64", "electron_scene_darwin_arm64", "release_tools", "validation_shell_darwin_arm64",
+      "electron_capsule_darwin_arm64", "electron_scene_darwin_arm64", "release_tools", "validation_shell_darwin_arm64",
     ]));
+    expect(changed["src/main.ts"]).not.toContain("electron_base_darwin_arm64");
+    // Coarse native-suite invariants intentionally accept cross-platform rebuilds.
+    expect(changed["config/platforms/windows/lifecycle.json"]).toContain("electron_base_darwin_arm64");
   });
   it.each(["release-exact", "release-prerelease", "release-stable"])("isolates CLI registration from product recipes in %s", async lane => {
     const result = await run("python3", ["-c", [

@@ -1,6 +1,11 @@
 export type { ElectronDistributionReceipt, ElectronSceneReceipt } from "./contracts.js";
 export * from "./capsule.js";
 export * from "./base.js";
+export * from "./runtime-archive.js";
+export { buildSignedMacBaseFromArchive, loadSignedMacBase, type SignedMacBase, type SignedMacBaseManifest } from "./macos/base-build.js";
+export { type MacBaseSeal, type MacBaseSigner } from "./macos/base-seal.js";
+export { projectMacBaseVersion } from "./macos/version-projection.js";
+export { finalizeMacBaseProjection, type MacNotaryAuthentication } from "./macos/finalize.js";
 export { buildElectronDistribution, type BuildElectronDistributionInput } from "./distribution.js";
 export * from "./distribution-policy.js";
 export * from "./projection/index.js";
