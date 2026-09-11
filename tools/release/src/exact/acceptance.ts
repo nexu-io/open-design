@@ -1,9 +1,9 @@
-import { join } from "node:path";
 import { describeElectronRuntimeDiagnostics, updateElectronClosureThroughCdp, inspectElectronSelectedCapsule,
+  inspectElectronBoundCapsule,
   prepareElectronShellThroughCdp, applyElectronShellThroughCdp, inspectElectronStartupThroughCdp, waitForElectronShutdown,
   closeElectronDiagnosticSession,
   type ElectronDiagnosticSession } from "@open-design/shell-electron/lifecycle/inspection";
-import { canonicalBytes, checkedFile, readObject, writeObject } from "./control-common.ts";
+import { canonicalBytes, writeObject } from "./control-common.ts";
 import { acceptInstalledRelease } from "./control-release.ts";
 import { readPublishedAcceptance } from "./installed-acceptance.ts";
 
@@ -21,18 +21,14 @@ export async function updateAcceptanceClosure(input: AcceptanceInput): Promise<v
 
 /** Same carrier, two public update paths. Capsule replacement owns its exact
  * Closure transition; never fake a second Closure apply after that transition. */
-export async function updateAcceptanceSameCarrier(input: AcceptanceInput & Readonly<{ installedRoot: string; firstInstallRoot: string; firstInstallNamespace: string }>) {
+export async function updateAcceptanceSameCarrier(input: AcceptanceInput & Readonly<{ installedRoot: string; candidateRoot: string }>) {
   const diagnosticSession = await session(input);
-  const installation = await readObject(join(input.firstInstallRoot, "standalone-installation.json"));
-  const manifestFile = await checkedFile(installation.capsule.manifest, "current first-install Capsule",
-    join(input.firstInstallRoot, installation.capsule.manifest.file));
-  const expected = await readObject(manifestFile);
-  const first = await inspectElectronSelectedCapsule({ ...diagnosticSession, namespace: input.firstInstallNamespace }, input.firstInstallRoot);
-  if (!canonicalBytes(first.envelope).equals(canonicalBytes(expected))) throw new Error("First installation did not commit its bound Capsule");
+  const candidate = await inspectElectronBoundCapsule(input.candidateRoot);
+  const expected = candidate.envelope;
   const before = await inspectElectronSelectedCapsule(diagnosticSession, input.installedRoot);
   // Per-version URLs/signatures are not a content upgrade. The verified owner
   // supplies logical Shell identity; release control never recomputes it.
-  if (before.shell.buildHash === first.shell.buildHash && before.shell.version === first.shell.version) return updateAcceptanceClosure(input);
+  if (before.shell.buildHash === candidate.shell.buildHash && before.shell.version === candidate.shell.version) return updateAcceptanceClosure(input);
   const prepared = await prepareElectronShellThroughCdp(diagnosticSession);
   const stages: Record<string, unknown> = { schemaVersion: 1, operation: "electron.capsule.upgrade.stages", before, prepared };
   const stageReceipt = input.receipt + ".stages.json";

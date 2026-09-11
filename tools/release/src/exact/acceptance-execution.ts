@@ -4,8 +4,8 @@ import { copyFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { installMacElectronApp, withMacElectronProcess } from "@open-design/shell-electron/lifecycle/installed";
-import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp, waitForElectronStartup } from "@open-design/shell-electron/lifecycle/inspection";
-import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
+import { describeElectronRuntimeDiagnostics, inspectElectronBoundCapsule, inspectElectronSelectedCapsule, inspectElectronStartupThroughCdp, waitForElectronStartup } from "@open-design/shell-electron/lifecycle/inspection";
+import { canonicalBytes, checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 import { readPublishedAcceptance } from "./installed-acceptance.ts";
 import { collectReleaseAcceptance, updateAcceptanceSameCarrier } from "./acceptance.ts";
 
@@ -14,9 +14,33 @@ const execute = promisify(execFile);
 type ExerciseInput = Input & Readonly<{ artifact: string; mode: string; baselineReceipt?: string; namespace?: string }>;
 
 export async function exerciseReleaseInstallation(input: ExerciseInput) {
+  return exerciseInstallation(input);
+}
+
+/** Both installations are verified before either runtime starts. Wait for both
+ * owners to finish, including cleanup, even when one scenario fails. */
+export async function exerciseReleaseInstallationPair(input: Input & Readonly<{ artifact: string; baselineArtifact: string; baselineReceipt: string }>) {
+  if (input.shell !== "electron") throw new Error("Paired installation acceptance requires Electron");
+  const firstInput = { ...input, mode: "first", namespace: `accept-first-${randomUUID()}` };
+  const hotInput = { ...input, artifact: input.baselineArtifact, mode: "hot", namespace: `accept-hot-${randomUUID()}` };
+  const prepared = await Promise.allSettled([prepareInstallation(firstInput), prepareInstallation(hotInput)]);
+  const failures = prepared.filter(result => result.status === "rejected");
+  if (failures.length) throw new AggregateError(failures.map(result => result.reason), "Installation preparation failed");
+  const first = (prepared[0] as PromiseFulfilledResult<PreparedInstallation>).value;
+  const hot = (prepared[1] as PromiseFulfilledResult<PreparedInstallation>).value;
+  const results = await Promise.allSettled([
+    exerciseInstallation(firstInput, first),
+    exerciseInstallation(hotInput, hot, first.installedRoot),
+  ]);
+  const errors = results.filter(result => result.status === "rejected");
+  if (errors.length) throw new AggregateError(errors.map(result => result.reason), "Installed acceptance failed");
+}
+
+type PreparedInstallation = Awaited<ReturnType<typeof prepareInstallation>>;
+async function exerciseInstallation(input: ExerciseInput, prepared?: PreparedInstallation, candidateRoot?: string) {
   if (!["first", "hot"].includes(input.mode)) throw new Error("Installation mode must be first or hot");
   input = { ...input, namespace: input.namespace ?? `accept-${input.mode}-${randomUUID()}` };
-  try { return await executeReleaseInstallation(input); }
+  try { return await executeReleaseInstallation(input, prepared ?? await prepareInstallation(input), candidateRoot); }
   catch (error) {
     const failure = error as Error & { code?: unknown; signal?: unknown; killed?: boolean; stdout?: string; stderr?: string };
     try {
@@ -60,7 +84,7 @@ export async function exerciseReleaseInstallation(input: ExerciseInput) {
 }
 
 /** Execution products belong to this invocation, never to the workflow's directory layout. */
-async function executeReleaseInstallation(input: ExerciseInput) {
+async function prepareInstallation(input: ExerciseInput) {
   if (!input.target.startsWith("darwin-") || process.platform !== "darwin") throw new Error("Installed execution currently requires macOS");
   if (input.mode === "hot" && input.shell !== "electron") throw new Error("Hot execution requires Electron");
   const { required, published, policy } = await readPublishedAcceptance({
@@ -81,7 +105,6 @@ async function executeReleaseInstallation(input: ExerciseInput) {
   await mkdir(root); // Refuse evidence reuse or overwriting an earlier attempt.
   const namespace = input.namespace!;
   let installedRoot: string;
-  let hotAcceptanceReceipt: string | undefined;
   if (input.shell === "electron") {
     const scope = { namespace, channel: policy.channel, productName: required.installIdentity.productName, presentation: "headless" as const };
     const diagnostics = describeElectronRuntimeDiagnostics(scope);
@@ -90,6 +113,17 @@ async function executeReleaseInstallation(input: ExerciseInput) {
     await writeObject(join(root, "scope.json"), { schemaVersion: 1, operation: "release.acceptance.scope", scope });
     const appPath = join(root, "installed.app");
     installedRoot = (await installMacElectronApp({ artifact: resolve(input.artifact), appPath })).resources;
+  } else if (input.shell === "terminal") {
+    installedRoot = join(root, "installed");
+  } else throw new Error("Unsupported acceptance Shell");
+  return { required, published, policy, root, namespace, installedRoot };
+}
+
+async function executeReleaseInstallation(input: ExerciseInput, prepared: PreparedInstallation, candidateRoot?: string) {
+  const { required, published, policy, root, namespace, installedRoot } = prepared;
+  let hotAcceptanceReceipt: string | undefined;
+  if (input.shell === "electron") {
+    const appPath = join(root, "installed.app");
     const executableName = required.installIdentity?.executableName;
     if (typeof executableName !== "string") throw new Error("Published executable identity is absent");
     // Enclose platform acquisition plus the product's bounded cold warmup;
@@ -108,10 +142,12 @@ async function executeReleaseInstallation(input: ExerciseInput) {
         // only the subsequent updater interaction belongs to the CDP budget.
         await waitForElectronStartup({ namespace, channel: policy.channel,
           productName: required.installIdentity.productName, presentation: "headless" }, baselineStartedAfter, 420_000);
-        const first = await readObject(join(resolve(input.workRoot), "first", "execution.json"));
-        await checkedFile(first.publication, "first-install publication", input.publication);
-        await updateAcceptanceSameCarrier({ ...input, installedRoot, firstInstallRoot: first.installedRoot,
-          firstInstallNamespace: first.namespace,
+        if (candidateRoot == null) {
+          const first = await readObject(join(resolve(input.workRoot), "first", "execution.json"));
+          await checkedFile(first.publication, "first-install publication", input.publication);
+          candidateRoot = first.installedRoot;
+        }
+        await updateAcceptanceSameCarrier({ ...input, installedRoot, candidateRoot: candidateRoot!,
           namespace, receipt: hotAcceptanceReceipt! });
       });
     }
@@ -123,7 +159,6 @@ async function executeReleaseInstallation(input: ExerciseInput) {
     });
   } else if (input.shell === "terminal") {
     const extracted = join(root, "extracted");
-    installedRoot = join(root, "installed");
     await mkdir(extracted);
     await execute("/usr/bin/tar", ["-xzf", resolve(input.artifact), "-C", extracted], { timeout: 120_000 });
     const source = join(extracted, "nexu-terminal");
@@ -169,6 +204,14 @@ export async function collectExecutedAcceptance(input: Input & Readonly<{ inspec
     if (hot && !inspection.upgradeRequired) throw new Error("Hot acceptance requires an older baseline");
   }
   const selected = hot ? await readExecution("hot") : first;
+  if (input.shell === "electron") {
+    if (hot && (first.namespace === selected.namespace || !first.namespace || !selected.namespace)) throw new Error("First and hot acceptance namespaces must be independent");
+    const { required, policy } = await readPublishedAcceptance({ publishReceipt: input.publication, policyReceipt: input.policy, shellType: input.shell, target: input.target });
+    const committed = await inspectElectronSelectedCapsule({ namespace: first.namespace, channel: policy.channel,
+      productName: required.installIdentity.productName, presentation: "headless" }, first.installedRoot);
+    const bound = await inspectElectronBoundCapsule(first.installedRoot);
+    if (!canonicalBytes(committed.envelope).equals(canonicalBytes(bound.envelope))) throw new Error("First installation did not commit its bound Capsule");
+  }
   await collectReleaseAcceptance({ ...input, installedRoot: selected.installedRoot,
     baselineCandidate,
     runtimeProofRoot: selected.runtimeProofRoot, namespace: selected.namespace,

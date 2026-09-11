@@ -64,6 +64,14 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   generation, outgoing shutdown, restarted renderer and a separate cold restart.
   Keep current first-install proof independent; a changed physical carrier still
   requires its own upgrade evidence and must not silently become first-install-only.
+- `installation exercise-pair` verifies and installs candidate and baseline before
+  running first-start and hot-update in independent namespaces. Target selection
+  consumes the authenticated bound Capsule through the Shell adapter, not a
+  completed first-start session. Join waits for both runtime owners even on failure;
+  final collection separately authenticates the first session's committed Capsule
+  against its bound input and requires both independent execution receipts.
+  Workflow adoption requires a namespace-capable compatible baseline and real
+  isolation evidence; command-level concurrency tests alone do not establish it.
 - Experimental `baseline --mode candidate` is restricted to betahyx exact
   releases. It requires installed first-start evidence, marks that evidence as
   candidate-only and defers channel activation while advancing the test baseline

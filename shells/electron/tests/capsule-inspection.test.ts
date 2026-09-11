@@ -1,13 +1,25 @@
 import { expect, it, vi, afterEach } from "vitest";
-import { inspectElectronSelectedCapsule } from "@/adapters/tools/lifecycle/capsule-inspection.ts";
-const mocks = vi.hoisted(() => ({ selection: vi.fn(), physical: vi.fn(), trust: vi.fn(), inspect: vi.fn() }));
+import { inspectElectronBoundCapsule, inspectElectronSelectedCapsule } from "@/adapters/tools/lifecycle/capsule-inspection.ts";
+const mocks = vi.hoisted(() => ({ selection: vi.fn(), physical: vi.fn(), trust: vi.fn(), inspect: vi.fn(), seed: vi.fn(), identity: vi.fn() }));
 vi.mock("@open-design/electron-kit", () => ({ resolveElectronSessionPaths: () => ({ runtimeRoot: "/owned/runtime" }),
-  resolveElectronSessionNamespace: () => "fixture-headless", readElectronCapsuleSelection: mocks.selection }));
+  resolveElectronSessionNamespace: () => "fixture-headless", readElectronCapsuleSelection: mocks.selection,
+  resolveElectronCompositeShellIdentity: mocks.identity }));
 vi.mock("@open-design/electron-kit/capsule-loader", () => ({ inspectElectronCapsule: mocks.inspect }));
 vi.mock("@open-design/electron-kit/installation/inspection", () => ({ readElectronInstalledManifest: mocks.physical }));
-vi.mock("@/adapters/standalone/installation.ts", () => ({ loadElectronInstalledTrust: mocks.trust, resolveElectronStandaloneTarget: () => "darwin-arm64" }));
+vi.mock("@/adapters/standalone/installation.ts", () => ({ loadElectronInstalledTrust: mocks.trust,
+  loadElectronInstalledCapsuleSeed: mocks.seed, resolveElectronStandaloneTarget: () => "darwin-arm64" }));
 afterEach(() => vi.resetAllMocks());
 const session = { productName: "Fixture", channel: "betahyx", namespace: "fixture", presentation: "headless" as const };
+it("authenticates the bound input without requiring any runtime selection", async () => {
+  mocks.physical.mockResolvedValue({ manifest: { channel: "betahyx", shell: { version: "0.3.0", buildHash: "carrier" } } });
+  mocks.seed.mockResolvedValue({ envelope: { document: { version: "candidate" } } });
+  mocks.identity.mockReturnValue({ buildHash: "composite" });
+  expect(await inspectElectronBoundCapsule("/installed/Resources")).toMatchObject({ shell: { buildHash: "composite" } });
+  expect(mocks.seed).toHaveBeenCalledWith({ resourceRoot: "/installed/Resources", channel: "betahyx", target: "darwin-arm64", carrierVersion: "0.3.0" });
+  expect(mocks.selection).not.toHaveBeenCalled();
+  mocks.seed.mockRejectedValueOnce(new Error("invalid signature"));
+  await expect(inspectElectronBoundCapsule("/installed/Resources")).rejects.toThrow("invalid signature");
+});
 it("authenticates selected Capsule bytes with sealed installation trust, without loading code", async () => {
   const current = { envelope: { document: {} }, root: "/cached/capsule", closureGenerationId: "a".repeat(64) };
   mocks.selection.mockResolvedValue({ current, pending: null, revision: 3 });

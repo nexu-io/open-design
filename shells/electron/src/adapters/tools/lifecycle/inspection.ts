@@ -5,7 +5,7 @@ export { callElectronCdp, withElectronCdp, inspectElectronCdpStatus, type Electr
 export { readElectronInstalledManifest } from "@open-design/electron-kit/installation/inspection";
 import { StandaloneStore } from "@open-design/standalone";
 import { resolveElectronStandaloneStoreRoot } from "../../standalone/store-root.ts";
-export { inspectElectronSelectedCapsule } from "./capsule-inspection.ts";
+export { inspectElectronBoundCapsule, inspectElectronSelectedCapsule } from "./capsule-inspection.ts";
 
 export type ElectronDiagnosticSession = ElectronSessionScope;
 

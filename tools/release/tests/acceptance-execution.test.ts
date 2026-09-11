@@ -3,14 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { describeFile } from "@/exact/control-common.ts";
-import { collectExecutedAcceptance, exerciseReleaseInstallation } from "@/exact/acceptance-execution.ts";
+import { collectExecutedAcceptance, exerciseReleaseInstallation, exerciseReleaseInstallationPair } from "@/exact/acceptance-execution.ts";
 
 const mocks = vi.hoisted(() => ({
   published: vi.fn(), install: vi.fn(), process: vi.fn(), update: vi.fn(), collect: vi.fn(), startup: vi.fn(), ready: vi.fn(),
   root: "",
+  bound: vi.fn(), selected: vi.fn(),
 }));
 vi.mock("@open-design/shell-electron/lifecycle/inspection", () => ({ inspectElectronStartupThroughCdp: mocks.startup,
   waitForElectronStartup: mocks.ready,
+  inspectElectronBoundCapsule: mocks.bound, inspectElectronSelectedCapsule: mocks.selected,
   describeElectronRuntimeDiagnostics: ({ namespace }: { namespace: string }) => ({ namespaceRoot: join(mocks.root, "namespaces", namespace), runtimeLog: join(mocks.root, "namespaces", namespace, "runtime.jsonl") }) }));
 vi.mock("@open-design/shell-electron/lifecycle/installed", () => ({ installMacElectronApp: mocks.install, withMacElectronProcess: mocks.process }));
 vi.mock("@/exact/installed-acceptance.ts", () => ({ readPublishedAcceptance: mocks.published }));
@@ -30,6 +32,8 @@ async function fixture() {
   mocks.install.mockImplementation(async ({ appPath }) => ({ resources: join(appPath, "Contents/Resources") }));
   mocks.process.mockImplementation(async (_input, exercise) => exercise?.());
   mocks.startup.mockResolvedValue({ results: [{}] });
+  mocks.bound.mockResolvedValue({ envelope: { document: "candidate" } });
+  mocks.selected.mockResolvedValue({ envelope: { document: "candidate" } });
   const input = { publication, policy: join(root, "policy.json"), shell: "electron", target: "darwin-arm64",
     workRoot: join(root, "execution"), artifact };
   const inspection = join(root, "inspection.json"), baselineReceipt = join(root, "baseline.json");
@@ -38,6 +42,49 @@ async function fixture() {
     compatible: true, upgradeRequired: true, reason: "same-carrier", target: input.target, channel: policy.channel, releaseVersion: policy.releaseVersion }));
   return { root, input, inspection, baselineReceipt };
 }
+
+it.skipIf(process.platform !== "darwin")("runs hot update while first startup is pending, but joins both before completion", async () => {
+  const f = await fixture();
+  const firstReady = Promise.withResolvers<void>(), hotRan = Promise.withResolvers<void>();
+  mocks.startup.mockImplementation(async (scope: { namespace: string }) => {
+    if (scope.namespace.startsWith("accept-first-")) await firstReady.promise;
+    return { results: [{}] };
+  });
+  mocks.update.mockImplementation(async input => {
+    expect(input.candidateRoot).toBe(join(f.input.workRoot, "first/installed.app/Contents/Resources"));
+    await expect(readFile(join(f.input.workRoot, "first/execution.json"))).rejects.toThrow();
+    hotRan.resolve();
+  });
+  let settled = false;
+  const pending = exerciseReleaseInstallationPair({ ...f.input, baselineArtifact: f.input.artifact,
+    baselineReceipt: f.baselineReceipt }).finally(() => { settled = true; });
+  try {
+    await hotRan.promise;
+    expect(settled).toBe(false);
+    expect(mocks.install).toHaveBeenCalledTimes(2);
+  } finally { firstReady.resolve(); }
+  await pending;
+  await collectExecutedAcceptance({ ...f.input, inspection: f.inspection, receipt: join(f.root, "accepted.json") });
+  expect(mocks.collect).toHaveBeenCalledOnce();
+});
+
+it.skipIf(process.platform !== "darwin")("waits for the other runtime owner when one concurrent scenario fails", async () => {
+  const f = await fixture();
+  const firstReady = Promise.withResolvers<void>(), hotFailed = Promise.withResolvers<void>();
+  mocks.startup.mockImplementation(async (scope: { namespace: string }) => {
+    if (scope.namespace.startsWith("accept-first-")) await firstReady.promise;
+    return { results: [{}] };
+  });
+  mocks.update.mockImplementation(async () => { hotFailed.resolve(); throw new Error("hot failed"); });
+  let settled = false;
+  const pending = exerciseReleaseInstallationPair({ ...f.input, baselineArtifact: f.input.artifact,
+    baselineReceipt: f.baselineReceipt }).finally(() => { settled = true; });
+  const failure = expect(pending).rejects.toThrow("Installed acceptance failed");
+  try { await hotFailed.promise; expect(settled).toBe(false); }
+  finally { firstReady.resolve(); }
+  await failure;
+  await expect(readFile(join(f.input.workRoot, "hot/execution.json"))).rejects.toThrow();
+});
 
 it.skipIf(process.platform !== "darwin")("keeps first install, hot update and subsequent cold start as independent evidence", async () => {
   const f = await fixture();
@@ -81,6 +128,15 @@ it.skipIf(process.platform !== "darwin")("does not substitute first installation
     reason: "carrier-identity-changed" }));
   await expect(collectExecutedAcceptance({ ...f.input, inspection: f.inspection, receipt: join(f.root, "accepted.json") }))
     .rejects.toThrow("Baseline upgrade evidence is required");
+  expect(mocks.collect).not.toHaveBeenCalled();
+});
+
+it.skipIf(process.platform !== "darwin")("keeps first-start Capsule commitment as a final gate after concurrent execution", async () => {
+  const f = await fixture();
+  await exerciseReleaseInstallationPair({ ...f.input, baselineArtifact: f.input.artifact, baselineReceipt: f.baselineReceipt });
+  mocks.selected.mockResolvedValue({ envelope: { document: "not-the-bound-candidate" } });
+  await expect(collectExecutedAcceptance({ ...f.input, inspection: f.inspection, receipt: join(f.root, "accepted.json") }))
+    .rejects.toThrow("did not commit its bound Capsule");
   expect(mocks.collect).not.toHaveBeenCalled();
 });
 

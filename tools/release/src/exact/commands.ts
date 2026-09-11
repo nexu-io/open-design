@@ -16,7 +16,7 @@ import { exportCapsule, importCapsule } from "./capsule-artifact.ts";
 import { exportBase, packBase, importBase, unpackBase } from "./base-artifact.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
-import { collectExecutedAcceptance, exerciseReleaseInstallation } from "./acceptance-execution.ts";
+import { collectExecutedAcceptance, exerciseReleaseInstallation, exerciseReleaseInstallationPair } from "./acceptance-execution.ts";
 import { registerValidationCommands } from "./validation-commands.ts";
 import { registerDistributionCommands } from "./distribution-commands.ts";
 import { registerToolchainCommands } from "./toolchain-commands.ts";
@@ -51,6 +51,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--artifact <file>", "Verified installer to exercise")
     .option("--mode <mode>", "first or hot")
     .option("--baseline-receipt <file>", "Verified baseline acquisition receipt (hot)")
+    .option("--baseline-artifact <file>", "Verified baseline installer (exercise-pair)")
     .option("--inspection <file>", "Baseline compatibility receipt (Electron collection)")
     .option("--receipt <file>", "Final installed acceptance credential")
     .action(async (operation: string, options: Options) => {
@@ -58,9 +59,11 @@ export function registerExactCommands(cli: CAC): void {
         shell: required(options, "shell"), target: required(options, "target"), workRoot: required(options, "workRoot") };
       if (operation === "exercise") await exerciseReleaseInstallation({ ...input, artifact: required(options, "artifact"),
         mode: required(options, "mode"), ...(options.baselineReceipt == null ? {} : { baselineReceipt: required(options, "baselineReceipt") }) });
+      else if (operation === "exercise-pair") await exerciseReleaseInstallationPair({ ...input, artifact: required(options, "artifact"),
+        baselineArtifact: required(options, "baselineArtifact"), baselineReceipt: required(options, "baselineReceipt") });
       else if (operation === "collect") await collectExecutedAcceptance({ ...input, receipt: required(options, "receipt"),
         ...(options.inspection == null ? {} : { inspection: required(options, "inspection") }) });
-      else throw new Error("installation operation must be exercise or collect");
+      else throw new Error("installation operation must be exercise, exercise-pair or collect");
     });
   cli.command("[command]", "Show help when no command is given").action((command?: string) => {
     if (command != null) throw new Error(`Unknown command: ${command}`);

@@ -1,8 +1,17 @@
-import { resolveElectronSessionPaths, readElectronCapsuleSelection } from "@open-design/electron-kit";
+import { resolveElectronSessionPaths, readElectronCapsuleSelection, resolveElectronCompositeShellIdentity } from "@open-design/electron-kit";
 import { inspectElectronCapsule } from "@open-design/electron-kit/capsule-loader";
 import { readElectronInstalledManifest } from "@open-design/electron-kit/installation/inspection";
-import { loadElectronInstalledTrust, resolveElectronStandaloneTarget } from "../../standalone/installation.ts";
+import { loadElectronInstalledCapsuleSeed, loadElectronInstalledTrust, resolveElectronStandaloneTarget } from "../../standalone/installation.ts";
 import type { ElectronDiagnosticSession } from "./inspection.ts";
+
+/** Authenticated installation input, not evidence that a runtime committed it. */
+export async function inspectElectronBoundCapsule(installedRoot: string) {
+  const physical = await readElectronInstalledManifest(installedRoot), target = resolveElectronStandaloneTarget();
+  const seed = await loadElectronInstalledCapsuleSeed({ resourceRoot: installedRoot,
+    channel: physical.manifest.channel, target, carrierVersion: physical.manifest.shell.version });
+  return Object.freeze({ envelope: seed.envelope, shell: resolveElectronCompositeShellIdentity(seed.envelope.document,
+    { target, shell: physical.manifest.shell }) });
+}
 
 /** Inspect authenticated selected bytes without loading code or changing state.
  * Trust always comes from the sealed installation, never the downloaded tree. */
