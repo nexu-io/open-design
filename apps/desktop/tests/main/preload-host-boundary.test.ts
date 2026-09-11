@@ -18,6 +18,7 @@ describe("desktop preload host boundary", () => {
     expect(source).toContain("OPEN_DESIGN_HOST_GLOBAL");
     expect(source).toContain("exportDiagnostics");
     expect(source).toContain("satisfies OpenDesignHostBridge");
+    expect(source).toContain("revealFile");
     expect(source).toContain("browser");
     expect(source).toContain("browser:clear-data");
     expect(source).toContain("updater");

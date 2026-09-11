@@ -408,6 +408,7 @@ export type OpenDesignHostBridge = {
   shell: {
     openExternal(url: string): Promise<OpenDesignHostActionResult>;
     openPath(projectId: string): Promise<OpenDesignHostActionResult>;
+    revealFile?(projectId: string, relativePath: string): Promise<OpenDesignHostActionResult>;
   };
   updater: {
     check(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;

@@ -39,6 +39,7 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
 
   const shell = value.shell;
   if (!isRecord(shell) || !hasFunction(shell, "openExternal") || !hasFunction(shell, "openPath")) return false;
+  if (shell.revealFile != null && typeof shell.revealFile !== "function") return false;
 
   const browser = value.browser;
   if (!isRecord(browser) || !hasFunction(browser, "clearData")) return false;
