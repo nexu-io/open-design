@@ -23,19 +23,27 @@ type MockSplash = {
   executed: string[];
   emitDidFinishLoad: () => void;
   destroy: () => void;
+  failNextExecution: (error: Error) => void;
 };
 
 function createMockSplash(): MockSplash {
   const executed: string[] = [];
   let didFinishLoad: (() => void) | null = null;
   let destroyed = false;
+  let nextExecutionError: Error | null = null;
   const surface: SplashStageSurface = {
     isDestroyed: () => destroyed,
     webContents: {
       executeJavaScript: (code: string) => {
+        if (nextExecutionError != null) {
+          const error = nextExecutionError;
+          nextExecutionError = null;
+          throw error;
+        }
         executed.push(code);
         return Promise.resolve(undefined);
       },
+      isDestroyed: () => destroyed,
       once: (event, listener) => {
         if (event === 'did-finish-load') didFinishLoad = listener;
       },
@@ -47,6 +55,9 @@ function createMockSplash(): MockSplash {
     emitDidFinishLoad: () => didFinishLoad?.(),
     destroy: () => {
       destroyed = true;
+    },
+    failNextExecution: (error) => {
+      nextExecutionError = error;
     },
   };
 }
@@ -97,6 +108,26 @@ describe('splash boot-stage replay guard', () => {
     splash.destroy();
 
     setSplashStage(splash.surface, 'engine');
+    expect(splash.executed).toEqual([]);
+  });
+
+  test('does not replay a deferred stage after the splash is destroyed', () => {
+    const splash = createMockSplash();
+    registerSplashStageTracking(splash.surface);
+    setSplashStage(splash.surface, 'engine');
+    splash.destroy();
+
+    splash.emitDidFinishLoad();
+    expect(splash.executed).toEqual([]);
+  });
+
+  test('ignores destruction between the lifecycle check and execution', () => {
+    const splash = createMockSplash();
+    registerSplashStageTracking(splash.surface);
+    splash.emitDidFinishLoad();
+    splash.failNextExecution(new TypeError('Object has been destroyed'));
+
+    expect(() => setSplashStage(splash.surface, 'engine')).not.toThrow();
     expect(splash.executed).toEqual([]);
   });
 
