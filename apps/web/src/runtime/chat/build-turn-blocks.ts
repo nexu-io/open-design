@@ -40,6 +40,7 @@ import type {
   TurnBlock,
 } from './contract';
 import { maskChatProtocolPayloads } from '../../artifacts/chat-protocol-context';
+import { createArtifactParser } from '../../artifacts/parser';
 import { readQuestionFormPayloadAt } from '../../artifacts/question-form';
 import { UNKNOWN_ELAPSED_BELOW_MS, diffStat } from './format';
 import {
@@ -163,10 +164,30 @@ function markerSearchViews(events: readonly PersistedAgentEvent[]): Map<Persiste
   let textEvents: Extract<PersistedAgentEvent, { kind: 'text' }>[] = [];
   const flush = () => {
     if (textEvents.length === 0) return;
-    const masked = maskChatProtocolPayloads(
-      textEvents.map((event) => event.text ?? '').join(''),
-      readQuestionFormPayloadAt,
-    );
+    const text = textEvents.map((event) => event.text ?? '').join('');
+    const formStarts = new Set<number>();
+    const maskedPayloads = maskChatProtocolPayloads(text, (input, start) => {
+      const payload = readQuestionFormPayloadAt(input, start);
+      if (payload) formStarts.add(start);
+      return payload;
+    });
+    let masked = maskedPayloads;
+    if (stripKeyedDone(text, runKey, maskedPayloads).doneAt !== null) {
+      // Bound candidates to a complete, quote-aware opener before asking the
+      // real artifact parser, rather than reparsing the whole remaining run.
+      const artifactStarts = new Set<number>();
+      for (const match of maskedPayloads.matchAll(/<artifact\s+(?:"[^"]*"|'[^']*'|[^'">])*>/g)) {
+        const first = createArtifactParser().feed(match[0]).next();
+        if (!first.done && first.value.type === 'artifact:start') artifactStarts.add(match.index);
+      }
+      // A literal opener must not preempt an authenticated boundary. Change
+      // only the search view, before restoring event boundaries; original text
+      // stays intact and forms spanning deltas are validated as one payload.
+      masked = maskedPayloads.replace(/<(?:question-form|artifact)\b/gi, (opener, start: number) =>
+        formStarts.has(start) || artifactStarts.has(start) ? opener : ' '.repeat(opener.length));
+    }
+    // Without an authenticated marker, keep the existing implicit-done path,
+    // including partially streamed forms, and the historical legacy fallback.
     let offset = 0;
     for (const event of textEvents) {
       const length = (event.text ?? '').length;
@@ -283,18 +304,18 @@ function scanTurnMarkers(raw: string, runKey: string | null, searchText: string)
   let doneAt: number | null = stripped.doneAt;
   let doneLength = 0;
 
-  // ② 密钥标记已经定了位置就用它;否则回落到老判据
-  if (doneAt == null) {
-    const legacy = runKey ? null : LEGACY_DONE_RE.exec(stripped.searchText);
-    const implicit = IMPLICIT_DONE_RE.exec(stripped.searchText);
-    if (legacy && (!implicit || legacy.index <= implicit.index)) {
-      doneAt = legacy.index;
-      doneLength = legacy[0].length;
-    } else if (implicit) {
-      // 隐式:标签本身要留给后面的正文,由消息层去剥成卡片,所以长度记 0
-      doneAt = implicit.index;
-      doneLength = 0;
-    }
+  // ② 在已剥离噪音的同一下标空间里取最早边界。持久化会合并相邻 text,
+  // 所以后到的显式 done 不能盖过前面的真实表单 / 产物。
+  const legacy = runKey ? null : LEGACY_DONE_RE.exec(stripped.searchText);
+  const implicit = IMPLICIT_DONE_RE.exec(stripped.searchText);
+  if (legacy && (doneAt == null || legacy.index < doneAt)) {
+    doneAt = legacy.index;
+    doneLength = legacy[0].length;
+  }
+  if (implicit && (doneAt == null || implicit.index < doneAt)) {
+    // 隐式:标签本身要留给后面的正文,由消息层去剥成卡片,所以长度记 0
+    doneAt = implicit.index;
+    doneLength = 0;
   }
 
   return { text, searchText: stripped.searchText, doneAt, doneLength };
