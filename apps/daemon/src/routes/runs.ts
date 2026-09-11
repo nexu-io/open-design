@@ -289,7 +289,20 @@ function withSeededSlideIndex(
  * path strings; persisted messages store `{ path, name, kind, order }` so the
  * UI can reload chips and annotation context after a headless omit-pin seed.
  */
-function seededUserMessageAttachmentFields(meta: JsonRecord): {
+function seededAttachmentSize(projectRoot: string | null | undefined, attachmentPath: string): number | undefined {
+  if (!projectRoot) return undefined;
+  try {
+    const absolute = path.resolve(projectRoot, attachmentPath);
+    const relative = path.relative(path.resolve(projectRoot), absolute);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) return undefined;
+    const stat = fs.statSync(absolute);
+    return stat.isFile() ? stat.size : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function seededUserMessageAttachmentFields(meta: JsonRecord, projectRoot?: string | null): {
   attachments?: Array<{ path: string; name: string; kind: 'image' | 'file'; order: number }>;
   commentAttachments?: SeededCommentAttachment[];
 } {
@@ -299,10 +312,12 @@ function seededUserMessageAttachmentFields(meta: JsonRecord): {
         .map((attachmentPath, index) => {
           const name = path.basename(attachmentPath) || attachmentPath;
           const ext = path.extname(name).toLowerCase();
+          const size = seededAttachmentSize(projectRoot, attachmentPath);
           return {
             path: attachmentPath,
             name,
             kind: SEEDED_USER_IMAGE_EXTS.has(ext) ? ('image' as const) : ('file' as const),
+            ...(size === undefined ? {} : { size }),
             order: index,
           };
         })
@@ -2518,7 +2533,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // message is still seedable when attachment metadata is present so
       // chips/annotations survive reload for omit-pin clients that leave
       // currentPrompt unset.
-      const seededAttachments = seededUserMessageAttachmentFields(meta);
+      const projectRoot = runProject && meta.projectId
+        ? resolveProjectDir(PROJECTS_DIR, meta.projectId, runProject.metadata)
+        : null;
+      const seededAttachments = seededUserMessageAttachmentFields(meta, projectRoot);
       const hasSeedableAttachmentMetadata =
         (seededAttachments.attachments?.length ?? 0) > 0 ||
         (seededAttachments.commentAttachments?.length ?? 0) > 0;
