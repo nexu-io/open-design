@@ -153,7 +153,7 @@ describe('run request idempotency', () => {
       .toEqual(generationInvocationsBeforeRetry);
   });
 
-  it('persists one immutable workflow-to-run binding across daemon restarts', async () => {
+  it('deduplicates a workflow request and permits its next generation after completion', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-plugin-workflow-bin-'));
     const { bin } = await writeSuccessfulClaude(binDir);
     started = await startWithFakeClaude(bin);
@@ -196,6 +196,19 @@ describe('run request idempotency', () => {
     );
     await expect(acceptedRun.json()).resolves.toMatchObject({
       clientType: 'external_mcp',
+      externalPluginAnalytics: { pluginWorkflowId },
+    });
+
+    const retried = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toMatchObject({
+      runId: firstBody.runId,
+      reused: true,
+      clientRequestId,
     });
 
     const bindingBeforeRestart = await fetch(
@@ -230,15 +243,91 @@ describe('run request idempotency', () => {
 
     const conflictingRequestId = randomUUID();
     const conflictLogical = logicalPluginRequestDigest(conflictingRequestId);
-    const conflict = await fetch(`${started.url}/api/runs`, {
+    const second = await fetch(`${started.url}/api/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         ...request,
         clientRequestId: conflictingRequestId,
+        assistantMessageId: `assistant_${randomUUID()}`,
+        message: 'refine the completed artifact',
+        currentPrompt: 'refine the completed artifact',
         analyticsHints: {
           ...request.analyticsHints,
           logicalRequestDigest: conflictLogical.digest,
+        },
+      }),
+    });
+    expect(second.status).toBe(202);
+    const secondBody = await second.json() as { runId: string };
+    expect(secondBody.runId).not.toBe(firstBody.runId);
+    await waitForRun(started.url, secondBody.runId);
+
+    const firstAttributed = await fetch(
+      `${started.url}/api/runs/${encodeURIComponent(firstBody.runId)}`,
+    );
+    await expect(firstAttributed.json()).resolves.toMatchObject({
+      clientRequestId,
+      externalPluginAnalytics: { pluginWorkflowId },
+    });
+    const secondAttributed = await fetch(
+      `${started.url}/api/runs/${encodeURIComponent(secondBody.runId)}`,
+    );
+    await expect(secondAttributed.json()).resolves.toMatchObject({
+      clientRequestId: conflictingRequestId,
+      externalPluginAnalytics: { pluginWorkflowId },
+    });
+    const latestBinding = await fetch(
+      `${started.url}/api/runs/by-plugin-workflow/${pluginWorkflowId}`,
+    );
+    await expect(latestBinding.json()).resolves.toMatchObject({
+      runId: secondBody.runId,
+      pluginWorkflowId,
+    });
+  });
+
+  it('rejects a concurrent generation for a workflow that already has an active run', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-plugin-workflow-active-bin-'));
+    const { bin } = await writeSuccessfulClaude(binDir, { exitDelayMs: 1_000 });
+    started = await startWithFakeClaude(bin);
+    const base = await createRunRequest(started.url);
+    const pluginWorkflowId = randomUUID();
+    const firstRequestId = randomUUID();
+    const firstLogical = logicalPluginRequestDigest(firstRequestId);
+    const analyticsHints = {
+      entrySurface: 'external_mcp',
+      hostProduct: 'codex_unknown',
+      externalPluginId: 'open-design',
+      externalPluginVersion: '0.4.0',
+      distributionMechanism: 'git_marketplace',
+      publisherClass: 'open_design_first_party',
+      attributionQuality: 'self_reported',
+      pluginWorkflowId,
+      logicalRequestDigest: firstLogical.digest,
+      logicalRequestDigestVersion: firstLogical.version,
+      briefState: 'not_applicable',
+    };
+    const first = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...base, clientRequestId: firstRequestId, analyticsHints }),
+    });
+    expect(first.status).toBe(202);
+
+    const secondRequestId = randomUUID();
+    const secondLogical = logicalPluginRequestDigest(secondRequestId);
+    const conflict = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...base,
+        clientRequestId: secondRequestId,
+        assistantMessageId: `assistant_${randomUUID()}`,
+        message: 'concurrent refinement',
+        currentPrompt: 'concurrent refinement',
+        analyticsHints: {
+          ...analyticsHints,
+          logicalRequestDigest: secondLogical.digest,
         },
       }),
     });
@@ -372,14 +461,14 @@ async function writeSuccessfulClaude(dir: string): Promise<{
 }>;
 async function writeSuccessfulClaude(
   dir: string,
-  options: { writeHtml?: boolean },
+  options: { writeHtml?: boolean; exitDelayMs?: number },
 ): Promise<{
   bin: string;
   invocationPath: string;
 }>;
 async function writeSuccessfulClaude(
   dir: string,
-  options: { writeHtml?: boolean } = {},
+  options: { writeHtml?: boolean; exitDelayMs?: number } = {},
 ): Promise<{
   bin: string;
   invocationPath: string;
@@ -404,7 +493,7 @@ console.log(JSON.stringify({
     stop_reason: 'end_turn'
   }
 }));
-setTimeout(() => process.exit(0), 20);
+setTimeout(() => process.exit(0), ${options.exitDelayMs ?? 20});
 `,
     'utf8',
   );
