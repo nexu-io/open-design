@@ -392,10 +392,11 @@ export async function assertAndFetchExternalAsset(
   return fetchImpl(url, requestInit);
 }
 
-// Aggressive but not punitive — happy paths usually return in under 2 s.
+// Happy paths usually return in under 2 s, but OpenRouter can occasionally
+// spend more than undici's default 10 s just establishing the connection.
 // Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
 // or distant providers; invalid values fall back to the default.
-const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
+const DEFAULT_PROVIDER_TIMEOUT_MS = 20_000;
 const LOOPBACK_NO_PROXY_TOKENS = ['localhost', '127.0.0.1', '[::1]'] as const;
 // CLI boot time is dominated by adapter auth/session restore; the heavy
 // adapters (Codex, Cursor Agent) regularly take 5–10 s on a cold first
@@ -771,6 +772,29 @@ export function proxyDispatcherRequestInit(
   };
 }
 
+export function providerDispatcherRequestInit(
+  timeoutMs: number,
+  env: NodeJS.ProcessEnv = process.env,
+): {
+  close(): Promise<void>;
+  requestInit: Pick<RequestInit, 'dispatcher'>;
+} {
+  const proxied = proxyDispatcherRequestInit(env, { connectTimeout: timeoutMs });
+  if (proxied.requestInit.dispatcher) return proxied;
+
+  // Node's global dispatcher gives connect attempts a separate ~10 s budget.
+  // Use a request-owned agent so the provider probe gets the same budget as
+  // the AbortController below instead of failing early with
+  // UND_ERR_CONNECT_TIMEOUT.
+  const dispatcher = new Agent({ connectTimeout: timeoutMs });
+  return {
+    close: () => dispatcher.close(),
+    requestInit: {
+      dispatcher: dispatcher as unknown as NonNullable<RequestInit['dispatcher']>,
+    },
+  };
+}
+
 const AGENT_COMPLETION_DEBOUNCE_MS = 500;
 const AGENT_KILL_GRACE_MS = 2_000;
 // Truncates the assistant reply we surface in the success copy so a
@@ -1133,6 +1157,13 @@ function networkErrorToKind(err: unknown): ConnectionTestKind {
     // `TypeError` with a `cause` whose `code` is one of these.
     const cause = (err as { cause?: { code?: string } }).cause;
     const code = cause?.code;
+    if (
+      code === 'UND_ERR_CONNECT_TIMEOUT' ||
+      code === 'UND_ERR_HEADERS_TIMEOUT' ||
+      code === 'UND_ERR_BODY_TIMEOUT'
+    ) {
+      return 'timeout';
+    }
     if (
       code === 'ENOTFOUND' ||
       code === 'EAI_AGAIN' ||
@@ -1645,11 +1676,12 @@ export async function testProviderConnection(
   } else {
     input.signal?.addEventListener('abort', abortFromParent, { once: true });
   }
-  const timer = setTimeout(() => controller.abort(), providerTimeoutMs());
-  let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+  const timeoutMs = providerTimeoutMs();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let proxyDispatcher: ReturnType<typeof providerDispatcherRequestInit> | null = null;
 
   try {
-    proxyDispatcher = proxyDispatcherRequestInit();
+    proxyDispatcher = providerDispatcherRequestInit(timeoutMs);
     const modelError = await validateLocalOpenAiModel(
       normalizedInput,
       validated.parsed,
