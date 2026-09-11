@@ -1156,6 +1156,14 @@ function applyApiProtocolConfig(
     apiKey: apiConfig.apiKey,
     baseUrl: resolveFixedOriginBaseUrl(protocol, apiConfig.baseUrl),
     model: apiConfig.model,
+    // Every path that changes the active model meets here — the model picker, a
+    // provider-tab switch, a restored draft — so the override is validated once,
+    // here. A model with a lower ceiling would otherwise leave Settings showing
+    // a number `effectiveMaxTokens` discards at request time.
+    maxTokens:
+      config.maxTokens != null && config.maxTokens > maxTokensUpperBound(apiConfig.model)
+        ? undefined
+        : config.maxTokens,
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
     // byokImageModel applies to the protocols that inject the daemon-side
@@ -2331,16 +2339,7 @@ export function SettingsDialog({
     });
   };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
-    setCfg((c) => {
-      const next = updateCurrentApiProtocolConfig(c, patch);
-      // Selecting another model can lower the ceiling below an override that
-      // was valid for the previous one. Keeping it would leave Settings
-      // showing a number that `effectiveMaxTokens` discards at request time.
-      if (next.maxTokens != null && next.maxTokens > maxTokensUpperBound(next.model)) {
-        return { ...next, maxTokens: undefined };
-      }
-      return next;
-    });
+    setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
   const updateMaxTokensInput = (raw: string) => {
     setMaxTokensInput(raw);
     const trimmed = raw.trim();
