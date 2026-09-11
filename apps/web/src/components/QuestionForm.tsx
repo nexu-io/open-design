@@ -721,7 +721,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
         </svg>
         {/* 稿子的卡头标题是 `<b>`(`.card > .h b { font-weight: inherit }`),不是 div ——
             标签不一样,逐元素比样式时从这里开始整段串位 */}
-        <b className="question-form-title">{form.title}</b>
+        <b className="question-form-title" title={form.title}>{form.title}</b>
         {/*
           OPEND-2641:分步进度(`1/4`)**不在这里** —— 它跟着当前问句走,
           渲染在 `.qf-label` 的末尾(见下面 `<StepProgress />` 的调用点)。

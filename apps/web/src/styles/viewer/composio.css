@@ -782,7 +782,11 @@
 }
 /* 稿子的 `<b>` 不撑开;把右侧那些靠 `margin-left: auto` 推到头(`.card > .h .n` 就是这么写的) */
 .question-form-title {
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* 稿子里这一段就是 `.card > .h` 里那只裸 `<b>`,自己不另开字号 ——
    跟着卡头的 `--t-lead`(14)走。写出来而不是靠继承:`.question-form-head`

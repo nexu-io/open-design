@@ -5,6 +5,10 @@ const questionCss = readFileSync(
   new URL('../../src/styles/viewer/composio.css', import.meta.url),
   'utf8',
 );
+const questionFormSource = readFileSync(
+  new URL('../../src/components/QuestionForm.tsx', import.meta.url),
+  'utf8',
+);
 
 describe('question form title layout', () => {
   it('keeps a long title on one stable line and exposes an ellipsis', () => {
@@ -15,5 +19,6 @@ describe('question form title layout', () => {
     expect(titleRules).toMatch(/white-space\s*:\s*nowrap/);
     expect(titleRules).toMatch(/overflow\s*:\s*hidden/);
     expect(titleRules).toMatch(/text-overflow\s*:\s*ellipsis/);
+    expect(questionFormSource).toContain('<b className="question-form-title" title={form.title}>');
   });
 });
