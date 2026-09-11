@@ -49,7 +49,7 @@ export function MissingBrandFontsBanner({
   }, [projectId]);
   if (dismissed) return null;
 
-  function keepSubstitutes(): void {
+  function useSystemFonts(): void {
     if (projectId && typeof window !== 'undefined') {
       try {
         window.localStorage.setItem(fontBannerDismissKey(projectId), '1');
@@ -75,8 +75,8 @@ export function MissingBrandFontsBanner({
             Add brand font files
           </Button>
         ) : null}
-        <Button variant="ghost" className="compact" onClick={keepSubstitutes}>
-          Keep substitutes
+        <Button variant="ghost" className="compact" onClick={useSystemFonts}>
+          Use system fonts
         </Button>
       </div>
     </div>

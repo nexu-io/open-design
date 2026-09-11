@@ -2654,7 +2654,7 @@ describe('DesignSystemDetailView', () => {
       </I18nProvider>,
     );
 
-    expect(await screen.findByText(/missing brand fonts/i)).toBeTruthy();
+    expect(await screen.findByText(/brand font files missing/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /use system fonts/i })).toBeTruthy();
   });
 

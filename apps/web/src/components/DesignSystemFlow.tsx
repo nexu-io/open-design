@@ -83,6 +83,7 @@ import { DesignSystemAssetDropzone } from './DesignSystemAssetDropzone';
 import { BrandPickerModal } from './BrandPickerModal';
 import { DesignSystemCreateHero } from './DesignSystemCreateHero';
 import { DesignSystemPicker } from './DesignSystemPicker';
+import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { LibraryPicker } from './LibraryPicker';
 import { notifyConnectorsChanged } from './connectors-events';
 import { connectorAuthSnapshotChanged } from './connectors-state';
@@ -2964,17 +2965,9 @@ export function DesignSystemDetailView({
               onRebuildTokenContract={() => void startTokenContractRebuild(false)}
               onForceRebuildTokenContract={() => void startTokenContractRebuild(true)}
             />
-            <div className="ds-warning-card">
-              <Icon name="help-circle" />
-              <span>
-                <strong>{t('dsFlow.brandFontsMissingTitle')}</strong>
-                {t('dsFlow.brandFontsMissingBody')}
-              </span>
-              <Button variant="ghost" className="compact">
-                <Icon name="upload" />
-                {t('dsFlow.addBrandFonts')}
-              </Button>
-            </div>
+            {editable && workspaceProjectId ? (
+              <MissingBrandFontsBanner projectId={workspaceProjectId} />
+            ) : null}
             {statusLine ? <div className="ds-status-line">{statusLine}</div> : null}
             <WorkspaceActivityCard message={workspaceActivityMessage} active={chatStreaming} />
             {pendingRevision ? (
