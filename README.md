@@ -130,6 +130,7 @@ Inside a project's Studio, the conversation, generated files, and live preview s
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Supported | `od mcp install kimi` |
 | [Kiro](https://kiro.dev) | ✅ Supported | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Supported | `od mcp install pi` |
+| [Oh My Pi](https://github.com/can1357/oh-my-pi) | ✅ Supported | `od mcp install omp` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Supported | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Supported | `od mcp install hermes` |
 

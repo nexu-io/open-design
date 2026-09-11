@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, omp, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
@@ -1249,6 +1249,7 @@ test('promptInputFormat is a string property (or undefined) on every promptViaSt
     { name: 'cursor-agent', def: cursorAgent, expected: undefined },
     { name: 'opencode', def: opencode, expected: undefined },
     { name: 'pi', def: pi, expected: undefined },
+    { name: 'omp', def: omp, expected: undefined },
     { name: 'qoder', def: qoder, expected: undefined },
   ];
   for (const { name, def, expected } of stdinAgents) {

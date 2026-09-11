@@ -116,6 +116,7 @@ function chatProtocolFromAgent(
     || id === 'kimi'
     || id === 'copilot'
     || id === 'pi'
+    || id === 'omp'
     || id === 'kiro'
     || id === 'kilo'
     || id === 'vibe'
@@ -147,6 +148,7 @@ function cliAgentLabel(agentId: string | null | undefined): string | null {
     qoder: 'Qoder CLI',
     copilot: 'GitHub Copilot CLI',
     pi: 'Pi',
+    omp: 'OMP',
     kiro: 'Kiro CLI',
     kilo: 'Kilo',
     vibe: 'Mistral Vibe CLI',
