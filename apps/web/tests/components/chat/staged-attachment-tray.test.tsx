@@ -138,10 +138,15 @@ describe('待发送附件托盘 · 逐文件上传', () => {
     });
   });
 
-  it('还在传的那张卡发不出去 —— 它没有服务端路径', async () => {
+  it('仍有当前轮附件上传时阻止发送,全部就绪后按选择顺序发送', async () => {
+    let finishSlowUpload: (() => void) | undefined;
     mockedUpload.mockImplementation(async (_id, files) => {
       const file = files[0]!;
-      if (file.name === '慢的.png') return neverResolves();
+      if (file.name === '慢的.png') {
+        await new Promise<void>((resolve) => {
+          finishSlowUpload = resolve;
+        });
+      }
       return uploadedImage(file.name);
     });
     const onSend = renderComposer();
@@ -151,14 +156,21 @@ describe('待发送附件托盘 · 逐文件上传', () => {
     await waitFor(() => {
       expect(screen.getByTestId('staged-attachments').querySelectorAll('.msg-att-img')).toHaveLength(2);
     });
-    fireEvent.click(screen.getByTestId('chat-send'));
+    const send = screen.getByTestId('chat-send') as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.click(send);
+    expect(onSend).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishSlowUpload?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(send.disabled).toBe(false));
+    fireEvent.click(send);
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
-    // ⚠️ 这条同时钉住了一个【已知的现网 bug】的现状:上传期间发送键仍然可点,
-    // 点下去在传的那个文件不跟着发。这一轮不修它(要另起红测 + 独立 PR,
-    // 见规格 §4-A 末尾),这里只是把「发出去的到底是哪些」写死,
-    // 免得后面改动悄悄把在传的半成品也塞进消息里。
     expect((onSend.mock.calls[0]?.[1] as Array<{ name: string }>).map((a) => a.name))
-      .toEqual(['快的.png']);
+      .toEqual(['快的.png', '慢的.png']);
   });
 
   it('失败的那一张留在托盘里、能单独重试,成功后变成可发送的附件', async () => {
