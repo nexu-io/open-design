@@ -2140,6 +2140,57 @@ describe('OD Next automatic production through the real server', () => {
     expect(researchContract).not.toContain('## assistant');
   });
 
+  it('fails a blocked production exit before publishing its Run and message terminal status (OPEND-2953)', async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.blocked-production`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'Build the lesson deck.'), {
+      'x-od-analytics-device-id': 'device-opend-2953',
+      'x-od-analytics-session-id': 'session-opend-2953',
+      'x-od-analytics-client-type': 'desktop',
+    });
+    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    expect(terminal).toMatchObject({
+      status: 'failed',
+      exitCode: 0,
+      errorCode: 'OD_NEXT_TASK_BLOCKED',
+      failureCategory: 'process_exit',
+      failureDetail: 'execution_failed',
+      retryable: false,
+      strategyTask: { outcome: 'blocked', terminal: true },
+    });
+    expect(terminal.error).toContain('od_next_protocol_runtime_state_missing');
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
+      status: 'failed', code: 0, artifactCount: 0,
+    });
+    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'failed', exit_code: 0 });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string }>;
+    };
+    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('failed');
+    const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
+    expect(recovery?.properties).toMatchObject({
+      result: 'failed',
+      error_code: 'OD_NEXT_TASK_BLOCKED',
+      failure_stage: 'finalize',
+      failure_detail: 'execution_failed',
+      retryable: false,
+      rpc_close_reason: 'exit_0',
+    });
+    for (const mapping of task.runs.slice(0, -1)) {
+      expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
+    }
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+  }, 90_000);
+
   it('blocks the durable task when the selected agent exits before publishing a session', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.fail-start`, '1');
@@ -3116,6 +3167,9 @@ function finish() {
     text = ${JSON.stringify(complexPlan)};
   } else if (stdin.includes('native continuation — contract_repair')) {
     text = ${JSON.stringify(repaired)};
+  } else if (stdin.includes('native continuation — production') && fs.existsSync(logPath + '.blocked-production')) {
+    staleTodoList = true;
+    text = 'Working on the lesson.';
   } else if (stdin.includes('native continuation — production')) {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
     staleTodoList = true;
@@ -3139,6 +3193,15 @@ function finish() {
   }
   console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
   console.log(JSON.stringify({ type: 'turn.started' }));
+  if (stdin.includes('native continuation — production') && fs.existsSync(logPath + '.blocked-production')) {
+    // Replay the host-observed failure boundary: completed tools and progress text,
+    // no deliverable or Runtime State, then a clean process exit.
+    for (let i = 0; i < 2; i++) console.log(JSON.stringify({ type: 'item.completed', item: {
+      id: 'tool-' + i, type: 'mcp_tool_call', server: 'tasks', tool: 'TodoWrite',
+      arguments: { todos: [{ content: 'Build the lesson', status: 'in_progress' }] },
+      result: { content: [{ type: 'text', text: 'Updated task list' }] }, status: 'completed',
+    } }));
+  }
   if (staleTodoList) {
     // Observed on real turns: the deliverable is written, but the LAST plan
     // snapshot the agent emits still carries unchecked items.

@@ -12748,6 +12748,23 @@ export async function startServer({
       { allowRetry = true } = {},
     ) => {
       lifecycle.mark('finalize_start');
+      // A clean child exit does not complete a task rejected by the strategy
+      // gate. Reconcile before persisting the message or publishing the Run
+      // terminal event, while retaining the actual process exit code.
+      if (
+        status === 'succeeded'
+        && run.strategyTask?.outcome === 'blocked'
+        && run.strategyTask.activeRunId === run.id
+      ) {
+        status = 'failed';
+        allowRetry = false;
+        const reasonCodes = run.strategyTask.blockedContext?.reasonCodes ?? [];
+        send('error', createSseErrorPayload(
+          'OD_NEXT_TASK_BLOCKED',
+          `The task could not complete${reasonCodes.length ? `: ${reasonCodes.join(', ')}` : '.'}`,
+          { retryable: false, details: { reasonCodes } },
+        ));
+      }
       flushRunMessageEvents(run);
       // Persist the transport-level close mechanism before classifying this
       // attempt. Runtime fatal/stream signals are only known in the close

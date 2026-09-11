@@ -117,6 +117,24 @@ function classify(
 }
 
 describe('classifyRunFailure', () => {
+  it('keeps a blocked task non-retryable without attributing its cause to a clean child exit', () => {
+    expect(classifyRunFailure({
+      result: 'failed',
+      status: { status: 'failed', errorCode: 'OD_NEXT_TASK_BLOCKED', exitCode: 0 },
+      events: [errorEvent('OD_NEXT_TASK_BLOCKED', 'upstream unavailable', false)],
+    })).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'execution_failed',
+      failure_stage: 'finalize',
+      failure_mechanism: 'unknown',
+      failure_domain: 'unknown',
+      repair_owner: 'unknown',
+      evidence_level: 'structured_code',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
   it('does not classify successful runs as failures', () => {
     expect(
       classifyRunFailure({
