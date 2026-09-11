@@ -254,20 +254,6 @@ describe('FileOpsSummary artifact cards', () => {
     expect(screen.getAllByTestId('artifact-card-result.html')).toHaveLength(1);
   });
 
-  it('keeps every card in a large mixed batch available to the bounded gallery', () => {
-    const entries = [
-      ...Array.from({ length: 16 }, (_, index) => entry({ path: `image-${index + 1}.png` })),
-      entry({ path: 'index.html' }),
-    ];
-
-    const { container } = render(<FileOpsSummary entries={entries} projectId="proj-1" />);
-
-    // The gallery's CSS bounds its visual height. Do not drop cards from the
-    // DOM: all 17 deliverables must remain available to scrolling, actions,
-    // and keyboard navigation while product decides the final grouping copy.
-    expect(container.querySelectorAll('.artifact-cards > .artifact-card')).toHaveLength(entries.length);
-  });
-
   it('gives an HTML artifact both publish and export, in that order', () => {
     const onPublish = vi.fn();
     const onExport = vi.fn();

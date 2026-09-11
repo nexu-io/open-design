@@ -67,16 +67,6 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
-  /*
-   * A run can produce an arbitrary number of deliverables. Keep the gallery
-   * inside the conversation's visual budget while leaving every card in the
-   * DOM, so actions and keyboard navigation remain available. The exact
-   * representative-card count and any explicit show-more affordance are a
-   * product decision; this structural cap is the safe fallback until then.
-   */
-  max-height: min(50vh, 360px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 /* One deliverable is the focus of the turn, so let it use the transcript's
    available width. The shared cap matches the design sheet's 406px content
