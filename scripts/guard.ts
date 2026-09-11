@@ -12,6 +12,7 @@ import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.t
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
 import { checkHtmlPluginPreviewContracts } from "./check-html-plugin-preview-contracts.ts";
 import { checkPluginPreviewManifest } from "./check-plugin-preview-manifest.ts";
+import { checkBundledDesignSystemPlugins } from "./check-bundled-design-system-plugins.ts";
 import {
   checkDesignSystemA1RequiredTokens,
   checkDesignSystemA2DefaultsParity,
@@ -1535,6 +1536,7 @@ const checks: GuardCheck[] = [
   { name: "what's new publish workflow", run: ({ repoRoot: root }) => checkWhatsNewPublishWorkflow(root) },
   { name: "HTML plugin preview contracts", run: ({ repoRoot: root }) => checkHtmlPluginPreviewContracts(root) },
   { name: "plugin preview manifest", run: checkPluginPreviewManifest },
+  { name: "bundled design-system plugins", run: ({ repoRoot: root }) => checkBundledDesignSystemPlugins(root) },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },
   { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },
