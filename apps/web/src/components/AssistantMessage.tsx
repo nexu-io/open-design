@@ -70,6 +70,7 @@ import {
 import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import { computeSkipRanges, rangeContains } from "../artifacts/markdown-context";
 import { splitShellCards } from "../runtime/chat/split-shell-cards";
+import { orderArtifactCards } from "../runtime/chat/artifact-card-order";
 import {
   AnsweredValue,
   isShortValueAnswer,
@@ -859,10 +860,10 @@ function AssistantMessageImpl({
      * 没有 `show` 就只保留 daemon 权威归属的 `producedFiles`。所以这里不能再回到
      * raw fileOps / `displayedProduced` —— 后两者还混着裸工具行与正文 / mtime 推断。
      */
-    if (summaryArtifactOps.length > 0) return summaryArtifactOps;
+    if (summaryArtifactOps.length > 0) return orderArtifactCards(summaryArtifactOps, artifactFocus);
     if (streaming) return [];
-    return producedFilesAsFileOps(declaredArtifactFiles);
-  }, [declaredArtifactFiles, streaming, summaryArtifactOps]);
+    return orderArtifactCards(producedFilesAsFileOps(declaredArtifactFiles), artifactFocus);
+  }, [artifactFocus, declaredArtifactFiles, streaming, summaryArtifactOps]);
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
   // message) fall back to the most recently modified HTML in the project so
