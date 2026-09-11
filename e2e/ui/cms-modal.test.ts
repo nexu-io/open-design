@@ -283,15 +283,16 @@ test("[P1] production modal closes through its mounted SDK control without a hos
 });
 
 for (const mode of ["failed", "hidden", "disabled"] as const) {
-	test(`[P1] production modal uses one host Close fallback when the mounted control is ${mode}`, async ({
+	test(`[P1] production modal adds no host Close button and Escape dismisses when the mounted control is ${mode}`, async ({
 		page,
 	}) => {
 		await installProductionFixture(page, { mode });
 		await gotoModal(page);
 		const modal = page.getByRole("dialog", { name: "Campaign" });
 		const fallback = modal.getByRole("button", { name: "Close", exact: true });
-		await expect(fallback).toHaveCount(1, { timeout: T.medium });
-		await fallback.click();
+		await expect(modal).toBeVisible({ timeout: T.medium });
+		await expect(fallback).toHaveCount(0);
+		await page.keyboard.press("Escape");
 		await expect(modal).toBeHidden();
 	});
 }

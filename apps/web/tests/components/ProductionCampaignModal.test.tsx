@@ -202,7 +202,7 @@ describe("ProductionCampaignModal", () => {
 		expect(document.querySelector("iframe,webview")).toBeNull();
 		// The fixture declares the SDK capability but exposes no actual close
 		// control, so the host fallback remains available.
-		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
 		await waitFor(() =>
 			expect(
 				localStorage.getItem("touchpoint-displayed:v1:user-a:campaign-1"),
@@ -635,7 +635,7 @@ describe("ProductionCampaignModal mount lifetime", () => {
 		expect(document.body.style.overflow).toBe("");
 	});
 
-	it("keeps a host fallback when the component mount fails", async () => {
+	it("does not add a host button on mount failure and remains dismissible with Escape", async () => {
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 			client: { osLocale: "en-US", type: "desktop" },
 		};
@@ -651,13 +651,13 @@ describe("ProductionCampaignModal mount lifetime", () => {
 				),
 		);
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
-		await waitFor(() =>
-			expect(screen.getByRole("button", { name: "Close" })).toBeTruthy(),
-		);
-		expect(screen.getByRole("dialog")).toBeTruthy();
+		await waitFor(() => expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalled());
+		expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+		fireEvent.keyDown(document, { key: "Escape" });
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 	});
 
-	it("removes the host fallback when a shadow close control becomes enabled", async () => {
+	it("never adds a host button while the component close control becomes enabled", async () => {
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 			client: { osLocale: "en-US", type: "desktop" },
 		};
@@ -679,9 +679,8 @@ describe("ProductionCampaignModal mount lifetime", () => {
 				),
 		);
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
-		await waitFor(() =>
-			expect(screen.getByRole("button", { name: "Close" })).toBeTruthy(),
-		);
+		await waitFor(() => expect(closeControl).toBeTruthy());
+		expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
 		closeControl.disabled = false;
 		await waitFor(() =>
 			expect(screen.queryByRole("button", { name: "Close" })).toBeNull(),
@@ -1076,14 +1075,15 @@ describe("ProductionCampaignModal device impressions", () => {
 		await waitFor(() => expect(finish).toBeTypeOf("function"));
 		expect(localStorage.getItem(marker())).toBeNull();
 		await act(async () => finish());
-		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		fireEvent.keyDown(document, { key: "Escape" });
 		expect(screen.queryByRole("dialog")).toBeNull();
 		expect(localStorage.getItem(marker())).toBeNull();
 	});
 	it("waits for a hidden document to become visible before recording", async () => {
 		const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
-		await screen.findByRole("button", { name: "Close" });
+		await screen.findByRole("dialog");
+		await act(async () => {});
 		await act(async () => {
 			window.dispatchEvent(new Event("focus"));
 		});
@@ -1182,7 +1182,8 @@ describe("ProductionCampaignModal device impressions", () => {
 		const view = render(
 			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
 		);
-		await screen.findByRole("button", { name: "Close" });
+		await screen.findByRole("dialog");
+		await act(async () => {});
 		expect(localStorage.getItem(marker())).toBeNull();
 		view.unmount();
 		verify.mockRestore();
@@ -1215,9 +1216,10 @@ describe("ProductionCampaignModal device impressions", () => {
 				throw new Error("quota");
 			});
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
-		await screen.findByRole("button", { name: "Close" });
+		await screen.findByRole("dialog");
+		await act(async () => {});
 		await waitFor(() => expect(write).toHaveBeenCalled());
-		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		fireEvent.keyDown(document, { key: "Escape" });
 		expect(screen.queryByRole("dialog")).toBeNull();
 	});
 });

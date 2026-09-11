@@ -1,6 +1,5 @@
 import { readCampaignHostLocale } from "./TestCampaignModal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@open-design/components";
 import { getOpenDesignHost } from "@open-design/host";
 import { openExternalUrl } from "../providers/registry";
 import {
@@ -16,7 +15,6 @@ import {
 	trapWebTouchpointModalFocus,
 	verifyWebTouchpoint,
 	webTouchpointContext,
-	hasWebTouchpointCloseControl,
 	type OpenDesignTouchpointElement,
 	type WebTouchpointContent,
 } from "./touchpoint-component";
@@ -192,14 +190,8 @@ export function ProductionCampaignModal({
 	const testRuntime = useTestRuntime();
 	const testDecision = testRuntime?.decisions.get(PLACEMENT);
 	const [testClosed, setTestClosed] = useState(false);
-	const [testCloseControlAvailable, setTestCloseControlAvailable] = useState<
-		boolean | null
-	>(null);
 	const decisionRef = useRef<AuthorizedDecision | null>(null);
 	const [closed, setClosed] = useState(false);
-	const [closeControlAvailable, setCloseControlAvailable] = useState<
-		boolean | null
-	>(null);
 	const elementRef = useRef<HTMLDivElement | null>(null);
 	const modalRef = useRef<HTMLDivElement | null>(null);
 	const expiry = useRef(0);
@@ -379,8 +371,6 @@ export function ProductionCampaignModal({
 		const element = document.createElement(
 			"opend-touchpoint",
 		) as OpenDesignTouchpointElement;
-		setCloseControlAvailable(null);
-		let closeControlObserver: MutationObserver | undefined;
 		let visibleFrame: number | undefined;
 		let mounted = false;
 		let recorded = false;
@@ -454,7 +444,6 @@ export function ProductionCampaignModal({
 				);
 				if (!current() || !context) {
 					dispose();
-					if (current() && !context) setCloseControlAvailable(false);
 					if (current() && !context)
 						emitWebTouchpointDiagnostic({
 							code: "touchpoint_locale_unsupported",
@@ -487,47 +476,16 @@ export function ProductionCampaignModal({
 				}
 				mounted = true;
 				recordWhenVisible();
-				setCloseControlAvailable(hasWebTouchpointCloseControl(element));
-				closeControlObserver = new MutationObserver(() => {
-					if (!current()) return;
-					setCloseControlAvailable(hasWebTouchpointCloseControl(element));
-				});
-				const closeControlObserverOptions: MutationObserverInit = {
-					attributes: true,
-					attributeFilter: [
-						"aria-label",
-						"aria-disabled",
-						"aria-hidden",
-						"class",
-						"disabled",
-						"hidden",
-						"style",
-						"title",
-					],
-					childList: true,
-					characterData: true,
-					subtree: true,
-				};
-				if (element.shadowRoot)
-					closeControlObserver.observe(
-						element.shadowRoot,
-						closeControlObserverOptions,
-					);
-				const dialog = element.closest('[role="dialog"]');
-				if (dialog)
-					closeControlObserver.observe(dialog, closeControlObserverOptions);
 			} catch (error) {
 				if (!current()) {
 					dispose();
 					return;
 				}
-				setCloseControlAvailable(false);
 				if (current()) {
 					emitWebTouchpointDiagnostic({
 						code:
 							error instanceof Error ? error.message : "touchpoint_load_failed",
 					});
-					setCloseControlAvailable(false);
 				}
 				dispose();
 			}
@@ -536,8 +494,6 @@ export function ProductionCampaignModal({
 			cancelled = true;
 			document.removeEventListener("visibilitychange", recordWhenVisible);
 			if (visibleFrame !== undefined) cancelAnimationFrame(visibleFrame);
-			closeControlObserver?.disconnect();
-			setCloseControlAvailable(null);
 			++authorizationGeneration.current;
 			dispose();
 			container.replaceChildren();
@@ -616,18 +572,12 @@ export function ProductionCampaignModal({
 				aria-modal="true"
 			>
 				<div className={styles.modal} ref={modalRef} tabIndex={-1}>
-					{testCloseControlAvailable === false ? (
-						<Button type="button" onClick={() => setTestClosed(true)}>
-							Close
-						</Button>
-					) : null}
 					<TestTouchpointMount
 						decision={testDecision}
 						placementKey={PLACEMENT}
 						testId="campaign-custom-element"
 						onVisible={onTestVisible}
 						requestClose={closeTestModal}
-						onCloseControlChange={setTestCloseControlAvailable}
 					/>
 				</div>
 			</div>
@@ -641,11 +591,6 @@ export function ProductionCampaignModal({
 			aria-modal="true"
 		>
 			<div className={styles.modal} ref={modalRef} tabIndex={-1}>
-				{closeControlAvailable === false ? (
-					<Button type="button" onClick={() => setClosed(true)}>
-						Close
-					</Button>
-				) : null}
 				<div ref={elementRef} data-testid="campaign-custom-element" />
 			</div>
 		</div>
