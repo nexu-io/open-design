@@ -47,7 +47,9 @@ describe("resolveMacInstallIdentity", () => {
   it("keeps stable builds on the canonical mac identity", () => {
     expect(resolveMacInstallIdentity(makeConfig("/work", "release-stable"))).toMatchObject({
       appId: "io.open-design.desktop",
-      installerTitle: "Open Design",
+      displayName: "OpenDesign",
+      executableName: "Open Design",
+      installerTitle: "OpenDesign",
       productName: "Open Design",
       publicAppBundleName: "Open Design.app",
       systemAppBundleName: "Open Design.app",
@@ -59,8 +61,9 @@ describe("resolveMacInstallIdentity", () => {
 
     expect(resolveMacInstallIdentity(config)).toEqual({
       appId: "io.open-design.desktop.beta",
+      displayName: "OpenDesign Beta",
       executableName: "Open Design Beta",
-      installerTitle: "Open Design Beta",
+      installerTitle: "OpenDesign Beta",
       productName: "Open Design Beta",
       publicAppBundleName: "Open Design Beta.app",
       systemAppBundleName: "Open Design Beta.app",
@@ -73,8 +76,9 @@ describe("resolveMacInstallIdentity", () => {
 
     expect(resolveMacInstallIdentity(config)).toEqual({
       appId: "io.open-design.desktop.preview",
+      displayName: "OpenDesign Preview",
       executableName: "Open Design Preview",
-      installerTitle: "Open Design Preview",
+      installerTitle: "OpenDesign Preview",
       productName: "Open Design Preview",
       publicAppBundleName: "Open Design Preview.app",
       systemAppBundleName: "Open Design Preview.app",
@@ -91,8 +95,9 @@ describe("resolveMacInstallIdentity", () => {
 
     expect(resolveMacInstallIdentity(prereleaseVersionConfig)).toEqual({
       appId: "io.open-design.desktop.prerelease",
+      displayName: "OpenDesign Prerelease",
       executableName: "Open Design Prerelease",
-      installerTitle: "Open Design Prerelease",
+      installerTitle: "OpenDesign Prerelease",
       productName: "Open Design Prerelease",
       publicAppBundleName: "Open Design Prerelease.app",
       systemAppBundleName: "Open Design Prerelease.app",

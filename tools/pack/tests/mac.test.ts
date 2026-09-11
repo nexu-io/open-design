@@ -400,11 +400,29 @@ describe("runElectronBuilder", () => {
 
     return JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
       afterSign?: string;
+      executableName?: string;
       mac?: {
+        extendInfo?: Record<string, string>;
         notarize?: boolean;
       };
+      productName?: string;
     };
   }
+
+  it("uses the compact public name without changing the persisted product identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: false });
+
+      expect(builderConfig.executableName).toBe("Open Design Prerelease");
+      expect(builderConfig.mac?.extendInfo).toMatchObject({
+        CFBundleDisplayName: "OpenDesign Prerelease",
+      });
+      expect(builderConfig.productName).toBe("Open Design Prerelease");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 
   it("does not explicitly disable electron-builder notarization for notarized mac builds", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));

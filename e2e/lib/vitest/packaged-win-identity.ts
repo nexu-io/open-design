@@ -9,6 +9,7 @@ export { releaseAppVersionArgs } from "./packaged-release-version.js";
 export type PackagedWinInstallIdentity = {
   displayName: string;
   namespaceToken: string;
+  productName: string;
 };
 
 function sanitizeNamespace(value: string): string {
@@ -22,6 +23,8 @@ export function resolvePackagedWinInstallIdentity(options: {
   const namespaceToken = sanitizeNamespace(options.namespace);
   const channel = releaseChannelFromVersion(options.releaseVersion)
     ?? releaseChannelFromNamespace(options.namespace, "default");
-  const displayName = channel == null ? `Open Design ${namespaceToken}` : releaseInstallIdentity(channel).productName;
-  return { displayName, namespaceToken };
+  const releaseIdentity = channel == null ? null : releaseInstallIdentity(channel);
+  const productName = releaseIdentity?.productName ?? `Open Design ${namespaceToken}`;
+  const displayName = releaseIdentity?.displayName ?? productName;
+  return { displayName, namespaceToken, productName };
 }
