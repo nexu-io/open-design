@@ -31,10 +31,15 @@ concurrency:
 jobs:
   runners:
     name: Resolve runner profiles
-    # Resolve on the Nexu ARC fleet for trusted branches, but preserve the
-    # hosted bootstrap path for external forks and explicit economic mode.
+    # Resolve on the Nexu ARC fleet for trusted canonical branches, but preserve
+    # the hosted bootstrap path for repository mirrors, external forks, and
+    # explicit economic mode. The ARC fleet is canonical-repository
+    # infrastructure that a mirror does not inherit, so a self-hosted label
+    # there queues until GitHub cancels the job at 24h - which strands every
+    # downstream job that needs this one and leaves the PR permanently unstable.
     runs-on: >-
-      ${{ ((github.event_name == 'pull_request'
+      ${{ (github.repository != 'nexu-io/open-design'
+        || (github.event_name == 'pull_request'
         && github.event.pull_request.head.repo.full_name != github.repository)
         || vars.OD_CI_RUNNER_MODE == 'economic')
         && 'ubuntu-24.04'
@@ -50,11 +55,13 @@ jobs:
       - name: Resolve runner profiles
         id: runners
         env:
-          # Fork PRs cannot rely on repository variables, so keep their required
-          # validation on GitHub-hosted runners even when private pools are down.
+          # Mirrors and fork PRs cannot rely on repository variables, nor on the
+          # private pools those variables name, so keep their required validation
+          # on GitHub-hosted runners even when private pools are down.
           OD_CI_RUNNER_MODE: >-
-            ${{ github.event_name == 'pull_request'
-              && github.event.pull_request.head.repo.full_name != github.repository
+            ${{ (github.repository != 'nexu-io/open-design'
+              || (github.event_name == 'pull_request'
+              && github.event.pull_request.head.repo.full_name != github.repository))
               && 'economic'
               || vars.OD_CI_RUNNER_MODE }}
         run: python3 .github/scripts/runners.py
