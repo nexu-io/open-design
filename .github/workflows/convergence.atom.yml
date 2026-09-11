@@ -1,13 +1,13 @@
 name: convergence.atom
 
 # Atomic capability: publish immutable reusable workload results only after a
-# successful admitted run. All validation and R2 writes execute trusted default-branch
+# successful admitted production gate. All validation and R2 writes execute trusted default-branch
 # Python; pull-request code is treated solely as data.
 on:
   workflow_dispatch:
     inputs:
       producer_run_id:
-        description: Successful betahyx release-exact run to admit
+        description: Completed betahyx release-exact run with successful production evidence
         required: true
         type: string
       trusted_sha:
@@ -34,10 +34,11 @@ jobs:
         github.repository == 'nexu-io/open-design'
         && ((github.event_name == 'workflow_dispatch'
           && github.ref == 'refs/heads/feat/electron-shell-exact-delivery')
-        || (github.event.workflow_run.conclusion == 'success'
+        || (contains(fromJSON('["success","failure"]'), github.event.workflow_run.conclusion)
         && github.event.workflow_run.head_repository.full_name == github.repository
         && (
           (github.event.workflow_run.name == 'ci'
+            && github.event.workflow_run.conclusion == 'success'
             && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'merge_group'))
           || (contains(fromJSON('["release-exact","release-prerelease","release-stable"]'), github.event.workflow_run.name)
             && github.event.workflow_run.event == 'workflow_dispatch')

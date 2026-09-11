@@ -109,10 +109,16 @@ class Workload:
 class WorkflowContract:
     def __init__(self, name: str, raw: Any):
         value = object_value(raw, f"convergence.workflows.{name}")
-        if not {"policy", "workloads"} <= set(value) or set(value) - {"policy", "workloads", "execution"}:
-            raise ConfigError(f"convergence.workflows.{name} requires policy and workloads; optional execution")
+        if not {"policy", "workloads"} <= set(value) or set(value) - {"policy", "workloads", "execution", "admission"}:
+            raise ConfigError(f"convergence.workflows.{name} requires policy and workloads; optional execution and admission")
         self.name = require_identity(name, "convergence workflow")
         self.policy = require_identity(value["policy"], f"convergence.workflows.{name}.policy")
+        self.production_gate = None
+        if "admission" in value:
+            admission = object_value(value["admission"], "workflow admission")
+            if name not in {"release-exact", "release-prerelease", "release-stable"} or set(admission) != {"productionJob"}:
+                raise ConfigError("production admission is restricted to release workflows")
+            self.production_gate = require_string(admission["productionJob"], "admission.productionJob")
         workloads = object_value(value["workloads"], f"convergence.workflows.{name}.workloads")
         if not workloads:
             raise ConfigError(f"convergence.workflows.{name}.workloads must not be empty")
@@ -1228,30 +1234,66 @@ def admitted_source() -> dict[str, Any]:
     run = object_value(api_json(f"/repos/nexu-io/open-design/actions/runs/{run_id}"), "producing run")
     expected = {"id": run_id, "name": "release-exact", "event": "workflow_dispatch",
                 "path": ".github/workflows/release-exact.yml", "status": "completed",
-                "conclusion": "success", "head_branch": branch, "head_sha": sha}
-    if any(run.get(key) != value for key, value in expected.items()):
-        raise ConfigError("manual convergence requires a successful exact run at the trusted SHA")
+                "head_branch": branch, "head_sha": sha}
+    if any(run.get(key) != value for key, value in expected.items()) or run.get("conclusion") not in {"success", "failure"}:
+        raise ConfigError("manual convergence requires a completed exact run at the trusted SHA")
     if object_value(run.get("head_repository"), "head repository").get("full_name") != repository["full_name"]:
         raise ConfigError("manual convergence head repository is not authorized")
     return {"repository": repository, "workflow_run": run}
 
 
+def validate_production_admission(payload: dict[str, Any], contract: ConvergenceContract) -> dict[str, Any]:
+    """Trusted live evidence from this attempt, not a producer-supplied success flag.
+    CI retains whole-run success. Release delivery failure cannot erase a completed
+    production gate; missing, ambiguous, failed and prior-attempt gates refuse."""
+    context = workflow_run_context(payload)
+    run = object_value(payload.get("workflow_run"), "producing run")
+    gate = contract.workflow(context["workflow"]).production_gate
+    if run.get("status") != "completed" or run.get("conclusion") not in ({"success", "failure"} if gate else {"success"}):
+        raise ConfigError("producing run is not admissible")
+    if gate is None:
+        return context
+    if context["event"] != "workflow_dispatch" or context["head_repository"] != context["repository"]:
+        raise ConfigError("release production admission requires a same-repository dispatch")
+    jobs = []
+    page = 1
+    while True:
+        response = object_value(api_json(f"/repos/{context['repository']}/actions/runs/{context['run_id']}/attempts/{context['run_attempt']}/jobs?per_page=100&page={page}"), "production jobs")
+        batch = response.get("jobs")
+        if not isinstance(batch, list) or len(batch) > 100:
+            raise ConfigError("invalid production job response")
+        jobs.extend(job for job in batch if isinstance(job, dict) and job.get("name") == gate)
+        if len(batch) < 100:
+            break
+        page += 1
+        if page > 100:
+            raise ConfigError("production job inventory exceeds bound")
+    expected = {"name": gate, "run_id": context["run_id"], "run_attempt": context["run_attempt"],
+                "head_sha": context["head_sha"], "status": "completed", "conclusion": "success"}
+    if len(jobs) != 1 or any(jobs[0].get(key) != value for key, value in expected.items()):
+        raise ConfigError("current-attempt production gate is missing, ambiguous or unsuccessful")
+    return context
+
+
 def source_command() -> int:
-    context = workflow_run_context(admitted_source())
+    payload = admitted_source()
+    context = workflow_run_context(payload)
     workflow = context["workflow"]
     if workflow not in {"ci", "release-exact", "release-prerelease", "release-stable"}:
         raise ConfigError("unsupported convergence source workflow")
+    config = ".github/config/convergence.json" if workflow == "ci" else f".github/config/plan/{workflow}.json"
+    validate_production_admission(payload, ConvergenceContract(Path(config)))
     append_outputs({
         "run_id": str(context["run_id"]),
         "run_attempt": str(context["run_attempt"]),
-        "config": ".github/config/convergence.json" if workflow == "ci" else f".github/config/plan/{workflow}.json",
+        "config": config,
         "handoff_id": "ci-results" if workflow == "ci" else f"{workflow}-results",
     })
     return 0
 
 
 def admit_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
-    context = workflow_run_context(admitted_source())
+    context = validate_production_admission(admitted_source(), contract)
     if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
         if args.release_policy is None:
             raise ConfigError("manual convergence requires a release policy artifact")

@@ -69,7 +69,15 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 - Release notifications live in `.github/scripts/feishu.py`, consume small business receipts and the Python plan summary, and remain independent of workspace installs/builds. Each release lane invokes it explicitly; delivery failure is non-gating. Do not put Feishu transport or notification bootstrap exceptions in tools-release/metatool.
 - `release-exact`, `release-prerelease`, and `release-stable` are independent entrypoints: no calls between them or through a shared release workflow. Each owns its atomic JSON declarations under `.github/config/plan/`; do not inherit another release lane's orchestration. Generic planner mechanisms and tools-release capabilities may be shared, not the release graph. Each lane's control identity includes its own declarations and actual control dependencies, never unrelated release configurations.
 - `convergence.atom.yml` is the only workload-result writer for CI and all three release entrypoints. Select the producer's explicit contract and handoff identity from trusted code, then retain the default-branch admission checks. Workload-result credentials must not enter release producer jobs.
-- Temporary maintainer-authorized bootstrap: its manual dispatch may trust a pinned SHA on `feat/electron-shell-exact-delivery` for a successful same-SHA `release-exact` betahyx run. The Python source/admission checks bind the dispatch, checkout, live producing run and release policy before storage credentials are used. Automatic admission remains default-branch-only; this exception does not authorize other branches or release lanes.
+- Temporary maintainer-authorized bootstrap: its manual dispatch may trust a pinned SHA on `feat/electron-shell-exact-delivery` for a completed same-SHA `release-exact` betahyx run with successful production evidence. The Python source/admission checks bind the dispatch, checkout, live producing run and release policy before storage credentials are used. Automatic admission remains default-branch-only; this exception does not authorize other branches or release lanes.
+- Each release plan declares its production job under `admission.productionJob`.
+  Release handoff is emitted by prepare after complete product and validation
+  consumption, before native delivery. Trusted admission checks the exact
+  run-attempt job inventory for one successful, same-SHA production job, even
+  when later delivery fails. Missing, duplicate, failed, skipped, foreign and
+  prior-attempt jobs refuse. Cancelled/in-progress runs refuse; ordinary CI
+  still requires whole-run success. This admission declaration does not change
+  workload hashing or turn release acceptance into a reusable test result.
 - Root `scripts/` remains for repo-level developer checks, product scripts, and guard/test logic. Do not move workflow-only handoff glue there just to make it look more general.
 
 New workflow-owned helpers should usually live under `.github/scripts/`. Prefer TypeScript for project-owned scripts in general, but Python is acceptable for small GitHub runner glue when stdlib portability and low setup cost matter. Keep such exceptions narrow and covered by `pnpm guard` policy.

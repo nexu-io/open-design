@@ -330,6 +330,7 @@
   },
   "workflows": {
     "release-prerelease": {
+      "admission": { "productionJob": "Prepare signed exact content" },
       "policy": "shell-scenes-v3",
       "workloads": {
         "electron_base_darwin_arm64": {

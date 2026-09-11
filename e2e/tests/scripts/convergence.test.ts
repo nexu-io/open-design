@@ -137,7 +137,7 @@ describe("workload convergence", () => {
     }
   });
 
-  test("admits manual bootstrap only for the pinned successful same-repository exact run", () => {
+  test("binds manual bootstrap to a completed pinned same-repository exact run", () => {
     const code = `
 import copy, os, sys
 from unittest.mock import patch
@@ -158,7 +158,7 @@ with patch.dict(os.environ, env), patch.object(c, 'event_payload', return_value=
         api.assert_called_once_with('/repos/nexu-io/open-design/actions/runs/12')
     for key, value in [('id', 13), ('name', 'release-stable'), ('event', 'pull_request'),
                        ('path', '.github/workflows/other.yml'), ('status', 'in_progress'),
-                       ('conclusion', 'failure'), ('head_branch', 'main'), ('head_sha', 'b' * 40),
+                       ('conclusion', 'cancelled'), ('head_branch', 'main'), ('head_sha', 'b' * 40),
                        ('head_repository', {'full_name': 'fork/open-design'})]:
         invalid = copy.deepcopy(run)
         invalid[key] = value
@@ -180,6 +180,53 @@ print('manual admission verified')
 `;
     expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript)], { encoding: "utf8" }))
       .toContain("manual admission verified");
+  });
+
+  test("requires live current-attempt production evidence even when release delivery fails", () => {
+    const code = `
+import copy, sys
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import convergence as c
+root=Path(sys.argv[2])
+for lane in ['exact','stable','prerelease']:
+    name='release-'+lane
+    contract=c.ConvergenceContract(root / '.github/config/plan' / (name+'.json'))
+    run={'id':12,'run_attempt':2,'name':name,'event':'workflow_dispatch','head_sha':'a'*40,
+         'status':'completed','conclusion':'failure','head_repository':{'full_name':'nexu-io/open-design'}}
+    payload={'repository':{'id':42,'full_name':'nexu-io/open-design'},'workflow_run':run}
+    job={'name':'Prepare signed exact content','run_id':12,'run_attempt':2,'head_sha':'a'*40,'status':'completed','conclusion':'success'}
+    with patch.object(c,'api_json',return_value={'jobs':[job]}) as api:
+        assert c.validate_production_admission(payload,contract)['run_attempt']==2
+        api.assert_called_once_with('/repos/nexu-io/open-design/actions/runs/12/attempts/2/jobs?per_page=100&page=1')
+    invalids=[[],[job,job]]
+    for key,value in [('run_id',13),('run_attempt',1),('head_sha','b'*40),('status','in_progress'),('conclusion','failure'),('conclusion','skipped')]:
+        invalids.append([{**job,key:value}])
+    for jobs in invalids:
+        with patch.object(c,'api_json',return_value={'jobs':jobs}):
+            try: c.validate_production_admission(payload,contract)
+            except c.ConfigError: pass
+            else: raise AssertionError('accepted invalid production evidence')
+    for change in [{'conclusion':'cancelled'},{'status':'in_progress'},{'head_repository':{'full_name':'fork/repo'}}]:
+        with patch.object(c,'api_json') as api:
+            try: c.validate_production_admission({**payload,'workflow_run':{**run,**change}},contract)
+            except c.ConfigError: pass
+            else: raise AssertionError('accepted invalid producer')
+            api.assert_not_called()
+contract=c.ConvergenceContract(root / '.github/config/convergence.json')
+payload['workflow_run']={**run,'name':'ci','event':'pull_request'}
+with patch.object(c,'api_json') as api:
+    try: c.validate_production_admission(payload,contract)
+    except c.ConfigError: pass
+    else: raise AssertionError('CI failure admitted')
+    payload['workflow_run']['conclusion']='success'
+    c.validate_production_admission(payload,contract)
+    api.assert_not_called()
+print('production evidence verified')
+`;
+    expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript), repoRoot], { encoding: "utf8" }))
+      .toContain("production evidence verified");
   });
 
   test("projects a mixed batch without leaking identities or changing independent decisions", () => {
@@ -590,6 +637,7 @@ assert not (root / 'escape').exists()
       repository: { id: 42, full_name: "example/repo" },
       workflow_run: {
         id: 12, run_attempt: 1, name: "ci", event: "pull_request", head_sha: headSha,
+        status: "completed", conclusion: "success",
         head_repository: { full_name: "example/repo" },
       },
     }));

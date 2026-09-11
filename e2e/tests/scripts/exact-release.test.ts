@@ -16,6 +16,20 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("commits complete production evidence before delivery in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
+    const publish = workflow.split("\n  publish:")[1]!.split("\n  acceptance:")[0]!;
+    expect(prepare.indexOf("Acquire complete validation evidence")).toBeLessThan(prepare.indexOf("Create reusable scene handoff"));
+    expect(prepare.indexOf("Compose and sign content metadata")).toBeLessThan(prepare.indexOf("Create reusable scene handoff"));
+    expect(prepare).toContain("contribute-all");
+    expect(prepare).toContain("Upload reusable scene handoff");
+    expect(publish).not.toContain("contribute-all");
+    expect(prepare).not.toContain("exact-final/");
+    expect(publish).toContain("Upload exact release evidence");
+    const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
+    expect(config.workflows[`release-${lane}`].admission).toEqual({ productionJob: "Prepare signed exact content" });
+  });
   it.each(["exact", "stable", "prerelease"])("skips scene and base hit relays in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const scene = workflow.split("\n  scene:")[1]!.split("\n  terminal_scene:")[0]!;

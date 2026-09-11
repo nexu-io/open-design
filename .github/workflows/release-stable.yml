@@ -1053,6 +1053,37 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Bind workload results in the Linux control plane
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: >-
+          python3 .github/scripts/convergence.py --config .github/config/plan/release-stable.json contribute-all
+          --pending "$RUNNER_TEMP/exact-plan/pending.json" --source-commit "$SOURCE_SHA"
+          --output "$RUNNER_TEMP/convergence-products"
+
+      - name: Create reusable scene handoff
+        id: convergence_handoff
+        continue-on-error: true
+        run: >-
+          python3 .github/scripts/convergence.py
+          --config .github/config/plan/release-stable.json
+          handoff
+          --pending "$RUNNER_TEMP/exact-plan/pending.json"
+          --products-root "$RUNNER_TEMP/convergence-products"
+          --handoff-root "$RUNNER_TEMP/handoff-convergence-exact-scenes"
+          --id release-stable-results
+
+      - name: Upload reusable scene handoff
+        if: ${{ steps.convergence_handoff.outputs.name != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ steps.convergence_handoff.outputs.name }}
+          path: ${{ steps.convergence_handoff.outputs.path }}
+          if-no-files-found: error
+          retention-days: 1
+  distribution:
+
   distribution:
     name: ${{ matrix.shell }} distribution (${{ matrix.target }})
     needs: [tools, plan, prepare]
@@ -1298,36 +1329,6 @@ jobs:
           path: |
             ${{ runner.temp }}/exact-final/*.json
             ${{ runner.temp }}/exact-final/documents/*.json
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Bind workload results in the Linux control plane
-        env:
-          SOURCE_SHA: ${{ inputs.source_sha }}
-        run: >-
-          python3 .github/scripts/convergence.py --config .github/config/plan/release-stable.json contribute-all
-          --pending "$RUNNER_TEMP/exact-plan/pending.json" --source-commit "$SOURCE_SHA"
-          --output "$RUNNER_TEMP/convergence-products"
-
-      - name: Create reusable scene handoff
-        id: convergence_handoff
-        continue-on-error: true
-        run: >-
-          python3 .github/scripts/convergence.py
-          --config .github/config/plan/release-stable.json
-          handoff
-          --pending "$RUNNER_TEMP/exact-plan/pending.json"
-          --products-root "$RUNNER_TEMP/convergence-products"
-          --handoff-root "$RUNNER_TEMP/handoff-convergence-exact-scenes"
-          --id release-stable-results
-
-      - name: Upload reusable scene handoff
-        if: ${{ steps.convergence_handoff.outputs.name != '' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: ${{ steps.convergence_handoff.outputs.name }}
-          path: ${{ steps.convergence_handoff.outputs.path }}
           if-no-files-found: error
           retention-days: 1
 
