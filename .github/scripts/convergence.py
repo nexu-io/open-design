@@ -150,7 +150,7 @@ class WorkflowContract:
         self.execution = None
         if "execution" in value:
             execution = object_value(value["execution"], f"workflow {name}.execution")
-            if not {"enabled", "runners", "matrices"} <= set(execution) or set(execution) - {"enabled", "runners", "matrices", "inputs", "batches"}:
+            if not {"enabled", "runners", "matrices"} <= set(execution) or set(execution) - {"enabled", "runners", "matrices", "inputs", "batches", "groups"}:
                 raise ConfigError("execution requires enabled, runners and matrices; optional inputs")
             for input_name in object_value(execution.get("inputs", {}), "execution inputs"):
                 require_identity(input_name, "execution input name")
@@ -197,6 +197,12 @@ class WorkflowContract:
                 for entry in matrices[batch["matrix"]]["include"]:
                     if entry.get("workload") not in self.workloads or any(source not in entry for source in fields.values()):
                         raise ConfigError("batch entries require declared workloads and projection fields")
+            for group_name, members in object_value(execution.get("groups", {}), "execution groups").items():
+                require_identity(group_name, "execution group name")
+                if (not isinstance(members, list) or not members
+                        or any(not isinstance(member, str) for member in members)
+                        or len(set(members)) != len(members) or set(members) - set(self.workloads)):
+                    raise ConfigError("execution group must name unique declared workloads")
             self.execution = execution
 
 
@@ -1110,6 +1116,10 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
             "run": compact_json(run),
             "hit": compact_json(hits),
             "would_run": compact_json(would_run),
+            "group_run": compact_json({
+                name: any(run[identity] for identity in members)
+                for name, members in (workflow.execution or {}).get("groups", {}).items()
+            }),
             "batch_run": compact_json({
                 name: any(run[entry["workload"]] for entry in workflow.execution["matrices"][batch["matrix"]]["include"])
                 for name, batch in (workflow.execution or {}).get("batches", {}).items()

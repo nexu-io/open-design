@@ -524,7 +524,7 @@ for lane in ['exact','stable','prerelease']:
     run={'id':12,'run_attempt':2,'name':name,'event':'workflow_dispatch','head_sha':'a'*40,
          'status':'completed','conclusion':'failure','head_repository':{'full_name':'nexu-io/open-design'}}
     payload={'repository':{'id':42,'full_name':'nexu-io/open-design'},'workflow_run':run}
-    job={'name':'[prepare] Release content · validated and signed','run_id':12,'run_attempt':2,'head_sha':'a'*40,'status':'completed','conclusion':'success'}
+    job={'name':'[prepare] Release content · products and signing','run_id':12,'run_attempt':2,'head_sha':'a'*40,'status':'completed','conclusion':'success'}
     with patch.object(c,'api_json',return_value={'jobs':[job]}) as api:
         assert c.validate_production_admission(payload,contract)['run_attempt']==2
         api.assert_called_once_with('/repos/nexu-io/open-design/actions/runs/12/attempts/2/jobs?per_page=100&page=1')
@@ -578,9 +578,18 @@ for jobs in invalids:
     with patch.object(c,'api_json',return_value={'jobs':jobs}):
         assert c.admit_result_jobs(candidate,workflow,context)['results']==candidate['results'][:1]
 assert len(candidate['results'])==2
+for node in ['contract','shell','closure']:
+    identity='validation_'+node+'_darwin_arm64'
+    selected={'results':[candidate['results'][0],{'receipt':{'workload':identity}}]}
+    test_job={**job,'name':workflow.result_jobs[identity]}
+    for status in ['success','failure','skipped']:
+        with patch.object(c,'api_json',return_value={'jobs':[{**test_job,'conclusion':status}]}):
+            admitted=c.admit_result_jobs(selected,workflow,context)['results']
+            assert admitted[0]==selected['results'][0]
+            assert len(admitted)==(2 if status=='success' else 1)
 for lane in ['stable','prerelease']:
     formal=c.ConvergenceContract(Path(sys.argv[2]) / '.github/config/plan' / ('release-'+lane+'.json')).workflow('release-'+lane)
-    assert all(not formal.workloads[name].reusable for name in formal.result_jobs)
+    assert all(not formal.workloads[name].reusable for name in formal.result_jobs if name.startswith('installed_'))
 print('installed witness admission verified')
 `;
     expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript), repoRoot], { encoding: "utf8" }))
@@ -626,6 +635,7 @@ import convergence as c
 root = Path(sys.argv[2])
 workflow = NS(name='ci', policy='test', order=['a','b'], workloads={name:NS(dependencies=[]) for name in ['a','b']}, execution={
   'matrices': {'items': {'include': [{'workload':'a','name':'first'}, {'workload':'b','name':'second'}]}},
+  'groups': {'production':['a','b']},
   'batches': {'data': {'matrix':'items','fields':{'id':'name'},'product':'resource'}}})
 contract = NS(workflow=lambda _: workflow)
 for scenario, hits, mode, enabled, expected in [
@@ -648,10 +658,30 @@ for scenario, hits, mode, enabled, expected in [
   assert execution == [{'id':name} for name in expected], scenario
   assert len(complete) == (2 if enabled else 0), scenario
   assert json.loads(outputs.call_args.args[0]['batch_run'])['data'] == bool(expected), scenario
+  assert json.loads(outputs.call_args.args[0]['group_run'])['production'] == bool(expected), scenario
   assert sum('artifact' in entry for entry in complete) == (len(complete)-len(execution)), scenario
 print('batch projections verified')
 `;
     expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript), fixture.root], { encoding: "utf8" })).toContain("batch projections verified");
+  });
+
+  test("execution groups preserve workload identities and reject invalid membership", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    const before = runPlan(fixture).pending.workloads;
+    config.workflows.ci.execution = {
+      enabled: ["a", "b"], runners: { worker: ["ubuntu-24.04"] }, matrices: {},
+      groups: { production: ["a", "b"] },
+    };
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    expect(runPlan(fixture).pending.workloads).toEqual(before);
+    for (const members of [[], ["a", "a"], ["missing"], "a"]) {
+      config.workflows.ci.execution.groups.production = members;
+      writeFileSync(fixture.configPath, JSON.stringify(config));
+      const result = spawnSync("python3", [convergenceScript, "--config", fixture.configPath, "validate"], { encoding: "utf8" });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("execution group");
+    }
   });
 
   test("bootstraps a tool from a verified blob without Node or workspace dependencies", () => {

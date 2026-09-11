@@ -38,10 +38,12 @@ concurrency:
 
 jobs:
   plan:
-    name: "[plan] Release workloads · identities and cache decisions"
+    name: "[plan] Release workloads · identities, tool and policy"
     runs-on: ubuntu-24.04
     outputs:
       run: ${{ steps.convergence.outputs.run }}
+      group_run: ${{ steps.convergence.outputs.group_run }}
+      native_input_matrix: ${{ steps.topology.outputs.native_input_matrix }}
       batch_run: ${{ steps.convergence.outputs.batch_run }}
       acceptance_matrix: ${{ toJSON(fromJSON(steps.convergence.outputs.execution_matrices).acceptance_matrix) }}
       acceptance_full_matrix: ${{ steps.topology.outputs.acceptance_matrix }}
@@ -50,8 +52,6 @@ jobs:
       electron_matrix: ${{ steps.topology.outputs.electron_matrix }}
       terminal_matrix: ${{ steps.topology.outputs.terminal_matrix }}
       validation_matrix: ${{ steps.topology.outputs.validation_matrix }}
-      platform_matrix: ${{ steps.topology.outputs.platform_matrix }}
-      capsule_matrix: ${{ steps.topology.outputs.capsule_matrix }}
       data_matrix: ${{ steps.topology.outputs.data_matrix }}
     steps:
       - name: "[validate] Validate immutable inputs"
@@ -115,47 +115,29 @@ jobs:
 
           if-no-files-found: error
           retention-days: 1
-
-  tools:
-    name: "[prepare] tools/release · tool and policy"
-    needs: [plan]
-    runs-on: ubuntu-24.04
-    steps:
-      - name: "[fetch] Repository source · pinned SHA"
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ inputs.source_sha }}
-          persist-credentials: false
-
-      - name: "[fetch] exact-convergence-plan · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/exact-plan
-
       - name: "[setup] Node.js · declared toolchain"
         uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
 
       - name: "[fetch] Acquire reusable release tool"
-        if: ${{ !fromJSON(needs.plan.outputs.run).release_tools }}
+        if: ${{ !fromJSON(steps.convergence.outputs.run).release_tools }}
         run: >-
           python3 .github/scripts/convergence.py --config .github/config/plan/release-exact.json acquire
           --descriptor "$RUNNER_TEMP/exact-plan/artifacts/release_tools/tool.json" --output "$RUNNER_TEMP/release-tools"
 
       - name: "[setup] pnpm · pinned package manager"
         uses: pnpm/action-setup@v5
-        if: ${{ fromJSON(needs.plan.outputs.run).release_tools }}
+        if: ${{ fromJSON(steps.convergence.outputs.run).release_tools }}
         with:
           version: 10.33.2
 
       - name: "[setup] Workload concurrency · runner capacity"
         uses: ./.github/actions/configure-ci-parallelism
-        if: ${{ fromJSON(needs.plan.outputs.run).release_tools }}
+        if: ${{ fromJSON(steps.convergence.outputs.run).release_tools }}
 
       - name: "[build] Build portable release tool"
-        if: ${{ fromJSON(needs.plan.outputs.run).release_tools }}
+        if: ${{ fromJSON(steps.convergence.outputs.run).release_tools }}
         env:
           OPEN_DESIGN_POSTINSTALL_LEVEL: release-prepare
           ONNXRUNTIME_NODE_INSTALL_CUDA: skip
@@ -217,7 +199,7 @@ jobs:
 
   validation:
     name: "[test] Shell and Closure · ${{ matrix.target }} · misses"
-    needs: [tools, plan]
+    needs: [plan]
     if: ${{ fromJSON(needs.plan.outputs.batch_run).validation }}
     strategy:
       fail-fast: false
@@ -324,7 +306,7 @@ jobs:
 
   runtime:
     name: "[build] apps/web + apps/daemon · misses"
-    needs: [tools, plan]
+    needs: [plan]
     if: ${{ fromJSON(needs.plan.outputs.batch_run).runtime }}
     runs-on: macos-15
     timeout-minutes: 20
@@ -393,10 +375,201 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  native_inputs:
+    name: "[build] Electron inputs · base, toolchain, platform and Capsule · ${{ matrix.target }}"
+    needs: [plan]
+    if: ${{ fromJSON(needs.plan.outputs.group_run).electron_inputs }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.native_input_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 35
+    steps:
+      - name: "[fetch] Repository source · pinned SHA"
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - name: "[fetch] exact-convergence-plan · workflow artifact"
+        uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - name: "[fetch] release-tools · workflow artifact"
+        uses: actions/download-artifact@v8
+        with:
+          name: release-tools-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/release-tools
+
+      - name: "[setup] Expose release tool"
+        shell: bash
+        run: |
+          chmod +x "$RUNNER_TEMP/release-tools/tools-release"
+          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
+
+      - name: "[fetch] release-policy · workflow artifact"
+        uses: actions/download-artifact@v8
+        with:
+          name: release-policy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-policy
+
+      - name: "[setup] pnpm · pinned package manager"
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: "[setup] Node.js · declared toolchain"
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: "[setup] Workload concurrency · runner capacity"
+        uses: ./.github/actions/configure-ci-parallelism
+
+      - name: "[setup] Prepare Electron input workspace"
+        env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: electron-build
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: "[build] Export built Electron toolchain"
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCHIVE_ZIP_PATH: /usr/bin/zip
+        run: >-
+          tools-release toolchain build --root "$GITHUB_WORKSPACE" --target "$TARGET"
+          --output "$RUNNER_TEMP/toolchain-artifact"
+
+      - name: "[store] exact-toolchain · workflow artifact"
+        uses: actions/upload-artifact@v7.0.1
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
+        with:
+          name: exact-toolchain-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/toolchain-artifact
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: "[build] Build independent capsule"
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.capsule_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools-release build capsule \
+            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
+            --output "$RUNNER_TEMP/exact-capsule/$TARGET" \
+            --receipt "$RUNNER_TEMP/exact-capsule/$TARGET/capsule-build-receipt.json"
+
+      - name: "[build] Export verified portable capsule"
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.capsule_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.capsule_workload }}
+        shell: bash
+        run: |
+          tools-release capsule export \
+            --target "$TARGET" \
+            --build-receipt "$RUNNER_TEMP/exact-capsule/$TARGET/capsule-build-receipt.json" \
+            --output "$RUNNER_TEMP/capsule-contribution"
+
+      - name: "[store] exact-capsule-product · workflow artifact"
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.capsule_workload] }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: exact-capsule-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-capsule
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: "[store] exact-capsule-cache · workflow artifact"
+        uses: actions/upload-artifact@v7.0.1
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.capsule_workload] }}
+        with:
+          name: exact-capsule-cache-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/capsule-contribution/artifact
+          if-no-files-found: error
+          retention-days: 1
+      - name: "[build] Build independent platform"
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.platform_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools-release build platform \
+            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
+            --output "$RUNNER_TEMP/exact-platform/$TARGET" \
+            --receipt "$RUNNER_TEMP/exact-platform/$TARGET/platform-build-receipt.json"
+
+      - name: "[validate] Contribute verified platform"
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.platform_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.platform_workload }}
+        shell: bash
+        run: |
+          tools-release platform export \
+            --target "$TARGET" \
+            --build-receipt "$RUNNER_TEMP/exact-platform/$TARGET/platform-build-receipt.json" \
+            --output "$RUNNER_TEMP/platform-contribution"
+
+      - name: "[store] exact-platform-product · workflow artifact"
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.platform_workload] }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: exact-platform-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-platform
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: "[store] exact-platform-cache · workflow artifact"
+        uses: actions/upload-artifact@v7.0.1
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.platform_workload] }}
+        with:
+          name: exact-platform-cache-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/platform-contribution/artifact
+          if-no-files-found: error
+          retention-days: 1
+      - name: "[build] Build and contribute Electron base"
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          CHANNEL: ${{ inputs.channel }}
+          CSC_LINK: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+          ARCHIVE_ZIP_PATH: /usr/bin/zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools-release build base \
+            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
+            --channel "$CHANNEL" \
+            --output "$RUNNER_TEMP/exact-base" --receipt "$RUNNER_TEMP/base-build-receipt.json"
+          tools-release base export \
+            --target "$TARGET" \
+            --build-receipt "$RUNNER_TEMP/base-build-receipt.json" \
+            --output "$RUNNER_TEMP/base-contribution"
+
+      - name: "[store] exact-base-product · workflow artifact"
+        uses: actions/upload-artifact@v7.0.1
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
+        with:
+          name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/base-contribution/artifact
+          if-no-files-found: error
+          retention-days: 1
+
+
   scene:
-    name: "[build] shells/electron · scene, base and toolchain · ${{ matrix.target }} · misses"
-    needs: [tools, plan, capsule, runtime]
-    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && (fromJSON(needs.plan.outputs.batch_run).electron_scenes || fromJSON(needs.plan.outputs.batch_run).bases || fromJSON(needs.plan.outputs.batch_run).toolchains) }}
+    name: "[build] shells/electron · scene · ${{ matrix.target }} · misses"
+    needs: [plan, native_inputs, runtime]
+    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && fromJSON(needs.plan.outputs.batch_run).electron_scenes }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.electron_matrix) }}
@@ -433,40 +606,21 @@ jobs:
           name: release-policy-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-policy
 
-      - name: "[setup] Node.js · declared toolchain"
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-
-      - name: "[restore] Restore converged scene"
-        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        env:
-          WORKLOAD: ${{ matrix.workload }}
-        shell: bash
-        run: |
-          tools-release scene import \
-            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/scene.json" \
-            --transport "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
-
       - name: "[setup] pnpm · pinned package manager"
         uses: pnpm/action-setup@v5
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || fromJSON(needs.plan.outputs.run)[matrix.base_workload] || fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
         with:
           version: 10.33.2
 
       - name: "[setup] Node.js · declared toolchain"
         uses: actions/setup-node@v6
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || fromJSON(needs.plan.outputs.run)[matrix.base_workload] || fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
         with:
           node-version-file: .node-version
           cache: pnpm
 
       - name: "[setup] Workload concurrency · runner capacity"
         uses: ./.github/actions/configure-ci-parallelism
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || fromJSON(needs.plan.outputs.run)[matrix.base_workload] || fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
 
       - name: "[setup] Prepare scene workspace"
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || fromJSON(needs.plan.outputs.run)[matrix.base_workload] || fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
         env:
           OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}
         shell: bash
@@ -509,25 +663,6 @@ jobs:
           --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/capsules.json"
           --output "$RUNNER_TEMP/capsules"
 
-      - name: "[build] Export built Electron toolchain"
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          ARCHIVE_ZIP_PATH: /usr/bin/zip
-        run: >-
-          tools-release toolchain build --root "$GITHUB_WORKSPACE" --target "$TARGET"
-          --output "$RUNNER_TEMP/toolchain-artifact"
-
-      - name: "[store] exact-toolchain · workflow artifact"
-        uses: actions/upload-artifact@v7.0.1
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
-        with:
-          name: exact-toolchain-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/toolchain-artifact
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 1
-
       - name: "[build] Build native scene"
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
@@ -539,35 +674,6 @@ jobs:
             --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
             --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" --capsule-directory "$RUNNER_TEMP/capsules" \
             --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
-
-      - name: "[build] Build and contribute Electron base"
-        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          CHANNEL: ${{ inputs.channel }}
-          CSC_LINK: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
-          ARCHIVE_ZIP_PATH: /usr/bin/zip
-        shell: bash
-        run: |
-          set -euo pipefail
-          tools-release build base \
-            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
-            --channel "$CHANNEL" \
-            --output "$RUNNER_TEMP/exact-base" --receipt "$RUNNER_TEMP/base-build-receipt.json"
-          tools-release base export \
-            --target "$TARGET" \
-            --build-receipt "$RUNNER_TEMP/base-build-receipt.json" \
-            --output "$RUNNER_TEMP/base-contribution"
-
-      - name: "[store] exact-base-product · workflow artifact"
-        uses: actions/upload-artifact@v7.0.1
-        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
-        with:
-          name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/base-contribution/artifact
-          if-no-files-found: error
-          retention-days: 1
 
       - name: "[validate] Verify release-neutral scene"
         env:
@@ -597,7 +703,7 @@ jobs:
 
   terminal_scene:
     name: "[build] shells/terminal · scene · ${{ matrix.target }} · misses"
-    needs: [tools, plan]
+    needs: [plan]
     if: ${{ fromJSON(needs.plan.outputs.batch_run).terminal_scenes }}
     strategy:
       fail-fast: false
@@ -723,223 +829,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  platform:
-    name: "[build] Electron platform · ${{ matrix.target }} · misses"
-    needs: [tools, plan]
-    if: ${{ fromJSON(needs.plan.outputs.batch_run).platforms }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.platform_matrix) }}
-    runs-on: ${{ matrix.runs_on }}
-    timeout-minutes: 20
-    steps:
-      - name: "[fetch] exact-convergence-plan · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/exact-plan
-
-      - name: "[fetch] release-tools · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: release-tools-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/release-tools
-
-      - name: "[setup] Expose release tool"
-        shell: bash
-        run: |
-          chmod +x "$RUNNER_TEMP/release-tools/tools-release"
-          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
-
-      - name: "[fetch] release-policy · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: release-policy-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-policy
-
-      - name: "[setup] Node.js · declared toolchain"
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ needs.plan.outputs.node_version }}
-
-      - name: "[fetch] Repository source · pinned SHA"
-        uses: actions/checkout@v6.0.2
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          ref: ${{ inputs.source_sha }}
-          persist-credentials: false
-
-      - name: "[setup] pnpm · pinned package manager"
-        uses: pnpm/action-setup@v5
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          version: 10.33.2
-
-      - name: "[setup] Workload concurrency · runner capacity"
-        uses: ./.github/actions/configure-ci-parallelism
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-
-      - name: "[restore] Restore platform dependency cache"
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ needs.plan.outputs.node_version }}
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: "[build] Build independent platform"
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        env:
-          OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}
-          TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm install --frozen-lockfile
-          tools-release build platform \
-            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
-            --output "$RUNNER_TEMP/exact-platform/$TARGET" \
-            --receipt "$RUNNER_TEMP/exact-platform/$TARGET/platform-build-receipt.json"
-
-      - name: "[validate] Contribute verified platform"
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          WORKLOAD: ${{ matrix.workload }}
-        shell: bash
-        run: |
-          tools-release platform export \
-            --target "$TARGET" \
-            --build-receipt "$RUNNER_TEMP/exact-platform/$TARGET/platform-build-receipt.json" \
-            --output "$RUNNER_TEMP/platform-contribution"
-
-      - name: "[store] exact-platform-product · workflow artifact"
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: exact-platform-product-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/exact-platform
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: "[store] exact-platform-cache · workflow artifact"
-        uses: actions/upload-artifact@v7.0.1
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          name: exact-platform-cache-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/platform-contribution/artifact
-          if-no-files-found: error
-          retention-days: 1
-
-  capsule:
-    name: "[build] packages/electron-capsule · ${{ matrix.target }} · misses"
-    needs: [tools, plan]
-    if: ${{ fromJSON(needs.plan.outputs.batch_run).capsules }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}
-    runs-on: ${{ matrix.runs_on }}
-    timeout-minutes: 20
-    steps:
-      - name: "[fetch] exact-convergence-plan · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/exact-plan
-
-      - name: "[fetch] release-tools · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: release-tools-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/release-tools
-
-      - name: "[setup] Expose release tool"
-        shell: bash
-        run: |
-          chmod +x "$RUNNER_TEMP/release-tools/tools-release"
-          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
-
-      - name: "[fetch] release-policy · workflow artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: release-policy-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-policy
-
-      - name: "[setup] Node.js · declared toolchain"
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ needs.plan.outputs.node_version }}
-
-      - name: "[fetch] Repository source · pinned SHA"
-        uses: actions/checkout@v6.0.2
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          ref: ${{ inputs.source_sha }}
-          persist-credentials: false
-
-      - name: "[setup] pnpm · pinned package manager"
-        uses: pnpm/action-setup@v5
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          version: 10.33.2
-
-      - name: "[setup] Workload concurrency · runner capacity"
-        uses: ./.github/actions/configure-ci-parallelism
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-
-      - name: "[restore] Restore capsule dependency cache"
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ needs.plan.outputs.node_version }}
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: "[build] Build independent capsule"
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        env:
-          OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}
-          TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm install --frozen-lockfile
-          tools-release build capsule \
-            --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
-            --output "$RUNNER_TEMP/exact-capsule/$TARGET" \
-            --receipt "$RUNNER_TEMP/exact-capsule/$TARGET/capsule-build-receipt.json"
-
-      - name: "[build] Export verified portable capsule"
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        env:
-          TARGET: ${{ matrix.target }}
-          WORKLOAD: ${{ matrix.workload }}
-        shell: bash
-        run: |
-          tools-release capsule export \
-            --target "$TARGET" \
-            --build-receipt "$RUNNER_TEMP/exact-capsule/$TARGET/capsule-build-receipt.json" \
-            --output "$RUNNER_TEMP/capsule-contribution"
-
-      - name: "[store] exact-capsule-product · workflow artifact"
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: exact-capsule-product-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/exact-capsule
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: "[store] exact-capsule-cache · workflow artifact"
-        uses: actions/upload-artifact@v7.0.1
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          name: exact-capsule-cache-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/capsule-contribution/artifact
-          if-no-files-found: error
-          retention-days: 1
-
   data:
     name: "[build] Closure data resources · misses"
-    needs: [tools, plan]
+    needs: [plan]
     if: ${{ fromJSON(needs.plan.outputs.batch_run).data }}
     outputs:
       products: ${{ steps.data.outputs.products }}
@@ -981,9 +873,9 @@ jobs:
           secret-access-key: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
 
   prepare:
-    name: "[prepare] Release content · validated and signed"
-    needs: [tools, plan, scene, terminal_scene, platform, capsule, data, validation]
-    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && needs.tools.result == 'success' }}
+    name: "[prepare] Release content · products and signing"
+    needs: [plan, scene, terminal_scene, native_inputs, data]
+    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' }}
     runs-on: ubuntu-24.04
     environment: standalone-exact-release
     timeout-minutes: 10
@@ -1096,44 +988,6 @@ jobs:
           --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/scenes.json"
           --source-commit "$SOURCE_SHA" --output "$RUNNER_TEMP/scenes"
 
-      - name: "[fetch] exact-validation-contract-darwin-arm64 · workflow artifact"
-        uses: actions/download-artifact@v8
-        if: ${{ fromJSON(needs.plan.outputs.run).validation_contract_darwin_arm64 }}
-        with:
-          name: exact-validation-contract-darwin-arm64-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/validation-products/contract
-
-      - name: "[fetch] exact-validation-shell-darwin-arm64 · workflow artifact"
-        uses: actions/download-artifact@v8
-        if: ${{ fromJSON(needs.plan.outputs.run).validation_shell_darwin_arm64 }}
-        with:
-          name: exact-validation-shell-darwin-arm64-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/validation-products/shell
-
-      - name: "[fetch] exact-validation-closure-darwin-arm64 · workflow artifact"
-        uses: actions/download-artifact@v8
-        if: ${{ fromJSON(needs.plan.outputs.run).validation_closure_darwin_arm64 }}
-        with:
-          name: exact-validation-closure-darwin-arm64-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/validation-products/closure
-
-      - name: "[fetch] Acquire complete validation evidence"
-        env:
-          SOURCE_SHA: ${{ inputs.source_sha }}
-        run: >-
-          tools-release validation acquire
-          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/validation.json"
-          --products "$RUNNER_TEMP/validation-products" --source-commit "$SOURCE_SHA"
-          --output "$RUNNER_TEMP/exact-validation"
-
-      - name: "[store] exact-validation-darwin-arm64 · workflow artifact"
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: exact-validation-darwin-arm64-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/exact-validation/*.json
-          if-no-files-found: error
-          retention-days: 30
-
       - name: "[sign] Compose and sign content metadata"
         env:
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
@@ -1200,8 +1054,8 @@ jobs:
           retention-days: 1
   distribution:
     name: "[build] ${{ matrix.shell }} distribution · ${{ matrix.target }} · native package"
-    needs: [tools, plan, prepare]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.prepare.result == 'success' }}
+    needs: [plan, prepare]
+    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && needs.prepare.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.shell_matrix) }}
@@ -1330,8 +1184,8 @@ jobs:
 
   publish:
     name: "[publish] Release objects · immutable CDN"
-    needs: [tools, plan, distribution]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.distribution.result == 'success' }}
+    needs: [plan, distribution, validation]
+    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && needs.distribution.result == 'success' }}
     runs-on: ubuntu-24.04
     environment: standalone-exact-release
     timeout-minutes: 15
@@ -1381,6 +1235,50 @@ jobs:
             --policy "$RUNNER_TEMP/release-policy/release-policy.json" --capability finalize \
             --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
             --receipt "$RUNNER_TEMP/finalize-authorization.json"
+
+      - name: "[fetch] Validation inputs · workflow plan"
+        uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - name: "[fetch] exact-validation-contract-darwin-arm64 · workflow artifact"
+        uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run).validation_contract_darwin_arm64 }}
+        with:
+          name: exact-validation-contract-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/validation-products/contract
+
+      - name: "[fetch] exact-validation-shell-darwin-arm64 · workflow artifact"
+        uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run).validation_shell_darwin_arm64 }}
+        with:
+          name: exact-validation-shell-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/validation-products/shell
+
+      - name: "[fetch] exact-validation-closure-darwin-arm64 · workflow artifact"
+        uses: actions/download-artifact@v8
+        if: ${{ fromJSON(needs.plan.outputs.run).validation_closure_darwin_arm64 }}
+        with:
+          name: exact-validation-closure-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/validation-products/closure
+
+      - name: "[fetch] Acquire complete validation evidence"
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: >-
+          tools-release validation acquire
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/validation.json"
+          --products "$RUNNER_TEMP/validation-products" --source-commit "$SOURCE_SHA"
+          --output "$RUNNER_TEMP/exact-validation"
+
+      - name: "[store] exact-validation-darwin-arm64 · workflow artifact"
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: exact-validation-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation/*.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: "[sign] Finalize signed Shell sidecar and channel head"
         env:
@@ -1443,8 +1341,8 @@ jobs:
 
   acceptance:
     name: "[test] Installed ${{ matrix.shell }} · ${{ matrix.target }} · ${{ inputs.baseline_mode == 'candidate' && 'candidate baseline' || 'first start and update' }}"
-    needs: [tools, plan, publish]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.publish.result == 'success' && (fromJSON(needs.plan.outputs.batch_run).acceptance || inputs.baseline_mode == 'candidate') }}
+    needs: [plan, publish]
+    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && needs.publish.result == 'success' && (fromJSON(needs.plan.outputs.batch_run).acceptance || inputs.baseline_mode == 'candidate') }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(inputs.baseline_mode == 'candidate' && needs.plan.outputs.acceptance_full_matrix || needs.plan.outputs.acceptance_matrix) }}
@@ -1633,8 +1531,8 @@ jobs:
 
   activate:
     name: "[publish] Channel head · accepted release"
-    needs: [tools, plan, publish, acceptance]
-    if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.publish.result == 'success' }}
+    needs: [plan, publish, acceptance]
+    if: ${{ !cancelled() && !failure() && needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     environment: standalone-exact-release
     timeout-minutes: 10
@@ -1727,7 +1625,7 @@ jobs:
 
   notify:
     name: "[report] Release outcome · timings and Feishu"
-    needs: [plan, tools, validation, runtime, scene, terminal_scene, platform, capsule, data, prepare, distribution, publish, acceptance, activate]
+    needs: [plan, validation, runtime, scene, terminal_scene, native_inputs, data, prepare, distribution, publish, acceptance, activate]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5

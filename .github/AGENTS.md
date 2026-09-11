@@ -32,8 +32,10 @@ evidence, not by enumerating each producer's success/skipped status in YAML.
 Keep failure/cancellation and control-plane guards short. Consumers acquire
 the complete plan-projected business input set; an expected fresh product or
 test receipt missing after an accidental skip fails without implicit execution.
-Validation producers execute only the miss batch; prepare acquires all bound
-evidence before signing. Cache-hit producers (including validation) skip jobs
+Validation producers execute only the miss batch; final publication acquires
+all bound evidence before finalizing the release. Prepare consumes complete
+build products independently of tests, so a failed test cannot erase reusable
+successful production. Cache-hit producers (including validation) skip jobs
 entirely. Do not add relay/gate jobs to reconstruct producer status expressions.
 
 The Electron build toolchain is also a declared reusable workload, emitted from
@@ -83,17 +85,32 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 - Data producers publish one current-run key-reference map through job outputs, not payload artifacts or public-origin URLs (GitHub may mask origin configuration stored as a secret). Python reconstructs URLs from the consumer's configured public origin and binds the exact canonical keys, complete expected miss inventory, pending workload digest and execution class before re-projecting consumer inputs. These references are not trusted cache hits. Trusted admission verifies the product namespace and bytes before result publication; it does not download/re-upload a GitHub artifact for directly published products.
 - Temporary maintainer-authorized bootstrap: its manual dispatch may trust a pinned SHA on `feat/electron-shell-exact-delivery` for a completed same-SHA `release-exact` betahyx run with successful production evidence. The Python source/admission checks bind the dispatch, checkout, live producing run and release policy before storage credentials are used. Automatic admission remains default-branch-only; this exception does not authorize other branches or release lanes.
 - Each release plan declares its production job under `admission.productionJob`.
-  Release handoff is emitted by prepare after complete product and validation
-  consumption, before native delivery. Trusted admission checks the exact
+  Release handoff is emitted by prepare after complete product consumption,
+  independently of validation, before native delivery. Trusted admission checks the exact
   run-attempt job inventory for one successful, same-SHA production job, even
   when later delivery fails. Missing, duplicate, failed, skipped, foreign and
   prior-attempt jobs refuse. Cancelled/in-progress runs refuse; ordinary CI
   still requires whole-run success. This admission declaration does not change
-  workload hashing. Installed acceptance has separately declared
+  workload hashing. Validation and installed acceptance have separately declared
   `admission.resultJobs`: the trusted consumer admits each such result only
   after its own exact-attempt, same-SHA job succeeds. Failed, skipped, missing,
   ambiguous and candidate-baseline jobs cannot publish installed witnesses;
   unrelated successful production results remain admissible.
+- Release production suites name source, runtime resources and build configuration
+  separately from tests and test configuration. Test recipes include both the
+  relevant production inputs and their test inputs. Do not restore whole-package
+  selectors to build identities or infer that a source test consumes a packaged
+  artifact. New production directories/configuration must update the owning
+  production suite. Platform configuration remains intentionally coarse.
+- Release plan and tool/policy preparation share one runner and checkout.
+  Python identity calculation still precedes and exclusively owns cache decisions;
+  sharing a job does not move planner state into tools-release.
+- `execution.groups` only packs independently identified workloads into jobs.
+  Its miss-aware `group_run` projection does not change workload hashes or
+  dependency semantics. Electron inputs share the declared electron-build
+  preparation for base, toolchain, platform and Capsule; scene composition
+  separately waits for these inputs and runtime resources. Keep lightweight
+  Linux data production separate from native workspace installation.
 - Experimental exact releases may reuse successful installed witnesses for
   unchanged Shell/Capsule/Closure inputs. Formal stable/prerelease declarations
   keep these workloads non-reusable. Python owns identities and miss-only

@@ -16,6 +16,50 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("separates build admission from test-gated publication in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
+    const publish = workflow.split("\n  publish:")[1]!.split("\n  acceptance:")[0]!;
+    expect(prepare.split("\n").find(line => line.startsWith("    needs:"))).not.toContain("validation");
+    expect(prepare).not.toContain("tools-release validation acquire");
+    expect(prepare).toContain("contribute-all");
+    expect(publish).toContain("needs: [plan, distribution, validation]");
+    expect(publish).toContain("!failure()");
+    expect(publish.indexOf("tools-release validation acquire")).toBeLessThan(publish.indexOf("tools-release finalize"));
+    const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
+    for (const node of ["contract", "shell", "closure"]) {
+      expect(config.workflows[`release-${lane}`].admission.resultJobs[`validation_${node}_darwin_arm64`])
+        .toBe("[test] Shell and Closure · darwin-arm64 · misses");
+    }
+  });
+  it.each(["release-exact", "release-prerelease", "release-stable"])("keeps package and app test edits out of production identities in %s", async lane => {
+    const result = await run("python3", ["-c", [
+      "import json,sys", "from pathlib import Path", "from functools import lru_cache", "from unittest.mock import patch",
+      "sys.path.insert(0,sys.argv[1])",
+      "from convergence import ConvergenceContract, GitFingerprinter, calculate",
+      "root=Path(sys.argv[2]); lane=sys.argv[3]",
+      "contract=ConvergenceContract(root/('.github/config/plan/'+lane+'.json')); workflow=contract.workflow(lane)",
+      "def compute(): return calculate(contract,root,lane,workflow.execution['runners'])",
+      "original=GitFingerprinter.records; baseline=GitFingerprinter(root)",
+      "@lru_cache(None)",
+      "def cached(token): return original(baseline,token)",
+      "with patch.object(GitFingerprinter,'records',lambda self,token:cached(token)): before=compute()",
+      "def changed(path):",
+      " def records(self,token): return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in cached(token)]",
+      " with patch.object(GitFingerprinter,'records',records): after=compute()",
+      " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
+      "paths=['apps/web/tests/sidecar-proxy.test.ts','apps/daemon/tests/sidecar-startup.test.ts','packages/electron-kit/tsconfig.tests.json','packages/electron-capsule/tsconfig.tests.json','packages/archive/tests/archive.test.ts','apps/web/src/app.tsx','apps/daemon/src/server.ts']",
+      "print(json.dumps({path:changed(path) for path in paths}))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
+    const changes = JSON.parse(result.stdout) as Record<string, string[]>;
+    for (const [path, identities] of Object.entries(changes)) {
+      if (path.includes("/tests/") || path.endsWith("tsconfig.tests.json")) {
+        expect(identities.length, path).toBeGreaterThan(0);
+        expect(identities.every(name => name.startsWith("validation_")), path).toBe(true);
+      }
+    }
+    expect(changes["apps/daemon/src/server.ts"]).toContain("closure_runtime_daemon_darwin_arm64");
+  });
   it.each(["exact", "stable", "prerelease"])("pairs accepted macOS sessions without duplicating first-start in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const first = workflow.split('- name: "[test] Install and exercise macOS Electron Shell"')[1]!.split("\n      - name:")[0]!;
@@ -42,7 +86,8 @@ describe("exact Electron release topology", () => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
     const publish = workflow.split("\n  publish:")[1]!.split("\n  acceptance:")[0]!;
-    expect(prepare.indexOf("Acquire complete validation evidence")).toBeLessThan(prepare.indexOf("Create reusable scene handoff"));
+    expect(prepare).not.toContain("Acquire complete validation evidence");
+    expect(publish.indexOf("Acquire complete validation evidence")).toBeLessThan(publish.indexOf("Finalize signed Shell sidecar"));
     expect(prepare.indexOf("Compose and sign content metadata")).toBeLessThan(prepare.indexOf("Create reusable scene handoff"));
     expect(prepare).toContain("contribute-all");
     expect(prepare).toContain("Upload reusable scene handoff");
@@ -50,22 +95,23 @@ describe("exact Electron release topology", () => {
     expect(prepare).not.toContain("exact-final/");
     expect(publish).toContain("Upload exact release evidence");
     const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
-    expect(config.workflows[`release-${lane}`].admission).toEqual({ productionJob: "[prepare] Release content · validated and signed" });
+    expect(config.workflows[`release-${lane}`].admission.productionJob).toBe("[prepare] Release content · products and signing");
   });
   it.each(["exact", "stable", "prerelease"])("skips scene and base hit relays in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const scene = workflow.split("\n  scene:")[1]!.split("\n  terminal_scene:")[0]!;
-    const terminal = workflow.split("\n  terminal_scene:")[1]!.split("\n  platform:")[0]!;
+    const terminal = workflow.split("\n  terminal_scene:")[1]!.split("\n  data:")[0]!;
     const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
-    expect(scene).toContain("fromJSON(needs.plan.outputs.batch_run).electron_scenes || fromJSON(needs.plan.outputs.batch_run).bases");
+    expect(scene).toContain("fromJSON(needs.plan.outputs.batch_run).electron_scenes");
+    expect(scene).not.toContain("matrix.base_workload");
     expect(scene).not.toContain("Restore converged Electron base");
     expect(terminal).toContain("if: ${{ fromJSON(needs.plan.outputs.batch_run).terminal_scenes }}");
     expect(prepare).toContain("tools-release scene acquire");
     expect(prepare).not.toContain("needs.scene.result");
-    expect(prepare).toContain("tools-release validation acquire");
-    expect(distribution).toContain("Acquire cached distribution scene directly");
-    expect(distribution).toContain("Acquire cached Electron base directly");
+    expect(prepare).not.toContain("tools-release validation acquire");
+    expect(distribution).toContain("tools-release distribution acquire --shell electron");
+    expect(distribution).toContain("&& 'source' || 'descriptor'");
   });
   it.each(["exact", "stable", "prerelease"])("separates native installation input from CDN payload transport in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
@@ -82,8 +128,8 @@ describe("exact Electron release topology", () => {
   });
   it.each(["exact", "stable", "prerelease"])("continues mandatory delivery past intentionally skipped producers in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
-    for (const [job, dependencies] of Object.entries({ distribution: ["tools", "plan", "prepare"], publish: ["tools", "plan", "distribution"],
-      acceptance: ["tools", "plan", "publish"], activate: ["tools", "publish"] })) {
+    for (const [job, dependencies] of Object.entries({ distribution: ["plan", "prepare"], publish: ["plan", "distribution"],
+      acceptance: ["plan", "publish"], activate: ["publish"] })) {
       const body = workflow.split(`\n  ${job}:`)[1]!.split(/\n  [a-z_]+:/u)[0]!;
       const condition = body.split("\n").find(line => line.startsWith("    if:")) ?? "";
       expect(condition).toContain("!cancelled()");
@@ -123,7 +169,7 @@ describe("exact Electron release topology", () => {
     expect(changes["packages/electron-capsule/package.json"]!.filter(name => name.startsWith("closure_runtime_"))).toEqual([]);
     for (const changed of Object.values(changes)) expect(changed).not.toContain("electron_base_darwin_arm64");
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
-    const runtime = workflow.split("\n  runtime:")[1]!.split("\n  scene:")[0]!;
+    const runtime = workflow.split("\n  runtime:")[1]!.split("\n  native_inputs:")[0]!;
     expect(runtime).toContain("if: ${{ fromJSON(needs.plan.outputs.batch_run).runtime }}");
     expect(runtime.match(/run: pnpm install --frozen-lockfile/gu)).toHaveLength(1);
     expect(runtime).toContain("batches/runtime.execution.json");
@@ -144,7 +190,11 @@ describe("exact Electron release topology", () => {
       "contract=ConvergenceContract(root/('.github/config/plan/'+lane+'.json'))",
       "workflow=contract.workflow(lane)",
       "def compute(): return calculate(contract,root,lane,workflow.execution['runners'])",
-      "before=compute(); original=GitFingerprinter.records",
+      "before=compute(); uncached=GitFingerprinter.records; baseline=GitFingerprinter(root)",
+      "from functools import lru_cache",
+      "@lru_cache(None)",
+      "def cached(token): return uncached(baseline,token)",
+      "def original(self,token): return cached(token)",
       "def changed(path):",
       " def records(self,token):",
       "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in original(self,token)]",
@@ -155,7 +205,7 @@ describe("exact Electron release topology", () => {
       "print(json.dumps(result))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
     const changed = JSON.parse(result.stdout) as Record<string, string[]>;
-    expect(changed["archive-tests"]).toEqual(["release_tools", "validation_closure_darwin_arm64"]);
+    expect(changed["archive-tests"]).toEqual(["validation_closure_darwin_arm64"]);
     for (const path of ["store.ts", "preparation-queue.ts"]) {
       expect(changed[path]).toContain("electron_capsule_darwin_arm64");
       expect(changed[path]!.filter(name => name.startsWith("closure_data_"))).toEqual([]);
@@ -185,7 +235,11 @@ describe("exact Electron release topology", () => {
       "contract=ConvergenceContract(root/('.github/config/plan/'+lane+'.json'))",
       "workflow=contract.workflow(lane)",
       "def compute(): return calculate(contract,root,lane,workflow.execution['runners'])",
-      "before=compute(); original=GitFingerprinter.records",
+      "before=compute(); uncached=GitFingerprinter.records; baseline=GitFingerprinter(root)",
+      "from functools import lru_cache",
+      "@lru_cache(None)",
+      "def cached(token): return uncached(baseline,token)",
+      "def original(self,token): return cached(token)",
       "def changed(path):",
       " def records(self,token):",
       "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in original(self,token)]",
@@ -256,10 +310,10 @@ describe("exact Electron release topology", () => {
       "workflow.workloads[selected].parameters['fixture']='changed'",
       "after=compute()",
       "changed=[name for name in before if before[name]['digest']!=after[name]['digest']]",
-      "assert changed==[selected], changed",
+      "assert set(changed)=={selected,'installed_electron_darwin_arm64','installed_terminal_darwin_arm64'}, changed",
       "print(json.dumps({'notificationChanged':0,'declarationChanged':changed}))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot]);
-    expect(JSON.parse(result.stdout)).toEqual({ notificationChanged: 0, declarationChanged: ["closure_data_skills_darwin_arm64"] });
+    expect(JSON.parse(result.stdout)).toEqual({ notificationChanged: 0, declarationChanged: expect.arrayContaining(["closure_data_skills_darwin_arm64", "installed_electron_darwin_arm64", "installed_terminal_darwin_arm64"]) });
   });
 
   it.each([
@@ -276,8 +330,8 @@ describe("exact Electron release topology", () => {
       "print(json.dumps(contract.suite_paths(sys.argv[3])))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/plan/release-exact.json"), suite]);
     const inputs: string[] = JSON.parse(result.stdout);
-    const paths = new Set(suite === "electron-scene" ? ["packages/electron-kit/", "shells/electron/src/", "shells/electron/config/", "shells/electron/resources/", "apps/closure/"]
-      : suite === "electron-platform" ? ["shells/electron/config/carriers/node-lock.json", "packages/platform/"]
+    const paths = new Set(suite === "electron-scene" ? ["packages/electron-kit/src/", "shells/electron/src/", "shells/electron/config/", "shells/electron/resources/", "apps/closure/src/"]
+      : suite === "electron-platform" ? ["shells/electron/config/carriers/node-lock.json", "packages/platform/src/"]
       : ({ "closure-data-plugins": ["plugins/_official/", "plugins/registry/"], "closure-data-frames": ["assets/frames/"],
         "closure-data-community-pets": ["assets/community-pets/"], "closure-data-plugin-previews": ["data/plugin-previews/"] } as Record<string, string[]>)[suite]
         ?? [suite.slice("closure-data-".length) + "/"]);
@@ -293,27 +347,42 @@ describe("exact Electron release topology", () => {
     const config = JSON.parse(await readFile(join(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
     const tokens = new Set<string>((Object.values(config.suites) as string[][]).flat().filter(token => !token.startsWith("suite://")));
     for (const token of tokens) {
-      const directory = (await stat(join(workspaceRoot, token))).isDirectory();
-      const path = join(root, token, ...(directory ? ["fixture"] : []));
+      const concrete = /[*?\[]/u.test(token)
+        ? (await run("git", ["ls-files", "--", `:(glob)${token}`], { cwd: workspaceRoot })).stdout.trim().split("\n")[0]!
+        : token;
+      if (!concrete) continue;
+      const directory = (await stat(join(workspaceRoot, concrete))).isDirectory();
+      const path = join(root, concrete, ...(directory ? ["fixture"] : []));
       await mkdir(dirname(path), { recursive: true }); await writeFile(path, "baseline");
     }
     await run("git", ["init", "-q", root]); await run("git", ["-C", root, "add", "."]);
-    const calculate = async () => JSON.parse((await run("python3", ["-c", [
-      "import json, sys", "from pathlib import Path", "sys.path.insert(0,sys.argv[1])",
-      "from convergence import ConvergenceContract, calculate",
-      "contract=ConvergenceContract(Path(sys.argv[2]))",
+    const result = await run("python3", ["-c", [
+      "import json,sys,subprocess", "from pathlib import Path", "from unittest.mock import patch",
+      "sys.path.insert(0,sys.argv[1])",
+      "from convergence import ConvergenceContract, GitFingerprinter, calculate",
+      "contract=ConvergenceContract(Path(sys.argv[2])); root=Path(sys.argv[3])",
       "runners={w.runner_class:['fixture'] for w in contract.workflow('release-exact').workloads.values()}",
-      "print(json.dumps(calculate(contract,Path(sys.argv[3]),'release-exact',runners)))",
-    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/plan/release-exact.json"), root])).stdout) as Record<string, { digest: string }>;
-    const before = await calculate();
-    for (const id of dataIds) {
-      const token = config.suites[`closure-data-${id}`].find((value: string) => !value.startsWith("suite://"));
-      const path = join(root, token, "fixture");
-      await writeFile(path, "changed data"); await run("git", ["-C", root, "add", path]);
-      const after = await calculate();
-      expect(Object.keys(after).filter(key => after[key]!.digest !== before[key]!.digest), id)
-        .toEqual([`closure_data_${id.replaceAll("-", "_")}_darwin_arm64`]);
-      await writeFile(path, "baseline"); await run("git", ["-C", root, "add", path]);
+      "owner=GitFingerprinter(root); original=GitFingerprinter.records",
+      "def records(self,token): return original(owner,token)",
+      "def change(path,value):",
+      " (root/path).write_text(value)",
+      " subprocess.run(['git','add','--',path],cwd=root,check=True)",
+      " owner.cache={k:v for k,v in owner.cache.items() if all(record[0]!=path for record in v)}",
+      "with patch.object(GitFingerprinter,'records',records):",
+      " before=calculate(contract,root,'release-exact',runners); changes={}",
+      " for name in json.loads(sys.argv[4]):",
+      "  token=next(t for t in contract.suites['closure-data-'+name] if not t.startswith('suite://'))",
+      "  path=token+'fixture'; change(path,'changed data')",
+      "  after=calculate(contract,root,'release-exact',runners)",
+      "  changes[name]=sorted(k for k in before if before[k]['digest']!=after[k]['digest'])",
+      "  change(path,'baseline')",
+      "print(json.dumps(changes))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/plan/release-exact.json"), root, JSON.stringify(dataIds)]);
+    for (const [id, changed] of Object.entries(JSON.parse(result.stdout))) {
+      expect(changed, id).toEqual([
+        `closure_data_${id.replaceAll("-", "_")}_darwin_arm64`,
+        "installed_electron_darwin_arm64", "installed_terminal_darwin_arm64",
+      ]);
     }
   }, 15_000);
 
@@ -396,10 +465,10 @@ describe("exact Electron release topology", () => {
 
   it("keeps independent platform cache restore free of workspace setup and passes target directories to prepare", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
-    const platform = workflow.split("\n  platform:")[1]!.split("\n  prepare:")[0]!;
-    expect(platform).toContain("matrix: ${{ fromJSON(needs.plan.outputs.platform_matrix) }}");
+    const platform = workflow.split("\n  native_inputs:")[1]!.split("\n  scene:")[0]!;
+    expect(platform).toContain("matrix: ${{ fromJSON(needs.plan.outputs.native_input_matrix) }}");
     expect(platform).not.toContain("Restore converged platform");
-    expect(platform).toContain("if: ${{ fromJSON(needs.plan.outputs.batch_run).platforms }}");
+    expect(platform).toContain("if: ${{ fromJSON(needs.plan.outputs.group_run).electron_inputs }}");
     for (const command of ["build platform", "platform export"]) expect(platform).toContain(`tools-release ${command}`);
     expect(platform).not.toContain("build:resources");
     expect(platform).not.toContain("matrix.mode");
@@ -408,10 +477,10 @@ describe("exact Electron release topology", () => {
     expect(prepare).toContain(' --platforms "$RUNNER_TEMP/platforms"');
     expect(prepare).toContain("pattern: exact-platform-product-*-${{ inputs.source_sha }}");
     expect(prepare).toContain("merge-multiple: true");
-    const capsule = workflow.split("\n  capsule:")[1]!.split("\n  data:")[0]!;
-    expect(capsule).toContain("matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}");
+    const capsule = platform;
+    expect(capsule.match(/run: pnpm install --frozen-lockfile/gu)).toHaveLength(1);
     expect(capsule).not.toContain("Restore converged capsule");
-    expect(capsule).toContain("if: ${{ fromJSON(needs.plan.outputs.batch_run).capsules }}");
+    expect(capsule).toContain("fromJSON(needs.plan.outputs.run)[matrix.capsule_workload]");
     expect(prepare).toContain("tools-release capsule acquire");
     expect(prepare).toContain("tools-release platform acquire");
     for (const command of ["build capsule", "capsule export"]) expect(capsule).toContain(`tools-release ${command}`);
@@ -420,14 +489,14 @@ describe("exact Electron release topology", () => {
     expect(workflow).toContain('convergence.py --config .github/config/plan/release-exact.json contribute');
     expect(prepare).toContain('--capsules "$RUNNER_TEMP/capsules"');
     const scene = workflow.split("\n  scene:")[1]!.split("\n  platform:")[0]!;
-    expect(scene).toContain("needs: [tools, plan, capsule, runtime]");
+    expect(scene).toContain("needs: [plan, native_inputs, runtime]");
     expect(scene).toContain('--capsule-directory "$RUNNER_TEMP/capsules"');
     expect(scene).not.toContain("capsule_args");
-    for (const command of ["build base", "base export"]) expect(scene).toContain(`tools-release ${command}`);
+    for (const command of ["build base", "base export"]) expect(platform).toContain(`tools-release ${command}`);
     expect(scene).not.toContain("tools-release artifact acquire");
     expect(scene).not.toContain("tools-release base pack");
-    expect(scene).toContain("fromJSON(needs.plan.outputs.run)[matrix.base_workload]");
-    expect(scene).toContain("path: ${{ runner.temp }}/base-contribution/artifact");
+    expect(platform).toContain("fromJSON(needs.plan.outputs.run)[matrix.base_workload]");
+    expect(platform).toContain("path: ${{ runner.temp }}/base-contribution/artifact");
     expect(scene).not.toContain("path: ${{ runner.temp }}/base-contribution/products");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
     expect(distribution).toContain('tools-release distribution acquire --shell electron');
@@ -441,10 +510,12 @@ describe("exact Electron release topology", () => {
     expect(distribution).not.toMatch(/pnpm|install --frozen-lockfile|POSTINSTALL/u);
     expect(distribution).toContain("tools-release distribution acquire --shell electron");
     expect(distribution).toContain('--toolchain "$RUNNER_TEMP/native-inputs/toolchain"');
-    const scene = workflow.split("\n  scene:")[1]!.split("\n  terminal_scene:")[0]!;
-    expect(scene).toContain("tools-release toolchain build");
-    expect(scene).toContain("fromJSON(needs.plan.outputs.batch_run).toolchains");
-    expect(scene).toContain("fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload]");
+    const native = workflow.split("\n  native_inputs:")[1]!.split("\n  scene:")[0]!;
+    expect(native).toContain("tools-release toolchain build");
+    expect(native).toContain("fromJSON(needs.plan.outputs.group_run).electron_inputs");
+    expect(native).toContain("fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload]");
+    expect(native).toContain("needs: [plan]");
+    expect(native).not.toContain("needs.runtime");
     const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
     expect(config.workflows["release-" + lane].workloads.electron_toolchain_darwin_arm64)
       .toMatchObject({ reusable: true, artifact: { product: "toolchain" } });
@@ -479,7 +550,7 @@ describe("exact Electron release topology", () => {
       expect(consumer).not.toContain("actions/checkout");
       expect(consumer).toContain("node-version: ${{ needs.plan.outputs.node_version }}");
     }
-    expect(publish).not.toContain("exact-convergence-plan");
+    expect(publish).toContain("Validation inputs · workflow plan");
     expect(activate).not.toContain('path: ${{ runner.temp }}/release-policy');
     if (lane !== "exact") expect(acceptance).toContain("fromJSON(needs.plan.outputs.acceptance_full_matrix)");
   });
@@ -518,7 +589,7 @@ describe("exact Electron release topology", () => {
     const scene = workflow.split("\n  scene:")[1]!.split("\n  prepare:")[0]!;
     const validation = workflow.split("\n  validation:")[1]?.split("\n  scene:")[0];
     expect(validation).toBeDefined();
-    expect(validation).toContain("needs: [tools, plan]");
+    expect(validation).toContain("needs: [plan]");
     expect(validation).toContain("matrix: ${{ fromJSON(needs.plan.outputs.validation_matrix) }}");
     expect(validation).not.toContain("outputs.run).electron_scene");
     expect(validation).toContain('tools-release validation materialize');
@@ -527,9 +598,9 @@ describe("exact Electron release topology", () => {
     expect(validation).not.toContain("scene-artifact");
     expect(scene).not.toContain('tools-release validate');
     expect(scene).not.toContain("matrix.shell == 'electron' ||");
-    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [tools, plan, scene, terminal_scene, platform, capsule, data, validation]");
-    const terminal = workflow.split("\n  terminal_scene:")[1]!.split("\n  platform:")[0]!;
-    expect(terminal).toContain("needs: [tools, plan]");
+    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, terminal_scene, native_inputs, data]");
+    const terminal = workflow.split("\n  terminal_scene:")[1]!.split("\n  data:")[0]!;
+    expect(terminal).toContain("needs: [plan]");
     expect(terminal).not.toContain("capsule");
     expect(terminal).toContain("needs.plan.outputs.terminal_matrix");
     const plan = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
@@ -619,7 +690,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain("exact-scene-request.json");
     expect(workflow).not.toContain("distribution-request.json");
     expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
-    expect(workflow).toContain('tools-release build scene-inputs');
+    expect(workflow).toContain('tools-release runtime build');
     expect(workflow).not.toContain("build:resources");
     expect(workflow).not.toContain("tools/pack/dist/exact-control.mjs");
     expect(workflow).toContain("tools/release/dist/tools-release");
@@ -640,7 +711,7 @@ describe("exact Electron release topology", () => {
         electron_scene_win32_x64: { runnerClass: "electron_win32_x64", reusable: false },
       },
     });
-    expect(convergence.suites["electron-scene"]).toContain("packages/electron-capsule/");
+    expect(convergence.suites["electron-scene"]).toContain("suite://production-packages-electron-capsule");
   });
 
   it("transports scenes opaquely and restores the plan before reading a cache hit", async () => {
@@ -693,16 +764,13 @@ describe("exact Electron release topology", () => {
       expect(workflow).toContain(`--workflow ${name}`);
       expect(workflow).toContain(`--id ${name}-results`);
       expect(workflow).toContain("node_version: ${{ steps.toolchain.outputs.node_version }}");
-      for (const job of ["platform", "capsule"]) {
-        const section = workflow.split(`\n  ${job}:`)[1]!.split(/\n  [a-z_]+:\n/u)[0]!;
-        expect(section).toContain("node-version: ${{ needs.plan.outputs.node_version }}");
-        expect(section).not.toContain("node-version-file:");
-        expect(section.indexOf("actions/setup-node@")).toBeLessThan(section.indexOf("actions/checkout@"));
-        const cache = section.split(`- name: "[restore] Restore ${job} dependency cache`)[1]!.split('- name: "[build] Build independent')[0]!;
-        expect(cache).toContain("if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}");
-        expect(cache).toContain("cache: pnpm");
-        expect(cache).toContain("cache-dependency-path: pnpm-lock.yaml");
-        expect(section.indexOf(`Restore ${job} dependency cache`)).toBeGreaterThan(section.indexOf("pnpm/action-setup@"));
+      const native = workflow.split("\n  native_inputs:")[1]!.split("\n  scene:")[0]!;
+      expect(native).toContain("needs: [plan]");
+      expect(native).toContain("cache: pnpm");
+      expect(native.match(/run: pnpm install --frozen-lockfile/gu)).toHaveLength(1);
+      expect(native).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: electron-build");
+      for (const id of config.workflows[name].execution.groups.electron_inputs) {
+        expect(config.workflows[name].workloads[id].parameters.postinstall_level).toBe("electron-build");
       }
       expect(Object.keys(config.workflows)).toEqual([name]);
       expect(config.suites["convergence-control"]).toContain(configPath);
@@ -711,9 +779,9 @@ describe("exact Electron release topology", () => {
         expect(config.suites["convergence-control"]).not.toContain(`.github/config/plan/release-${other}.json`);
       }
       const profile = lane === "exact" ? "exact-validation" : `${lane}-distribution`;
-      for (const job of ["platform", "capsule", "data"]) {
+      for (const job of ["native_inputs", "data"]) {
         const producer = workflow.split(`\n  ${job}:`)[1]!.split(/\n  [a-z_]+:/u)[0]!;
-        expect(producer).toContain("needs: [tools, plan]");
+        expect(producer).toContain("needs: [plan]");
       }
       expect(workflow).toContain(`PROFILE: ${profile}`);
       expect(workflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");
@@ -767,8 +835,11 @@ describe("exact Electron release topology", () => {
     }
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
 
-    const plan = workflow.split("\n  plan:")[1]!.split("\n  tools:")[0]!;
-    expect(plan).not.toMatch(/setup-node|pnpm|node |release-tools|release-policy/u);
+    const plan = workflow.split("\n  plan:")[1]!.split("\n  validation:")[0]!;
+    const identity = plan.split('      - name: "[setup] Node.js')[0]!;
+    expect(identity).not.toMatch(/setup-node|pnpm|node |release-tools|release-policy/u);
+    expect(workflow).not.toContain("\n  tools:");
+    expect(plan).toContain("tools-release policy resolve");
     expect(workflow).not.toMatch(/node "\$RUNNER_TEMP|exact-release-plan|--plan |--registry /u);
     expect(workflow).toContain('echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"');
     expect(workflow).toContain("tools-release baseline inspect");

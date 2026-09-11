@@ -3,6 +3,169 @@
     "version": 2
   },
   "suites": {
+    "production-apps-closure": [
+      "apps/closure/esbuild.config.ts",
+      "apps/closure/package.json",
+      "apps/closure/src/",
+      "apps/closure/tsconfig.json"
+    ],
+    "production-apps-daemon": [
+      "apps/daemon/bin/",
+      "apps/daemon/package.json",
+      "apps/daemon/scripts/",
+      "apps/daemon/src/",
+      "apps/daemon/tsconfig.json"
+    ],
+    "production-apps-web": [
+      "apps/web/app/",
+      "apps/web/next-env.d.ts",
+      "apps/web/next.config.ts",
+      "apps/web/package.json",
+      "apps/web/postcss.config.mjs",
+      "apps/web/public/",
+      "apps/web/sidecar/",
+      "apps/web/src/",
+      "apps/web/tsconfig.json",
+      "apps/web/tsconfig.sidecar.json"
+    ],
+    "production-packages-agui-adapter": [
+      "packages/agui-adapter/esbuild.config.mjs",
+      "packages/agui-adapter/package.json",
+      "packages/agui-adapter/src/",
+      "packages/agui-adapter/tsconfig.json"
+    ],
+    "production-packages-archive": [
+      "packages/archive/package.json",
+      "packages/archive/src/",
+      "packages/archive/tsconfig.json"
+    ],
+    "production-packages-components": [
+      "packages/components/esbuild.config.ts",
+      "packages/components/package.json",
+      "packages/components/src/",
+      "packages/components/tsconfig.json"
+    ],
+    "production-packages-contracts": [
+      "packages/contracts/esbuild.config.mjs",
+      "packages/contracts/package.json",
+      "packages/contracts/src/",
+      "packages/contracts/tsconfig.json"
+    ],
+    "production-packages-diagnostics": [
+      "packages/diagnostics/esbuild.config.mjs",
+      "packages/diagnostics/package.json",
+      "packages/diagnostics/src/",
+      "packages/diagnostics/tsconfig.json"
+    ],
+    "production-packages-download": [
+      "packages/download/esbuild.config.mjs",
+      "packages/download/package.json",
+      "packages/download/src/",
+      "packages/download/tsconfig.json"
+    ],
+    "production-packages-dsh-runtime": [
+      "packages/dsh-runtime/clean.ts",
+      "packages/dsh-runtime/cordis.patch.yml",
+      "packages/dsh-runtime/esbuild.config.ts",
+      "packages/dsh-runtime/package.json",
+      "packages/dsh-runtime/src/",
+      "packages/dsh-runtime/tsconfig.json"
+    ],
+    "production-packages-electron-capsule": [
+      "packages/electron-capsule/package.json",
+      "packages/electron-capsule/src/",
+      "packages/electron-capsule/tsconfig.json"
+    ],
+    "production-packages-electron-contract": [
+      "packages/electron-contract/esbuild.config.mjs",
+      "packages/electron-contract/package.json",
+      "packages/electron-contract/src/",
+      "packages/electron-contract/tsconfig.json"
+    ],
+    "production-packages-electron-kit": [
+      "packages/electron-kit/esbuild.config.mjs",
+      "packages/electron-kit/package.json",
+      "packages/electron-kit/resources/",
+      "packages/electron-kit/src/",
+      "packages/electron-kit/tsconfig.json"
+    ],
+    "production-packages-metatool": [
+      "packages/metatool/bin/",
+      "packages/metatool/esbuild.config.mjs",
+      "packages/metatool/package.json",
+      "packages/metatool/src/",
+      "packages/metatool/tsconfig.json"
+    ],
+    "production-packages-platform": [
+      "packages/platform/esbuild.config.mjs",
+      "packages/platform/package.json",
+      "packages/platform/src/",
+      "packages/platform/tsconfig.json"
+    ],
+    "production-packages-plugin-runtime": [
+      "packages/plugin-runtime/esbuild.config.mjs",
+      "packages/plugin-runtime/package.json",
+      "packages/plugin-runtime/src/",
+      "packages/plugin-runtime/tsconfig.json"
+    ],
+    "production-packages-registry-protocol": [
+      "packages/registry-protocol/esbuild.config.mjs",
+      "packages/registry-protocol/package.json",
+      "packages/registry-protocol/src/",
+      "packages/registry-protocol/tsconfig.json"
+    ],
+    "production-packages-release": [
+      "packages/release/esbuild.config.ts",
+      "packages/release/package.json",
+      "packages/release/src/",
+      "packages/release/tsconfig.json"
+    ],
+    "production-packages-sidecar-proto": [
+      "packages/sidecar-proto/esbuild.config.mjs",
+      "packages/sidecar-proto/package.json",
+      "packages/sidecar-proto/src/",
+      "packages/sidecar-proto/tsconfig.json"
+    ],
+    "production-packages-sidecar": [
+      "packages/sidecar/esbuild.config.mjs",
+      "packages/sidecar/package.json",
+      "packages/sidecar/src/",
+      "packages/sidecar/tsconfig.json"
+    ],
+    "production-packages-standalone": [
+      "packages/standalone/esbuild.config.ts",
+      "packages/standalone/package.json",
+      "packages/standalone/src/",
+      "packages/standalone/tsconfig.json"
+    ],
+    "production-shells-terminal": [
+      "shells/terminal/contract/",
+      "shells/terminal/model/",
+      "shells/terminal/node-lock.json",
+      "shells/terminal/package.json",
+      "shells/terminal/ps1/",
+      "shells/terminal/resources/",
+      "shells/terminal/runtime/",
+      "shells/terminal/sh/",
+      "shells/terminal/version"
+    ],
+    "production-tools-pack": [
+      "tools/pack/bin/",
+      "tools/pack/esbuild.config.mjs",
+      "tools/pack/meta.json",
+      "tools/pack/package.json",
+      "tools/pack/src/",
+      "tools/pack/tsconfig.json"
+    ],
+    "production-tools-release": [
+      "tools/release/bin/",
+      "tools/release/esbuild.config.mjs",
+      "tools/release/meta.json",
+      "tools/release/package.json",
+      "tools/release/resources/",
+      "tools/release/src/",
+      "tools/release/tsconfig.json"
+    ],
     "convergence-control": [
       ".github/config/plan/release-exact.json",
       ".github/workflows/release-exact.yml",
@@ -47,19 +210,19 @@
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
       "suite://electron-shell-source",
-      "packages/contracts/",
-      "packages/diagnostics/",
-      "packages/electron-kit/",
-      "packages/electron-capsule/",
-      "packages/electron-contract/",
-      "packages/platform/",
-      "packages/sidecar/",
-      "packages/sidecar-proto/",
-      "packages/standalone/",
-      "packages/download/",
-      "packages/release/",
-      "packages/plugin-runtime/",
-      "packages/registry-protocol/",
+      "suite://production-packages-contracts",
+      "suite://production-packages-diagnostics",
+      "suite://production-packages-electron-kit",
+      "suite://production-packages-electron-capsule",
+      "suite://production-packages-electron-contract",
+      "suite://production-packages-platform",
+      "suite://production-packages-sidecar",
+      "suite://production-packages-sidecar-proto",
+      "suite://production-packages-standalone",
+      "suite://production-packages-download",
+      "suite://production-packages-release",
+      "suite://production-packages-plugin-runtime",
+      "suite://production-packages-registry-protocol",
       "suite://release-executor",
       "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/toolchain-artifact.ts",
@@ -83,16 +246,16 @@
       "package.json",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
-      "packages/standalone/",
-      "packages/platform/",
-      "packages/download/",
+      "suite://production-packages-standalone",
+      "suite://production-packages-platform",
+      "suite://production-packages-download",
       "shells/electron/package.json",
       "shells/electron/tsconfig.build.json",
       "shells/electron/src/build-api.ts",
       "shells/electron/src/platform/",
       "shells/electron/config/carriers/node-lock.json",
       "shells/electron/resources/platform/",
-      "tools/pack/",
+      "suite://production-tools-pack",
       "tools/release/src/exact/control-common.ts",
       "suite://release-executor",
       "tools/release/src/exact/platform-artifact.ts",
@@ -104,12 +267,12 @@
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
-      "apps/closure/",
-      "packages/download/",
-      "packages/platform/",
-      "packages/sidecar/",
-      "packages/standalone/",
-      "shells/terminal/",
+      "suite://production-apps-closure",
+      "suite://production-packages-download",
+      "suite://production-packages-platform",
+      "suite://production-packages-sidecar",
+      "suite://production-packages-standalone",
+      "suite://production-shells-terminal",
       "suite://release-executor",
       "tools/release/src/exact/scene-artifact.ts",
       "tools/release/src/exact/resource-artifact.ts",
@@ -126,13 +289,13 @@
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
-      "apps/closure/",
-      "packages/download/",
-      "packages/electron-kit/",
-      "packages/electron-capsule/",
-      "packages/platform/",
-      "packages/sidecar/",
-      "packages/standalone/",
+      "suite://production-apps-closure",
+      "suite://production-packages-download",
+      "suite://production-packages-electron-kit",
+      "suite://production-packages-electron-capsule",
+      "suite://production-packages-platform",
+      "suite://production-packages-sidecar",
+      "suite://production-packages-standalone",
       "suite://electron-shell-source",
       "suite://release-executor",
       "tools/release/src/exact/scene-artifact.ts",
@@ -144,17 +307,17 @@
       "tools/release/src/policy/"
     ],
     "closure-resources": [
-      "apps/daemon/",
-      "apps/web/",
-      "packages/agui-adapter/",
-      "packages/components/",
-      "packages/contracts/",
-      "packages/diagnostics/",
-      "packages/electron-contract/",
-      "packages/plugin-runtime/",
-      "packages/registry-protocol/",
-      "packages/release/",
-      "packages/sidecar-proto/"
+      "suite://production-apps-daemon",
+      "suite://production-apps-web",
+      "suite://production-packages-agui-adapter",
+      "suite://production-packages-components",
+      "suite://production-packages-contracts",
+      "suite://production-packages-diagnostics",
+      "suite://production-packages-electron-contract",
+      "suite://production-packages-plugin-runtime",
+      "suite://production-packages-registry-protocol",
+      "suite://production-packages-release",
+      "suite://production-packages-sidecar-proto"
     ],
     "closure-data-control": [
       "tools/release/src/exact/resource-commands.ts",
@@ -220,14 +383,14 @@
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
       "suite://electron-shell-source",
-      "packages/electron-kit/",
-      "packages/electron-contract/",
-      "packages/standalone/",
-      "packages/platform/",
-      "packages/release/",
-      "packages/sidecar/",
-      "packages/sidecar-proto/",
-      "packages/download/"
+      "suite://production-packages-electron-kit",
+      "suite://production-packages-electron-contract",
+      "suite://production-packages-standalone",
+      "suite://production-packages-platform",
+      "suite://production-packages-release",
+      "suite://production-packages-sidecar",
+      "suite://production-packages-sidecar-proto",
+      "suite://production-packages-download"
     ],
     "electron-base": [
       ".node-version",
@@ -236,7 +399,8 @@
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
       "suite://release-executor",
-      "packages/electron-kit/*.json",
+      "packages/electron-kit/package.json",
+      "packages/electron-kit/tsconfig.json",
       "packages/electron-kit/*.mjs",
       "packages/electron-kit/src/contracts/",
       "packages/electron-kit/src/lib/",
@@ -250,8 +414,8 @@
       "shells/electron/src/adapters/tools/manifests.ts",
       "shells/electron/src/adapters/tools/platforms/",
       "shells/electron/src/composition/release-identity.ts",
-      "packages/download/",
-      "tools/pack/",
+      "suite://production-packages-download",
+      "suite://production-tools-pack",
       "tools/release/src/exact/base-artifact.ts",
       "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/base-build.ts"
@@ -262,15 +426,15 @@
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
-      "packages/contracts/",
-      "packages/download/",
-      "packages/electron-contract/",
-      "packages/electron-kit/",
-      "packages/electron-capsule/",
-      "packages/platform/",
-      "packages/release/",
-      "packages/sidecar/",
-      "packages/standalone/",
+      "suite://production-packages-contracts",
+      "suite://production-packages-download",
+      "suite://production-packages-electron-contract",
+      "suite://production-packages-electron-kit",
+      "suite://production-packages-electron-capsule",
+      "suite://production-packages-platform",
+      "suite://production-packages-release",
+      "suite://production-packages-sidecar",
+      "suite://production-packages-standalone",
       "suite://electron-shell-source",
       "tools/release/src/exact/control-common.ts",
       "suite://release-executor",
@@ -287,17 +451,34 @@
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
-      "packages/",
-      "apps/closure/",
+      "suite://production-packages-agui-adapter",
+      "suite://production-packages-archive",
+      "suite://production-packages-components",
+      "suite://production-packages-contracts",
+      "suite://production-packages-diagnostics",
+      "suite://production-packages-download",
+      "suite://production-packages-dsh-runtime",
+      "suite://production-packages-electron-capsule",
+      "suite://production-packages-electron-contract",
+      "suite://production-packages-electron-kit",
+      "suite://production-packages-metatool",
+      "suite://production-packages-platform",
+      "suite://production-packages-plugin-runtime",
+      "suite://production-packages-registry-protocol",
+      "suite://production-packages-release",
+      "suite://production-packages-sidecar-proto",
+      "suite://production-packages-sidecar",
+      "suite://production-packages-standalone",
+      "suite://production-apps-closure",
       "suite://electron-shell-source",
-      "tools/pack/",
-      "tools/release/"
+      "suite://production-tools-pack",
+      "suite://production-tools-release"
     ],
     "release-executor": [
       "tools/release/src/exact/build-commands.ts",
       "tools/release/src/exact/command-input.ts",
       ".node-version",
-      "packages/metatool/",
+      "suite://production-packages-metatool",
       "packages/archive/package.json",
       "packages/archive/tsconfig.json",
       "packages/archive/src/",
@@ -326,14 +507,29 @@
       "suite://validation-control",
       "suite://electron-shell-tests",
       "suite://electron-capsule",
-      "suite://electron-platform"
+      "suite://electron-platform",
+      "packages/electron-kit/tests/",
+      "packages/electron-kit/tsconfig.tests.json",
+      "packages/electron-kit/vitest.config.ts",
+      "packages/electron-capsule/tests/",
+      "packages/electron-capsule/tsconfig.tests.json",
+      "packages/electron-capsule/vitest.config.ts",
+      "packages/standalone/tests/",
+      "packages/standalone/tsconfig.tests.json",
+      "packages/standalone/vitest.config.ts"
     ],
     "validation-closure": [
       "suite://validation-control",
       "packages/archive/",
       "suite://closure-resources",
       "apps/closure/",
-      "packages/standalone/"
+      "packages/standalone/",
+      "apps/daemon/tests/",
+      "apps/daemon/tsconfig.tests.json",
+      "apps/daemon/vitest.config.ts",
+      "apps/daemon/vitest.parallel.config.ts",
+      "apps/web/tests/",
+      "apps/web/vitest.config.ts"
     ],
     "runtime-control": [
       ".node-version",
@@ -356,27 +552,27 @@
     ],
     "runtime-daemon": [
       "suite://runtime-control",
-      "apps/daemon/",
-      "packages/agui-adapter/",
-      "packages/contracts/",
-      "packages/diagnostics/",
-      "packages/platform/",
-      "packages/plugin-runtime/",
-      "packages/registry-protocol/",
-      "packages/release/",
-      "packages/sidecar/",
-      "packages/sidecar-proto/"
+      "suite://production-apps-daemon",
+      "suite://production-packages-agui-adapter",
+      "suite://production-packages-contracts",
+      "suite://production-packages-diagnostics",
+      "suite://production-packages-platform",
+      "suite://production-packages-plugin-runtime",
+      "suite://production-packages-registry-protocol",
+      "suite://production-packages-release",
+      "suite://production-packages-sidecar",
+      "suite://production-packages-sidecar-proto"
     ],
     "runtime-web": [
       "suite://runtime-control",
-      "apps/web/",
-      "packages/release/",
-      "packages/components/",
-      "packages/contracts/",
-      "packages/electron-contract/",
-      "packages/platform/",
-      "packages/sidecar/",
-      "packages/sidecar-proto/"
+      "suite://production-apps-web",
+      "suite://production-packages-release",
+      "suite://production-packages-components",
+      "suite://production-packages-contracts",
+      "suite://production-packages-electron-contract",
+      "suite://production-packages-platform",
+      "suite://production-packages-sidecar",
+      "suite://production-packages-sidecar-proto"
     ],
     "installed-acceptance": [
       "suite://validation-control",
@@ -394,8 +590,11 @@
   "workflows": {
     "release-exact": {
       "admission": {
-        "productionJob": "[prepare] Release content · validated and signed",
+        "productionJob": "[prepare] Release content · products and signing",
         "resultJobs": {
+          "validation_contract_darwin_arm64": "[test] Shell and Closure · darwin-arm64 · misses",
+          "validation_shell_darwin_arm64": "[test] Shell and Closure · darwin-arm64 · misses",
+          "validation_closure_darwin_arm64": "[test] Shell and Closure · darwin-arm64 · misses",
           "installed_terminal_darwin_arm64": "[test] Installed terminal · darwin-arm64 · first start and update",
           "installed_electron_darwin_arm64": "[test] Installed electron · darwin-arm64 · first start and update"
         }
@@ -479,7 +678,8 @@
             "prefix": "exact-toolchain-darwin-arm64"
           },
           "parameters": {
-            "target": "darwin-arm64"
+            "target": "darwin-arm64",
+            "postinstall_level": "electron-build"
           }
         },
         "terminal_scene_darwin_arm64": {
@@ -515,7 +715,8 @@
           },
           "dependsOn": [
             "closure_runtime_daemon_darwin_arm64",
-            "closure_runtime_web_darwin_arm64"
+            "closure_runtime_web_darwin_arm64",
+            "electron_capsule_darwin_arm64"
           ]
         },
         "electron_scene_win32_x64": {
@@ -862,6 +1063,14 @@
         }
       },
       "execution": {
+        "groups": {
+          "electron_inputs": [
+            "electron_base_darwin_arm64",
+            "electron_toolchain_darwin_arm64",
+            "electron_platform_darwin_arm64",
+            "electron_capsule_darwin_arm64"
+          ]
+        },
         "enabled": [
           "release_tools",
           "terminal_scene_darwin_arm64",
@@ -905,6 +1114,19 @@
           ]
         },
         "matrices": {
+          "native_input_matrix": {
+            "include": [
+              {
+                "shell": "electron",
+                "target": "darwin-arm64",
+                "runs_on": "macos-15",
+                "base_workload": "electron_base_darwin_arm64",
+                "toolchain_workload": "electron_toolchain_darwin_arm64",
+                "platform_workload": "electron_platform_darwin_arm64",
+                "capsule_workload": "electron_capsule_darwin_arm64"
+              }
+            ]
+          },
           "toolchain_matrix": {
             "include": [
               {
