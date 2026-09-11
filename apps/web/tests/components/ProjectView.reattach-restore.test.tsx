@@ -917,6 +917,69 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
+  it('reopens the persisted artifact_focus target after a reconnect when the target already existed', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-artifact-focus',
+        role: 'assistant',
+        agentId: 'codex',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-artifact-focus',
+        runStatus: 'running',
+        // The focus event is already persisted on the message when the page
+        // reconnects.  The file itself existed before this turn (the agent
+        // refreshed the site entry in place), so a diff-only recovery cannot
+        // infer the intended tab from the file list.
+        preTurnFileNames: ['index.html'],
+        events: [{ kind: 'artifact_focus', open: 'index.html' }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    const index = {
+      name: 'index.html',
+      path: '/p/index.html',
+      size: 20,
+      updatedAt: Date.now(),
+      kind: 'html',
+      mime: 'text/html',
+    };
+    fetchProjectFiles.mockResolvedValue(index ? [index] : []);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-artifact-focus',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+      // Deliberately absent: the persisted artifact_focus event is the only
+      // authoritative declaration available to this recovery path.
+    });
+
+    let capturedHandlers: { onDone: () => void } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      capturedHandlers = { onDone: options.handlers.onDone };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(capturedHandlers).not.toBeNull();
+    capturedHandlers!.onDone();
+
+    await waitFor(() => expect(chatPaneHarness.openRequestNames).toContain('index.html'));
+  });
+
   it('claims the projected active task Run once and drops the predecessor cursor', async () => {
     const startedAt = Date.now();
     const visiblePrefix = 'Decision summary.\n';
