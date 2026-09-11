@@ -16,6 +16,7 @@
 // `/api/proxy/*/stream` routes; both paths share the base URL policy from
 // contracts so Settings and daemon-side checks reject the same hosts.
 
+import { resolveAgentReasoning } from './runtimes/detection.js';
 import { spawn } from 'node:child_process';
 import { promises as dnsPromises, lookup as dnsLookupCb } from 'node:dns';
 import { promises as fsp } from 'node:fs';
@@ -2358,6 +2359,19 @@ async function testAgentConnectionInternal(
     };
   }
 
+  let reasoning: string | null;
+  try {
+    reasoning = def.id === 'codex'
+      ? await resolveAgentReasoning(def, model, input.reasoning, configuredAgentEnv)
+      : input.reasoning ?? null;
+  } catch (error) {
+    return {
+      ok: false, kind: 'invalid_reasoning', latencyMs: Date.now() - start,
+      model, agentName: def.name,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-'));
   // Antigravity's print mode is silent on stdout/stderr for both
   // missing-auth and quota-exhausted failures — it exits 0 without
@@ -2594,7 +2608,7 @@ async function testAgentConnectionInternal(
           reasoning:
             input.agentId === 'opencode' && executableResolution.configuredOverridePath
               ? null
-              : input.reasoning ?? null,
+              : reasoning,
           serviceTier: input.serviceTier ?? null,
         },
         {

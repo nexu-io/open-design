@@ -1,3 +1,4 @@
+import { reasoningOptionsForModel, reconcileAgentChoice, reconcileAgentPreferences } from '../runtime/agent-reasoning';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
@@ -1540,6 +1541,9 @@ export function SettingsDialog({
     ? restorePendingByokProviderDraft(normalizedInitialConfig)
     : normalizedInitialConfig;
   const [cfg, setCfg] = useState<AppConfig>(() => initialFormConfig);
+  useEffect(() => {
+    setCfg((current) => reconcileAgentPreferences(current, agents));
+  }, [agents]);
   const [maxTokensInput, setMaxTokensInput] = useState(
     initialFormConfig.maxTokens == null ? '' : String(initialFormConfig.maxTokens),
   );
@@ -2988,6 +2992,8 @@ export function SettingsDialog({
         return t('settings.testForbidden');
       case 'not_found_model':
         return t('settings.testNotFoundModel', { model: testedModel });
+      case 'invalid_reasoning':
+        return result.detail ?? t('settings.testUnknown');
       case 'invalid_model_id':
         return t('settings.testInvalidModelId', { model: testedModel });
       case 'invalid_base_url':
@@ -3970,10 +3976,7 @@ export function SettingsDialog({
       Array.isArray(selected.models) && selected.models.length > 0;
     const configuredModelId =
       cfg.agentModels?.[selected.id]?.model ?? defaultAgentModelId(selected);
-    const modelReasoningOptions = selected.models?.find(
-      (model) => model.id === configuredModelId,
-    )?.reasoningOptions;
-    const activeReasoningOptions = modelReasoningOptions ?? selected.reasoningOptions;
+    const activeReasoningOptions = reasoningOptionsForModel(selected, configuredModelId);
     const hasReasoning =
       Array.isArray(activeReasoningOptions) &&
       activeReasoningOptions.length > 0;
@@ -4042,7 +4045,7 @@ export function SettingsDialog({
     ) => {
       setCfg((c) => {
         const prev = c.agentModels?.[selected.id] ?? {};
-        const merged = { ...prev, ...next };
+        const merged = reconcileAgentChoice(selected, prev, next);
         if (
           Object.prototype.hasOwnProperty.call(next, 'serviceTier') &&
           next.serviceTier === undefined

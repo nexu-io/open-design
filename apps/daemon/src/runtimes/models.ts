@@ -84,7 +84,7 @@ function mergeMissingFallbackModelMetadata(
     Array.isArray(fallbackServiceTiers) &&
     fallbackServiceTiers.length > 0;
   const needsReasoningOptions =
-    (!model.reasoningOptions || model.reasoningOptions.length === 0) &&
+    model.reasoningOptions === undefined &&
     Array.isArray(fallbackReasoningOptions) &&
     fallbackReasoningOptions.length > 0;
   if (!needsSpeedTiers && !needsServiceTiers && !needsReasoningOptions) return model;

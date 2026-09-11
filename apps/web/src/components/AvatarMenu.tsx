@@ -1,3 +1,4 @@
+import { reasoningOptionsForModel, reconcileAgentChoice } from '../runtime/agent-reasoning';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { getResolvedDeviceId } from '../analytics/client';
@@ -397,9 +398,7 @@ export function AvatarMenu({
   const normalizedCurrentChoice = effectiveAgentModelChoice(currentAgent, currentChoice) ?? currentChoice;
   const currentModelId =
     normalizedCurrentChoice.model ?? defaultAgentModelId(currentAgent);
-  const activeReasoningOptions =
-    currentAgent?.models?.find((model) => model.id === currentModelId)?.reasoningOptions ??
-    currentAgent?.reasoningOptions;
+  const activeReasoningOptions = reasoningOptionsForModel(currentAgent, currentModelId);
   const currentReasoningId =
     activeReasoningOptions?.some(
       (option) => option.id === normalizedCurrentChoice.reasoning,
@@ -626,10 +625,10 @@ export function AvatarMenu({
                                   openAmrUpgrade();
                                   return;
                                 }
-                                onAgentModelChange(currentAgent.id, {
+                                onAgentModelChange(currentAgent.id, reconcileAgentChoice(currentAgent, currentChoice, {
                                   model: model.id,
                                   serviceTier: undefined,
-                                });
+                                }));
                                 // Selection made — dismiss the popover right away.
                                 setOpen(false);
                               }}

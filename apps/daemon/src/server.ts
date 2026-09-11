@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { resolveAgentReasoning } from './runtimes/detection.js';
 import type {
   DesktopExportArtifactInput,
   DesktopExportArtifactResult,
@@ -246,7 +247,6 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
-  isKnownReasoningEffort,
   isKnownServiceTier,
   openDesignAmrRunAttempt,
   openDesignAmrTraceEnv,
@@ -11749,17 +11749,19 @@ export async function startServer({
       typeof process.env[def.defaultModelEnvVar] === 'string' &&
       process.env[def.defaultModelEnvVar]?.trim(),
     );
-    const safeReasoning =
-      typeof reasoning === 'string' &&
-      isKnownReasoningEffort(def, safeModel, reasoning, requestedLiveModelScope)
-        ? reasoning
-        : null;
     safeModel = resolveModelForServiceTier(
       def,
       safeModel,
       typeof serviceTier === 'string' ? serviceTier : null,
       requestedLiveModelScope,
     );
+    let safeReasoning: string | null;
+    try {
+      safeReasoning = await resolveAgentReasoning(def, safeModel, reasoning, configuredAgentEnv, requestedLiveModelScope);
+    } catch (error) {
+      return failRun('BAD_REQUEST', error instanceof Error ? error.message : String(error));
+    }
+    run.reasoning = safeReasoning;
     const safeServiceTier =
       typeof serviceTier === 'string' &&
       isKnownServiceTier(def, safeModel, serviceTier, requestedLiveModelScope)

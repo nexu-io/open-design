@@ -1,3 +1,5 @@
+import { validateModelReasoning } from './reasoning.js';
+import { findKnownModel, isKnownReasoningEffort } from './models.js';
 import { createHash } from 'node:crypto';
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
@@ -233,6 +235,34 @@ async function fetchModels(
   } catch {
     return { models: def.fallbackModels, source: 'fallback' };
   }
+}
+
+/** Validate explicit Codex efforts against the configured CLI even before a picker refresh. */
+export async function resolveAgentReasoning(
+  def: RuntimeAgentDef,
+  model: string | null | undefined,
+  reasoning: unknown,
+  configuredEnv: Record<string, string> = {},
+  scope?: string | null,
+): Promise<string | null> {
+  if (reasoning == null || reasoning === '' || reasoning === 'default') return null;
+  if (def.id !== 'codex') {
+    return typeof reasoning === 'string' && isKnownReasoningEffort(def, model, reasoning, scope)
+      ? reasoning : null;
+  }
+  const known = findKnownModel(def, model, scope);
+  let models = known ? [known] : def.fallbackModels;
+  if (def.id === 'codex') {
+    const launch = resolveAgentLaunch(def, configuredEnv);
+    if (launch.selectedPath && launch.launchPath) {
+      const env = applyAgentLaunchEnv(spawnEnvForAgent(
+        def.id, { ...process.env, ...(def.env || {}) }, configuredEnv,
+        undefined, { resolvedBin: launch.selectedPath },
+      ), launch);
+      models = (await fetchModels(def, launch.launchPath, env)).models;
+    }
+  }
+  return validateModelReasoning(def, models, model, reasoning);
 }
 
 export type VersionProbeOutcome =

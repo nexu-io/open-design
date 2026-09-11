@@ -8,6 +8,7 @@
 // upward through the same callbacks `AvatarMenu` already uses, so the
 // switcher inherits autosave + daemon sync without re-implementing it.
 
+import { reasoningOptionsForModel, reconcileAgentChoice } from '../runtime/agent-reasoning';
 import {
   useCallback,
   useEffect,
@@ -711,6 +712,10 @@ export function InlineModelSwitcher({
     !currentAgentModelIds.includes(configuredModelId)
       ? defaultAgentModelId(currentAgent)
       : configuredModelId ?? defaultAgentModelId(currentAgent);
+  const reasoningOptions = reasoningOptionsForModel(currentAgent, currentModelId);
+  const reasoningChoice = config.agentModels?.[currentAgent?.id ?? ''] ?? {};
+  const currentReasoningId = reasoningOptions.some((r) => r.id === reasoningChoice.reasoning)
+    ? reasoningChoice.reasoning : reasoningOptions.find((r) => r.default)?.id ?? reasoningOptions[0]?.id;
   const currentModelOption =
     currentAgentModels.find((m) => m.id === currentModelId) ?? null;
   // `agentId` and `agentModels` intentionally retain the last local-agent
@@ -767,10 +772,10 @@ export function InlineModelSwitcher({
       if (!agentModelIsSelectable(currentAgent, modelId)) {
         return false;
       }
-      onAgentModelChange?.(agentId, { model: modelId, ...extra });
+      onAgentModelChange?.(agentId, reconcileAgentChoice(currentAgent, config.agentModels?.[agentId] ?? {}, { model: modelId, ...extra }));
       return true;
     },
-    [currentAgent, onAgentModelChange],
+    [currentAgent, config.agentModels, onAgentModelChange],
   );
 
   /**
@@ -1753,6 +1758,25 @@ export function InlineModelSwitcher({
                 </div>
               ) : null}
             </>
+          )}
+
+          {config.mode === 'daemon' && currentAgent && reasoningOptions.length > 0 && currentReasoningId && (
+            <div className="inline-switcher__row">
+              <label className="inline-switcher__label" htmlFor="inline-reasoning">
+                {t('avatar.reasoningLabel')}
+              </label>
+              <select
+                id="inline-reasoning"
+                className="inline-switcher__select"
+                data-testid="inline-model-switcher-reasoning"
+                value={currentReasoningId}
+                onChange={(event) => onAgentModelChange(currentAgent.id, { reasoning: event.target.value })}
+              >
+                {reasoningOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </div>
           )}
 
           <button

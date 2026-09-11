@@ -2738,6 +2738,31 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 });
 
 describe('SettingsDialog execution settings Local CLI interactions', () => {
+  it('uses model reasoning and persists Default when switching to an incompatible model', async () => {
+    const agent: AgentInfo = {
+      ...availableAgents[0]!,
+      modelsSource: 'live',
+      models: [
+        { id: 'sol', label: 'Sol', reasoningOptions: [{ id: 'ultra', label: 'Ultra' }, { id: 'deep-v2', label: 'Future' }] },
+        { id: 'luna', label: 'Luna', reasoningOptions: [{ id: 'max', label: 'Max' }] },
+      ],
+      reasoningOptions: [{ id: 'default', label: 'Default' }, { id: 'minimal', label: 'Minimal' }],
+    };
+    const { onPersist } = renderSettingsDialog({ mode: 'daemon', agentId: 'codex',
+      agentModels: { codex: { model: 'sol', reasoning: 'ultra' } },
+    }, { agents: [agent] });
+    const reasoning = screen.getByRole('combobox', { name: 'Reasoning effort' });
+    expect(within(reasoning).getAllByRole('option').map((o) => (o as HTMLOptionElement).value))
+      .toEqual(['default', 'ultra', 'deep-v2']);
+    fireEvent.click(screen.getByRole('combobox', { name: en['settings.modelPicker'] }));
+    fireEvent.click(screen.getByRole('option', { name: /Luna/ }));
+    expect((reasoning as HTMLSelectElement).value).toBe('default');
+    expect(within(reasoning).queryByRole('option', { name: 'Ultra' })).toBeNull();
+    await waitFor(() => expect(onPersist).toHaveBeenCalledWith(expect.objectContaining({
+      agentModels: { codex: { model: 'luna', reasoning: 'default' } },
+    }), expect.any(Object)));
+  });
+
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();

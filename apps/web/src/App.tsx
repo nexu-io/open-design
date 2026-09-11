@@ -1,3 +1,4 @@
+import { reconcileAgentChoice, reconcileAgentPreferences } from './runtime/agent-reasoning';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
@@ -2777,11 +2778,21 @@ function AppInner() {
     [],
   );
 
+  useEffect(() => {
+    const current = latestPersistedConfigRef.current;
+    const next = reconcileAgentPreferences(current, agents);
+    if (next === current) return;
+    latestPersistedConfigRef.current = next;
+    saveConfig(next);
+    void syncConfigToDaemon(next);
+    setConfig(next);
+  }, [agents, config]);
+
   const handleAgentModelChange = useCallback(
     (agentId: string, choice: { model?: string; reasoning?: string; serviceTier?: string }) => {
       const current = latestPersistedConfigRef.current;
       const prev = current.agentModels?.[agentId] ?? {};
-      const merged = mergeAgentModelChoice(prev, choice);
+      const merged = reconcileAgentChoice(agents.find((agent) => agent.id === agentId), mergeAgentModelChoice(prev, choice));
       const nextAgentModels = {
         ...(current.agentModels ?? {}),
         [agentId]: merged,
@@ -2792,7 +2803,7 @@ function AppInner() {
       void syncConfigToDaemon(next);
       setConfig(next);
     },
-    [],
+    [agents],
   );
 
   // BYOK protocol switch — also flips `mode` to 'api' so the user does
