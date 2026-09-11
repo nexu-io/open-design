@@ -916,6 +916,17 @@ export function attachAcpSession({
     });
   };
 
+  let completionText: string | null = null;
+  const prepareCompletionText = (checkVisibleOutput = false): string => {
+    if (completionText === null) {
+      const flushedToolText = checkVisibleOutput
+        ? toolCallTextSuppressor.flushForVisibleOutputCheck()
+        : toolCallTextSuppressor.flush();
+      completionText = flushedToolText ? (dsmlArtifactSuppressor?.strip(flushedToolText) ?? flushedToolText) : '';
+    }
+    return completionText;
+  };
+
   const finishCleanPrompt = (usageSource?: unknown) => {
     if (finished) return;
     // Mark the prompt finished before notifying observers so duplicate results
@@ -925,9 +936,8 @@ export function attachAcpSession({
     // Flush any tools still open when the prompt completes so traces stay
     // complete (one tool_use + tool_result per id).
     flushOpenAcpTools();
-    const flushedToolText = toolCallTextSuppressor.flush();
+    const flushedText = prepareCompletionText();
     noteToolCallTextSuppression('tool_call_xml_flush');
-    const flushedText = flushedToolText ? (dsmlArtifactSuppressor?.strip(flushedToolText) ?? flushedToolText) : '';
     if (flushedText) {
       emitVisibleTextDelta(flushedText);
     }
@@ -1390,7 +1400,10 @@ export function attachAcpSession({
       // them as isError via fail()). Think-only open tools do not flip the flag.
       flushOpenAcpTools();
       const usage = formatUsage(result.usage);
-      if (!emittedVisibleTextChunk && !emittedConcreteToolEvent && modelUnavailableErrorCode) {
+      // Prepare buffered text without notifying observers. Publish it only
+      // inside finishCleanPrompt's existing finished/re-entry protection.
+      if (!emittedVisibleTextChunk && !emittedConcreteToolEvent && modelUnavailableErrorCode &&
+          !prepareCompletionText(true)) {
         const outputTokens = usage?.output_tokens;
         const hadCompletionTokens = typeof outputTokens === 'number' && outputTokens > 0;
         // Emit usage before fail so analytics still sees provider tokens.

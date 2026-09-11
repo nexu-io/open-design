@@ -18,9 +18,15 @@ const MAX_CANDIDATE_LENGTH = 512;
 export interface ArtifactTextSuppressor {
   strip(text: string): string;
   flush(): string;
+  /** Drain for a no-visible-output check without promoting an incomplete tool opener to prose. */
+  flushForVisibleOutputCheck?(): string;
   isSuppressing(): boolean;
   hasPendingCandidate(): boolean;
   stats(): ArtifactTextSuppressorStats;
+}
+
+interface CompletionTextSuppressor extends ArtifactTextSuppressor {
+  flushForVisibleOutputCheck(): string;
 }
 
 export interface ArtifactTextSuppressorStats {
@@ -41,12 +47,13 @@ export function createDsmlArtifactTextSuppressor(): ArtifactTextSuppressor {
   });
 }
 
-export function createToolCallTextSuppressor(): ArtifactTextSuppressor {
+export function createToolCallTextSuppressor(): CompletionTextSuppressor {
   const toolBlockSuppressor = createTaggedTextSuppressor({
     openRe: TOOL_CALL_OPEN_RE,
     closeRe: TOOL_CALL_CLOSE_RE,
     isPossibleOpen: isPossibleToolCallOpen,
     isPossibleClose: isPossibleToolCallClose,
+    discardIncompleteOpenOnVisibleOutputCheck: true,
   });
   const protocolTailSuppressor = createDsmlToolProtocolTailSuppressor();
   return chainTextSuppressors(toolBlockSuppressor, protocolTailSuppressor);
@@ -110,15 +117,26 @@ function createDsmlToolProtocolTailSuppressor(): ArtifactTextSuppressor {
 function chainTextSuppressors(
   first: ArtifactTextSuppressor,
   second: ArtifactTextSuppressor,
-): ArtifactTextSuppressor {
+): CompletionTextSuppressor {
+  const flush = (checkVisibleOutput: boolean) => {
+    const firstTail = checkVisibleOutput && first.flushForVisibleOutputCheck
+      ? first.flushForVisibleOutputCheck()
+      : first.flush();
+    const visibleFirstTail = firstTail ? second.strip(firstTail) : '';
+    const secondTail = checkVisibleOutput && second.flushForVisibleOutputCheck
+      ? second.flushForVisibleOutputCheck()
+      : second.flush();
+    return `${visibleFirstTail}${secondTail}`;
+  };
   return {
     strip(text) {
       return second.strip(first.strip(text));
     },
     flush() {
-      const firstTail = first.flush();
-      const visibleFirstTail = firstTail ? second.strip(firstTail) : '';
-      return `${visibleFirstTail}${second.flush()}`;
+      return flush(false);
+    },
+    flushForVisibleOutputCheck() {
+      return flush(true);
     },
     isSuppressing() {
       return first.isSuppressing() || second.isSuppressing();
@@ -147,6 +165,7 @@ function createTaggedTextSuppressor(args: {
   closeRe: RegExp;
   isPossibleOpen: (text: string) => boolean;
   isPossibleClose: (text: string) => boolean;
+  discardIncompleteOpenOnVisibleOutputCheck?: boolean;
 }): ArtifactTextSuppressor {
   let suppressing = false;
   let candidate = '';
@@ -207,6 +226,16 @@ function createTaggedTextSuppressor(args: {
     return suppressing ? '' : text;
   }
 
+  function flushForVisibleOutputCheck(): string {
+    // Reuse this suppressor's actual opener grammar. A bare "<" or a
+    // lookalike is not a recognized tool opener merely because it is held.
+    // The virtual closing angle is only a classification probe, never output.
+    const incompleteOpen = args.discardIncompleteOpenOnVisibleOutputCheck === true &&
+      args.isPossibleOpen(candidate) && args.openRe.exec(`${candidate}>`)?.index === 0;
+    const tail = flush();
+    return incompleteOpen ? '' : tail;
+  }
+
   function isSuppressing(): boolean {
     return suppressing;
   }
@@ -226,7 +255,7 @@ function createTaggedTextSuppressor(args: {
     };
   }
 
-  return { strip, flush, isSuppressing, hasPendingCandidate, stats };
+  return { strip, flush, flushForVisibleOutputCheck, isSuppressing, hasPendingCandidate, stats };
 }
 
 export function emitWithTextSuppressor(
