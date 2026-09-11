@@ -835,6 +835,94 @@ export async function closeManagedChild(child: ManagedSidecarChild, observe?: (e
   }
 }
 
+/**
+ * Notes an unexpected post-startup exit of a managed sidecar child in that
+ * sidecar's own `latest.log`.
+ *
+ * Issue #7416: `closeManagedChild` writes lifecycle lines only when the
+ * packaged app asks a sidecar to stop, and only the web child had a
+ * post-startup exit hook (`createWebSidecarSupervisor`'s `onExit`, which both
+ * notices the death and respawns). A daemon that vanished after reporting
+ * ready therefore left its log ending on the last ordinary line, so nothing
+ * in it distinguished "still running" from "died silently".
+ *
+ * Arming is register-plus-recheck, not a bare `once("exit")`. `waitForStatus`
+ * drops its own exit listener in `finally` as soon as a ready status comes
+ * back, and it does not re-check `childExited` after a ready IPC response, so
+ * a daemon that answers ready and dies in the same breath has already fired
+ * `exit` by the time the caller reaches this function one await later. The
+ * synchronous `exitCode` / `signalCode` fields survive that event, so they are
+ * re-read after the listener is installed; `reported` keeps the two paths from
+ * both recording the same death. The child is typed structurally (as in
+ * `waitForStatus`) so lifecycle races can be exercised without spawning a real
+ * child.
+ *
+ * `dispose()` mutes the watcher for an intentional shutdown, where
+ * `closeManagedChild` already writes the shutdown/exited pair. `logged`
+ * resolves once the write has been attempted; it stays pending for a child
+ * that never exits.
+ *
+ * The write itself is best-effort and must stay that way: this runs while the
+ * app is already handling a dead daemon, and `appendSidecarLifecycleLog` can
+ * reject from its `mkdir` (permissions, ENOSPC, a non-directory in the way) —
+ * only its `appendFile` is guarded. The packaged main process rethrows
+ * non-harmless unhandled rejections (see `createFatalUnhandledRejectionHandler`
+ * in `logging.ts`), so an unguarded floating promise here would turn a failed
+ * diagnostic line into a process crash. Hence the `catch` on the whole chain.
+ */
+export function watchUnexpectedManagedChildExit(child: {
+  app: AppKey;
+  child: {
+    exitCode: number | null;
+    pid?: number | undefined;
+    signalCode: NodeJS.Signals | null;
+    once: (
+      event: "exit",
+      listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+    ) => void;
+  };
+  logPath: string;
+}): { dispose: () => void; logged: Promise<void> } {
+  let disposed = false;
+  let reported = false;
+  let settle: () => void = () => undefined;
+  const logged = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+
+  const report = (code: number | null, signal: NodeJS.Signals | null): void => {
+    if (reported) return;
+    reported = true;
+    if (disposed) {
+      settle();
+      return;
+    }
+    // `code ?? "null"`, not `?? "unknown"`: Node reports code === null for a
+    // signal termination, and that null is the standard, meaningful value.
+    void appendSidecarLifecycleLog(
+      child.logPath,
+      `[open-design packaged] unexpected exit app=${child.app} pid=${child.child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "none"}`,
+    )
+      .catch(() => undefined)
+      .finally(settle);
+  };
+
+  child.child.once("exit", report);
+
+  // The exit may already have fired between the ready handoff and this call,
+  // in which case the listener above will never run.
+  if (child.child.exitCode !== null || child.child.signalCode !== null) {
+    report(child.child.exitCode, child.child.signalCode);
+  }
+
+  return {
+    dispose: () => {
+      disposed = true;
+    },
+    logged,
+  };
+}
+
 export async function registerPackagedWebUrl(
   daemonStamp: SidecarStamp,
   webUrl: string,
@@ -906,6 +994,7 @@ export async function startPackagedSidecars(
   await mkdir(paths.electronSessionDataRoot, { recursive: true });
 
   const children: ManagedSidecarChild[] = [];
+  let daemonExitWatch: { dispose: () => void } | null = null;
   let shutdownObserver: ((event: UpdateLifecycleObservation) => Promise<void>) | undefined;
   let webSupervisor: { close(): Promise<void> } | null = null;
 
@@ -989,6 +1078,9 @@ export async function startPackagedSidecars(
       { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
+    // Only from here on: before ready, waitForStatus above already owns the
+    // daemon's exit event and turns it into a startup error.
+    daemonExitWatch = watchUnexpectedManagedChildExit(daemon);
     options.onPhase?.("daemon-ready");
 
     // The web payload must be in the page cache before the web sidecar
@@ -1051,6 +1143,7 @@ export async function startPackagedSidecars(
       web: webStatus,
       currentWebUrl: supervisor.currentUrl,
       async close(observe) {
+        daemonExitWatch?.dispose();
         shutdownObserver = observe;
         const closeErrors: unknown[] = [];
         await supervisor.close().catch((error: unknown) => {
@@ -1069,6 +1162,7 @@ export async function startPackagedSidecars(
       },
     };
   } catch (error) {
+    daemonExitWatch?.dispose();
     await webSupervisor?.close().catch(() => undefined);
     for (const child of [...children].reverse()) {
       await closeManagedChild(child).catch(() => undefined);
