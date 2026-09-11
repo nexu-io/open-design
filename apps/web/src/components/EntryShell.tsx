@@ -2255,14 +2255,20 @@ function OnboardingView({
     runtime,
     step,
   };
+  // In Bedrock profile mode only the profile counts as a credential: a
+  // leftover key is dropped from the request anyway.
+  const byokHasCredential =
+    apiProtocol === 'bedrock' && resolveBedrockAuthMode(config.awsAuthMode) === 'profile'
+      ? Boolean(byokAwsProfile)
+      : Boolean(config.apiKey.trim());
   const canTestProvider =
-    (Boolean(config.apiKey.trim()) || Boolean(byokAwsProfile)) &&
+    byokHasCredential &&
     Boolean(config.baseUrl.trim()) &&
     Boolean(config.model.trim());
   const canFetchProviderModels =
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
-    (Boolean(config.apiKey.trim()) || Boolean(byokAwsProfile)) &&
+    byokHasCredential &&
     Boolean(config.baseUrl.trim()) &&
     isLikelyHttpUrl(config.baseUrl);
   const visibleProviderTestState =

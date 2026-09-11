@@ -2748,6 +2748,17 @@ export function SettingsDialog({
     if (blockingByokDraftIssues(byokDraftValidation).length > 0) {
       return;
     }
+    // Bedrock profile mode with no profile yet: the request cannot carry a
+    // credential, so the auto-test would only surface the daemon's "either
+    // apiKey or awsProfile" error while the user is still typing. Same silence
+    // as an empty key.
+    if (
+      apiProtocol === 'bedrock'
+      && resolveBedrockAuthMode(cfg.awsAuthMode) === 'profile'
+      && !(cfg.awsProfile ?? '').trim()
+    ) {
+      return;
+    }
     const key = providerConnectionTestKey(apiProtocol, cfg);
     if (providerAutoTestKeyRef.current === key) {
       return;
