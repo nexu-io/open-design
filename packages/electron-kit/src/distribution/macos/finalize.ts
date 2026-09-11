@@ -36,11 +36,18 @@ export async function finalizeMacBaseProjection(input: Readonly<{
       console.info(JSON.stringify({ event: "electron.distribution.stage", stage: name,
         durationMs: Math.round(performance.now() - start), status: "success" }));
       return result;
-    } catch {
+    } catch (error) {
       // Child-process errors embed argv, which may include Apple credentials.
       console.info(JSON.stringify({ event: "electron.distribution.stage", stage: name,
         durationMs: Math.round(performance.now() - start), status: "failed" }));
-      throw new Error(`macOS distribution ${name} failed`);
+      // stderr carries the native diagnosis; never include the child error's
+      // message/stack, which embeds the full credential-bearing command line.
+      let detail = (error as { stderr?: unknown })?.stderr;
+      if (typeof detail === "string") {
+        for (const value of auth) detail = (detail as string).replaceAll(value, "[redacted]");
+        detail = (detail as string).replace(/[\x00-\x1f\x7f]/gu, " ").trim().slice(0, 2000);
+      }
+      throw new Error(`macOS distribution ${name} failed${typeof detail === "string" && detail ? `: ${detail}` : ""}`);
     }
   }
   await stage("outer-sign", "/usr/bin/codesign", ["--force", "--sign", input.identity, "--timestamp", "--options", "runtime",

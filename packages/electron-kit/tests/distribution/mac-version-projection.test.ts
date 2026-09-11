@@ -75,3 +75,11 @@ it("does not expose credential-bearing subprocess errors or continue after a fai
     entitlements: "/fixture/entitlements.plist", notary: { kind: "keychain", profile: "fixture" }, run })).rejects.toThrow(/^macOS distribution outer-sign failed$/u);
   expect(run).toHaveBeenCalledTimes(1);
 });
+
+it("retains native stderr diagnosis while redacting injected authentication", async () => {
+  const input = await fixture();
+  const run = vi.fn(async () => { throw Object.assign(new Error("full command line must not escape"), { stderr: "chain resolution failed: private-password" }); });
+  await expect(finalizeMacBaseProjection({ appPath: input.baseAppPath, seal: input.seal, identity: "a".repeat(40),
+    entitlements: "/fixture/entitlements.plist", notary: { kind: "apple-id", appleId: "a@example.test", password: "private-password", teamId: "ABCDEFGHIJ" }, run }))
+    .rejects.toThrow("outer-sign failed: chain resolution failed: [redacted]");
+});
