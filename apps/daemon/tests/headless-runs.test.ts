@@ -299,6 +299,22 @@ describe('POST /api/runs headless fallbacks', () => {
     const prompt = `omit-pin with attachments ${randomUUID()}`;
     const attachmentPath = 'assets/hero.png';
     const bmpAttachmentPath = 'assets/scan.bmp';
+    const fileContents = 'hero fixture bytes';
+    const bmpContents = 'scan fixture bytes';
+    for (const [name, content] of [
+      [attachmentPath, fileContents],
+      [bmpAttachmentPath, bmpContents],
+    ] as const) {
+      const fileResponse = await fetch(
+        `${started.url}/api/projects/${encodeURIComponent(projectId)}/files`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, content }),
+        },
+      );
+      expect(fileResponse.status).toBe(200);
+    }
     const commentAttachment = {
       id: `comment-${randomUUID()}`,
       order: 1,
@@ -336,7 +352,13 @@ describe('POST /api/runs headless fallbacks', () => {
       messages: Array<{
         role: string;
         content: string;
-        attachments?: Array<{ path: string; name: string; kind: string; order?: number }>;
+        attachments?: Array<{
+          path: string;
+          name: string;
+          kind: string;
+          size?: number;
+          order?: number;
+        }>;
         commentAttachments?: Array<{
           id: string;
           filePath: string;
@@ -356,12 +378,14 @@ describe('POST /api/runs headless fallbacks', () => {
         path: attachmentPath,
         name: 'hero.png',
         kind: 'image',
+        size: Buffer.byteLength(fileContents),
         order: 0,
       },
       {
         path: bmpAttachmentPath,
         name: 'scan.bmp',
         kind: 'image',
+        size: Buffer.byteLength(bmpContents),
         order: 1,
       },
     ]);
