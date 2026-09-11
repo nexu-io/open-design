@@ -1,0 +1,48 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "llm-council-mtquiog0",
+  "title": "LLM Council",
+  "version": "0.1.0",
+  "description": "Run any question or decision through a council of 5 AI advisors who analyze independently, peer-review each other anonymously, and synthesize a single verdict.",
+  "license": "MIT",
+  "homepage": "https://github.com/tenfoldmarc/llm-council-skill",
+  "plugin": {
+    "repo": "https://github.com/tenfoldmarc/llm-council-skill"
+  },
+  "tags": [
+    "community",
+    "create",
+    "decision-support",
+    "multi-agent",
+    "peer-review",
+    "research"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "live-artifact",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./references"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ]
+  }
+}
