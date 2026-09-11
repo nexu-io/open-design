@@ -17,6 +17,7 @@ import { Button } from '@open-design/components';
 import { ThinkingOrb } from './composer/ThinkingOrb';
 import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
+import { pluginMatchesQuery, rankPluginMatches } from './plugins-home/plugin-search';
 import type { Dict, Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
@@ -1145,19 +1146,32 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // pre-filtered by enabled/disabled state. We no longer fetch a fresh list
     // here to avoid showing skills the user has disabled via Settings.
 
-    // Lazy-fetch installed plugins once on mount; the tools-menu Plugins
-    // tab and the @-mention picker both consume this list.
+    // Lazy-fetch installed plugins; the tools-menu Plugins tab and the
+    // @-mention picker both consume this list. The Workspace context is
+    // REQUIRED: a plugin bound to the caller's personal Workspace (an
+    // `od plugin install` with --workspace) is filtered out of a headerless
+    // read — the daemon hides any Workspace-claimed resource from a caller
+    // with no identity to check it against. Without the context the composer
+    // silently showed only unbound/bundled plugins, so a freshly installed
+    // personal plugin never appeared in the @ picker. Re-read on
+    // `open-design:plugins-changed` so an install performed while this
+    // project is open shows up without a reload.
     useEffect(() => {
       if (!projectId || !composerEngaged) return;
       let cancelled = false;
-      void listPlugins().then((rows) => {
-        if (cancelled) return;
-        setInstalledPlugins(rows);
-      });
+      const load = () => {
+        void listPlugins({ workspaceContext }).then((rows) => {
+          if (cancelled) return;
+          setInstalledPlugins(rows);
+        });
+      };
+      load();
+      window.addEventListener('open-design:plugins-changed', load);
       return () => {
         cancelled = true;
+        window.removeEventListener('open-design:plugins-changed', load);
       };
-    }, [projectId, composerEngaged]);
+    }, [projectId, composerEngaged, workspaceContext]);
 
     useEffect(() => {
       if (!composerEngaged) return;
@@ -3154,20 +3168,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       [mention, mentionQuery, projectFiles],
     );
     const filteredPlugins = useMemo(
-      () =>
-        mention
-          ? pluginsForComposer
-              .filter((p) => {
-                if (!mentionQuery) return true;
-                return (
-                  p.title.toLowerCase().includes(mentionQuery) ||
-                  p.id.toLowerCase().includes(mentionQuery) ||
-                  (p.manifest?.description ?? '').toLowerCase().includes(mentionQuery) ||
-                  (p.manifest?.tags ?? []).join(' ').toLowerCase().includes(mentionQuery)
-                );
-              })
-              .slice(0, 8)
-          : [],
+      () => (mention ? rankPluginMatches(pluginsForComposer, mentionQuery) : []),
       [mention, mentionQuery, pluginsForComposer],
     );
     const filteredMcpServers = useMemo(
@@ -5644,23 +5645,6 @@ function ToolsSkillsPanel({
     </>
   );
 }
-
-function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    plugin.title,
-    plugin.id,
-    plugin.sourceKind,
-    plugin.source,
-    plugin.manifest?.description ?? '',
-    ...(plugin.manifest?.tags ?? []),
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q);
-}
-
 
 function buildDesignToolboxResources({
   skills,
