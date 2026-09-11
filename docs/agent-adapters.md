@@ -139,7 +139,7 @@ definitions currently group by transport as follows:
 | Stream format | Runtime ids |
 |---|---|
 | `claude-stream-json` | `claude`, `amp`, `codebuddy` |
-| `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode` |
+| `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode`, `dulus` |
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
 | `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
