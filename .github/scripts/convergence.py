@@ -19,7 +19,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Callable
 from unittest.mock import patch
 
 import handoff as handoff_contract
@@ -640,6 +640,22 @@ def archive_product_directory(source: Path, destination: Path) -> None:
                 shutil.copyfileobj(input_file, output_file, length=1024 * 1024)
 
 
+def retry_cache_read(operation: Callable[[float], Any], timeout: float) -> tuple[Any, bool]:
+    """Retry one transient public read, never invalid evidence or a cache miss.
+    Each attempt retains the caller's timeout; there is no sleeping, recursive
+    retry, payload acquisition or change to workload identity."""
+    for attempt in range(2):
+        try:
+            return operation(timeout), attempt != 0
+        except urllib.error.HTTPError as error:
+            if attempt or error.code not in {408, 429, 500, 502, 503, 504}:
+                raise
+        except (TimeoutError, ConnectionError, http.client.HTTPException, urllib.error.URLError):
+            if attempt:
+                raise
+    raise AssertionError("cache read attempts exhausted without a result")
+
+
 def resolve_results(
     base_url: str | None,
     repository_id: int,
@@ -665,7 +681,7 @@ def resolve_results(
         key = result_key(repository_id, workflow.name, workflow.policy, identity, expected["digest"])
         url = f"{base_url.rstrip('/')}/{key}"
         try:
-            value = fetch_result(url, timeout)
+            value, retried = retry_cache_read(lambda budget: fetch_result(url, budget), timeout)
             result = validate_result(
                 value,
                 repository_id=repository_id,
@@ -676,8 +692,9 @@ def resolve_results(
             for product in result["products"].values():
                 # Planning checks availability, not payload bytes. Acquisition
                 # verifies the declared digest before exposing any content.
-                probe_product(product["source"], timeout)
-            return identity, True, "result-hit", result
+                _, probe_retried = retry_cache_read(lambda budget: probe_product(product["source"], budget), timeout)
+                retried = retried or probe_retried
+            return identity, True, "result-hit-after-retry" if retried else "result-hit", result
         except urllib.error.HTTPError as error:
             return identity, False, "result-missing" if error.code == 404 else f"read-http-{error.code}", None
         except (
@@ -1072,7 +1089,7 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
         if not enabled[identity]
         else "shadow-result-hit"
         if args.mode == "shadow" and hits[identity]
-        else "result-hit"
+        else read_reasons[identity]
         if hits[identity]
         else read_reasons[identity]
         for identity in calculated

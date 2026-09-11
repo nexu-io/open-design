@@ -393,6 +393,44 @@ assert c.cache_inventory(Failed(),42,'release-exact')=={'status':'unavailable','
     const result = spawnSync("python3", ["-c", code, path.join(repoRoot, ".github/scripts")], { encoding: "utf8" });
     expect(result, result.stderr).toMatchObject({ status: 0, stderr: "" });
   });
+  test("retries transient cache reads once without accepting missing or invalid evidence", () => {
+    const code = `
+import json,sys
+from types import SimpleNamespace
+from unittest.mock import patch
+from urllib.error import HTTPError
+sys.path.insert(0,sys.argv[1])
+import convergence as c
+receipt=json.loads(sys.argv[2]); identity=receipt['workload']
+workflow=SimpleNamespace(name='ci',policy='test-v1')
+expected={'digest':receipt['digest'],'executionClass':receipt['executionClass'],'products':'none','reusable':True}
+def resolve(): return c.resolve_results('https://cache.example',42,workflow,{identity:expected},2)
+for error in [TimeoutError(),ConnectionResetError(),HTTPError('https://cache.example',503,'busy',{},None)]:
+    with patch.object(c,'fetch_result',side_effect=[error,receipt]) as fetch:
+        hits,reasons,_=resolve()
+        assert hits[identity] and reasons[identity]=='result-hit-after-retry'
+        assert fetch.call_count==2
+        assert all(call.args[1]==2 for call in fetch.call_args_list)
+for value,reason in [(HTTPError('https://cache.example',404,'missing',{},None),'result-missing'),({},'read-unavailable:ConfigError')]:
+    options={'side_effect':value} if isinstance(value,Exception) else {'return_value':value}
+    with patch.object(c,'fetch_result',**options) as fetch:
+        hits,reasons,_=resolve()
+        assert not hits[identity] and reasons[identity]==reason and fetch.call_count==1
+with patch.object(c,'fetch_result',side_effect=TimeoutError()) as fetch:
+    hits,reasons,_=resolve()
+    assert not hits[identity] and reasons[identity]=='read-unavailable:TimeoutError' and fetch.call_count==2
+expected['products']='manifest'
+receipt['products']={'bundle':{'type':'url','source':'https://cache.example/bundle.zip','data':{'sha256':'e'*64}}}
+with patch.object(c,'fetch_result',return_value=receipt) as fetch, patch.object(c,'probe_product',side_effect=[TimeoutError(),None]) as probe:
+    hits,reasons,_=resolve()
+    assert hits[identity] and reasons[identity]=='result-hit-after-retry'
+    assert fetch.call_count==1 and probe.call_count==2
+print('bounded retry preserves evidence requirements')
+`;
+    expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript), JSON.stringify(candidate({}).results[0]!.receipt)], { encoding: "utf8" }))
+      .toContain("bounded retry preserves evidence requirements");
+  });
+
   test("reads independent cached results with bounded concurrency and stable ordering", () => {
     const code = `
 import sys, threading
@@ -404,9 +442,11 @@ workflow=SimpleNamespace(name='ci',policy='test-v1')
 expected={'digest':'a'*64,'executionClass':{'runnerClass':'worker','labels':['worker']},'products':'none','reusable':True}
 calculated={f'item{i}':dict(expected) for i in range(16)}
 barrier=threading.Barrier(8,timeout=5)
+attempts={}
 def fetch(url,timeout):
     identity=url.split('/workloads/')[1].split('/')[0]
-    barrier.wait()
+    attempts[identity]=attempts.get(identity,0)+1
+    if attempts[identity]==1: barrier.wait()
     if identity=='item3': raise TimeoutError('isolated unavailable result')
     return {'schemaVersion':1,'protocol':c.PROTOCOL,'repositoryId':42,'workflow':'ci','policy':'test-v1',
       'workload':identity,'digest':expected['digest'],'executionClass':expected['executionClass'],'products':{},
@@ -417,6 +457,7 @@ with patch.object(c,'fetch_result',side_effect=fetch):
 assert list(hits)==list(calculated)
 assert sum(hits.values())==15 and reasons['item3']=='read-unavailable:TimeoutError'
 assert list(results)==[name for name in calculated if name!='item3']
+assert attempts['item3']==2 and sum(attempts.values())==17
 print('bounded parallel reads preserve decisions')
 `;
     expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript)], { encoding: "utf8" }))

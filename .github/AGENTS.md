@@ -105,6 +105,10 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 - Release plan and tool/policy preparation share one runner and checkout.
   Python identity calculation still precedes and exclusively owns cache decisions;
   sharing a job does not move planner state into tools-release.
+- Public plan result reads and product probes retry a transient transport/HTTP
+  failure once, with the existing per-attempt timeout. Missing, invalid or
+  mismatched evidence never becomes a hit; exhausted reads still select execution.
+  Recovered hits report `result-hit-after-retry` without changing identity.
 - `execution.groups` only packs independently identified workloads into jobs.
   Its miss-aware `group_run` projection does not change workload hashes or
   dependency semantics. Electron inputs share the declared electron-build
