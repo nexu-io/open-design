@@ -75,6 +75,20 @@ export function projectDir(projectsRoot, projectId) {
   return path.join(projectsRoot, projectId);
 }
 
+/**
+ * Rejects display names that carry filesystem or path semantics: path
+ * separators, dot-only traversal segments, or control characters. The
+ * project id (slug) is the filesystem-facing name; the display name must
+ * never be able to smuggle path meaning into any current or future consumer
+ * (exports, zip entries, UI path rendering). See #7042.
+ */
+export function isSafeProjectName(name: string): boolean {
+  if (typeof name !== 'string' || name.trim().length === 0) return false;
+  if (name === '.' || name === '..') return false;
+  // eslint-disable-next-line no-control-regex
+  return !/[/\\\u0000-\u001f\u007f]/.test(name);
+}
+
 export class SandboxImportedProjectError extends Error {
   code = 'SANDBOX_IMPORTED_PROJECT_UNAVAILABLE';
 
