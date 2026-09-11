@@ -218,20 +218,27 @@ export function useAnchoredPopover(
    * 原地那份在菜单自己的 `transform` 上。
    */
   readAppliedShift: MutableRefObject<() => number>,
-  options: { estimatedHeight: number; gap?: number; flipEnabled?: boolean } = { estimatedHeight: 0 },
+  options: {
+    estimatedHeight: number;
+    gap?: number;
+    flipEnabled?: boolean;
+    /** Body portals can use viewport height while their anchor remains clipped by ancestors. */
+    blockSizeBoundary?: 'clippingAncestors' | 'viewport';
+  } = { estimatedHeight: 0 },
 ): AnchoredPopover {
-  const { estimatedHeight, gap = 6, flipEnabled = true } = options;
+  const { estimatedHeight, gap = 6, flipEnabled = true, blockSizeBoundary = 'clippingAncestors' } = options;
   const [state, setState] = useState<AnchoredPopover>(INITIAL);
   // 内联箭头每次渲染都是新的;放进 ref 后监听器只在开合时绑一次。
-  const optionsRef = useRef({ estimatedHeight, gap, flipEnabled });
-  optionsRef.current = { estimatedHeight, gap, flipEnabled };
+  const optionsRef = useRef({ estimatedHeight, gap, flipEnabled, blockSizeBoundary });
+  optionsRef.current = { estimatedHeight, gap, flipEnabled, blockSizeBoundary };
 
   const measure = useCallback(() => {
     const anchor = anchorRef.current;
     if (!anchor || typeof anchor.getBoundingClientRect !== 'function') return;
     const rect = anchor.getBoundingClientRect();
-    const { estimatedHeight: estH, gap: g, flipEnabled: canFlip } = optionsRef.current;
+    const { estimatedHeight: estH, gap: g, flipEnabled: canFlip, blockSizeBoundary: blockBoundary } = optionsRef.current;
     const clip = clippingRect(anchor);
+    const blockClip = blockBoundary === 'viewport' ? viewportRect() : clip;
 
     /*
      * 锚点还在不在?两种「不可见」分开判:
@@ -251,8 +258,8 @@ export function useAnchoredPopover(
     // 翻面只看**自然高度** —— 看被限高改小之后的高度就会成环(见 docblock)。
     const height = natural && natural.height > 0 ? natural.height : estH;
 
-    const spaceBelow = clip.bottom - rect.bottom - g;
-    const spaceAbove = rect.top - clip.top - g;
+    const spaceBelow = blockClip.bottom - rect.bottom - g;
+    const spaceAbove = rect.top - blockClip.top - g;
     /*
      * 原地那条路(工具栏)根本不消费 `placement` —— 它的方向由既有 CSS
      * (`top: calc(100% + 6px)`)钉死向下。给它算一个永远不会生效的 `above`,
@@ -308,8 +315,8 @@ export function useAnchoredPopover(
        */
       const availableBlock =
         placement === 'above'
-          ? rect.top - g - clip.top - INLINE_PAD
-          : clip.bottom - (rect.bottom + g) - INLINE_PAD;
+          ? rect.top - g - blockClip.top - INLINE_PAD
+          : blockClip.bottom - (rect.bottom + g) - INLINE_PAD;
       if (availableBlock > 0 && natural.height >= availableBlock) {
         maxBlockSize = availableBlock;
       }

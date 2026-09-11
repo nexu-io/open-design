@@ -29,7 +29,7 @@
  */
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FileOpsSummary } from '../../../src/components/FileOpsSummary';
 import { HtmlProjectCoverFrame } from '../../../src/components/project-cover';
 import {
@@ -184,6 +184,7 @@ afterEach(() => {
 
 async function renderCards(n: number, projectId: string): Promise<void> {
   render(<FileOpsSummary entries={entries(n)} projectId={projectId} />);
+  fireEvent.click(screen.getByRole('button', { name: `View all (${n})` }));
   await waitFor(() => {
     expect(screen.getAllByTestId('artifact-card-deliverable-0.html')).toHaveLength(1);
   });
@@ -341,6 +342,7 @@ describe('反向对照:不许被这次改动弄坏的东西', () => {
         }))}
       />,
     );
+    fireEvent.click(screen.getByRole('button', { name: 'View all (24)' }));
     await waitFor(() => {
       expect(screen.getAllByTestId('artifact-card-deliverable-0.html')).toHaveLength(1);
     });
