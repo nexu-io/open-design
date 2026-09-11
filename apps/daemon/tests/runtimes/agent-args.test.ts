@@ -72,6 +72,35 @@ test('cursor-agent passes --trust once the --help probe detects it', () => {
   }
 });
 
+test('cursor-agent resumes with the captured CLI chat id', () => {
+  agentCapabilities.delete('cursor-agent');
+  const args = cursorAgent.buildArgs(
+    '',
+    [],
+    [],
+    {},
+    {
+      cwd: '/tmp/od-project',
+      resumeSessionId: 'cursor-chat-123',
+      newSessionId: 'daemon-minted-id',
+    },
+  );
+
+  assert.deepEqual(args, [
+    '--print',
+    '--output-format',
+    'stream-json',
+    '--stream-partial-output',
+    '--force',
+    '--workspace',
+    '/tmp/od-project',
+    '--resume',
+    'cursor-chat-123',
+  ]);
+  assert.equal(cursorAgent.resumesSessionViaCli, true);
+  assert.equal(cursorAgent.capturesSessionIdFromStream, true);
+});
+
 test('cursor-agent declares the --trust capability probe (issue #4461 root cause)', () => {
   assert.deepEqual(cursorAgent.helpArgs, ['--help']);
   assert.equal(cursorAgent.capabilityFlags?.['--trust'], 'trust');
