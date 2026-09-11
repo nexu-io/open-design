@@ -29,6 +29,11 @@ interface Props {
   visible?: boolean;
 }
 
+function playSilently(video: HTMLVideoElement): void {
+  const promise = video.play();
+  if (promise && typeof promise.catch === 'function') promise.catch(() => {});
+}
+
 export function MediaSurface({ preview, pluginTitle, inView, visible = inView }: Props) {
   const [hovering, setHovering] = useState(false);
   // Track per-URL poster load failure so a 404 / decode error / dead
@@ -153,10 +158,7 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
       v.pause();
       return;
     }
-    const tryPlay = () => {
-      const p = v.play();
-      if (p && typeof p.catch === 'function') p.catch(() => {});
-    };
+    const tryPlay = () => playSilently(v);
     tryPlay();
     v.addEventListener('canplay', tryPlay);
     return () => v.removeEventListener('canplay', tryPlay);
@@ -169,7 +171,16 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
     <div
       ref={approachRef}
       className="plugins-home__media"
-      onMouseEnter={() => setHovering(true)}
+      onMouseEnter={() => {
+        setHovering(true);
+        // Chromium may pause a video when its workspace/browser tab is
+        // backgrounded while this React tree remains mounted. Baked previews
+        // already have `playing=true` while idle, so hover does not otherwise
+        // change the playback effect's dependencies and the clip stays frozen
+        // until Community remounts. Treat hover as an explicit resume signal;
+        // plain hover-only videos are still started by the effect after mount.
+        if (videoRef.current) playSilently(videoRef.current);
+      }}
       onMouseLeave={() => setHovering(false)}
     >
       {inView && preview.poster && !posterLoadFailed ? (
