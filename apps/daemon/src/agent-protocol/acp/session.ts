@@ -29,6 +29,7 @@ import {
 import { errorMessage, asObject, extractAcpUpdateText, extractAcpStatusDetail } from './json.js';
 import {
   sendRpc,
+  sendRpcNotification,
   sendRpcResult,
   isJsonRpcId,
   rpcErrorMessage,
@@ -1535,8 +1536,7 @@ export function attachAcpSession({
       // is no sessionId to cancel, but we must still close stdin below.
       if (sessionId) {
         try {
-          sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
-          nextId += 1;
+          sendRpcNotification(child.stdin, 'session/cancel', { sessionId });
         } catch {
           // The caller owns process-signal fallback if the ACP transport is gone.
         }
