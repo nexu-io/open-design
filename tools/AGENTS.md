@@ -72,6 +72,11 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   against its bound input and requires both independent execution receipts.
   Workflow adoption requires a namespace-capable compatible baseline and real
   isolation evidence; command-level concurrency tests alone do not establish it.
+- Successful installation collection removes only its exclusively created
+  namespace, after matching the local ownership marker and publication binding,
+  holding both the stopped shared-resource guard and carrier session lease, and
+  retaining runtime logs in the evidence workspace. Missing/mismatched ownership,
+  live consumers, or retention failure preserve state; failed runs retain diagnosis.
 - Experimental `baseline --mode candidate` is restricted to betahyx exact
   releases. It requires installed first-start evidence, marks that evidence as
   candidate-only and defers channel activation while advancing the test baseline

@@ -1,13 +1,14 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { installMacElectronApp, withMacElectronProcess } from "@open-design/shell-electron/lifecycle/installed";
 import { describeElectronRuntimeDiagnostics, inspectElectronBoundCapsule, inspectElectronSelectedCapsule, inspectElectronStartupThroughCdp, waitForElectronStartup } from "@open-design/shell-electron/lifecycle/inspection";
 import { canonicalBytes, checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 import { readPublishedAcceptance } from "./installed-acceptance.ts";
 import { collectReleaseAcceptance, updateAcceptanceSameCarrier } from "./acceptance.ts";
+import { createAcceptanceScope, removeAcceptanceScope } from "./acceptance-scope.ts";
 
 type Input = Readonly<{ publication: string; policy: string; shell: string; target: string; workRoot: string }>;
 const execute = promisify(execFile);
@@ -107,10 +108,7 @@ async function prepareInstallation(input: ExerciseInput) {
   let installedRoot: string;
   if (input.shell === "electron") {
     const scope = { namespace, channel: policy.channel, productName: required.installIdentity.productName, presentation: "headless" as const };
-    const diagnostics = describeElectronRuntimeDiagnostics(scope);
-    await mkdir(dirname(diagnostics.namespaceRoot), { recursive: true });
-    await mkdir(diagnostics.namespaceRoot); // Existing user state is never an acceptance fixture.
-    await writeObject(join(root, "scope.json"), { schemaVersion: 1, operation: "release.acceptance.scope", scope });
+    await createAcceptanceScope(root, input.publication, scope);
     const appPath = join(root, "installed.app");
     installedRoot = (await installMacElectronApp({ artifact: resolve(input.artifact), appPath })).resources;
   } else if (input.shell === "terminal") {
@@ -217,4 +215,11 @@ export async function collectExecutedAcceptance(input: Input & Readonly<{ inspec
     runtimeProofRoot: selected.runtimeProofRoot, namespace: selected.namespace,
     ...(hot ? { hotAcceptanceReceipt: selected.hotAcceptanceReceipt,
       firstInstallRoot: first.installedRoot, firstInstallNamespace: first.namespace } : {}) });
+  if (input.shell === "electron") {
+    const { required, policy } = await readPublishedAcceptance({ publishReceipt: input.publication, policyReceipt: input.policy, shellType: input.shell, target: input.target });
+    for (const execution of hot ? [first, selected] : [first]) {
+      await removeAcceptanceScope(execution.runtimeProofRoot, input.publication, { namespace: execution.namespace,
+        channel: policy.channel, productName: required.installIdentity.productName, presentation: "headless" });
+    }
+  }
 }

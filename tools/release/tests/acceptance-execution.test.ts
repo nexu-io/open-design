@@ -14,7 +14,8 @@ vi.mock("@open-design/shell-electron/lifecycle/inspection", () => ({ inspectElec
   waitForElectronStartup: mocks.ready,
   inspectElectronBoundCapsule: mocks.bound, inspectElectronSelectedCapsule: mocks.selected,
   describeElectronRuntimeDiagnostics: ({ namespace }: { namespace: string }) => ({ namespaceRoot: join(mocks.root, "namespaces", namespace), runtimeLog: join(mocks.root, "namespaces", namespace, "runtime.jsonl") }) }));
-vi.mock("@open-design/shell-electron/lifecycle/installed", () => ({ installMacElectronApp: mocks.install, withMacElectronProcess: mocks.process }));
+vi.mock("@open-design/shell-electron/lifecycle/installed", () => ({ installMacElectronApp: mocks.install, withMacElectronProcess: mocks.process,
+  withStoppedElectronSession: async (session: { namespace: string }, operation: (paths: { namespaceRoot: string }) => Promise<unknown>) => operation({ namespaceRoot: join(mocks.root, "namespaces", session.namespace) }) }));
 vi.mock("@/exact/installed-acceptance.ts", () => ({ readPublishedAcceptance: mocks.published }));
 vi.mock("@/exact/acceptance.ts", () => ({ updateAcceptanceSameCarrier: mocks.update, collectReleaseAcceptance: mocks.collect }));
 const roots: string[] = [];
@@ -30,7 +31,11 @@ async function fixture() {
   const policy = { channel: "betahyx", releaseVersion: "1.0.0-betahyx.2", target: { publicBaseUrl: "https://release.example" } };
   mocks.published.mockResolvedValue({ required, policy, published: { channelHead: { url: "https://release.example/betahyx/1.0.0-betahyx.2/channel-head.json" } } });
   mocks.install.mockImplementation(async ({ appPath }) => ({ resources: join(appPath, "Contents/Resources") }));
-  mocks.process.mockImplementation(async (_input, exercise) => exercise?.());
+  mocks.process.mockImplementation(async (input, exercise) => {
+    const namespace = (input.args as string[]).find(arg => arg.startsWith("--namespace="))!.slice("--namespace=".length);
+    await writeFile(join(root, "namespaces", namespace, "runtime.jsonl"), "runtime evidence");
+    return exercise?.();
+  });
   mocks.startup.mockResolvedValue({ results: [{}] });
   mocks.bound.mockResolvedValue({ envelope: { document: "candidate" } });
   mocks.selected.mockResolvedValue({ envelope: { document: "candidate" } });
