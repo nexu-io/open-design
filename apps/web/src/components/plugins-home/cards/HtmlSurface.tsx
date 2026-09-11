@@ -22,7 +22,7 @@
 // when the URL is unreachable. Results are cached per-URL so
 // scrolling doesn't re-probe the same plugin.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isVisualStabilityMode } from '../../../utils/visualStability';
 import type { HtmlPreviewSpec } from '../preview';
 
@@ -77,10 +77,22 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView, eager = fa
     const cached = probeCache.get(preview.src);
     return cached ?? 'idle';
   });
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const hoveringRef = useRef(false);
+
+  const setHoverMotion = (active: boolean) => {
+    hoveringRef.current = active;
+    if (preview.motion !== 'scroll') return;
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'od:plugin-preview-motion', motion: 'scroll', active },
+      '*',
+    );
+  };
 
   useEffect(() => {
     setArmed(false);
     setShouldProbe(isVisualStabilityMode());
+    hoveringRef.current = false;
     const cached = probeCache.get(preview.src);
     setProbeState(cached ?? 'idle');
   }, [preview.src]);
@@ -154,14 +166,18 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView, eager = fa
     <div
       className="plugins-home__html"
       data-plugin-id={pluginId}
+      data-preview-motion={preview.motion ?? undefined}
       onMouseEnter={() => {
         setShouldProbe(true);
         if (probeState === 'ok') setArmed(true);
+        setHoverMotion(true);
       }}
+      onMouseLeave={() => setHoverMotion(false)}
     >
       <div className="plugins-home__html-frame">
         {armed ? (
           <iframe
+            ref={iframeRef}
             title={`${pluginTitle} preview`}
             src={preview.src}
             sandbox="allow-scripts"
@@ -169,6 +185,7 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView, eager = fa
             tabIndex={-1}
             aria-hidden
             className="plugins-home__html-iframe"
+            onLoad={() => setHoverMotion(hoveringRef.current)}
           />
         ) : (
           <div

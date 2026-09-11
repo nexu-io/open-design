@@ -2438,7 +2438,11 @@ function PluginPromptPresetCard({
   // to fit the preview cell (see useDeckPreviewScale), so a template's first
   // slide previews proportionally instead of overflowing. The baked-clip path
   // (preferBaked) is already proportional; this fixes the live-HTML fallback.
-  const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
+  const odManifest = record.manifest?.od as
+    | { mode?: unknown; scenario?: unknown }
+    | undefined;
+  const odMode = odManifest?.mode;
+  const odScenario = odManifest?.scenario;
   const presetPreviewRef = useRef<HTMLSpanElement>(null);
   useDeckPreviewScale(presetPreviewRef, odMode === 'deck' && preview.kind === 'html');
   const title = localizePluginTitle(locale, record);
@@ -2454,6 +2458,7 @@ function PluginPromptPresetCard({
         data-testid="home-hero-plugin-preset"
         data-plugin-id={record.id}
         {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
+        {...(typeof odScenario === 'string' ? { 'data-od-scenario': odScenario } : {})}
         disabled={disabled}
         onClick={() => onPick(record, chipId, seedPrompt)}
       >
@@ -3958,6 +3963,12 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
       all.some((slug) => slug === value || slug.includes(value) || slug.split('-').includes(value)),
     );
   };
+  const hasToken = (...values: string[]) => {
+    const all = [...slugs];
+    return values.some((value) =>
+      all.some((slug) => slug === value || slug.split('-').includes(value)),
+    );
+  };
   switch (chipId) {
     case 'prototype':
       return has('prototype') || hasPart('web-prototype');
@@ -3992,10 +4003,9 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
             'meeting-notes',
             'runbook',
             'eguide',
-            'letter',
             'dossier',
             'memo',
-          )) &&
+          ) || hasToken('letter')) &&
         !hasPart('video', 'audio', 'hyperframes', 'deck', 'slides')
       );
     case 'deck':

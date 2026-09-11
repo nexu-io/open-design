@@ -201,13 +201,22 @@ export async function buildScreenshotPptx(
 // 960pt = a 16:9 slide of 960x540pt, matching PowerPoint's 16:9 page.
 const PDF_PAGE_LONGEST_PT = 960;
 
-export async function buildScreenshotPdf(images: SlideImage[]): Promise<Buffer> {
+export async function buildScreenshotPdf(
+  images: SlideImage[],
+  documentPageSizes?: Array<{ width: number; height: number }>,
+): Promise<Buffer> {
+  if (documentPageSizes && (documentPageSizes.length !== images.length ||
+    documentPageSizes.some(p => !Number.isFinite(p.width) || !Number.isFinite(p.height) ||
+      p.width <= 0 || p.height <= 0 || p.width > 14400 || p.height > 14400))) {
+    throw new Error('Invalid document page sizes');
+  }
   if (images.length === 0) throw new Error('no slides to export');
   const pdf = await PDFDocument.create();
-  for (const img of images) {
+  for (const [index, img] of images.entries()) {
     const image = img.jpeg ? await pdf.embedJpg(img.buffer) : await pdf.embedPng(img.buffer);
     const aspect = image.height > 0 ? image.width / image.height : 1;
-    const [width, height] =
+    const paper = documentPageSizes?.[index];
+    const [width, height] = paper ? [paper.width, paper.height] :
       aspect >= 1
         ? [PDF_PAGE_LONGEST_PT, PDF_PAGE_LONGEST_PT / aspect]
         : [PDF_PAGE_LONGEST_PT * aspect, PDF_PAGE_LONGEST_PT];

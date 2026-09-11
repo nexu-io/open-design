@@ -14,7 +14,7 @@
 //     skipped) when the probe reports the URL is unreachable.
 
 import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import {
   HtmlSurface,
   __resetHtmlSurfaceProbeCacheForTests,
@@ -26,6 +26,7 @@ const PREVIEW: HtmlPreviewSpec = {
   src: '/api/plugins/example-html-ppt/preview',
   label: 'index.html',
   source: 'preview',
+  motion: 'scroll',
 };
 
 const okResponse = (): Response =>
@@ -63,9 +64,43 @@ describe('HtmlSurface reachability probe', () => {
       },
       { timeout: 2000 },
     );
+    expect(container.querySelector('.plugins-home__html')).toHaveAttribute(
+      'data-preview-motion',
+      'scroll',
+    );
     expect(
       container.querySelector('[data-testid="plugins-home-html-fallback"]'),
     ).toBeNull();
+  });
+
+  it('forwards hover scroll motion to the sandboxed live preview', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse()));
+    const { container } = render(
+      <HtmlSurface
+        preview={PREVIEW}
+        pluginId="example-html-ppt"
+        pluginTitle="Html Ppt"
+        inView
+      />,
+    );
+    const surface = container.querySelector('.plugins-home__html') as HTMLElement;
+    fireEvent.mouseEnter(surface);
+    const iframe = await waitFor(() => {
+      const node = container.querySelector('iframe');
+      expect(node).toBeTruthy();
+      return node as HTMLIFrameElement;
+    });
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    fireEvent.load(iframe);
+    expect(postMessage).toHaveBeenLastCalledWith(
+      { type: 'od:plugin-preview-motion', motion: 'scroll', active: true },
+      '*',
+    );
+    fireEvent.mouseLeave(surface);
+    expect(postMessage).toHaveBeenLastCalledWith(
+      { type: 'od:plugin-preview-motion', motion: 'scroll', active: false },
+      '*',
+    );
   });
 
   it('renders the typographic fallback (no iframe) when the URL 404s', async () => {

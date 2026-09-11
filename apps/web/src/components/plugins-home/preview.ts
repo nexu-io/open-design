@@ -61,6 +61,8 @@ export interface HtmlPreviewSpec {
   source: 'preview' | 'example';
   /** Example stem when `source === 'example'`, otherwise undefined. */
   exampleStem?: string;
+  /** Optional motion contract used while the live iframe is the gallery fallback. */
+  motion?: 'scroll' | 'deck' | 'static' | null;
 }
 
 export interface DesignPreviewSpec {
@@ -89,6 +91,7 @@ interface PreviewBlock {
   entry?: unknown;
   audio?: unknown;
   holdMs?: unknown;
+  motion?: unknown;
 }
 
 interface ExampleOutputEntry {
@@ -254,6 +257,10 @@ export function inferPluginPreview(
       };
     }
     if (t === 'html' && entry) {
+      const motion =
+        preview.motion === 'scroll' || preview.motion === 'deck' || preview.motion === 'static'
+          ? preview.motion
+          : null;
       return {
         kind: 'html',
         src: workspaceResourceUrl(
@@ -262,6 +269,7 @@ export function inferPluginPreview(
         ),
         label: entry.replace(/^\.\//, '').split(/[\\/]/).pop() ?? entry,
         source: 'preview',
+        motion,
       };
     }
   }

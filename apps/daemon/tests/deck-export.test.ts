@@ -221,6 +221,22 @@ describe('buildScreenshotPptx', () => {
 });
 
 describe('buildScreenshotPdf', () => {
+  it('preserves authored A4 sizes independently of capture resolution', async () => {
+    const images = decodeSlideDataUrls([PNG_DATA_URL, PNG_DATA_URL]);
+    const size = { width: 210 * 72 / 25.4, height: 297 * 72 / 25.4 };
+    const doc = await PDFDocument.load(await buildScreenshotPdf(images, [size, size]));
+    expect(doc.getPageCount()).toBe(2);
+    for (const page of doc.getPages()) {
+      expect(page.getWidth()).toBeCloseTo(size.width, 3);
+      expect(page.getHeight()).toBeCloseTo(size.height, 3);
+    }
+  });
+  it('rejects missing or invalid authored paper sizes', async () => {
+    const images = decodeSlideDataUrls([PNG_DATA_URL]);
+    await expect(buildScreenshotPdf(images, [])).rejects.toThrow('Invalid document page sizes');
+    await expect(buildScreenshotPdf(images, [{ width: NaN, height: 842 }])).rejects.toThrow();
+  });
+
   it('produces a %PDF document', async () => {
     const pngs = decodeSlideDataUrls([PNG_DATA_URL]);
     const out = await buildScreenshotPdf(pngs);
