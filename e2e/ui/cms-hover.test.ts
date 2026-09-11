@@ -1,18 +1,17 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
-import { expect, test } from "@/playwright/suite";
+import type { Page, Route } from "@playwright/test";
 import {
 	mockAmrPersonalWorkspace,
 	mockAmrWalletSnapshot,
 } from "@/playwright/amr";
 import { applyStandardMocks } from "@/playwright/mock-factory";
+import { expect, test } from "@/playwright/suite";
 import { T } from "@/timeouts";
-import type { Page, Route } from "@playwright/test";
 
 const { cmsHostReleaseFingerprint } = (await import(
-	`${process.cwd()}/../apps/web/next.config.ts`,
+	`${process.cwd()}/../apps/web/next.config.ts`
 )) as {
 	cmsHostReleaseFingerprint: (
 		readFile: (file: string) => string | Buffer,
@@ -428,4 +427,62 @@ test("[P1] controlled CMS fixture stays within a narrow viewport and restores fo
 			(response) => response.placementKey === ENTRY_PLACEMENT,
 		),
 	).toBe(true);
+});
+
+test("[P1] controlled CMS fixture closes the hover layer after the pointer leaves the entry-layer union", async ({
+	page,
+}) => {
+	await installCmsFixture(page);
+	await gotoCmsHome(page);
+	const hoverRoot = page.getByTestId("cms-hover-overlay-root");
+	const entry = hoverRoot.locator("opend-touchpoint").first();
+	const layer = hoverRoot.locator("opend-touchpoint").nth(1);
+	await expect(entry).toBeVisible({ timeout: T.medium });
+	await entry.hover();
+	await expect(layer).toBeVisible({ timeout: T.medium });
+
+	const entryBox = await entry.boundingBox();
+	const layerBox = await layer.boundingBox();
+	if (!entryBox || !layerBox)
+		throw new Error("hover fixture did not expose measurable rectangles");
+	const outside = { x: 8, y: 8 };
+	const contains = (box: typeof entryBox, point: typeof outside) =>
+		point.x >= box.x &&
+		point.x <= box.x + box.width &&
+		point.y >= box.y &&
+		point.y <= box.y + box.height;
+	expect(contains(entryBox, outside)).toBe(false);
+	expect(contains(layerBox, outside)).toBe(false);
+	await page.mouse.move(outside.x, outside.y);
+	await expect(layer).toBeHidden();
+	await expect(entry).toHaveAttribute("aria-expanded", "false");
+});
+
+test("[P1] controlled CMS fixture flips the hover layer above an anchor near the viewport bottom", async ({
+	page,
+}) => {
+	await installCmsFixture(page);
+	await gotoCmsHome(page);
+	await page.setViewportSize({ width: 640, height: 240 });
+	const hoverRoot = page.getByTestId("cms-hover-overlay-root");
+	const entry = hoverRoot.locator("opend-touchpoint").first();
+	const layer = hoverRoot.locator("opend-touchpoint").nth(1);
+	await expect(entry).toBeVisible({ timeout: T.medium });
+	const initialEntryBox = await entry.boundingBox();
+	if (!initialEntryBox)
+		throw new Error("hover entry did not expose a measurable rectangle");
+	const targetTop = 240 - initialEntryBox.height - 16;
+	await entry.evaluate((element, translateY) => {
+		element.style.transform = `translateY(${translateY}px)`;
+	}, targetTop - initialEntryBox.y);
+
+	await entry.hover();
+	await expect(layer).toBeVisible({ timeout: T.medium });
+	const entryBox = await entry.boundingBox();
+	const layerBox = await layer.boundingBox();
+	if (!entryBox || !layerBox)
+		throw new Error("hover fixture did not expose measurable rectangles");
+	expect(layerBox.y + layerBox.height).toBe(entryBox.y - 8);
+	expect(layerBox.y).toBeGreaterThanOrEqual(8);
+	expect(layerBox.y + layerBox.height).toBeLessThanOrEqual(240 - 8);
 });
