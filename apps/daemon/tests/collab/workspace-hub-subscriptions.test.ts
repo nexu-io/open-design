@@ -61,9 +61,18 @@ describe('WorkspaceHubSubscriptionManager', () => {
 
     expect(stopped.sort()).toEqual(['old-billing', 'old-renderer']);
     expect(manager.activeWorkspaceIds()).toEqual([]);
+    const releaseNewRenderer = manager.retainEventInterest('old-renderer');
     releaseOldRenderer();
+    expect(manager.activeWorkspaceIds()).toEqual(['old-renderer']);
+    releaseNewRenderer();
+    expect(manager.activeWorkspaceIds()).toEqual([]);
     manager.setBillingInterests(['new-billing']);
-    expect(started).toEqual(['old-billing', 'old-renderer', 'new-billing']);
+    expect(started).toEqual([
+      'old-billing',
+      'old-renderer',
+      'old-renderer',
+      'new-billing',
+    ]);
     expect(manager.activeWorkspaceIds()).toEqual(['new-billing']);
   });
 
