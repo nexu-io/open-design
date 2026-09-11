@@ -5,6 +5,7 @@ const entry = vi.hoisted(() => ({
   run: vi.fn(),
   exit: vi.fn(),
   carrier: vi.fn(),
+  namespace: vi.fn(),
 }));
 
 vi.mock("node:fs", async original => ({
@@ -14,6 +15,7 @@ vi.mock("node:fs", async original => ({
 vi.mock("electron", () => ({ app: { exit: entry.exit } }));
 vi.mock("@open-design/electron-kit/runtime", () => ({
   runElectronCarrier: entry.carrier,
+  resolveElectronLaunchNamespace: entry.namespace,
   validateElectronCarrierConfig: (value: unknown) => value,
 }));
 vi.mock("@/adapters/standalone/electron-control.js", async original => ({
@@ -26,7 +28,8 @@ describe("Electron process entry failure boundary", () => {
     vi.resetModules();
     vi.resetAllMocks();
     vi.stubGlobal("__dirname", "/installed");
-    entry.readFileSync.mockReturnValue(JSON.stringify({ preflight: {}, startupTimeoutMs: 1000 }));
+    entry.readFileSync.mockReturnValue(JSON.stringify({ preflight: {}, startupTimeoutMs: 1000, channel: "betahyx", namespace: "installed" }));
+    entry.namespace.mockReturnValue("selected-session");
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -52,7 +55,17 @@ describe("Electron process entry failure boundary", () => {
     entry.run.mockResolvedValue(undefined);
     await import("@/main.js");
     expect(entry.run).toHaveBeenCalledOnce();
+    expect(entry.run).toHaveBeenCalledWith(expect.any(Function), 1000, { channel: "betahyx", namespace: "selected-session" });
     expect(entry.exit).not.toHaveBeenCalled();
     expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid launch scope before registering a controlled generation", async () => {
+    const failure = new Error("forbidden path override");
+    entry.namespace.mockImplementation(() => { throw failure; });
+    await import("@/main.js");
+    expect(entry.run).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith("Electron Shell startup failed", failure);
+    expect(entry.exit).toHaveBeenCalledExactlyOnceWith(1);
   });
 });
