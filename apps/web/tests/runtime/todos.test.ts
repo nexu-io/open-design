@@ -278,6 +278,33 @@ describe('todo event helpers', () => {
     ]);
   });
 
+  it('marks every unfinished todo as stopped when a terminal run ends with stale progress', () => {
+    const input = latestTodoWriteInputForPinnedCard([
+      {
+        runStatus: 'succeeded',
+        endedAt: 3_000,
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-2989',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Build single-file HTML deck', status: 'in_progress' },
+                { content: 'Verify exactly one runnable root-level HTML entry', status: 'pending' },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(parseTodoWriteInput(input)).toEqual([
+      { content: 'Build single-file HTML deck', status: 'stopped', activeForm: undefined },
+      { content: 'Verify exactly one runnable root-level HTML entry', status: 'stopped', activeForm: undefined },
+    ]);
+  });
+
   it('marks update_plan items as stopped when a terminal run ends with stale progress', () => {
     const input = latestTodoWriteInputForPinnedCard([
       {
