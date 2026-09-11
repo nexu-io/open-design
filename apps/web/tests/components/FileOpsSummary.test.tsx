@@ -254,6 +254,20 @@ describe('FileOpsSummary artifact cards', () => {
     expect(screen.getAllByTestId('artifact-card-result.html')).toHaveLength(1);
   });
 
+  it('bounds a large mixed artifact batch instead of mounting every card at once', () => {
+    const entries = [
+      ...Array.from({ length: 16 }, (_, index) => entry({ path: `image-${index + 1}.png` })),
+      entry({ path: 'index.html' }),
+    ];
+
+    const { container } = render(<FileOpsSummary entries={entries} projectId="proj-1" />);
+
+    // A 16-image + HTML run must have a bounded default gallery. Mounting all
+    // 17 cards makes the ChatPanel result occupy the whole conversation and
+    // hides status/summary/next-step content (OPEND-2571).
+    expect(container.querySelectorAll('.artifact-cards > .artifact-card').length).toBeLessThan(entries.length);
+  });
+
   it('gives an HTML artifact both publish and export, in that order', () => {
     const onPublish = vi.fn();
     const onExport = vi.fn();
