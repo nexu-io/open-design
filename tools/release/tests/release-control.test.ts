@@ -105,11 +105,16 @@ describe("exact phased release control", () => {
     const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
       authorizationHeaders.push(request.headers.authorization);
       const path = request.url ?? "/";
-      if (request.method === "GET") {
+      if (request.method === "GET" || request.method === "HEAD") {
         const body = objects.get(path);
         response.statusCode = body == null ? 404 : 200;
-        if (body != null) response.setHeader("ETag", `"${createHash("sha256").update(body).digest("hex")}"`);
-        response.end(body);
+        if (body != null) {
+          const digest = createHash("sha256").update(body).digest("hex");
+          response.setHeader("ETag", `"${digest}"`);
+          response.setHeader("x-amz-meta-sha256", digest);
+          response.setHeader("Content-Length", body.length);
+        }
+        response.end(request.method === "HEAD" ? undefined : body);
         return;
       }
       const chunks: Buffer[] = [];
@@ -203,6 +208,15 @@ describe("exact phased release control", () => {
       const firstPublish = join(root, "publish-first.json");
       const replayPublish = join(root, "publish-replay.json");
       await expect(runRelease(publishArgs, firstPublish)).resolves.toMatchObject({ status: 0, stderr: "" });
+      if (transport === "sigv4") {
+        const value = JSON.parse(await readFile(pack, "utf8"));
+        value.artifacts[0].publication = { schemaVersion: 1, channel: "betahyx", releaseVersion: "0.1.0-betahyx.1",
+          sourceCommit: "a".repeat(40), name: "terminal-darwin-arm64.tar.gz", sha256: artifact.sha256, size: artifact.size };
+        await writeFile(pack, JSON.stringify(value));
+        // Downstream has no installer bytes: successful publication must consume
+        // authenticated final-object proof rather than silently redownload it.
+        await rm(archive);
+      }
       await expect(runRelease(publishArgs, replayPublish)).resolves.toMatchObject({ status: 0, stderr: "" });
       expect(JSON.parse(await readFile(replayPublish, "utf8"))).toMatchObject({ operation: "exact.publish", replayed: true });
 

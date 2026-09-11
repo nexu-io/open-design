@@ -14,6 +14,7 @@ import { bindReleaseValidation } from "./validation.ts";
 import { collectInstalledAcceptance, readPublishedAcceptance } from "./installed-acceptance.ts";
 import { authorizeReleaseCapability, readReleasePolicyReceipt, releaseTargetsEqual, type ReleasePolicyReceipt, type ReleaseTarget } from "../policy/release-profile.ts";
 import { requiresFormalMacTrust } from "../policy/native-trust.ts";
+import { verifyPublishedArtifact } from "./publication-artifact.ts";
 
 function releaseComponent(value: string): number {
   const parsed = Number(value);
@@ -143,6 +144,11 @@ export async function publishExactRelease(input: JsonObject, receiptPath: string
   }
   let allReplayed = true;
   const objects = await mapWithConcurrency(entries, 4, async ({ kind, value }) => {
+    if (kind === "artifacts" && value.publication != null) {
+      const verified = await verifyPublishedArtifact(policy, value), name = basename(value.file);
+      return { kind: "artifact", name, url: `${publicPrefix}/${encodeURIComponent(name)}`,
+        etag: verified.etag, sha256: value.sha256, size: value.size };
+    }
     const path = await checkedFile(value, kind.slice(0, -1));
     const name = basename(path);
     const encodedName = encodeURIComponent(name);

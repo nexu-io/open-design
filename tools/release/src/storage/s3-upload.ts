@@ -74,7 +74,7 @@ function objectUrl(config: StorageConfig, objectKey: string): { canonicalUri: st
   return { canonicalUri, url };
 }
 
-function authorizationHeader(config: StorageConfig, method: "GET" | "PUT", canonicalUri: string, headers: Record<string, string>, payloadHash: string, dateStamp: string): string {
+function authorizationHeader(config: StorageConfig, method: "GET" | "PUT" | "HEAD", canonicalUri: string, headers: Record<string, string>, payloadHash: string, dateStamp: string): string {
   const signedHeaders = Object.keys(headers).sort().join(";");
   const canonicalHeaders = Object.keys(headers)
     .sort()
@@ -92,7 +92,7 @@ const MAX_ATTEMPTS = 5;
 
 /** Raw status and ETag are retained for immutable writes and channel-head CAS. */
 export async function requestStorageObject(config: StorageConfig, objectKey: string, init: {
-  method: "GET" | "PUT"; body?: Uint8Array; headers?: RequestInit["headers"];
+  method: "GET" | "PUT" | "HEAD"; body?: Uint8Array; headers?: RequestInit["headers"];
 }): Promise<Response> {
   const { canonicalUri, url } = objectUrl(config, objectKey);
   const body = init.body == null ? undefined : Buffer.from(init.body);
@@ -100,7 +100,7 @@ export async function requestStorageObject(config: StorageConfig, objectKey: str
   const headers = Object.fromEntries(new Headers(init.headers).entries());
   delete headers.authorization;
   // CAS must use the stored representation's validator, not a compressed variant.
-  if (init.method === "GET") headers["accept-encoding"] = "identity";
+  if (init.method === "GET" || init.method === "HEAD") headers["accept-encoding"] = "identity";
   if (headers["if-match"]) headers["if-match"] = strongQuotedEtag(headers["if-match"]);
   headers.host = url.host;
   headers["x-amz-content-sha256"] = payloadHash;

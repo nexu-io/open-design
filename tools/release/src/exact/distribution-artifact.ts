@@ -3,8 +3,8 @@ import { basename, join, resolve } from "node:path";
 import { checkedFile, readObject, writeObject } from "./control-common.ts";
 import { stageArtifactProduct } from "./artifact-product.ts";
 
-/** Publication consumes the signed contribution and its installer, not native
- * assembly intermediates. Keep the complete build output with its producer. */
+/** Published installers travel as references to final version objects. Local
+ * distribution without retention keeps the file-backed contribution contract. */
 export async function exportReleaseDistribution(input: Readonly<{ source: string; output: string }>) {
   const source = resolve(input.source), receiptName = "shell-contribution.json";
   const contribution = await readObject(join(source, receiptName));
@@ -15,8 +15,10 @@ export async function exportReleaseDistribution(input: Readonly<{ source: string
   if (!(await lstat(file)).isFile()) throw new Error("Distribution installer must be a regular file");
   await checkedFile(contribution.artifact, "Distribution installer", file);
   await stageArtifactProduct(input.output, async stage => {
-    await copyFile(file, join(stage, name));
-    await checkedFile(contribution.artifact, "Transport installer", join(stage, name));
+    if (contribution.artifact.publication == null) {
+      await copyFile(file, join(stage, name));
+      await checkedFile(contribution.artifact, "Transport installer", join(stage, name));
+    }
     await writeObject(join(stage, receiptName), contribution);
   });
 }

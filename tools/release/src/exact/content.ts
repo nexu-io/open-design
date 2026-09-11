@@ -16,6 +16,7 @@ import {
 import { composeReleaseDataResources } from "./resource-composition.ts";
 import { verifyCapsuleReleaseBudget } from "./capsule-budget.ts";
 import { preparePlatformProduct } from "./platform-product.ts";
+import { mapWithConcurrency } from "../storage/concurrency.ts";
 
 export type PrepareExactContentInput = Readonly<{
   channel: string;
@@ -44,6 +45,7 @@ export type FinalizeExactContentInput = Readonly<{
   standaloneArtifactFile: string;
   contributions: readonly Readonly<{ receipt: string; archiveFile: string }>[];
   outputDirectory: string;
+  verifyPublishedArtifact?: (descriptor: JsonObject) => Promise<unknown>;
 }>;
 
 const DIGEST = /^[a-f0-9]{64}$/u;
@@ -275,13 +277,20 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
   const expected = new Set<string>((prepared.shells as JsonObject[]).flatMap((shell) => (shell.scenes as JsonObject[]).map((scene) => `${shell.type}/${scene.target}`)));
   const seen = new Set<string>(), distributions = new Map<string, JsonObject[]>();
   for (const key of preparedShells.keys()) distributions.set(key, []);
-  const closurePath = await checkedFile(prepared.closureArtifact, "Closure artifact", request.closureArtifactFile);
-  const standalonePath = await checkedFile(prepared.standaloneArtifact, "Standalone launcher artifact", request.standaloneArtifactFile);
-  const artifacts = [await describeFile(closurePath, prepared.closureArtifact.mediaType ?? "application/octet-stream"), await describeFile(standalonePath, prepared.standaloneArtifact.mediaType ?? "application/octet-stream")];
-  for (const resource of (prepared.resourceArtifacts ?? []) as JsonObject[]) {
-    const path = await checkedFile(resource, "Closure resource artifact", join(resolve(String(request.prepareReceipt), ".."), "artifacts", basename(String(resource.file))));
-    artifacts.push(await describeFile(path, resource.mediaType ?? "application/zip"));
-  }
+  const artifactDescription = async (descriptor: JsonObject, label: string, path?: string) => {
+    if (descriptor.publication != null) {
+      if (request.verifyPublishedArtifact == null) throw new Error("Published artifact requires origin verification");
+      await request.verifyPublishedArtifact(descriptor);
+      return { ...descriptor, file: basename(descriptor.file) };
+    }
+    return describeFile(await checkedFile(descriptor, label, path), descriptor.mediaType ?? "application/octet-stream");
+  };
+  const artifacts: JsonObject[] = await Promise.all([
+    artifactDescription(prepared.closureArtifact, "Closure artifact", request.closureArtifactFile),
+    artifactDescription(prepared.standaloneArtifact, "Standalone launcher artifact", request.standaloneArtifactFile),
+  ]);
+  artifacts.push(...await mapWithConcurrency((prepared.resourceArtifacts ?? []) as JsonObject[], 4, resource =>
+    artifactDescription(resource, "Closure resource artifact", join(resolve(String(request.prepareReceipt), ".."), "artifacts", basename(String(resource.file))))));
   for (const raw of contributions) {
     if (raw == null || typeof raw !== "object" || Array.isArray(raw)) throw new Error("invalid Shell contribution descriptor");
     const descriptor = raw as JsonObject, contribution = await readObject(String(descriptor.receipt ?? ""));
@@ -290,8 +299,8 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
     if (contribution.schemaVersion !== 1 || contribution.operation !== "shell.distribution.contribute" || !expected.has(key) || seen.has(key)) throw new Error(`invalid or duplicate Shell contribution: ${key}`);
     if (contribution.shell?.version !== shell?.version || contribution.shell?.buildHash !== scene?.shellBuildHash) throw new Error(`Shell contribution identity mismatch: ${key}`);
     seen.add(key);
-    const path = await checkedFile(contribution.artifact, `${key} distribution`, descriptor.archiveFile);
-    const mediaType = String(contribution.artifact.mediaType ?? "application/octet-stream"), artifact = await describeFile(path, mediaType);
+    const artifact = await artifactDescription(contribution.artifact, `${key} distribution`, descriptor.archiveFile);
+    const path = artifact.file, mediaType = String(contribution.artifact.mediaType ?? "application/octet-stream");
     artifacts.push(artifact);
     if (contribution.updater != null && (contribution.updater.protocol !== "standalone-shell-updater-v4"
       || contribution.updater.interaction !== "restart-and-install" || typeof contribution.updater.handler !== "string" || !IDENTIFIER.test(contribution.updater.handler))) {
@@ -341,8 +350,8 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
         archive: { url: publicObjectUrl(String(prepared.artifactBaseUrl), archive), sha256: archiveDescription.sha256, size: archiveDescription.size },
       });
       const capsuleManifest = assertElectronCapsuleReleaseManifest(distribution.capsule, (await readObject(destination)).document, scene.target);
-      const platform = await checkedFile(scene.platform, "platform archive", join(preparedRoot, "artifacts", basename(scene.platform.file)));
-      const platformDescription = await describeFile(platform, "application/zip");
+      const platformDescription = await artifactDescription(scene.platform, "platform archive", join(preparedRoot, "artifacts", basename(scene.platform.file)));
+      const platform = platformDescription.file;
       if (platformDescription.sha256 !== capsuleManifest.platform.blob.sha256 || platformDescription.size !== capsuleManifest.platform.blob.size
         || capsuleManifest.platform.blob.sources.length !== 1 || capsuleManifest.platform.blob.sources[0]!.url !== publicObjectUrl(String(prepared.artifactBaseUrl), platform)) {
         throw new Error("Capsule platform publication binding mismatch");

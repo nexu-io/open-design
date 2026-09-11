@@ -1,10 +1,11 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { withDistributionResult } from "@/exact/distribution-result.ts";
 import { describeFile, writeObject } from "@/exact/control-common.ts";
 import { resolveReleasePolicy } from "@/policy/release-profile.ts";
+import { exportReleaseDistribution } from "@/exact/distribution-artifact.ts";
 
 const { objects } = vi.hoisted(() => ({ objects: new Map<string, Buffer>() }));
 vi.mock("@/exact/release-object.ts", () => ({ releaseObjects: () => ({
@@ -37,6 +38,10 @@ it.each(["electron", "terminal"])("restores exact completed %s bytes from the co
   expect(await withDistributionResult({ ...f, output, receipt })).toEqual(original);
   expect(f.build).toHaveBeenCalledTimes(1);
   expect(await readFile(join(output, "installer.dmg"), "utf8")).toBe("original signed bytes");
+  expect([...objects.keys()].sort()).toEqual(["installer.dmg", `native/${shell}/darwin-arm64/result.json`].sort());
+  const transport = join(f.root, "transport");
+  await exportReleaseDistribution({ source: output, output: transport });
+  expect(await readdir(transport)).toEqual(["shell-contribution.json"]);
 });
 it("refuses a builder return value without its completed contribution file", async () => {
   const f = await fixture();
@@ -48,7 +53,7 @@ it("rejects changed signing inputs and corrupted completed bytes", async () => {
   const f = await fixture(); await withDistributionResult(f);
   const output = join(f.root, "retry");
   await expect(withDistributionResult({ ...f, output, binding: { ...f.binding, content: "different" } })).rejects.toThrow("binding mismatch");
-  objects.set("native/electron/darwin-arm64/installer.dmg", Buffer.from("corrupt"));
+  objects.set("installer.dmg", Buffer.from("corrupt"));
   await expect(withDistributionResult({ ...f, output })).rejects.toThrow("binding verification failed");
   expect(f.build).toHaveBeenCalledTimes(1);
 });

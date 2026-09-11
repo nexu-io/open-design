@@ -1153,15 +1153,7 @@ jobs:
             --shells "$RUNNER_TEMP/exact-plan/inputs/shells.json" --scenes "$RUNNER_TEMP/scenes" \
             --capsules "$RUNNER_TEMP/capsules" --platforms "$RUNNER_TEMP/platforms" --data-resources "$RUNNER_TEMP/data-products" \
             --output "$RUNNER_TEMP/exact-prepare" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json" \
-            --native-output "$RUNNER_TEMP/exact-installation-input" --freeze-storage true
-
-      - name: "[store] exact-prepared-stable · workflow artifact"
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: exact-prepared-stable-${{ inputs.release_version }}
-          path: ${{ runner.temp }}/exact-prepare
-          if-no-files-found: error
-          retention-days: 1
+            --native-output "$RUNNER_TEMP/exact-installation-input" --freeze-storage true --publish-artifacts true
 
       - name: "[store] exact-installation-input-stable · workflow artifact"
         uses: actions/upload-artifact@v7.0.1
@@ -1382,10 +1374,10 @@ jobs:
         with:
           node-version-file: .node-version
 
-      - name: "[fetch] exact-prepared-stable · workflow artifact"
+      - name: "[fetch] Release metadata and bound Capsule · workflow artifact"
         uses: actions/download-artifact@v8
         with:
-          name: exact-prepared-stable-${{ inputs.release_version }}
+          name: exact-installation-input-stable-${{ inputs.release_version }}
           path: ${{ runner.temp }}/prepared
 
       - name: "[fetch] exact-distribution-set · workflow artifact"
@@ -1431,6 +1423,11 @@ jobs:
 
       - name: "[sign] Finalize signed Shell sidecar and channel head"
         env:
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
           RELEASE_VERSION: ${{ inputs.release_version }}
           SHELL_MATRIX: ${{ needs.plan.outputs.shell_matrix }}
           OD_EXACT_SIGNING_KEY_ID: ${{ secrets.EXACT_SIGNING_KEY_ID }}

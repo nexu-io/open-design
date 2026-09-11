@@ -25,7 +25,13 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   tools-release behind its policy-bound commands. Do not restore tools-pack
   exact-control or a separate pack signing API/binary.
 - `prepare --native-output` projects only bound metadata, trust and Capsule
-  payloads for native assembly; the publisher retains the full resource set.
+  payloads for native assembly and final metadata composition.
+  `prepare --publish-artifacts true` writes Closure, launcher, resource and platform
+  payloads directly to immutable final version objects, with producer-computed
+  digest metadata and byte readback. The thin installation input carries their
+  channel/version/source-bound references. Finalize and publish authenticate those
+  references at the policy-bound origin with HEAD; they do not download the payloads
+  or accept arbitrary URLs. Capsule remains local for current budget verification.
   `prepare --freeze-storage true` freezes the exact selection, public signing
   keys and compatibility baseline at `<channel>/<version>/version-input.json`
   in policy-bound release storage. This is an immutable release input, not a
@@ -34,8 +40,10 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   Never persist private keys. A frozen version cannot be reassigned to another
   source commit after a failed attempt.
 - `distribution build --retain-result true` retains completed installers and
-  their binding receipt at `<channel>/<version>/native/<shell>/<target>/` in
-  release storage. Restore only matching frozen inputs and verified original
+  their binding receipt at `<channel>/<version>/native/<shell>/<target>/result.json`
+  in release storage; installer bytes live once at their final version object name.
+  Internal distribution transport carries only the contribution for retained results.
+  Restore only matching frozen inputs and verified original
   bytes; never treat an interrupted native workspace as a completed result or
   assume that signing the same inputs again produces identical bytes. The
   completed result does not replace installed acceptance or channel activation.

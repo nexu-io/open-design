@@ -1,10 +1,11 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { ReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { requiresFormalMacTrust } from "../policy/native-trust.ts";
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-product.ts";
 import { releaseObjects } from "./release-object.ts";
+import { publishArtifact } from "./publication-artifact.ts";
 
 /** Reuse completed version-bound installer bytes, never an interrupted signing
  * workspace and never an installer from another release. */
@@ -32,9 +33,9 @@ export async function withDistributionResult(input: Readonly<{
   const existing = await objects.read(manifestName);
   if (existing != null) {
     const saved = JSON.parse(existing.toString("utf8")) as JsonObject;
-    if (saved.schemaVersion !== 1 || saved.operation !== "exact.distribution.result"
+    if (saved.schemaVersion !== 2 || saved.operation !== "exact.distribution.result"
       || !canonicalBytes(saved.binding).equals(canonicalBytes(input.binding))) throw new Error("Completed distribution input binding mismatch");
-    const file = validate(saved.contribution), bytes = await objects.read(`${prefix}/${file}`);
+    const file = validate(saved.contribution), bytes = await objects.read(file);
     if (bytes == null) throw new Error("Completed distribution installer is missing");
     await stageArtifactProduct(input.output, async stage => {
       const path = join(stage, file); await writeFile(path, bytes, { flag: "wx" });
@@ -52,7 +53,9 @@ export async function withDistributionResult(input: Readonly<{
   // publication-facing contribution is the shared file-backed contract.
   const result = await readObject(join(input.output, "shell-contribution.json")), file = validate(result);
   const path = await checkedFile(result.artifact, "Completed installer", join(input.output, file));
-  await objects.create(`${prefix}/${file}`, await readFile(path), result.artifact.mediaType ?? "application/octet-stream");
-  await objects.create(manifestName, canonicalBytes({ schemaVersion: 1, operation: "exact.distribution.result", binding: input.binding, contribution: result }), "application/json");
+  result.artifact.publication = await publishArtifact(input.policy, result.artifact, path);
+  await objects.create(manifestName, canonicalBytes({ schemaVersion: 2, operation: "exact.distribution.result", binding: input.binding, contribution: result }), "application/json");
+  await writeObject(join(input.output, "shell-contribution.json"), result);
+  await writeObject(input.receipt, result);
   return result;
 }

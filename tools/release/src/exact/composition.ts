@@ -5,7 +5,9 @@ import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { finalizeContent, prepareContent, preparationTrust, type PrepareExactContentInput } from "./content.ts";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
-import { describeFile, readObject, type JsonObject } from "./control-common.ts";
+import { describeFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
+import { publishArtifact, verifyPublishedArtifact } from "./publication-artifact.ts";
+import { mapWithConcurrency } from "../storage/concurrency.ts";
 import { unpackSceneArtifact } from "./scene-artifact.ts";
 import { resolveDataResourceReceipts } from "./resource-composition.ts";
 import { freezeVersionInput } from "./version-input.ts";
@@ -28,6 +30,7 @@ export async function prepareReleaseContent(input: Readonly<{
   dataResourcesRoot?: string;
   versionInputDirectory?: string;
   freezeStorage?: boolean;
+  publishArtifacts?: boolean;
   previousContentMetadataFile?: string; output: string; receipt: string;
 }>): Promise<void> {
   const policy = await readReleasePolicyReceipt(input.policy, { capability: "prepare", ...input });
@@ -128,23 +131,40 @@ export async function prepareReleaseContent(input: Readonly<{
     shells: [...shells.values()].sort((a, b) => a.type.localeCompare(b.type)), outputDirectory: input.output,
   };
   await prepareContent(request, input.receipt);
+  if (input.publishArtifacts) {
+    const prepared = await readObject(input.receipt);
+    const artifacts: JsonObject[] = [prepared.closureArtifact, prepared.standaloneArtifact, ...prepared.resourceArtifacts,
+      ...prepared.shells.flatMap((shell: JsonObject) => shell.type === "electron"
+        ? shell.scenes.flatMap((scene: JsonObject) => [scene.platform]) : [])];
+    const names = artifacts.map(value => basename(String(value.file)));
+    if (new Set(names).size !== names.length) throw new Error("Duplicate prepared publication object name");
+    await mapWithConcurrency(artifacts, 4, async descriptor => {
+      descriptor.publication = await publishArtifact(policy, descriptor);
+    });
+    await writeObject(input.receipt, prepared);
+  }
 }
 
 export async function finalizeReleaseContent(input: Readonly<{
   policy: string; prepared: string; distributions: string; output: string; receipt: string;
 }>): Promise<void> {
   const prepareReceipt = join(input.prepared, "prepare-receipt.json"), prepared = await readObject(prepareReceipt);
-  await readReleasePolicyReceipt(input.policy, { capability: "finalize", channel: String(prepared.channel), releaseVersion: String(prepared.releaseVersion), sourceCommit: String(prepared.sourceCommit) });
+  const policy = await readReleasePolicyReceipt(input.policy, { capability: "finalize", channel: String(prepared.channel), releaseVersion: String(prepared.releaseVersion), sourceCommit: String(prepared.sourceCommit) });
+  if (prepared.artifactBaseUrl !== `${policy.target.publicBaseUrl.replace(/\/$/u, "")}/${policy.channel}/${policy.releaseVersion}`) {
+    throw new Error("Prepared publication origin differs from release policy");
+  }
   const contributions = [];
   for (const entry of (await readdir(input.distributions, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory()) throw new Error("distribution collection must contain contribution directories");
     const directory = join(input.distributions, entry.name), receipt = join(directory, "shell-contribution.json");
     const contribution: JsonObject = await readObject(receipt);
     if (typeof contribution.artifact?.file !== "string") throw new Error("distribution contribution lacks artifact");
-    contributions.push({ receipt, archiveFile: await localFile(directory, basename(contribution.artifact.file)) });
+    contributions.push({ receipt, archiveFile: contribution.artifact.publication == null
+      ? await localFile(directory, basename(contribution.artifact.file)) : basename(contribution.artifact.file) });
   }
   const relocated = async (descriptor: JsonObject, directory: string) => {
     if (typeof descriptor?.file !== "string") throw new Error("prepared artifact descriptor is incomplete");
+    if (descriptor.publication != null) return join(directory, basename(descriptor.file));
     return localFile(directory, basename(descriptor.file));
   };
   await finalizeContent({ prepareReceipt,
@@ -152,5 +172,6 @@ export async function finalizeReleaseContent(input: Readonly<{
     closureArtifactFile: await relocated(prepared.closureArtifact, join(input.prepared, "artifacts")),
     standaloneArtifactFile: await relocated(prepared.standaloneArtifact, join(input.prepared, "artifacts")),
     contributions, outputDirectory: input.output,
+    verifyPublishedArtifact: descriptor => verifyPublishedArtifact(policy, descriptor),
   }, input.receipt);
 }

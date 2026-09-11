@@ -76,7 +76,9 @@ describe("exact Electron release topology", () => {
     expect(distribution).toContain('--retain-result true');
     expect(distribution).toContain("name: exact-installation-input-");
     expect(distribution).not.toContain("name: exact-prepared-");
-    expect(publish).toContain("name: exact-prepared-");
+    expect(publish).toContain("name: exact-installation-input-");
+    expect(workflow).not.toContain("name: exact-prepared-");
+    expect(workflow).toContain("--publish-artifacts true");
   });
   it.each(["exact", "stable", "prerelease"])("continues mandatory delivery past intentionally skipped producers in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");

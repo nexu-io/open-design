@@ -25,7 +25,7 @@ it("prepares and finalizes signed content within release ownership, with no requ
   const sourceRoot = resolve("../.."), sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: sourceRoot, encoding: "utf8" }).trim();
   const channel = "betahyx", releaseVersion = "0.1.0-betahyx.1";
   const policy = join(root, "policy.json");
-  const fetch = vi.fn(async () => new Response(null, { status: 404 })); vi.stubGlobal("fetch", fetch);
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 404 })); vi.stubGlobal("fetch", fetch);
   await json(policy, resolveReleasePolicy({ schemaVersion: 1, operation: "release.policy.resolve", profile: "exact-validation",
     channel, releaseVersion, sourceCommit, sourceRef: "refs/heads/test", switches: { endUserDistribution: false, stableAuthorized: false },
     target: { endpointUrl: "https://storage.example", bucket: "release", publicBaseUrl: "https://public.example", latestChannelHeadUrl: "https://storage.example/release/betahyx/latest/channel-head.json" } }));
@@ -129,7 +129,26 @@ it("prepares and finalizes signed content within release ownership, with no requ
     "--closure-artifact", currentClosure, "--standalone-artifact", currentLauncher, "--resource-receipt", currentResources, "--capsules", capsules,
     "--data-resources", dataRoot];
   await expect(command([...independentArgs, "--data-resource", "ambiguous.json"])).rejects.toThrow("not both");
-  await command(independentArgs);
+  const objects = new Map<string, { bytes: Buffer; headers: Headers }>();
+  for (const [name, value] of Object.entries({ RELEASE_STORAGE_ACCESS_KEY_ID: "test", RELEASE_STORAGE_SECRET_ACCESS_KEY: "test",
+    RELEASE_STORAGE_BUCKET: "release", RELEASE_STORAGE_ENDPOINT: "https://storage.example", RELEASE_STORAGE_REGION: "auto" })) vi.stubEnv(name, value);
+  fetch.mockImplementation(async (...args: unknown[]) => {
+    const url = String(args[0]), init = args[1] as RequestInit;
+    if (!url.startsWith(`https://storage.example/release/${channel}/${releaseVersion}/`)) return new Response(null, { status: 404 });
+    if (init.method === "PUT") {
+      expect(new Headers(init.headers).get("if-none-match")).toBe("*");
+      if (objects.has(url)) return new Response(null, { status: 412 });
+      const bytes = Buffer.from(init.body as Uint8Array), headers = new Headers(init.headers);
+      headers.set("content-length", String(bytes.length)); headers.set("etag", '"stored"');
+      objects.set(url, { bytes, headers }); return new Response(null, { status: 201 });
+    }
+    const object = objects.get(url);
+    return object == null ? new Response(null, { status: 404 })
+      : new Response(init.method === "HEAD" ? null : new Uint8Array(object.bytes), { headers: object.headers });
+  });
+  const thin = join(root, "thin-prepared");
+  await command([...independentArgs, "--publish-artifacts", "true", "--native-output", thin]);
+  expect(objects.size).toBe(14); // Closure + launcher + 11 resources + platform, never Capsule or a transport bundle.
   const selected = JSON.parse(await readFile(independentReceipt, "utf8"));
   expect(selected.closureArtifact.sha256).toBe(sha("current closure"));
   expect(selected.standaloneArtifact.sha256).toBe(sha("current launcher"));
@@ -149,8 +168,16 @@ it("prepares and finalizes signed content within release ownership, with no requ
     }
   }
   const independentFinal = join(root, "independent-final");
-  await command(finalize.map(value => value === prepared ? independent : value === final ? independentFinal
-    : value === join(final, "pack-receipt.json") ? join(independentFinal, "pack-receipt.json") : value));
+  fetch.mockClear();
+  const thinFinalize = finalize.map(value => value === prepared ? thin : value === final ? independentFinal
+    : value === join(final, "pack-receipt.json") ? join(independentFinal, "pack-receipt.json") : value);
+  await command(thinFinalize);
+  expect(fetch.mock.calls.every(call => (call[1] as RequestInit).method === "HEAD")).toBe(true);
+  expect(fetch).toHaveBeenCalledTimes(14);
+  const saved = objects.entries().next().value!;
+  objects.delete(saved[0]);
+  await expect(command(thinFinalize)).rejects.toThrow("binding mismatch");
+  objects.set(...saved);
   const composed = JSON.parse(await readFile(join(independentFinal, "documents/electron-metadata.json"), "utf8"));
   expect(composed.document.distributions[0].artifact.sha256).toBe(sha("installer"));
   expect(composed.document.distributions[0].capsule.archive.sha256).toBe(currentCapsule.archive.sha256);
