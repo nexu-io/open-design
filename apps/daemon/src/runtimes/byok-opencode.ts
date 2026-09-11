@@ -1,4 +1,5 @@
 import type { ByokChatProviderConfig } from '@open-design/contracts';
+import { aimlapiAttributionHeaders, isAimlapiApiHost } from '../integrations/aimlapi.js';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
@@ -16,6 +17,7 @@ const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], s
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
+  aimlapi: 'https://api.aimlapi.com/v1',
 };
 
 type ProviderPackage =
@@ -169,6 +171,20 @@ function isRealOpenAIHost(baseUrl: string): boolean {
   }
 }
 
+function aimlapiProviderEntry(
+  baseUrl: string,
+  apiKeyOption: Record<string, unknown>,
+): { npm: ProviderPackage; options: Record<string, unknown> } {
+  return {
+    npm: '@ai-sdk/openai-compatible',
+    options: {
+      baseURL: baseUrl,
+      ...apiKeyOption,
+      headers: aimlapiAttributionHeaders(),
+    },
+  };
+}
+
 function buildProviderEntry(
   protocol: ByokChatProviderConfig['protocol'],
   baseUrl: string,
@@ -218,6 +234,12 @@ function buildProviderEntry(
         },
       };
     case 'openai':
+      // Legacy configs saved under the generic "OpenAI" tab but pointed at
+      // aimlapi.com's real host still need the attribution pair — see
+      // isAimlapiApiHost() for why this can't be keyed on protocol alone.
+      if (isAimlapiApiHost(baseUrl)) {
+        return aimlapiProviderEntry(baseUrl, apiKeyOption);
+      }
       // Real OpenAI speaks the Responses API via @ai-sdk/openai. Every other
       // host under the "openai" protocol (DeepSeek, vLLM, etc.) only serves
       // /chat/completions, so route it through @ai-sdk/openai-compatible.
@@ -237,6 +259,13 @@ function buildProviderEntry(
           ...apiKeyOption,
         },
       };
+    case 'aimlapi':
+      // This runtime — not the /api/proxy/* routes — is what serves real BYOK
+      // chat, so the aimlapi.com attribution pair has to ride here or it only
+      // ever covers Test connection and model discovery. The options object is
+      // handed to the provider factory, which forwards `headers` on every
+      // upstream request.
+      return aimlapiProviderEntry(baseUrl, apiKeyOption);
     case 'senseaudio':
     case 'aihubmix':
       return {
