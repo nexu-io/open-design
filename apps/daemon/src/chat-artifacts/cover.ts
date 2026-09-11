@@ -399,7 +399,11 @@ async function renderOneCover(
 ): Promise<void> {
   let result: DesktopExportArtifactResult;
   try {
-    result = await withBudget(renderer(render), CHAT_ARTIFACT_COVER_BUDGET_MS);
+    result = await withBudget(
+      renderer(render),
+      CHAT_ARTIFACT_COVER_BUDGET_MS,
+      (err) => logCoverFailure(row.labelAtCapture, err),
+    );
   } catch (err) {
     logCoverFailure(row.labelAtCapture, err);
     recordCoverFailure(deps, row, err instanceof CoverBudgetExceededError ? 'timeout' : 'renderer_unavailable');
@@ -499,6 +503,7 @@ class CoverBudgetExceededError extends Error {
 async function withBudget(
   work: Promise<DesktopExportArtifactResult>,
   budgetMs: number,
+  onLateCleanupFailure: (err: unknown) => void,
 ): Promise<DesktopExportArtifactResult> {
   let timer: NodeJS.Timeout | undefined;
   let timedOut = false;
@@ -507,7 +512,7 @@ async function withBudget(
     // already owns a failed snapshot; only release the renderer's late temp
     // output, never attach it or announce a ready cover.
     if (timedOut && result?.ok && typeof result.path === 'string' && result.path.length > 0) {
-      await fs.promises.rm(result.path, { force: true }).catch(() => {});
+      await fs.promises.rm(result.path, { force: true }).catch(onLateCleanupFailure);
     }
     return result;
   });

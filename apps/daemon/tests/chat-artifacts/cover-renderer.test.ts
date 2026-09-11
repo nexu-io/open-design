@@ -86,6 +86,39 @@ describe('actual cover renderer failure persistence', () => {
     expect(onRefsChanged).not.toHaveBeenCalled();
     expect(await deps.blobs.listObjectKeys()).toEqual([]);
   });
+  it('reports failed late-output cleanup without replacing the timeout snapshot or announcing ready', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let finish!: (result: Awaited<ReturnType<ChatArtifactCoverRenderer>>) => void;
+    await capture(() => new Promise((resolve) => { finish = resolve; }));
+    await vi.advanceTimersByTimeAsync(CHAT_ARTIFACT_COVER_BUDGET_MS);
+    const failedSnapshot = snapshot();
+    expect(failedSnapshot?.captureState).toBe('failed');
+    expect(failedSnapshot?.failureCode).toBe('timeout');
+    warn.mockClear();
+
+    const output = path.join(root, 'locked-late-output.png');
+    fs.writeFileSync(output, PNG);
+    const cleanupError = new Error('EACCES: late PNG is locked');
+    const remove = vi.spyOn(fs.promises, 'rm').mockRejectedValueOnce(cleanupError);
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      finish({ ok: true, path: output, mime: 'image/png' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(remove).toHaveBeenCalledExactlyOnceWith(output, { force: true });
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        '[chat-artifacts] cover failed for index.html: EACCES: late PNG is locked',
+      );
+      expect(snapshot()).toEqual(failedSnapshot);
+      expect(onRefsChanged).not.toHaveBeenCalled();
+      expect(await deps.blobs.listObjectKeys()).toEqual([]);
+      expect(fs.existsSync(output)).toBe(true);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.removeListener('unhandledRejection', unhandled);
+    }
+  });
   it('does not mistake an exporter error with timeout-like text for the daemon deadline', async () => {
     vi.useFakeTimers();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
