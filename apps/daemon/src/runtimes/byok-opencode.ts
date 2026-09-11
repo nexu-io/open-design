@@ -11,13 +11,14 @@ export const BYOK_OPENCODE_API_KEY_ENV = 'OPEN_DESIGN_BYOK_API_KEY';
 // get the bare `@ai-sdk/amazon-bedrock` factory, which reads static access
 // keys from the environment and knows nothing about SSO profiles.
 export const BYOK_OPENCODE_BEDROCK_PROVIDER_ID = 'amazon-bedrock';
-// Key-mode routes onto Bedrock's Anthropic Messages and OpenAI Responses
+// Bearer routes onto Bedrock's Anthropic Messages and OpenAI Responses
 // endpoints. Distinct ids on purpose: OpenCode's `amazon-bedrock` loader keys
 // its Converse/credential-chain behaviour on that exact id.
 export const BYOK_OPENCODE_BEDROCK_ANTHROPIC_PROVIDER_ID = 'open-design-bedrock-anthropic';
 export const BYOK_OPENCODE_BEDROCK_OPENAI_PROVIDER_ID = 'open-design-bedrock-openai';
 // Read by OpenCode's Bedrock loader; takes precedence over the credential
-// chain, so it must only be set in API-key mode.
+// chain, so it is only set when a bearer (API key or profile-minted token) is
+// in play.
 export const BYOK_OPENCODE_BEDROCK_BEARER_TOKEN_ENV = 'AWS_BEARER_TOKEN_BEDROCK';
 export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
@@ -80,6 +81,12 @@ export interface OpenCodeByokProviderConfigOptions {
   // bedrock-openai-file-adapter.ts). Only the run spawn passes it; config
   // completeness checks and connection tests leave it out.
   bedrockOpenAiFileAdapterPluginUrl?: string;
+  // Short-term Bedrock bearer minted from the AWS profile (see
+  // integrations/bedrock-bearer.ts). With it, the profile mode runs through
+  // the very same provider config as the API-key mode. The run spawn resolves
+  // it; callers that only check completeness leave it out and get the
+  // profile-based Converse config instead.
+  bedrockProfileBearerToken?: string;
 }
 
 export function buildOpenCodeByokProviderConfig(
@@ -172,6 +179,15 @@ function bedrockProfile(provider: ByokChatProviderConfig): string {
   return typeof provider.awsProfile === 'string' ? provider.awsProfile.trim() : '';
 }
 
+/** Bedrock provider in AWS-profile mode (no API key, a named profile). */
+export function isBedrockProfileProvider(
+  provider: ByokChatProviderConfig | null | undefined,
+): provider is ByokChatProviderConfig & { awsProfile: string; baseUrl: string } {
+  if (!provider || provider.protocol !== 'bedrock') return false;
+  const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : '';
+  return !apiKey && bedrockProfile(provider) !== '' && typeof provider.baseUrl === 'string';
+}
+
 // Vendor segment of a Bedrock model id or inference-profile id, e.g.
 // `anthropic.claude-sonnet-5`, `global.anthropic.claude-sonnet-5`,
 // `us.openai.gpt-6-astra`, `arn:aws:bedrock:...:inference-profile/eu.anthropic.…`.
@@ -245,24 +261,27 @@ function assembleBedrockConfig(route: BedrockRoute, family: BedrockModelFamily, 
   };
 }
 
-// Routes, in API-key mode:
-// - Anthropic models: `@ai-sdk/anthropic` on `<endpoint>/anthropic/v1`
-//   (Anthropic Messages), the key as the SDK api key.
-// - OpenAI models: `@ai-sdk/openai` on `<endpoint>/openai/v1` (Responses API,
-//   the only OpenAI path Bedrock serves with tools), the key as the SDK api
-//   key, plus the file adapter plugin (bedrock-openai-file-adapter.ts).
-// - Every other family, and the AWS-profile mode: OpenCode's own
-//   `amazon-bedrock` provider (Converse). With a key it reads
-//   `AWS_BEARER_TOKEN_BEDROCK` ahead of the credential chain; in profile mode
-//   it resolves the chain for `options.profile` itself. The regional endpoint
-//   is only forwarded when it differs from the region default (VPC endpoint,
-//   custom host).
+// Both credential modes run through the same provider config. The bearer is
+// either the user's long-term Bedrock API key or the short-term token the run
+// spawn minted from the AWS profile (integrations/bedrock-bearer.ts); from
+// here on nothing depends on where it came from.
 //
-// Measured on 2026-09-11: Converse rejects `document` blocks and tool-result
-// `image` blocks for OpenAI models, and OpenAI Chat Completions on Bedrock
-// refuses tools for GPT-6, so the Responses API is the only OpenAI-family path
-// with tools. The key never enters the JSON config: the SDK routes reference
-// it as `{env:...}` and Converse reads its own env variable.
+// Routes:
+// - Anthropic models: `@ai-sdk/anthropic` on `<endpoint>/anthropic/v1`
+//   (Anthropic Messages), bearer as the SDK api key.
+// - OpenAI models: `@ai-sdk/openai` on `<endpoint>/openai/v1` (Responses API,
+//   the only OpenAI path Bedrock serves with tools), bearer as the SDK api
+//   key, plus the file adapter plugin (bedrock-openai-file-adapter.ts).
+// - Every other family, and any caller that has no bearer: OpenCode's own
+//   `amazon-bedrock` provider (Converse). With a bearer it reads
+//   `AWS_BEARER_TOKEN_BEDROCK` ahead of the credential chain; without one
+//   (profile mode seen by the config completeness check or the connection
+//   test, which do not mint) it resolves the chain for `options.profile`
+//   itself. The regional endpoint is only forwarded when it differs from the
+//   region default (VPC endpoint, custom host).
+//
+// The bearer never enters the JSON config: the SDK routes reference it as
+// `{env:...}` and Converse reads its own env variable.
 function buildBedrockProviderConfig(
   provider: ByokChatProviderConfig,
   rawModel: string,
@@ -271,7 +290,7 @@ function buildBedrockProviderConfig(
   options: OpenCodeByokProviderConfigOptions,
 ): OpenCodeByokProviderConfig | null {
   const profile = bedrockProfile(provider);
-  const bearer = apiKey; // the Bedrock API key travels as a bearer
+  const bearer = apiKey || (profile ? options.bedrockProfileBearerToken ?? '' : '');
   if (!profile && !bearer) return null;
   if (!opencodeByokModelId(rawModel, 'bedrock')) return null;
   const region = resolveBedrockRegion(baseUrl);

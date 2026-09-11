@@ -537,7 +537,21 @@ describe('byok-opencode Bedrock provider config', () => {
     });
   });
 
-  it('keeps Anthropic and OpenAI models on Converse in AWS-profile mode', () => {
+  it('runs the AWS-profile mode through the same config as the API-key mode once a bearer is minted', () => {
+    const base = { protocol: 'bedrock' as const, baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' };
+    for (const model of ['global.anthropic.claude-sonnet-5', 'us.openai.gpt-6-astra', 'amazon.nova-2-lite-v1:0']) {
+      const viaKey = buildOpenCodeByokProviderConfig({ ...base, apiKey: 'bedrock-api-key-minted' }, model);
+      const viaProfile = buildOpenCodeByokProviderConfig(
+        { ...base, apiKey: '', awsProfile: 'sandbox' },
+        model,
+        { bedrockProfileBearerToken: 'bedrock-api-key-minted' },
+      );
+      expect(viaProfile, model).toEqual(viaKey);
+      expect(JSON.stringify(viaProfile?.config), model).not.toContain('sandbox');
+    }
+  });
+
+  it('keeps Converse with the profile for callers that do not mint a bearer', () => {
     for (const model of ['global.anthropic.claude-sonnet-5', 'us.openai.gpt-6-astra']) {
       const config = buildOpenCodeByokProviderConfig(
         {

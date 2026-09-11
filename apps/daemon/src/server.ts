@@ -274,8 +274,14 @@ import { stampToolTiming } from './runtimes/tool-timing.js';
 import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+  isBedrockProfileProvider,
 } from './runtimes/byok-opencode.js';
 import { ensureBedrockOpenAiFileAdapterPlugin } from './runtimes/bedrock-openai-file-adapter.js';
+import {
+  BedrockProfileBearerError,
+  resolveBedrockBearerForProfile,
+} from './integrations/bedrock-bearer.js';
+import { resolveBedrockRegion } from '@open-design/contracts';
 import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
@@ -10871,6 +10877,24 @@ export async function startServer({
       );
     if (!def.bin)
       return failRun('AGENT_UNAVAILABLE', 'agent has no binary');
+    // AWS-profile mode: mint a short-term Bedrock bearer from the profile so
+    // the run uses the same provider config as the API-key mode. An expired
+    // SSO session is a sign-in problem, not a provider config problem.
+    let bedrockProfileBearerToken: string | undefined;
+    if (def.id === 'byok-opencode' && isBedrockProfileProvider(byokProvider)) {
+      try {
+        bedrockProfileBearerToken = await resolveBedrockBearerForProfile(
+          byokProvider.awsProfile,
+          resolveBedrockRegion(byokProvider.baseUrl),
+        );
+      } catch (error) {
+        const reason = error instanceof BedrockProfileBearerError ? error.reason : 'credentials_unavailable';
+        return failRun(
+          reason === 'sso_expired' ? 'AGENT_AUTH_REQUIRED' : 'BYOK_PROVIDER_REQUIRED',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
           byokProvider,
@@ -10878,6 +10902,7 @@ export async function startServer({
           {
             bedrockOpenAiFileAdapterPluginUrl:
               ensureBedrockOpenAiFileAdapterPlugin(RUNTIME_DATA_DIR),
+            ...(bedrockProfileBearerToken ? { bedrockProfileBearerToken } : {}),
           },
         )
       : null;
