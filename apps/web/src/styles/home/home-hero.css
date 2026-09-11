@@ -2078,11 +2078,11 @@
 }
 /* The picker is the upload disc's twin at the head of the card's foot row (per
    product: 设计系统常驻在添加附件后面，样式和 icon 的大小和上传附件一致), so it
-   copies `.home-hero__foot-left .plus-menu__trigger` exactly: the same 36px
+   matches the adjacent `.plus-menu__trigger` on Home and in project chat: the same 36px
    band, the same pale fill, no stroke and no shadow. `height: auto` undoes
    primitives.css's blanket `button { height: 36px }`, which min-height alone
    cannot override. */
-.home-hero__foot-left .home-hero__ds-row-trigger {
+:is(.home-hero__foot-left, .composer-row) .home-hero__ds-row-trigger {
   box-sizing: border-box;
   min-height: 36px;
   height: auto;
@@ -2098,17 +2098,18 @@
   box-shadow: none;
 }
 /* Same hover as the upload disc beside it — the pair lights up identically. */
-.home-hero__foot-left .home-hero__ds-row-picker .home-hero__ds-row-trigger:hover,
-.home-hero__foot-left .home-hero__ds-row-picker .home-hero__ds-row-trigger:focus-visible {
+:is(.home-hero__foot-left, .composer-row) .home-hero__ds-row-picker .home-hero__ds-row-trigger:hover,
+:is(.home-hero__foot-left, .composer-row) .home-hero__ds-row-picker .home-hero__ds-row-trigger:focus-visible,
+:is(.home-hero__foot-left, .composer-row) .home-hero__ds-row-trigger[aria-expanded="true"] {
   background: var(--bg-subtle);
   color: var(--text-strong);
 }
-.home-hero__foot-left .home-hero__ds-row-trigger-icon {
+:is(.home-hero__foot-left, .composer-row) .home-hero__ds-row-trigger-icon {
   opacity: 1;
 }
 /* Nothing picked yet: the palette glyph alone (the field name lives on the
    tooltip), so the control is the upload disc's exact 36px circle. */
-.home-hero__foot-left .home-hero__ds-row-trigger.is-icon-only {
+:is(.home-hero__foot-left, .composer-row) .home-hero__ds-row-trigger.is-icon-only {
   width: 36px;
   min-width: 36px;
   height: 36px;
@@ -2118,7 +2119,7 @@
   border-radius: var(--radius-circular, 50%);
 }
 /* The pill never gets squeezed by a long prompt-input row beside it. */
-.home-hero__foot-left .home-hero__ds-row-picker {
+:is(.home-hero__foot-left, .composer-row) .home-hero__ds-row-picker {
   flex: 0 0 auto;
 }
 .home-hero__footer-options {

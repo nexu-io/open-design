@@ -322,11 +322,15 @@
   font-size: 12px;
 }
 /* ---------- Plugin pane: list + hover-preview column ---------- */
-/* Owned by the project composer's 插件 quick pill popover
-   (ChatComposer's ComposerPluginsPaneContent), which sizes itself through
-   `.composer-plugins-standalone-popup`. The left column is the familiar
-   search + list, the right column mirrors the hovered row with a live
-   preview hero and metadata. */
+/* The Home submenu and project quick pill share these two columns.
+   Match the submenu width reserved by PLUS_MENU_PLUGIN_FLYOUT_WIDTH so
+   the list leaves room for the preview. */
+.plus-menu__flyout--plugins {
+  min-width: 0;
+  width: 466px;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+}
 .plus-menu__plugin-pane {
   display: flex;
   gap: 8px;
@@ -423,7 +427,21 @@
 }
 /* Narrow surfaces (contained flyout) have no room for a side column, so
    the preview drops below the list and the hero height is capped. */
+.plus-menu__popup--flyout-contained .plus-menu__flyout--plugins {
+  width: auto;
+  overflow-y: auto;
+}
+.plus-menu__popup--flyout-contained .plus-menu__plugin-pane {
+  flex-direction: column;
+  flex: 0 0 auto;
+}
+.plus-menu__popup--flyout-contained .plus-menu__plugin-main {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+}
 .plus-menu__popup--flyout-contained .plus-menu__preview {
+  flex: 0 0 auto;
   border-left: 0;
   border-top: 1px solid var(--border);
   /* Stacked layout: the side-column inset above doesn't apply — full-width

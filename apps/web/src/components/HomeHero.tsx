@@ -177,6 +177,7 @@ interface Props {
   onRemoveConnectorContext?: (connectorId: string) => void;
   onAddWorkspaceContext?: (item: WorkspaceContextItem) => void;
   onRemoveWorkspaceContext?: (id: string) => void;
+  onAddPlugin?: () => void;
   onAddConnector?: () => void;
   onAddMcp?: () => void;
   onOpenPluginDetails?: (record: InstalledPluginRecord) => void;
@@ -362,6 +363,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onRemoveConnectorContext = () => undefined,
     onAddWorkspaceContext = () => undefined,
     onRemoveWorkspaceContext = () => undefined,
+    onAddPlugin,
     onAddConnector = () => undefined,
     onAddMcp = () => undefined,
     onOpenPluginDetails = () => undefined,
@@ -2173,6 +2175,54 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
                 });
               }}
+              onSearchUsed={(submenu) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_search',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
+              connectors={connectorOptions}
+              onPickConnector={(connector) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'connector',
+                  resource_id: connector.id,
+                });
+                pickConnector(connector);
+              }}
+              onAddConnector={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_add',
+                  resource_kind: 'connector',
+                });
+                onAddConnector();
+              }}
+              plugins={pluginOptions}
+              onPickPlugin={(record) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'plugin',
+                  resource_id: record.id,
+                });
+                pickPlugin(record);
+              }}
+              onAddPlugin={onAddPlugin ? () => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_add',
+                  resource_kind: 'plugin',
+                });
+                onAddPlugin();
+              } : undefined}
               skills={skillOptions}
               onPickSkill={(skill) => {
                 trackHomeChatComposerClick(analytics.track, {
@@ -2184,6 +2234,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 pickSkill(skill);
               }}
+              mcpServers={mcpOptions}
+              onPickMcp={(server) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'mcp',
+                  resource_id: server.id,
+                });
+                pickMcp(server);
+              }}
+              onAddMcp={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_add',
+                  resource_kind: 'mcp',
+                });
+                onAddMcp();
+              }}
               onAttachFiles={() => {
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
@@ -2192,8 +2262,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 fileInputRef.current?.click();
               }}
-              onReferenceProject={onPickWorkingDir ? undefined : referenceProjectAction}
-              onLinkLocalCode={onPickWorkingDir ? undefined : linkLocalCodeAction}
+              onReferenceProject={referenceProjectAction}
+              onLinkLocalCode={linkLocalCodeAction}
               onSelectFromLibrary={() => {
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
@@ -2396,13 +2466,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               });
               onClearWorkingDir?.();
             }}
-            // Analytics keep the original `plus_pick` element name so the
-            // funnel stays continuous across the move.
-            onReferenceProject={referenceProjectAction}
-            onLinkLocalCode={linkLocalCodeAction}
-            /* All four menu rows answer one question — what may the agent read
-               besides this thread — so they all report the same way: the
-               trigger takes the pick's name, and its hover × clears it (per
+            /* The trigger reflects the most recent attached context; its
+               hover × clears that selection (per
                product: 工作目录会换成后边的文件名…和现在选择最近使用的文件夹的
                逻辑一样). The LAST attached item is the one named; a directory
                outranks it. */

@@ -590,14 +590,14 @@ select.plugin-inputs-form__input {
   min-height: 24px;
   max-width: 100%;
   gap: 0;
-  padding: 0 3px 0 0;
+  padding: 4px;
   background: color-mix(in srgb, var(--bg-panel) 88%, var(--c-tint));
   border-color: color-mix(in srgb, var(--c-hue) 16%, var(--border-soft));
 }
 .composer-shell .context-chip-strip__body {
   gap: 6px;
   min-width: 0;
-  padding: 2px 6px 2px 8px;
+  padding: 0;
 }
 /* Drop the badge box — let a small, hue-tinted type icon lead, exactly
    like a file context chip. */

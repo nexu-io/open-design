@@ -1759,8 +1759,7 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer:where([data-chat-roo
 
    三层一起抬,少一层就会错位:真正写字的那层、Lexical 的静态占位符、
    以及盖在占位符原位上的打字机轮播 —— 它们是同一行字的三种状态。
-   (行内 @芯片的 19px 方盒不跟着变:它按 `vertical-align: middle` 居中,
-    高度不是从行高推出来的,见下面 `.composer-inline-mention` 那段注释。) */
+   行内 @ 标签通过 `vertical-align: middle` 居中，高度由文字和内边距决定。 */
 [data-chat-root] .composer-input-editor [contenteditable='true']:where([data-chat-root], [data-chat-root] *),
 [data-chat-root] .composer-input-editor .composer-editable:where([data-chat-root], [data-chat-root] *),
 [data-chat-root] .composer-input-placeholder:where([data-chat-root], [data-chat-root] *),
@@ -1787,15 +1786,11 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer:where([data-chat-roo
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  /* Dify recipe: fixed-px box + vertical-align:middle, NOT an em-relative
-     height with a magic baseline nudge. A 19px box centers cleanly in the
-     editor's 21.6px line (13.5px × 1.6) and stays put under zoom / font
-     scaling because none of these metrics are derived from the pill's own
-     reduced font-size. */
-  height: 19px;
+  /* Let the text and padding determine the height so the label stays visible. */
+  height: auto;
   max-width: min(240px, 25vw);
   margin: 0 0.5px;
-  padding: 0 7px 0 6px;
+  padding: 4px;
   border: 1px solid color-mix(in srgb, var(--m-hue) 26%, var(--border));
   border-radius: var(--radius-sm);
   background: var(--m-tint);
@@ -2852,6 +2847,12 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer:where([data-chat-roo
   transition:
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* All tags above the composer share the same inset, including context,
+   skill, file, comment and applied-plugin variants. */
+.composer-shell .staged-chip:where([data-chat-root], [data-chat-root] *) {
+  height: auto;
+  padding: 4px;
 }
 .staged-chip:hover:where([data-chat-root], [data-chat-root] *) {
   background: var(--bg-panel);

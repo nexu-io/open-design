@@ -67,8 +67,8 @@ import type {
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../../../comments';
 import { Icon, type IconName } from "./components/Icon";
 import { ChatCloseIcon, ChatFileIcon, ChatSendArrowIcon } from "../primitives/icons";
-import { ComposerPlusMenu } from '../../ComposerPlusMenu';
-import { PLUS_SUBMENU_RESOURCE_KIND, type PlusMenuSubmenu } from './components/ComposerPlusMenu';
+import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND } from '../../ComposerPlusMenu';
+import type { PlusMenuSubmenu } from './components/ComposerPlusMenu';
 import { LibraryPicker } from '../../LibraryPicker';
 import { FigmaImportModal } from '../../FigmaImportModal';
 import { FigmaHelpModal } from '../../FigmaHelpModal';
@@ -3660,11 +3660,69 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               workspaceContext={workspaceContext}
               triggerTestId="chat-plus-trigger"
               placementPreference="up"
-              openRequest={plusMenuOpenRequest ? { nonce: plusMenuOpenRequest.nonce } : null}
+              openRequest={plusMenuOpenRequest ? {
+                nonce: plusMenuOpenRequest.nonce,
+                submenu: plusMenuOpenRequest.submenu === 'toolbox'
+                  ? undefined
+                  : plusMenuOpenRequest.submenu,
+              } : null}
               onOpen={() => {
                 trackComposerBar({ element: 'plus_menu_open' });
                 setComposerEngaged(true);
               }}
+              onSubmenuOpen={(submenu) => {
+                if (submenu === 'workingDir') return;
+                trackComposerBar({
+                  element: 'plus_submenu_open',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
+              onSearchUsed={(submenu) => {
+                trackComposerBar({
+                  element: 'plus_search',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
+              onReferenceProject={() => {
+                trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'reference-project' });
+                trackProjectReferenceModalSurfaceView(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'project_reference_modal',
+                  ...(projectId ? { project_id: projectId } : {}),
+                });
+                setProjectReferenceOpen(true);
+              }}
+              onLinkLocalCode={() => {
+                trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'local-code' });
+                void handleLinkLocalCodeContext();
+              }}
+              plugins={pluginsForComposer}
+              onPickPlugin={(record) => {
+                trackComposerBar({ element: 'plus_pick', resource_kind: 'plugin', resource_id: record.id });
+                void insertPluginMention(record);
+              }}
+              onAddPlugin={onBrowsePlugins ? () => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
+                onBrowsePlugins();
+              } : undefined}
+              connectors={connectors}
+              onPickConnector={(connector) => {
+                trackComposerBar({ element: 'plus_pick', resource_kind: 'connector', resource_id: connector.id });
+                insertConnectorMention(connector);
+              }}
+              onAddConnector={onOpenConnectors ? () => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'connector' });
+                onOpenConnectors();
+              } : undefined}
+              mcpServers={enabledMcpServers}
+              onPickMcp={(server) => {
+                trackComposerBar({ element: 'plus_pick', resource_kind: 'mcp', resource_id: server.id });
+                insertMcpMention(server);
+              }}
+              onAddMcp={onOpenMcpSettings ? () => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'mcp' });
+                onOpenMcpSettings();
+              } : undefined}
               onAttachFiles={() => fileInputRef.current?.click()}
               attachLoading={uploading}
               onSelectFromLibrary={() => setLibraryPickerOpen(true)}
