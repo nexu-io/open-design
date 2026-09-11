@@ -22,7 +22,10 @@ export function workspaceProjectHeaders(context: WorkspaceCollabContext): Header
 /**
  * Browser-owned navigations (iframe/img/a) cannot attach request headers.
  * Preserve the exact authority in the URL for those surfaces; the daemon
- * freshly verifies both values before serving Workspace-owned bytes.
+ * freshly verifies both values before serving Workspace-owned bytes. The
+ * workspace type travels too: daemon gates that key on the caller's EXPLICIT
+ * type assertion (e.g. the unattributed local personal design-system
+ * allowance) must see the same assertion the header-carrying fetches make.
  */
 export function workspaceResourceUrl(
   path: string,
@@ -31,7 +34,8 @@ export function workspaceResourceUrl(
   if (!context) return path;
   const separator = path.includes('?') ? '&' : '?';
   return `${path}${separator}workspaceId=${encodeURIComponent(context.workspaceId)}`
-    + `&workspaceMemberId=${encodeURIComponent(context.workspaceMemberId)}`;
+    + `&workspaceMemberId=${encodeURIComponent(context.workspaceMemberId)}`
+    + `&workspaceType=${encodeURIComponent(context.workspaceType)}`;
 }
 
 /** Append a query fragment without corrupting an already workspace-scoped URL. */

@@ -271,9 +271,12 @@ describe('project resource selection uses the persisted exact member', () => {
     });
 
     expect(response.status).toBe(200);
+    // The selection partition carried no type and the request asserted none:
+    // the validator sees an explicitly unasserted type (fail-closed).
     expect(validateDesignSystem).toHaveBeenCalledWith('user:workspace-brand', {
       workspaceId: WORKSPACE_ID,
       workspaceMemberId: MEMBER_ID,
+      workspaceTypeVerified: null,
     });
     expect(validateSkill).toHaveBeenCalledWith('workspace-skill', {
       workspaceId: WORKSPACE_ID,
@@ -320,6 +323,7 @@ describe('project resource selection uses the persisted exact member', () => {
     expect(validateDesignSystem).toHaveBeenCalledWith('user:private-brand', {
       workspaceId: WORKSPACE_ID,
       workspaceMemberId: MEMBER_ID,
+      workspaceTypeVerified: null,
     });
     expect(validateSkill).toHaveBeenCalledWith('private-skill', {
       workspaceId: WORKSPACE_ID,
@@ -349,6 +353,7 @@ describe('project resource selection uses the persisted exact member', () => {
     expect(validateDesignSystem).toHaveBeenCalledWith('user:private-brand', {
       workspaceId: WORKSPACE_ID,
       workspaceMemberId: MEMBER_ID,
+      workspaceTypeVerified: null,
     });
     expect(validateSkill).toHaveBeenCalledWith('private-skill', {
       workspaceId: WORKSPACE_ID,

@@ -228,11 +228,13 @@ describe('HomeView context picker', () => {
       skillCatalogScope: {
         workspaceId: workspaceA.workspaceId,
         workspaceMemberId: workspaceA.workspaceMemberId,
+        workspaceType: workspaceA.workspaceType,
       },
       designSystemId: WORKSPACE_DESIGN_SYSTEM.id,
       designSystemCatalogScope: {
         workspaceId: workspaceA.workspaceId,
         workspaceMemberId: workspaceA.workspaceMemberId,
+        workspaceType: workspaceA.workspaceType,
       },
     }));
   });

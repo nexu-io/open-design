@@ -411,10 +411,20 @@ function localCatalogScopeFromWorkspaceContext(
   context: WorkspaceCollabContext | null,
 ): LocalCatalogScope | null {
   if (!context?.workspaceId?.trim() || !context.workspaceMemberId?.trim()) return null;
+  // The type this client asserts for the partition — the same
+  // `x-od-workspace-type` its catalog reads carry. Daemon gates keyed on the
+  // explicit assertion must see it again on project creation and at run
+  // time, where no request headers exist.
+  const workspaceType = localCatalogScopeWorkspaceType(context.workspaceType);
   return {
     workspaceId: context.workspaceId.trim(),
     workspaceMemberId: context.workspaceMemberId.trim(),
+    ...(workspaceType ? { workspaceType } : {}),
   };
+}
+
+function localCatalogScopeWorkspaceType(value: unknown): LocalCatalogScope['workspaceType'] | null {
+  return value === 'personal' || value === 'team' ? value : null;
 }
 
 function readLocalCatalogScopeDraft(key: string): LocalCatalogScope | null {
@@ -423,9 +433,11 @@ function readLocalCatalogScopeDraft(key: string): LocalCatalogScope | null {
   try {
     const parsed = JSON.parse(raw) as Partial<LocalCatalogScope> | null;
     if (!parsed?.workspaceId?.trim() || !parsed.workspaceMemberId?.trim()) return null;
+    const workspaceType = localCatalogScopeWorkspaceType(parsed.workspaceType);
     return {
       workspaceId: parsed.workspaceId.trim(),
       workspaceMemberId: parsed.workspaceMemberId.trim(),
+      ...(workspaceType ? { workspaceType } : {}),
     };
   } catch {
     return null;

@@ -7,7 +7,7 @@ import type {
 } from './context.js';
 import type { ProjectSyncIntent, ProjectSyncIntentEvent, ProjectSyncState } from './project-sync.js';
 import type { TeamResourceState } from './team-resources.js';
-import type { WorkspaceCollabContext } from './collab.js';
+import type { WorkspaceCollabContext, WorkspaceType } from './collab.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -164,6 +164,17 @@ export interface PromptTemplateMetadata {
 export interface LocalCatalogScope {
   workspaceId: string;
   workspaceMemberId: string;
+  /**
+   * The workspace type of that partition. A client sends the type it asserts
+   * (the same `x-od-workspace-type` its catalog reads carry); the daemon
+   * persists it only once its membership verification has confirmed it at
+   * selection time, and drops a claim it cannot confirm. Daemon gates that
+   * key on a verified personal workspace — the legacy unattributed local
+   * personal design-system allowance — read the persisted value again at run
+   * time, where no request headers exist. Optional: an older draft without it
+   * stays unasserted.
+   */
+  workspaceType?: WorkspaceType;
 }
 
 export interface ProjectResourceCatalogScopes {
