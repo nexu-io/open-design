@@ -223,6 +223,7 @@ interface Props {
   onRefreshFiles: (
     options?: { fresh?: boolean },
   ) => Promise<FileRefreshResult | void> | FileRefreshResult | void;
+  onManualFileWritten?: (file: ProjectFile) => void;
   isDeck: boolean;
   streaming?: boolean;
   commentQueueOnSend?: boolean;
@@ -1306,6 +1307,7 @@ export function FileWorkspace({
   filesRefreshKey = 0,
   filesGeneration,
   onRefreshFiles,
+  onManualFileWritten,
   isDeck,
   streaming,
   commentQueueOnSend = false,
@@ -2734,6 +2736,7 @@ export function FileWorkspace({
       workspaceContext,
     );
     if (!file) return;
+    onManualFileWritten?.(file);
     await onRefreshFiles();
     await refreshProjectFolders();
     openFile(file.name, { forcePersist: true });
@@ -3410,6 +3413,7 @@ export function FileWorkspace({
         file.name === 'brand.html' ? onBrandExtractionStopRequest : undefined
       }
       onFileSaved={refreshFilesWithoutResult}
+      onFileWritten={onManualFileWritten}
       onOpenFileReplacing={stableOpenFileReplacing}
       commentPortalId={workspaceActive ? commentPortalId : undefined}
       onCommentModeChange={workspaceActive ? onCommentModeChange : undefined}
