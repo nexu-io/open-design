@@ -58,7 +58,7 @@
       "undici@^6": "6.28.0",
       "undici@^7": "7.29.0",
       "yaml": "2.9.0",
-      "@powerformer/vela-cli-darwin-arm64": "file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.codex-chat.gdcbd8ba.tgz",
+      "@powerformer/vela-cli-darwin-arm64": "file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.claude-stream.g6d7cdf5.tgz",
       "@deepseek-ai/dsh-llm-pi-ai>@earendil-works/pi-ai": "0.85.1",
       "@deepseek-ai/dsh-subprocess-local>koffi": "3.2.1"
     },
