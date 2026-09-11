@@ -1062,9 +1062,10 @@ export type PersistedAgentEvent =
    *
    * Persisted with the turn's other events so a reloaded conversation shows
    * the same three rows it showed live. Turns recorded before this event
-   * existed have none, and MUST render no next-step row at all — there is no
-   * legacy fallback, because the suggestions are about the specific thing that
-   * turn built and cannot be reconstructed after the fact.
+   * existed have none. Normally no next-step row is rendered; OPEND-2776
+   * permits the UI's three image actions when a successful turn has its own
+   * nonempty image deliverables. That fallback does not manufacture an event
+   * or infer generated images from user attachments or project history.
    */
   | { kind: 'next_steps'; suggestions: string[] }
   /**
