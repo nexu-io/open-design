@@ -304,7 +304,7 @@ import {
   fetchVelaRemoteModelsWithRetry,
   isVelaChatCapableModelId,
 } from './runtimes/defs/amr.js';
-import { migrateLegacyDataDirSync } from './migration/index.js';
+import { migrateLegacyDataDirSync, migrateOdNextDefaultOnSync } from './migration/index.js';
 import {
   consumedImportNonces,
   getDesktopAuthSecret,
@@ -1371,6 +1371,15 @@ migrateLegacyDataDirSync({
   legacyDir: process.env.OD_LEGACY_DATA_DIR,
   dataDir: RUNTIME_DATA_DIR,
 });
+// One-shot adoption of the OD Next default. Clears a saved
+// `odNextStrategyMode` on the first boot of a build that carries this, so an
+// installation that opted out under the opt-in switch starts on the default
+// like everyone else, and writes a marker so it never runs again — a switch
+// the user turns off after that stays off across restarts. Synchronous and
+// ahead of any route registration on purpose: `readAppConfig` is called per
+// request, so an async step would race the first run of the session. See
+// apps/daemon/src/migration/od-next-default-on.ts.
+migrateOdNextDefaultOnSync({ dataDir: RUNTIME_DATA_DIR });
 // Immutable chat-artifact snapshot storage. Derived from the SINGLE resolved
 // data root per the repository "Daemon data directory contract" — the store
 // itself has no default and would throw if handed anything else.

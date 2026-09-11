@@ -71,24 +71,32 @@ function configuredMode(value: unknown): OdNextRolloutMode | null {
  * not to.
  *
  * That inverts which case is load-bearing. While the strategy was opt-in, the
- * question was whether anyone had asked for it, and an installation that lost
- * its saved mode simply kept the behaviour it already had. Now the question is
- * whether anyone asked against it, and an installation that loses its saved
- * mode is switched back on. So the invariant this function has to keep is:
- * an installation that opted out reads `off` through every later release.
+ * question was whether anyone had asked for it. Now it is whether anyone asked
+ * against it, and there is exactly one thing that counts as asking: a legible
+ * `off` saved in the config. Every other state the field can be in — absent,
+ * null, a typo, a value some other build wrote, a file that will not parse at
+ * all — means nobody's choice is legible, and the installation runs the
+ * default. `app-config.ts` drops what it cannot read rather than resolving it
+ * to a mode, so an unreadable field arrives here as an absent one.
  *
- * That rests on the config never reading as unconfigured unless it genuinely
- * is. `off` is a value the config carries, and the read path in `app-config.ts`
- * keeps three states apart rather than two: no file at all is the only one that
- * reaches the default below. A file that exists but cannot be believed —
- * malformed JSON, a non-object body, a mode this build does not recognise —
- * resolves to `off` before it gets here, because "we cannot read your choice"
- * must not become "you chose OD Next". See
- * `OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE`.
+ * Failing closed on an unreadable field reads as the cautious choice and is
+ * not. It is a claim about the user made from a value that means nothing, and
+ * it lands on installations that never declined anything — in a rollout whose
+ * whole purpose is to reach them. A broken field is evidence of a broken field.
  *
- * `assertWritableControlValues` covers the write path for the same reason, but
- * only the write path: it cannot do anything about a file that was already bad
- * on disk, hand-edited, or written by another version.
+ * `assertWritableControlValues` is what keeps that from weakening the control
+ * surface: a bad value through the API is refused with a 400 and the saved mode
+ * is left alone, so nobody's opt-out is lost to a typo they can see. It covers
+ * the write path only, which is the whole point — a file that was already bad
+ * on disk, hand-edited, or written by another version was never a decision this
+ * daemon recorded.
+ *
+ * The one-time clear is a separate thing and belongs to the migration, not
+ * here. The build that carried the default-on flip starts every installation on
+ * the default once, whatever the opt-in switch left behind, and
+ * `migrateOdNextDefaultOnSync` writes a marker in the same breath so it never
+ * runs again. After that a saved `off` is a decision this function honours on
+ * every read, which is what makes the switch work across restarts.
  *
  * `OD_NEXT_STRATEGY_ROLLOUT` outranks the saved `odNextStrategyMode` so that a
  * pinned process stays pinned: an operator debugging one daemon, a packaged
