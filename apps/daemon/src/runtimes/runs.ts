@@ -47,6 +47,30 @@ import { normalizeTelemetryAppVersionInfo } from '../app-version.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
+/** How many host-recorded media failures one attempt keeps. A fan-out that
+ *  fails wholesale is still one verdict; the list is evidence, not a log. */
+const MAX_RUN_MEDIA_TASK_FAILURES = 20;
+
+/**
+ * Did the HOST itself watch a piece of this turn's declared work fail?
+ *
+ * The only evidence this predicate accepts is evidence the daemon wrote down
+ * about its own execution: a media generation dispatched under this run's tool
+ * grant that `routes/media.ts` recorded as `failed`. It never reads the model's
+ * output. That boundary is the point — the turn-completion marker, the TodoWrite
+ * snapshot and the closing prose are all the model's account of its own turn,
+ * and an account cannot outrank a failure the host observed. Judging on the
+ * agent's words would also make a copy edit (the S22 apology sentence in
+ * `prompts/media-contract.ts` is verbatim-copied product copy) silently change
+ * a completeness verdict.
+ *
+ * Scoped to the attempt: `prepareRestart` clears the list, so a retry that
+ * finally delivers is judged on its own execution.
+ */
+function runHasHostRecordedDeliveryFailure(run) {
+  return Array.isArray(run?.mediaTaskFailures) && run.mediaTaskFailures.length > 0;
+}
+
 const RUN_STATE_SCHEMA_VERSION = 1;
 
 const DIAGNOSTIC_SOURCE = 'open-design-daemon';
@@ -562,6 +586,9 @@ function durableRunState(run) {
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
     ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
+    ...(runHasHostRecordedDeliveryFailure(run)
+      ? { mediaTaskFailures: run.mediaTaskFailures }
+      : {}),
     ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
     ...(typeof run.model === 'string' ? { model: run.model } : {}),
     ...(typeof run.resolvedModelId === 'string'
@@ -989,6 +1016,10 @@ export function createChatRunService({
       authenticatedDoneConclusion: false,
       completionMarkerTail: '',
       completionMarkerAwaitingConclusion: false,
+      // Media generations this attempt dispatched that the host itself watched
+      // fail, recorded by `noteMediaTaskFailure` from routes/media.ts. The one
+      // completeness signal on this run that is not the model's self-report.
+      mediaTaskFailures: [],
       endedWithUnfinishedWork: false,
       artifactCount: undefined as number | undefined,
       artifactPaths: undefined as string[] | undefined,
@@ -1061,6 +1092,53 @@ export function createChatRunService({
   const persistState = (run) => {
     if (!run?.statePath) return { ok: false, errorType: 'storage_unavailable' };
     return writeDurableState(run.statePath, durableRunState(run));
+  };
+
+  /**
+   * Hand a failed media generation back to the turn that asked for it.
+   *
+   * The dual of `associateLateRunProducedFile`: that one gives the turn the
+   * bytes a 202 dispatch eventually produced, this one gives it the fact that
+   * the dispatch produced none. Until it existed, `routes/media.ts` knew the
+   * failing task's `run_id` — it printed it in the `[media]` diagnostic and
+   * shipped it to analytics — and told the run nothing, so the turn's verdict
+   * came from the agent's exit code alone and a turn whose only deliverable
+   * failed still published `succeeded` with a green check.
+   *
+   * Additive and idempotent per task id: a task reports at most one failure, and
+   * a re-entrant call (retry, replay, both catch paths firing) must not double
+   * count. Bounded, because a batch fan-out can fail wholesale and this is
+   * evidence, not a log. Recording is accepted whether or not the run is already
+   * terminal — a late failure still belongs in the run's record — but a run that
+   * has already published its terminal frame keeps the verdict it published;
+   * re-deriving completeness after the fact is a separate contract.
+   */
+  const noteMediaTaskFailure = (runId, failure) => {
+    if (typeof runId !== 'string' || !runId) return false;
+    const taskId = typeof failure?.taskId === 'string' ? failure.taskId : '';
+    if (!taskId) return false;
+    const run = get(runId);
+    if (!run) return false;
+    if (!Array.isArray(run.mediaTaskFailures)) run.mediaTaskFailures = [];
+    if (run.mediaTaskFailures.some((recorded) => recorded?.taskId === taskId)) return false;
+    if (run.mediaTaskFailures.length >= MAX_RUN_MEDIA_TASK_FAILURES) return false;
+    run.mediaTaskFailures.push({
+      taskId,
+      ...(typeof failure.surface === 'string' && failure.surface
+        ? { surface: failure.surface }
+        : {}),
+      ...(typeof failure.model === 'string' && failure.model ? { model: failure.model } : {}),
+      failedAt: Number.isFinite(failure.failedAt) ? failure.failedAt : Date.now(),
+      error: failure.error && typeof failure.error === 'object'
+        ? failure.error
+        : { message: 'media generation failed' },
+    });
+    // A run that already went terminal keeps its terminal clock: `updatedAt` is
+    // what `prepareRestart` measures the resume wait against, and a late failure
+    // arriving after the frame was published must not move it.
+    if (!TERMINAL_RUN_STATUSES.has(run.status)) run.updatedAt = Date.now();
+    persistState(run);
+    return true;
   };
 
   const persistTerminalState = (run, lifecycleEvidence = run.terminalLifecycle) => {
@@ -1259,6 +1337,9 @@ export function createChatRunService({
     run.deliverableSyntaxRepair = undefined;
     run.deliverableSyntaxValidation = undefined;
     run.endedWithUnfinishedWork = false;
+    // Host-observed failures belong to the attempt that produced them. A resume
+    // that finally delivers must not inherit the previous attempt's verdict.
+    run.mediaTaskFailures = [];
     run.askUserScanText = '';
     run.authenticatedDoneConclusion = false;
     run.completionMarkerTail = '';
@@ -1405,6 +1486,9 @@ export function createChatRunService({
     retryable: run.retryable ?? null,
     resumable: run.resumable ?? false,
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
+    ...(runHasHostRecordedDeliveryFailure(run)
+      ? { mediaTaskFailures: run.mediaTaskFailures }
+      : {}),
     ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
     ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     eventsLogPath: run.eventsLogPath ?? null,
@@ -1501,8 +1585,22 @@ export function createChatRunService({
     // it asked on the way out. Truncation stays independent and still wins.
     const endedByAskingUser =
       status === 'succeeded' && turnEndedByAskingUser(run.askUserScanText);
+    // Counter-evidence the host holds against its own turn. It is a term of its
+    // own, deliberately OUTSIDE the marker/todo clause below, because that whole
+    // clause is the agent's account of its own work: the completion marker, the
+    // strategy verdict and the TodoWrite snapshot can each veto "unfinished",
+    // and a run that apologised for a failed generation reached `succeeded` with
+    // a green check because the marker vetoed a `cancelled` todo. A failure the
+    // daemon watched happen is not something the turn's own narration may
+    // overrule — nor may it be read out of that narration (the apology copy is
+    // product copy, changed at will). Gated on `succeeded` for the same reason
+    // the two clauses above are: a run the user stopped is stopped, and one that
+    // already failed carries its verdict in `status`.
+    const hostRecordedDeliveryFailure =
+      status === 'succeeded' && runHasHostRecordedDeliveryFailure(run);
     run.endedWithUnfinishedWork =
       Boolean(run.truncatedMidTurn)
+      || hostRecordedDeliveryFailure
       || (!strategyTaskProvesDelivery(run.strategyTask)
         && !authenticatedDoneProvesDelivery
         && !endedByAskingUser
@@ -1532,6 +1630,9 @@ export function createChatRunService({
       terminalAt,
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
+      ...(runHasHostRecordedDeliveryFailure(run)
+        ? { mediaTaskFailures: run.mediaTaskFailures }
+        : {}),
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
       ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
@@ -2299,6 +2400,7 @@ export function createChatRunService({
     wait,
     emit,
     persistState,
+    noteMediaTaskFailure,
     setAnalyticsRecovery,
     beginAnalyticsDelivery,
     finalizeAnalyticsDelivery,

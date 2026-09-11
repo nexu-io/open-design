@@ -48,6 +48,7 @@ const chatPaneProps: {
     sourceAssistantMessageId?: string,
   ) => boolean | Promise<boolean>;
   questionFormSubmitDisabled?: boolean;
+  viewerOnly?: boolean;
   activeConversationId?: string | null;
   conversations?: Array<{ id: string; title?: string | null }>;
   messages?: ChatMessage[];
@@ -142,6 +143,7 @@ vi.mock('../../src/components/ChatPane', () => ({
       sourceAssistantMessageId?: string,
     ) => boolean | Promise<boolean>;
     questionFormSubmitDisabled?: boolean;
+    viewerOnly?: boolean;
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
     messages?: ChatMessage[];
@@ -150,6 +152,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     chatPaneProps.onForkFromMessage = props.onForkFromMessage;
     chatPaneProps.onSubmitQuestionForm = props.onSubmitQuestionForm;
     chatPaneProps.questionFormSubmitDisabled = props.questionFormSubmitDisabled;
+    chatPaneProps.viewerOnly = props.viewerOnly;
     chatPaneProps.activeConversationId = props.activeConversationId;
     chatPaneProps.conversations = props.conversations;
     chatPaneProps.messages = props.messages;
@@ -215,6 +218,7 @@ describe('ProjectView conversation delete', () => {
     chatPaneProps.onForkFromMessage = undefined;
     chatPaneProps.onSubmitQuestionForm = undefined;
     chatPaneProps.questionFormSubmitDisabled = undefined;
+    chatPaneProps.viewerOnly = undefined;
     chatPaneProps.activeConversationId = undefined;
     chatPaneProps.conversations = undefined;
     chatPaneProps.messages = undefined;
@@ -251,10 +255,12 @@ describe('ProjectView conversation delete', () => {
 
     renderProjectView(onProjectsRefresh);
 
-    // ChatPane mount is async (ProjectView loads conversations in an
-    // effect, then renders chat). Wait for the mocked ChatPane to
-    // surface its `onDeleteConversation` prop.
-    await waitFor(() => expect(chatPaneProps.onDeleteConversation).toBeDefined());
+    // ChatPane can expose its callback before workspace scope settles.
+    // Wait for the real permission state to permit deletion as well.
+    await waitFor(() => {
+      expect(chatPaneProps.onDeleteConversation).toBeDefined();
+      expect(chatPaneProps.viewerOnly).toBe(false);
+    });
 
     await act(async () => {
       await chatPaneProps.onDeleteConversation!('conv-1');

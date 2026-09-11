@@ -14,10 +14,14 @@
 // pipeline nothing; it lives in a workflow of its own so it cannot hold the
 // pipeline's repository-wide concurrency group.
 //
-// The first card is deliberately withheld until a platform actually publishes.
-// A "构建中…" card posted at dispatch time becomes a permanent lie whenever a
-// build dies. The one exception is total failure, where silence would hide an
-// incident — see shouldPostFirstCard.
+// The card is posted on the first poll, before any package exists, and every
+// later state is an edit of that same message. The fear that used to withhold
+// it — a "构建中…" card left standing forever when a build dies — is answered by
+// the machinery that grew around it since: a failed lane renders its own
+// terminal state, a release where nothing shipped turns the card red, and the
+// watcher's own timeout stamps the card instead of abandoning it. Silence
+// during the entire build window bought nothing and cost the channel the one
+// thing it wanted, which is knowing a release is under way.
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
@@ -28,21 +32,54 @@ import {
   isTerminal,
   readChangelogLines,
   renderPrereleaseCard,
-  shouldPostFirstCard,
   undiscoveredLaneStatus,
 } from "./prerelease-card.ts";
 import type {
   Changelog,
   LaneStatus,
+  LaneTiming,
   PlatformKey,
   PlatformLane,
   PrereleaseCardState,
   TestLane,
 } from "./prerelease-card.ts";
 
-type GithubJob = { name?: unknown; status?: unknown; conclusion?: unknown };
-type GithubRun = { id?: unknown; name?: unknown; html_url?: unknown; status?: unknown };
-type DispatchedRun = { completed: boolean; id: string; url: string };
+type GithubJob = {
+  name?: unknown;
+  status?: unknown;
+  conclusion?: unknown;
+  started_at?: unknown;
+  completed_at?: unknown;
+};
+type GithubRun = {
+  id?: unknown;
+  name?: unknown;
+  html_url?: unknown;
+  status?: unknown;
+  conclusion?: unknown;
+  run_attempt?: unknown;
+  updated_at?: unknown;
+};
+type DispatchedRun = {
+  /**
+   * The run is completed AS OF THIS OBSERVATION — never "the run is finished
+   * forever". GitHub re-runs a workflow in place, so no run is ever permanently
+   * terminal and this field has to be re-read, not remembered.
+   */
+  completed: boolean;
+  id: string;
+  url: string;
+  /**
+   * Everything a re-run changes about the run, as one comparable string.
+   *
+   * A re-run increments `run_attempt`, sends `status` back to `in_progress`,
+   * rewrites `conclusion`, and bumps `updated_at` — all under the same run id.
+   * Any one of them can in principle be missed (a whole re-run could land
+   * between two polls, leaving `status`/`conclusion` where they were), so the
+   * fingerprint carries all four and changes if any of them does.
+   */
+  fingerprint: string;
+};
 
 function required(name: string): string {
   const value = process.env[name];
@@ -152,6 +189,26 @@ function statusOf(job: GithubJob): LaneStatus {
   return "failure";
 }
 
+const NO_TIMING: LaneTiming = { startedAt: null, completedAt: null };
+
+function epochMs(value: unknown): number | null {
+  if (typeof value !== "string" || value.length === 0) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * The job's wall clock, taken verbatim.
+ *
+ * No interpretation happens here on purpose: GitHub sets `started_at` on a
+ * QUEUED job too, and deciding which of these numbers is meaningful belongs to
+ * the renderer, which is the only place that also knows the lane's status.
+ */
+function timingOf(job: GithubJob | undefined): LaneTiming {
+  if (job == null) return NO_TIMING;
+  return { startedAt: epochMs(job.started_at), completedAt: epochMs(job.completed_at) };
+}
+
 /** Worst-wins, with "still moving" beating "all done" so a family never reads terminal early. */
 function rollup(statuses: LaneStatus[]): LaneStatus {
   if (statuses.length === 0) return "unknown";
@@ -189,6 +246,26 @@ async function listJobs(runId: string): Promise<GithubJob[]> {
   return jobs;
 }
 
+/**
+ * When the origin run was created — the start of the round's own clock.
+ *
+ * Read in its own try/catch rather than inside the poll: the total elapsed time
+ * is a convenience, and losing it must never cost the card a whole cycle of
+ * lane states. Retried every cycle until it lands, so one 5xx does not drop it
+ * for the rest of the watch.
+ */
+async function readRunCreatedAt(): Promise<number | null> {
+  try {
+    const run = await githubJson<{ created_at?: unknown; run_started_at?: unknown }>(
+      `/repos/${repo}/actions/runs/${originRunId}`,
+    );
+    return epochMs(run.created_at) ?? epochMs(run.run_started_at);
+  } catch (error) {
+    console.warn(`[card] could not read run start: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
 async function findDispatchedRun(workflowFile: string): Promise<DispatchedRun | null> {
   const body = await githubJson<{ workflow_runs?: GithubRun[] }>(
     `/repos/${repo}/actions/workflows/${encodeURIComponent(workflowFile)}/runs?event=workflow_dispatch&per_page=40`,
@@ -198,11 +275,43 @@ async function findDispatchedRun(workflowFile: string): Promise<DispatchedRun | 
     if (!name.includes(runMarker)) continue;
     return {
       completed: run.status === "completed",
+      fingerprint: [run.status, run.conclusion, run.run_attempt, run.updated_at]
+        .map((field) => (field == null ? "" : String(field)))
+        .join("|"),
       id: String(run.id),
       url: typeof run.html_url === "string" ? run.html_url : "",
     };
   }
   return null;
+}
+
+/**
+ * One dispatched lane, re-read every cycle, with its job list refreshed only
+ * when the run itself says something moved.
+ *
+ * GitHub re-runs IN PLACE: `run_attempt` increments and `status` returns to
+ * `in_progress` under the SAME run id. "Completed" is therefore a reading, not
+ * a fact — a watcher that stops looking at a finished run reports the first
+ * attempt's verdict for the rest of its life, which is how a card kept saying
+ * ❌ E2E Vitest · 未通过 after a re-run had already turned that run green.
+ *
+ * The cost of watching for that is nothing new: `findDispatchedRun` is one
+ * list-runs call the lane already made on every cycle before it completed, and
+ * that response already carries every field a re-run touches. Only the
+ * paginated `listJobs` is gated, and only for a run that is both completed and
+ * unchanged since the jobs in hand were read — an in-flight run still re-lists
+ * every cycle, because its jobs move without the run's own fields settling.
+ */
+async function refreshDispatchedLane(
+  workflowFile: string,
+  previousRun: DispatchedRun | null,
+  previousJobs: GithubJob[],
+): Promise<{ run: DispatchedRun | null; jobs: GithubJob[] }> {
+  const run = (await findDispatchedRun(workflowFile)) ?? previousRun;
+  if (run == null) return { jobs: previousJobs, run: null };
+  const unmoved = previousRun != null && previousRun.id === run.id && previousRun.fingerprint === run.fingerprint;
+  if (unmoved && run.completed) return { jobs: previousJobs, run };
+  return { jobs: await listJobs(run.id), run };
 }
 
 const ARTIFACT_BASENAME: Record<PlatformKey, string> = {
@@ -279,46 +388,63 @@ function reportDelivered(): void {
 type Watch = {
   originJobs: GithubJob[];
   publish: LaneStatus;
+  /** When publish stopped, once it has. Feeds the card's whole-round clock. */
+  publishCompletedAt: number | null;
   testsRun: DispatchedRun | null;
   testsJobs: GithubJob[];
   smokeRun: DispatchedRun | null;
   smokeJobs: GithubJob[];
   publishSucceededAt: number | null;
+  runCreatedAt: number | null;
 };
 
 async function collect(previous: Watch): Promise<Watch> {
+  const runCreatedAt = previous.runCreatedAt ?? (await readRunCreatedAt());
   const originJobs = await listJobs(originRunId);
   const publishJob = originJobs.find((job) => jobMatches(String(job.name ?? ""), ORIGIN_PUBLISH_JOB));
   const publish = publishJob == null ? "pending" : statusOf(publishJob);
+  // Only a terminal publish has a completion to report; a job the API has not
+  // finished with can still carry a stale or absent stamp.
+  const publishCompletedAt = isTerminal(publish) ? timingOf(publishJob).completedAt : null;
 
-  // Re-listed every cycle rather than cached, because the run's own
+  // Re-read every cycle rather than cached, because the run's own
   // completion is what tells a MISSING job apart from a job the API has not
   // created yet. A run that has only just started reports a partial job list,
-  // and reading that as "skipped" would fabricate green.
+  // and reading that as "skipped" would fabricate green. A run that already
+  // finished is re-read too — GitHub re-runs it in place, so its verdict can
+  // change under the same run id for as long as this watch is awake.
   let testsRun = previous.testsRun;
   let testsJobs = previous.testsJobs;
-  if (expectTests && !(previous.testsRun?.completed ?? false)) {
-    testsRun = (await findDispatchedRun(testsWorkflowFile)) ?? previous.testsRun;
-    if (testsRun != null) testsJobs = await listJobs(testsRun.id);
+  if (expectTests) {
+    ({ jobs: testsJobs, run: testsRun } = await refreshDispatchedLane(
+      testsWorkflowFile,
+      previous.testsRun,
+      previous.testsJobs,
+    ));
   }
 
   let smokeRun = previous.smokeRun;
   let smokeJobs = previous.smokeJobs;
   // The smoke run is only dispatched once publish succeeds, so do not even look
   // for it before then — an early lookup would only burn API budget.
-  if (expectSmoke && publish === "success" && !(previous.smokeRun?.completed ?? false)) {
-    smokeRun = (await findDispatchedRun(smokeWorkflowFile)) ?? previous.smokeRun;
-    if (smokeRun != null) smokeJobs = await listJobs(smokeRun.id);
+  if (expectSmoke && publish === "success") {
+    ({ jobs: smokeJobs, run: smokeRun } = await refreshDispatchedLane(
+      smokeWorkflowFile,
+      previous.smokeRun,
+      previous.smokeJobs,
+    ));
   }
 
   return {
     originJobs,
     publish,
+    publishCompletedAt,
     testsRun,
     testsJobs,
     smokeRun,
     smokeJobs,
     publishSucceededAt: previous.publishSucceededAt ?? (publish === "success" ? Date.now() : null),
+    runCreatedAt,
   };
 }
 
@@ -360,7 +486,7 @@ async function buildState(watch: Watch, startedAt: number, timedOut: boolean): P
         });
       } else smoke = "skipped";
     }
-    platforms.push({ key, label: PLATFORM_LABELS[key], build, downloadUrl, smoke });
+    platforms.push({ key, label: PLATFORM_LABELS[key], build, downloadUrl, smoke, timing: timingOf(job) });
   }
 
   const tests: TestLane[] = TEST_JOBS.map((entry) => {
@@ -414,6 +540,9 @@ async function buildState(watch: Watch, startedAt: number, timedOut: boolean): P
     expectSmoke,
     finished: originDone && testsDone && smokeDone,
     timedOut,
+    now: Date.now(),
+    runCreatedAt: watch.runCreatedAt,
+    publishCompletedAt: watch.publishCompletedAt,
   };
 }
 
@@ -428,11 +557,13 @@ async function main(): Promise<void> {
   let watch: Watch = {
     originJobs: [],
     publish: "pending",
+    publishCompletedAt: null,
     testsRun: null,
     testsJobs: [],
     smokeRun: null,
     smokeJobs: [],
     publishSucceededAt: null,
+    runCreatedAt: null,
   };
   let messageId: string | null = null;
   let lastRendered = "";
@@ -451,26 +582,29 @@ async function main(): Promise<void> {
     const state = await buildState(watch, startedAt, timedOut);
     const done = state.finished || timedOut;
 
-    if (messageId != null || shouldPostFirstCard(state) || done) {
-      const card = renderPrereleaseCard(state);
-      const rendered = JSON.stringify(card);
-      if (rendered !== lastRendered) {
-        try {
-          if (messageId == null) {
-            messageId = await client.sendCard(chatId, card);
-            console.log(`[card] posted ${messageId}`);
-          } else {
-            await client.patchCard(messageId, card);
-            console.log("[card] updated");
-          }
-          lastRendered = rendered;
-          chatHoldsLatest = true;
-        } catch (error) {
-          // Keep watching. The next cycle re-renders from the same state and
-          // tries again, so one Feishu hiccup does not lose the card.
-          console.warn(`[card] delivery failed: ${error instanceof Error ? error.message : String(error)}`);
-          chatHoldsLatest = false;
+    // No gate: the first render goes to the chat whatever it says, and every
+    // one after it edits that same message. The only thing that suppresses a
+    // write is "this render is identical to the one already delivered", which
+    // is why the live durations are quantized to the minute — see
+    // formatElapsed.
+    const card = renderPrereleaseCard(state);
+    const rendered = JSON.stringify(card);
+    if (rendered !== lastRendered) {
+      try {
+        if (messageId == null) {
+          messageId = await client.sendCard(chatId, card);
+          console.log(`[card] posted ${messageId}`);
+        } else {
+          await client.patchCard(messageId, card);
+          console.log("[card] updated");
         }
+        lastRendered = rendered;
+        chatHoldsLatest = true;
+      } catch (error) {
+        // Keep watching. The next cycle re-renders from the same state and
+        // tries again, so one Feishu hiccup does not lose the card.
+        console.warn(`[card] delivery failed: ${error instanceof Error ? error.message : String(error)}`);
+        chatHoldsLatest = false;
       }
     }
 

@@ -326,7 +326,7 @@ open-design/
 
 ## 排障
 
-- **"no agents found on PATH"** —— 安裝 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 中註冊的任一本地 runtime，確認 daemon 能找到其執行檔，然後在 **Settings → Execution mode** 中執行 **Rescan**；也可以在 Settings 中設定 BYOK runtime。
+- **"no agents found on PATH"** —— 安裝 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 中註冊的任一本地 runtime，確認 daemon 能找到其執行檔，然後在 **Models & providers → Local CLI** 中執行 **Rescan**；也可以在 Settings 中設定 BYOK runtime。
 - **daemon 在 /api/chat 上返回 500** —— 查看 daemon 終端機的 stderr 尾部；通常是 CLI 拒絕了傳入的參數。不同 CLI 的 argv 結構各異；如需調整，請查看 `apps/daemon/src/runtimes/defs/` 中對應的定義。
 - **媒體生成發生錯誤，`OD_BIN` 缺失、或 daemon URL 為 `:0`** —— 執行上述媒體 dispatcher 問題排除步驟。請勿重複使用既有的 CLI 會話；從 OpenDesign 應用程式中重新開啟專案，daemon 才會注入新的 `OD_*` 變數。
 - **Codex 載入的插件上下文過多** —— 使用 `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` 啟動 OpenDesign，daemon 啟動 Codex 時會傳入 `--disable plugins`。

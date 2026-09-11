@@ -108,6 +108,7 @@ const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows"
 const notifyReleaseFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-release-feishu.yml");
 const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-release.yml");
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
+const patchCutPreflightScriptPath = join(workspaceRoot, ".github", "scripts", "release", "resolve-patch-cut.ts");
 const feishuCardScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu.ts");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const dshBootstrapPublishWorkflowPath = join(workspaceRoot, ".github", "workflows", "dsh-bootstrap-publish.yml");
@@ -2956,10 +2957,15 @@ process.stdin.on("end", () => {
     expect(card).toContain("gh api --paginate");
     expect(card).toContain("compare/${PREV}...${CUR}?per_page=100");
 
-    // The watcher polls; it is never pushed to.
+    // The watcher polls; it is never pushed to. That holds for the durations
+    // the card reports too: they are the job list's own `started_at` /
+    // `completed_at`, so no build job has to report a timing to anyone. (When
+    // the first card is posted is behaviour, not workflow topology — it is
+    // asserted against the real script in
+    // tools/release/tests/prerelease-card-delivery-signal.test.ts.)
     expect(watcher).toContain("/repos/${repo}/actions/runs/${runId}/jobs");
     expect(watcher).toContain("origin-run ${originRunId}");
-    expect(watcher).toContain("shouldPostFirstCard");
+    expect(watcher).toContain("timingOf(job)");
     // A wrong URL would ship a 404 button to the whole channel.
     expect(watcher).toContain("verifyDownloadUrl");
 
@@ -3102,41 +3108,48 @@ process.stdin.on("end", () => {
     ]);
   });
 
-  it("[P2] gates the Thursday patch cut on the Tuesday minor being published", async () => {
+  it("[P2] gates the Thursday patch cut on the previous release being published", async () => {
     // cut-patch-release is the Tuesday cut-release flow, one weekday later, with a
     // PATCH bump and a publish guard. Lock the three properties that make it safe:
     //   1. It fires Thursday and bumps patch (not minor) from the highest release branch.
-    //   2. It only cuts when this line's minor base X.Y.0 is a PUBLISHED stable
+    //   2. It only cuts when the PREVIOUS release branch is a PUBLISHED stable
     //      GitHub Release (non-draft, non-prerelease) — otherwise it must NOT create
     //      a branch or launch the prerelease publication; it posts a notice and stops.
     //   3. The happy path still cuts from main and pushes with the App token, so the
     //      existing notify-release-feishu push trigger produces the prerelease + card.
-    const [workflow, notice] = await Promise.all([
+    // The decision itself is covered behaviorally in
+    // e2e/tests/scripts/resolve-patch-cut.test.ts; this test owns the wiring.
+    const [workflow, notice, preflight] = await Promise.all([
       readFile(cutPatchReleaseWorkflowPath, "utf8"),
       readFile(feishuNoticeScriptPath, "utf8"),
+      readFile(patchCutPreflightScriptPath, "utf8"),
     ]);
 
     // Thursday cron, and a patch (not minor) bump.
     const trigger = sectionBetween(workflow, "on:", "\npermissions:");
     expect(trigger).toContain("cron: '0 1 * * 4'");
-    expect(workflow).toContain('V="${major}.${minor}.$((patch+1))"');
-    expect(workflow).not.toContain("minor+1");
+    expect(preflight).toContain("const patch = highest.patch + 1;");
+    expect(preflight).not.toContain("minor + 1");
 
-    // The guard target (MINOR_BASE) must derive from the FINAL version V, not from
-    // the highest branch — otherwise a manual `version=` on another line is gated
-    // against the wrong minor (e.g. version=0.15.1 while latest is 0.14.0 would
-    // wrongly check open-design-v0.14.0). Assert V's own major/minor drive it.
-    expect(workflow).toContain('vmajor=${V%%.*}; vrest=${V#*.}; vminor=${vrest%%.*}');
-    expect(workflow).toContain('MINOR_BASE="${vmajor}.${vminor}.0"');
-    expect(workflow).not.toContain('MINOR_BASE="${major}.${minor}.0"');
+    // The gate target is the release the cut stacks on — the highest release
+    // branch below it — not the minor base X.Y.0. Gating on the base only ever
+    // checks the line's first patch: once X.Y.0 shipped, X.Y.2 and X.Y.3 could be
+    // cut on top of unshipped releases, which is how release/v0.22.3 got cut on
+    // 2026-09-10 while release/v0.22.2 was still unshipped.
+    const resolveStep = sectionBetween(workflow, "- name: Compute next patch version", "# Guard:");
+    expect(resolveStep).toContain("resolve-patch-cut.ts resolve");
+    expect(preflight).toContain("const gate = previousRelease(branches, version).text;");
+    expect(preflight).toContain("branches.filter((branch) => compareVersions(branch, version) < 0).at(-1)");
+    expect(preflight).not.toContain("`${version.major}.${version.minor}.0`");
 
-    // The guard reads the minor base's stable release and requires it published
-    // (neither draft nor prerelease); a missing release falls back to not published.
-    const guard = sectionBetween(workflow, "- name: Check the Tuesday minor is published", "# ---- Skip path");
-    expect(guard).toContain('gh release view "$MINOR_TAG"');
-    expect(guard).toContain("--jq '(.isDraft or .isPrerelease) | not'");
-    expect(guard).toContain("|| published=false");
-    expect(workflow).toContain('echo "minor_tag=open-design-v$MINOR_BASE"');
+    // The guard reads that release and requires it published (neither draft nor
+    // prerelease); a missing release falls back to not published.
+    const guard = sectionBetween(workflow, "- name: Check the previous release is published", "# ---- Skip path");
+    expect(guard).toContain("GATE_TAG: ${{ steps.ver.outputs.gate_tag }}");
+    expect(guard).toContain("resolve-patch-cut.ts gate");
+    expect(preflight).toContain('"(.isDraft or .isPrerelease) | not"');
+    expect(preflight).toContain('const published = answer === "true" ? "true" : "false";');
+    expect(preflight).toContain('setOutput("gate_tag", `${TAG_PREFIX}${gate}`)');
 
     // Skip path: no branch, no build — only the Feishu notice runs, gated on !published.
     const noticeStep = sectionBetween(workflow, "- name: Notify Feishu that the patch cut was skipped", "- name: Stop here when skipping");

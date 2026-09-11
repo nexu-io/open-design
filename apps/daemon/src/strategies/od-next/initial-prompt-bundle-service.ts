@@ -442,6 +442,10 @@ export function createOdNextInitialPromptBundleService(
         renderChatTurnHostProtocolInstructions(
           stringValue(meta.doneKey) ?? '',
           'od_next_request',
+          // Same run locale the Bundle's own system prompt was composed with
+          // (OPEND-2765): the follow-up suggestions are user-visible prose and
+          // must not fall back to English on a localized run.
+          stringValue(locale),
         ).text,
         typeof systemPrompt === 'string' ? systemPrompt : '',
       ].filter(Boolean).join('\n\n---\n\n'),

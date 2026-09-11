@@ -619,6 +619,32 @@ describe('OD Next V2 prompt recipe', () => {
     expect(composeOdNextStrategyRequestPromptV2(recipe)).toBe(core);
   });
 
+  it('keeps memory without introducing retired cards into the OD Next prompt path', () => {
+    const context = { memoryBody: 'Remember the operator audience.' };
+    const core = composeOdNextStrategyCorePromptV2(recipe);
+    const stableContext = composeOdNextStrategyStableRequestContextV2(context);
+    const request = composeOdNextStrategyRequestPromptV2(recipe, context);
+    const bundle = composeOdNextStrategyBundleHeadV2(recipe);
+    const production = composeOdNextStrategyContinuationV2({
+      stage: 'production',
+      nativeSessionResume: true,
+      taskExecutionId: 'task-1',
+      taskRunIndex: 1,
+      planContractHash: A,
+      hostProtocolKey: '0123456789abcdef',
+    });
+
+    expect(stableContext).toContain(context.memoryBody);
+    expect(request).toContain(stableContext);
+    expect(core).toContain(recipe.coreStrategy);
+    expect(request).toContain(recipe.coreStrategy);
+    expect(production).toContain('<od-done key="0123456789abcdef"/>');
+    for (const prompt of [core, stableContext, request, JSON.stringify(bundle), production]) {
+      expect(prompt).not.toContain('task-brief');
+      expect(prompt).not.toContain('rule-proposal');
+    }
+  });
+
   it('changes cache identity for either package or selected profile content', () => {
     const baseline = odNextPromptCacheIdentityV2(recipe);
     expect(odNextPromptCacheIdentityV2({ ...recipe, packageHash: B })).not.toBe(baseline);
