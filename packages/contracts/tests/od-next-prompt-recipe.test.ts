@@ -120,6 +120,10 @@ describe('OD Next V2 prompt recipe', () => {
       expect(text).not.toContain('summarize the written or changed deck file');
       expect(text).not.toMatch(/TodoWrite[^\n]{0,80}(?:must|required)/i);
     }
+    expect(textArtifactPrompt).toContain('identifier="page-name"');
+    expect(textArtifactPrompt).toContain('Only identifier, type, and title attributes are supported');
+    expect(textArtifactPrompt).toContain('does not replace the required Open Design plan/runtime protocol blocks');
+    expect(prototypePrompt).not.toContain('identifier="page-name"');
     expect(textArtifactBundleSkill).toBe(textArtifactRecipe.taskSkill);
     expect(textArtifactBundleSkill).not.toContain('## Final handoff');
 
