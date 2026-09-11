@@ -35,6 +35,11 @@ concurrency:
 jobs:
   gc:
     name: GC orphaned preview clips
+    # GC reads and prunes the canonical R2 bucket. Mirrors do not inherit those
+    # credentials, and this job deliberately fails closed rather than GC from
+    # partial data - so in a mirror it can only ever fail loudly on the weekly
+    # cron. Keep the trusted publisher scoped to the canonical repository.
+    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
