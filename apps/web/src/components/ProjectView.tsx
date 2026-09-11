@@ -1115,8 +1115,11 @@ function clampChatPanelWidth(
 
 export function defaultChatPanelWidthForSplit(splitWidth: number): number {
   if (!Number.isFinite(splitWidth) || splitWidth <= 0) return DEFAULT_CHAT_PANEL_WIDTH;
-  const equalHalf = (splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2;
-  return clampChatPanelWidth(equalHalf, maxChatPanelWidthForSplit(splitWidth));
+  // The design baseline is the first-open width.  The available split still
+  // wins on narrow viewports, where preserving the workspace minimum requires
+  // clamping that baseline down.  A user-resized width is handled separately
+  // by the customized path in the layout effect and never comes through here.
+  return clampChatPanelWidth(DEFAULT_CHAT_PANEL_WIDTH, maxChatPanelWidthForSplit(splitWidth));
 }
 
 function designSystemFeedbackAttachments(
