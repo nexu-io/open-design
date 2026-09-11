@@ -189,7 +189,16 @@ export interface ManualEditDragCommitMessage {
   display?: string;
 }
 
+/** Cmd/Ctrl+Z pressed on the canvas. Keyboard focus lives inside the sandboxed
+ *  iframe after any click there, so the host's own shortcut listener never
+ *  hears these keys — the bridge forwards them as this message instead. */
+export interface ManualEditHistoryMessage {
+  type: 'od-edit-history';
+  op: 'undo' | 'redo';
+}
+
 export type ManualEditBridgeMessage =
+  | ManualEditHistoryMessage
   | ManualEditTargetMessage
   | ManualEditSelectMessage
   | ManualEditHoverMessage
