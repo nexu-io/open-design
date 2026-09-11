@@ -807,13 +807,13 @@ importers:
       '@open-design/standalone':
         specifier: workspace:*
         version: link:../../packages/standalone
+      electron:
+        specifier: 41.3.0
+        version: 41.3.0
     devDependencies:
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2
-      electron:
-        specifier: 41.3.0
-        version: 41.3.0
       esbuild:
         specifier: 0.28.0
         version: 0.28.0

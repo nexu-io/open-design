@@ -30,6 +30,7 @@ export async function deployWorkspacePackage(input: DeployWorkspacePackageInput)
     throw new Error("package deployment requires an owned workspace package and separate output");
   }
   const workspaceManifest = JSON.parse(await readFile(join(workspace, "package.json"), "utf8"));
+  await readFile(join(workspace, "pnpm-lock.yaml")); // No unlocked fallback when the shared lock is absent.
   const manifest = JSON.parse(await readFile(join(source, "package.json"), "utf8"));
   const manager = /^pnpm@(\d+\.\d+\.\d+)(?:\+.*)?$/u.exec(workspaceManifest.packageManager ?? "");
   if (!manager || typeof manifest.name !== "string" || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u.test(manifest.name)
@@ -44,8 +45,13 @@ export async function deployWorkspacePackage(input: DeployWorkspacePackageInput)
   try {
     const root = await realpath(output), packageRoot = join(root, "package");
     if (inside(source, root)) throw new Error("package deployment requires separate output");
-    await execute(pnpm, ["--filter", manifest.name,
-      "deploy", "--legacy", "--prod", "--offline", "--ignore-scripts", packageRoot],
+    // These overrides apply only to deployment. pnpm projects the existing
+    // shared lock into an isolated frozen lockfile; it does not reinject or
+    // reinstall the source workspace. Legacy deploy forces resolution even
+    // with --offline and therefore depends on ambient registry metadata.
+    await execute(pnpm, ["--config.inject-workspace-packages=true", "--config.force-legacy-deploy=false",
+      "--config.shared-workspace-lockfile=true", "--filter", manifest.name,
+      "deploy", "--prod", "--offline", "--ignore-scripts", packageRoot],
     { cwd: workspace, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
     const deployed = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
     if (deployed.name !== manifest.name || deployed.version !== manifest.version) throw new Error("deployed package identity mismatch");
@@ -62,7 +68,7 @@ export async function deployWorkspacePackage(input: DeployWorkspacePackageInput)
         else if (!stat.isFile()) throw new Error("portable package contains a special entry");
       }
     }
-    // pnpm legacy deployment can retain one self-reference to its source package.
+    // A package export may retain a self-reference to its source package.
     // Normalize only that verified identity, never arbitrary workspace dependencies.
     for (const path of links) {
       const target = await readlink(path), resolved = resolve(dirname(path), target);

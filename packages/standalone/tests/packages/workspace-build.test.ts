@@ -18,12 +18,14 @@ async function fixture(escape = false) {
   const manifest = { name: "@fixture/example", version: "1.0.0" };
   await mkdir(source, { recursive: true });
   await writeFile(join(root, "package.json"), JSON.stringify({ packageManager: "pnpm@10.33.2" }));
+  await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
   await writeFile(join(source, "package.json"), JSON.stringify(manifest));
   vi.mocked(execFile).mockImplementation(((file: string, args: string[], _options: unknown, callback: Function) => {
     void (async () => {
       if (args[0] === "--version") return callback(null, { stdout: "10.33.2\n", stderr: "" });
       expect(file).toBe("fixture-pnpm");
-      expect(args.slice(0, -1)).toEqual(["--filter", "@fixture/example", "deploy", "--legacy", "--prod", "--offline", "--ignore-scripts"]);
+      expect(args.slice(0, -1)).toEqual(["--config.inject-workspace-packages=true", "--config.force-legacy-deploy=false",
+        "--config.shared-workspace-lockfile=true", "--filter", "@fixture/example", "deploy", "--prod", "--offline", "--ignore-scripts"]);
       const deployed = args.at(-1)!;
       await mkdir(join(deployed, "node_modules"), { recursive: true });
       await writeFile(join(deployed, "package.json"), JSON.stringify(manifest));

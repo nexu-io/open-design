@@ -36,11 +36,11 @@
     "@open-design/electron-kit": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "@open-design/standalone": "workspace:*"
+    "@open-design/standalone": "workspace:*",
+    "electron": "41.3.0"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
-    "electron": "41.3.0",
     "esbuild": "0.28.0",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
