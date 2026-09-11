@@ -57,6 +57,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Obsolete outer retirement (mac/win) | U | packaged `obsolete-installed-outer.test.ts` |
 | Reinstalled newer outer resets runtime (bound > active) | U | packaged `launcher-runtime.test.ts` supersede case |
 | Reinstalled older outer delegates (bound < active) | P | spec recovery segment precondition |
+| Physical running payload survives pointer changes, cleanup, and same-version repair | U | desktop `tests/main/updater/payload-running.test.ts` |
 
 ## E. Installer (reinstall) path
 
