@@ -2150,6 +2150,16 @@ function failureReason(failed: boolean, content: string | undefined): string | n
   return text || null;
 }
 
+/** Keep only supplied, valid request parameters; never infer a returned range. */
+function readRequestRange(input: unknown): ToolRow['readRange'] {
+  if (!input || typeof input !== 'object') return undefined;
+  const { offset, limit } = input as Record<string, unknown>;
+  const range: NonNullable<ToolRow['readRange']> = {};
+  if (typeof offset === 'number' && Number.isSafeInteger(offset) && offset >= 0) range.offset = offset;
+  if (typeof limit === 'number' && Number.isSafeInteger(limit) && limit > 0) range.limit = limit;
+  return range.offset != null || range.limit != null ? range : undefined;
+}
+
 function buildToolRow(
   event: Extract<PersistedAgentEvent, { kind: 'tool_use' }>,
   result: Extract<PersistedAgentEvent, { kind: 'tool_result' }> | undefined,
@@ -2181,6 +2191,7 @@ function buildToolRow(
     title: toolTitle(event.name, event.input),
     rawTitle: isRawCommandTitle(event.name, event.input),
     file,
+    ...(kind === 'read' && file ? { readRange: readRequestRange(event.input) } : {}),
     pattern: kind === 'search' ? searchPattern(event.name, event.input) : null,
     hits,
     delta: diffStat(event.name, event.input),
