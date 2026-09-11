@@ -36,6 +36,14 @@ Validation producers execute only the miss batch; prepare acquires all bound
 evidence before signing. Cache-hit producers (including validation) skip jobs
 entirely. Do not add relay/gate jobs to reconstruct producer status expressions.
 
+The Electron build toolchain is also a declared reusable workload, emitted from
+the already-built native production workspace. Its cache hit never schedules
+installation as a relay. Electron distribution restores the verified toolchain
+package and uses the plan-projected Node version without source checkout or pnpm;
+Terminal retains its source-backed native process adapter. Public result reads
+use bounded parallelism without changing workload identity, ordering or fail-open
+semantics; full product-byte verification remains in acquisition.
+
 ## Architecture
 
 GitHub automation uses two layers.

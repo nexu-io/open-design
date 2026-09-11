@@ -39,6 +39,12 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   bytes; never treat an interrupted native workspace as a completed result or
   assume that signing the same inputs again produces identical bytes. The
   completed result does not replace installed acceptance or channel activation.
+- `toolchain build|unpack|import` transports a built public Electron Shell
+  package through Standalone's offline workspace-package export and Archive's
+  native ZIP contract. Its target/Node/package/archive receipt is portable;
+  only Python plan decides reuse. `distribution build --toolchain` consumes
+  that verified package without workspace installation or source checkout.
+  This delivery enables the toolchain product on matching macOS hosts only.
 - `resource acquire` assembles the complete nine data inputs; `runtime build`
   produces an explicit miss-only web/daemon selection and `runtime acquire`
   assembles the complete native runtime pair. Acquisition never builds or

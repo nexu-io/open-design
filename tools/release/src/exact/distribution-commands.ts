@@ -7,6 +7,7 @@ import { exportReleaseDistribution } from "./distribution-artifact.ts";
 export function registerDistributionCommands(cli: CAC): void {
   cli.command("distribution <operation>", "Assemble or restore a version-bound native installer")
     .option("--root <directory>", "Workspace owning the native build toolchain")
+    .option("--toolchain <directory>", "Verified restored toolchain directory (Electron consumes)")
     .option("--shell <name>", "electron or terminal")
     .option("--target <target>", "Native platform architecture")
     .option("--output <directory>", "Native installer output")
@@ -33,6 +34,7 @@ export function registerDistributionCommands(cli: CAC): void {
         policy: required(options, "policy"), channel: required(options, "channel"),
         releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit"),
         retainResult: options.retainResult === "true",
+        ...(options.toolchain == null ? {} : { toolchain: required(options, "toolchain") }),
         ...(options.baseReceipt == null ? {} : { baseReceipt: required(options, "baseReceipt") }),
         ...(options.baseDirectory == null ? {} : { baseDirectory: required(options, "baseDirectory") }),
       });

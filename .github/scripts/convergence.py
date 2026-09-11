@@ -16,6 +16,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -605,15 +606,12 @@ def resolve_results(
         if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
             base_url = None
             invalid_base_url = True
-    for identity, expected in calculated.items():
+    def resolve_one(item: tuple[str, dict[str, Any]]) -> tuple[str, bool, str, Any]:
+        identity, expected = item
         if not expected["reusable"]:
-            hits[identity] = False
-            reasons[identity] = "reuse-disabled"
-            continue
+            return identity, False, "reuse-disabled", None
         if not base_url:
-            hits[identity] = False
-            reasons[identity] = "base-url-invalid" if invalid_base_url else "base-url-missing"
-            continue
+            return identity, False, "base-url-invalid" if invalid_base_url else "base-url-missing", None
         key = result_key(repository_id, workflow.name, workflow.policy, identity, expected["digest"])
         url = f"{base_url.rstrip('/')}/{key}"
         try:
@@ -629,12 +627,9 @@ def resolve_results(
                 # Planning checks availability, not payload bytes. Acquisition
                 # verifies the declared digest before exposing any content.
                 probe_product(product["source"], timeout)
-            results[identity] = result
-            hits[identity] = True
-            reasons[identity] = "result-hit"
+            return identity, True, "result-hit", result
         except urllib.error.HTTPError as error:
-            hits[identity] = False
-            reasons[identity] = "result-missing" if error.code == 404 else f"read-http-{error.code}"
+            return identity, False, "result-missing" if error.code == 404 else f"read-http-{error.code}", None
         except (
             ConfigError,
             json.JSONDecodeError,
@@ -644,8 +639,15 @@ def resolve_results(
             urllib.error.URLError,
             TimeoutError,
         ) as error:
-            hits[identity] = False
-            reasons[identity] = f"read-unavailable:{type(error).__name__}"
+            return identity, False, f"read-unavailable:{type(error).__name__}", None
+    # Parallelize independent metadata reads, not identity calculation. map keeps
+    # declaration order, per-workload fail-open semantics and complete product probes.
+    if calculated:
+        with ThreadPoolExecutor(max_workers=min(8, len(calculated))) as executor:
+            for identity, hit, reason, result in executor.map(resolve_one, calculated.items()):
+                hits[identity], reasons[identity] = hit, reason
+                if result is not None:
+                    results[identity] = result
     return hits, reasons, results
 
 

@@ -4,8 +4,9 @@ import { assertMacNotarizationCredentials, requiresFormalMacTrust } from "../pol
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 import { withDistributionResult } from "./distribution-result.ts";
 import { electronBuilder, target, terminalBuild, type BuildInput } from "./native-builder.ts";
+import { resolveToolchainPackage } from "./toolchain-artifact.ts";
 
-export async function buildReleaseDistribution(input: BuildInput & Readonly<{ retainResult?: boolean; baseDirectory?: string; baseReceipt?: string; scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
+export async function buildReleaseDistribution(input: BuildInput & Readonly<{ toolchain?: string; retainResult?: boolean; baseDirectory?: string; baseReceipt?: string; scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
   if (input.baseDirectory != null) {
     if (input.baseReceipt != null) throw new Error("Base directory and receipt are mutually exclusive");
     if (input.shell === "electron") input = { ...input, baseReceipt: join(resolve(input.baseDirectory), "base-build-receipt.json") };
@@ -32,7 +33,8 @@ export async function buildReleaseDistribution(input: BuildInput & Readonly<{ re
   if (input.shell === "terminal") return terminalBuild(input, "distribution", { ...common, operation: "terminal.distribution.build", trustFile: trust,
     releaseDocumentsDirectory: join(preparedRoot, "documents"), release: { channel: input.channel, releaseVersion: input.releaseVersion,
       sourceCommit: input.sourceCommit, publishedAt: prepared.publishedAt, artifactBaseUrl: prepared.artifactBaseUrl } });
-  const { buildElectronInstaller } = await electronBuilder(input.root);
+  const { buildElectronInstaller } = await electronBuilder(input.root,
+    input.toolchain == null ? undefined : await resolveToolchainPackage(input.toolchain, buildTarget));
   const capsule = await checkedFile(expected.capsule.manifest, "prepared Capsule manifest", join(preparedRoot, "documents", `capsule-${buildTarget}.json`));
   const capsuleArchive = await checkedFile(expected.capsule.archive, "prepared Capsule archive", join(preparedRoot, "artifacts", basename(expected.capsule.archive.file)));
   const result = await buildElectronInstaller({ ...common, schemaVersion: 2, operation: "electron.distribution.build", acceptedContentMetadataFile: content, acceptedTrustFile: trust,

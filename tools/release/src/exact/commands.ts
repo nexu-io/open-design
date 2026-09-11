@@ -19,6 +19,7 @@ import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.
 import { collectExecutedAcceptance, exerciseReleaseInstallation } from "./acceptance-execution.ts";
 import { registerValidationCommands } from "./validation-commands.ts";
 import { registerDistributionCommands } from "./distribution-commands.ts";
+import { registerToolchainCommands } from "./toolchain-commands.ts";
 import { registerBuildCommands } from "./build-commands.ts";
 import { required, emit, type Options } from "./command-input.ts";
 import { acquireArtifactProduct } from "./artifact-product.ts";
@@ -95,6 +96,7 @@ export function registerExactCommands(cli: CAC): void {
 
   registerBuildCommands(cli);
   registerDistributionCommands(cli);
+  registerToolchainCommands(cli);
 
   cli.command("prepare", "Compose and sign content from the declared Shell scenes")
     .option("--policy <file>", "Release policy receipt")

@@ -24,6 +24,8 @@
       "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/commands.ts",
+      "tools/release/src/exact/toolchain-artifact.ts",
+      "tools/release/src/exact/toolchain-commands.ts",
       "tools/release/src/exact/build-commands.ts",
       "tools/release/src/exact/resource-commands.ts",
       "tools/release/src/policy/",
@@ -37,6 +39,31 @@
       ".github/actions/configure-ci-parallelism/action.yml",
       "tools/release/src/exact/runtime-commands.ts",
       "tools/release/src/exact/runtime-resources.ts"
+    ],
+    "electron-toolchain": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "suite://electron-shell-source",
+      "packages/contracts/",
+      "packages/diagnostics/",
+      "packages/electron-kit/",
+      "packages/electron-capsule/",
+      "packages/electron-contract/",
+      "packages/platform/",
+      "packages/sidecar/",
+      "packages/sidecar-proto/",
+      "packages/standalone/",
+      "packages/download/",
+      "packages/release/",
+      "packages/plugin-runtime/",
+      "packages/registry-protocol/",
+      "suite://release-executor",
+      "tools/release/src/exact/native-builder.ts",
+      "tools/release/src/exact/toolchain-artifact.ts",
+      "tools/release/src/exact/toolchain-commands.ts"
     ],
     "electron-shell-source": [
       "shells/electron/package.json",
@@ -403,6 +430,21 @@
             "postinstall_level": "electron-build"
           }
         },
+        "electron_toolchain_darwin_arm64": {
+          "inputs": [
+            "suite://electron-toolchain"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true,
+          "artifact": {
+            "product": "toolchain",
+            "prefix": "exact-toolchain-darwin-arm64"
+          },
+          "parameters": {
+            "target": "darwin-arm64"
+          }
+        },
         "terminal_scene_darwin_arm64": {
           "inputs": [
             "suite://terminal-scene"
@@ -723,6 +765,7 @@
           "terminal_scene_darwin_arm64",
           "electron_scene_darwin_arm64",
           "electron_base_darwin_arm64",
+          "electron_toolchain_darwin_arm64",
           "electron_platform_darwin_arm64",
           "electron_capsule_darwin_arm64",
           "closure_data_skills_darwin_arm64",
@@ -758,6 +801,14 @@
           ]
         },
         "matrices": {
+          "toolchain_matrix": {
+            "include": [
+              {
+                "target": "darwin-arm64",
+                "workload": "electron_toolchain_darwin_arm64"
+              }
+            ]
+          },
           "base_matrix": {
             "include": [{ "target": "darwin-arm64", "workload": "electron_base_darwin_arm64" }]
           },
@@ -777,7 +828,8 @@
                 "platform_workload": "electron_platform_darwin_arm64",
                 "runner_class": "electron_darwin_arm64",
                 "runs_on": "macos-15",
-                "base_workload": "electron_base_darwin_arm64"
+                "base_workload": "electron_base_darwin_arm64",
+                "toolchain_workload": "electron_toolchain_darwin_arm64"
               }
             ]
           },
@@ -790,7 +842,8 @@
                 "platform_workload": "electron_platform_darwin_arm64",
                 "runner_class": "electron_darwin_arm64",
                 "runs_on": "macos-15",
-                "base_workload": "electron_base_darwin_arm64"
+                "base_workload": "electron_base_darwin_arm64",
+                "toolchain_workload": "electron_toolchain_darwin_arm64"
               }
             ]
           },
@@ -890,7 +943,8 @@
                 "platform_workload": "electron_platform_darwin_arm64",
                 "runner_class": "electron_darwin_arm64",
                 "runs_on": "macos-15",
-                "base_workload": "electron_base_darwin_arm64"
+                "base_workload": "electron_base_darwin_arm64",
+                "toolchain_workload": "electron_toolchain_darwin_arm64"
               }
             ]
           },
@@ -955,6 +1009,13 @@
           }
         },
         "batches": {
+          "toolchains": {
+            "matrix": "toolchain_matrix",
+            "fields": {
+              "target": "target"
+            },
+            "product": "toolchain"
+          },
           "capsules": {
             "matrix": "capsule_matrix",
             "fields": { "target": "target" },

@@ -95,6 +95,36 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("reads independent cached results with bounded concurrency and stable ordering", () => {
+    const code = `
+import sys, threading
+from types import SimpleNamespace
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import convergence as c
+workflow=SimpleNamespace(name='ci',policy='test-v1')
+expected={'digest':'a'*64,'executionClass':{'runnerClass':'worker','labels':['worker']},'products':'none','reusable':True}
+calculated={f'item{i}':dict(expected) for i in range(16)}
+barrier=threading.Barrier(8,timeout=5)
+def fetch(url,timeout):
+    identity=url.split('/workloads/')[1].split('/')[0]
+    barrier.wait()
+    if identity=='item3': raise TimeoutError('isolated unavailable result')
+    return {'schemaVersion':1,'protocol':c.PROTOCOL,'repositoryId':42,'workflow':'ci','policy':'test-v1',
+      'workload':identity,'digest':expected['digest'],'executionClass':expected['executionClass'],'products':{},
+      'validated':{'event':'pull_request','runId':1,'runAttempt':1,'headSha':'a'*40,'baseSha':'b'*40,
+        'treeSha':'c'*40,'validatedAt':'2026-08-21T00:00:00Z'}}
+with patch.object(c,'fetch_result',side_effect=fetch):
+    hits,reasons,results=c.resolve_results('https://cache.example',42,workflow,calculated,1)
+assert list(hits)==list(calculated)
+assert sum(hits.values())==15 and reasons['item3']=='read-unavailable:TimeoutError'
+assert list(results)==[name for name in calculated if name!='item3']
+print('bounded parallel reads preserve decisions')
+`;
+    expect(execFileSync("python3", ["-c", code, path.dirname(convergenceScript)], { encoding: "utf8" }))
+      .toContain("bounded parallel reads preserve decisions");
+  });
+
   test("pins the schema 2 identity algorithm independently of Git and platform", () => {
     const digest = execFileSync("python3", ["-c", [
       "import sys", "from pathlib import Path", "from unittest.mock import patch",

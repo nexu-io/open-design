@@ -360,7 +360,7 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(20);
+    expect(candidate.results).toHaveLength(21);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
@@ -407,6 +407,23 @@ describe("exact Electron release topology", () => {
     expect(distribution).toContain('tools-release base import');
     expect(distribution).toContain('--base-directory "$RUNNER_TEMP/base"');
     expect(distribution).toContain("name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}");
+  });
+
+  it.each(["exact", "stable", "prerelease"])("acquires a planned build toolchain without repeating distribution installs in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
+    expect(distribution).not.toMatch(/pnpm|install --frozen-lockfile|POSTINSTALL/u);
+    expect(distribution).toContain("tools-release toolchain unpack");
+    expect(distribution).toContain("tools-release toolchain import");
+    expect(distribution).toContain('--toolchain "$RUNNER_TEMP/toolchain"');
+    const scene = workflow.split("\n  scene:")[1]!.split("\n  terminal_scene:")[0]!;
+    expect(scene).toContain("tools-release toolchain build");
+    expect(scene).toContain("fromJSON(needs.plan.outputs.batch_run).toolchains");
+    expect(scene).toContain("fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload]");
+    const config = JSON.parse(await readFile(resolve(workspaceRoot, `.github/config/plan/release-${lane}.json`), "utf8"));
+    expect(config.workflows["release-" + lane].workloads.electron_toolchain_darwin_arm64)
+      .toMatchObject({ reusable: true, artifact: { product: "toolchain" } });
+    expect(config.suites["electron-toolchain"]).not.toEqual(expect.arrayContaining(["apps/web/", "apps/daemon/", "skills/"]));
   });
 
   it.each(["exact", "stable", "prerelease"])("builds only data misses and acquires the complete version set in release-%s prepare", async channel => {
@@ -643,8 +660,8 @@ describe("exact Electron release topology", () => {
       expect(workflow).not.toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_SK");
       const distributionBuild = workflow.split("- name: Build native distribution")[1]!.split("- uses:")[0]!;
       const distributionSetup = workflow.split("- name: Restore distribution scene")[0]!.split("- uses: actions/setup-node@v6").at(-1)!;
-      expect(distributionSetup).toContain("cache: ${{ matrix.shell == 'electron' && 'pnpm' || '' }}");
-      expect(distributionSetup).toContain("cache-dependency-path: pnpm-lock.yaml");
+      expect(distributionSetup).not.toContain("cache:");
+      expect(distributionSetup).not.toContain("cache-dependency-path:");
       expect(distributionBuild).toContain("CSC_LINK: ${{ matrix.shell == 'electron' && secrets.APPLE_SIGNING_CERTIFICATE_BASE64 || '' }}");
       expect(distributionBuild).toContain("secrets.APPLE_APP_SPECIFIC_PASSWORD");
       expect(distributionBuild).toContain("secrets.APPLE_TEAM_ID");

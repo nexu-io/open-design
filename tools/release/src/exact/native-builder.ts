@@ -10,10 +10,11 @@ import { readObject, writeObject } from "./control-common.ts";
 
 type Target = ElectronExactSceneRequest["target"];
 export type BuildInput = Readonly<{ root: string; shell: string; target: string; output: string; receipt: string }>;
-export async function electronBuilder(root: string): Promise<typeof import("@open-design/shell-electron/build")> {
+export async function electronBuilder(root: string, packageDirectory?: string): Promise<typeof import("@open-design/shell-electron/build")> {
   // A relocated CI controller resolves native build dependencies from the explicitly
   // selected workspace, never from its temporary artifact directory.
-  const resolver = createRequire(join(resolve(root), "tools/release/package.json"));
+  const resolver = createRequire(packageDirectory == null ? join(resolve(root), "tools/release/package.json")
+    : join(resolve(packageDirectory), "package.json"));
   return import(pathToFileURL(resolver.resolve("@open-design/shell-electron/build")).href);
 }
 export async function packageBuilder(root: string): Promise<typeof import("@open-design/standalone/packages/build")> {

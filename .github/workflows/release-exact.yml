@@ -365,7 +365,7 @@ jobs:
   scene:
     name: ${{ matrix.shell }} scene (${{ matrix.target }})
     needs: [tools, plan, capsule, runtime]
-    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && (fromJSON(needs.plan.outputs.batch_run).electron_scenes || fromJSON(needs.plan.outputs.batch_run).bases) }}
+    if: ${{ !cancelled() && !failure() && needs.plan.result == 'success' && (fromJSON(needs.plan.outputs.batch_run).electron_scenes || fromJSON(needs.plan.outputs.batch_run).bases || fromJSON(needs.plan.outputs.batch_run).toolchains) }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.electron_matrix) }}
@@ -413,21 +413,21 @@ jobs:
             --transport "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
 
       - uses: pnpm/action-setup@v5
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || fromJSON(needs.plan.outputs.run)[matrix.base_workload] || fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
         with:
           version: 10.33.2
 
       - uses: actions/setup-node@v6
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || fromJSON(needs.plan.outputs.run)[matrix.base_workload] || fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
         with:
           node-version-file: .node-version
           cache: pnpm
 
       - uses: ./.github/actions/configure-ci-parallelism
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || fromJSON(needs.plan.outputs.run)[matrix.base_workload] || fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
 
       - name: Prepare scene workspace
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || fromJSON(needs.plan.outputs.run)[matrix.base_workload] || fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
         env:
           OPEN_DESIGN_POSTINSTALL_LEVEL: ${{ matrix.postinstall_level }}
         shell: bash
@@ -466,6 +466,24 @@ jobs:
           tools-release capsule acquire
           --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/capsules.json"
           --output "$RUNNER_TEMP/capsules"
+
+      - name: Export built Electron toolchain
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCHIVE_ZIP_PATH: /usr/bin/zip
+        run: >-
+          tools-release toolchain build --root "$GITHUB_WORKSPACE" --target "$TARGET"
+          --output "$RUNNER_TEMP/toolchain-artifact"
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
+        with:
+          name: exact-toolchain-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/toolchain-artifact
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Build native scene
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -1095,6 +1113,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6.0.2
+        if: ${{ matrix.shell == 'terminal' }}
         with:
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
@@ -1131,16 +1150,9 @@ jobs:
           name: release-policy-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-policy
 
-      - uses: pnpm/action-setup@v5
-        if: ${{ matrix.shell == 'electron' }}
-        with:
-          version: 10.33.2
-
       - uses: actions/setup-node@v6
         with:
-          node-version-file: .node-version
-          cache: ${{ matrix.shell == 'electron' && 'pnpm' || '' }}
-          cache-dependency-path: pnpm-lock.yaml
+          node-version: ${{ needs.plan.outputs.node_version }}
 
       - name: Acquire cached distribution scene directly
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -1157,17 +1169,29 @@ jobs:
           tools-release scene unpack \
             --archive "$RUNNER_TEMP/scene-artifact/scene.tar" --output "$RUNNER_TEMP/scene"
 
-      - uses: ./.github/actions/configure-ci-parallelism
-        if: ${{ matrix.shell == 'electron' }}
+      - uses: actions/download-artifact@v8
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
+        with:
+          name: exact-toolchain-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/toolchain-artifact
 
-      - name: Prepare Electron distribution toolchain
-        if: ${{ matrix.shell == 'electron' }}
+      - name: Restore produced Electron toolchain
+        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
         env:
-          OPEN_DESIGN_POSTINSTALL_LEVEL: electron-build
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm install --frozen-lockfile
+          TARGET: ${{ matrix.target }}
+        run: >-
+          tools-release toolchain unpack --target "$TARGET"
+          --source "$RUNNER_TEMP/toolchain-artifact" --output "$RUNNER_TEMP/toolchain"
+
+      - name: Acquire cached Electron toolchain
+        if: ${{ matrix.shell == 'electron' && !fromJSON(needs.plan.outputs.run)[matrix.toolchain_workload] }}
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.toolchain_workload }}
+        run: >-
+          tools-release toolchain import --target "$TARGET"
+          --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/toolchain.json"
+          --output "$RUNNER_TEMP/toolchain"
 
       - uses: actions/download-artifact@v8
         if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
@@ -1216,7 +1240,7 @@ jobs:
         run: |
           set -euo pipefail
           tools-release distribution build \
-            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --root "$GITHUB_WORKSPACE" --toolchain "$RUNNER_TEMP/toolchain" --shell "$SHELL_TYPE" --target "$TARGET" \
             --policy "$RUNNER_TEMP/release-policy/release-policy.json" \
             --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
             --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" --base-directory "$RUNNER_TEMP/base" \
