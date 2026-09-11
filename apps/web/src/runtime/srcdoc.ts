@@ -3392,6 +3392,12 @@ function injectDeckBridge(
     return ['x', 'y'];
   }
   function scrollDeckTarget(list){
+    // A responsive class-toggle deck can make its one visible slide taller
+    // than the iframe while removing every inactive sibling from layout. That
+    // root overflow belongs to the current page; it is not evidence of a
+    // multi-page scroll track. Opacity and visibility do not qualify because
+    // those slides remain in flow and may form a genuine scroll deck.
+    if (inactiveSlidesAreRemovedFromLayout(list)) return null;
     var axes = deckAxisOrder(list);
     var nested = nestedScrollTargets(list);
     for (var n=0; n<nested.length; n++) {
@@ -3517,6 +3523,19 @@ function injectDeckBridge(
       }
     }
     return 'active';
+  }
+  function inactiveSlidesAreRemovedFromLayout(list){
+    var active = findActiveByClass(list);
+    if (active < 0 || list.length < 2) return false;
+    for (var i=0; i<list.length; i++) {
+      if (i === active) continue;
+      if (list[i].hasAttribute('hidden')) continue;
+      try {
+        if (window.getComputedStyle(list[i]).display === 'none') continue;
+      } catch (_) {}
+      return false;
+    }
+    return true;
   }
   function hasComputedHiddenSibling(list, active){
     if (active < 0) return false;
