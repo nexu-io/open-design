@@ -125,6 +125,38 @@ describe('minimax image generation', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
+  it('writes imported-folder project media into metadata.baseDir', async () => {
+    await writeConfig({ providers: { minimax: {} } });
+    const externalProjectRoot = path.join(root, 'imported-project');
+    await mkdir(externalProjectRoot, { recursive: true });
+
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      base_resp: { status_code: 0, status_msg: 'success' },
+      data: { image_base64: [PNG_BASE64] },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'imported-project-id',
+      metadata: { kind: 'prototype', baseDir: externalProjectRoot },
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'an imported project image',
+      output: 'imported.png',
+    });
+
+    expect(result.name).toBe('imported.png');
+    await expect(readFile(path.join(externalProjectRoot, 'imported.png'))).resolves.toEqual(
+      Buffer.from(PNG_BASE64, 'base64'),
+    );
+    await expect(readFile(path.join(projectsRoot, 'imported-project-id', 'imported.png'))).rejects.toThrow();
+  });
+
   it('forwards --image as subject_reference[0].image_file for I2I', async () => {
     await writeConfig({
       providers: { minimax: {} },
