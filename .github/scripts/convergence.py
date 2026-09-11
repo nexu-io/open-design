@@ -984,7 +984,16 @@ def contribute_batch_command(args: argparse.Namespace, contract: ConvergenceCont
     with ThreadPoolExecutor(max_workers=4) as executor:
         list(executor.map(lambda request: contribute_command(request, contract), requests))
     manifests = {entry["workload"]: load_json(args.output / entry["workload"] / "product-manifest.json") for entry in entries}
-    append_outputs({"products": compact_json(manifests)})
+    references = {}
+    for identity, manifest in manifests.items():
+        validate_contribution(manifest, pending, workflow, identity)
+        # Job outputs must not contain the public origin: GitHub may mask it
+        # because the deployment stores that configuration as a secret.
+        references[identity] = {**manifest, "products": {
+            name: {**product, "type": "plan-key", "source": product_key(
+                pending["repositoryId"], workflow.name, workflow.policy, identity, name, product["data"]["sha256"])}
+            for name, product in manifest["products"].items()}}
+    append_outputs({"products": compact_json(references)})
     return 0
 
 
@@ -993,8 +1002,22 @@ def bind_command(args: argparse.Namespace, contract: ConvergenceContract) -> int
     manifests = object_value(json.loads(args.products_json), "current-run products")
     if set(manifests) != {entry["workload"] for entry in entries}:
         raise ConfigError("current-run batch product inventory differs")
+    origin = public_origin(os.environ.get(STORAGE_ENV["public_origin"], "")) if manifests else ""
     for identity, manifest in manifests.items():
+        manifest = object_value(manifest, "current-run product reference")
+        products = object_value(manifest.get("products"), "current-run product references")
+        resolved = {}
+        for name, reference in products.items():
+            reference = object_value(reference, "current-run product reference")
+            data = object_value(reference.get("data"), "current-run product data")
+            key = product_key(pending["repositoryId"], workflow.name, workflow.policy, identity, name, data.get("sha256"))
+            if (set(reference) != {"type", "source", "data"} or reference["type"] != "plan-key"
+                    or reference["source"] != key):
+                raise ConfigError("current-run product key reference differs")
+            resolved[name] = {"type": "url", "source": f"{origin}/{key}", "data": data}
+        manifest = {**manifest, "products": resolved}
         validate_contribution(manifest, pending, workflow, identity)
+        manifests[identity] = manifest
     # Re-project consumer inputs without altering plan decisions or trusted hits.
     for name, descriptor in product_inputs(pending, manifests).items():
         write_json_atomic(args.output / f"{name}.json", descriptor)

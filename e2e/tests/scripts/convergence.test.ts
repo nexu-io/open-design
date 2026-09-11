@@ -97,7 +97,7 @@ afterEach(() => {
 describe("workload convergence", () => {
   test("binds an aggregated direct-product miss batch without converting uploads into cache hits", () => {
     const code = `
-import sys,json,tempfile,hashlib
+import sys,json,tempfile,hashlib,os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -124,16 +124,32 @@ with tempfile.TemporaryDirectory() as temporary:
  with patch.object(c,'R2Client',Storage),patch.object(c,'storage_config',return_value=storage),patch.object(c,'append_outputs') as output:
   assert c.contribute_batch_command(args,contract)==0
   manifests=json.loads(output.call_args.args[0]['products']);assert set(manifests)==selected
+  assert storage['public_origin'] not in output.call_args.args[0]['products']
+  assert all(m['products']['resource']['type']=='plan-key' for m in manifests.values())
   assert len(writes)==2
+ # Consumers need only the read origin, never upload credentials.
+ os.environ[c.STORAGE_ENV['public_origin']]=storage['public_origin']
+ for field in ['access_key_id','secret_access_key']: os.environ.pop(c.STORAGE_ENV[field],None)
  bound=SimpleNamespace(pending=args.pending,batch='data',products_json=json.dumps(manifests),output=root/'inputs',products_root=root/'bound')
  assert c.bind_command(bound,contract)==0
  assert c.load_json(args.pending)==pending
  sources=c.load_json(bound.output/'batches/data.json')['sources']
  assert len(sources)==2 and all(set(source)=={'id','artifact'} for source in sources)
- assert {source['artifact']['url'] for source in sources}=={m['products']['resource']['source'] for m in manifests.values()}
+ assert {source['artifact']['url'] for source in sources}=={storage['public_origin']+'/'+m['products']['resource']['source'] for m in manifests.values()}
  # Trusted handoff collection retains direct manifests, without inventing job sources.
  assert c.contribute_all_command(SimpleNamespace(pending=args.pending,source_commit='b'*40,output=bound.products_root),contract)==0
- for name,manifest in manifests.items(): assert c.load_json(bound.products_root/name/'product-manifest.json')==manifest
+ for name in manifests: assert c.load_json(bound.products_root/name/'product-manifest.json')==c.load_json(args.output/name/'product-manifest.json')
+ for replacement in [{'source':'../foreign'}, {'source':'https://foreign.invalid/key'}, {'type':'url'}, {'unexpected':True}]:
+  changed=json.loads(json.dumps(manifests));next(iter(changed.values()))['products']['resource'].update(replacement)
+  bound.products_json=json.dumps(changed)
+  try: c.bind_command(bound,contract)
+  except c.ConfigError: pass
+  else: raise AssertionError('accepted invalid key reference')
+ bound.products_json=json.dumps(manifests)
+ with patch.dict(os.environ,{c.STORAGE_ENV['public_origin']:'http://insecure.invalid'}):
+  try: c.bind_command(bound,contract)
+  except c.ConfigError: pass
+  else: raise AssertionError('accepted insecure consumer origin')
  for changed in [{},dict(manifests,unknown=next(iter(manifests.values())))]:
   bound.products_json=json.dumps(changed)
   try: c.bind_command(bound,contract)

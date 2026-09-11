@@ -965,6 +965,7 @@ jobs:
 
       - name: "[validate] Closure data references · current run"
         env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
           PRODUCT_RECEIPTS: ${{ needs.data.outputs.products || '{}' }}
         run: >-
           python3 .github/scripts/convergence.py --config .github/config/plan/release-prerelease.json bind
