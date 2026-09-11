@@ -1085,8 +1085,6 @@ jobs:
           if-no-files-found: error
           retention-days: 1
   distribution:
-
-  distribution:
     name: ${{ matrix.shell }} distribution (${{ matrix.target }})
     needs: [tools, plan, prepare]
     if: ${{ !cancelled() && !failure() && needs.tools.result == 'success' && needs.plan.result == 'success' && needs.prepare.result == 'success' }}
