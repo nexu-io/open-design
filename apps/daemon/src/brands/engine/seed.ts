@@ -220,6 +220,18 @@ function fontStack(primaryFamily: string | undefined, fallbacks: string[]): stri
 }
 
 /**
+ * The colorSuccess value `seedFromBrand` derives for a brand whose
+ * accent-secondary role carries `accentSecondaryHex`: that hex only stands in
+ * for success when it reads green; otherwise the Ant default survives.
+ * Importers that author explicit success overrides compare against this so a
+ * value is only overridden when it would otherwise be lost.
+ */
+export function derivedColorSuccess(accentSecondaryHex: string | undefined): string {
+  const linkHex = normalizeHex(accentSecondaryHex ?? "");
+  return linkHex && isGreenish(linkHex) ? linkHex : defaultSeed.colorSuccess;
+}
+
+/**
  * Map an already-synthesized Brand kit onto a SeedToken.
  *  - colorPrimary  ← role "accent" (else the first non-neutral color, else default)
  *  - colorInfo     ← same as primary
@@ -230,7 +242,7 @@ function fontStack(primaryFamily: string | undefined, fallbacks: string[]): stri
  *                    otherwise light foregrounds fall back to black and dark
  *                    canvases fall back to white as before
  *  - fontFamily    ← body face + fallbacks + system tail
- *  - borderRadius  ← parseInt(layout.radius) || 6
+ *  - borderRadius  ← layout.radius when it parses to a whole number >= 0, else 6
  *  - everything else ← defaultSeed
  */
 export function seedFromBrand(brand: Brand): SeedToken {
@@ -255,20 +267,23 @@ export function seedFromBrand(brand: Brand): SeedToken {
     defaultSeed.colorPrimary;
 
   const linkHex = normalizeHex(accentSecondary?.hex ?? "");
-  const successHex =
-    linkHex && isGreenish(linkHex) ? linkHex : defaultSeed.colorSuccess;
 
-  const radius = parseInt(brand.layout?.radius ?? "", 10);
+  // The radius seed is an integer pixel count; a fractional authored dimension
+  // ("0.5rem", "0.25em") cannot be represented and must fall back to the
+  // default instead of truncating to square corners.
+  const radius = Number.parseFloat(brand.layout?.radius ?? "");
+  const radiusSeed =
+    Number.isFinite(radius) && Number.isInteger(radius) && radius >= 0 ? radius : defaultSeed.borderRadius;
 
   return {
     ...defaultSeed,
     colorPrimary: primaryHex,
     colorInfo: primaryHex,
     colorLink: linkHex ?? "",
-    colorSuccess: successHex,
+    colorSuccess: derivedColorSuccess(accentSecondary?.hex),
     ...neutralBases(background?.hex, surface?.hex, foreground?.hex),
     fontFamily: fontStack(brand.typography?.body?.family, brand.typography?.body?.fallbacks ?? []),
-    borderRadius: Number.isFinite(radius) && radius > 0 ? radius : defaultSeed.borderRadius,
+    borderRadius: radiusSeed,
   };
 }
 
