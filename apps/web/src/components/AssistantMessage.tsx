@@ -548,6 +548,8 @@ function AssistantMessageImpl({
    */
   /** 壳头那颗秒表的「现在」+ S12 的静默起点,每秒同刻取一次(见 `useTickingNow`)。 */
   const { nowMs, lastEventAtMs } = useTickingNow(streaming, message.runId);
+  // A retried message keeps its creation date but carries the new run's start.
+  const runStartedAt = message.startedAt ?? message.createdAt;
 
   /**
    * 执行记录里的文件名要判归属才决定做不做链接(产品 2026-08-27:
@@ -571,7 +573,7 @@ function AssistantMessageImpl({
       // 「一件事都还没发生」那一格(S12)靠它算静默时长;它同时也是壳头耗时的
       // 兜底起点 —— 不发工具事件的那批 agent(plain-stream / qoder)整轮没有一个
       // 带时刻的事件,没有这一对起止,壳头就只有一句光秃秃的「已完成」。
-      ...(message.createdAt != null ? { startedAtMs: message.createdAt } : {}),
+      ...(runStartedAt != null ? { startedAtMs: runStartedAt } : {}),
       ...(message.endedAt != null ? { endedAtMs: message.endedAt } : {}),
       // 取不到就**不传** —— 让 `shellQuiet` 退回轮次开头,而不是拿一个假的
       // 「刚刚」把 S12 悄悄关掉(「卡在首个 token」那一档每月 5,547 次)。
@@ -593,7 +595,7 @@ function AssistantMessageImpl({
     };
     // `message.endedAt` 从 undefined 变成时刻**就在轮次终止那一刻** —— 不进依赖的话
     // 兜底耗时会停在「还没有终点」的那一版,壳头刚收起时秒数是空的。
-  }, [displayEvents, turnRunStatus, nowMs, previousTodos, message.endedAt, streaming, lastEventAtMs, mediaTasks]);
+  }, [displayEvents, turnRunStatus, nowMs, previousTodos, runStartedAt, message.endedAt, streaming, lastEventAtMs, mediaTasks]);
   /**
    * 执行记录里**真的有东西**。
    *
