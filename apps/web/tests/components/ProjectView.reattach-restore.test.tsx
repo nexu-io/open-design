@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -13,7 +13,7 @@ import {
   resolveAgentTouchedFileNames,
 } from '../../src/components/ProjectView';
 import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
-import type { ChatMessage } from '../../src/types';
+import type { ChatMessage, ProjectFile } from '../../src/types';
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -45,6 +45,7 @@ const chatPaneHarness = vi.hoisted(() => ({
     meta?: unknown,
   ) => unknown),
   onStop: null as null | (() => void),
+  onTabsStateChange: null as null | ((state: { tabs: string[]; active: string | null }) => void),
   openRequestNames: [] as string[],
   messages: [] as ChatMessage[],
 }));
@@ -145,9 +146,12 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: ({
     openRequest,
+    onTabsStateChange,
   }: {
     openRequest?: { name?: string; openBatch?: readonly string[] } | null;
+    onTabsStateChange: NonNullable<typeof chatPaneHarness.onTabsStateChange>;
   }) => {
+    chatPaneHarness.onTabsStateChange = onTabsStateChange;
     const name = openRequest?.name;
     // A finished turn's other artifacts ride in `openBatch` (OPEND-2588).
     // Recording only `.name` would quietly make the "never opened ghost.html"
@@ -172,6 +176,7 @@ function renderProjectView(options?: {
   resolvedDir?: string | null;
   projectId?: string;
   routeConversationId?: string | null;
+  intent?: 'web-clone';
   strict?: boolean;
 }) {
   const project = {
@@ -179,6 +184,7 @@ function renderProjectView(options?: {
     name: 'Project',
     skillId: null,
     designSystemId: null,
+    metadata: options?.intent ? { intent: options.intent } : undefined,
   } as never;
   const view = (
     <ProjectView
@@ -522,9 +528,12 @@ describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
 describe('ProjectView daemon reattach restore', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     chatPaneHarness.onSend = null;
     chatPaneHarness.onStop = null;
+    chatPaneHarness.onTabsStateChange = null;
     chatPaneHarness.openRequestNames = [];
     chatPaneHarness.messages = [];
     window.sessionStorage.clear();
@@ -917,68 +926,140 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
-  it('reopens the persisted artifact_focus target after a reconnect when the target already existed', async () => {
-    const startedAt = Date.now();
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([
-      {
-        id: 'msg-reattach-artifact-focus',
-        role: 'assistant',
-        agentId: 'codex',
-        content: '',
-        createdAt: startedAt,
-        startedAt,
-        runId: 'run-artifact-focus',
-        runStatus: 'running',
-        // The focus event is already persisted on the message when the page
-        // reconnects.  The file itself existed before this turn (the agent
-        // refreshed the site entry in place), so a diff-only recovery cannot
-        // infer the intended tab from the file list.
-        preTurnFileNames: ['index.html'],
-        events: [{ kind: 'artifact_focus', open: 'index.html' }],
-      } satisfies ChatMessage,
-    ]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    const index = {
-      name: 'index.html',
-      path: '/p/index.html',
-      size: 20,
-      updatedAt: Date.now(),
-      kind: 'html',
-      mime: 'text/html',
-    };
-    fetchProjectFiles.mockResolvedValue(index ? [index] : []);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-    fetchChatRunStatus.mockResolvedValue({
-      id: 'run-artifact-focus',
-      status: 'running',
-      createdAt: startedAt,
-      updatedAt: startedAt,
-      exitCode: null,
-      signal: null,
-      // Deliberately absent: the persisted artifact_focus event is the only
-      // authoritative declaration available to this recovery path.
-    });
+  it.each([
+    { change: 'created', cachedListing: false, userTakesOver: false, terminalReplay: false },
+    { change: 'rewritten', cachedListing: false, userTakesOver: false, terminalReplay: false },
+    { change: 'created', cachedListing: true, userTakesOver: false, terminalReplay: false },
+    { change: 'created', cachedListing: false, userTakesOver: true, terminalReplay: false },
+    { change: 'created', cachedListing: false, userTakesOver: false, terminalReplay: true },
+    { change: 'created', cachedListing: true, userTakesOver: false, terminalReplay: true },
+    { change: 'created', cachedListing: false, userTakesOver: true, terminalReplay: true },
+  ] as const)(
+    'restores a one-hour, 206-artifact clone ($change entry, cached listing: $cachedListing, user takeover: $userTakesOver, terminal replay: $terminalReplay)',
+    async ({ change, cachedListing, userTakesOver, terminalReplay }) => {
+      const endedAt = Date.now();
+      const startedAt = endedAt - (59 * 60 + 53) * 1000;
+      const notes: ProjectFile = {
+        name: 'notes.md', path: 'notes.md', size: 10, mtime: startedAt - 60_000,
+        kind: 'text', mime: 'text/markdown',
+      };
+      const review: ProjectFile = { ...notes, name: 'review.md', path: 'review.md' };
+      const index: ProjectFile = {
+        name: 'index.html', path: 'index.html', size: 4096,
+        mtime: startedAt + 1000, kind: 'html', mime: 'text/html',
+      };
+      const artifacts: ProjectFile[] = [
+        index,
+        ...Array.from({ length: 205 }, (_, i): ProjectFile => ({
+          name: `assets/image-${i}.png`, path: `assets/image-${i}.png`,
+          size: 100, mtime: endedAt - 100, kind: 'image', mime: 'image/png',
+        })),
+      ];
+      const beforeNames = [notes.name, review.name, ...(change === 'rewritten' ? [index.name] : [])];
+      const focus = { kind: 'artifact_focus', open: index.name } as const;
+      listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Website Clone' }]);
+      listMessages.mockResolvedValue([{
+        id: 'msg-clone', role: 'assistant', content: '', agentId: 'codex',
+        createdAt: startedAt, startedAt, runId: 'run-clone',
+        runStatus: terminalReplay ? 'succeeded' : 'running',
+        endedAt: terminalReplay ? endedAt : undefined,
+        preTurnFileNames: beforeNames,
+        events: terminalReplay ? [{ kind: 'text', text: 'Clone complete.' }, focus] : [focus],
+      } satisfies ChatMessage]);
+      fetchPreviewComments.mockResolvedValue([]);
+      // A saved unrelated tab must not consume the turn's final auto-open.
+      loadTabs.mockResolvedValue({ tabs: [notes.name], active: notes.name, hasSavedState: true });
+      fetchProjectFiles.mockResolvedValue([notes, review]);
+      fetchLiveArtifacts.mockResolvedValue([]);
+      fetchSkill.mockResolvedValue(null);
+      fetchDesignSystem.mockResolvedValue(null);
+      getTemplate.mockResolvedValue(null);
+      listActiveChatRuns.mockResolvedValue([]);
+      const status = {
+        id: 'run-clone', status: 'running', createdAt: startedAt,
+        updatedAt: endedAt, exitCode: null, signal: null,
+        artifactCount: artifacts.length, artifactPaths: artifacts.map((file) => file.name),
+      };
+      const terminalStatus = { ...status, status: 'succeeded' };
+      let releaseStatus!: (value: typeof status) => void;
+      const statusReady = new Promise<typeof status>((resolve) => { releaseStatus = resolve; });
+      if (terminalReplay) fetchChatRunStatus.mockReturnValue(statusReady);
+      else fetchChatRunStatus.mockResolvedValue(status);
+      let handlers: { onAgentEvent: (event: unknown) => void; onDone: () => Promise<void> } | null = null;
+      reattachDaemonRun.mockImplementation(async (options: any) => {
+        handlers = options.handlers;
+        return new Promise<void>(() => {});
+      });
 
-    let capturedHandlers: { onDone: () => void } | null = null;
-    reattachDaemonRun.mockImplementation(async (options: any) => {
-      capturedHandlers = { onDone: options.handlers.onDone };
-      return new Promise<void>(() => {});
-    });
+      renderProjectView({ intent: 'web-clone' });
+      if (terminalReplay) await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalled());
+      else await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+      expect(chatPaneHarness.openRequestNames).toEqual([]);
+      fetchChatRunStatus.mockResolvedValue(terminalStatus);
+      const finish = async () => {
+        if (terminalReplay) releaseStatus(terminalStatus);
+        else {
+          handlers!.onAgentEvent(focus);
+          await handlers!.onDone();
+        }
+      };
+      if (cachedListing) {
+        // Use the actual provider and one-second GET cache. An ordinary
+        // workspace read can finish just before the terminal artifact lands.
+        const registry = await vi.importActual<typeof import('../../src/providers/registry')>(
+          '../../src/providers/registry',
+        );
+        vi.useFakeTimers();
+        let filesOnServer = [notes, review];
+        vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
+          new Response(JSON.stringify({ files: filesOnServer }), { status: 200 })
+        ));
+        await registry.fetchProjectFiles('project-1', { requireAuthoritative: true });
+        fetchProjectFiles.mockImplementation(registry.fetchProjectFiles);
+        filesOnServer = [notes, review, ...artifacts];
+        await act(finish);
+        vi.useRealTimers();
+      } else {
+        // The focus event predates the authoritative file refresh. Its result
+        // contains both this turn's entry and 205 newer auxiliary resources.
+        let releaseFiles!: (files: ProjectFile[]) => void;
+        const filesReady = new Promise<ProjectFile[]>((resolve) => {
+          releaseFiles = resolve;
+        });
+        fetchProjectFiles.mockClear();
+        fetchProjectFiles.mockReturnValue(filesReady);
+        await act(finish);
+        await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+        expect(chatPaneHarness.openRequestNames).toEqual([]);
+        if (userTakesOver) {
+          await waitFor(() => expect(
+            chatPaneHarness.messages.find((message) => message.id === 'msg-clone')?.runStatus,
+          ).toBe('succeeded'));
+          // The run is visibly complete, but its final file read is still in
+          // flight. A deliberate tab switch now must win over that late read.
+          act(() => {
+            chatPaneHarness.onTabsStateChange!({
+              tabs: [notes.name, review.name], active: review.name,
+            });
+          });
+        }
+        await act(async () => { releaseFiles([notes, review, ...artifacts]); });
+      }
 
-    renderProjectView();
-
-    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
-    expect(capturedHandlers).not.toBeNull();
-    capturedHandlers!.onDone();
-
-    await waitFor(() => expect(chatPaneHarness.openRequestNames).toContain('index.html'));
-  });
+      if (!userTakesOver) {
+        await waitFor(() => expect(chatPaneHarness.openRequestNames).toEqual([index.name]));
+      }
+      await waitFor(() => {
+        const saved = saveMessage.mock.calls
+          .map((call) => call[2] as ChatMessage)
+          .filter((message) => message.id === 'msg-clone' && message.producedFiles?.length)
+          .at(-1);
+        expect(saved?.runStatus).toBe('succeeded');
+        expect(saved?.producedFiles).toHaveLength(206);
+      });
+      if (userTakesOver) expect(chatPaneHarness.openRequestNames).toEqual([]);
+    },
+  );
 
   it('claims the projected active task Run once and drops the predecessor cursor', async () => {
     const startedAt = Date.now();
