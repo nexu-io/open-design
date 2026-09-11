@@ -716,7 +716,7 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
+  // Picker exposes the synthetic Default + the 14 labels agy's TUI
   // Switch-Model surfaces for consumer-tier accounts. The set is small
   // enough to ship statically; revisit when upstream adds an `agy
   // models` subcommand (also tracked under issue #35).
@@ -729,6 +729,12 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
       'Gemini 3.5 Flash (High)',
       'Gemini 3.5 Flash (Medium)',
       'Gemini 3.5 Flash (Low)',
+      'Gemini 3.6 Flash (High)',
+      'Gemini 3.6 Flash (Medium)',
+      'Gemini 3.6 Flash (Low)',
+      'Gemini 3.7 Flash (High)',
+      'Gemini 3.7 Flash (Medium)',
+      'Gemini 3.7 Flash (Low)',
       'Claude Sonnet 4.6 (Thinking)',
       'Claude Opus 4.6 (Thinking)',
       'GPT-OSS 120B (Medium)',
