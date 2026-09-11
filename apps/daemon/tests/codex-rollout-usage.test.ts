@@ -1,7 +1,8 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
 
 import {
   codexSessionIdFromRunEvents,
@@ -153,6 +154,72 @@ describe('readCodexRolloutFirstCall', () => {
     expect(result?.first_call_input_tokens).toBe(13342);
     expect(result?.first_call_cache_hit_ratio).toBeCloseTo(12672 / 13342);
   });
+
+  it('preserves first-call usage after an owned thread has been archived', async () => {
+    const sid = '019eef4f-7409-7c82-bebe-30504eed3959';
+    const home = plantRollout(sid, rollout(sid));
+    try {
+      const before = await readCodexRolloutFirstCall({ codexHome: home, sessionId: sid });
+      const name = `rollout-2026-06-24T12-00-00-${sid}.jsonl`;
+      mkdirSync(path.join(home, 'archived_sessions'));
+      renameSync(path.join(home, 'sessions/2026/06/24', name), path.join(home, 'archived_sessions', name));
+      expect(await readCodexRolloutFirstCall({ codexHome: home, sessionId: sid })).toEqual(before);
+    } finally { rmSync(home, { recursive: true, force: true }); }
+  });
+
+  it('retains indexed archived usage after the flat archive exceeds the scan limit', async () => {
+    const sid = '019eef4f-7409-7c82-bebe-30504eed3959';
+    const home = plantRollout(sid, rollout(sid));
+    try {
+      const archive = path.join(home, 'archived_sessions');
+      mkdirSync(archive);
+      const name = `rollout-2026-06-24T12-00-00-${sid}.jsonl`;
+      const archivedPath = path.join(archive, name);
+      renameSync(path.join(home, 'sessions/2026/06/24', name), archivedPath);
+      // Codex archives into one flat directory, while its native primary-key
+      // index resolves a known thread without scanning other conversations.
+      for (let i = 0; i < 2_049; i += 1) writeFileSync(path.join(archive, `unrelated-${i}`), '');
+      const db = new Database(path.join(home, 'state_5.sqlite'));
+      try {
+        db.exec('CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, archived INTEGER NOT NULL)');
+        db.prepare('INSERT INTO threads VALUES (?, ?, 1)').run(sid, archivedPath);
+      } finally { db.close(); }
+      expect((await readCodexRolloutFirstCall({ codexHome: home, sessionId: sid }))?.first_call_input_tokens).toBe(13342);
+    } finally { rmSync(home, { recursive: true, force: true }); }
+  });
+
+  it.each(['outside archive', 'other thread', 'symlink', 'writable file'])(
+    'does not trust an indexed rollout pointing to %s',
+    async (scenario) => {
+      const sid = '019eef4f-7409-7c82-bebe-30504eed3959';
+      const home = plantRollout(sid, rollout(sid));
+      try {
+        const archive = path.join(home, 'archived_sessions');
+        mkdirSync(archive);
+        const name = `rollout-2026-06-24T12-00-00-${sid}.jsonl`;
+        const activePath = path.join(home, 'sessions/2026/06/24', name);
+        const target = path.join(home, name);
+        renameSync(activePath, target);
+        let indexedPath = path.join(archive, name);
+        if (scenario === 'outside archive') indexedPath = target;
+        else if (scenario === 'other thread') {
+          indexedPath = path.join(archive, 'rollout-2026-06-24T12-00-00-20000000-0000-4000-8000-000000000002.jsonl');
+          renameSync(target, indexedPath);
+        } else if (scenario === 'symlink') symlinkSync(target, indexedPath);
+        else {
+          renameSync(target, indexedPath);
+          chmodSync(indexedPath, 0o666);
+        }
+        for (let i = 0; i < 2_049; i += 1) writeFileSync(path.join(archive, `unrelated-${i}`), '');
+        const db = new Database(path.join(home, 'state_5.sqlite'));
+        try {
+          db.exec('CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, archived INTEGER NOT NULL)');
+          db.prepare('INSERT INTO threads VALUES (?, ?, 1)').run(sid, indexedPath);
+        } finally { db.close(); }
+        expect(await readCodexRolloutFirstCall({ codexHome: home, sessionId: sid })).toBeNull();
+      } finally { rmSync(home, { recursive: true, force: true }); }
+    },
+  );
 
   it('returns null (never throws) when the session id has no matching rollout', async () => {
     const home = plantRollout('some-other-session', rollout('some-other-session'));
