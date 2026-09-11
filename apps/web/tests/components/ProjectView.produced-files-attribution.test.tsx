@@ -1,5 +1,5 @@
-import type { DaemonStreamOptions } from '../../src/providers/daemon';
 // @vitest-environment jsdom
+import type { DaemonStreamOptions } from '../../src/providers/daemon';
 
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
