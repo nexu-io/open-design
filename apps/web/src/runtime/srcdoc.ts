@@ -1853,6 +1853,14 @@ function injectSelectionBridge(
   var postTargetsTimer = null;
   // overrides[elementId] = { selector: '[data-od-id="x"]', props: { color: '#fff', ... } }
   var overrides = Object.create(null);
+  // #7008: a replayed override keyed by a frame-qualified id (frame:[...])
+  // has no matching selector in THIS document's DOM, so it can never be
+  // validated/applied locally. Keep the raw, per-child entries here (keyed
+  // by framePath, then by the child's own local elementId) so they can be
+  // forwarded once — immediately if the child frame already exists, and
+  // again on a later od:url-selection-bridge-ready in case the replay
+  // arrived before the child finished mounting or reloaded afterward.
+  var pendingFrameInspectOverrides = Object.create(null);
   var styleEl = null;
   // Allow-list of CSS properties the host may override. A malicious parent
   // could otherwise smuggle arbitrary CSS (or, with </style>, raw HTML)
@@ -1877,6 +1885,200 @@ function injectSelectionBridge(
   // brackets (close the <style> tag), and newlines (defense in depth).
   var UNSAFE_VALUE = /[;{}<>\\n\\r]/;
   function active(){ return commentEnabled || inspectEnabled; }
+  // #7008: child documents are eligible only when their resolved URL stays
+  // beneath this srcdoc's daemon-minted project preview scope. Artifact markup
+  // never gets to opt itself into the relay with a data attribute.
+  //
+  // Validates and extracts the in-scope project path from an already-
+  // resolved href string, without touching a frame's reflected src
+  // attribute at all -- src is set by the PARENT and does not update
+  // when the CHILD navigates itself (an internal link, a
+  // window.location assignment), so deriving path from it goes stale the
+  // moment that happens. Callers that have a live, child-reported href
+  // (a ready ping) should use this instead of projectFramePath(frame).
+  function projectFramePathFromHref(hrefString){
+    try {
+      var base = new URL(document.baseURI);
+      var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
+      var child = new URL(hrefString, document.baseURI);
+      if (!baseMatch || child.origin !== base.origin) return null;
+      var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
+      if (child.pathname.indexOf(prefix) !== 0) return null;
+      var path = decodeURIComponent(child.pathname.slice(prefix.length));
+      return path && path.indexOf('..') < 0 ? path : null;
+    } catch (_) { return null; }
+  }
+  // #7008 review (nettee): a validated ready ping's confirmed path used to be
+  // cached on an ordinary DOM attribute in the author-controlled root
+  // writable attribute on an iframe in the author-controlled root document.
+  // Any artifact script with a reference to that element (the root's own
+  // script, not just the nested child) could set or cross-assign it
+  // directly, with no involvement of the ready-ping handler at all, and have
+  // the forged value trusted as ground truth. A closure-local WeakMap has no
+  // such surface: nothing outside this IIFE has a reference to it.
+  var liveFramePaths = new WeakMap();
+  // #7296 review (R9-2): once a frame is KNOWN to have navigated (its native
+  // load event fired), its parent src attribute staying unchanged no longer
+  // proves anything -- a child navigating itself never touches that
+  // attribute. Simply clearing the cache and falling back to re-deriving
+  // from that same stale attribute would let a departed document (an
+  // external site, a non-HTML file) keep answering to the frame's old,
+  // still-declared identity. This frame is unavailable until a fresh ready
+  // ping confirms it is back at that SAME declared identity -- not any
+  // other self-navigated path, which stays unauthorized per the R8-1/R8-2
+  // fix regardless of caching.
+  var frameUnavailable = new WeakSet();
+  var frameLoadListeners = new WeakSet();
+  function observeFrameLoad(frame){
+    if (!frame || frameLoadListeners.has(frame)) return;
+    frameLoadListeners.add(frame);
+    frame.addEventListener('load', function(){
+      try { liveFramePaths.delete(frame); } catch (_) {}
+      try { frameUnavailable.add(frame); } catch (_) {}
+    });
+  }
+  function projectFramePath(frame){
+    // A validated ready ping (see od:url-selection-bridge-ready below)
+    // caches the child's own reported path here -- ground truth from the
+    // child itself, once known, always wins over re-deriving from the
+    // parent's possibly-stale src attribute.
+    try {
+      var cachedFramePath = frame && liveFramePaths.get(frame);
+      var currentFrameSrc = frame && frame.getAttribute ? (frame.getAttribute('src') || '') : '';
+      if (cachedFramePath && cachedFramePath.srcAtCache === currentFrameSrc) return cachedFramePath.path;
+    } catch (_) {}
+    try {
+      if (frame && frameUnavailable.has(frame)) return null;
+      return projectFramePathFromHref(frame.src);
+    } catch (_) { return null; }
+  }
+  function isProjectHtmlPath(path){ return /\.html?$/i.test(String(path || '')); }
+  // DOM-identity-only lookup: frame.contentWindow === source cannot be
+  // forged by any script (it is the browser's own WindowProxy identity),
+  // unlike anything a message payload claims. Used by the ready-ping
+  // handler specifically because it must be able to locate a frame that is
+  // CURRENTLY unavailable (see frameUnavailable above) in order to
+  // re-validate and potentially clear that state -- projectFrameForSource
+  // below intentionally cannot see an unavailable frame at all, which would
+  // otherwise deadlock the very ready ping meant to clear it.
+  function frameElementForSource(source){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      if (frames[i].contentWindow === source) return frames[i];
+    }
+    return null;
+  }
+  function projectFrameForSource(source){
+    var frame = frameElementForSource(source);
+    return frame && projectFramePath(frame) ? frame : null;
+  }
+  function markProjectFrames(){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      var path = projectFramePath(frames[i]);
+      var eligible = !!path && isProjectHtmlPath(path);
+      frames[i].toggleAttribute('data-od-project-frame', eligible);
+    }
+  }
+  markProjectFrames();
+  try {
+    new MutationObserver(function(){
+      markProjectFrames();
+    }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+  } catch (_) {}
+  function parseProjectFrameTarget(elementId){
+    var raw = String(elementId || '');
+    if (raw.indexOf('frame:') !== 0) return null;
+    try {
+      var parts = JSON.parse(decodeURIComponent(raw.slice(6)));
+      return Array.isArray(parts) && parts.length === 2 &&
+        typeof parts[0] === 'string' && parts[0] &&
+        typeof parts[1] === 'string' && parts[1]
+        ? { framePath: parts[0], localElementId: parts[1] }
+        : null;
+    } catch (_) { return null; }
+  }
+  function projectFrameTargetId(framePath, localElementId){
+    try { return 'frame:' + encodeURIComponent(JSON.stringify([framePath, localElementId])); }
+    catch (_) { return null; }
+  }
+  function projectFrameForPath(framePath){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      if (projectFramePath(frames[i]) === framePath) return frames[i];
+    }
+    return null;
+  }
+  function routeProjectFrameCommand(data){
+    if (!data || !data.type) return false;
+    var allowed = { 'od:comment-active-target': true, 'od:inspect-set': true, 'od:inspect-reset': true };
+    if (!allowed[data.type]) return false;
+    var target = parseProjectFrameTarget(data.elementId);
+    if (!target) return false;
+    var frame = projectFrameForPath(target.framePath);
+    if (!frame || !frame.contentWindow) return true;
+    var message = { type: data.type, elementId: target.localElementId };
+    if (typeof data.selector === 'string') message.selector = data.selector;
+    if (typeof data.prop === 'string') message.prop = data.prop;
+    if (typeof data.value === 'string') message.value = data.value;
+    try { frame.contentWindow.postMessage(message, '*'); } catch (_) {}
+    return true;
+  }
+  function relayFrameInspectOverrides(framePath){
+    var entries = pendingFrameInspectOverrides[framePath];
+    if (!entries) return;
+    var frame = projectFrameForPath(framePath);
+    if (!frame || !frame.contentWindow) return;
+    try { frame.contentWindow.postMessage({ type: 'od:inspect-replay', overrides: entries }, '*'); } catch (_) {}
+  }
+  function broadcastProjectFrameMode(data){
+    if (!data || (data.type !== 'od:comment-mode' && data.type !== 'od:inspect-mode')) return;
+    var frames = document.querySelectorAll('iframe[data-od-project-frame]');
+    for (var i = 0; i < frames.length; i++) {
+      try { frames[i].contentWindow && frames[i].contentWindow.postMessage(data, '*'); } catch (_) {}
+    }
+  }
+  function safeRelayPosition(position, frame){
+    if (!position || !Number.isFinite(Number(position.x)) || !Number.isFinite(Number(position.y)) ||
+      !Number.isFinite(Number(position.width)) || !Number.isFinite(Number(position.height))) return null;
+    var rect = frame.getBoundingClientRect();
+    var width = Number(frame.clientWidth || 0);
+    var height = Number(frame.clientHeight || 0);
+    if (!(width > 0) || !(height > 0)) return null;
+    var sx = rect.width / width;
+    var sy = rect.height / height;
+    return { x: Math.round(rect.x + Number(position.x) * sx), y: Math.round(rect.y + Number(position.y) * sy),
+      width: Math.round(Number(position.width) * sx), height: Math.round(Number(position.height) * sy) };
+  }
+  function relayProjectFrameSelection(ev){
+    if (!active()) return;
+    var data = ev && ev.data;
+    if (data && data.type === 'od:comment-leave') {
+      // Carries no target identity — the pointer simply left whatever it was
+      // over. Relay as-is once the sender is confirmed a real project frame.
+      if (projectFrameForSource(ev.source)) window.parent.postMessage({ type: 'od:comment-leave' }, '*');
+      return;
+    }
+    var allowed = { 'od:comment-target': true, 'od:comment-hover': true, 'od:comment-active-target-update': true };
+    if (!data || !allowed[data.type] || !data.position || !data.elementId || !data.selector) return;
+    var frame = projectFrameForSource(ev.source);
+    if (!frame) return;
+    var framePath = projectFramePath(frame);
+    var position = safeRelayPosition(data.position, frame);
+    if (!framePath || !position) return;
+    var localElementId = String(data.elementId);
+    var targetId = projectFrameTargetId(framePath, localElementId);
+    if (!targetId) return;
+    var message = { type: data.type, elementId: targetId,
+      localElementId: localElementId, framePath: framePath, selector: String(data.selector),
+      label: typeof data.label === 'string' ? data.label : '', text: typeof data.text === 'string' ? data.text : '',
+      position: position, htmlHint: typeof data.htmlHint === 'string' ? data.htmlHint : '', style: data.style || null };
+    if (data.clickedDescendant && typeof data.clickedDescendant === 'object') message.clickedDescendant = { label: typeof data.clickedDescendant.label === 'string' ? data.clickedDescendant.label : '', text: typeof data.clickedDescendant.text === 'string' ? data.clickedDescendant.text : '' };
+    if (data.hoverPoint && Number.isFinite(Number(data.hoverPoint.x)) && Number.isFinite(Number(data.hoverPoint.y))) message.hoverPoint = { x: Math.round(Number(data.hoverPoint.x)), y: Math.round(Number(data.hoverPoint.y)) };
+    if (Number.isFinite(Number(data.slideIndex)) && Number(data.slideIndex) >= 0) message.slideIndex = Math.floor(Number(data.slideIndex));
+    window.parent.postMessage(message, '*');
+  }
+  window.addEventListener('message', relayProjectFrameSelection);
   function deckSlideIndexForPayload(){
     try {
       var state = window.__odDeckSlideState && window.__odDeckSlideState();
@@ -2642,6 +2844,39 @@ function meaningfulDomFallbackTarget(el) {
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
+    if (data.type === 'od:url-selection-bridge-ready') {
+      // A project child can load after the root's initial mode broadcast.
+      // Its ready ping is accepted only from the current direct, scoped frame
+      // (window-identity check below); the href itself is validated against
+      // the scope, not against the frame's possibly-stale src attribute --
+      // that attribute is set by the PARENT and does not update when the
+      // CHILD navigates itself (an internal link, a window.location
+      // assignment), so comparing against it would falsely reject a
+      // legitimate ready ping the moment that happens (#7008 review).
+      var readyFrame = frameElementForSource(ev.source);
+      if (!readyFrame) return;
+      var readyFramePath = projectFramePathFromHref(data.href);
+      if (!readyFramePath) return;
+      observeFrameLoad(readyFrame);
+      try { liveFramePaths.set(readyFrame, { path: readyFramePath, srcAtCache: readyFrame.getAttribute('src') || '' }); } catch (_) {}
+      // #7296 review (R9-2): a ready ping only clears the post-departure
+      // "unavailable" gate when it confirms the frame is back at its OWN
+      // declared identity -- a ready ping reporting some OTHER
+      // self-navigated path leaves the gate in place, since that path was
+      // never authorized to begin with (R8-1/R8-2).
+      try {
+        var declaredPath = projectFramePathFromHref(readyFrame.src);
+        if (declaredPath && declaredPath === readyFramePath) frameUnavailable.delete(readyFrame);
+      } catch (_) {}
+      try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
+      try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
+      // #7008: a replay that arrived before this child mounted (or before it
+      // reloaded, e.g. a scope rotation) was queued rather than dropped —
+      // deliver it now that the child's own bridge is confirmed ready.
+      relayFrameInspectOverrides(readyFramePath);
+      return;
+    }
+    if (routeProjectFrameCommand(data)) return;
     if (data.type === 'od:preview-runtime-state-restore') {
       var currentGeneration = runtimeStateRestoreGeneration();
       if (
@@ -2671,6 +2906,7 @@ function meaningfulDomFallbackTarget(el) {
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+      broadcastProjectFrameMode(data);
       if (active()) setTimeout(postTargets, 0);
       else {
         hoveredId = null;
@@ -2706,6 +2942,7 @@ function meaningfulDomFallbackTarget(el) {
     if (data.type === 'od:inspect-mode') {
       inspectEnabled = !!data.enabled;
       document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
+      broadcastProjectFrameMode(data);
       if (active()) setTimeout(postTargets, 0);
       else hoveredId = null;
       return;
@@ -2733,11 +2970,21 @@ function meaningfulDomFallbackTarget(el) {
       // contract instead of whatever the parent sent.
       var raw = (data && typeof data.overrides === 'object' && data.overrides) ? data.overrides : {};
       overrides = Object.create(null);
+      // #7008: this replay's map is the host's FULL authoritative set, not
+      // an incremental patch, so the per-child breakdown below is also
+      // replaced wholesale rather than merged.
+      var nextPendingFrameOverrides = Object.create(null);
       var ids = Object.keys(raw);
       for (var i = 0; i < ids.length; i++) {
         var id = ids[i];
         var entry = raw[id];
         if (!entry || typeof entry.props !== 'object' || !entry.props) continue;
+        var frameTarget = parseProjectFrameTarget(id);
+        if (frameTarget) {
+          if (!nextPendingFrameOverrides[frameTarget.framePath]) nextPendingFrameOverrides[frameTarget.framePath] = Object.create(null);
+          nextPendingFrameOverrides[frameTarget.framePath][frameTarget.localElementId] = entry;
+          continue;
+        }
         var safeSelector = safeSelectorFor(id, entry.selector);
         if (!safeSelector) continue;
         var clean = Object.create(null);
@@ -2753,6 +3000,9 @@ function meaningfulDomFallbackTarget(el) {
         }
         if (Object.keys(clean).length) overrides[id] = { selector: safeSelector, props: clean };
       }
+      pendingFrameInspectOverrides = nextPendingFrameOverrides;
+      var pendingFramePaths = Object.keys(pendingFrameInspectOverrides);
+      for (var f = 0; f < pendingFramePaths.length; f++) relayFrameInspectOverrides(pendingFramePaths[f]);
       rebuildStyleSheet();
       postOverrides();
       return;
@@ -2920,8 +3170,8 @@ html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cel
 /* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.
    While picker modes are on, disable pointer events on outer-document iframes so the
    hit target resolves to an annotated ancestor (card, shell) in this document. */
-html[data-od-comment-mode] body iframe,
-html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
+html[data-od-comment-mode] body iframe:not([data-od-project-frame]),
+html[data-od-inspect-mode] body iframe:not([data-od-project-frame]) { pointer-events: none !important; }
 </style>`;
   return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
 }
