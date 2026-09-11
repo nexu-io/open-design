@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
+import { buildReleaseDistribution } from "@/exact/distribution-build.ts";
+import { buildReleaseBase, buildReleaseCapsule, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
 import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 
 const roots: string[] = [];

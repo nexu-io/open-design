@@ -21,6 +21,7 @@
       "tools/release/src/exact/resource-build.ts",
       "tools/release/src/exact/platform-artifact.ts",
       "tools/release/src/exact/resource-composition.ts",
+      "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/build-commands.ts",
@@ -68,6 +69,7 @@
       "tools/release/src/exact/control-common.ts",
       "suite://release-executor",
       "tools/release/src/exact/platform-artifact.ts",
+      "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/native-build.ts"
     ],
     "terminal-scene": [
@@ -85,6 +87,7 @@
       "tools/release/src/exact/scene-artifact.ts",
       "tools/release/src/exact/resource-artifact.ts",
       "tools/release/src/exact/resource-composition.ts",
+      "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/resource-build.ts",
       "tools/release/src/policy/"
@@ -108,6 +111,7 @@
       "tools/release/src/exact/scene-artifact.ts",
       "tools/release/src/exact/resource-artifact.ts",
       "tools/release/src/exact/resource-composition.ts",
+      "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/resource-build.ts",
       "tools/release/src/policy/"
@@ -202,6 +206,7 @@
       "suite://electron-carrier",
       "suite://release-executor",
       "tools/release/src/exact/base-artifact.ts",
+      "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/resource-build.ts",
       "tools/release/src/policy/"
@@ -226,6 +231,7 @@
       "suite://release-executor",
       "tools/release/src/exact/capsule-artifact.ts",
       "tools/release/src/exact/capsule-budget.ts",
+      "tools/release/src/exact/native-builder.ts",
       "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/resource-build.ts",
       "tools/release/src/policy/"

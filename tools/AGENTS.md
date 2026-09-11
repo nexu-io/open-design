@@ -33,7 +33,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   it before reading `latest`; changed selections and readback collisions fail.
   Never persist private keys. A frozen version cannot be reassigned to another
   source commit after a failed attempt.
-- `build distribution --retain-result true` retains completed installers and
+- `distribution build --retain-result true` retains completed installers and
   their binding receipt at `<channel>/<version>/native/<shell>/<target>/` in
   release storage. Restore only matching frozen inputs and verified original
   bytes; never treat an interrupted native workspace as a completed result or

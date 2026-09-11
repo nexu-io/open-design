@@ -1213,7 +1213,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tools-release build distribution \
+          tools-release distribution build \
             --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
             --policy "$RUNNER_TEMP/release-policy/release-policy.json" \
             --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \

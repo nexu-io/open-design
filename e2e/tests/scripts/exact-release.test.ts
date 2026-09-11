@@ -192,12 +192,15 @@ describe("exact Electron release topology", () => {
       "  return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in baseline_records(token)]",
       " with patch.object(GitFingerprinter,'records',records): after=compute()",
       " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
-      "print(json.dumps({path:changed('tools/release/src/'+path) for path in ['index.ts','exact/commands.ts','exact/build-commands.ts','exact/resource-commands.ts']}))",
+      "print(json.dumps({path:changed('tools/release/src/'+path) for path in ['index.ts','exact/commands.ts','exact/build-commands.ts','exact/resource-commands.ts','exact/distribution-commands.ts','exact/distribution-build.ts','exact/native-builder.ts']}))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
     const changed: Record<string, string[]> = JSON.parse(result.stdout);
     const control = ["release_tools", "validation_closure_darwin_arm64", "validation_contract_darwin_arm64", "validation_shell_darwin_arm64"];
     expect(changed["index.ts"]).toEqual(control);
     expect(changed["exact/commands.ts"]).toEqual(control);
+    expect(changed["exact/distribution-commands.ts"]).toEqual(["release_tools"]);
+    expect(changed["exact/distribution-build.ts"]).toEqual(["release_tools"]);
+    expect(changed["exact/native-builder.ts"]).toEqual(expect.arrayContaining(["electron_base_darwin_arm64", "electron_scene_darwin_arm64", "terminal_scene_darwin_arm64"]));
     expect(changed["exact/resource-commands.ts"]).toEqual([
       ...dataIds.map(id => `closure_data_${id.replaceAll("-", "_")}_darwin_arm64`), "release_tools",
     ].sort());
@@ -530,7 +533,7 @@ describe("exact Electron release topology", () => {
     expect(execution.enabled).not.toContain("electron_scene_win32_x64");
     expect(execution.runners.electron_win32_x64).toEqual(["windows-2025"]);
     expect(workflow).toContain("tools-release build scene");
-    expect(workflow).toContain('tools-release build distribution');
+    expect(workflow).toContain('tools-release distribution build');
     expect(workflow).not.toContain("exact-scene-request.json");
     expect(workflow).not.toContain("distribution-request.json");
     expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
