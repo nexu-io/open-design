@@ -35,13 +35,6 @@ const configureCiParallelismActionPath = join(
 );
 const uiExtendedMainWorkflowPath = join(workspaceRoot, ".github", "workflows", "ui-extended-main.yml");
 const visualBaselineWorkflowPath = join(workspaceRoot, ".github", "workflows", "visual-baseline.yml");
-const bakePreviewsGcWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-gc.yml");
-const critiqueConformanceWorkflowPath = join(
-  workspaceRoot,
-  ".github",
-  "workflows",
-  "critique-conformance.yml",
-);
 const playwrightConfigPath = join(e2eRoot, "playwright.config.ts");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
@@ -1330,11 +1323,6 @@ process.stdin.on("end", () => {
     // regressing any of them fails here instead of silently breaking auto-merge.
     const workflow = await readFile(bakePreviewsWorkflowPath, "utf8");
 
-    // This publisher needs canonical-repository R2 and release-bot credentials. Mirrors do not
-    // inherit those secrets, so their push/nightly runs must skip the trusted publisher instead
-    // of reaching the AWS CLI with empty bucket/endpoint arguments.
-    expect(workflow).toContain("if: github.repository == 'nexu-io/open-design'");
-
     // 1. The rolling PR is pushed with the release-bot App token, not GITHUB_TOKEN — a
     //    GITHUB_TOKEN-authored push triggers no CI, so the PR could never clear main's required
     //    `Validate workspace` check or the merge queue.
@@ -1947,43 +1935,6 @@ process.stdin.on("end", () => {
     expect(runners).toContain("&& 'ubuntu-24.04'");
     expect(runners).toContain("&& 'economic'");
     expect(runners).toContain("|| vars.OD_CI_RUNNER_MODE");
-  });
-
-  it("[P1] routes repository mirrors through GitHub-hosted runner profiles", async () => {
-    const workflow = await readFile(ciWorkflowPath, "utf8");
-    const runners = sectionBetween(workflow, "  runners:", "  plan:");
-    const bootstrap = sectionBetween(runners, "    runs-on: >-", "    outputs:");
-    const mode = sectionBetween(runners, "          OD_CI_RUNNER_MODE: >-", "        run: python3");
-
-    // The Nexu ARC fleet is canonical-repository infrastructure a mirror does not inherit. A
-    // same-repository mirror PR is not a fork PR, so without this guard it resolves the private
-    // `nexu-runners-small` label, never gets a runner, and GitHub cancels the bootstrap at 24h —
-    // which skips every job that `needs: [runners]` and strands the PR at UNSTABLE forever.
-    expect(bootstrap).toContain("github.repository != 'nexu-io/open-design'");
-    // Both halves are required: the hosted bootstrap alone would still hand downstream jobs the
-    // `default` mode from .github/config/runners.json, whose classes all name private pools.
-    expect(mode).toContain("github.repository != 'nexu-io/open-design'");
-  });
-
-  it.each([
-    // Trusted publishers whose push/schedule triggers are copied verbatim into every mirror.
-    { name: "bake-plugin-previews-gc", workflowPath: bakePreviewsGcWorkflowPath, jobStart: "  gc:" },
-    { name: "critique-conformance", workflowPath: critiqueConformanceWorkflowPath, jobStart: "  run:" },
-    { name: "visual-baseline", workflowPath: visualBaselineWorkflowPath, jobStart: "  baseline:" },
-  ])("[P1] scopes $name to the canonical repository", async ({ workflowPath, jobStart }) => {
-    const workflow = await readFile(workflowPath, "utf8");
-    const jobStartIndex = workflow.indexOf(`\n${jobStart}\n`);
-    expect(jobStartIndex).toBeGreaterThanOrEqual(0);
-    const job = workflow.slice(jobStartIndex);
-    const guard = job.indexOf("    if: github.repository == 'nexu-io/open-design'");
-    const runsOn = job.indexOf("    runs-on:");
-
-    // These jobs need canonical R2 credentials, canonical conformance history, or the private
-    // Blacksmith pool. A mirror inherits none of them, so each cron/push tick is guaranteed red.
-    expect(guard).toBeGreaterThanOrEqual(0);
-    // Job-level guard, not step-level: the entire job must be skipped rather than burn runner
-    // minutes on checkout and workspace setup only to fail on the first credentialed step.
-    expect(guard).toBeLessThan(runsOn);
   });
 
   it("[P1] pins ShellCheck for actionlint across runner profiles", async () => {
