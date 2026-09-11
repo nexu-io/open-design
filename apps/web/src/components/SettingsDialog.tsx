@@ -101,6 +101,8 @@ import {
 import {
   mergeProviderModelOptions,
   providerModelsCacheKey,
+  setProviderModelsDiscovery,
+  setProviderModelsSeed,
   type ProviderModelsCache,
 } from './providerModelsCache';
 export {
@@ -186,6 +188,15 @@ import { ByokKeyField } from './byok/ByokKeyField';
 import { ByokModelField } from './byok/ByokModelField';
 import { ByokProviderBaseUrl } from './byok/ByokProviderBaseUrl';
 import { ByokProviderPicker } from './byok/ByokProviderPicker';
+import { OrcaRouterConnectControl } from './OrcaRouterConnectControl';
+import {
+  refreshOrcaRouterAccountStatus,
+  useOrcaRouterAccountConnected,
+} from '../state/orcarouterAccount';
+import {
+  useClearedInvalidSelection,
+  useNarrowedModelOptions,
+} from './OrcaRouterModelPicker';
 import { byokPreflightBlockReason } from './byok/preflight';
 import {
   blockingByokDraftFields,
@@ -846,6 +857,11 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
   aihubmix: {
     host: 'aihubmix.com',
     url: 'https://aihubmix.com/?aff=JA1e',
+  },
+  orcarouter: {
+    host: 'orcarouter.ai',
+    // The console page that also revokes every key issued to this app.
+    url: 'https://www.orcarouter.ai/console/authorized-apps',
   },
   bedrock: {
     host: 'aws.amazon.com',
@@ -2894,6 +2910,16 @@ export function SettingsDialog({
           [cacheKey]: result.models ?? [],
         }));
       }
+      // Record the outcome so the model field can tell a settled empty
+      // catalogue (clear the incompatible selection) from still-loading
+      // (leave it alone) and from failed discovery (keep the metadata seed).
+      setProviderModelsDiscovery(cacheKey, result.ok ? 'ready' : 'degraded');
+      if (!result.ok && result.seedModels?.length) {
+        // The daemon's metadata-preserving fallback, filtered by modality just
+        // like a live row. The plain suggested ids carry no evidence and would
+        // all vanish under an attachment.
+        setProviderModelsSeed(cacheKey, result.seedModels);
+      }
       trackModelsFetchResult({
         result: result.ok ? 'success' : 'failed',
         ...(result.ok ? {} : { error_code: result.kind || 'UNKNOWN' }),
@@ -2918,6 +2944,7 @@ export function SettingsDialog({
           detail: err instanceof Error ? err.message : 'Model list request failed',
         },
       });
+      setProviderModelsDiscovery(cacheKey, 'degraded');
       trackModelsFetchResult({
         result: 'failed',
         error_code: err instanceof Error ? err.name : 'UNKNOWN',
@@ -3564,6 +3591,9 @@ export function SettingsDialog({
   const apiKeyDraftInvalid = byokBlockingDraftIssues.some((issue) =>
     issue.field === 'api_key' && issue.code !== 'api_key_required'
   );
+  // Reactive: a PKCE account's connected state arrives asynchronously, and the
+  // model-fetch gate below must re-evaluate once it does.
+  const orcaRouterConnected = useOrcaRouterAccountConnected();
   const byokModelFetchDraftValidation = useMemo(
     () => validateByokDraft(
       apiProtocol,
@@ -3574,6 +3604,10 @@ export function SettingsDialog({
       },
       {
         requiresApiKey: byokRequiresApiKey,
+        // A PKCE OrcaRouter account keeps its key in the daemon, so the browser
+        // field is legitimately empty and the catalogue is still fetchable.
+        credentialConfigured:
+          apiProtocol === 'orcarouter' && orcaRouterConnected === true,
         requireModel: false,
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
@@ -3582,11 +3616,20 @@ export function SettingsDialog({
       apiProtocol,
       byokKeyValidationBaseUrl,
       byokRequiresApiKey,
+      orcaRouterConnected,
       cfg.apiKey,
       cfg.baseUrl,
       cfg.model,
     ],
   );
+  // The hidden provider API-key entry (the first of OrcaRouter's two) is always
+  // a stale duplicate: both entries exist and a PKCE account legitimately has
+  // no key. Read the daemon's verdict once when the OrcaRouter tab is showing,
+  // so the gates below can distinguish "no key yet" from "key held server-side".
+  useEffect(() => {
+    if (apiProtocol !== 'orcarouter') return;
+    void refreshOrcaRouterAccountStatus();
+  }, [apiProtocol]);
   const providerModelsKey = useMemo(
     () => providerModelsCacheKey(
       apiProtocol,
@@ -3831,13 +3874,16 @@ export function SettingsDialog({
     },
     [apiProtocol, selectedProvider, providerModelDiscoveryUnavailable],
   );
-  const apiModelOptions = useMemo(
-    () => mergeProviderModelOptions(
-      fetchedApiModelOptions,
-      suggestedApiModelIds,
-    ),
-    [fetchedApiModelOptions, suggestedApiModelIds],
-  );
+  // Same attachment-aware narrowing the composer picker applies — one shared
+  // rule, so the two surfaces cannot disagree about what is selectable. The
+  // discovery key makes a live catalogue authoritative and reserves the seed
+  // for the degraded path.
+  const apiModelOptions = useNarrowedModelOptions({
+    protocol: apiProtocol,
+    fetchedModels: fetchedApiModelOptions,
+    ...(providerModelsKey ? { discoveryKey: providerModelsKey } : {}),
+    suggestedModelIds: suggestedApiModelIds,
+  });
   // Shared hook: live AIHubMix catalogue for aihubmix, static registry for
   // other providers (same list the chat composer's image picker uses).
   const byokImageModelOptions = useByokImageModelOptions(apiProtocol);
@@ -3853,6 +3899,15 @@ export function SettingsDialog({
   }, [
     pendingProviderModelReconciliation,
   ]);
+  // A model the staged attachments rule out must not stay selected. A
+  // hand-typed custom model is the user's explicit choice, so it is exempt.
+  useClearedInvalidSelection({
+    protocol: apiProtocol,
+    ...(providerModelsKey ? { discoveryKey: providerModelsKey } : {}),
+    options: apiModelOptions,
+    selected: cfg.mode === 'api' && !apiModelCustomEditing ? cfg.model : '',
+    onModelChange: (model) => updateApiConfig({ model }),
+  });
   const apiModelCustomActive =
     shouldShowCustomModelInput(
       cfg.model,
@@ -5612,6 +5667,17 @@ export function SettingsDialog({
                 }}
                 onToggleShowApiKey={() => setShowApiKey((v) => !v)}
               />
+              {apiProtocol === 'orcarouter' ? (
+                /* OrcaRouter shows its two auth entries together: the API-key
+                   field above (entry 1) and the PKCE connect control below
+                   (entry 2). The connect control owns its own credential
+                   storage, so a successful login refreshes the live catalogue
+                   through the same discovery path the key field uses. */
+                <OrcaRouterConnectControl
+                  onCredentialChange={commitProviderModelsInputs}
+                  pastedApiKey={cfg.apiKey}
+                />
+              ) : null}
               {showBaseUrlField ? (
                 <ByokProviderBaseUrl
                   apiProtocol={apiProtocol}
@@ -5715,6 +5781,7 @@ export function SettingsDialog({
                 }
                 providerModelsFailureMessage={providerModelsFailureMessage}
                 forceTextInput={apiProtocol === 'azure'}
+                alignModelPopoverEnd={apiProtocol === 'orcarouter'}
                 showAzureModelFetchHint={apiProtocol === 'azure'}
                 showFetchModelsUnsupportedHint={
                   apiProtocol !== 'azure' &&

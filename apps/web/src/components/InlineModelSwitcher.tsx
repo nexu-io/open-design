@@ -53,7 +53,15 @@ import {
 } from '../collab/useWorkspaceContext';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { fetchProviderModels } from '../providers/provider-models';
-import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
+import {
+  useClearedInvalidSelection,
+  useNarrowedModelOptions,
+} from './OrcaRouterModelPicker';
+import {
+  API_PROTOCOL_TABS,
+  DEFAULT_BASE_URL_BY_PROTOCOL,
+  SUGGESTED_MODELS_BY_PROTOCOL,
+} from '../state/apiProtocols';
 import {
   canUpgradeVelaPlan,
   cancelVelaLogin,
@@ -94,6 +102,8 @@ import {
 import {
   mergeProviderModelOptions,
   providerModelsCacheKey,
+  setProviderModelsDiscovery,
+  setProviderModelsSeed,
   type ProviderModelsCache,
 } from './providerModelsCache';
 import { isDeepSeekV4FlashCampaignModel } from '../campaigns/deepseek-v4-flash';
@@ -129,14 +139,6 @@ interface Props {
       | 'about',
   ) => void;
 }
-
-const API_PROTOCOL_TABS: Array<{ id: ApiProtocol; title: string }> = [
-  { id: 'anthropic', title: 'Anthropic' },
-  { id: 'openai', title: 'OpenAI' },
-  { id: 'azure', title: 'Azure' },
-  { id: 'google', title: 'Google' },
-  { id: 'aihubmix', title: 'AIHubMix' },
-];
 
 const AMR_REMINDER_SEEN_KEY = 'open-design:inline-amr-cli-reminder-seen:v2';
 let amrReminderSeenFallback = false;
@@ -1003,29 +1005,43 @@ export function InlineModelSwitcher({
   useEffect(() => {
     if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
-    if (apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
-    const baseUrl = config.baseUrl.trim();
+    // OrcaRouter is a fixed-origin gateway: its catalogue is read server-side
+    // with the stored credential, so no browser-held key is required to fetch.
+    if (apiProtocol !== 'aihubmix' && apiProtocol !== 'orcarouter' && !config.apiKey.trim()) return;
+    const baseUrl = config.baseUrl.trim() || DEFAULT_BASE_URL_BY_PROTOCOL[apiProtocol];
     if (!/^https?:\/\//i.test(baseUrl)) return;
     const key = providerModelsKey;
     if (fetchedApiModelOptions.length) return;
     if (providerModelsFetchingRef.current.has(key)) return;
     providerModelsFetchingRef.current.add(key);
     let active = true;
+    setProviderModelsDiscovery(key, 'loading');
     void fetchProviderModels({
       protocol: apiProtocol,
       baseUrl,
       apiKey: config.apiKey,
     })
       .then((result) => {
-        if (active && result.ok && result.models?.length) {
+        if (!active) return;
+        // A successful answer is authoritative even when it is empty, so the
+        // picker must not keep offering the seed on top of it.
+        setProviderModelsDiscovery(key, result.ok ? 'ready' : 'degraded');
+        if (result.ok && result.models?.length) {
           onProviderModelsCacheChange((current) => ({
             ...current,
             [key]: result.models ?? [],
           }));
         }
+        // On the degraded path the daemon hands back a metadata-preserving
+        // fallback; keeping it lets the attachment filter reason about the seed
+        // instead of dropping every row for want of modality evidence.
+        if (!result.ok && result.seedModels?.length) {
+          setProviderModelsSeed(key, result.seedModels);
+        }
       })
       .catch(() => {
         // Non-fatal: the picker falls back to the static seed list.
+        if (active) setProviderModelsDiscovery(key, 'degraded');
       })
       .finally(() => {
         providerModelsFetchingRef.current.delete(key);
@@ -1055,14 +1071,32 @@ export function InlineModelSwitcher({
       ),
     [apiProtocol, providerForProtocol],
   );
-  const apiModelOptions = useMemo(
-    () => mergeProviderModelOptions(fetchedApiModelOptions, suggestedApiModelIds),
-    [fetchedApiModelOptions, suggestedApiModelIds],
-  );
+  // Attachments narrow the list: a staged image means only models whose
+  // catalogue metadata declares an image input are offered. The rule lives in
+  // `useNarrowedModelOptions` so this picker and Settings cannot drift. The
+  // discovery key lets a live catalogue stand alone and reserves the seed for
+  // the degraded path.
+  const apiModelOptions = useNarrowedModelOptions({
+    protocol: apiProtocol,
+    fetchedModels: fetchedApiModelOptions,
+    ...(providerModelsKey ? { discoveryKey: providerModelsKey } : {}),
+    suggestedModelIds: suggestedApiModelIds,
+  });
   const apiModelIds = useMemo(
     () => apiModelOptions.map((model) => model.id),
     [apiModelOptions],
   );
+  // Narrowing the list can strand the current choice on a model the staged
+  // attachments rule out. Clear it rather than keep sending an incompatible id.
+  // Scoped to OrcaRouter inside the hook: this effect would otherwise discard a
+  // custom OpenAI-compatible selection the user made deliberately.
+  useClearedInvalidSelection({
+    protocol: apiProtocol,
+    ...(providerModelsKey ? { discoveryKey: providerModelsKey } : {}),
+    options: apiModelOptions,
+    selected: config.mode === 'api' ? config.model : '',
+    ...(onApiModelChange ? { onModelChange: onApiModelChange } : {}),
+  });
   const apiModelChoices = useMemo(
     () => apiModelOptions.map((model) => ({ ...model, label: model.label })),
     [apiModelOptions],
@@ -1355,6 +1389,15 @@ export function InlineModelSwitcher({
                     data-testid="inline-model-switcher-api-model"
                     searchInputTestId="inline-model-switcher-api-model-search"
                     popoverTestId="inline-model-switcher-api-model-popover"
+                    // OrcaRouter's catalogue lists long `vendor/model` ids
+                    // behind a compact chip far narrower than the 380px-minimum
+                    // panel, so hang the panel from the trigger's right edge.
+                    // Scoped to this protocol: every other provider keeps the
+                    // long-standing left-anchored rendering.
+                    popoverAlign={apiProtocol === 'orcarouter' ? 'end' : 'start'}
+                    // Mirrors the stylesheet's `min-width: 380px` floor so the
+                    // end-anchored panel's measured width matches the request.
+                    popoverMinWidth={apiProtocol === 'orcarouter' ? 380 : undefined}
                     searchPlaceholder={t('designs.searchPlaceholder')}
                     getPopoverBoundary={getModelPopoverBoundary}
                     aria-label={t('inlineSwitcher.modelLabel')}

@@ -24,6 +24,13 @@ interface ByokModelFieldProps {
   modelsLoadedFromAccountMessage: string | null;
   providerModelsFailureMessage: string | null;
   forceTextInput?: boolean;
+  /**
+   * OrcaRouter only — hang the model panel from the field's right edge. Its
+   * catalogue lists long `vendor/model` ids and the field spans a dialog much
+   * wider than the panel's 560px cap, so the default left anchor leaves the
+   * panel overhanging the control it belongs to.
+   */
+  alignModelPopoverEnd?: boolean;
   showAzureModelFetchHint: boolean;
   showFetchModelsUnsupportedHint: boolean;
   showSuggestedModelsHint: boolean;
@@ -44,6 +51,7 @@ export function ByokModelField({
   modelsLoadedFromAccountMessage,
   providerModelsFailureMessage,
   forceTextInput = false,
+  alignModelPopoverEnd = false,
   showAzureModelFetchHint,
   showFetchModelsUnsupportedHint,
   showSuggestedModelsHint,
@@ -93,6 +101,10 @@ export function ByokModelField({
             searchInputTestId="settings-byok-model-search"
             popoverTestId="settings-byok-model-popover"
             popoverClassName="settings-byok-select-popover"
+            popoverAlign={alignModelPopoverEnd ? 'end' : 'start'}
+            // Mirrors the stylesheet's `min-width: 380px` floor so the
+            // end-anchored panel's measured width matches the request.
+            popoverMinWidth={alignModelPopoverEnd ? 380 : undefined}
             models={models}
             value={selectValue}
             onFocus={onFocus}

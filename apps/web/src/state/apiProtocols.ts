@@ -84,6 +84,18 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'MiniMax-M2.7-highspeed',
     'MiniMax-M2.7',
   ],
+  orcarouter: [
+    // OrcaRouter's live catalogue (GET /v1/models on the inference origin) is
+    // the authoritative list; this is the verified cold-start seed used only
+    // when that request fails, so a fresh install still has a usable chat list.
+    // Every id below was read back from the live catalogue and keeps its
+    // vendor/model namespace verbatim. See apps/daemon/src/integrations/orcarouter.ts.
+    'openai/gpt-5.5',
+    'anthropic/claude-opus-4.8',
+    'google/gemini-3.5-flash',
+    'deepseek/deepseek-v4-pro',
+    'orcarouter/auto',
+  ],
   aihubmix: [
     // AIHubMix is an OpenAI-compatible aggregator that routes to OpenAI /
     // Anthropic / Gemini / DeepSeek by model name on its side. Listing the
@@ -173,6 +185,7 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   // through the Memory model picker.
   ollama: 'gemma3:4b',
   senseaudio: 'senseaudio-s2-flash',
+  orcarouter: 'orcarouter/auto',
   aihubmix: 'gpt-4o-mini',
   bedrock: 'amazon.nova-lite-v1:0',
 };
@@ -188,6 +201,7 @@ export const API_PROTOCOL_TABS: ReadonlyArray<{
   { id: 'ollama', title: 'Ollama Cloud' },
   { id: 'senseaudio', title: 'SenseAudio' },
   { id: 'aihubmix', title: 'AIHubMix' },
+  { id: 'orcarouter', title: 'OrcaRouter' },
 ];
 
 export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -198,6 +212,7 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
+  orcarouter: 'OrcaRouter',
   bedrock: 'AWS Bedrock',
 };
 
@@ -209,6 +224,8 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   ollama: 'Ollama API key',
   senseaudio: 'SenseAudio API key',
   aihubmix: 'sk-...',
+  // OrcaRouter keys are prefixed; this is a paste hint, not a validation rule.
+  orcarouter: 'sk-orca-...',
   bedrock: 'AWS credentials',
 };
 
@@ -223,6 +240,9 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
+  // Inference origin. Authentication lives on a different host
+  // (https://www.orcarouter.ai) and is never derived from this value.
+  orcarouter: 'https://api.orcarouter.ai/v1',
   bedrock: 'https://bedrock-runtime.us-east-1.amazonaws.com',
 };
 
@@ -233,6 +253,7 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
 // here when it's such a gateway.
 export const FIXED_ORIGIN_GATEWAYS: ReadonlySet<ApiProtocol> = new Set<ApiProtocol>([
   'aihubmix',
+  'orcarouter',
 ]);
 
 export function isFixedOriginGateway(protocol: ApiProtocol): boolean {

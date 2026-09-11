@@ -41,6 +41,16 @@ import path from 'node:path';
 import { MEDIA_PROVIDERS } from './models.js';
 import { expandHomePrefix } from '../home-expansion.js';
 import { resolveXAIBearer } from '../integrations/xai-credentials.js';
+import {
+  ORCAROUTER_ENV_API_KEY,
+  ORCAROUTER_ENV_API_KEY_LEGACY,
+  ORCAROUTER_ENV_API_KEY_PREFIXED,
+  ORCAROUTER_PROVIDER_ID,
+} from '../integrations/orcarouter.js';
+import {
+  resolveOrcaRouterDataDir,
+  resolveOrcaRouterOAuthCredential,
+} from '../integrations/orcarouter-credentials.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
@@ -89,6 +99,16 @@ const ENV_KEYS: Record<string, string[]> = {
   nanobanana: ['OD_NANOBANANA_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   imagerouter: ['OD_IMAGEROUTER_API_KEY', 'IMAGEROUTER_API_KEY'],
   openrouter: ['OD_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
+  // OrcaRouter's inference credential. `ORCA_API_KEY` is the canonical name the
+  // docs use; the OD_-prefixed pair follows this daemon's per-provider
+  // convention. All three names are read from one place — the credential module
+  // owns the list — so the media dispatcher and the BYOK chat path cannot drift
+  // apart about which variable lights them up. See `orcaRouterEnvApiKey`.
+  orcarouter: [
+    ORCAROUTER_ENV_API_KEY,
+    ORCAROUTER_ENV_API_KEY_PREFIXED,
+    ORCAROUTER_ENV_API_KEY_LEGACY,
+  ],
   'custom-image': ['OD_CUSTOM_IMAGE_API_KEY', 'CUSTOM_IMAGE_API_KEY'],
   bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
   fal: ['OD_FAL_KEY', 'FAL_KEY'],
@@ -363,7 +383,11 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
       ? await resolveOpenAIAuthFileCredential()
       : providerId === 'grok'
         ? await resolveXAIOAuthCredential(projectRoot)
-        : null
+        : providerId === ORCAROUTER_PROVIDER_ID
+          ? await resolveOrcaRouterOAuthCredential(
+              resolveOrcaRouterDataDir(projectRoot),
+            ).catch(() => null)
+          : null
     : null;
   return {
     apiKey: envKey || entry.apiKey || externalCredential?.apiKey || '',

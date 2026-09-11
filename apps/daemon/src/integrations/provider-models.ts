@@ -12,6 +12,14 @@ import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { redactSecrets, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
+import {
+  filterOrcaRouterModels,
+  normalizeOrcaRouterCatalogPage,
+  orcaRouterCatalogUrl,
+  orcaRouterSeedModelOptions,
+  toOrcaRouterModelOptions,
+  type OrcaRouterCatalogModel,
+} from './orcarouter.js';
 
 type ProviderModelsInput = ProviderModelsRequest & {
   signal?: AbortSignal;
@@ -241,6 +249,12 @@ function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, ap
     // (GET /api/v1/models?type=llm), not the OpenAI /v1/models route.
     return aihubmixCatalogUrl(baseUrl, 'llm');
   }
+  if (protocol === 'orcarouter') {
+    // The OrcaRouter catalogue takes a `?capability=` filter, so the chat
+    // picker asks for the chat page rather than filtering a media-heavy
+    // unfiltered list client-side.
+    return orcaRouterCatalogUrl(baseUrl, 'chat');
+  }
   if (protocol === 'openai' || protocol === 'senseaudio') {
     return appendVersionedApiPath(baseUrl, '/models');
   }
@@ -259,7 +273,9 @@ function providerModelsHeaders(
   protocol: ConnectionTestProtocol,
   apiKey: string,
 ): Record<string, string> {
-  if (protocol === 'openai' || protocol === 'senseaudio') {
+  if (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'orcarouter') {
+    // OrcaRouter's catalogue is scoped to the caller's workspace, so it is read
+    // with the user's own key exactly like an OpenAI-compatible endpoint.
     return { authorization: `Bearer ${apiKey}` };
   }
   if (protocol === 'aihubmix') {
@@ -277,6 +293,15 @@ function providerModelsHeaders(
   return {};
 }
 
+/**
+ * Chat rows from an OrcaRouter catalogue page, after the shared capability
+ * filter. Exported so the daemon's OrcaRouter route and this discovery path
+ * agree on what a chat model is.
+ */
+function orcaRouterChatRows(data: unknown): OrcaRouterCatalogModel[] {
+  return filterOrcaRouterModels(normalizeOrcaRouterCatalogPage(data), 'chat');
+}
+
 function extractModels(protocol: ConnectionTestProtocol, data: unknown): ProviderModelOption[] {
   // SenseAudio's /v1/models response follows the OpenAI envelope
   // (`{ data: [{ id, ... }] }`), so the same extractor handles both.
@@ -285,6 +310,16 @@ function extractModels(protocol: ConnectionTestProtocol, data: unknown): Provide
   // (e.g. gpt-image-2 → "image_generation,llm") would otherwise leak in. Those
   // belong to the dedicated image/video/audio pickers.
   if (protocol === 'aihubmix') return parseAIHubMixCatalog(data, { chatOnly: true });
+  if (protocol === 'orcarouter') {
+    // Capability filtering (endpoint types + declared input modalities) lives in
+    // the OrcaRouter module so the daemon route, this discovery path, and the
+    // media surfaces cannot drift apart. Rows that do not declare a text-capable
+    // endpoint type are dropped rather than guessed at.
+    return toOrcaRouterModelOptions(
+      orcaRouterChatRows(data),
+      data,
+    ) as ProviderModelOption[];
+  }
   if (protocol === 'openai' || protocol === 'senseaudio') return extractOpenAiModels(data);
   if (protocol === 'anthropic') return extractAnthropicModels(data);
   if (protocol === 'google') return extractGoogleModels(data);

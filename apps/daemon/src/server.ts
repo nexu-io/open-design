@@ -275,6 +275,7 @@ import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from './runtimes/byok-opencode.js';
+import { attachOrcaRouterDaemonCredential } from './integrations/orcarouter-credentials.js';
 import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
@@ -885,6 +886,7 @@ import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.j
 import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginRoutes } from './routes/plugins/index.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
+import { registerOrcaRouterRoutes } from './routes/orcarouter.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDeliverableSyntaxToolRoutes } from './routes/deliverable-syntax-tool.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
@@ -8436,6 +8438,10 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
   });
+  registerOrcaRouterRoutes(app, {
+    http: httpDeps,
+    paths: pathDeps,
+  });
   // Project workspace
   registerActiveContextRoutes(app, {
     db,
@@ -10870,9 +10876,18 @@ export async function startServer({
       );
     if (!def.bin)
       return failRun('AGENT_UNAVAILABLE', 'agent has no binary');
+    // A PKCE-issued OrcaRouter account never places its key in the browser, so
+    // the run arrives keyless and the daemon fills in the credential it already
+    // holds. This is the runtime's copy for the life of the child process: the
+    // resolved secret is never persisted (the run body is sanitized downstream)
+    // and never reaches the web layer.
+    const runtimeByokProvider = await attachOrcaRouterDaemonCredential(
+      byokProvider,
+      RUNTIME_DATA_DIR,
+    );
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
-          byokProvider,
+          runtimeByokProvider,
           typeof model === 'string' ? model : null,
         )
       : null;
@@ -14375,14 +14390,14 @@ export async function startServer({
         apiVersion?: string;
         model?: string;
         requiresApiKey?: boolean;
-      } | null = byokProvider
+      } | null = runtimeByokProvider
         ? {
-            provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
-            apiKey: (byokProvider as { apiKey?: string }).apiKey,
-            baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
-            apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
+            provider: (runtimeByokProvider as { protocol?: string }).protocol ?? undefined,
+            apiKey: (runtimeByokProvider as { apiKey?: string }).apiKey,
+            baseUrl: (runtimeByokProvider as { baseUrl?: string }).baseUrl,
+            apiVersion: (runtimeByokProvider as { apiVersion?: string }).apiVersion,
             model: typeof safeModel === 'string' ? safeModel : undefined,
-            requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
+            requiresApiKey: (runtimeByokProvider as { requiresApiKey?: boolean }).requiresApiKey,
           }
         : null;
       const memoryOptions = {

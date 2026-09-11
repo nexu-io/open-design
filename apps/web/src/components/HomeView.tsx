@@ -60,6 +60,7 @@ import { FigmaImportModal } from './FigmaImportModal';
 import { fetchMcpServers } from '../state/mcp';
 import { takeHomeComposerAssetSeed } from '../state/libraryHandoff';
 import { useI18n, useT } from '../i18n';
+import { modalitiesForFiles, setStagedModalities } from '../state/stagedAttachments';
 import {
   formatModelWindowRetryAt,
   modelWindowLimitCopy,
@@ -645,6 +646,14 @@ export function HomeView({
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [contextWorkspaceItems, setContextWorkspaceItems] = useState<WorkspaceContextItem[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+
+  // Tell the BYOK model picker which attachment modalities are in play so it
+  // can offer only models that declare them. The files stay here; only the
+  // derived modality list is shared.
+  useEffect(() => {
+    setStagedModalities(modalitiesForFiles(stagedFiles));
+  }, [stagedFiles]);
+  useEffect(() => () => setStagedModalities([]), []);
   const [workingDir, setWorkingDir] = useState<string | null>(null);
   // Token paired with `workingDir` when picked through the desktop host's
   // native dialog. Spent on the post-creation working-dir POST so the

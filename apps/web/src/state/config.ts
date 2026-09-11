@@ -227,6 +227,29 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
   {
+    // OrcaRouter is the named OpenAI-compatible gateway used by the two
+    // OrcaRouter auth entries (pasted key / Connect with OrcaRouter). The base
+    // URL here is the INFERENCE origin only; authentication lives on
+    // https://www.orcarouter.ai and is never derived from this value.
+    label: 'OrcaRouter',
+    protocol: 'orcarouter',
+    baseUrl: 'https://api.orcarouter.ai/v1',
+    // Verified cold-start seed. The live catalogue (GET /v1/models, read
+    // server-side with the user's key) is authoritative and replaces this list
+    // whenever it is reachable.
+    preferredModels: [
+      'openai/gpt-5.5',
+      'anthropic/claude-opus-4.8',
+      'google/gemini-3.5-flash',
+      'deepseek/deepseek-v4-pro',
+      'orcarouter/auto',
+    ],
+    apiKeyConsoleLink: {
+      host: 'orcarouter.ai',
+      url: 'https://www.orcarouter.ai/console/authorized-apps',
+    },
+  },
+  {
     label: 'Azure OpenAI',
     protocol: 'azure',
     baseUrl: '',
@@ -524,6 +547,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
   { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
   { id: 'openrouter', title: 'OpenRouter', providerLabel: 'OpenRouter' },
+  { id: 'orcarouter', title: 'OrcaRouter', providerLabel: 'OrcaRouter' },
   { id: 'mistral', title: 'Mistral AI', providerLabel: 'Mistral AI' },
   { id: 'xai', title: 'xAI', providerLabel: 'xAI' },
   { id: 'together', title: 'Together AI', providerLabel: 'Together AI' },

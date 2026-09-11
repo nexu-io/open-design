@@ -350,6 +350,26 @@ const BRAND_BOOLEAN_FLAGS = new Set([
 ]);
 const AGENT_STRING_FLAGS = new Set(['daemon-url']);
 const AGENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+// Hoisted for the same reason as the sets above: `runOrcaRouter` is reachable
+// through the top-of-file SUBCOMMAND_MAP dispatch, which runs during module
+// evaluation, so a `const` declared beside the handler would still be in TDZ.
+const ORCAROUTER_STRING_FLAGS = new Set([
+  'daemon-url',
+  'api-key',
+  'api-key-file',
+  'code',
+  'code-file',
+  'state',
+  'capability',
+  'base-url',
+]);
+const ORCAROUTER_BOOLEAN_FLAGS = new Set([
+  'json',
+  'help',
+  'h',
+  'watch',
+  'clear',
+]);
 const STRATEGY_STRING_FLAGS = new Set(['daemon-url']);
 const STRATEGY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Hoisted because `runAutomation` is reachable through the top-of-file
@@ -391,6 +411,7 @@ const SUBCOMMAND_MAP = {
   media: runMedia,
   mcp: runMcp,
   amr: runAmr,
+  orcarouter: runOrcaRouter,
   collab: runCollab,
   'message-center': runMessageCenter,
   research: runResearch,
@@ -1006,6 +1027,12 @@ function printRootHelp() {
       Start Vela browser sign-in or inspect the current Vela account through
       the local OpenDesign daemon.
 
+  od orcarouter <status|connect|complete|cancel|disconnect|set-key|models> [args]
+      Drive the OrcaRouter account lifecycle headlessly: start the OAuth 2.0 +
+      PKCE login, finish it with a pasted code, adopt a pasted API key, or
+      inspect the live model catalogue. Same daemon routes the Settings UI
+      calls, so an external agent can connect an account without a browser.
+
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
 
@@ -1183,6 +1210,331 @@ Options:
       console.error(`unknown subcommand: od amr ${sub}`);
       process.exit(2);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od orcarouter …
+//
+// Headless surface for the OrcaRouter account lifecycle. This is the dual-track
+// contract: every capability the Settings → OrcaRouter connect control exposes
+// is reachable here through the same `/api/orcarouter/*` routes, so an external
+// agent can connect an account (or adopt a key) without a browser.
+//
+// The secret-bearing inputs are `--api-key-file` and `--code-file`: a shell
+// history and a process table are both readable by other local users, so a
+// pasted credential is accepted from a file or stdin (`-`) rather than only
+// from argv.
+// ---------------------------------------------------------------------------
+
+function printOrcaRouterHelp() {
+  console.log(`Usage:
+  od orcarouter status [--json]
+      Show whether an account is connected and where the credential came from.
+
+  od orcarouter connect [--json] [--watch]
+      Start an OAuth 2.0 + PKCE login. Prints the authorize URL and the state.
+      --watch polls until a NEW credential lands (or the 10-minute window ends).
+      A reconnect keeps the previous credential usable, so --watch waits for the
+      daemon's credential generation to change rather than for "connected".
+      With --json, --watch emits newline-delimited events on stdout:
+        {"event":"started", ...authorizeUrl, state, callback}
+        {"event":"connected", attempt, generation, status}
+      so a script can read the URL before the login completes.
+
+  od orcarouter complete --state <state> (--code <code> | --code-file <path|->) [--json]
+      Finish a login with the code the consent screen showed. Use --code-file -
+      to read it from stdin instead of the process argument list.
+
+  od orcarouter cancel [--json]
+      Abandon an in-flight login without touching a stored credential.
+
+  od orcarouter disconnect [--json]
+      Remove the stored credential. The account must be reconnected afterwards.
+
+  od orcarouter set-key (--api-key <key> | --api-key-file <path|->) [--json]
+      Adopt an existing sk-orca-… key as the credential (the API-key entry).
+
+  od orcarouter models [--capability <chat|embedding|image|video|rerank>] [--json]
+      Read the live catalogue, filtered to what the account can actually call.
+
+Options:
+  --daemon-url <url>   OpenDesign daemon HTTP base.
+  --json               Emit the daemon response as JSON.`);
+}
+
+/**
+ * Read a secret from a file or stdin. `-` means stdin, so a caller can pipe the
+ * value in without it ever appearing in argv.
+ */
+function readSecretInput(flagValue: string, label: string): string {
+  if (flagValue === '-') {
+    try {
+      return readFileSync(0, 'utf8').trim();
+    } catch (err) {
+      console.error(`could not read ${label} from stdin: ${err.message}`);
+      process.exit(2);
+    }
+  }
+  try {
+    return readFileSync(flagValue, 'utf8').trim();
+  } catch (err) {
+    console.error(`could not read ${label} from ${flagValue}: ${err.message}`);
+    process.exit(2);
+  }
+}
+
+async function postOrcaRouterRoute(base, route, body = {}) {
+  let resp;
+  try {
+    resp = await fetch(`${base}${route}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  return await resp.json();
+}
+
+/**
+ * Read `/api/orcarouter/auth/status`.
+ *
+ * Fails the command on the same conditions `postOrcaRouterRoute` does — an
+ * unreachable daemon or a rejected read is a real error, and a watch loop that
+ * swallowed it would sit silent until the login window expired.
+ */
+async function fetchOrcaRouterStatus(base) {
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/orcarouter/auth/status`);
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  return await resp.json();
+}
+
+/**
+ * Emit one compact newline-delimited JSON event.
+ *
+ * `writeJson` pretty-prints, which is right for a single response but wrong for
+ * a stream: a multi-line object cannot be consumed one event per line. This is
+ * the same shape `od run watch` uses.
+ */
+function writeJsonEvent(data) {
+  process.stdout.write(JSON.stringify(data) + '\n');
+}
+
+async function runOrcaRouter(args) {
+  const sub = args[0];
+  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
+    printOrcaRouterHelp();
+    process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
+  }
+  if (
+    sub !== 'status'
+    && sub !== 'connect'
+    && sub !== 'complete'
+    && sub !== 'cancel'
+    && sub !== 'disconnect'
+    && sub !== 'set-key'
+    && sub !== 'models'
+  ) {
+    console.error(`unknown subcommand: od orcarouter ${sub}`);
+    printOrcaRouterHelp();
+    process.exit(2);
+  }
+
+  let flags;
+  try {
+    flags = parseFlags(args.slice(1), {
+      string: ORCAROUTER_STRING_FLAGS,
+      boolean: ORCAROUTER_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  const writeJson = (data) =>
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+
+  if (sub === 'status') {
+    let resp;
+    try {
+      resp = await fetch(`${base}/api/orcarouter/auth/status`);
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const status = await resp.json();
+    if (flags.json) return writeJson(status);
+    console.log(`Connected\t${status.connected ? 'yes' : 'no'}`);
+    console.log(`Source\t${status.source ?? '-'}`);
+    console.log(`Auth state\t${status.authState ?? '-'}`);
+    console.log(`Account\t${status.accountId ?? '-'}`);
+    console.log(`Generation\t${status.generation ?? '-'}`);
+    console.log(`Auth origin\t${status.authBase ?? '-'}`);
+    console.log(`Inference origin\t${status.apiBase ?? '-'}`);
+    if (status.listening) console.log(`Listener\twaiting for the browser callback`);
+    if (status.reauthReason) console.log(`Reason\t${status.reauthReason}`);
+    return;
+  }
+
+  if (sub === 'connect') {
+    // Capture the credential the daemon holds BEFORE starting. A reconnect
+    // deliberately leaves the previous credential usable, so `connected` is
+    // already true on the first poll and would report success with the old
+    // account while the new authorization is still pending. The generation is
+    // what distinguishes "reconnected" from "still the old grant" — the same
+    // rule the web connect control applies. Only the watch path needs it; a
+    // one-shot Start has nothing to compare against.
+    const baseline = flags.watch ? await fetchOrcaRouterStatus(base) : null;
+    const baselineGeneration =
+      typeof baseline?.generation === 'number' ? baseline.generation : null;
+
+    const started = await postOrcaRouterRoute(base, '/api/orcarouter/oauth/start');
+    if (flags.json && !flags.watch) return writeJson(started);
+    if (!flags.json) {
+      console.log(`Authorize URL\t${started.authorizeUrl}`);
+      console.log(`State\t${started.state}`);
+      console.log(`Callback\t${started.callback?.host}:${started.callback?.port}`);
+      if (!flags.watch) {
+        console.log(
+          'Next\tod orcarouter complete --state <state> --code-file -   (paste the shown code)',
+        );
+        return;
+      }
+    } else {
+      // The watch path must expose the authorization details before it starts
+      // waiting: a caller that only saw the trailing completion event could not
+      // open the URL the login needs, and the process would sit silent until
+      // the window expired.
+      writeJsonEvent({
+        event: 'started',
+        authorizeUrl: started.authorizeUrl,
+        state: started.state,
+        callback: started.callback ?? null,
+        baselineGeneration,
+      });
+    }
+    // Poll until the exchange lands, mirroring what the connect control does.
+    const deadline = Date.now() + 10 * 60 * 1000;
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const status = await fetchOrcaRouterStatus(base);
+      const generationAdvanced =
+        typeof status?.generation === 'number'
+        && status.generation !== baselineGeneration;
+      if (status?.connected && generationAdvanced) {
+        if (flags.json) {
+          return writeJsonEvent({
+            event: 'connected',
+            attempt: status.attempt ?? null,
+            generation: status.generation,
+            status,
+          });
+        }
+        console.log(`Connected\tyes`);
+        console.log(`Account\t${status.accountId ?? '-'}`);
+        return;
+      }
+      if (Date.now() > deadline) {
+        const message = baselineGeneration === null
+          ? 'login window expired before an account was connected.'
+          : 'login window expired before a replacement credential was stored.';
+        if (flags.json) {
+          process.stderr.write(
+            `${JSON.stringify({ event: 'expired', ok: false, error: { message } })}\n`,
+          );
+        } else {
+          console.error(message);
+        }
+        process.exit(4);
+      }
+    }
+  }
+
+  if (sub === 'complete') {
+    const state = flags.state;
+    const code = flags['code-file']
+      ? readSecretInput(flags['code-file'], 'authorization code')
+      : flags.code;
+    if (!state || !code) {
+      console.error('usage: od orcarouter complete --state <state> --code <code>|--code-file <path|->');
+      process.exit(2);
+    }
+    const result = await postOrcaRouterRoute(base, '/api/orcarouter/oauth/complete', {
+      state,
+      code,
+    });
+    if (flags.json) return writeJson(result);
+    console.log(`Connected\tyes`);
+    return;
+  }
+
+  if (sub === 'cancel') {
+    const result = await postOrcaRouterRoute(base, '/api/orcarouter/oauth/cancel');
+    if (flags.json) return writeJson(result);
+    console.log('Login attempt\tcancelled');
+    return;
+  }
+
+  if (sub === 'disconnect') {
+    const result = await postOrcaRouterRoute(base, '/api/orcarouter/oauth/disconnect');
+    if (flags.json) return writeJson(result);
+    console.log('Credential\tremoved');
+    return;
+  }
+
+  if (sub === 'set-key') {
+    if (flags.clear === true) {
+      const result = await postOrcaRouterRoute(base, '/api/orcarouter/credentials', {
+        clear: true,
+      });
+      if (flags.json) return writeJson(result);
+      console.log('Credential\tremoved');
+      return;
+    }
+    const apiKey = flags['api-key-file']
+      ? readSecretInput(flags['api-key-file'], 'API key')
+      : flags['api-key'];
+    if (!apiKey) {
+      console.error('usage: od orcarouter set-key --api-key <key> | --api-key-file <path|->');
+      process.exit(2);
+    }
+    const result = await postOrcaRouterRoute(base, '/api/orcarouter/credentials', { apiKey });
+    if (flags.json) return writeJson(result);
+    console.log(`Credential\tstored (generation ${result.generation})`);
+    if (result.prefixOk === false) {
+      console.log(
+        'Note\tthe key does not start with sk-orca-; it was stored as pasted, '
+        + 'and the first request will establish whether it works.',
+      );
+    }
+    return;
+  }
+
+  // models
+  const capability = flags.capability ?? 'chat';
+  const result = await postOrcaRouterRoute(base, '/api/orcarouter/models', {
+    capability,
+    ...(flags['base-url'] ? { apiBase: flags['base-url'] } : {}),
+  });
+  if (flags.json) return writeJson(result);
+  if (!result.ok) {
+    console.log(`Catalogue\tunavailable (${result.reason ?? 'unknown'})`);
+    if (result.seed) console.log(`Fallback\tverified seed`);
+  }
+  for (const model of result.models ?? []) {
+    console.log(model.id);
+  }
+  return;
 }
 
 // ---------------------------------------------------------------------------

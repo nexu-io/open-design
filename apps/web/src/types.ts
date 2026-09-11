@@ -119,6 +119,7 @@ export type ApiProtocol =
   | 'ollama'
   | 'senseaudio'
   | 'aihubmix'
+  | 'orcarouter'
   | 'bedrock';
 
 export type LiveArtifactTabId = `live:${string}`;
