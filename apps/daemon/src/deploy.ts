@@ -2,21 +2,30 @@ import fs from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
+import JSZip from 'jszip';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const NETLIFY_PROVIDER_ID = 'netlify';
+export const RENDER_PROVIDER_ID = 'render';
+export const RAILWAY_PROVIDER_ID = 'railway';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
+export const SAVED_NETLIFY_TOKEN_MASK = 'saved-netlify-token';
+export const SAVED_RENDER_TOKEN_MASK = 'saved-render-token';
+export const SAVED_RAILWAY_TOKEN_MASK = 'saved-railway-token';
+export const SAVED_GITHUB_TOKEN_MASK = 'saved-github-token';
 
 type JsonObject = Record<string, any>;
-type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID;
+type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof NETLIFY_PROVIDER_ID | typeof RENDER_PROVIDER_ID | typeof RAILWAY_PROVIDER_ID;
 type DeployErrorDetails = JsonObject | string | undefined;
 type DeployConfig = {
   token: string;
+  githubToken?: string | undefined;
   teamId?: string | undefined;
   teamSlug?: string | undefined;
   accountId?: string | undefined;
@@ -52,6 +61,7 @@ function errorMessage(err: unknown, fallback: string): string {
 
 const VERCEL_API = 'https://api.vercel.com';
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
+const NETLIFY_API = 'https://api.netlify.com/api/v1';
 const CLOUDFLARE_API_PAGE_SIZE = 100;
 const CLOUDFLARE_API_MAX_PAGES = 100;
 export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES = 100;
@@ -74,17 +84,31 @@ export class DeployError extends Error {
   }
 }
 
-export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
+export function deployConfigPath(
+  providerId: DeployProviderId = VERCEL_PROVIDER_ID,
+  dataDir?: string,
+) {
+  if (providerId === NETLIFY_PROVIDER_ID || providerId === RENDER_PROVIDER_ID || providerId === RAILWAY_PROVIDER_ID) {
+    if (dataDir) {
+      if (providerId === NETLIFY_PROVIDER_ID) return path.join(dataDir, 'netlify.json');
+      if (providerId === RENDER_PROVIDER_ID) return path.join(dataDir, 'render.json');
+      if (providerId === RAILWAY_PROVIDER_ID) return path.join(dataDir, 'railway.json');
+    }
+    throw new Error(`Provider ${providerId} credentials require an explicit data directory.`);
+  }
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return path.join(base, 'cloudflare-pages.json');
+  if (providerId === VERCEL_PROVIDER_ID) return path.join(base, 'vercel.json');
+  throw new Error(`Provider ${providerId} credentials require an explicit data directory.`);
 }
 
-export async function readVercelConfig(): Promise<DeployConfig> {
+export async function readVercelConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
+    const token = typeof parsed.token === 'string' ? parsed.token : '';
     return {
-      token: typeof parsed.token === 'string' ? parsed.token : '',
+      token: token === SAVED_TOKEN_MASK ? '' : token,
       teamId: typeof parsed.teamId === 'string' ? parsed.teamId : '',
       teamSlug: typeof parsed.teamSlug === 'string' ? parsed.teamSlug : '',
     };
@@ -94,12 +118,13 @@ export async function readVercelConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
+export async function readCloudflarePagesConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
+    const token = typeof parsed.token === 'string' ? parsed.token : '';
     return {
-      token: typeof parsed.token === 'string' ? parsed.token : '',
+      token: token === SAVED_CLOUDFLARE_TOKEN_MASK ? '' : token,
       accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
       projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
       cloudflarePages: normalizeCloudflarePagesConfigHints(parsed.cloudflarePages),
@@ -110,31 +135,78 @@ export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function writeVercelConfig(input: Partial<DeployConfig>) {
-  const current = await readVercelConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+export async function readNetlifyConfig(dataDir?: string): Promise<DeployConfig> {
+  try {
+    const raw = await readFile(deployConfigPath(NETLIFY_PROVIDER_ID, dataDir), 'utf8');
+    const parsed = JSON.parse(raw);
+    const token = typeof parsed.token === 'string' ? parsed.token : '';
+    const githubToken = typeof parsed.githubToken === 'string' ? parsed.githubToken : '';
+    return {
+      token: token === SAVED_NETLIFY_TOKEN_MASK ? '' : token,
+      githubToken: githubToken === SAVED_GITHUB_TOKEN_MASK ? '' : githubToken,
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', githubToken: '' };
+    throw err;
+  }
+}
+
+export async function readRenderConfig(dataDir?: string): Promise<DeployConfig> {
+  try {
+    const raw = await readFile(deployConfigPath(RENDER_PROVIDER_ID, dataDir), 'utf8');
+    const parsed = JSON.parse(raw);
+    const token = typeof parsed.token === 'string' ? parsed.token : '';
+    const githubToken = typeof parsed.githubToken === 'string' ? parsed.githubToken : '';
+    return {
+      token: token === SAVED_RENDER_TOKEN_MASK ? '' : token,
+      githubToken: githubToken === SAVED_GITHUB_TOKEN_MASK ? '' : githubToken,
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', githubToken: '' };
+    throw err;
+  }
+}
+
+export async function readRailwayConfig(dataDir?: string): Promise<DeployConfig> {
+  try {
+    const raw = await readFile(deployConfigPath(RAILWAY_PROVIDER_ID, dataDir), 'utf8');
+    const parsed = JSON.parse(raw);
+    const token = typeof parsed.token === 'string' ? parsed.token : '';
+    const githubToken = typeof parsed.githubToken === 'string' ? parsed.githubToken : '';
+    return {
+      token: token === SAVED_RAILWAY_TOKEN_MASK ? '' : token,
+      githubToken: githubToken === SAVED_GITHUB_TOKEN_MASK ? '' : githubToken,
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', githubToken: '' };
+    throw err;
+  }
+}
+
+function preserveSecretInput(inputValue: unknown, currentValue: string | undefined, mask: string) {
+  if (typeof inputValue !== 'string') return currentValue || '';
+  const trimmed = inputValue.trim();
+  if (!trimmed || trimmed === mask) return currentValue || '';
+  return trimmed;
+}
+
+export async function writeVercelConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readVercelConfig(dataDir);
   const next = {
-    token:
-      tokenInput && tokenInput !== SAVED_TOKEN_MASK
-        ? tokenInput
-        : current.token,
+    token: preserveSecretInput(input?.token, current.token, SAVED_TOKEN_MASK),
     teamId: typeof input?.teamId === 'string' ? input.teamId.trim() : current.teamId,
     teamSlug:
       typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
   };
-  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID, dataDir), next);
   return publicDeployConfig(next);
 }
 
-export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
-  const current = await readCloudflarePagesConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readCloudflarePagesConfig(dataDir);
   const cloudflarePages = normalizeCloudflarePagesConfigHints(input?.cloudflarePages, current.cloudflarePages);
   const next: DeployConfig = {
-    token:
-      tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
-        ? tokenInput
-        : current.token,
+    token: preserveSecretInput(input?.token, current.token, SAVED_CLOUDFLARE_TOKEN_MASK),
     accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
     // Legacy installs may already have a saved Cloudflare Pages projectName.
     // New writes intentionally stop treating it as user configuration: the
@@ -145,8 +217,38 @@ export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
   if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
   if (!next.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), next);
   return publicCloudflarePagesConfig(next);
+}
+
+export async function writeNetlifyConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readNetlifyConfig(dataDir);
+  const next = {
+    token: preserveSecretInput(input?.token, current.token, SAVED_NETLIFY_TOKEN_MASK),
+    githubToken: preserveSecretInput(input?.githubToken, current.githubToken, SAVED_GITHUB_TOKEN_MASK),
+  };
+  await writeDeployConfigFile(deployConfigPath(NETLIFY_PROVIDER_ID, dataDir), next);
+  return publicNetlifyConfig(next);
+}
+
+export async function writeRenderConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readRenderConfig(dataDir);
+  const next = {
+    token: preserveSecretInput(input?.token, current.token, SAVED_RENDER_TOKEN_MASK),
+    githubToken: preserveSecretInput(input?.githubToken, current.githubToken, SAVED_GITHUB_TOKEN_MASK),
+  };
+  await writeDeployConfigFile(deployConfigPath(RENDER_PROVIDER_ID, dataDir), next);
+  return publicRenderConfig(next);
+}
+
+export async function writeRailwayConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readRailwayConfig(dataDir);
+  const next = {
+    token: preserveSecretInput(input?.token, current.token, SAVED_RAILWAY_TOKEN_MASK),
+    githubToken: preserveSecretInput(input?.githubToken, current.githubToken, SAVED_GITHUB_TOKEN_MASK),
+  };
+  await writeDeployConfigFile(deployConfigPath(RAILWAY_PROVIDER_ID, dataDir), next);
+  return publicRailwayConfig(next);
 }
 
 async function writeDeployConfigFile(file: string, config: DeployConfig) {
@@ -186,23 +288,68 @@ export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
-export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
-  return readVercelConfig();
+export function publicNetlifyConfig(config: Partial<DeployConfig>) {
+  return {
+    providerId: NETLIFY_PROVIDER_ID,
+    configured: Boolean(config?.token && config?.githubToken),
+    tokenMask: config?.token ? SAVED_NETLIFY_TOKEN_MASK : '',
+    githubTokenMask: config?.githubToken ? SAVED_GITHUB_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    target: 'preview',
+  };
 }
 
-export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
-  return writeVercelConfig(input);
+export function publicRenderConfig(config: Partial<DeployConfig>) {
+  return {
+    providerId: RENDER_PROVIDER_ID,
+    configured: Boolean(config?.token && config?.githubToken),
+    tokenMask: config?.token ? SAVED_RENDER_TOKEN_MASK : '',
+    githubTokenMask: config?.githubToken ? SAVED_GITHUB_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    target: 'preview',
+  };
+}
+
+export function publicRailwayConfig(config: Partial<DeployConfig>) {
+  return {
+    providerId: RAILWAY_PROVIDER_ID,
+    configured: Boolean(config?.token && config?.githubToken),
+    tokenMask: config?.token ? SAVED_RAILWAY_TOKEN_MASK : '',
+    githubTokenMask: config?.githubToken ? SAVED_GITHUB_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    target: 'preview',
+  };
+}
+
+export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, dataDir?: string) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig(dataDir);
+  if (providerId === NETLIFY_PROVIDER_ID) return readNetlifyConfig(dataDir);
+  if (providerId === RENDER_PROVIDER_ID) return readRenderConfig(dataDir);
+  if (providerId === RAILWAY_PROVIDER_ID) return readRailwayConfig(dataDir);
+  return readVercelConfig(dataDir);
+}
+
+export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}, dataDir?: string) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input, dataDir);
+  if (providerId === NETLIFY_PROVIDER_ID) return writeNetlifyConfig(input, dataDir);
+  if (providerId === RENDER_PROVIDER_ID) return writeRenderConfig(input, dataDir);
+  if (providerId === RAILWAY_PROVIDER_ID) return writeRailwayConfig(input, dataDir);
+  return writeVercelConfig(input, dataDir);
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
+  if (providerId === NETLIFY_PROVIDER_ID) return publicNetlifyConfig(config);
+  if (providerId === RENDER_PROVIDER_ID) return publicRenderConfig(config);
+  if (providerId === RAILWAY_PROVIDER_ID) return publicRailwayConfig(config);
   return publicDeployConfig(config);
 }
 
 export function isDeployProviderId(value: unknown): value is DeployProviderId {
-  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID || value === NETLIFY_PROVIDER_ID || value === RENDER_PROVIDER_ID || value === RAILWAY_PROVIDER_ID;
 }
 
 function normalizeCloudflarePagesConfigHints(input: unknown, fallback: CloudflarePagesConfigHints = {}): CloudflarePagesConfigHints {
@@ -386,10 +533,33 @@ function isLinkedFolderProject(metadata: unknown) {
   );
 }
 
-export async function deployToVercel({ config, files, projectId }: { config: DeployConfig; files: DeployFile[]; projectId: string }) {
-  if (!config?.token) {
+async function resolveVercelTeamId(config: DeployConfig): Promise<string> {
+  if (config.teamId) return config.teamId;
+  if (!config.teamSlug) return '';
+  try {
+    const resp = await fetch(`${VERCEL_API}/v2/teams`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+    if (!resp.ok) return '';
+    const data = await resp.json() as any;
+    const teams = data?.teams;
+    if (Array.isArray(teams)) {
+      const match = teams.find((t: any) => t.slug === config.teamSlug);
+      if (match?.id) return match.id;
+    }
+  } catch (err) {
+    console.error('Failed to resolve Vercel team ID from slug:', err);
+  }
+  return '';
+}
+
+export async function deployToVercel({ config: originalConfig, files, projectId }: { config: DeployConfig; files: DeployFile[]; projectId: string }) {
+  if (!originalConfig?.token) {
     throw new DeployError('Vercel token is required.', 400, undefined, 'VERCEL_TOKEN_REQUIRED');
   }
+
+  const resolvedTeamId = await resolveVercelTeamId(originalConfig);
+  const config = resolvedTeamId ? { ...originalConfig, teamId: resolvedTeamId } : originalConfig;
 
   const createResp = await fetch(`${VERCEL_API}/v13/deployments${vercelTeamQuery(config)}`, {
     method: 'POST',
@@ -434,6 +604,1666 @@ export async function deployToVercel({ config, files, projectId }: { config: Dep
     status: link.status,
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
+  };
+}
+
+async function readNetlifyJson(resp: Response): Promise<any> {
+  try {
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
+async function ensureGitHubRepository({
+  username,
+  repoName,
+  githubToken,
+  isPrivate = false,
+}: {
+  username: string;
+  repoName: string;
+  githubToken: string;
+  isPrivate?: boolean;
+}): Promise<{ repoId: number; private: boolean; defaultBranch: string }> {
+  const repoUrl = `https://api.github.com/repos/${username}/${repoName}`;
+  const repoCheck = await fetch(repoUrl, {
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+
+  if (repoCheck.status === 404) {
+    const createResp = await fetch('https://api.github.com/user/repos', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Open-Design-Daemon',
+      },
+      body: JSON.stringify({
+        name: repoName,
+        private: isPrivate,
+        auto_init: true,
+      }),
+    });
+
+    if (!createResp.ok) {
+      // It might have been created by a concurrent request, retry fetching it.
+      const retryCheck = await fetch(repoUrl, {
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'Open-Design-Daemon',
+        },
+      });
+      if (retryCheck.ok) {
+        const repoJson = (await retryCheck.json()) as any;
+        return {
+          repoId: repoJson.id,
+          private: typeof repoJson.private === 'boolean' ? repoJson.private : isPrivate,
+          defaultBranch: repoJson.default_branch || 'main',
+        };
+      }
+      const errText = await createResp.text();
+      throw new DeployError(`Failed to create GitHub repository: ${errText}`, 502);
+    }
+    const createJson = (await createResp.json()) as any;
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    return {
+      repoId: createJson.id,
+      private: typeof createJson.private === 'boolean' ? createJson.private : isPrivate,
+      defaultBranch: createJson.default_branch || 'main',
+    };
+  } else if (!repoCheck.ok) {
+    const errText = await repoCheck.text();
+    throw new DeployError(`Failed to check GitHub repository: ${errText}`, 502);
+  } else {
+    const repoJson = (await repoCheck.json()) as any;
+    return {
+      repoId: repoJson.id,
+      private: typeof repoJson.private === 'boolean' ? repoJson.private : false,
+      defaultBranch: repoJson.default_branch || 'main',
+    };
+  }
+}
+
+async function pollNetlifyDeploy(config: DeployConfig, deploymentId: string, { timeoutMs = 60_000, intervalMs = 2_000 } = {}) {
+  const startedAt = Date.now();
+  let last: any = null;
+  while (true) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = timeoutMs - elapsed;
+    if (remaining <= 0) break;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), remaining);
+    try {
+      const resp = await fetch(`${NETLIFY_API}/deploys/${encodeURIComponent(deploymentId)}`, {
+        headers: { Authorization: `Bearer ${config.token}` },
+        signal: controller.signal,
+      });
+      const json = await readNetlifyJson(resp);
+      if (!resp.ok) {
+        throw new DeployError(json?.message || `Netlify deploy status lookup failed (${resp.status}).`, 502, json);
+      }
+      last = json;
+      const state = typeof json?.state === 'string' ? json.state.toLowerCase() : '';
+      if (state === 'ready') return json;
+      if (state === 'error' || state === 'rejected') {
+        throw new DeployError(json?.error_message || json?.message || 'Netlify deployment failed.', 502, json);
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        throw new DeployError('Netlify deployment poll timed out.', 504);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const nextRemaining = timeoutMs - (Date.now() - startedAt);
+    if (nextRemaining <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
+  }
+  throw new DeployError('Netlify deployment poll timed out.', 504, last);
+}
+
+export async function deployToNetlify({
+  config,
+  files,
+  projectId,
+  projectsRoot,
+  projectMetadata,
+  priorMetadata,
+}: {
+  config: DeployConfig;
+  files: DeployFile[];
+  projectId: string;
+  projectsRoot?: string | undefined;
+  projectMetadata?: JsonObject | undefined;
+  priorMetadata?: JsonObject | undefined;
+}) {
+  if (!config?.token) {
+    throw new DeployError('Netlify token is required.', 400);
+  }
+  if (!config?.githubToken) {
+    throw new DeployError('GitHub PAT is required.', 400);
+  }
+
+  // 1. Get user details from GitHub
+  const userResp = await fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `Bearer ${config.githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+  if (!userResp.ok) {
+    const errText = await userResp.text();
+    throw new DeployError(`Failed to fetch GitHub user details: ${errText}`, 502);
+  }
+  const githubUser = (await userResp.json()) as any;
+  const username = githubUser.login;
+
+  // 2. Add netlify.toml to files array if not present and ensure GitHub repository exists
+  const netlifyToml = `[build]\n  command = ""\n  publish = "."\n`;
+  if (!files.some((f) => f.file === 'netlify.toml')) {
+    files.push({
+      file: 'netlify.toml',
+      data: netlifyToml,
+      contentType: 'text/toml',
+    });
+  }
+
+  const repoName = `od-netlify-${projectId}`;
+  const repoInfo = await ensureGitHubRepository({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    isPrivate: true,
+  });
+  const repoId = repoInfo.repoId;
+  const isPrivate = repoInfo.private;
+  const defaultBranch = repoInfo.defaultBranch;
+
+  // Resolve Netlify site details early so we can check for existing deploy keys
+  let siteId = priorMetadata?.siteId;
+  let serviceUrl = priorMetadata?.serviceUrl;
+  const siteName = safeVercelProjectName(`od-${projectId}`);
+
+  if (siteId) {
+    try {
+      const verifyResp = await fetch(`${NETLIFY_API}/sites/${siteId}`, {
+        headers: { Authorization: `Bearer ${config.token}` },
+      });
+      if (verifyResp.status === 404) {
+        siteId = undefined;
+        serviceUrl = undefined;
+      }
+    } catch {
+      // Ignore network/fetch errors during verification to avoid duplicate resource creation on transient network drop
+    }
+  }
+
+  if (!siteId) {
+    // Try to find existing site by name
+    const listResp = await fetch(`${NETLIFY_API}/sites?name=${siteName}&filter=all`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+    if (!listResp.ok) {
+      const errText = await listResp.text().catch(() => '');
+      throw new DeployError(`Failed to search existing Netlify sites: ${listResp.status} ${errText}`, 502);
+    }
+    const sites = await readNetlifyJson(listResp);
+    if (Array.isArray(sites)) {
+      const existing = sites.find((s: any) => s.name === siteName);
+      if (existing) {
+        siteId = existing.id || existing.site_id;
+        serviceUrl = existing.ssl_url || existing.url;
+      }
+    }
+  }
+
+  let deployKeyId = priorMetadata?.deployKeyId;
+  let publicKey = '';
+
+  // If we don't have a deployKeyId, check if we can get it from the site if the site already exists
+  if (!deployKeyId && siteId) {
+    const siteResp = await fetch(`${NETLIFY_API}/sites/${siteId}`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+    if (siteResp.ok) {
+      const site = (await readNetlifyJson(siteResp)) as any;
+      deployKeyId = site?.deploy_key_id || site?.repo?.deploy_key_id || site?.build_settings?.deploy_key_id;
+    }
+  }
+
+  if (deployKeyId) {
+    try {
+      const deployKeyResp = await fetch(`${NETLIFY_API}/deploy_keys/${encodeURIComponent(deployKeyId)}`, {
+        headers: { Authorization: `Bearer ${config.token}` },
+      });
+      if (deployKeyResp.ok) {
+        const deployKey = (await deployKeyResp.json()) as any;
+        if (deployKey?.public_key) {
+          publicKey = deployKey.public_key;
+        } else {
+          deployKeyId = undefined;
+        }
+      } else {
+        deployKeyId = undefined;
+      }
+    } catch {
+      deployKeyId = undefined;
+    }
+  }
+
+  if (!deployKeyId) {
+    // Generate a deploy key on Netlify
+    const deployKeyResp = await fetch(`${NETLIFY_API}/deploy_keys`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!deployKeyResp.ok) {
+      const errText = await deployKeyResp.text();
+      throw new DeployError(`Failed to create Netlify deploy key: ${errText}`, 502);
+    }
+    const deployKey = (await deployKeyResp.json()) as any;
+    deployKeyId = deployKey.id;
+    publicKey = deployKey.public_key;
+  }
+
+  // Add the public key to the GitHub repository as a deploy key (only if we created a new key pair)
+  if (publicKey) {
+    const addKeyResp = await fetch(`https://api.github.com/repos/${username}/${repoName}/keys`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.githubToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Open-Design-Daemon',
+      },
+      body: JSON.stringify({
+        title: 'Netlify Deploy Key',
+        key: publicKey,
+        read_only: true,
+      }),
+    });
+    if (!addKeyResp.ok) {
+      const errText = await addKeyResp.text();
+      const isDuplicate =
+        errText.includes('already_exists') ||
+        errText.includes('already exists') ||
+        errText.includes('key is already in use');
+      if (!isDuplicate) {
+        throw new DeployError(`Failed to add deploy key to GitHub repository: ${errText}`, 502);
+      }
+    }
+  }
+
+  // 3. Sync files to the GitHub repository
+  for (const file of files) {
+    await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
+  }
+
+  const currentFilePaths = new Set(files.map((f) => f.file));
+  await reconcileGitHubRepositoryFiles({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    defaultBranch,
+    currentFiles: currentFilePaths,
+  });
+
+  // 4. Create or update Netlify site linked to the GitHub repo
+  if (siteId) {
+    // Ensure the site is linked to the GitHub repository
+    const updateSiteResp = await fetch(`${NETLIFY_API}/sites/${siteId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        repo: {
+          provider: 'github',
+          repo: `${username}/${repoName}`,
+          repo_id: repoId,
+          private: isPrivate,
+          branch: defaultBranch,
+          cmd: '',
+          dir: '.',
+          deploy_key_id: deployKeyId,
+        },
+      }),
+    });
+    if (!updateSiteResp.ok) {
+      const errText = await updateSiteResp.text();
+      throw new DeployError(`Failed to update Netlify site repository settings: ${errText}`, 502);
+    }
+  } else {
+    // Create a new site linked to the GitHub repo
+    const createSiteResp = await fetch(`${NETLIFY_API}/sites`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: siteName,
+        repo: {
+          provider: 'github',
+          repo: `${username}/${repoName}`,
+          repo_id: repoId,
+          private: isPrivate,
+          branch: defaultBranch,
+          cmd: '',
+          dir: '.',
+          deploy_key_id: deployKeyId,
+        },
+      }),
+    });
+    const site = await readNetlifyJson(createSiteResp);
+    if (createSiteResp.ok && (site?.id || site?.site_id)) {
+      siteId = site.id || site.site_id;
+      serviceUrl = site.ssl_url || site.url;
+    } else {
+      // Fallback: create site without repo link, then update it
+      const fallbackResp = await fetch(`${NETLIFY_API}/sites`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: siteName }),
+      });
+      const fallbackSite = await readNetlifyJson(fallbackResp);
+      if (!fallbackResp.ok || !(fallbackSite?.id || fallbackSite?.site_id)) {
+        throw new DeployError(fallbackSite?.message || 'Failed to create Netlify site.', 502, fallbackSite);
+      }
+      siteId = fallbackSite.id || fallbackSite.site_id;
+      serviceUrl = fallbackSite.ssl_url || fallbackSite.url;
+
+      // Update / Link repository settings
+      const updateSiteResp = await fetch(`${NETLIFY_API}/sites/${siteId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repo: {
+            provider: 'github',
+            repo: `${username}/${repoName}`,
+            repo_id: repoId,
+            private: isPrivate,
+            branch: defaultBranch,
+            cmd: '',
+            dir: '.',
+            deploy_key_id: deployKeyId,
+          },
+        }),
+      });
+      if (!updateSiteResp.ok) {
+        const errText = await updateSiteResp.text();
+        throw new DeployError(`Failed to update fallback Netlify site repository settings: ${errText}`, 502);
+      }
+    }
+  }
+
+  // 5. Trigger a new deploy programmatically via /builds endpoint
+  let deploymentId = '';
+  let triggerSucceeded = false;
+  let triggerError: any = null;
+
+  // Fetch the latest deploy ID before triggering to detect the new deploy ID if needed
+  let latestDeployIdBefore: string | undefined;
+  try {
+    const preListResp = await fetch(`${NETLIFY_API}/sites/${siteId}/deploys?per_page=1`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+    if (preListResp.ok) {
+      const deploys = await readNetlifyJson(preListResp);
+      if (Array.isArray(deploys)) {
+        latestDeployIdBefore = deploys[0]?.id || null;
+      }
+    }
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Failed to fetch Netlify deploys before trigger:', err);
+    }
+  }
+
+  const buildsController = new AbortController();
+  const buildsTimer = setTimeout(() => buildsController.abort(), 15_000);
+  try {
+    const triggerResp = await fetch(`${NETLIFY_API}/sites/${siteId}/builds`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+      signal: buildsController.signal,
+    });
+    if (triggerResp.ok) {
+      triggerSucceeded = true;
+      const buildResult = await readNetlifyJson(triggerResp);
+      deploymentId = buildResult?.deploy_id || buildResult?.id || '';
+    } else {
+      const errJson = await readNetlifyJson(triggerResp);
+      const errMsg = errJson?.message || errJson?.error || `Failed to trigger Netlify build (${triggerResp.status}).`;
+      triggerError = new DeployError(errMsg, 502, errJson);
+    }
+  } catch (err) {
+    console.error('Failed to trigger Netlify build:', err);
+    triggerError = err instanceof DeployError ? err : new DeployError(`Failed to trigger Netlify build: ${errorMessage(err, 'unknown error')}`, 502);
+  } finally {
+    clearTimeout(buildsTimer);
+  }
+
+  if (triggerError) {
+    throw triggerError;
+  }
+
+  // Fallback: If trigger succeeded but no deployment ID was returned, query the site's deploys list
+  if (triggerSucceeded && !deploymentId) {
+    if (latestDeployIdBefore === undefined) {
+      throw new DeployError('Failed to resolve new Netlify deployment because baseline deployment ID could not be established.', 502);
+    }
+    // Poll up to 5 times (1s interval) for a new deploy to show up
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const listDeploysResp = await fetch(`${NETLIFY_API}/sites/${siteId}/deploys?per_page=1`, {
+        headers: { Authorization: `Bearer ${config.token}` },
+      });
+      if (listDeploysResp.ok) {
+        const deploys = await readNetlifyJson(listDeploysResp);
+        if (Array.isArray(deploys) && deploys.length > 0) {
+          const latestDeploy = deploys[0];
+          // Ensure it is a new deploy that appeared after the trigger
+          if (latestDeploy.id !== latestDeployIdBefore) {
+            deploymentId = latestDeploy.id;
+            break;
+          }
+        }
+      }
+      // Wait 1 second before retrying
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    if (!deploymentId) {
+      throw new DeployError('Failed to resolve new Netlify deployment after trigger.', 502);
+    }
+  }
+
+  const readyDeploy = deploymentId
+    ? await pollNetlifyDeploy(config, deploymentId)
+    : null;
+  const finalDeploy = readyDeploy || { ssl_url: serviceUrl, url: serviceUrl };
+  const initialUrl =
+    finalDeploy.ssl_url ||
+    finalDeploy.url ||
+    finalDeploy.deploy_ssl_url ||
+    finalDeploy.deploy_url ||
+    serviceUrl;
+
+  const link = await waitForReachableDeploymentUrl(
+    [
+      finalDeploy.ssl_url,
+      finalDeploy.url,
+      finalDeploy.deploy_ssl_url,
+      finalDeploy.deploy_url,
+      serviceUrl,
+    ].filter(Boolean) as string[],
+    { providerLabel: 'Netlify', timeoutMs: 5_000 },
+  );
+
+  return {
+    providerId: NETLIFY_PROVIDER_ID,
+    url: link.url || initialUrl || `https://${siteName}.netlify.app`,
+    deploymentId,
+    target: 'preview',
+    status: link.status,
+    statusMessage: link.statusMessage,
+    reachableAt: link.reachableAt,
+    providerMetadata: { siteId, serviceUrl: link.url || initialUrl || `https://${siteName}.netlify.app`, deployKeyId },
+  };
+}
+
+function gitBlobSha(content: Buffer | Uint8Array | string): string {
+  const buf = typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content);
+  const header = `blob ${buf.length}\0`;
+  const hasher = createHash('sha1');
+  hasher.update(header);
+  hasher.update(buf);
+  return hasher.digest('hex');
+}
+
+async function createOrUpdateGitHubFile(
+  username: string,
+  repo: string,
+  token: string,
+  filePath: string,
+  content: Buffer | Uint8Array | string
+) {
+  const base64Content = Buffer.from(content).toString('base64');
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  const url = `https://api.github.com/repos/${username}/${repo}/contents/${encodedPath}`;
+
+  const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
+  const acceptHeader = size > 1_000_000 ? 'application/vnd.github.object+json' : 'application/vnd.github.v3+json';
+
+  let sha: string | undefined;
+  const getResp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: acceptHeader,
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+  if (getResp.ok) {
+    const json = (await getResp.json()) as any;
+    sha = json.sha;
+    
+    // Skip uploading if the file is unchanged
+    const localSha = gitBlobSha(content);
+    if (sha === localSha) {
+      return;
+    }
+  }
+
+  const putResp = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+    body: JSON.stringify({
+      message: `deploy: sync ${filePath}`,
+      content: base64Content,
+      ...(sha ? { sha } : {}),
+    }),
+  });
+
+  if (!putResp.ok) {
+    const errBody = (await putResp.json().catch(() => null)) as any;
+    throw new DeployError(errBody?.message || `Failed to upload ${filePath} to GitHub.`, 502, errBody);
+  }
+}
+
+async function reconcileGitHubRepositoryFiles({
+  username,
+  repoName,
+  githubToken,
+  defaultBranch,
+  currentFiles,
+}: {
+  username: string;
+  repoName: string;
+  githubToken: string;
+  defaultBranch: string;
+  currentFiles: Set<string>;
+}) {
+  const treeUrl = `https://api.github.com/repos/${username}/${repoName}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=true`;
+  const treeResp = await fetch(treeUrl, {
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+  if (!treeResp.ok) {
+    if (treeResp.status === 404 || treeResp.status === 409) {
+      return;
+    }
+    const errText = await treeResp.text();
+    throw new DeployError(`Failed to fetch GitHub repository tree: ${errText}`, 502);
+  }
+
+  const treeData = (await treeResp.json()) as any;
+  const remoteFiles = Array.isArray(treeData?.tree) ? treeData.tree : [];
+
+  for (const item of remoteFiles) {
+    if (item.type === 'blob') {
+      const path = item.path;
+      if (!currentFiles.has(path)) {
+        const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+        const deleteUrl = `https://api.github.com/repos/${username}/${repoName}/contents/${encodedPath}`;
+        const deleteResp = await fetch(deleteUrl, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${githubToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'Open-Design-Daemon',
+          },
+          body: JSON.stringify({
+            message: `deploy: cleanup stale file ${path}`,
+            sha: item.sha,
+            branch: defaultBranch,
+          }),
+        });
+        if (!deleteResp.ok) {
+          const errText = await deleteResp.text();
+          throw new DeployError(`Failed to delete stale file ${path} from GitHub repository: ${errText}`, 502);
+        }
+      }
+    }
+  }
+}
+
+const RENDER_API = 'https://api.render.com/v1';
+
+async function pollRenderDeploy(config: DeployConfig, serviceId: string, deployId: string, { timeoutMs = 180_000, intervalMs = 2_000 } = {}) {
+  const startedAt = Date.now();
+  let last: any = null;
+  while (true) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = timeoutMs - elapsed;
+    if (remaining <= 0) break;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), remaining);
+    try {
+      const resp = await fetch(`${RENDER_API}/services/${encodeURIComponent(serviceId)}/deploys/${encodeURIComponent(deployId)}`, {
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
+      const json = (await resp.json().catch(() => null)) as any;
+      if (!resp.ok) {
+        throw new DeployError(json?.message || `Render deploy status lookup failed (${resp.status}).`, 502, json);
+      }
+      last = json;
+      const status = typeof json?.status === 'string' ? json.status.toLowerCase() : '';
+      if (status === 'live') return json;
+      if (status === 'build_failed' || status === 'update_failed' || status === 'canceled') {
+        throw new DeployError(`Render deployment failed with status: ${json.status}.`, 502, json);
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        throw new DeployError('Render deployment poll timed out.', 504);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const nextRemaining = timeoutMs - (Date.now() - startedAt);
+    if (nextRemaining <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
+  }
+  throw new DeployError('Render deployment poll timed out.', 504, last);
+}
+
+export async function deployToRender({
+  config,
+  files,
+  projectId,
+  projectsRoot,
+  projectMetadata,
+  priorMetadata,
+}: {
+  config: DeployConfig;
+  files: DeployFile[];
+  projectId: string;
+  projectsRoot?: string | undefined;
+  projectMetadata?: JsonObject | undefined;
+  priorMetadata?: JsonObject | undefined;
+}) {
+  if (!config?.token) {
+    throw new DeployError('Render API key is required.', 400);
+  }
+  if (!config?.githubToken) {
+    throw new DeployError('GitHub PAT is required.', 400);
+  }
+
+  // 1. Get user details from GitHub
+  const userResp = await fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `Bearer ${config.githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+  if (!userResp.ok) {
+    const errText = await userResp.text();
+    throw new DeployError(`Failed to fetch GitHub user details: ${errText}`, 502);
+  }
+  const githubUser = (await userResp.json()) as any;
+  const username = githubUser.login;
+
+  // 2. Add render.yaml to files array if not present
+  const yamlContent = `services:
+  - type: web
+    name: od-render-${projectId}
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: "."
+`;
+
+  if (!files.some((f) => f.file === 'render.yaml')) {
+    files.push({
+      file: 'render.yaml',
+      data: yamlContent,
+      contentType: 'text/yaml',
+    });
+  }
+
+  // 3. Ensure GitHub repository exists
+  const repoName = `od-render-${projectId}`;
+  const repoInfo = await ensureGitHubRepository({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    isPrivate: false,
+  });
+  const defaultBranch = repoInfo.defaultBranch;
+
+
+  // 4. Sync files to the GitHub repository using the GitHub API
+  for (const file of files) {
+    await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
+  }
+
+  const currentFilePaths = new Set(files.map((f) => f.file));
+  await reconcileGitHubRepositoryFiles({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    defaultBranch,
+    currentFiles: currentFilePaths,
+  });
+
+  // 5. Get Owner ID from Render
+  const ownersResp = await fetch(`${RENDER_API}/owners`, {
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!ownersResp.ok) {
+    const errText = await ownersResp.text();
+    throw new DeployError(`Failed to fetch Render owner details: ${errText}`, 502);
+  }
+  const owners = (await ownersResp.json()) as any[];
+  if (!Array.isArray(owners) || owners.length === 0) {
+    throw new DeployError('No owners found for Render API key.', 400);
+  }
+  const ownerId = owners[0].owner.id;
+
+  // 6. Find or Create Render static site service
+  let serviceId = priorMetadata?.serviceId;
+  let serviceUrl = priorMetadata?.serviceUrl;
+
+  if (serviceId) {
+    try {
+      const verifyResp = await fetch(`${RENDER_API}/services/${serviceId}`, {
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: 'application/json',
+        },
+      });
+      if (verifyResp.status === 404) {
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    } catch {
+      // Ignore network/fetch errors during verification to avoid duplicate resource creation on transient network drop
+    }
+  }
+
+  const listResp = await fetch(`${RENDER_API}/services?limit=100&name=${repoName}`, {
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!listResp.ok) {
+    const errText = await listResp.text().catch(() => '');
+    throw new DeployError(`Failed to search existing Render services: ${listResp.status} ${errText}`, 502);
+  }
+  const services = (await listResp.json()) as any[];
+  if (Array.isArray(services)) {
+    const existing = services.find((s) => {
+      const item = s.service || s;
+      return item.name === repoName && item.type === 'static_site';
+    });
+    if (existing) {
+      const item = existing.service || existing;
+      serviceId = item.id;
+      serviceUrl = item.serviceDetails?.url || item.url || `https://${repoName}.onrender.com`;
+    }
+  }
+
+  let preTriggerDeployId: string | undefined;
+  if (serviceId) {
+    try {
+      const listDeploysResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys?limit=1`, {
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: 'application/json',
+        },
+      });
+      if (listDeploysResp.ok) {
+        const deploys = await listDeploysResp.json().catch(() => null);
+        if (Array.isArray(deploys)) {
+          const firstDeploy = deploys[0];
+          const item = firstDeploy?.deploy || firstDeploy;
+          preTriggerDeployId = item?.id || null;
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  let deployId = '';
+  let isNewService = false;
+  if (!serviceId) {
+    isNewService = true;
+    // Create new service
+    const createServiceResp = await fetch(`${RENDER_API}/services`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'static_site',
+        name: repoName,
+        ownerId,
+        repo: `https://github.com/${username}/${repoName}`,
+        branch: defaultBranch,
+        autoDeploy: 'yes',
+        serviceDetails: {
+          buildCommand: '',
+          publishPath: '.',
+        },
+      }),
+    });
+    if (!createServiceResp.ok) {
+      const errText = await createServiceResp.text();
+      throw new DeployError(`Failed to create Render service: ${errText}`, 502);
+    }
+    const created = (await createServiceResp.json()) as any;
+    const item = created.service || created;
+    serviceId = item.id;
+    serviceUrl = item.serviceDetails?.url || item.url || `https://${repoName}.onrender.com`;
+
+    // Fetch the auto-triggered initial deploy ID
+    const listDeploysResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys?limit=1`, {
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        Accept: 'application/json',
+      },
+    });
+    if (listDeploysResp.ok) {
+      const deploys = await listDeploysResp.json().catch(() => null);
+      if (Array.isArray(deploys) && deploys.length > 0) {
+        const item = deploys[0].deploy || deploys[0];
+        deployId = item.id;
+      }
+    }
+  } else {
+    // Service already exists, trigger a fresh deploy
+    const triggerResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+    if (!triggerResp.ok) {
+      const errText = await triggerResp.text();
+      throw new DeployError(`Failed to trigger Render deploy: ${errText}`, 502);
+    }
+    const triggerJson = (await triggerResp.json().catch(() => null)) as any;
+    const item = triggerJson?.deploy || triggerJson;
+    deployId = item?.id || '';
+  }
+
+  // Poll up to 5 times (1s intervals) to resolve the new deploy ID if it wasn't returned immediately or is stale
+  if (!deployId || (!isNewService && deployId === preTriggerDeployId)) {
+    if (!isNewService && preTriggerDeployId === undefined) {
+      throw new DeployError('Failed to resolve new Render deployment because baseline deployment ID could not be established.', 502);
+    }
+    for (let i = 0; i < 5; i++) {
+      try {
+        const listDeploysResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys?limit=1`, {
+          headers: {
+            Authorization: `Bearer ${config.token}`,
+            Accept: 'application/json',
+          },
+        });
+        if (listDeploysResp.ok) {
+          const deploys = await listDeploysResp.json().catch(() => null);
+          if (Array.isArray(deploys) && deploys.length > 0) {
+            const item = deploys[0].deploy || deploys[0];
+            if (item.id && (isNewService || item.id !== preTriggerDeployId)) {
+              deployId = item.id;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Ignore and retry
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
+  if (!deployId) {
+    throw new DeployError('Failed to resolve new Render deployment after trigger.', 502);
+  }
+
+  // Poll deployment status
+  await pollRenderDeploy(config, serviceId!, deployId);
+
+  // 7. Wait for URL to be reachable
+  const link = await waitForReachableDeploymentUrl([serviceUrl!], { providerLabel: 'Render', timeoutMs: 5_000 });
+
+  return {
+    providerId: RENDER_PROVIDER_ID,
+    url: link.url || serviceUrl,
+    deploymentId: serviceId,
+    target: 'preview',
+    status: link.status,
+    statusMessage: link.statusMessage,
+    reachableAt: link.reachableAt,
+    providerMetadata: { serviceId, serviceUrl, deployId },
+  };
+}
+
+async function getLatestRailwayDeployment(
+  queryRailway: (query: string, variables?: JsonObject, options?: { signal?: AbortSignal }) => Promise<any>,
+  variables: { projectId: string; serviceId: string; environmentId: string },
+  options?: { signal?: AbortSignal }
+) {
+  const data = await queryRailway(`
+    query deployments($input: DeploymentListInput!) {
+      deployments(input: $input, first: 1) {
+        edges {
+          node {
+            id
+            status
+            url
+          }
+        }
+      }
+    }
+  `, {
+    input: {
+      projectId: variables.projectId,
+      serviceId: variables.serviceId,
+      environmentId: variables.environmentId,
+    }
+  }, options);
+  return data?.deployments?.edges?.[0]?.node;
+}
+
+async function pollRailwayDeploy(
+  queryRailway: (query: string, variables?: JsonObject, options?: { signal?: AbortSignal }) => Promise<any>,
+  deploymentId: string,
+  { timeoutMs = 180_000, intervalMs = 2_000 } = {}
+) {
+  const startedAt = Date.now();
+  let last: any = null;
+  while (true) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = timeoutMs - elapsed;
+    if (remaining <= 0) break;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), remaining);
+
+    try {
+      const data = await queryRailway(`
+        query deployment($id: String!) {
+          deployment(id: $id) {
+            id
+            status
+          }
+        }
+      `, { id: deploymentId }, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      const deploy = data?.deployment;
+      if (!deploy) {
+        throw new DeployError('Railway deployment not found.', 502);
+      }
+      last = deploy;
+      const status = typeof deploy.status === 'string' ? deploy.status.toUpperCase() : '';
+      if (status === 'ACTIVE') return deploy;
+      if (status === 'FAILED' || status === 'CRASHED' || status === 'REMOVED') {
+        throw new DeployError(`Railway deployment failed with status: ${deploy.status}.`, 502, deploy);
+      }
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError' || (err instanceof Error && err.name === 'AbortError')) {
+        throw new DeployError('Railway deployment poll timed out.', 504);
+      }
+      if (err instanceof DeployError) throw err;
+      if (Date.now() - startedAt >= timeoutMs) {
+        throw new DeployError('Railway deployment poll timed out.', 504);
+      }
+    }
+
+    const nextRemaining = timeoutMs - (Date.now() - startedAt);
+    if (nextRemaining <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
+  }
+  throw new DeployError('Railway deployment poll timed out.', 504, last);
+}
+
+export async function checkNetlifyDeploymentLinks(existing: any, dataDir?: string) {
+  const metadata = existing.providerMetadata || {};
+  const { siteId, serviceUrl } = metadata;
+  const deployId = existing.deploymentId;
+  if (!deployId) {
+    const result = await checkDeploymentUrl(existing.url || serviceUrl);
+    return {
+      status: result.reachable ? 'ready' : result.status || 'link-delayed',
+      statusMessage: result.reachable
+        ? 'Public link is ready.'
+        : result.statusMessage || 'Provider is still preparing the public link.',
+    };
+  }
+
+  try {
+    const config = await readDeployConfig(NETLIFY_PROVIDER_ID, dataDir);
+    const resp = await fetch(`${NETLIFY_API}/deploys/${encodeURIComponent(deployId)}`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+    const json = await readNetlifyJson(resp);
+    if (!resp.ok) {
+      throw new Error(json?.message || `Netlify deploy status lookup failed (${resp.status}).`);
+    }
+    const state = typeof json?.state === 'string' ? json.state.toLowerCase() : '';
+    if (state === 'ready') {
+      const reach = await checkDeploymentUrl(existing.url || json.ssl_url || json.url || serviceUrl);
+      return {
+        status: reach.reachable ? 'ready' : reach.status || 'link-delayed',
+        statusMessage: reach.reachable
+          ? 'Public link is ready.'
+          : reach.statusMessage || 'Provider is still preparing the public link.',
+      };
+    } else if (state === 'error' || state === 'rejected') {
+      return {
+        status: 'failed',
+        statusMessage: json?.error_message || json?.message || 'Netlify deployment failed.',
+      };
+    } else {
+      return {
+        status: 'link-delayed',
+        statusMessage: `Netlify deployment is currently: ${state}.`,
+      };
+    }
+  } catch (err: any) {
+    return {
+      status: 'link-delayed',
+      statusMessage: `Failed to query Netlify deployment status: ${err.message || err}`,
+    };
+  }
+}
+
+export async function checkRenderDeploymentLinks(existing: any, dataDir?: string) {
+  const metadata = existing.providerMetadata || {};
+  const { serviceId, deployId, serviceUrl } = metadata;
+  const targetServiceId = serviceId || existing.deploymentId;
+  if (!targetServiceId || !deployId) {
+    const result = await checkDeploymentUrl(existing.url || serviceUrl);
+    return {
+      status: result.reachable ? 'ready' : result.status || 'link-delayed',
+      statusMessage: result.reachable
+        ? 'Public link is ready.'
+        : result.statusMessage || 'Provider is still preparing the public link.',
+    };
+  }
+
+  try {
+    const config = await readDeployConfig(RENDER_PROVIDER_ID, dataDir);
+    const resp = await fetch(`${RENDER_API}/services/${encodeURIComponent(targetServiceId)}/deploys/${encodeURIComponent(deployId)}`, {
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        Accept: 'application/json',
+      },
+    });
+    const json = await resp.json().catch(() => null) as any;
+    if (!resp.ok) {
+      throw new Error(json?.message || `Render deploy status lookup failed (${resp.status}).`);
+    }
+    const status = typeof json?.status === 'string' ? json.status.toLowerCase() : '';
+    if (status === 'live') {
+      const reach = await checkDeploymentUrl(existing.url || serviceUrl);
+      return {
+        status: reach.reachable ? 'ready' : reach.status || 'link-delayed',
+        statusMessage: reach.reachable
+          ? 'Public link is ready.'
+          : reach.statusMessage || 'Provider is still preparing the public link.',
+      };
+    } else if (status === 'build_failed' || status === 'update_failed' || status === 'canceled') {
+      return {
+        status: 'failed',
+        statusMessage: `Render deployment failed with status: ${json.status || status}.`,
+      };
+    } else {
+      return {
+        status: 'link-delayed',
+        statusMessage: `Render deployment is currently: ${status}.`,
+      };
+    }
+  } catch (err: any) {
+    return {
+      status: 'link-delayed',
+      statusMessage: `Failed to query Render deployment status: ${err.message || err}`,
+    };
+  }
+}
+
+export async function checkRailwayDeploymentLinks(existing: any, dataDir?: string) {
+  const metadata = existing.providerMetadata || {};
+  const { railwayProjectId, environmentId, serviceId, serviceUrl, railwayDeployId } = metadata;
+  if (!railwayDeployId) {
+    const result = await checkDeploymentUrl(serviceUrl);
+    return {
+      status: result.reachable ? 'ready' : result.status || 'link-delayed',
+      statusMessage: result.reachable
+        ? 'Public link is ready.'
+        : result.statusMessage || 'Provider is still preparing the public link.',
+    };
+  }
+
+  try {
+    const config = await readDeployConfig(RAILWAY_PROVIDER_ID, dataDir);
+    const RAILWAY_API = 'https://backboard.railway.com/graphql/v2';
+    const resp = await fetch(RAILWAY_API, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `
+          query deployment($id: String!) {
+            deployment(id: $id) {
+              id
+              status
+            }
+          }
+        `,
+        variables: { id: railwayDeployId },
+      }),
+    });
+    const result = await resp.json().catch(() => null) as any;
+    if (!resp.ok || result?.errors) {
+      throw new Error(result?.errors?.[0]?.message || 'Railway API request failed');
+    }
+    const deploy = result.data?.deployment;
+    if (!deploy) {
+      throw new Error('Railway deployment not found');
+    }
+    const status = typeof deploy.status === 'string' ? deploy.status.toUpperCase() : '';
+    if (status === 'ACTIVE') {
+      const reach = await checkDeploymentUrl(serviceUrl);
+      return {
+        status: reach.reachable ? 'ready' : reach.status || 'link-delayed',
+        statusMessage: reach.reachable
+          ? 'Public link is ready.'
+          : reach.statusMessage || 'Provider is still preparing the public link.',
+      };
+    } else if (status === 'FAILED' || status === 'CRASHED' || status === 'REMOVED') {
+      return {
+        status: 'failed',
+        statusMessage: `Railway deployment failed with status: ${deploy.status}.`,
+      };
+    } else {
+      return {
+        status: 'link-delayed',
+        statusMessage: `Railway deployment is currently: ${deploy.status.toLowerCase()}.`,
+      };
+    }
+  } catch (err: any) {
+    return {
+      status: 'link-delayed',
+      statusMessage: `Failed to query Railway deployment status: ${err.message || err}`,
+    };
+  }
+}
+
+export async function deployToRailway({
+  config,
+  files,
+  projectId,
+  projectsRoot,
+  projectMetadata,
+  priorMetadata,
+}: {
+  config: DeployConfig;
+  files: DeployFile[];
+  projectId: string;
+  projectsRoot: string;
+  projectMetadata?: JsonObject | undefined;
+  priorMetadata?: JsonObject | undefined;
+}) {
+  if (!config?.token) {
+    throw new DeployError('Railway API token is required.', 400);
+  }
+  if (!config?.githubToken) {
+    throw new DeployError('GitHub PAT is required.', 400);
+  }
+
+  // 1. Get user details from GitHub
+  const userResp = await fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `Bearer ${config.githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+  if (!userResp.ok) {
+    const errText = await userResp.text();
+    throw new DeployError(`Failed to fetch GitHub user details: ${errText}`, 502);
+  }
+  const githubUser = (await userResp.json()) as any;
+  const username = githubUser.login;
+
+  // 2. Ensure GitHub repository exists
+  const repoName = `od-railway-${projectId}`;
+  const repoInfo = await ensureGitHubRepository({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    isPrivate: false,
+  });
+  const defaultBranch = repoInfo.defaultBranch;
+
+  // Add a Staticfile to the files array if not present, so that Railway
+  // (Nixpacks/Railpack) instantly and reliably detects this as a static site!
+  if (!files.some((f) => f.file === 'Staticfile')) {
+    const staticfile = 'root: .\nindex_fallback: true\n';
+    files.push({
+      file: 'Staticfile',
+      data: staticfile,
+      contentType: 'text/plain',
+    });
+  }
+
+  // 3. Sync files to the GitHub repository using the GitHub API
+  for (const file of files) {
+    await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
+  }
+
+  const currentFilePaths = new Set(files.map((f) => f.file));
+  await reconcileGitHubRepositoryFiles({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    defaultBranch,
+    currentFiles: currentFilePaths,
+  });
+
+  // Helper to query Railway API
+  const RAILWAY_API = 'https://backboard.railway.com/graphql/v2';
+  async function queryRailway(query: string, variables: JsonObject = {}, options?: { signal?: AbortSignal }) {
+    const resp = await fetch(RAILWAY_API, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query, variables }),
+      signal: options?.signal ?? null,
+    });
+    const result = (await resp.json().catch(() => null)) as any;
+    if (!resp.ok || result?.errors) {
+      const msg = result?.errors?.[0]?.message || `Railway API request failed with status ${resp.status}`;
+      const status = resp.status === 200 ? 502 : (resp.status || 502);
+      throw new DeployError(msg, status, result);
+    }
+    return result.data;
+  }
+
+  let railwayProjectId = priorMetadata?.railwayProjectId;
+  let environmentId = priorMetadata?.environmentId;
+  let serviceId = priorMetadata?.serviceId;
+  let serviceUrl = priorMetadata?.serviceUrl;
+
+  if (railwayProjectId) {
+    try {
+      const projData = await queryRailway(`
+        query project($id: String!) {
+          project(id: $id) {
+            id
+            name
+          }
+        }
+      `, { id: railwayProjectId });
+      if (!projData?.project) {
+        railwayProjectId = undefined;
+        environmentId = undefined;
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    } catch (err: any) {
+      if (err instanceof DeployError && (err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('notfound'))) {
+        railwayProjectId = undefined;
+        environmentId = undefined;
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    }
+  }
+
+  if (railwayProjectId && serviceId) {
+    try {
+      const serviceData = await queryRailway(`
+        query service($id: String!) {
+          service(id: $id) {
+            id
+            name
+          }
+        }
+      `, { id: serviceId });
+      if (!serviceData?.service) {
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    } catch (err: any) {
+      if (err instanceof DeployError && (err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('notfound'))) {
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    }
+  }
+
+  const railwayName = repoName.slice(0, 30);
+
+  // 4. Resolve or create Railway Project
+  if (!railwayProjectId) {
+    const listData = await queryRailway(`
+      query projects {
+        projects {
+          edges {
+            node {
+              id
+              name
+            }
+          }
+        }
+      }
+    `);
+    const existingProject = listData?.projects?.edges?.find(
+      (edge: any) => edge?.node?.name === railwayName
+    );
+    if (existingProject) {
+      railwayProjectId = existingProject.node.id;
+    }
+  }
+
+  if (!railwayProjectId) {
+    const createData = await queryRailway(`
+      mutation projectCreate($input: ProjectCreateInput!) {
+        projectCreate(input: $input) {
+          id
+          name
+        }
+      }
+    `, {
+      input: {
+        name: railwayName,
+      },
+    });
+    railwayProjectId = createData?.projectCreate?.id;
+  }
+
+  if (!railwayProjectId) {
+    throw new DeployError('Failed to create or resolve Railway project.', 502);
+  }
+
+  // 5. Fetch project environments to get the production environment ID
+  if (!environmentId) {
+    const envData = await queryRailway(`
+      query environments($projectId: String!) {
+        environments(projectId: $projectId) {
+          edges {
+            node {
+              id
+              name
+            }
+          }
+        }
+      }
+    `, { projectId: railwayProjectId });
+    const productionEnv = envData?.environments?.edges?.find(
+      (edge: any) => edge?.node?.name?.toLowerCase() === 'production'
+    ) || envData?.environments?.edges?.[0];
+    environmentId = productionEnv?.node?.id;
+  }
+
+  if (!environmentId) {
+    throw new DeployError('Failed to resolve Railway environment.', 502);
+  }
+
+  // 6. Fetch project services or create service linked to the GitHub repository
+  let isNewService = false;
+  if (!serviceId) {
+    const serviceListData = await queryRailway(`
+      query services($projectId: String!) {
+        services(projectId: $projectId) {
+          edges {
+            node {
+              id
+              name
+            }
+          }
+        }
+      }
+    `, { projectId: railwayProjectId });
+    const existingService = serviceListData?.services?.edges?.find(
+      (edge: any) => edge?.node?.name === railwayName
+    );
+    if (existingService) {
+      serviceId = existingService.node.id;
+    }
+  }
+
+  if (!serviceId) {
+    isNewService = true;
+    const serviceCreateData = await queryRailway(`
+      mutation serviceCreate($input: ServiceCreateInput!) {
+        serviceCreate(input: $input) {
+          id
+          name
+        }
+      }
+    `, {
+      input: {
+        projectId: railwayProjectId,
+        name: railwayName,
+        source: {
+          repo: `${username}/${repoName}`,
+        },
+      },
+    });
+    serviceId = serviceCreateData?.serviceCreate?.id;
+  }
+
+  if (!serviceId) {
+    throw new DeployError('Failed to resolve or create Railway service.', 502);
+  }
+
+  // Query and store the latest deploy ID from Railway before triggering build
+  let preTriggerDeployId: string | undefined;
+  if (!isNewService) {
+    try {
+      const latest = await getLatestRailwayDeployment(queryRailway, {
+        projectId: railwayProjectId,
+        serviceId,
+        environmentId,
+      });
+      preTriggerDeployId = latest?.id || null;
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Trigger deployment to start the build programmatically (if it's not a newly created service, which automatically deploys)
+  if (!isNewService) {
+    if (preTriggerDeployId === undefined) {
+      throw new DeployError('Failed to resolve new Railway deployment because baseline deployment ID could not be established.', 502);
+    }
+    try {
+      await queryRailway(`
+        mutation serviceInstanceDeploy($serviceId: String!, $environmentId: String!) {
+          serviceInstanceDeploy(serviceId: $serviceId, environmentId: $environmentId)
+        }
+      `, {
+        serviceId,
+        environmentId,
+      });
+    } catch (err) {
+      // Some Railway accounts expose the newer V2 mutation first.
+      try {
+        await queryRailway(`
+          mutation serviceInstanceDeployV2($serviceId: String!, $environmentId: String!) {
+            serviceInstanceDeployV2(serviceId: $serviceId, environmentId: $environmentId)
+          }
+        `, {
+          serviceId,
+          environmentId,
+        });
+      } catch (fallbackErr) {
+        console.error('Failed to trigger Railway deployment:', fallbackErr);
+        const msg = `Failed to trigger Railway deployment: both V1 and V2 mutations failed. V1 Error: ${errorMessage(err, 'unknown error')}. V2 Error: ${errorMessage(fallbackErr, 'unknown error')}`;
+        throw new DeployError(msg, 502, {
+          v1Error: err instanceof Error ? { ...err, message: err.message } : err,
+          v2Error: fallbackErr instanceof Error ? { ...fallbackErr, message: fallbackErr.message } : fallbackErr,
+        });
+      }
+    }
+  }
+
+  // 7. Resolve or generate Service Domain
+  if (!serviceUrl) {
+    let domainList: any[] = [];
+    try {
+      const domainsData = await queryRailway(`
+        query domains($projectId: String!, $environmentId: String!, $serviceId: String!) {
+          domains(
+            projectId: $projectId
+            environmentId: $environmentId
+            serviceId: $serviceId
+          ) {
+            serviceDomains {
+              id
+              domain
+            }
+          }
+        }
+      `, {
+        projectId: railwayProjectId,
+        environmentId,
+        serviceId,
+      });
+      domainList = domainsData?.domains?.serviceDomains || [];
+    } catch {
+      domainList = [];
+    }
+    if (domainList.length > 0) {
+      serviceUrl = `https://${domainList[0].domain}`;
+    }
+
+    if (!serviceUrl) {
+      try {
+        const domainCreateData = await queryRailway(`
+          mutation serviceDomainCreate($input: ServiceDomainCreateInput!) {
+            serviceDomainCreate(input: $input) {
+              id
+              domain
+            }
+          }
+        `, {
+          input: {
+            environmentId,
+            serviceId,
+          },
+        });
+        if (domainCreateData?.serviceDomainCreate?.domain) {
+          serviceUrl = `https://${domainCreateData.serviceDomainCreate.domain}`;
+        }
+      } catch (err) {
+        throw err instanceof DeployError ? err : new DeployError(`Failed to generate Railway service domain: ${errorMessage(err, 'unknown error')}`, 502);
+      }
+    }
+  }
+
+  if (!serviceUrl) {
+    throw new DeployError('Failed to resolve or create Railway service domain.', 502);
+  }
+
+  let railwayDeployId: string | undefined;
+  // Poll up to 5 times (1s intervals) to resolve the new deployment ID
+  for (let i = 0; i < 5; i++) {
+    try {
+      const latest = await getLatestRailwayDeployment(queryRailway, {
+        projectId: railwayProjectId,
+        serviceId,
+        environmentId,
+      });
+      if (latest?.id && (isNewService || latest.id !== preTriggerDeployId)) {
+        railwayDeployId = latest.id;
+        break;
+      }
+    } catch {
+      // Ignore and retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  if (!railwayDeployId) {
+    throw new DeployError('Failed to resolve new Railway deployment after trigger.', 502);
+  }
+
+  let deployStatus = 'link-delayed';
+  let deployStatusMessage = 'Railway deployment is currently preparing.';
+  let reachableAt: number | undefined;
+
+  try {
+    const polled = await pollRailwayDeploy(queryRailway, railwayDeployId);
+    const status = typeof polled?.status === 'string' ? polled.status.toUpperCase() : '';
+    if (status === 'ACTIVE') {
+      const link = await waitForReachableDeploymentUrl([serviceUrl], { providerLabel: 'Railway', timeoutMs: 5_000 });
+      deployStatus = link.status;
+      deployStatusMessage = link.statusMessage;
+      reachableAt = link.reachableAt;
+    } else {
+      deployStatus = 'link-delayed';
+      deployStatusMessage = `Railway deployment is currently: ${polled?.status?.toLowerCase() || 'unknown'}.`;
+    }
+  } catch (err: any) {
+    throw err;
+  }
+
+  return {
+    providerId: RAILWAY_PROVIDER_ID,
+    url: serviceUrl,
+    deploymentId: railwayDeployId || serviceId,
+    target: 'preview',
+    status: deployStatus,
+    statusMessage: deployStatusMessage,
+    reachableAt,
+    providerMetadata: { railwayProjectId, environmentId, serviceId, serviceUrl, railwayDeployId },
   };
 }
 
