@@ -1255,14 +1255,14 @@ async function readImportError(resp: Response): Promise<SkillImportError> {
   };
 }
 
-export async function fetchPromptTemplates(): Promise<PromptTemplateSummary[]> {
+export async function fetchPromptTemplates(): Promise<PromptTemplateSummary[] | null> {
   try {
     const resp = await fetch('/api/prompt-templates');
-    if (!resp.ok) return [];
+    if (!resp.ok) return null;
     const json = (await resp.json()) as { promptTemplates: PromptTemplateSummary[] };
     return json.promptTemplates ?? [];
   } catch {
-    return [];
+    return null;
   }
 }
 
