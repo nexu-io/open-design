@@ -263,7 +263,7 @@ location /api/ {
 | 模式 | picker 中的值 | 请求流转路径 |
 |---|---|---|
 | **Local CLI**（daemon 检测到 agent 时的默认模式） | "Local CLI" | 前端 → daemon `/api/chat` → `spawn(<agent>, ...)` → 结构化工具/文件事件经 SSE 传输 → 项目文件 → 预览。plain-stream CLI 改走 text-artifact 路径。 |
-| **API 模式**（fallback / 未安装 CLI） | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | 前端 → daemon `/api/proxy/{provider}/stream` → provider SSE 归一化为 `delta/end/error` → `<artifact>` 解析器 → 预览 |
+| **API 模式**（fallback / 未安装 CLI） | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Ofox" / "Azure OpenAI" / "Google Gemini" | 前端 → daemon `/api/proxy/{provider}/stream` → provider SSE 归一化为 `delta/end/error` → `<artifact>` 解析器 → 预览 |
 
 两种模式最终进入同一个文件工作区和沙箱预览，但交付契约不同。具备文件系统能力的 runtime 写入规范文件，不应在 `<artifact>` 中重复源码；plain/纯文本与 BYOK 运行没有文件工具，其规范交付物是 `<artifact>` 中的完整 HTML。执行 profile 由 runtime transport 决定。
 

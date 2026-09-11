@@ -453,6 +453,27 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('keeps Ofox as an OpenAI-compatible known provider without changing the OpenAI default', () => {
+    const openai = switchApiProtocolConfig(baseConfig, 'openai');
+    const ofox = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://api.ofox.ai/v1',
+      model: 'deepseek/deepseek-v4-flash-0731',
+      apiProviderBaseUrl: 'https://api.ofox.ai/v1',
+    });
+
+    expect(openai).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(ofox).toMatchObject({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.ofox.ai/v1',
+      model: 'deepseek/deepseek-v4-flash-0731',
+      apiProviderBaseUrl: 'https://api.ofox.ai/v1',
+    });
+  });
+
   it('auto-fills Google defaults when switching from a selected known provider', () => {
     expect(switchApiProtocolConfig(baseConfig, 'google')).toMatchObject({
       mode: 'api',
