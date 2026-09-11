@@ -75,6 +75,7 @@ import {
   summarizeRunDiagnosticsForAnalytics,
   type RunDiagnosticsAnalytics,
 } from './run-diagnostics.js';
+import { projectWriteProgressDiagnostic } from './agent-protocol/acp/write-progress.js';
 import { projectToolExecutionLifecycleDiagnostic } from './agent-protocol/acp/tool-execution-lifecycle.js';
 import {
   classifyRunFailure,
@@ -812,6 +813,9 @@ function collectAgentEvents(
         ? projectToolExecutionLifecycleDiagnostic(data)
         : null;
       if (diagnosticName === 'tool_execution_lifecycle' && !toolExecutionLifecycle) continue;
+      const isWriteProgress = diagnosticName === 'write_progress' || diagnosticName === 'write_progress_snapshot';
+      const writeProgress = isWriteProgress ? projectWriteProgressDiagnostic(data) : null;
+      if (isWriteProgress && !writeProgress) continue;
       const index = diagnosticCounts.get(diagnosticName) ?? 0;
       diagnosticCounts.set(diagnosticName, index + 1);
       const promptBudget = promptBudgetAnalyticsFromDiagnostic(
@@ -823,7 +827,7 @@ function collectAgentEvents(
         name: `agent-diagnostic:${diagnosticName}`,
         timestamp,
         input: eventInput('diagnostic'),
-        output: toolExecutionLifecycle ?? {
+        output: writeProgress ?? toolExecutionLifecycle ?? {
           name: diagnosticName,
           ...(typeof data.source === 'string' ? { source: data.source } : {}),
           ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
