@@ -218,24 +218,115 @@ export function createPackagedDesktopLogger(paths: PackagedNamespacePaths): Pack
     warn: console.warn.bind(console),
   };
 
+  // Packaged Electron on Windows / Linux has no controlling terminal:
+  // `process.stdout` / `process.stderr` are typically detached or
+  // piped to a closed handle, so the very first `console.info(...)`
+  // a renderer lifecycle handler fires (e.g. `did-start-loading`)
+  // raises `Error: EPIPE: broken pipe, write` from
+  // `node:internal/streams/writable:508`. The error escapes the
+  // wrapper because the throws happen *inside* `Writable.write`, not
+  // at the call site, and lands in the packaged main process as an
+  // uncaught exception that crashes the whole app with Electron's
+  // native "JavaScript error in main process" dialog.
+  //
+  // The structured file logger above already swallows its own
+  // append failures (see `appendDesktopLogLine`). This wrapper does
+  // the same for the stdout / stderr echo: only the two known-safe
+  // stream-closure error codes are swallowed, and the matcher is
+  // intentionally narrow (a future `code: 'EACCES'`-style regression
+  // that broadens the filter trips the regression test in
+  // `tests/logging.test.ts`).
+  //
+  // This try/catch alone is NOT sufficient to stop the crash: it only
+  // catches a *synchronous* throw, and a detached stdout/stderr pipe
+  // fails asynchronously instead. See `installStdioErrorGuard` below
+  // for the layer that actually covers that path.
+  const safeEcho = (fn: (...a: unknown[]) => void) => (...args: unknown[]) => {
+    if (!echo) return;
+    try {
+      fn(...args);
+    } catch (error) {
+      if (isHarmlessStdoutError(error)) return;
+      throw error;
+    }
+  };
+
   console.log = (...args: unknown[]) => {
     logger.info("console.log", { args });
-    if (echo) originalConsole.log(...args);
+    safeEcho(originalConsole.log)(...args);
   };
   console.info = (...args: unknown[]) => {
     logger.info("console.info", { args });
-    if (echo) originalConsole.info(...args);
+    safeEcho(originalConsole.info)(...args);
   };
   console.warn = (...args: unknown[]) => {
     logger.warn("console.warn", { args });
-    if (echo) originalConsole.warn(...args);
+    safeEcho(originalConsole.warn)(...args);
   };
   console.error = (...args: unknown[]) => {
     logger.error("console.error", { args });
-    if (echo) originalConsole.error(...args);
+    safeEcho(originalConsole.error)(...args);
   };
 
+  // safeEcho's try/catch only covers a *synchronous* throw. It does not
+  // cover this failure mode: verified live on a packaged Windows build
+  // where safeEcho alone did not stop the crash. See installStdioErrorGuard.
+  installStdioErrorGuard([process.stdout, process.stderr]);
+
   return logger;
+}
+
+/**
+ * Second, independent layer on top of `safeEcho` above. `safeEcho`'s
+ * try/catch only catches a *synchronous* throw from the echo call, but
+ * `Writable#write` on a detached stdout/stderr pipe (no controlling
+ * terminal — the packaged Electron case) fails *asynchronously*
+ * instead: Node's internal `onwriteError` path schedules the stream's
+ * own `'error'` event via `process.nextTick` during `destroy()`, so by
+ * the time it fires, the `try { fn(...args) }` call has already
+ * returned normally and there is nothing left on the stack to catch.
+ *
+ * This is easy to miss because the resulting uncaught exception's
+ * `.stack` is misleading: V8 fixes `.stack` at `Error` *construction*
+ * time — deep inside the synchronous write attempt, which includes
+ * this file's `safeEcho` frames — not at throw time. It looks like the
+ * error went through `safeEcho` and escaped it, when it actually never
+ * reached that catch block at all.
+ *
+ * Streams are passed in (rather than reading `process.stdout` /
+ * `process.stderr` directly) so this can be unit tested against fakes.
+ */
+export function installStdioErrorGuard(streams: Iterable<NodeJS.WritableStream>): void {
+  for (const stream of streams) {
+    stream.on("error", (error) => {
+      if (isHarmlessStdoutError(error)) return;
+      throw error;
+    });
+  }
+}
+
+/**
+ * Recognise the two known-harmless stream-closure error codes that
+ * packaged Electron's stdout / stderr can raise when the underlying
+ * pipe has been detached (no controlling terminal, redirected to a
+ * closed handle, or explicitly `.destroy()`ed by the host).
+ *
+ *   - `EPIPE`                — classic POSIX broken-pipe on `write`
+ *   - `ERR_STREAM_DESTROYED` — Node's "stream was destroyed" state
+ *
+ * The matcher is intentionally narrow: it requires the structured
+ * `code` property to be present and to equal one of the two known
+ * values. A bare `Error` with "broken pipe" in its message but no
+ * `code` is rejected so that real I/O failures (e.g. an EACCES on
+ * a file write that happens to mention pipes) are not silently
+ * dropped. Tests in `tests/logging.test.ts` pin both edges.
+ *
+ * @see https://github.com/nexu-io/open-design/issues/6964
+ */
+export function isHarmlessStdoutError(error: unknown): boolean {
+  if (error == null || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return code === "EPIPE" || code === "ERR_STREAM_DESTROYED";
 }
 
 export function attachPackagedDesktopProcessLogging(options: {
