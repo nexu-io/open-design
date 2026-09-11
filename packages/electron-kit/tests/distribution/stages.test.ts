@@ -15,6 +15,7 @@ it.each(["mac", "win"] as const)("assembles before wrapping the untouched %s app
   const root = await mkdtemp(join(tmpdir(), "electron-distribution-stage-")); roots.push(root);
   const appPath = join(root, platform === "mac" ? "Product.app" : "win-unpacked/Product.exe");
   vi.mocked(build).mockImplementationOnce(async options => {
+    expect(options?.publish).toBe("never");
     expect(options?.prepackaged).toBeUndefined();
     expect([...options!.targets!.values()].flatMap(value => [...value.values()].flat())).toEqual(["dir"]);
     // electron-builder normalizes file sets in place during the first build.
@@ -27,7 +28,7 @@ it.each(["mac", "win"] as const)("assembles before wrapping the untouched %s app
   expect(await buildElectronDistributionStages({ projectDir: root, appPath, platform, arch: Arch.arm64,
     config, targets: ["dir", platform === "mac" ? "dmg" : "nsis"] })).toEqual([join(root, "installer")]);
   expect(vi.mocked(build).mock.calls[1]![0]).toMatchObject({
-    prepackaged: platform === "mac" ? appPath : dirname(appPath), config,
+    prepackaged: platform === "mac" ? appPath : dirname(appPath), config, publish: "never",
   });
   expect(config.files).toEqual(["main.cjs"]);
   expect(vi.mocked(build).mock.calls[1]![0]!.config).toMatchObject({ files: ["main.cjs"] });

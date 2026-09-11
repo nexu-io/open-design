@@ -73,7 +73,7 @@ describe("Electron distribution policy", () => {
       executableName: manifest.executableName,
     });
     expect(configuration.mac).toEqual({ category: "public.app-category.developer-tools", target: ["dir", "dmg"] });
-    expect(configuration.dmg).toEqual({ sign: false });
+    expect(configuration.dmg).toEqual({ sign: false, writeUpdateInfo: false });
     expect(configuration.win).toEqual({ target: ["dir", "nsis"] });
     expect(configuration.nsis).toMatchObject({
       allowElevation: false,

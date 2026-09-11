@@ -56,10 +56,10 @@ export async function buildElectronDistributionStages(input: Readonly<{
   // electron-builder mutates declarative file sets while normalizing them.
   // Each stage must start from the original recipe, not the previous mutation.
   const assemblyConfig = structuredClone(input.config), wrapperConfig = structuredClone(input.config);
-  await electronBuild({ projectDir: input.projectDir,
+  await electronBuild({ projectDir: input.projectDir, publish: "never",
     targets: platform.createTarget(["dir"], input.arch), config: assemblyConfig });
   await access(input.appPath);
-  return electronBuild({ projectDir: input.projectDir,
+  return electronBuild({ projectDir: input.projectDir, publish: "never",
     prepackaged: input.platform === "mac" ? input.appPath : dirname(input.appPath),
     targets: platform.createTarget(input.targets.filter(target => target !== "dir"), input.arch),
     config: wrapperConfig });

@@ -96,7 +96,9 @@ export function resolveElectronDistributionConfiguration(input: Readonly<{
     npmRebuild: false,
     nodeGypRebuild: false,
     mac: { category: policy.mac.category, target: [...policy.mac.targets] },
-    dmg: { sign: policy.mac.dmg.sign },
+    // The standalone updater consumes complete installers, not electron-updater
+    // blockmaps. Keep native wrapping free of unused update-side outputs.
+    dmg: { sign: policy.mac.dmg.sign, writeUpdateInfo: false },
     win: { target: [...policy.windows.targets] },
     nsis: {
       ...policy.windows.nsis,
