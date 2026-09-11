@@ -1211,6 +1211,7 @@ import {
 } from './http/local-daemon-request.js';
 import { renderOAuthResultPage } from './http/oauth-result-page.js';
 import { bearerTokenFromRequest, createToolRequestAuth } from './http/tool-request-auth.js';
+import { scopeEnvByokForAgent } from './byok-env.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -10792,6 +10793,7 @@ export async function startServer({
       byokMediaDefaults,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
+
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
       run.conversationId = conversationId;
@@ -10870,10 +10872,21 @@ export async function startServer({
       );
     if (!def.bin)
       return failRun('AGENT_UNAVAILABLE', 'agent has no binary');
+    // Host-managed default provider (OD_BYOK_*), scoped to the BYOK
+    // runtime: server deployments where the host holds the inference key.
+    // It engages ONLY for byok-opencode runs with no browser-sent provider
+    // — an ordinary agent's model/provider wiring is untouched, and the
+    // key never leaves the daemon (nor the persisted run body: a retry
+    // re-reads the env, so a host-side rotation reaches retries).
+    const byokScoped = scopeEnvByokForAgent({
+      agentId: def.id,
+      byokProvider: byokProvider as ByokChatProviderConfig | null | undefined,
+      model,
+    });
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
-          byokProvider,
-          typeof model === 'string' ? model : null,
+          byokScoped.provider,
+          typeof byokScoped.model === 'string' ? byokScoped.model : null,
         )
       : null;
     if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
@@ -14375,14 +14388,14 @@ export async function startServer({
         apiVersion?: string;
         model?: string;
         requiresApiKey?: boolean;
-      } | null = byokProvider
+      } | null = byokScoped.provider
         ? {
-            provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
-            apiKey: (byokProvider as { apiKey?: string }).apiKey,
-            baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
-            apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
+            provider: byokScoped.provider.protocol,
+            apiKey: byokScoped.provider.apiKey,
+            baseUrl: byokScoped.provider.baseUrl,
+            apiVersion: byokScoped.provider.apiVersion,
             model: typeof safeModel === 'string' ? safeModel : undefined,
-            requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
+            requiresApiKey: byokScoped.provider.requiresApiKey,
           }
         : null;
       const memoryOptions = {

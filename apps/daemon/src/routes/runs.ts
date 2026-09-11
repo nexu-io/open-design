@@ -183,6 +183,7 @@ import {
   BYOK_OPENCODE_AGENT_ID,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from '../runtimes/byok-opencode.js';
+import { scopeEnvByokForAgent } from '../byok-env.js';
 import { resolveChatRunInactivityTimeoutMs } from '../runtimes/chat-run-lifecycle.js';
 import {
   runtimeAcceptsMidTurnInput,
@@ -881,9 +882,17 @@ function externalPluginAttributionMismatch(
 
 function hasCompleteByokOpenCodeConfig(meta: JsonRecord): boolean {
   if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return true;
+  // Host-managed default (OD_BYOK_*): a server deployment's browser may
+  // carry no provider at all. Validate against the same scoped resolution
+  // the run path executes with, so the gate and execution never disagree.
+  const scoped = scopeEnvByokForAgent({
+    agentId: BYOK_OPENCODE_AGENT_ID,
+    byokProvider: meta.byokProvider as ByokChatProviderConfig | null | undefined,
+    model: typeof meta.model === 'string' ? meta.model : null,
+  });
   return buildOpenCodeByokProviderConfig(
-    meta.byokProvider as ByokChatProviderConfig | null | undefined,
-    typeof meta.model === 'string' ? meta.model : null,
+    scoped.provider,
+    typeof scoped.model === 'string' ? scoped.model : null,
   ) !== null;
 }
 

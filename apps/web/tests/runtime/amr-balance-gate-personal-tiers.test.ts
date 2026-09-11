@@ -24,6 +24,7 @@ import {
 } from '../../src/providers/daemon';
 
 vi.mock('../../src/providers/daemon', () => ({
+  fetchByokHostDefaults: vi.fn(async () => ({ configured: false })),
   fetchAmrWalletSnapshot: vi.fn(),
   fetchVelaLoginStatus: vi.fn(),
 }));
