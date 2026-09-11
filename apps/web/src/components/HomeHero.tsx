@@ -1662,7 +1662,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               onPopoverKey={handlePopoverKey}
               comboboxAria={{
                 expanded: pickerOpen,
-                activeId: pickerOpen ? `home-hero-option-${selectedIndex}` : null,
+                controlsId: 'home-hero-context-picker',
+                activeId:
+                  pickerOpen && visiblePickerOptions.length > 0
+                    ? `home-hero-option-${selectedIndex}`
+                    : null,
               }}
             />
             <PlaceholderCarousel

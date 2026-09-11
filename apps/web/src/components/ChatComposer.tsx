@@ -2913,19 +2913,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         // Drive a single index over the visible section union. MentionPopover
         // renders the same files-first section order and highlights the
         // matching row from activeIndex.
-        const showFiles = mentionTab === 'all' || mentionTab === 'files';
-        const showTabs = mentionTab === 'all' || mentionTab === 'tabs';
-        const showPlugins = mentionTab === 'all' || mentionTab === 'plugins';
-        const showSkills = mentionTab === 'all' || mentionTab === 'skills';
-        const showMcp = mentionTab === 'all' || mentionTab === 'mcp';
-        const showConnectors = mentionTab === 'all' || mentionTab === 'connectors';
-        const total =
-          (showFiles ? filteredFiles.length : 0) +
-          (showTabs ? filteredWorkspaceContexts.length : 0) +
-          (showPlugins ? filteredPlugins.length : 0) +
-          (showSkills ? filteredSkills.length : 0) +
-          (showMcp ? filteredMcpServers.length : 0) +
-          (showConnectors ? filteredConnectors.length : 0);
+        const total = visibleMentionOptionCount;
         if (total > 0) {
           if (key === 'ArrowDown') {
             setMentionIndex((i) => (i + 1) % total);
@@ -3223,6 +3211,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         .filter((s) => skillMatchesQuery(s, mentionQuery))
         .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery));
     }, [mention, mentionQuery, skills, stagedSkills]);
+    const visibleMentionOptionCount =
+      (mentionTab === 'all' || mentionTab === 'files' ? filteredFiles.length : 0) +
+      (mentionTab === 'all' || mentionTab === 'tabs' ? filteredWorkspaceContexts.length : 0) +
+      (mentionTab === 'all' || mentionTab === 'plugins' ? filteredPlugins.length : 0) +
+      (mentionTab === 'all' || mentionTab === 'skills' ? filteredSkills.length : 0) +
+      (mentionTab === 'all' || mentionTab === 'mcp' ? filteredMcpServers.length : 0) +
+      (mentionTab === 'all' || mentionTab === 'connectors' ? filteredConnectors.length : 0);
     const liveCommentAttachments = currentCommentAttachments();
     const placeholderCarouselActive =
       !streaming
@@ -3586,8 +3581,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               popoverOpen={Boolean(mention) || Boolean(slash && filteredSlash.length > 0)}
               onPopoverKey={handlePopoverKey}
               comboboxAria={{
-                expanded: Boolean(mention),
-                activeId: mention ? `mention-opt-${mentionIndex}` : null,
+                expanded: Boolean(mention) || Boolean(slash && filteredSlash.length > 0),
+                controlsId:
+                  slash && filteredSlash.length > 0 ? 'slash-listbox' : 'mention-listbox',
+                activeId:
+                  slash && filteredSlash.length > 0
+                    ? `slash-opt-${Math.min(slashIndex, filteredSlash.length - 1)}`
+                    : mention && visibleMentionOptionCount > 0
+                      ? `mention-opt-${Math.min(mentionIndex, visibleMentionOptionCount - 1)}`
+                      : null,
               }}
             />
             {placeholderScenarios.length > 0 ? (
@@ -6454,6 +6456,7 @@ function SlashPopover({
       <div
         className="slash-popover-list"
         role="listbox"
+        id="slash-listbox"
         aria-label={t('pet.slashPopoverAria')}
       >
         {commands.map((cmd, idx) => {
