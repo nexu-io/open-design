@@ -16,7 +16,7 @@ export const TOUCHPOINT_COMPONENT_V2_UPSTREAM_PROVENANCE = Object.freeze({
 	]),
 	sourceSha256: Object.freeze({
 		touchpoints:
-			"1b5f6fb5e52d8cc522649c723b829240b729727e04806fc237732163c5ebb58e",
+			"be26f9c4e5cfe6e0a0eedee3d31dc70df8f1c8ee61704e765d4f5c89879fc2f0",
 		fixture: "278a40cd787dc74544aa785f85d218d8a51820d2d0e14c7b8d7c6eced10b4c92",
 	}),
 });
@@ -27,6 +27,24 @@ export const TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION =
 	"vela-touchpoint-wrapper-v1" as const;
 export const TOUCHPOINT_COMPONENT_V2_SDK_VERSION =
 	"vela-touchpoint-sdk-v1" as const;
+
+const INTERNAL_ACTION_SENTINEL_ORIGIN = "https://vela.invalid";
+
+/**
+ * Mirrors browser URL normalization without depending on the current host. The
+ * raw path restrictions remain separate so shared manifests reject both
+ * ambiguous spellings and normalized origin escapes.
+ */
+function hasSentinelInternalOrigin(path: string): boolean {
+	try {
+		return (
+			new URL(path, INTERNAL_ACTION_SENTINEL_ORIGIN).origin ===
+			INTERNAL_ACTION_SENTINEL_ORIGIN
+		);
+	} catch {
+		return false;
+	}
+}
 
 const placementKeySchema = z.enum([
 	"opend.home.campaign-modal",
@@ -80,8 +98,16 @@ const staticActionSchema = z.object({
 				.max(1024)
 				.regex(/^\/(?!\/).*$/u)
 				.refine(
+					(value) => !value.includes("\\"),
+					"internal action path must not contain backslashes",
+				)
+				.refine(
 					(value) => !value.split("/").includes(".."),
 					"internal action path must not traverse",
+				)
+				.refine(
+					hasSentinelInternalOrigin,
+					"internal action path must resolve on the sentinel origin",
 				),
 		}),
 	]),

@@ -1,6 +1,16 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { getOpenDesignHost, OPEN_DESIGN_HOST_VERSION } from "@open-design/host";
-import { TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION, TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION, TOUCHPOINT_COMPONENT_V2_SDK_VERSION } from "@open-design/contracts";
+import {
+	TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
+	TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION,
+	TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
+} from "@open-design/contracts";
 import {
 	emitWebTouchpointDiagnostic,
 	ensureWebTouchpointElement,
@@ -8,14 +18,22 @@ import {
 	supportsWebTouchpointCapabilities,
 	verifyWebTouchpoint,
 	webTouchpointContext,
+	hasWebTouchpointCloseControl,
 	type OpenDesignTouchpointElement,
 	type WebTouchpointContent,
 } from "./touchpoint-component";
-import { touchpointStaticActionsMatch, type TouchpointStaticAction } from "./touchpoint-static-actions";
+import {
+	touchpointStaticActionsMatch,
+	type TouchpointStaticAction,
+} from "./touchpoint-static-actions";
 import styles from "./TestCampaignModal.module.css";
 
-export const TEST_CAMPAIGN_MODAL_PLACEMENT = "opend.home.campaign-modal" as const;
-export const TEST_CAMPAIGN_MODAL_CAPABILITIES = ["close", "static-action"] as const;
+export const TEST_CAMPAIGN_MODAL_PLACEMENT =
+	"opend.home.campaign-modal" as const;
+export const TEST_CAMPAIGN_MODAL_CAPABILITIES = [
+	"close",
+	"static-action",
+] as const;
 export const TEST_CAMPAIGN_PLACEMENTS = [
 	"opend.home.account-badge",
 	"opend.home.campaign-modal",
@@ -83,9 +101,15 @@ function getTestRuntimeSnapshot(): TestRuntimeSession | null {
 	return currentTestSession;
 }
 export function useTestRuntime(): TestRuntimeSession | null {
-	return useSyncExternalStore(subscribeTestRuntime, getTestRuntimeSnapshot, getTestRuntimeSnapshot);
+	return useSyncExternalStore(
+		subscribeTestRuntime,
+		getTestRuntimeSnapshot,
+		getTestRuntimeSnapshot,
+	);
 }
-export function setTestRuntimeSession(session: TestRuntimeSession | null): void {
+export function setTestRuntimeSession(
+	session: TestRuntimeSession | null,
+): void {
 	currentTestSession = session;
 	acceptanceState.clear();
 	for (const listener of testRuntimeListeners) listener();
@@ -103,13 +127,15 @@ export function isSelectedTestCampaignDecision(
 	context: TestContext,
 	placementKey: string = TEST_CAMPAIGN_MODAL_PLACEMENT,
 ): boolean {
-	return next.deploymentId === context.deploymentId &&
+	return (
+		next.deploymentId === context.deploymentId &&
 		next.placementKey === placementKey &&
 		next.content?.placementKey === placementKey &&
 		next.testContext?.deploymentId === context.deploymentId &&
 		next.testContext?.scenario === context.scenario &&
 		next.testContext?.simulatedAt === context.simulatedAt &&
-		next.testContext?.updatedAt === context.updatedAt;
+		next.testContext?.updatedAt === context.updatedAt
+	);
 }
 
 /** Test has no server event contract, so static targets remain default-deny. */
@@ -144,7 +170,11 @@ function supportsHost(authenticated: boolean): boolean {
 }
 
 export function readCampaignHostLocale(): string {
-	return document.documentElement.lang.trim() || getOpenDesignHost()?.client.osLocale?.trim() || "en-US";
+	return (
+		document.documentElement.lang.trim() ||
+		getOpenDesignHost()?.client.osLocale?.trim() ||
+		"en-US"
+	);
 }
 
 function hostTheme(): "light" | "dark" {
@@ -165,10 +195,14 @@ function expectedSnapshotMatches(
 	// Missing identities are not a compatible snapshot and must never authorize
 	// a mount. Fixtures follow the same complete payload as the real API.
 	return (
-		Boolean(deployment.snapshotHash) && decision.snapshotHash === deployment.snapshotHash &&
-		Boolean(snapshot.contentVersionId) && decision.content?.id === snapshot.contentVersionId &&
-		Boolean(snapshot.manifestHash) && decision.manifestHash === snapshot.manifestHash &&
-		Boolean(snapshot.artifactHash) && decision.artifactHash === snapshot.artifactHash
+		Boolean(deployment.snapshotHash) &&
+		decision.snapshotHash === deployment.snapshotHash &&
+		Boolean(snapshot.contentVersionId) &&
+		decision.content?.id === snapshot.contentVersionId &&
+		Boolean(snapshot.manifestHash) &&
+		decision.manifestHash === snapshot.manifestHash &&
+		Boolean(snapshot.artifactHash) &&
+		decision.artifactHash === snapshot.artifactHash
 	);
 }
 
@@ -182,9 +216,16 @@ function decisionMatchesSelection(
 		isSelectedTestCampaignDecision(decision, context, placementKey) &&
 		decision.activityId === deployment.activityId &&
 		decision.testContext.testerMemberId === context.testerMemberId &&
-		["before", "active", "ended"].includes(decision.testContext.scheduleState) &&
+		["before", "active", "ended"].includes(
+			decision.testContext.scheduleState,
+		) &&
 		expectedSnapshotMatches(decision, deployment) &&
-		touchpointStaticActionsMatch(decision.staticActions, decision.content.manifest.placements.find((placement) => placement.key === placementKey)?.staticActions ?? []) &&
+		touchpointStaticActionsMatch(
+			decision.staticActions,
+			decision.content.manifest.placements.find(
+				(placement) => placement.key === placementKey,
+			)?.staticActions ?? [],
+		) &&
 		decision.content.id.length > 0
 	);
 }
@@ -197,7 +238,9 @@ function acceptanceEvidence(
 		locale: string;
 		scenario: string;
 	}>,
-	href = typeof window === "undefined" ? "http://127.0.0.1/" : window.location.href,
+	href = typeof window === "undefined"
+		? "http://127.0.0.1/"
+		: window.location.href,
 ): string {
 	let url: URL;
 	try {
@@ -222,14 +265,16 @@ function acceptanceEvidence(
  * The URL is an evidence pointer to the current local host and identity; it is
  * never presented as a screenshot or written as a success receipt by the client.
  */
-export async function recordTestAcceptance(input: Readonly<{
-	deploymentId: string;
-	snapshotHash: string;
-	placementKey: TestCampaignPlacement;
-	locale: string;
-	scenario: Scenario;
-	hostVersion?: string;
-}>): Promise<unknown> {
+export async function recordTestAcceptance(
+	input: Readonly<{
+		deploymentId: string;
+		snapshotHash: string;
+		placementKey: TestCampaignPlacement;
+		locale: string;
+		scenario: Scenario;
+		hostVersion?: string;
+	}>,
+): Promise<unknown> {
 	const response = await fetch(
 		`/api/touchpoints/test-runtime/test-deployments/${encodeURIComponent(input.deploymentId)}/acceptances`,
 		{
@@ -241,28 +286,32 @@ export async function recordTestAcceptance(input: Readonly<{
 				locale: input.locale,
 				scenario: input.scenario,
 				evidence: acceptanceEvidence(input),
-				hostCompatibility: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE ? {
-					version: 1,
-					snapshotHash: input.snapshotHash,
-					hostFamily: "open-design-desktop",
-					platform: "desktop",
-					hostRelease: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE,
-					runtime: {
-						kind: "web-component",
-						apiVersion: TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
-						wrapperVersion: TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION,
-						sdkVersion: TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
-					},
-					capabilities: input.placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
-						? [...TEST_CAMPAIGN_MODAL_CAPABILITIES]
-						: input.placementKey === "opend.home.account-badge"
-							? ["static-action"]
-							: [...placementCapabilities],
-				} : undefined,
+				hostCompatibility: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE
+					? {
+							version: 1,
+							snapshotHash: input.snapshotHash,
+							hostFamily: "open-design-desktop",
+							platform: "desktop",
+							hostRelease: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE,
+							runtime: {
+								kind: "web-component",
+								apiVersion: TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
+								wrapperVersion: TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION,
+								sdkVersion: TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
+							},
+							capabilities:
+								input.placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
+									? [...TEST_CAMPAIGN_MODAL_CAPABILITIES]
+									: input.placementKey === "opend.home.account-badge"
+										? ["static-action"]
+										: [...placementCapabilities],
+						}
+					: undefined,
 			}),
 		},
 	);
-	if (!response.ok) throw new Error(`touchpoint_test_acceptance_http_${response.status}`);
+	if (!response.ok)
+		throw new Error(`touchpoint_test_acceptance_http_${response.status}`);
 	return response.json().catch(() => undefined);
 }
 
@@ -272,13 +321,15 @@ export function recordVisibleTestTouchpoint(
 	decision: TestDecision,
 	placementKey: TestCampaignPlacement,
 ): void {
-	if (currentTestSession !== session || session.context.scenario !== "active") return;
+	if (currentTestSession !== session || session.context.scenario !== "active")
+		return;
 	const key = `${session.selectionKey}:${placementKey}`;
 	if (acceptanceState.has(key)) return;
 	acceptanceState.set(key, "in-flight");
 	void recordTestAcceptance({
 		deploymentId: session.deployment.id,
-		snapshotHash: session.deployment.snapshotHash ?? decision.snapshotHash ?? "",
+		snapshotHash:
+			session.deployment.snapshotHash ?? decision.snapshotHash ?? "",
 		placementKey,
 		locale: decision.content.locale,
 		scenario: session.context.scenario,
@@ -311,8 +362,12 @@ export type TestTouchpointMountProps = Readonly<{
 	placementKey: TestCampaignPlacement;
 	testId: string;
 	className?: string;
-	onVisible: (decision: TestDecision, placementKey: TestCampaignPlacement) => void;
+	onVisible: (
+		decision: TestDecision,
+		placementKey: TestCampaignPlacement,
+	) => void;
 	requestClose?: () => void;
+	onCloseControlChange?: (available: boolean | null) => void;
 }>;
 
 /** Mounts one immutable v2 placement in the real OpenDesign Shadow DOM host. */
@@ -323,6 +378,7 @@ export function TestTouchpointMount({
 	className,
 	onVisible,
 	requestClose,
+	onCloseControlChange,
 }: TestTouchpointMountProps) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const [ready, setReady] = useState(false);
@@ -331,7 +387,11 @@ export function TestTouchpointMount({
 		if (!container) return;
 		let cancelled = false;
 		let verified: Awaited<ReturnType<typeof verifyWebTouchpoint>> | undefined;
-		const element = document.createElement("opend-touchpoint") as OpenDesignTouchpointElement;
+		let closeControlObserver: MutationObserver | undefined;
+		const element = document.createElement(
+			"opend-touchpoint",
+		) as OpenDesignTouchpointElement;
+		onCloseControlChange?.(null);
 		container.replaceChildren(element);
 		const mount = async () => {
 			try {
@@ -342,8 +402,11 @@ export function TestTouchpointMount({
 				);
 				if (cancelled || !context) {
 					verified.dispose();
+					onCloseControlChange?.(false);
 					if (!cancelled)
-						emitWebTouchpointDiagnostic({ code: "touchpoint_locale_unsupported" });
+						emitWebTouchpointDiagnostic({
+							code: "touchpoint_locale_unsupported",
+						});
 					return;
 				}
 				await element.mount(
@@ -361,34 +424,83 @@ export function TestTouchpointMount({
 					},
 				);
 				if (cancelled) return;
+				onCloseControlChange?.(hasWebTouchpointCloseControl(element));
+				closeControlObserver = new MutationObserver(() => {
+					if (cancelled) return;
+					onCloseControlChange?.(hasWebTouchpointCloseControl(element));
+				});
+				const closeControlObserverOptions: MutationObserverInit = {
+					attributes: true,
+					attributeFilter: [
+						"aria-label",
+						"aria-disabled",
+						"aria-hidden",
+						"class",
+						"disabled",
+						"hidden",
+						"style",
+						"title",
+					],
+					childList: true,
+					characterData: true,
+					subtree: true,
+				};
+				if (element.shadowRoot)
+					closeControlObserver.observe(
+						element.shadowRoot,
+						closeControlObserverOptions,
+					);
+				const dialog = element.closest('[role="dialog"]');
+				if (dialog)
+					closeControlObserver.observe(dialog, closeControlObserverOptions);
 				setReady(true);
 				await afterPaint();
-				if (!cancelled && actuallyVisible(element)) onVisible(decision, placementKey);
+				if (!cancelled && actuallyVisible(element))
+					onVisible(decision, placementKey);
 			} catch (error) {
-				if (!cancelled)
-					emitWebTouchpointDiagnostic({
-						code: error instanceof Error ? error.message : "touchpoint_load_failed",
-					});
+				if (cancelled) return;
+				onCloseControlChange?.(false);
+				emitWebTouchpointDiagnostic({
+					code:
+						error instanceof Error ? error.message : "touchpoint_load_failed",
+				});
 			}
 		};
 		void mount();
 		return () => {
 			cancelled = true;
+			closeControlObserver?.disconnect();
+			onCloseControlChange?.(null);
 			void element.dispose(verified?.resourceUrls).catch(() => undefined);
 			verified?.dispose();
 			container.replaceChildren();
 		};
-	}, [decision, onVisible, placementKey, requestClose]);
-	return <div ref={containerRef} className={className} data-testid={testId} hidden={!ready} />;
+	}, [decision, onCloseControlChange, onVisible, placementKey, requestClose]);
+	return (
+		<div
+			ref={containerRef}
+			className={className}
+			data-testid={testId}
+			hidden={!ready}
+		/>
+	);
 }
 
 /** Real Electron Test harness for all enabled OpenDesign placements. */
-export function TestCampaignModal({ authenticated, sessionSubject }: { authenticated: boolean; sessionSubject?: string | null }) {
+export function TestCampaignModal({
+	authenticated,
+	sessionSubject,
+}: {
+	authenticated: boolean;
+	sessionSubject?: string | null;
+}) {
 	const compatible = supportsHost(authenticated);
 	const [deployments, setDeployments] = useState<TestDeployment[]>([]);
 	const [deployment, setDeployment] = useState<TestDeployment | null>(null);
 	const [context, setContext] = useState<TestContext | null>(null);
-	const [decisions, setDecisions] = useState<Map<TestCampaignPlacement, TestDecision>>(new Map());
+	const [decisions, setDecisions] = useState<
+		Map<TestCampaignPlacement, TestDecision>
+	>(new Map());
 	const testSessionRef = useRef<TestRuntimeSession | null>(null);
 	const selectionGeneration = useRef(0);
 	const selectionKeyRef = useRef("");
@@ -409,10 +521,13 @@ export function TestCampaignModal({ authenticated, sessionSubject }: { authentic
 	useEffect(() => {
 		ensureWebTouchpointElement();
 	}, []);
-	useEffect(() => () => {
-		testSessionRef.current = null;
-		clearTestRuntimeSession();
-	}, []);
+	useEffect(
+		() => () => {
+			testSessionRef.current = null;
+			clearTestRuntimeSession();
+		},
+		[],
+	);
 	useEffect(() => {
 		if (!compatible) {
 			setDeployments([]);
@@ -420,7 +535,9 @@ export function TestCampaignModal({ authenticated, sessionSubject }: { authentic
 			return;
 		}
 		let cancelled = false;
-		void fetch("/api/touchpoints/test-runtime/deployments", { cache: "no-store" })
+		void fetch("/api/touchpoints/test-runtime/deployments", {
+			cache: "no-store",
+		})
 			.then((response) =>
 				response.ok
 					? (response.json() as Promise<{ deployments?: TestDeployment[] }>)
@@ -446,16 +563,26 @@ export function TestCampaignModal({ authenticated, sessionSubject }: { authentic
 
 	const select = useCallback(
 		async (deploymentId: string, scenario: Scenario) => {
-			const selected = deployments.find((candidate) => candidate.id === deploymentId);
+			const selected = deployments.find(
+				(candidate) => candidate.id === deploymentId,
+			);
 			const generation = ++selectionGeneration.current;
 			setDeployment(null);
 			setDecisions(new Map());
 			setContext(null);
-			if (!selected) { clear(); return; }
+			if (!selected) {
+				clear();
+				return;
+			}
 			setDeployment(selected);
 			const previousContext = testSessionRef.current?.context;
 			const pendingSession: TestRuntimeSession = Object.freeze({
-				selectionKey: [selected.id, selected.snapshotHash ?? "", "pending", String(generation)].join(":"),
+				selectionKey: [
+					selected.id,
+					selected.snapshotHash ?? "",
+					"pending",
+					String(generation),
+				].join(":"),
 				deployment: selected,
 				context: previousContext ?? {
 					deploymentId,
@@ -475,7 +602,9 @@ export function TestCampaignModal({ authenticated, sessionSubject }: { authentic
 				});
 				if (generation !== selectionGeneration.current) return;
 				if (!response.ok) {
-					emitWebTouchpointDiagnostic({ code: `touchpoint_test_context_http_${response.status}` });
+					emitWebTouchpointDiagnostic({
+						code: `touchpoint_test_context_http_${response.status}`,
+					});
 					return;
 				}
 				const nextContext = (await response.json()) as TestContext;
@@ -526,7 +655,11 @@ export function TestCampaignModal({ authenticated, sessionSubject }: { authentic
 						selected,
 						item.placementKey,
 					);
-					if (identityMatches && item.decision.testContext.scheduleState !== "active") continue;
+					if (
+						identityMatches &&
+						item.decision.testContext.scheduleState !== "active"
+					)
+						continue;
 					const capabilitiesMatch = supportsWebTouchpointCapabilities(
 						item.decision.content,
 						item.decision.requiredCapabilities,
@@ -544,7 +677,9 @@ export function TestCampaignModal({ authenticated, sessionSubject }: { authentic
 								: undefined,
 						});
 					} else {
-						emitWebTouchpointDiagnostic({ code: "touchpoint_decision_mismatch" });
+						emitWebTouchpointDiagnostic({
+							code: "touchpoint_decision_mismatch",
+						});
 					}
 				}
 				if (nextDecisions.size !== available.length) {
@@ -567,7 +702,10 @@ export function TestCampaignModal({ authenticated, sessionSubject }: { authentic
 			} catch (error) {
 				if (generation !== selectionGeneration.current) return;
 				emitWebTouchpointDiagnostic({
-					code: error instanceof Error ? error.message : "touchpoint_test_load_failed",
+					code:
+						error instanceof Error
+							? error.message
+							: "touchpoint_test_load_failed",
 				});
 			}
 		},
@@ -616,7 +754,8 @@ export function TestCampaignModal({ authenticated, sessionSubject }: { authentic
 			</label>
 			{context ? (
 				<output data-testid="touchpoint-test-clock">
-					Test clock: {context.scenario} / {active ? "active" : ""} / {context.simulatedAt}
+					Test clock: {context.scenario} / {active ? "active" : ""} /{" "}
+					{context.simulatedAt}
 				</output>
 			) : null}
 		</div>
