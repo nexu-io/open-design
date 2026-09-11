@@ -737,11 +737,13 @@ describe('MCP_TEMPLATES', () => {
   it('includes the Higgsfield openclaw entry pointing at the streamable HTTP /mcp endpoint', () => {
     const tpl = MCP_TEMPLATES.find((t) => t.id === 'higgsfield-openclaw');
     expect(tpl).toBeDefined();
+    expect(tpl?.label).toBe('Higgsfield');
     // The actual MCP endpoint (verified live) is the /mcp path with
     // streamable HTTP transport. The bare host returns 404 on POST and the
     // /sse path returns 404 — only /mcp speaks the protocol.
     expect(tpl?.transport).toBe('http');
     expect(tpl?.url).toBe('https://mcp.higgsfield.ai/mcp');
+    expect(tpl?.homepage).toBe('https://higgsfield.ai/mcp');
     // Authorization header is optional — Claude Code attempts OAuth itself
     // when no Bearer token is supplied.
     expect(
@@ -836,6 +838,7 @@ describe('MCP_TEMPLATES', () => {
       'ui-components',
       'data-viz',
       'publishing',
+      '3d',
       'utilities',
     ]);
     for (const t of MCP_TEMPLATES) {
@@ -857,7 +860,17 @@ describe('MCP_TEMPLATES', () => {
       'nanobanana',
       'seedream',
       'fal-ai',
+      'runway',
+      'luma-acedata',
+      'midjourney-acedata',
+      'kling-acedata',
+      'comfyui',
     ]);
+  });
+
+  it('groups 3d templates in declaration order', () => {
+    const ids = MCP_TEMPLATES.filter((t) => t.category === '3d').map((t) => t.id);
+    expect(ids).toEqual(['blender-ageless', 'blender-dcc-http']);
   });
 
   it('groups design-systems templates in declaration order', () => {
@@ -1187,5 +1200,74 @@ describe('MCP_TEMPLATES', () => {
     // GitHub repo slug). Getting this wrong silently 404s on the registry.
     expect(tpl?.args).toEqual(['-y', 'a11y-mcp-server']);
     expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Blender ageless stdio template (uvx)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'blender-ageless');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('3d');
+    expect(tpl?.transport).toBe('stdio');
+    expect(tpl?.command).toBe('uvx');
+    expect(tpl?.args).toEqual(['ageless-blender-mcp']);
+    expect(tpl?.homepage).toBe('https://github.com/ageless-h/blender-mcp');
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Blender DCC embedded HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'blender-dcc-http');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('3d');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.authMode).toBe('none');
+    expect(tpl?.url).toBe('http://127.0.0.1:9765/mcp');
+    expect(tpl?.homepage).toBe('https://github.com/dcc-mcp/dcc-mcp-blender');
+  });
+
+  it('includes the official Runway OAuth HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'runway');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.authMode).toBe('oauth');
+    expect(tpl?.url).toBe('https://mcp.runwayml.com/mcp');
+    expect(tpl?.homepage).toBe('https://runwayml.com/mcp');
+  });
+
+  it('includes the Luma Dream Machine AceDataCloud HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'luma-acedata');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.authMode).toBe('none');
+    expect(tpl?.url).toBe('https://luma.mcp.acedata.cloud/mcp');
+    expect(tpl?.homepage).toBe('https://github.com/AceDataCloud/mcp-luma');
+    expect(tpl?.headerFields?.[0]?.key).toBe('Authorization');
+    expect(tpl?.headerFields?.[0]?.required).toBe(true);
+  });
+
+  it('includes the Midjourney AceDataCloud HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'midjourney-acedata');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.url).toBe('https://midjourney.mcp.acedata.cloud/mcp');
+  });
+
+  it('includes the Kling AceDataCloud HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'kling-acedata');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.url).toBe('https://kling.mcp.acedata.cloud/mcp');
+  });
+
+  it('includes the ComfyUI local stdio template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'comfyui');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('stdio');
+    expect(tpl?.command).toBe('npx');
+    expect(tpl?.args).toEqual(['-y', 'comfyui-mcp']);
+    expect(tpl?.homepage).toBe('https://github.com/artokun/comfyui-mcp');
   });
 });

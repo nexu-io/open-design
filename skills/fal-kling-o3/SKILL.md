@@ -8,7 +8,7 @@ triggers:
   - "kling video"
   - "kling image"
 od:
-  mode: video
+  mode: utility
   category: video-generation
   upstream: "https://github.com/fal-ai-community/skills"
 ---
@@ -20,6 +20,10 @@ od:
 ## What it does
 
 Generate images and videos with Kling O3 — Kling's most powerful model family — via fal.ai.
+
+## Current Open Design scope
+
+Prefer the built-in Kling (AceDataCloud) MCP template in Settings → Integrations for direct Kling tools, or fal.ai MCP / this fal-kling-o3 skill when you already use FAL_KEY.
 
 ## Source
 
