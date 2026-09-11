@@ -280,6 +280,7 @@ const card = () =>
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
   vi.restoreAllMocks();
   window.sessionStorage.clear();
@@ -291,6 +292,71 @@ beforeEach(() => {
 });
 
 describe('封面在终止帧之后才落地时,卡面必须自己换成快照', () => {
+  it('refreshes an already-ready latest cover through three revisions without changing an earlier turn', async () => {
+    const latest = finishedTurn(readyRef)[0]!;
+    const historical: ChatMessage = {
+      ...latest,
+      id: 'msg-historical',
+      runId: 'run-historical',
+      createdAt: latest.createdAt! - 1000,
+    };
+    listMessages.mockResolvedValue([historical, latest]);
+    const view = renderProjectView();
+    const coverFor = (messageId: string) => document
+      .getElementById(`assistant-message-${messageId}`)
+      ?.querySelector('img')
+      ?.getAttribute('src');
+    await waitFor(() => {
+      expect(coverFor(MESSAGE_ID)).toBe(COVER_URL);
+      expect(coverFor(historical.id)).toBe(COVER_URL);
+    });
+
+    // OPEND-2769: the displayed message already has a ready cover. The server
+    // changes its snapshot identity while message/file identities stay stable.
+    // Exercise the real event -> listMessages -> memoized card pipeline, not
+    // just a prop-injected ready image or the pending-to-ready fallback.
+    vi.useFakeTimers();
+    let previousCover = COVER_URL;
+    for (const revision of [2, 3, 4]) {
+      const snapshotId = `snap-${revision}`;
+      const thumbnailUrl = `/api/projects/${PROJECT_ID}/chat-artifact-snapshots/${snapshotId}/thumbnail`;
+      listMessages.mockResolvedValue([
+        historical,
+        {
+          ...latest,
+          artifactRefs: [{ ...readyRef, snapshotId, thumbnailUrl }],
+        },
+      ]);
+      const readsBeforeEvent = listMessages.mock.calls.length;
+      act(() => {
+        projectEventHandler()({
+          type: 'chat-artifact-refs-changed',
+          projectId: PROJECT_ID,
+          conversationId: CONVERSATION_ID,
+          messageId: MESSAGE_ID,
+        } as ProjectEvent);
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(149); });
+      expect(listMessages).toHaveBeenCalledTimes(readsBeforeEvent);
+      expect(coverFor(MESSAGE_ID)).toBe(previousCover);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(coverFor(MESSAGE_ID)).toBe(thumbnailUrl);
+      expect(listMessages).toHaveBeenCalledTimes(readsBeforeEvent + 1);
+      expect(coverFor(historical.id)).toBe(COVER_URL);
+      previousCover = thumbnailUrl;
+    }
+
+    // A fresh mount must show exactly what the event-updated card already did.
+    vi.useRealTimers();
+    view.unmount();
+    renderProjectView();
+    await waitFor(() => {
+      expect(coverFor(MESSAGE_ID)).toBe(previousCover);
+      expect(coverFor(historical.id)).toBe(COVER_URL);
+    });
+  });
+
   it('先降级成 live iframe,收到 chat-artifact-refs-changed 后换成 <img> 快照', async () => {
     renderProjectView();
     await waitFor(() => expect(listMessages).toHaveBeenCalled());
