@@ -2211,6 +2211,7 @@ function OnboardingView({
   const cliRefreshPendingTokenRef = useRef<number | null>(null);
   const amrLoginPollCancelledRef = useRef(false);
   const amrHydratedLoginPollStartedRef = useRef(false);
+  const mountedRef = useRef(true);
   const onboardingMountedRef = useRef(true);
   const amrLoginStartPendingRef = useRef(false);
   const amrLoginCancelRequestedRef = useRef(false);
@@ -2361,8 +2362,10 @@ function OnboardingView({
         );
 
   useEffect(() => {
+    mountedRef.current = true;
     onboardingMountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       onboardingMountedRef.current = false;
       amrLoginPollCancelledRef.current = true;
       agentRevealTimersRef.current.forEach((timer) => clearTimeout(timer));
@@ -3106,11 +3109,11 @@ function OnboardingView({
         setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
       }
-      if (await pollAmrLoginCompletion()) {
+      if (await pollAmrLoginCompletion() && mountedRef.current) {
         continueAfterCloudSignIn();
       }
     } finally {
-      setAmrLoginPending(false);
+      if (mountedRef.current) setAmrLoginPending(false);
     }
   }
 
@@ -3171,12 +3174,13 @@ function OnboardingView({
 
   async function pollAmrLoginCompletion(): Promise<boolean> {
     const startedAt = Date.now();
-    while (!amrLoginPollCancelledRef.current) {
+    while (!amrLoginPollCancelledRef.current && mountedRef.current) {
       await new Promise((resolve) =>
         window.setTimeout(resolve, AMR_LOGIN_POLL_INTERVAL_MS),
       );
-      if (amrLoginPollCancelledRef.current) return false;
+      if (amrLoginPollCancelledRef.current || !mountedRef.current) return false;
       const nextStatus = await fetchVelaLoginStatus();
+      if (!mountedRef.current) return false;
       if (nextStatus) {
         setAmrStatus(nextStatus);
         onAmrLoginStatusChange?.(nextStatus);

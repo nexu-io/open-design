@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildMacZcodeAppDialogCommand,
   buildWindowsFolderDialogCommand,
   parseLinuxFolderDialogResult,
   parseFolderDialogStdout,
+  parseZcodeAppDialogStdout,
+  supportsNativeZcodeAppDialog,
 } from '../src/native-folder-dialog.js';
 
 function dialogError(message: string, code: string | number): Error & { code: string | number } {
@@ -43,6 +46,27 @@ describe('native folder dialog helpers', () => {
     expect(parseFolderDialogStdout(null, 'C:\\Users\\Ada\\Project\r\n')).toBe('C:\\Users\\Ada\\Project');
   });
 
+  it('builds the macOS ZCode.app package picker command', () => {
+    const command = buildMacZcodeAppDialogCommand();
+
+    expect(command.command).toBe('osascript');
+    expect(command.args).toContain('-e');
+    expect(command.args.join(' ')).toContain('choose file');
+    expect(command.args.join(' ')).toContain('of type {"app"}');
+  });
+
+  it('supports the ZCode.app package picker only on macOS', () => {
+    expect(supportsNativeZcodeAppDialog('darwin')).toBe(true);
+    expect(supportsNativeZcodeAppDialog('linux')).toBe(false);
+    expect(supportsNativeZcodeAppDialog('win32')).toBe(false);
+  });
+
+  it('parses app package paths without a trailing slash', () => {
+    expect(parseZcodeAppDialogStdout(null, '/Applications/ZCode.app/\n')).toBe(
+      '/Applications/ZCode.app',
+    );
+  });
+
   it('returns null when the dialog is cancelled', () => {
     expect(parseFolderDialogStdout(null, '\r\n')).toBeNull();
   });
@@ -74,6 +98,20 @@ describe('native folder dialog helpers', () => {
 
     expect(() => parseLinuxFolderDialogResult(err, '', '')).toThrow(
       'Could not open folder picker: zenity is not installed',
+    );
+  });
+
+  it('returns null when the ZCode.app picker is cancelled', () => {
+    const error = Object.assign(new Error('User canceled.'), { code: 1 });
+
+    expect(parseZcodeAppDialogStdout(error, '')).toBeNull();
+  });
+
+  it('throws when the ZCode.app picker command fails', () => {
+    const error = Object.assign(new Error('osascript timed out'), { code: null });
+
+    expect(() => parseZcodeAppDialogStdout(error, '')).toThrow(
+      'ZCode.app picker failed: osascript timed out',
     );
   });
 });

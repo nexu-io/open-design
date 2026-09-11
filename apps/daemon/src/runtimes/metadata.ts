@@ -87,6 +87,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://www.codebuddy.cn',
     docsUrl: 'https://www.codebuddy.cn/docs/workbuddy/Overview',
   },
+  zcode: {
+    installUrl: 'https://zcode.z.ai',
+    docsUrl: 'https://zcode.z.ai/cn/docs/welcome',
+  },
   atomcode: {
     installUrl: 'https://atomcode.atomgit.com/docs/en/quickstart.html',
     docsUrl: 'https://atomcode.atomgit.com/docs/en/index.html',

@@ -1,6 +1,10 @@
 import { accessSync, closeSync, constants, openSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs';
 import path, { delimiter } from 'node:path';
-import { inspectAgentExecutableResolution, userToolchainBinDirs } from './executables.js';
+import {
+  inspectAgentExecutableResolution,
+  userToolchainBinDirs,
+  type AgentExecutableResolutionOptions,
+} from './executables.js';
 import type { RuntimeAgentDef } from './types.js';
 
 export type AgentLaunchKind = 'selected' | 'codex-native';
@@ -15,7 +19,7 @@ export type AgentLaunchResolution = ReturnType<typeof inspectAgentExecutableReso
 export function resolveAgentLaunch(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
-  options: { skipPathCandidates?: readonly string[] } = {},
+  options: AgentExecutableResolutionOptions = {},
 ): AgentLaunchResolution {
   const resolution = inspectAgentExecutableResolution(def, configuredEnv, options);
   if (!resolution.selectedPath) {

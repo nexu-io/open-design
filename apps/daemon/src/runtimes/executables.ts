@@ -8,6 +8,11 @@ import { resolveSandboxRuntimeConfigFromEnv } from '../sandbox-mode.js';
 import { expandHomePath } from './paths.js';
 import type { RuntimeAgentDef } from './types.js';
 
+export interface AgentExecutableResolutionOptions {
+  zcodeAppPath?: string | null;
+  skipPathCandidates?: readonly string[];
+}
+
 const RUNTIME_PROJECT_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../../..',
@@ -37,6 +42,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['reasonix', 'REASONIX_BIN'],
   ['trae-cli', 'TRAE_CLI_BIN'],
   ['vibe', 'VIBE_BIN'],
+  ['zcode', 'ZCODE_BIN'],
 ]);
 
 const TOOLCHAIN_DIR_CACHE_TTL_MS = 5000;
@@ -198,7 +204,55 @@ function configuredExecutableOverride(
 ): string | null {
   const envKey = AGENT_BIN_ENV_KEYS.get(def?.id);
   if (!envKey) return null;
-  return executableFilePath(configuredEnv?.[envKey] ?? process.env[envKey]);
+  const rawOverride =
+    configuredEnv?.[envKey] ??
+    process.env[envKey];
+  return executableFilePath(rawOverride);
+}
+
+function zcodeExecutableFromAppPath(appPath: string | null | undefined): string | null {
+  if (typeof appPath !== 'string' || appPath.trim().length === 0) return null;
+  const expanded = expandHomePath(appPath.trim());
+  if (!path.isAbsolute(expanded)) return null;
+  try {
+    if (!statSync(expanded).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  return executableFilePath(
+    path.join(expanded, 'Contents', 'Resources', 'glm', 'zcode.cjs'),
+  );
+}
+
+function hasExplicitZcodeAppPath(options: AgentExecutableResolutionOptions): boolean {
+  return (
+    process.platform === 'darwin' &&
+    typeof options.zcodeAppPath === 'string' &&
+    options.zcodeAppPath.trim().length > 0
+  );
+}
+
+function zcodeBundleExecutable(options: AgentExecutableResolutionOptions = {}): string | null {
+  if (process.platform !== 'darwin') return null;
+  if (hasExplicitZcodeAppPath(options)) {
+    return zcodeExecutableFromAppPath(options.zcodeAppPath);
+  }
+  for (const candidate of zcodeAppBundleCandidates()) {
+    const executable = executableFilePath(candidate);
+    if (executable) return executable;
+  }
+  return null;
+}
+
+export function zcodeAppBundleCandidates(): string[] {
+  if (process.platform !== 'darwin') return [];
+  const { home, hasOverride } = resolveDetectionHome();
+  const bundleSuffix = ['ZCode.app', 'Contents', 'Resources', 'glm', 'zcode.cjs'];
+  const candidates = [path.join(home, 'Applications', ...bundleSuffix)];
+  if (!hasOverride) {
+    candidates.unshift(path.join('/Applications', ...bundleSuffix));
+  }
+  return candidates;
 }
 
 export function resolveAmrOpenCodeExecutable(
@@ -274,7 +328,9 @@ function packagedVelaOpenCodeCompanionTree(resourceRoot: string): string | null 
 function packagedBuiltInExecutable(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
+  options: AgentExecutableResolutionOptions = {},
 ): string | null {
+  if (def.id === 'zcode') return zcodeBundleExecutable(options);
   if (def.id === 'byok-opencode') {
     return resolveAmrOpenCodeExecutable({ ...process.env, ...configuredEnv });
   }
@@ -349,8 +405,9 @@ export function codexAppBundleCandidates(): string[] {
 export function resolveAgentExecutable(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
+  options: AgentExecutableResolutionOptions = {},
 ): string | null {
-  return inspectAgentExecutableResolution(def, configuredEnv).selectedPath;
+  return inspectAgentExecutableResolution(def, configuredEnv, options).selectedPath;
 }
 
 // The executables a completed detection pass proved cannot be launched, per
@@ -389,12 +446,7 @@ export function forgetUnusableExecutables(agentId: string): void {
 export function inspectAgentExecutableResolution(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
-  // Paths already proven unusable by a spawn attempt. Only PATH-derived
-  // candidates are skippable: an explicit `*_BIN` override, a packaged
-  // built-in, and the Codex app bundle are deliberate selections, so a
-  // broken one must surface as an error rather than silently resolving to
-  // some other binary the user never pointed at.
-  options: { skipPathCandidates?: readonly string[] } = {},
+  options: AgentExecutableResolutionOptions = {},
 ): {
   configuredOverridePath: string | null;
   pathResolvedPath: string | null;
@@ -408,6 +460,7 @@ export function inspectAgentExecutableResolution(
     };
   }
   const configuredOverridePath = configuredExecutableOverride(def, configuredEnv);
+  const explicitZcodeAppPath = def.id === 'zcode' && hasExplicitZcodeAppPath(options);
   const candidates = [
     def.bin,
     ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
@@ -425,12 +478,14 @@ export function inspectAgentExecutableResolution(
   // first file that merely *exists* can be a shim detection already proved
   // dead, which is why those are filtered out above rather than ranked below.
   const pathResolvedPath: string | null = pathCandidates[0] ?? null;
-  const builtInPath = packagedBuiltInExecutable(def, configuredEnv);
+  const builtInPath = packagedBuiltInExecutable(def, configuredEnv, options);
   const appBundlePath = codexAppBundleExecutable(def);
   return {
     configuredOverridePath,
     pathResolvedPath,
     selectedPath:
-      configuredOverridePath || builtInPath || pathResolvedPath || appBundlePath,
+      configuredOverridePath ||
+      builtInPath ||
+      (explicitZcodeAppPath ? null : pathResolvedPath || appBundlePath),
   };
 }

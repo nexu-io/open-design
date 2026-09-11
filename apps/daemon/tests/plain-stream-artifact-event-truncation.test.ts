@@ -45,6 +45,9 @@ import { startServer } from '../src/server.js';
 const PROD_DEFAULT_MAX_EVENTS = 2_000;
 const ARTIFACT_IDENTIFIER = 'trunc-repro';
 const ARTIFACT_FILE_NAME = `${ARTIFACT_IDENTIFIER}.html`;
+// These tests boot a real daemon and process multi-megabyte fake stdout. Hosted
+// runners can exceed the daemon suite's general 20-second test timeout.
+const PLAIN_STREAM_INTEGRATION_TIMEOUT_MS = 60_000;
 
 type StartedServer = { url: string; server: Server; shutdown?: () => Promise<void> | void };
 type RunStatus = { id: string; status: string; exitCode: number | null };
@@ -141,7 +144,7 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
         `of the 2000-event run.events ring buffer before the plain-stream ` +
         `finalizer re-scanned it, so the artifact was silently never persisted`,
     ).toContain(ARTIFACT_FILE_NAME);
-  });
+  }, PLAIN_STREAM_INTEGRATION_TIMEOUT_MS);
 
   // Regression guard for the accumulator cap (raised by review on #5850): the
   // truncation-proof stdout accumulator is head-biased (keeps the first CAP
@@ -200,7 +203,7 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
         `accumulator; the finalizer must fall back to run.events (where the tag ` +
         `still lives) rather than trusting the capped buffer's absence of it`,
     ).toContain(ARTIFACT_FILE_NAME);
-  });
+  }, PLAIN_STREAM_INTEGRATION_TIMEOUT_MS);
 
   // Regression guard #2 for the accumulator cap (raised by review on #5850): two
   // artifacts split across the cap boundary — `A -> >8 MiB prose -> B`. The
@@ -250,7 +253,7 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
       'the late artifact B (past the cap, only in the tail ring) must ALSO persist — ' +
         'the finalizer must union head and tail artifact sets, not stop at A',
     ).toContain('split-b.html');
-  });
+  }, PLAIN_STREAM_INTEGRATION_TIMEOUT_MS);
 
   // Regression guard #3 for the accumulator merge (raised by review on #5850):
   // two DISTINCT artifacts that happen to share the same identifier AND the same
@@ -298,7 +301,7 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
       `both same-identifier same-body artifacts must persist as distinct files ` +
         `(got ${JSON.stringify(dupFiles)}) — a value-level dedup would keep only one`,
     ).toBe(2);
-  });
+  }, PLAIN_STREAM_INTEGRATION_TIMEOUT_MS);
 
   // Control: identical run WITHOUT the flood — the artifact tag stays inside
   // the ring buffer and persistence works. This passes on origin/main and
@@ -344,7 +347,7 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
         : String(file),
     );
     expect(names).toContain(ARTIFACT_FILE_NAME);
-  });
+  }, PLAIN_STREAM_INTEGRATION_TIMEOUT_MS);
 });
 
 async function writeArtifactThenFloodDeepseek(
@@ -461,7 +464,10 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
   expect(response.status).toBe(200);
 }
 
-async function createAndWaitForRun(url: string): Promise<{ run: RunStatus; projectId: string }> {
+async function createAndWaitForRun(
+  url: string,
+  timeoutMs = PLAIN_STREAM_INTEGRATION_TIMEOUT_MS,
+): Promise<{ run: RunStatus; projectId: string }> {
   const projectId = `plain_trunc_${randomUUID()}`;
   const projectResponse = await fetch(`${url}/api/projects`, {
     method: 'POST',
@@ -496,7 +502,7 @@ async function createAndWaitForRun(url: string): Promise<{ run: RunStatus; proje
   expect(runResponse.status).toBe(202);
   const body = await runResponse.json() as { runId: string };
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 20_000) {
+  while (Date.now() - startedAt < timeoutMs) {
     const response = await fetch(`${url}/api/runs/${encodeURIComponent(body.runId)}`);
     expect(response.status).toBe(200);
     const run = await response.json() as RunStatus;

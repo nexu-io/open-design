@@ -1002,6 +1002,7 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'installationId',
   'telemetry',
   'privacyDecisionAt',
+  'zcodeAppPath',
   'allowSilentUpdates',
 ]);
 
@@ -1096,6 +1097,9 @@ export function mergeDaemonConfig(
   }
   next.agentCliEnv = daemonConfig.agentCliEnv ?? {};
   next.agentCliEnvIntent = daemonConfig.agentCliEnvIntent ?? {};
+  if (daemonConfig.zcodeAppPath !== undefined) {
+    next.zcodeAppPath = daemonConfig.zcodeAppPath ?? null;
+  }
   if (daemonConfig.disabledSkills !== undefined) {
     next.disabledSkills = daemonConfig.disabledSkills;
   }
@@ -1274,6 +1278,9 @@ export async function syncConfigToDaemon(
     agentModels: config.agentModels,
     agentCliEnv: config.agentCliEnv,
     agentCliEnvIntent: config.agentCliEnvIntent,
+    ...(Object.prototype.hasOwnProperty.call(config, 'zcodeAppPath')
+      ? { zcodeAppPath: config.zcodeAppPath ?? null }
+      : {}),
     skillId: config.skillId,
     designSystemId: config.designSystemId,
     disabledSkills: config.disabledSkills,

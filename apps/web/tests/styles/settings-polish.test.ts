@@ -89,4 +89,22 @@ describe('settings polish CSS', () => {
     expect(ruleValue(actions, 'display')).toBe('grid');
     expect(ruleValue(actions, 'grid-template-columns')).toBe('1fr 1fr');
   });
+
+  it('scopes the compact ZCode CTA layout without changing other agent cards', () => {
+    const genericGhost = cssBlock(artifactsCss, '\n.agent-card-link--ghost');
+    const zcodeGhost = cssBlock(
+      artifactsCss,
+      '.agent-card-unavailable--zcode .agent-card-footer > .agent-card-link--ghost',
+    );
+    const zcodePicker = cssBlock(
+      artifactsCss,
+      '.agent-card-unavailable--zcode .agent-card-footer > .agent-card-link--zcode-picker',
+    );
+
+    expect(ruleValue(genericGhost, 'padding')).toBe('3px 10px');
+    expect(ruleValue(zcodeGhost, 'height')).toBe('26px');
+    expect(ruleValue(zcodeGhost, 'min-height')).toBe('26px');
+    expect(ruleValue(zcodeGhost, 'white-space')).toBe('nowrap');
+    expect(ruleValue(zcodePicker, 'margin-left')).toBe('auto');
+  });
 });

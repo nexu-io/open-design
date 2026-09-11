@@ -966,6 +966,36 @@ describe('SettingsDialog agent CLI env settings', () => {
       agentCliEnv: {},
     });
   });
+
+  it('passes a hydrated ZCode app path through agent rescan options', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {},
+      zcodeAppPath: '/Applications/ZCode.app',
+    };
+
+    expect(agentRefreshOptionsForConfig(config)).toEqual({
+      throwOnError: true,
+      agentCliEnv: {},
+      zcodeAppPath: '/Applications/ZCode.app',
+    });
+  });
+
+  it('passes hydrated null ZCode app path only after daemon config has loaded', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {},
+      zcodeAppPath: null,
+    };
+
+    expect(agentRefreshOptionsForConfig(config)).toEqual({
+      throwOnError: true,
+      agentCliEnv: {},
+      zcodeAppPath: null,
+    });
+  });
 });
 
 describe('deriveComposioCredentialState', () => {

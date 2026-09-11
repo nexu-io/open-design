@@ -273,6 +273,7 @@ export interface AgentTestRequest {
   reasoning?: string;
   serviceTier?: string;
   agentCliEnv?: AgentCliEnvPrefs;
+  zcodeAppPath?: string | null;
 }
 
 export type ConnectionTestRequest =

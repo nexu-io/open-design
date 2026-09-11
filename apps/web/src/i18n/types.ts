@@ -417,6 +417,7 @@ export interface Dict {
   'settings.testUnknown': string;
   'settings.agentInstall.install': string;
   'settings.agentInstall.docs': string;
+  'settings.agentInstall.configurePath': string;
   'settings.agentInstall.pathHint': string;
   'settings.agentInstall.stepOpenLinks': string;
   'settings.agentInstall.stepAuth': string;
@@ -577,6 +578,18 @@ export interface Dict {
   'settings.cliEnvCodexBin': string;
   'settings.cliEnvCodexBaseUrl': string;
   'settings.cliEnvCodexApiKey': string;
+  'settings.cliEnvZcodeBin': string;
+  'settings.zcodeAppPathTitle': string;
+  'settings.zcodeAppPathHint': string;
+  'settings.zcodeAppPathAuto': string;
+  'settings.zcodeAppPathChoose': string;
+  'settings.zcodeAppPathSelected': string;
+  'settings.zcodeAppPathSelectedPending': string;
+  'settings.zcodeAppPathNoSelection': string;
+  'settings.zcodeAppPathUnsupported': string;
+  'settings.zcodeAppPathInvalid': string;
+  'settings.zcodeAppPathPickerError': string;
+  'settings.zcodeAppPathVerifyError': string;
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;

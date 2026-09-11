@@ -178,6 +178,7 @@ import {
   validateRunToolBundleForAgent,
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
+import type { AgentExecutableResolutionOptions } from '../runtimes/executables.js';
 import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_AGENT_ID,
@@ -585,7 +586,10 @@ export interface RegisterRunRoutesDeps {
     RUNTIME_DATA_DIR: string;
   };
   agents: {
-    detectAgents: (agentCliEnv?: Record<string, unknown>) => Promise<DetectedAgent[]>;
+    detectAgents: (
+      agentCliEnv?: Record<string, unknown>,
+      options?: AgentExecutableResolutionOptions,
+    ) => Promise<DetectedAgent[]>;
     getAgentDef: (agentId: string) => RuntimeAgentDef | null | undefined;
   };
   chat: {
@@ -2228,6 +2232,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           : null;
         const agents = await detectAgents(
           toJsonRecord(appCfg.agentCliEnv),
+          { zcodeAppPath: appCfg.zcodeAppPath ?? null },
         ).catch((): DetectedAgent[] => []);
         const cfgAgentAvailable = cfgAgent
           ? agents.some((agent) => agent.id === cfgAgent && agent.available)

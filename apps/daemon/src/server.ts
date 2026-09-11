@@ -347,9 +347,12 @@ import {
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import {
+  buildMacZcodeAppDialogCommand,
   buildWindowsFolderDialogCommand,
   parseFolderDialogStdout,
   parseLinuxFolderDialogResult,
+  parseZcodeAppDialogStdout,
+  supportsNativeZcodeAppDialog,
 } from './native-folder-dialog.js';
 import {
   AssetCacheError,
@@ -498,6 +501,12 @@ import {
 import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+import { resolveZcodeSavedProvider } from './runtimes/zcode-config.js';
+import { createZcodeProtocolClient } from './runtimes/zcode-protocol.js';
+import {
+  startZcodeProtocolTurn,
+  ZcodeResumeSessionMissingError,
+} from './runtimes/zcode-session.js';
 import {
   CODEX_APP_SERVER_STREAM_FORMAT,
   applyCodexTransportOverride,
@@ -2728,6 +2737,31 @@ function openNativeFolderDialog() {
   });
 }
 
+function openNativeZcodeAppDialog() {
+  if (!supportsNativeZcodeAppDialog()) {
+    return Promise.reject(new Error('ZCode.app picker is only supported on macOS'));
+  }
+  return new Promise((resolve, reject) => {
+    const command = buildMacZcodeAppDialogCommand();
+    execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
+      try {
+        resolve(parseZcodeAppDialogStdout(err, stdout));
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+function createZcodeSetupErrorPayload(errorMessage) {
+  const serviceCode = classifyAgentServiceFailure(errorMessage);
+  if (serviceCode) {
+    return createSseErrorPayload(serviceCode, errorMessage, { retryable: true });
+  }
+
+  return createSseErrorPayload('AGENT_EXECUTION_FAILED', errorMessage, { retryable: false });
+}
+
 /**
  * @param {ApiErrorCode} code
  * @param {string} message
@@ -3665,7 +3699,9 @@ export async function startServer({
   void readAppConfig(RUNTIME_DATA_DIR)
     .then((config) => {
       orbitService.configure(config.orbit);
-      return detectAgents(config.agentCliEnv ?? {});
+      return detectAgents(config.agentCliEnv ?? {}, {
+        zcodeAppPath: config.zcodeAppPath ?? null,
+      });
     })
     .catch(() => detectAgents().catch(() => {}));
 
@@ -8365,7 +8401,12 @@ export async function startServer({
     },
   };
   const orbitDeps = { orbitService };
-  const nativeDialogDeps = { openBrowser, openNativeFolderDialog };
+  const nativeDialogDeps = {
+    openBrowser,
+    openNativeFolderDialog,
+    openNativeZcodeAppDialog,
+    supportsNativeZcodeAppDialog,
+  };
   const researchDeps = { searchResearch, ResearchError };
   const liveArtifactDeps = {
     createLiveArtifact,
@@ -8936,7 +8977,9 @@ export async function startServer({
         : null;
       let detectedAgentName: string | null = null;
       if (!agentId) {
-        const agents = await detectAgents(config.agentCliEnv ?? {}).catch(() => []);
+        const agents = await detectAgents(config.agentCliEnv ?? {}, {
+          zcodeAppPath: config.zcodeAppPath ?? null,
+        }).catch(() => []);
         const available = agents.find((agent) => agent.available);
         agentId = available?.id ?? null;
         detectedAgentName = available?.name ?? null;
@@ -11701,7 +11744,8 @@ export async function startServer({
     const agentSupportsSessionResume =
       runtimeResumesSessionById(def) ||
       def.streamFormat === 'pi-rpc' ||
-      def.resumesSessionViaAcpLoad === true;
+      def.resumesSessionViaAcpLoad === true ||
+      def.streamFormat === 'zcode-protocol';
     // Capture-style adapters (codex) mint their OWN session id and report it on
     // the stream; the daemon captures it here and persists THAT as the resume
     // handle instead of `agentResumeCtx.newSessionId` (which such CLIs ignore).
@@ -11716,10 +11760,12 @@ export async function startServer({
     // resolve to an available fallback below.
     let configuredAgentEnv = {};
     let appConfigForRun = null;
+    let zcodeAppPath: string | null = null;
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       appConfigForRun = appConfig;
       configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+      zcodeAppPath = appConfig.zcodeAppPath ?? null;
     } catch {
       configuredAgentEnv = {};
     }
@@ -11770,7 +11816,9 @@ export async function startServer({
       reasoning: safeReasoning,
       serviceTier: safeServiceTier,
     };
-    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
+    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv, {
+      zcodeAppPath,
+    });
     const resolvedBin = agentLaunch.selectedPath;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
       // Concretize omitted/default AMR model requests to the live catalog
@@ -13585,7 +13633,7 @@ export async function startServer({
     }
 
     let persistDeliveredAgentSessionState = () => {};
-    if (runtimeResumesSessionById(def) && run.conversationId) {
+    if ((runtimeResumesSessionById(def) || def.streamFormat === 'zcode-protocol') && run.conversationId) {
       let persisted = false;
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
@@ -13602,9 +13650,11 @@ export async function startServer({
         // capture-style run that never reported an id (CLI died before
         // `thread.started`) leaves nothing to resume — correct, the next turn
         // starts fresh and re-seeds the transcript.
-        const createTurnSessionId = agentCapturesSessionId
-          ? capturedSessionId
-          : agentResumeCtx.newSessionId;
+        const createTurnSessionId = def.streamFormat === 'zcode-protocol'
+          ? zcodeTurn?.sessionId
+          : agentCapturesSessionId
+            ? capturedSessionId
+            : agentResumeCtx.newSessionId;
         if (!agentResumeCtx.isResuming && createTurnSessionId) {
           upsertAgentSession(db, {
             conversationId: run.conversationId,
@@ -13740,6 +13790,10 @@ export async function startServer({
       }
     };
     let forcedChildShutdownTimers = [];
+    let zcodeTerminalDrainTimer: ReturnType<typeof setTimeout> | null = null;
+    let zcodeTerminalStatus: 'completed' | 'failed' | null = null;
+    let zcodeTerminalUsageSeen = false;
+    const zcodeFinalResultTimeoutMs = 10_000;
     let acpAttemptTermination = null;
     const beginAcpAttemptTermination = (
       reason = 'acp_terminal',
@@ -13782,6 +13836,46 @@ export async function startServer({
           design.runs.signalChildProcess(targetChild, targetProcessGroupId, 'SIGKILL');
         }, inactivityKillGraceMs * 2),
       ];
+    };
+    const clearZcodeTerminalDrainTimer = () => {
+      if (!zcodeTerminalDrainTimer) return;
+      clearTimeout(zcodeTerminalDrainTimer);
+      zcodeTerminalDrainTimer = null;
+    };
+    const finishZcodeTurnAfterDrain = (delayMs: number) => {
+      clearZcodeTerminalDrainTimer();
+      zcodeTerminalDrainTimer = setTimeout(() => {
+        zcodeTerminalDrainTimer = null;
+        zcodeTurn?.unsubscribe?.();
+        zcodeProtocolClient?.dispose?.();
+        if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+        scheduleForcedChildShutdown();
+      }, delayMs);
+    };
+    const failZcodeTurnWithoutFinalResult = () => {
+      clearZcodeTerminalDrainTimer();
+      zcodeTerminalDrainTimer = setTimeout(() => {
+        zcodeTerminalDrainTimer = null;
+        if (
+          !run.cancelRequested &&
+          !agentStreamError &&
+          zcodeTerminalStatus === 'completed' &&
+          !zcodeTerminalUsageSeen
+        ) {
+          agentStreamError = 'ZCode completed the prompt before sending final-result usage.';
+          agentStreamErrorObservedBeforeCancellation = true;
+          run.runtimeFailureObservedBeforeCancellation = true;
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            agentStreamError,
+            { retryable: true },
+          ));
+        }
+        zcodeTurn?.unsubscribe?.();
+        zcodeProtocolClient?.dispose?.();
+        if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+        scheduleForcedChildShutdown();
+      }, zcodeFinalResultTimeoutMs);
     };
     const failForInactivity = (reason: 'inactivity' | 'first_output' = 'inactivity') => {
       if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
@@ -14102,6 +14196,8 @@ export async function startServer({
 
     let child;
     let acpSession = null;
+    let zcodeProtocolClient = null;
+    let zcodeTurn = null;
     let writePromptToChildStdin = false;
     let spawnedAgentEnv = null;
     // The stream handler is block-scoped to its parser branch, but the OpenCode
@@ -14130,6 +14226,7 @@ export async function startServer({
         def.promptViaStdin ||
         def.streamFormat === 'acp-json-rpc' ||
         def.streamFormat === 'dsh-profile-jsonl' ||
+        def.streamFormat === 'zcode-protocol' ||
         def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT
           ? 'pipe'
           : 'ignore';
@@ -14290,7 +14387,9 @@ export async function startServer({
         });
       }
       if (
-        (def.promptViaStdin || def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT) &&
+        (def.promptViaStdin
+          || def.streamFormat === 'zcode-protocol'
+          || def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT) &&
         child.stdin &&
         def.streamFormat !== 'pi-rpc' &&
         def.streamFormat !== 'dsh-profile-jsonl'
@@ -15621,6 +15720,107 @@ export async function startServer({
       child.on('close', () => {
         publishRuntimeChildEvidenceCoverage(acpSession?.childEvidenceCoverage?.());
       });
+    } else if (def.streamFormat === 'zcode-protocol') {
+      trackingSubstantiveOutput = true;
+      const zcodeAbort = new AbortController();
+      child.once('close', () => zcodeAbort.abort(new Error('zcode app-server closed')));
+      zcodeProtocolClient = createZcodeProtocolClient(child);
+      try {
+        const zcodeModel =
+          typeof safeModel === 'string' && safeModel.trim() && safeModel !== 'default'
+            ? safeModel
+            : null;
+        const zcodeHomeDir =
+          spawnedAgentEnv?.HOME?.trim() || spawnedAgentEnv?.USERPROFILE?.trim();
+        const providerSelection = resolveZcodeSavedProvider({
+          modelId: zcodeModel,
+          ...(zcodeHomeDir ? { homeDir: zcodeHomeDir } : {}),
+        });
+        const zcodeResumeSessionId = agentResumeCtx.resumeSessionId?.trim() || null;
+        zcodeTurn = await startZcodeProtocolTurn({
+          client: zcodeProtocolClient,
+          cwd: effectiveCwd,
+          mode: 'yolo',
+          onEvent: (ev) => {
+            sendAgentEvent(ev);
+            if (ev?.type === 'usage') {
+              zcodeTerminalUsageSeen = true;
+              if (zcodeTerminalStatus === 'completed') {
+                run.turnCompletedCleanly = true;
+                finishZcodeTurnAfterDrain(150);
+              }
+              return;
+            }
+            if (ev?.type !== 'status') return;
+            if (ev.label === 'completed') {
+              if (zcodeTerminalUsageSeen) {
+                run.turnCompletedCleanly = true;
+                finishZcodeTurnAfterDrain(150);
+              } else {
+                failZcodeTurnWithoutFinalResult();
+              }
+            }
+            if (ev.label === 'completed' || ev.label === 'failed') {
+              zcodeTerminalStatus = ev.label;
+              if (ev.label === 'failed') {
+                finishZcodeTurnAfterDrain(150);
+              }
+            }
+          },
+          prompt: composed,
+          providerSelection,
+          resumeSessionId: zcodeResumeSessionId,
+          signal: zcodeAbort.signal,
+        });
+        console.log(
+          `[zcode] session action=${zcodeResumeSessionId ? 'resume' : 'create'} sessionId=${zcodeTurn.sessionId} runId=${run.id} conversationId=${run.conversationId ?? 'none'} model=${zcodeModel ?? 'default'}`,
+        );
+      } catch (error) {
+        if (
+          error instanceof ZcodeResumeSessionMissingError &&
+          agentResumeCtx.isResuming &&
+          run.conversationId &&
+          !run.cancelRequested
+        ) {
+          clearAgentSession(db, run.conversationId, def.id);
+          if (!run.resumeAutoReseeded) {
+            run.resumeAutoReseeded = true;
+            run.resumeAutoReseededFrom = agentResumeCtx.resumeSessionId ?? null;
+            run.nativeSessionRecovery = markNativeSessionAutoReseeded({
+              previous: run.nativeSessionRecovery,
+              agentId: def.id,
+              previousSessionId: agentResumeCtx.resumeSessionId,
+            });
+            publishNativeSessionRecoveryMetadata();
+            design.runs.emit(run, 'diagnostic', {
+              type: 'agent_resume_auto_reseed',
+              agent_id: def.id,
+              reason: 'resume_failed',
+              previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+              stale_session_cleared: true,
+              nativeSessionRecovery: run.nativeSessionRecovery,
+            });
+            clearZcodeTerminalDrainTimer();
+            zcodeProtocolClient?.dispose?.();
+            if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+            watchdogRetryRestarted = true;
+            scheduleRetryRestart(0);
+            return;
+          }
+        }
+        if (!agentStreamError && !run.cancelRequested) {
+          flushVisibleAgentStderr();
+          agentStreamError = error instanceof Error ? error.message : String(error);
+          agentStreamErrorObservedBeforeCancellation = true;
+          run.runtimeFailureObservedBeforeCancellation = true;
+          clearInactivityWatchdog();
+          send('error', createZcodeSetupErrorPayload(agentStreamError));
+        }
+        clearZcodeTerminalDrainTimer();
+        zcodeProtocolClient?.dispose?.();
+        if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+        scheduleForcedChildShutdown();
+      }
     } else if (def.streamFormat === 'dsh-profile-jsonl') {
       trackingSubstantiveOutput = true;
       acpSession = attachDshProfileSession({
@@ -16039,6 +16239,22 @@ export async function startServer({
       }
       parseBufferedAntigravityGeminiJsonEventStream();
       flushAgentTitleMarkerBuffer();
+      if (
+        !run.cancelRequested &&
+        def.streamFormat === 'zcode-protocol' &&
+        zcodeTerminalStatus === 'completed' &&
+        !zcodeTerminalUsageSeen &&
+        !agentStreamError
+      ) {
+        agentStreamError = 'ZCode completed the prompt before sending final-result usage.';
+        agentStreamErrorObservedBeforeCancellation = true;
+        run.runtimeFailureObservedBeforeCancellation = true;
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          agentStreamError,
+          { retryable: true },
+        ));
+      }
       if (agentStreamErrorObservedBeforeCancellation && agentStreamError) {
         markRpcCloseReason('stream_error');
         return finishWithRetryDecision('failed', code === 0 ? 1 : (code ?? 1), signal ?? null);
@@ -16937,6 +17153,9 @@ export async function startServer({
         if (agentLogFilePath) {
           fs.promises.unlink(agentLogFilePath).catch(() => {});
         }
+        clearZcodeTerminalDrainTimer();
+        zcodeTurn?.unsubscribe?.();
+        zcodeProtocolClient?.dispose?.();
         cleanupPromptFile();
       }
     });
@@ -17002,7 +17221,9 @@ export async function startServer({
       ? appConfig.agentId
       : null;
     if (!agentId) {
-      const agents = await detectAgents(appConfig.agentCliEnv ?? {}).catch(() => []);
+      const agents = await detectAgents(appConfig.agentCliEnv ?? {}, {
+        zcodeAppPath: appConfig.zcodeAppPath ?? null,
+      }).catch(() => []);
       agentId = agents.find((agent) => agent.available)?.id ?? null;
     }
     if (!agentId) throw new Error('No available agent is configured for Orbit. Choose an agent in Settings first.');
@@ -17245,7 +17466,9 @@ export async function startServer({
     let agentId = routine.agentId
       || (typeof appConfig.agentId === 'string' && appConfig.agentId ? appConfig.agentId : null);
     if (!agentId) {
-      const agents = await detectAgents(appConfig.agentCliEnv ?? {}).catch(() => []);
+      const agents = await detectAgents(appConfig.agentCliEnv ?? {}, {
+        zcodeAppPath: appConfig.zcodeAppPath ?? null,
+      }).catch(() => []);
       agentId = agents.find((agent) => agent.available)?.id ?? null;
     }
     if (!agentId) {
@@ -17725,8 +17948,8 @@ export async function startServer({
     paths: pathDeps,
     chat: { prepareOdNextInitialPromptBundle, startChatRun },
     agents: agentDeps,
+    appConfig: appConfigDeps,
     critique: critiqueDeps,
-    appConfig: { readAppConfig },
     validation: validationDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
     telemetry: { reportFinalizedMessage, reportFeedback },
