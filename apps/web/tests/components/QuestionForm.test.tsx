@@ -388,6 +388,24 @@ describe('QuestionFormView', () => {
     expect(container.querySelector('.qf-chip-other')?.contains(input)).toBe(true);
   });
 
+  it('collapses an expanded custom choice from either the row or its checkbox', () => {
+    const { container } = render(
+      <QuestionFormView form={richForm} interactive onSubmit={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write your own' }));
+    const expandedRow = container.querySelector('.qf-chip-other.qf-chip-open');
+    if (!expandedRow) throw new Error('expected expanded custom choice');
+    fireEvent.click(screen.getByTestId('qf-input'));
+    expect(screen.queryByTestId('qf-input')).not.toBeNull();
+    fireEvent.click(expandedRow);
+    expect(screen.queryByTestId('qf-input')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write your own' }));
+    fireEvent.click(screen.getByLabelText('Write your own'));
+    expect(screen.queryByTestId('qf-input')).toBeNull();
+  });
+
   it('deselects fixed options when Other opens and collapses when one is picked', () => {
     const { container } = render(
       <QuestionFormView form={richForm} interactive onSubmit={vi.fn()} />,

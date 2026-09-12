@@ -390,6 +390,10 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       <div
         className="qf-chip qf-chip-other qf-chip-on qf-chip-open"
         data-chat-scroll-anchor={`question-own:${q.id}`}
+        onClick={(event) => {
+          if (event.target instanceof Element && event.target.closest('button, textarea')) return;
+          toggleOther(q);
+        }}
       >
         <button
           type="button"
