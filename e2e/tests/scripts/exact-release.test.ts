@@ -63,7 +63,8 @@ describe("exact Electron release topology", () => {
       " def records(self,token): return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in cached(token)]",
       " with patch.object(GitFingerprinter,'records',records): after=compute()",
       " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
-      "paths=['apps/web/tests/sidecar-proxy.test.ts','apps/daemon/tests/sidecar-startup.test.ts','packages/electron-kit/tsconfig.tests.json','packages/electron-capsule/tsconfig.tests.json','packages/archive/tests/archive.test.ts','apps/web/src/app.tsx','apps/daemon/src/server.ts']",
+      "paths=['apps/web/tests/sidecar-proxy.test.ts','apps/daemon/tests/sidecar-startup.test.ts','packages/electron-kit/tsconfig.tests.json','packages/electron-capsule/tsconfig.tests.json','packages/archive/tests/archive.test.ts','apps/web/app/layout.tsx','apps/daemon/src/server.ts']",
+      "assert all((root/path).is_file() for path in paths), 'identity probe must name existing source files'",
       "print(json.dumps({path:changed(path) for path in paths}))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
     const changes = JSON.parse(result.stdout) as Record<string, string[]>;
@@ -74,6 +75,8 @@ describe("exact Electron release topology", () => {
       }
     }
     expect(changes["apps/daemon/src/server.ts"]).toContain("closure_runtime_daemon_darwin_arm64");
+    expect(changes["apps/web/app/layout.tsx"]).toContain("closure_runtime_web_darwin_arm64");
+    expect(changes["apps/web/app/layout.tsx"]).not.toContain("closure_runtime_daemon_darwin_arm64");
   });
   it.each(["exact", "stable", "prerelease"])("pairs accepted macOS sessions without duplicating first-start in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
