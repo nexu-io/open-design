@@ -325,6 +325,15 @@ The initial product proof is intentionally artifact-oriented:
 
 ## 9. Event normalization
 
+The profile plugin (`plugin_version` 0.1.1) maps Harness events onto the same
+OD JSONL frames. Live tokens come from process-local
+`agent/assistant-stream` chunk frames (`text-delta` → `text`,
+`reasoning-delta` → `thinking`). Durable settlement is `assistant/message`
+(usage always; text only when no live/legacy chunk already filled
+`result.output`). `assistant/attempt` is not user-visible text. `dsh` 0.1.2
+still arrives as `assistant/chunk`. A turn emits each visible text delta at
+most once.
+
 | Profile frame | OpenDesign event |
 | --- | --- |
 | `thinking` | `thinking_start`, then `thinking_delta` |
