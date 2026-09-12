@@ -105,6 +105,11 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 - Release plan and tool/policy preparation share one runner and checkout.
   Python identity calculation still precedes and exclusively owns cache decisions;
   sharing a job does not move planner state into tools-release.
+- Product-only release preparation checks out only the pinned commit's
+  `.github` directory with cone-mode sparse checkout and depth one. Root files
+  (including `.node-version`) and Git commit metadata remain available.
+  Its product inputs come from verified artifacts, never app/package source;
+  identity calculation and source producers retain their full source checkout.
 - Public plan result reads and product probes retry a transient transport/HTTP
   failure once, with the existing per-attempt timeout. Missing, invalid or
   mismatched evidence never becomes a hit; exhausted reads still select execution.

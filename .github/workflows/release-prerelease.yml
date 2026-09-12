@@ -873,11 +873,13 @@ jobs:
     environment: standalone-prerelease-release
     timeout-minutes: 10
     steps:
-      - name: "[fetch] Repository source · pinned SHA"
+      - name: "[fetch] Release control files · pinned SHA"
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: .github
 
       - name: "[setup] Node.js · declared toolchain"
         uses: actions/setup-node@v6

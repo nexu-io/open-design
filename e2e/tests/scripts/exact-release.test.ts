@@ -16,6 +16,21 @@ const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugi
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it.each(["exact", "stable", "prerelease"])("checks out only release controls for product-only preparation in release-%s", async lane => {
+    const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+    const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
+    const checkout = prepare.split("uses: actions/checkout@")[1]!.split("\n      - name:")[0]!;
+    expect(checkout).toContain("ref: ${{ inputs.source_sha }}");
+    expect(checkout).toContain("persist-credentials: false");
+    expect(checkout).toContain("fetch-depth: 1");
+    expect(checkout).toContain("sparse-checkout: .github");
+    expect(prepare).toContain("node-version-file: .node-version");
+    expect(prepare).toContain('--root "$GITHUB_WORKSPACE"');
+    expect(prepare).not.toContain("pnpm install");
+    expect(prepare).not.toContain("tools-release scene build");
+    // Identity calculation and source producers still need their full source view.
+    expect(workflow.split("\n  prepare:")[0]).not.toContain("sparse-checkout:");
+  });
   it.each(["exact", "stable", "prerelease"])("separates build admission from test-gated publication in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
     const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
