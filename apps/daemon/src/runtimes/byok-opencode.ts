@@ -18,12 +18,22 @@ const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], s
   aihubmix: 'https://aihubmix.com/v1',
 };
 
-type ProviderPackage =
+export type ProviderPackage =
   | '@ai-sdk/anthropic'
   | '@ai-sdk/openai'
   | '@ai-sdk/openai-compatible'
   | '@ai-sdk/azure'
   | '@ai-sdk/google';
+
+// Endpoint the resolved package actually calls, so the pre-spawn breadcrumb
+// stays accurate for non-OpenAI protocols.
+const REQUEST_PATH_BY_PACKAGE: Record<ProviderPackage, string> = {
+  '@ai-sdk/openai': '/responses',
+  '@ai-sdk/openai-compatible': '/chat/completions',
+  '@ai-sdk/anthropic': '/messages',
+  '@ai-sdk/google': '/models',
+  '@ai-sdk/azure': '/chat/completions',
+};
 
 export interface OpenCodeByokProviderConfig {
   providerId: string;
@@ -97,27 +107,77 @@ export function buildOpenCodeByokProviderConfig(
   };
 }
 
+export interface OpenCodeByokResolutionInfo {
+  baseUrlHost: string | null;
+  npm: ProviderPackage;
+  modelId: string;
+  baseURL: string;
+  requestPath: string;
+}
+
+export function describeOpenCodeByokResolution(
+  provider: ByokChatProviderConfig | null | undefined,
+  model: string | null | undefined,
+): OpenCodeByokResolutionInfo | null {
+  const resolved = buildOpenCodeByokProviderConfig(provider, model);
+  if (!resolved) return null;
+  const entry = (
+    resolved.config as {
+      provider: Record<
+        string,
+        { npm: ProviderPackage; options?: { baseURL?: unknown } }
+      >;
+    }
+  ).provider[BYOK_OPENCODE_PROVIDER_ID];
+  if (!entry) return null;
+  const baseURL =
+    typeof entry.options?.baseURL === 'string' ? entry.options.baseURL : '';
+  let baseUrlHost: string | null = null;
+  try {
+    baseUrlHost = baseURL ? new URL(baseURL).hostname : null;
+  } catch {
+    baseUrlHost = null;
+  }
+  const requestPath = REQUEST_PATH_BY_PACKAGE[entry.npm];
+  return { baseUrlHost, npm: entry.npm, modelId: resolved.modelId, baseURL, requestPath };
+}
+
 function normalizeProviderBaseUrl(
   protocol: ByokChatProviderConfig['protocol'],
   baseUrl: string,
 ): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, '');
   if (!trimmed) return trimmed;
-  if (protocol === 'anthropic' && !hasVersionedApiPath(trimmed)) {
-    return appendVersionedApiPath(trimmed);
+  const withScheme = withCompletedUrlScheme(trimmed);
+  if (protocol === 'anthropic' && !hasVersionedApiPath(withScheme)) {
+    return appendVersionedApiPath(withScheme);
   }
-  if (protocol === 'openai' && isExactOrigin(trimmed, 'https://api.openai.com')) {
+  if (protocol === 'openai' && isExactOrigin(withScheme, 'https://api.openai.com')) {
     return 'https://api.openai.com/v1';
   }
-  if (protocol === 'google' && isExactOrigin(trimmed, 'https://generativelanguage.googleapis.com')) {
+  if (protocol === 'google' && isExactOrigin(withScheme, 'https://generativelanguage.googleapis.com')) {
     return 'https://generativelanguage.googleapis.com/v1beta';
   }
   if (protocol === 'ollama') {
-    if (isExactOrigin(trimmed, 'https://ollama.com')) return 'https://ollama.com/v1';
-    if (isLocalOllamaOriginPath(trimmed)) return `${trimmed}/v1`;
-    if (trimmed.endsWith('/api')) return `${trimmed.slice(0, -4)}/v1`;
+    if (isExactOrigin(withScheme, 'https://ollama.com')) return 'https://ollama.com/v1';
+    if (isLocalOllamaOriginPath(withScheme)) return `${withScheme}/v1`;
+    if (withScheme.endsWith('/api')) return `${withScheme.slice(0, -4)}/v1`;
   }
-  return trimmed;
+  return withScheme;
+}
+
+function withCompletedUrlScheme(value: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(value);
+  } catch {
+    parsed = null;
+  }
+  if (parsed && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
+    return value;
+  }
+  return `https://${value}`;
 }
 
 function requiresApiKey(
@@ -161,11 +221,10 @@ function isExactOrigin(value: string, origin: string): boolean {
 }
 
 function isRealOpenAIHost(baseUrl: string): boolean {
-  if (!baseUrl) return true;
   try {
     return new URL(baseUrl).hostname === 'api.openai.com';
   } catch {
-    return true;
+    return false;
   }
 }
 
