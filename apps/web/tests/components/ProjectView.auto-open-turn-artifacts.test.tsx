@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { ChatMessage } from '../../src/types';
@@ -42,6 +42,9 @@ const chatPaneHarness = vi.hoisted(() => ({
 // `.name` is exactly the false-green this suite exists to avoid: a batch open
 // that the host issues as one request would look like a single-file open.
 const workspaceHarness = vi.hoisted(() => ({
+  tabsState: { tabs: [] as string[], active: null as string | null },
+  onTabsStateChange: null as null | ((state: { tabs: string[]; active: string | null }) => void),
+  onRefreshFiles: null as null | (() => Promise<unknown>),
   lastRequest: null as unknown,
   requests: [] as { name: string; batch: string[] }[],
 }));
@@ -151,9 +154,18 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: ({
     openRequest,
+    tabsState,
+    onTabsStateChange,
+    onRefreshFiles,
   }: {
+    tabsState: typeof workspaceHarness.tabsState;
+    onTabsStateChange: NonNullable<typeof workspaceHarness.onTabsStateChange>;
+    onRefreshFiles: NonNullable<typeof workspaceHarness.onRefreshFiles>;
     openRequest?: { name?: string; openBatch?: readonly string[] } | null;
   }) => {
+    workspaceHarness.tabsState = tabsState;
+    workspaceHarness.onTabsStateChange = onTabsStateChange;
+    workspaceHarness.onRefreshFiles = onRefreshFiles;
     if (openRequest && openRequest !== workspaceHarness.lastRequest) {
       workspaceHarness.lastRequest = openRequest;
       if (openRequest.name) {
@@ -215,6 +227,7 @@ function renderProjectView(options?: { resolvedDir?: string | null; metadata?: u
 type Handlers = {
   onAgentEvent: (event: unknown) => void;
   onDone: (text?: string) => void;
+  onError: (error: Error) => Promise<void>;
 };
 
 async function runTurn(options: {
@@ -268,6 +281,9 @@ describe('ProjectView auto-open of a finished turn (OPEND-2588)', () => {
     chatPaneHarness.onSend = null;
     chatPaneHarness.onStop = null;
     chatPaneHarness.messages = [];
+    workspaceHarness.tabsState = { tabs: [], active: null };
+    workspaceHarness.onTabsStateChange = null;
+    workspaceHarness.onRefreshFiles = null;
     workspaceHarness.lastRequest = null;
     workspaceHarness.requests = [];
     window.sessionStorage.clear();
@@ -315,4 +331,153 @@ describe('ProjectView auto-open of a finished turn (OPEND-2588)', () => {
     await waitFor(() => expect(focusedTab()).toBe('index.html'));
     expect(openedTabsInOrder()).toEqual(['index.html']);
   });
+
+  // These exercise real ProjectView callbacks and controlled file I/O. The
+  // workspace boundary records host requests/default state; no selection or
+  // user-takeover decision is mocked.
+  const referenceImage = {
+    name: 'assets/pokemon/squirtle.png', path: 'assets/pokemon/squirtle.png',
+    kind: 'image', size: 151_400, mtime: 2_000, mime: 'image/png',
+  };
+  const finalPage = {
+    name: 'index.html', path: 'index.html', kind: 'html', size: 4_096,
+    mtime: 3_000, mime: 'text/html',
+  };
+  const notes = { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1, size: 10 };
+
+  function prepareFocusScenario() {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Pokemon app' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], active: null, hasSavedState: false });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-focus', status: 'running', createdAt: 1_000, updatedAt: 2_000,
+    });
+  }
+
+  it.each(['completion', 'error', 'stop', 'user', 'still-streaming'] as const)(
+    'resolves delayed intermediate focus against the %s lifecycle (OPEND-2815)',
+    async (laterSelection) => {
+      prepareFocusScenario();
+      // Saved tabs avoid the separate initial-primary path in this race.
+      loadTabs.mockResolvedValue({ tabs: [notes.name], active: notes.name, hasSavedState: true });
+      fetchProjectFiles.mockResolvedValue([notes]);
+      let handlers!: Handlers;
+      streamViaDaemon.mockImplementation(async (options: any) => {
+        options.onRunCreated('run-focus');
+        handlers = options.handlers;
+        return new Promise<void>(() => {});
+      });
+      renderProjectView();
+      await waitFor(() => expect(workspaceHarness.tabsState.active).toBe(notes.name));
+      void chatPaneHarness.onSend!('Build a Pokemon app', [], []);
+      await waitFor(() => expect(handlers).toBeTruthy());
+      let releaseImageRead!: (files: unknown[]) => void;
+      fetchProjectFiles.mockReturnValueOnce(new Promise(resolve => { releaseImageRead = resolve; }));
+      await act(async () => {
+        handlers.onAgentEvent({ kind: 'artifact_focus', open: referenceImage.name });
+      });
+      expect(releaseImageRead).toBeTruthy();
+      if (laterSelection === 'completion') {
+        fetchProjectFiles.mockResolvedValue([notes, referenceImage, finalPage]);
+        handlers.onDone('Pokemon app complete.');
+        await waitFor(() => expect(focusedTab()).toBe(finalPage.name));
+      } else if (laterSelection === 'error') {
+        await act(async () => { await handlers.onError(new Error('fixture transport failure')); });
+        await waitFor(() => expect(chatPaneHarness.messages.some(message => message.runStatus === 'failed')).toBe(true));
+      } else if (laterSelection === 'stop') {
+        act(() => chatPaneHarness.onStop!());
+        await waitFor(() => expect(chatPaneHarness.messages.some(message => message.runStatus === 'canceled')).toBe(true));
+      } else if (laterSelection === 'user') {
+        act(() => workspaceHarness.onTabsStateChange!({
+          tabs: [notes.name, 'review.md'], active: 'review.md',
+        }));
+      }
+      const requestsBeforeOldRead = [...workspaceHarness.requests];
+      await act(async () => { releaseImageRead([notes, referenceImage]); });
+      if (laterSelection === 'still-streaming') {
+        expect(workspaceHarness.requests).toEqual([...requestsBeforeOldRead, { name: referenceImage.name, batch: [] }]);
+        return;
+      }
+      expect(workspaceHarness.requests).toEqual(requestsBeforeOldRead);
+      if (laterSelection === 'completion') expect(focusedTab()).toBe(finalPage.name);
+      else if (laterSelection === 'user') expect(workspaceHarness.tabsState.active).toBe('review.md');
+    },
+  );
+
+  it.each(['completion', 'error', 'stop', 'user', 'still-streaming'] as const)(
+    'keeps delayed successful Write and focus reads within the %s lifecycle (OPEND-2815)',
+    async (laterSelection) => {
+      prepareFocusScenario();
+      loadTabs.mockResolvedValue({ tabs: [notes.name], active: notes.name, hasSavedState: true });
+      fetchProjectFiles.mockResolvedValue([notes]);
+      let handlers!: Handlers;
+      streamViaDaemon.mockImplementation(async (options: any) => {
+        options.onRunCreated('run-focus');
+        handlers = options.handlers;
+        return new Promise<void>(() => {});
+      });
+      renderProjectView({ resolvedDir: '/tmp/projects/project-1' });
+      await waitFor(() => expect(workspaceHarness.tabsState.active).toBe(notes.name));
+      void chatPaneHarness.onSend!('Create the preview image and then the final lesson page.', [], []);
+      await waitFor(() => expect(handlers).toBeTruthy());
+      // The native files DTO stamps the actual write during this run. A stale
+      // fixture mtime would bypass the Write path's turn-window attribution.
+      const writtenImage = { ...referenceImage, mtime: Date.now() };
+
+      let releaseImageRead!: (files: unknown[]) => void;
+      const imageRead = new Promise<unknown[]>(resolve => { releaseImageRead = resolve; });
+      // Production coalesces Write and focus readers of the same /files URL.
+      // The root native Stop recording has a /tmp resolvedDir and an absolute
+      // /private/tmp tool path, so immediate path proof is unavailable but the
+      // subsequent real file-list suffix match can resolve the new image.
+      fetchProjectFiles.mockReturnValueOnce(imageRead).mockReturnValueOnce(imageRead);
+      const readsBeforeEvents = fetchProjectFiles.mock.calls.length;
+      await act(async () => {
+        handlers.onAgentEvent({
+          kind: 'tool_use', id: 'write-reference', name: 'Write',
+          input: { file_path: `/private/tmp/projects/project-1/${referenceImage.name}` },
+        });
+        handlers.onAgentEvent({
+          kind: 'tool_result', toolUseId: 'write-reference',
+          content: 'Wrote the preview image.', isError: false,
+        });
+        handlers.onAgentEvent({ kind: 'artifact_focus', open: referenceImage.name });
+      });
+      expect(fetchProjectFiles.mock.calls.length - readsBeforeEvents).toBe(2);
+      expect(workspaceHarness.requests).toEqual([]);
+      if (laterSelection === 'completion') {
+        fetchProjectFiles.mockResolvedValue([notes, writtenImage, finalPage]);
+        handlers.onDone('The final lesson is ready in index.html.');
+        await waitFor(() => expect(focusedTab()).toBe(finalPage.name));
+      } else if (laterSelection === 'error') {
+        await act(async () => { await handlers.onError(new Error('fixture transport failure')); });
+        await waitFor(() => expect(chatPaneHarness.messages.some(message => message.runStatus === 'failed')).toBe(true));
+      } else if (laterSelection === 'stop') {
+        act(() => chatPaneHarness.onStop!());
+        await waitFor(() => expect(chatPaneHarness.messages.some(message => message.runStatus === 'canceled')).toBe(true));
+      } else if (laterSelection === 'user') {
+        act(() => workspaceHarness.onTabsStateChange!({
+          tabs: [notes.name, 'review.md'], active: 'review.md',
+        }));
+      }
+      const requestsBeforeOldRead = [...workspaceHarness.requests];
+      await act(async () => { releaseImageRead([notes, writtenImage]); });
+      if (laterSelection === 'still-streaming') {
+        expect(focusedTab()).toBe(referenceImage.name);
+        expect(workspaceHarness.requests.length).toBeGreaterThan(requestsBeforeOldRead.length);
+        return;
+      }
+      expect(workspaceHarness.requests).toEqual(requestsBeforeOldRead);
+      if (laterSelection === 'completion') expect(focusedTab()).toBe(finalPage.name);
+      else if (laterSelection === 'user') expect(workspaceHarness.tabsState.active).toBe('review.md');
+    },
+  );
+
 });

@@ -8788,6 +8788,7 @@ export function ProjectView({
       // has selected a turn-level artifact, however, an older Write refresh
       // must not move focus again.
       let completionSelectedAutoOpen = false;
+      let liveFocusClosed = false;
       // A new run gets a clean slate: taking the preview over during the last
       // turn says nothing about this one.
       userTookOverPreviewRef.current = false;
@@ -8895,6 +8896,9 @@ export function ProjectView({
             const moduleFileNames = /\.(jsx|tsx)$/i.test(declaredPath)
               ? await collectReferencedJsxNames(nextFiles, readProjectHtml)
               : undefined;
+            // The file read belongs to this live stream. Completion, failure,
+            // or cancellation must not let its stale focus replace a later choice.
+            if (liveFocusClosed || controller.signal.aborted) return;
             const decision = decideAgentFocusOpen({
               declaredPath,
               projectFiles: nextFiles,
@@ -8981,6 +8985,13 @@ export function ProjectView({
                 const moduleFileNames = /\.(jsx|tsx)$/i.test(filePath)
                   ? await collectReferencedJsxNames(nextFiles, readProjectHtml)
                   : undefined;
+                // Write and explicit focus reads can share pending file I/O.
+                // Neither may take the preview after this stream or user moved on.
+                if (
+                  liveFocusClosed
+                  || controller.signal.aborted
+                  || userTookOverPreviewRef.current
+                ) return;
                 const decision = decideAutoOpenAfterWrite(filePath, nextFiles, {
                   moduleFileNames,
                 });
@@ -9148,6 +9159,7 @@ export function ProjectView({
           });
         },
         onDone: (fullText = '') => {
+          liveFocusClosed = true;
           // The daemon delivers onDone even for a canceled run, so a run
           // superseded by a "send now" interrupt can still land here and must
           // not apply its completion side effects over the replacement. A run
@@ -9419,6 +9431,7 @@ export function ProjectView({
           onProjectsRefresh();
         },
         onError: async (err: Error) => {
+          liveFocusClosed = true;
           // Disconnect-time stamp, used as-is for non-generic-disconnect
           // failures. When the generic-disconnect retry-cap probe below
           // resolves a terminal daemon status, this is advanced to that
