@@ -1,0 +1,60 @@
+.avatars:hover,
+.avatars:focus-within {
+  z-index: 10;
+}
+
+.avatar {
+  outline: none;
+  cursor: default;
+}
+
+.avatar:focus-visible {
+  outline: var(--stroke-thin, 1px) solid var(--blue, #1a74ff);
+  outline-offset: var(--spacing-2, 2px);
+}
+
+.portrait {
+  border: var(--stroke-thin, 1px) solid var(--bg, #fafafa);
+  background: var(--bg-subtle, #ededed);
+  color: var(--text, #494949);
+  font-size: var(--font-size-12, 12px);
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltip {
+  position: absolute;
+  left: 50%;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.tooltip[data-placement='bottom'] {
+  top: 100%;
+  margin-top: var(--spacing-8, 8px);
+}
+
+.tooltip[data-placement='top'] {
+  bottom: 100%;
+  margin-bottom: var(--spacing-8, 8px);
+}
+
+.tooltipText {
+  display: block;
+  width: max-content;
+  max-width: 240px;
+  padding: var(--spacing-4, 4px) var(--spacing-8, 8px);
+  border-radius: var(--radius-medium, 4px);
+  background: var(--text-strong, #202020);
+  color: var(--bg, #fafafa);
+  font-size: var(--font-size-12, 12px);
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
+  transform: translateX(-50%);
+}

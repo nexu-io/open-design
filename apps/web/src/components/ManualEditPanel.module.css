@@ -1,0 +1,56 @@
+/* The inspector sits on the same unpainted app ground as the chat pane.
+   Form fields retain their own surfaces; the outer shell is not a card. */
+.docked {
+  --manual-edit-scrollbar-thumb: color-mix(in srgb, var(--text-faint) 40%, transparent);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.docked :global(.manual-edit-modal.cc-panel) {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  scrollbar-gutter: auto;
+}
+
+.docked :global(.manual-edit-scroll) {
+  scrollbar-width: auto;
+  scrollbar-color: var(--manual-edit-scrollbar-thumb) transparent;
+  scrollbar-gutter: stable;
+}
+
+.docked :global(.manual-edit-scroll::-webkit-scrollbar-thumb) {
+  background: var(--manual-edit-scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.docked :global(.manual-edit-scroll::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+.docked :global(.manual-edit-titlebar) {
+  min-height: 48px;
+  padding: 8px 12px;
+  cursor: default;
+}
+
+.docked :global(.manual-edit-footer) {
+  background: transparent;
+}
+
+.docked :global(.manual-edit-field input),
+.docked :global(.manual-edit-content-inspector .manual-edit-field textarea),
+.docked :global(.manual-edit-field select),
+.docked :global(.manual-edit-modal .cc-row > .cc-value),
+.docked :global(.cc-quad-cell) {
+  border-radius: 12px;
+}

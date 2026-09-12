@@ -720,12 +720,11 @@
 /* The global `button:hover` rule (primitives.css) paints a --border-strong
    stroke on EVERY button hover, and its specificity (0,2,1) outranks the
    viewer's own (0,2,0) :hover rules — so it was the real source of the hover
-   stroke on tabs, toolbar actions and viewport menu rows. Override it back to
+   stroke on tabs and toolbar actions. Override it back to
    transparent here (hover feedback is the gray fill only). `:not(:disabled)`
    lifts each selector to (0,3,0) so it beats the global rule. */
 .viewer-action:hover:not(:disabled),
-.viewer-tab:hover:not(:disabled):not(.active),
-.viewer-viewport-menu-item:hover:not(:disabled) {
+.viewer-tab:hover:not(:disabled):not(.active) {
   border-color: transparent;
 }
 /* Selected tab = the segmented switch thumb: keep its thin border (the
@@ -783,15 +782,6 @@
   padding: 0;
   overflow: hidden;
 }
-/* Collapsed rail claims no column and no divider: the aside unmounts entirely,
-   so the slide fills the pane edge-to-edge and the toolbar toggle is the only
-   affordance left. No sliver of chrome, no border line. */
-.comment-preview-layer-with-deck-rail.comment-preview-layer-deck-rail-collapsed {
-  grid-template-columns: minmax(0, 1fr);
-}
-.deck-thumbnail-toolbar-toggle {
-  flex: 0 0 auto;
-}
 .deck-thumbnail-rail {
   position: relative;
   min-width: 0;
@@ -826,10 +816,6 @@
 .preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .comment-preview-canvas {
   border-left: 0;
   border-radius: 0 var(--deck-device-frame-radius) var(--deck-device-frame-radius) 0;
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail.comment-preview-layer-deck-rail-collapsed .comment-preview-canvas {
-  border-left: 1px solid var(--border-strong);
-  border-radius: var(--deck-device-frame-radius);
 }
 .preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-list {
   gap: 6px;

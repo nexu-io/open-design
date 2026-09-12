@@ -247,16 +247,16 @@
    tab bar, which stays pinned; two sticky bars there would occlude each
    other). */
 .df-batch-bar {
-  margin: 0 20px 8px;
+  margin: 0 0 8px;
   padding: 7px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid var(--accent-soft);
+  border: none;
   border-radius: var(--radius-sm);
-  background: var(--accent-tint);
-  box-shadow: 0 8px 18px -16px color-mix(in srgb, var(--text) 36%, transparent);
+  background: var(--bg-panel);
+  box-shadow: none;
   animation: df-batch-enter 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 @keyframes df-batch-enter {
@@ -301,6 +301,16 @@
    scrolls with the content and paints no background of its own: the panel's
    veil-canvas wash shows through, so only the tab pills read as UI (the old
    sticky near-opaque strip rendered as a full-width gray band). */
+/* The bar over the file grid: what the project is MADE OF on the left (the
+   type switch), what it LOOKS like on the right (a link to its entry page).
+   The two belong together — they are the two ways into the same project — and
+   the row already spans the pane, so the link costs no vertical space. */
+.df-tabbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .df-tabs {
   display: flex;
   align-items: center;
@@ -310,33 +320,66 @@
      content baseline instead of applying a second horizontal inset. */
   padding: 8px 0 10px;
 }
-.df-tab {
-  all: unset;
-  cursor: pointer;
+/* Reads as a tab's quieter sibling — same pill, same type, no fill until it is
+   pointed at — so it sits in the row without competing with the active type. */
+.df-tabbar-preview {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  /* Pill shape wants more horizontal breathing room than the old rounded
-     rectangle. */
-  padding: 6px 14px;
+  flex: 0 1 auto;
+  /* The file name is the only part that may be cut; the icon stays whole. */
+  min-width: 0;
+  padding: 6px 12px;
   border-radius: var(--radius-pill, 999px);
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
+  text-decoration: none;
   transition: color 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.df-tab:hover {
+.df-tabbar-preview:hover {
   color: var(--text-strong);
   background: var(--bg-fill-tertiary);
 }
-.df-tab.active {
-  color: var(--text-strong);
-  background: var(--bg-fill-secondary);
-  font-weight: 600;
-}
-.df-tab:focus-visible {
+.df-tabbar-preview:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 52%, transparent);
   outline-offset: 1px;
+}
+.df-tabbar-preview-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.df-tab {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.df-tab:hover:not(:disabled),
+.df-tab.active {
+  color: var(--text);
+  background: var(--bg-subtle);
+  border-color: transparent;
+  box-shadow: none;
+}
+.df-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .df-tab-count {
   color: var(--text-faint);
@@ -368,7 +411,7 @@
 .df-file-row {
   transition: background 120ms var(--ease-out);
 }
-.df-file-row:hover { background: var(--blue-bg); }
+.df-file-row:hover { background: var(--accent-tint); }
 .df-file-row.active:not(.selected) { background: var(--blue-bg); }
 .df-file-row.active.selected { background: var(--blue); }
 .df-file-row.active:not(.selected) .df-row-name { color: var(--text-strong); }
@@ -427,8 +470,7 @@
   padding: 11px 16px;
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--border-soft);
-  border-radius: 0;
+  border-radius: var(--radius);
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -503,12 +545,11 @@
   text-underline-offset: 2px;
   word-break: break-all;
 }
-.df-row:hover { background: var(--blue-bg); }
+.df-row:hover { background: var(--accent-tint); }
 .df-row.active:not(.selected) { background: var(--blue-bg); color: var(--text); }
 .df-row.active:not(.selected) .df-row-name { color: var(--text-strong); }
 .df-row.selected {
   margin: 2px 8px;
-  border-bottom-color: transparent;
   border-radius: 8px;
   background: var(--blue);
 }
@@ -564,12 +605,9 @@
   position: relative;
 }
 .df-row-icon[data-kind="folder"] { background: var(--bg-muted); color: var(--text-soft); }
-.df-row-icon[data-kind="html"] { background: var(--accent-tint); color: var(--accent-strong); }
-.df-row-icon[data-kind="image"] { background: var(--green-bg); color: var(--green); }
-.df-row-icon[data-kind="code"] { background: #fff7d8; color: #8c6700; }
-.df-row-icon[data-kind="text"] { background: var(--bg-subtle); color: var(--text-muted); }
-.df-row-icon[data-kind="sketch"] { background: var(--purple-bg); color: var(--purple); }
-.df-row-icon[data-kind="stylesheet"] { background: var(--blue-bg); color: var(--blue, var(--accent-strong)); }
+.df-row-icon[data-file-type] {
+  background: color-mix(in srgb, var(--df-file-icon-color) 12%, transparent);
+}
 .df-row-name-wrap {
   display: flex;
   flex-direction: column;
@@ -1084,6 +1122,8 @@ button.df-card-thumb:focus:not(:disabled) {
 .df-card-name-btn {
   all: unset;
   display: block;
+  font-size: 13px;
+  line-height: 18px;
   max-width: 100%;
   min-width: 0;
   cursor: pointer;
@@ -1159,12 +1199,17 @@ button.df-card-thumb:focus:not(:disabled) {
 .df-panel.has-selection .df-card-check { opacity: 1; }
 .df-card-check:hover { background: var(--bg-subtle); color: var(--text); }
 .df-card-check[aria-checked="true"] { color: var(--accent-strong); }
-/* The rename input replaces only the name line; the kind · time sub stays
-   visible below it, so it stretches to the meta-text column width. */
+/* Match the name button's line box and inset so entering rename does not
+   enlarge the caption or shift the timestamp below it. */
 .df-card .df-rename-input {
   align-self: stretch;
-  width: 100%;
+  width: calc(100% + 12px);
+  height: 22px;
   box-sizing: border-box;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 1px 5px;
+  margin: -2px -6px;
 }
 /* Glyph placeholder inside a card thumb (too-large or still-loading HTML):
    reuse the preview-pane placeholder, sized down for the card box. */
@@ -1220,3 +1265,49 @@ button.df-card-thumb:focus:not(:disabled) {
 .df-row-popover button:hover { background: var(--bg-subtle); }
 .df-row-popover button.danger { color: var(--red); }
 .df-row-popover button.danger:hover { background: var(--red-bg); }
+
+/* Page cards use the same separate cover and caption as All Projects. */
+.df-card--page,
+.df-card--page:hover {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.df-card--page .df-card-thumb {
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+}
+.df-card--page.selected .df-card-thumb,
+.df-card--page.active .df-card-thumb {
+  border-color: var(--blue);
+}
+.df-card--page .df-card-meta {
+  gap: 8px;
+  padding: 8px 8px 0;
+}
+.df-card--page .df-card-meta-text {
+  padding: 0;
+  gap: 1px;
+}
+.df-card--page .df-row-menu:not(.df-row-menu-placeholder) {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg);
+  z-index: 2;
+}
+
+.df-topbar-left { gap: 12px; }
+.df-topbar-left .df-tabbar { min-width: 0; }
+.df-topbar-left .df-tabs {
+  padding: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}

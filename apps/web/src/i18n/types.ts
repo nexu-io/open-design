@@ -3937,6 +3937,7 @@ export interface Dict {
   'manualEdit.title': string;
   'manualEdit.fallbackTitle': string;
   'manualEdit.movePanel': string;
+  'manualEdit.resizePanel': string;
   'manualEdit.editParams': string;
   'manualEdit.closePanel': string;
   'manualEdit.selectLayer': string;

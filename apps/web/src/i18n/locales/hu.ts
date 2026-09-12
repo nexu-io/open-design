@@ -3088,6 +3088,7 @@ export const hu: Dict = {
   'manualEdit.title': 'Kézi szerkesztő',
   'manualEdit.fallbackTitle': 'Szerkesztés',
   'manualEdit.movePanel': 'Szerkesztőpanel áthelyezése',
+  "manualEdit.resizePanel": "Szerkesztőpanel átméretezése",
   'manualEdit.editParams': 'Paraméterek szerkesztése',
   'manualEdit.closePanel': 'Szerkesztőpanel bezárása',
   'manualEdit.selectLayer': 'Válassz egy réteget',

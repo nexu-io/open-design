@@ -3088,6 +3088,7 @@ export const fa: Dict = {
   'manualEdit.title': 'ویرایشگر دستی',
   'manualEdit.fallbackTitle': 'ویرایش',
   'manualEdit.movePanel': 'جابه‌جایی پنل ویرایش',
+  "manualEdit.resizePanel": "تغییر عرض پنل ویرایش",
   'manualEdit.editParams': 'ویرایش پارامترها',
   'manualEdit.closePanel': 'بستن پنل ویرایش',
   'manualEdit.selectLayer': 'یک لایه انتخاب کنید',

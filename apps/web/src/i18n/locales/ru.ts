@@ -3088,6 +3088,7 @@ export const ru: Dict = {
   'manualEdit.title': 'Ручной редактор',
   'manualEdit.fallbackTitle': 'Редактировать',
   'manualEdit.movePanel': 'Переместить панель редактирования',
+  "manualEdit.resizePanel": "Изменить ширину панели редактирования",
   'manualEdit.editParams': 'Изменить параметры',
   'manualEdit.closePanel': 'Закрыть панель редактирования',
   'manualEdit.selectLayer': 'Выберите слой',

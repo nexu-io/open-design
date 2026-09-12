@@ -3088,6 +3088,7 @@ export const ko: Dict = {
   'manualEdit.title': '수동 편집기',
   'manualEdit.fallbackTitle': '편집',
   'manualEdit.movePanel': '편집 패널 이동',
+  "manualEdit.resizePanel": "편집 패널 너비 조절",
   'manualEdit.editParams': '매개변수 편집',
   'manualEdit.closePanel': '편집 패널 닫기',
   'manualEdit.selectLayer': '레이어 선택',

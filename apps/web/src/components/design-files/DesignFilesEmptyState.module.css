@@ -37,3 +37,32 @@
 .centerFeed {
   align-self: stretch;
 }
+
+/* The open question is a title, not a step: it wraps inside the ring's box
+   instead of being ellipsized the way a file path is, and stops at three lines
+   so it can never outgrow the circle. */
+.question {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+/* The terminal heading of a run that stopped. Same size and colour as the
+   question — both are "why the ring is holding still" — on one line, since
+   "Run failed" / "Canceled" is a state, not a sentence. */
+.failure {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

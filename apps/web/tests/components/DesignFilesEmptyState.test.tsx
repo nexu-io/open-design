@@ -60,8 +60,6 @@ describe('DesignFilesEmptyState', () => {
 
     const feed = screen.getByTestId('run-step-feed');
     expect([...feed.children].map((li) => li.textContent)).toEqual([
-      '读取 site.css',
-      '编辑 index.html',
       'Bash pnpm build',
     ]);
     const current = [...feed.children].filter(
@@ -70,21 +68,84 @@ describe('DesignFilesEmptyState', () => {
     expect(current.map((li) => li.textContent)).toEqual(['Bash pnpm build']);
   });
 
-  it('falls back to "thinking" while the turn has called nothing yet', () => {
-    renderState({ running: true, steps: [] });
-
-    expect(screen.getByText('思考中')).toBeTruthy();
+  // Before the first tool call the ring says what the CHAT footer is saying —
+  // all running phases use the execution header’s single status label.
+  it('names the run phase while the turn has called nothing yet', () => {
+    renderState({ running: true, steps: [], phase: 'preparing' });
+    expect(screen.getByText('进行中')).toBeTruthy();
     expect(screen.queryByTestId('design-files-empty-trail')).toBeNull();
+
+    cleanup();
+    renderState({ running: true, steps: [], phase: 'thinking' });
+    expect(screen.getByText('进行中')).toBeTruthy();
+
+    cleanup();
+    renderState({ running: true, steps: [], phase: 'working' });
+    expect(screen.getByText('进行中')).toBeTruthy();
   });
 
   // The ring reports the agent's work. The prompt the user just typed is
   // already in the chat column, and echoing it here both put user input inside
   // the circle and pushed the status line down a row.
   it('keeps the user\'s own prompt out of the ring, status on the first line', () => {
-    renderState({ running: true, steps: [] });
+    renderState({ running: true, steps: [], phase: 'thinking' });
 
     const center = screen.getByTestId('design-files-empty-chat');
-    expect(center.textContent).toBe('思考中');
+    expect(center.textContent).toBe('进行中');
+  });
+
+  // A turn that ended by ASKING is finished but not done: the run stopped
+  // because it needs an answer, and the ring names what the wait is about
+  // instead of going blank beside an open form in the chat column.
+  // The chat column heads a dead run "运行失败"; the ring beside it used to go
+  // blank, which reads as "nothing happened" rather than "it broke".
+  it('names a failed run the way the chat card heads it', () => {
+    renderState({ running: false, failure: 'failed' });
+
+    expect(screen.getByTestId('design-files-empty-failure').textContent).toBe('运行失败');
+  });
+
+  it('names a canceled run with the chat\'s own word for it', () => {
+    renderState({ running: false, failure: 'canceled' });
+
+    expect(screen.getByTestId('design-files-empty-failure').textContent).toBe('已取消');
+  });
+
+  // The steps are what is happening NOW; a failure is how the last run ended.
+  it('keeps the failure out of the ring while a new run is in flight', () => {
+    renderState({ running: true, steps: [], phase: 'thinking', failure: 'failed' });
+
+    expect(screen.queryByTestId('design-files-empty-failure')).toBeNull();
+    expect(screen.getByText('进行中')).toBeTruthy();
+  });
+
+  // A turn that broke mid-ask stopped for the failure, not for the answer.
+  it('puts the failure ahead of an open question', () => {
+    renderState({ running: false, failure: 'failed', question: '开场三问' });
+
+    expect(screen.getByTestId('design-files-empty-failure').textContent).toBe('运行失败');
+    expect(screen.queryByTestId('design-files-empty-question')).toBeNull();
+  });
+
+  it('names the open question once the run is over', () => {
+    renderState({ running: false, question: '开场三问——补齐真实故事的关键信息' });
+
+    expect(screen.getByTestId('design-files-empty-question').textContent).toBe(
+      '开场三问——补齐真实故事的关键信息',
+    );
+  });
+
+  // While it works, the work is the news; the form is still on screen in the
+  // chat column either way.
+  it('keeps the steps in the ring while the run is still going', () => {
+    renderState({
+      running: true,
+      steps: [step('1', 'edit', 'index.html')],
+      question: '开场三问',
+    });
+
+    expect(screen.getByText('编辑 index.html')).toBeTruthy();
+    expect(screen.queryByTestId('design-files-empty-question')).toBeNull();
   });
 
   // With no run in flight the ring is just the field turning. The copy that

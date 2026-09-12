@@ -7,24 +7,32 @@ import styles from './QueuedSendStack.module.css';
 type Banner = { id: string; content: ReactNode };
 type DisplayBanner = Banner & { phase: 'enter' | 'ready' | 'exit'; depth: number };
 const CLOSE_MS = 250;
-const SPREAD_GAP = 2;
-const MAX_VISIBLE_BANNERS = 6;
+const SPREAD_GAP = 4;
+// 22px controls, 6px vertical padding on each side, and the card's two borders.
+const MIN_BANNER_HEIGHT = 36;
+const FULLY_VISIBLE_BANNERS = 5;
+
+function expandedHeightLimit(bannerHeight: number): number {
+  // Five complete cards and their gaps, then half of the sixth card.
+  return FULLY_VISIBLE_BANNERS * (bannerHeight + SPREAD_GAP) + bannerHeight / 2;
+}
 
 /** Presentation only: collapsed overflow never removes a queued message. */
-export function QueuedSendStack({ items, label, containerRef, dragging, onDragLeave }: {
+export function QueuedSendStack({ items, label, containerRef, dragging, onDragLeave, onExpandedChange }: {
   items: Banner[];
   label: string;
   containerRef?: MutableRefObject<HTMLDivElement | null>;
   dragging: boolean;
   onDragLeave: DragEventHandler<HTMLDivElement>;
+  onExpandedChange?: (expanded: boolean) => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [banners, setBanners] = useState<DisplayBanner[]>([]);
   const [pointerInside, setPointerInside] = useState(false);
   const [focusInside, setFocusInside] = useState(false);
-  const [bannerHeight, setBannerHeight] = useState(52);
-  const [availableHeight, setAvailableHeight] = useState(MAX_VISIBLE_BANNERS * (52 + SPREAD_GAP) - SPREAD_GAP);
+  const [bannerHeight, setBannerHeight] = useState(MIN_BANNER_HEIGHT);
+  const [availableHeight, setAvailableHeight] = useState(expandedHeightLimit(MIN_BANNER_HEIGHT));
   const exitTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const latestItems = useRef(items);
   latestItems.current = items;
@@ -79,15 +87,20 @@ export function QueuedSendStack({ items, label, containerRef, dragging, onDragLe
   }, []);
 
   const mounted = banners.length > 0;
+  const expanded = mounted && liveCount > 0 && spread;
+  // The host's floating controls yield while this stack occupies the transcript.
+  useLayoutEffect(() => { onExpandedChange?.(expanded); }, [expanded, onExpandedChange]);
+  useLayoutEffect(() => () => { onExpandedChange?.(false); }, [onExpandedChange]);
+
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
     const measure = () => {
       const contents = root.querySelectorAll<HTMLElement>('[data-queue-banner-content]');
-      setBannerHeight(Math.max(52, ...Array.from(contents, (node) => node.scrollHeight + 2)));
+      setBannerHeight(Math.max(MIN_BANNER_HEIGHT, ...Array.from(contents, (node) => node.scrollHeight + 2)));
       const bottom = root.getBoundingClientRect().bottom;
       const paneTop = root.closest('.pane')?.getBoundingClientRect().top ?? 0;
-      setAvailableHeight(Math.max(52, bottom - paneTop - 4));
+      setAvailableHeight(Math.max(MIN_BANNER_HEIGHT, bottom - paneTop - 4));
     };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
@@ -128,12 +141,12 @@ export function QueuedSendStack({ items, label, containerRef, dragging, onDragLe
       role="region"
       aria-label={label}
       tabIndex={0}
-      data-expanded={spread}
+      data-expanded={expanded}
       style={{
         '--chat-queue-banner-height': `${bannerHeight}px`,
         '--chat-queue-reserve': `${bannerHeight + Math.min(Math.max(count - 1, 0), 2) * 12}px`,
         '--chat-queue-column-height': `${fullHeight}px`,
-        '--chat-queue-viewport-height': `${Math.min(fullHeight, MAX_VISIBLE_BANNERS * (bannerHeight + SPREAD_GAP) - SPREAD_GAP, availableHeight)}px`,
+        '--chat-queue-viewport-height': `${Math.min(fullHeight, expandedHeightLimit(bannerHeight), availableHeight)}px`,
       } as CSSProperties}
       onPointerEnter={(event) => { if (event.pointerType !== 'touch') setPointerInside(true); }}
       onFocusCapture={() => setFocusInside(true)}

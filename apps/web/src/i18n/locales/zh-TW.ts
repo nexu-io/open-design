@@ -3299,6 +3299,7 @@ export const zhTW: Dict = {
   "manualEdit.title": "手動編輯器",
   "manualEdit.fallbackTitle": "編輯",
   "manualEdit.movePanel": "移動編輯面板",
+  "manualEdit.resizePanel": "調整編輯欄寬度",
   "manualEdit.editParams": "編輯參數",
   "manualEdit.closePanel": "關閉編輯面板",
   "manualEdit.selectLayer": "選取圖層",

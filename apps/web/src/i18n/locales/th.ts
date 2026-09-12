@@ -3088,6 +3088,7 @@ export const th: Dict = {
   'manualEdit.title': 'กล่องควบคุม',
   'manualEdit.fallbackTitle': 'แก้ไข',
   'manualEdit.movePanel': 'ย้ายแผงแก้ไข',
+  "manualEdit.resizePanel": "ปรับความกว้างแผงแก้ไข",
   'manualEdit.editParams': 'แก้ไขพารามิเตอร์',
   'manualEdit.closePanel': 'ปิดแผงแก้ไข',
   'manualEdit.selectLayer': 'เลือกเลเยอร์ขึ้นมา',

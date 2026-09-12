@@ -3088,6 +3088,7 @@ export const esES: Dict = {
   'manualEdit.title': 'Editor manual',
   'manualEdit.fallbackTitle': 'Editar',
   'manualEdit.movePanel': 'Mover el panel de edición',
+  "manualEdit.resizePanel": "Cambiar el ancho del panel de edición",
   'manualEdit.editParams': 'Editar parámetros',
   'manualEdit.closePanel': 'Cerrar el panel de edición',
   'manualEdit.selectLayer': 'Selecciona una capa',

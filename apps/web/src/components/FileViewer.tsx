@@ -1,8 +1,26 @@
+import { WorkspaceAccountDock } from './workspace/WorkspaceAccountDock';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { CenteredLoader } from './Loading';
-import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
+import {
+  APP_CHROME_FILE_ACTIONS_ID,
+  APP_CHROME_FILE_ACTIONS_SELECTOR,
+  APP_CHROME_TAB_ACTION_ID,
+  APP_CHROME_TAB_ACTION_SELECTOR,
+  APP_CHROME_TAB_LEAD_ID,
+  APP_CHROME_TAB_LEAD_SELECTOR,
+  APP_CHROME_VIEW_TABS_ID,
+  APP_CHROME_VIEW_TABS_SELECTOR,
+} from './AppChromeHeader';
+import { HybridTabLabel } from './ui/hybrid-tabs';
+import { PreviewUserAvatars } from './workspace/PreviewUserAvatars';
+import {
+  consumeChromeViewModeRequest,
+  publishChromeViewMode,
+  resetChromeViewMode,
+  usePendingChromeViewMode,
+} from './workspace/chrome-view-mode';
 import {
   commentSendCompleted,
   commentSendSucceeded,
@@ -264,6 +282,7 @@ import type {
   PreviewCommentTarget,
 } from '../types';
 import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
+import { useWorkspaceEditDock } from './workspace/WorkspaceEditLayout';
 import {
   applyManualEditPatch,
   isManualEditFullHtmlDocument,
@@ -285,6 +304,21 @@ import {
 function resolveChromeActionsHost(): HTMLElement | null {
   return document.querySelector<HTMLElement>(APP_CHROME_FILE_ACTIONS_SELECTOR)
     ?? document.getElementById(APP_CHROME_FILE_ACTIONS_ID);
+}
+
+function resolveChromeViewTabsHost(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(APP_CHROME_VIEW_TABS_SELECTOR)
+    ?? document.getElementById(APP_CHROME_VIEW_TABS_ID);
+}
+
+function resolveChromeTabLeadHost(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(APP_CHROME_TAB_LEAD_SELECTOR)
+    ?? document.getElementById(APP_CHROME_TAB_LEAD_ID);
+}
+
+function resolveChromeTabActionHost(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(APP_CHROME_TAB_ACTION_SELECTOR)
+    ?? document.getElementById(APP_CHROME_TAB_ACTION_ID);
 }
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -1000,6 +1034,15 @@ function setMarkdownCodeBlockCopiedState(block: HTMLElement, copied: boolean, t:
   existingToast?.remove();
 }
 
+/**
+ * The preview's viewport, as one icon-only button that CYCLES.
+ *
+ * It used to be a labelled trigger with a chevron opening a three-item menu.
+ * Per product it is now the glyph alone, and each click advances to the next
+ * preset — desktop → tablet → phone → desktop. The set is three, so a menu
+ * cost a click and a popover to say what one click can, and the glyph itself
+ * already reports the current viewport (the tooltip names it).
+ */
 function PreviewViewportControls({
   viewport,
   onViewport,
@@ -1011,79 +1054,36 @@ function PreviewViewportControls({
   t: TranslateFn;
   tabIndex?: number;
 }) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const listboxId = useId();
-  const activePreset =
-    PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
+  const activeIndex = Math.max(
+    0,
+    PREVIEW_VIEWPORT_PRESETS.findIndex((preset) => preset.id === viewport),
+  );
+  const activePreset = PREVIEW_VIEWPORT_PRESETS[activeIndex]!;
+  const nextPreset =
+    PREVIEW_VIEWPORT_PRESETS[(activeIndex + 1) % PREVIEW_VIEWPORT_PRESETS.length]!;
 
   return (
-    <div className="viewer-viewport-switcher" ref={menuRef}>
+    <div className="viewer-viewport-switcher">
       <button
         type="button"
-        className={`viewer-action viewer-viewport-trigger${open ? '' : ' od-tooltip'}`}
+        className="viewer-action viewer-viewport-trigger od-tooltip"
+        // The name says what the control is for; the tooltip and title say
+        // which viewport it is on, the way every other icon-only control in
+        // this row reports its state.
         aria-label={t('fileViewer.viewportAria')}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listboxId : undefined}
         title={t(activePreset.titleKey)}
-        data-tooltip={open ? undefined : t(activePreset.titleKey)}
+        data-tooltip={t(activePreset.titleKey)}
         data-tooltip-placement="bottom"
+        data-viewport={activePreset.id}
         tabIndex={tabIndex}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => onViewport(nextPreset.id)}
       >
         <RemixIcon
           name={previewViewportIcon(activePreset.id)}
           size={14}
           className="viewer-viewport-icon"
         />
-        <span>{t(activePreset.labelKey)}</span>
-        <RemixIcon name="arrow-down-s-line" size={14} />
       </button>
-      {open ? (
-        <div className="viewer-viewport-menu" id={listboxId} role="listbox" aria-label={t('fileViewer.viewportAria')}>
-          {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
-            const selected = viewport === preset.id;
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                className={`viewer-viewport-menu-item${selected ? ' active' : ''}`}
-                role="option"
-                aria-selected={selected}
-                title={t(preset.titleKey)}
-                onClick={() => {
-                  onViewport(preset.id);
-                  setOpen(false);
-                }}
-              >
-                <span className="viewer-viewport-menu-label">
-                  <RemixIcon name={previewViewportIcon(preset.id)} size={14} />
-                  <span>{t(preset.labelKey)}</span>
-                </span>
-                {selected ? <Icon name="check" size={13} /> : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1730,7 +1730,7 @@ interface Props {
   manualEditEntryAllowed?: boolean;
 }
 
-function FileViewerLoadingSkeleton() {
+function FileViewerLoadingPlaceholder() {
   const t = useT();
   return (
     <div
@@ -1738,30 +1738,7 @@ function FileViewerLoadingSkeleton() {
       role="status"
       aria-busy="true"
       aria-label={t('fileViewer.loading')}
-    >
-      <div className="viewer-loading-stage" aria-hidden="true">
-        <span className="viewer-loading-card viewer-loading-card-back viewer-loading-card-back-two" />
-        <span className="viewer-loading-card viewer-loading-card-back viewer-loading-card-back-one" />
-        <span className="viewer-loading-card viewer-loading-card-main">
-          <span className="viewer-loading-kicker" />
-          <span className="viewer-loading-title" />
-          <span className="viewer-loading-title viewer-loading-title-short" />
-          <span className="viewer-loading-rule" />
-          <span className="viewer-loading-content">
-            <span className="viewer-loading-copy">
-              <span className="viewer-loading-line" />
-              <span className="viewer-loading-line viewer-loading-line-medium" />
-              <span className="viewer-loading-line viewer-loading-line-short" />
-            </span>
-            <span className="viewer-loading-chart">
-              <span className="viewer-loading-bar viewer-loading-bar-one" />
-              <span className="viewer-loading-bar viewer-loading-bar-two" />
-              <span className="viewer-loading-bar viewer-loading-bar-three" />
-            </span>
-          </span>
-        </span>
-      </div>
-    </div>
+    />
   );
 }
 
@@ -1854,7 +1831,7 @@ export const FileViewer = memo(function FileViewer({
         </div>
       );
     }
-    return <FileViewerLoadingSkeleton />;
+    return <FileViewerLoadingPlaceholder />;
   }
 
   if (rendererMatch?.renderer.id === 'html' || rendererMatch?.renderer.id === 'deck-html') {
@@ -2272,36 +2249,39 @@ export function LiveArtifactViewer({
       {((node: ReactNode) => (
         chromeActionsHost ? createPortal(node, chromeActionsHost) : node
       ))(
-        <div className="present-wrap chrome-present-wrap" ref={presentWrapRef}>
-          <button
-            className="chrome-action chrome-action-secondary chrome-action-icon present-trigger od-tooltip"
-            aria-haspopup="menu"
-            aria-expanded={presentMenuOpen}
-            aria-label={t('fileViewer.present')}
-            data-tooltip={t('fileViewer.present')}
-            data-tooltip-placement="bottom"
-            title={t('fileViewer.present')}
-            onClick={() => setPresentMenuOpen((v) => !v)}
-          >
-            <RemixIcon name="slideshow-3-line" size={15} />
-          </button>
-          {presentMenuOpen ? (
-            <div className="present-menu" role="menu">
-              <button role="menuitem" onClick={presentInThisTab}>
-                <span className="present-icon"><RemixIcon name="eye-line" size={14} /></span>{' '}
-                {t('fileViewer.presentInTab')}
-              </button>
-              <button role="menuitem" onClick={presentFullscreen}>
-                <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
-                {t('fileViewer.presentFullscreen')}
-              </button>
-              <button role="menuitem" onClick={presentNewTab}>
-                <span className="present-icon"><RemixIcon name="share-forward-line" size={14} /></span>{' '}
-                {t('fileViewer.presentNewTab')}
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <>
+          <PreviewUserAvatars />
+          <div className="present-wrap chrome-present-wrap" ref={presentWrapRef}>
+            <button
+              className="chrome-action chrome-action-secondary chrome-action-icon present-trigger od-tooltip"
+              aria-haspopup="menu"
+              aria-expanded={presentMenuOpen}
+              aria-label={t('fileViewer.present')}
+              data-tooltip={t('fileViewer.present')}
+              data-tooltip-placement="bottom"
+              title={t('fileViewer.present')}
+              onClick={() => setPresentMenuOpen((v) => !v)}
+            >
+              <RemixIcon name="slideshow-3-line" size={15} />
+            </button>
+            {presentMenuOpen ? (
+              <div className="present-menu" role="menu">
+                <button role="menuitem" onClick={presentInThisTab}>
+                  <span className="present-icon"><RemixIcon name="eye-line" size={14} /></span>{' '}
+                  {t('fileViewer.presentInTab')}
+                </button>
+                <button role="menuitem" onClick={presentFullscreen}>
+                  <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
+                  {t('fileViewer.presentFullscreen')}
+                </button>
+                <button role="menuitem" onClick={presentNewTab}>
+                  <span className="present-icon"><RemixIcon name="share-forward-line" size={14} /></span>{' '}
+                  {t('fileViewer.presentNewTab')}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </>
       )}
       {inTabPresent ? (
         <button
@@ -7700,10 +7680,8 @@ function HtmlViewer({
       | 'slide_next'
       | 'slide_reset'
       | 'thumbnail_select'
-      | 'thumbnail_rail_toggle'
       | 'speaker_notes_edit',
     extra?: {
-      action?: 'expand' | 'collapse';
       slide_index?: number;
       slide_count?: number;
     },
@@ -7715,7 +7693,6 @@ function HtmlViewer({
       element,
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-      ...(extra?.action ? { action: extra.action } : {}),
       ...(typeof extra?.slide_index === 'number'
         ? { slide_index: extra.slide_index }
         : {}),
@@ -7737,6 +7714,7 @@ function HtmlViewer({
     });
   };
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
+  const selectModeRef = useRef<((next: 'preview' | 'source') => void) | null>(null);
   const sourceSnapshotRefreshKey = htmlSourceSnapshotRefreshKey(file, filesRefreshKey);
   const [initialSourceSnapshot] = useState(() => (
     liveHtml === undefined && sourceAuthorizationScopeKey
@@ -8192,6 +8170,28 @@ function HtmlViewer({
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
+  /* 演示 is its own axis, not merely "not editing". On this branch 标记 and
+     评论 both EXIT manual edit (see activateDrawTool / activateCommentTool), so
+     folding the dock on `manualEditMode` would have the tools fold themselves
+     away the moment you used one. A freshly opened file arrives presenting:
+     the page is live and clickable with nothing armed over it. */
+  const [canvasPresentMode, setCanvasPresentMode] = useState(true);
+  const canvasDockRef = useRef<HTMLDivElement | null>(null);
+  const canvasPresentTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const canvasEditToolsId = useId();
+  const canvasPresentToolsId = useId();
+  const [canvasDockSwitchPending, setCanvasDockSwitchPending] = useState(false);
+  const canvasDockSwitchPendingRef = useRef(false);
+  const canvasDockSwitchSequenceRef = useRef(0);
+  useEffect(() => {
+    // A pending save must not reopen tools in a different file or workspace.
+    canvasDockSwitchSequenceRef.current += 1;
+    canvasDockSwitchPendingRef.current = false;
+    setCanvasDockSwitchPending(false);
+    setCanvasPresentMode(true);
+    setPresentMenuOpen(false);
+    return () => { canvasDockSwitchSequenceRef.current += 1; };
+  }, [fileViewportKey, workspaceActive]);
   useEffect(() => {
     onRetainActivityChange?.(file.name, manualEditMode);
     return () => onRetainActivityChange?.(file.name, false);
@@ -8658,6 +8658,13 @@ function HtmlViewer({
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
+  const manualEditDockOwner = useId();
+  const manualEditDock = useWorkspaceEditDock(
+    manualEditDockOwner,
+    workspaceActive && mode === 'preview' && manualEditMode
+      && Boolean(selectedManualEditTarget || manualEditPageStylesOpen),
+  );
+  const manualEditDocked = manualEditDock !== null;
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
   const [manualEditDraftDirty, setManualEditDraftDirty] = useState(false);
   const selectedManualEditTargetIdRef = useRef<string | null>(null);
@@ -9095,7 +9102,6 @@ function HtmlViewer({
   // Brief "Press Esc to exit" hint shown in the main window whenever a
   // presentation (fullscreen stage + presenter popup) starts.
   const [presentEscHint, setPresentEscHint] = useState(false);
-  const [deckThumbnailsCollapsed, setDeckThumbnailsCollapsed] = useState(false);
   const [speakerNotesEditMode, setSpeakerNotesEditMode] = useState(false);
   const [speakerNotesDraft, setSpeakerNotesDraft] = useState('');
   const [speakerNotesSaving, setSpeakerNotesSaving] = useState(false);
@@ -9103,13 +9109,44 @@ function HtmlViewer({
   const speakerNotesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const boardPreviewScaleOptions = localCommentSideDockActive ? { canvasPadding: 0 } : undefined;
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const [shareHost, setShareHost] = useState<HTMLElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     if (!workspaceActive || typeof document === 'undefined') {
       setChromeActionsHost(null);
+      setShareHost(null);
       return;
     }
     setChromeActionsHost(resolveChromeActionsHost());
+    setShareHost(document.querySelector<HTMLElement>('[data-app-chrome-share="true"]'));
+  }, [workspaceActive]);
+  const [viewTabsHost, setViewTabsHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!workspaceActive || typeof document === 'undefined') {
+      setViewTabsHost(null);
+      return;
+    }
+    setViewTabsHost(resolveChromeViewTabsHost());
+  }, [workspaceActive]);
+  const [tabLeadHost, setTabLeadHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!workspaceActive || typeof document === 'undefined') {
+      setTabLeadHost(null);
+      return;
+    }
+    setTabLeadHost(resolveChromeTabLeadHost());
+  }, [workspaceActive]);
+  // The active tab's own slot. It lives INSIDE that tab, so it is torn down
+  // and rebuilt whenever the active tab changes — but so is `workspaceActive`
+  // for every viewer involved, and effects run after the commit that mounted
+  // the new tab, so this resolves against the slot that is actually on screen.
+  const [tabActionHost, setTabActionHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!workspaceActive || typeof document === 'undefined') {
+      setTabActionHost(null);
+      return;
+    }
+    setTabActionHost(resolveChromeTabActionHost());
   }, [workspaceActive]);
 
   useEffect(() => {
@@ -11815,8 +11852,8 @@ function HtmlViewer({
     }
     const ok = await flushManualEditStyleSave();
     if (!ok) return;
-    if (selectedManualEditTarget) void clearManualEditTargetSelection();
-    else setManualEditPageStylesOpen(false);
+    if (selectedManualEditTarget) await clearManualEditTargetSelection();
+    setManualEditPageStylesOpen(false);
   }
 
   function manualEditContentPatchForDraft(
@@ -11874,8 +11911,8 @@ function HtmlViewer({
     }
     const ok = await flushManualEditStyleSave();
     if (!ok) return;
-    if (selectedManualEditTarget) void clearManualEditTargetSelection();
-    else setManualEditPageStylesOpen(false);
+    if (selectedManualEditTarget) await clearManualEditTargetSelection();
+    setManualEditPageStylesOpen(manualEditDocked);
   }
 
   async function resetManualEditPanelDraft() {
@@ -11912,11 +11949,11 @@ function HtmlViewer({
   async function cancelManualEditPanel() {
     if (manualEditTextSessionIdRef.current) await finishManualEditTextSession(false);
     if (selectedManualEditTarget) {
-      void clearManualEditTargetSelection();
+      await clearManualEditTargetSelection();
     } else {
       cancelManualEditStyleDraft();
-      setManualEditPageStylesOpen(false);
     }
+    setManualEditPageStylesOpen(manualEditDocked);
   }
 
   async function applyManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {
@@ -12556,19 +12593,15 @@ function HtmlViewer({
 
   useEffect(() => {
     if (!workspaceActive || !presentMenuOpen) return;
-    const onPointer = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      if (target.closest('.present-wrap')) return;
-      setPresentMenuOpen(false);
-    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPresentMenuOpen(false);
+      if (e.key !== 'Escape') return;
+      setPresentMenuOpen(false);
+      if (canvasDockRef.current?.contains(document.activeElement)) {
+        canvasPresentTriggerRef.current?.focus();
+      }
     };
-    document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
     };
   }, [presentMenuOpen, workspaceActive]);
@@ -12612,7 +12645,7 @@ function HtmlViewer({
     if (!workspaceActive || !deployMenuOpen) return;
     const onDocClick = (e: MouseEvent) => {
       if (!shareRef.current) return;
-      if (shareRef.current.contains(e.target as Node)) return;
+      if (shareRef.current.contains(e.target as Node) || shareHost?.contains(e.target as Node)) return;
       setDeployMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -12625,7 +12658,7 @@ function HtmlViewer({
       document.removeEventListener('mousedown', onDocClick);
       document.removeEventListener('keydown', onKey);
     };
-  }, [deployMenuOpen, workspaceActive]);
+  }, [deployMenuOpen, workspaceActive, shareHost]);
 
   useEffect(() => {
     if (!workspaceActive || !inTabPresent) return;
@@ -13181,12 +13214,40 @@ function HtmlViewer({
     });
   }
 
+  // 预览 and 代码 are two views of one surface drawn by two components: the
+  // row's 预览 tab belongs to FileWorkspace, this 代码 tab is portaled in. Tell
+  // the row which one is current so only that one carries its label; hand it
+  // back to 预览 when this viewer stops owning the tab.
+  useEffect(() => {
+    if (!viewTabsHost || !workspaceActive) return;
+    publishChromeViewMode(mode);
+    return () => resetChromeViewMode();
+  }, [viewTabsHost, workspaceActive, mode]);
+
+  // The other direction: clicking 预览 up in the row is a selection, not a
+  // no-op — it has to pull this viewer out of source view, or 代码 sits there
+  // expanded beside an active 预览. Keyed on the request's nonce so this reacts
+  // to a fresh ask and never to its own published mode.
+  const pendingChromeViewMode = usePendingChromeViewMode();
+  useEffect(() => {
+    if (!viewTabsHost || !workspaceActive) return;
+    if (pendingChromeViewMode === null) return;
+    // Taking it clears it, so this runs once per ask and never answers its own
+    // published mode. A viewer that mounts INTO an outstanding request (the
+    // 代码 click that switched panes to get here) answers it on its first
+    // commit, which is the case a change-detecting signal could not serve.
+    const requested = consumeChromeViewModeRequest();
+    if (requested) selectModeRef.current?.(requested);
+  }, [pendingChromeViewMode, viewTabsHost, workspaceActive]);
+
   function selectMode(nextMode: 'preview' | 'source') {
     // Read-only viewer of a team-shared project can preview but not inspect source.
     if (viewerOnly && nextMode === 'source') return;
     if (nextMode === 'source') setDrawOverlayOpen(false);
     setMode(nextMode);
   }
+  // Declared after the effect above, which reaches it through this ref.
+  selectModeRef.current = selectMode;
 
   function activateBoard(nextTool?: BoardTool) {
     setMode('preview');
@@ -13226,12 +13287,51 @@ function HtmlViewer({
     setBoardPreviewIndex(null);
   }
 
+  function exitCanvasPresentMode() {
+    setPresentMenuOpen(false);
+    setCanvasPresentMode(false);
+  }
+
+  async function toggleCanvasPresentationTools() {
+    if (manualEditActivationPendingRef.current || canvasDockSwitchPendingRef.current) return;
+    if (presentMenuOpen) {
+      setPresentMenuOpen(false);
+      return;
+    }
+    const sequence = ++canvasDockSwitchSequenceRef.current;
+    canvasDockSwitchPendingRef.current = true;
+    setCanvasDockSwitchPending(true);
+    try {
+      // Opening presentation tools is a mode switch, not permission to drop an
+      // unfinished inline edit. Keep editing and its error visible on failure.
+      if (manualEditMode && !(await requestManualEditSafeExitRef.current())) return;
+      if (sequence !== canvasDockSwitchSequenceRef.current) return;
+      capturePreviewScrollPosition();
+      setZoomMenuOpen(false);
+      setCommentPanelOpen(false);
+      setCommentCreateMode(false);
+      setBoardMode(false);
+      setInspectMode(false);
+      setDrawOverlayOpen(false);
+      closeArtifactToolMenus();
+      setCanvasPresentMode(true);
+      setPresentMenuOpen(true);
+      fireArtifactHeaderClick('present_dropdown');
+    } finally {
+      if (sequence === canvasDockSwitchSequenceRef.current) {
+        canvasDockSwitchPendingRef.current = false;
+        setCanvasDockSwitchPending(false);
+      }
+    }
+  }
+
   function closeArtifactToolMenus() {
     setAgentToolsOpen(false);
   }
 
   function activateDrawTool() {
-    if (viewerOnly) return; // read-only viewer: mark (annotate) is an edit action
+    if (viewerOnly || canvasDockSwitchPendingRef.current) return; // read-only viewer: mark is an edit action
+    exitCanvasPresentMode();
     fireArtifactToolbarClick('mark');
     const next = !drawOverlayOpen;
     if (!next) {
@@ -13260,6 +13360,8 @@ function HtmlViewer({
   }
 
   function activateCommentTool() {
+    if (canvasDockSwitchPendingRef.current) return;
+    exitCanvasPresentMode();
     fireArtifactToolbarClick('comment');
     capturePreviewScrollPosition();
     if (boardMode && !commentCreateMode && boardTool === 'inspect') {
@@ -13289,6 +13391,8 @@ function HtmlViewer({
   }
 
   function activateCommentCreateTool(returnFocusTarget?: HTMLElement | null) {
+    if (canvasDockSwitchPendingRef.current) return;
+    exitCanvasPresentMode();
     if (returnFocusTarget) commentPanelReturnFocusRef.current = returnFocusTarget;
     fireArtifactToolbarClick('comment');
     capturePreviewScrollPosition();
@@ -13336,7 +13440,8 @@ function HtmlViewer({
   }
 
   function activateManualEditTool() {
-    if (viewerOnly || (!manualEditMode && !manualEditEntryAllowed)) return;
+    if (canvasDockSwitchPendingRef.current || viewerOnly || (!manualEditMode && !manualEditEntryAllowed)) return;
+    exitCanvasPresentMode();
     fireArtifactToolbarClick('edit');
     capturePreviewScrollPosition();
     if (!manualEditMode) {
@@ -13352,6 +13457,7 @@ function HtmlViewer({
         setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
         setManualEditSrcDocActive(true);
         setManualEditMode(true);
+        setManualEditPageStylesOpen(manualEditDocked);
         closeArtifactToolMenus();
       };
       if (!useUrlLoadPreview) {
@@ -13715,7 +13821,7 @@ function HtmlViewer({
   }, [slideNavRequest?.nonce, slideNavRequest?.slideIndex, effectiveDeck, previewStateKey, slideState?.count]);
 
   // Share and Download are separate toolbar intents, but they share the same
-  // popover shell so switching between them keeps the menu anchored in place.
+  // popover shell so each intent anchors the menu to its own toolbar position.
   const openUnifiedActionMenu = (
     tab: 'share' | 'export',
     sourceLabel: 'share_dropdown' | 'download_dropdown',
@@ -14318,8 +14424,7 @@ function HtmlViewer({
   const sourceModeLoading = mode === 'source' && source === null;
   const boardAvailable = mode === 'preview' && source !== null;
   const showPreviewToolbarControls = mode === 'preview';
-  // Independent of the rail's lazy per-slide documents so a collapsed rail
-  // (which unmounts DeckThumbnailRail entirely) still renders its toggle.
+  // Keep the slide rail visible whenever deck navigation is available.
   const showDeckThumbnailRail = effectiveDeck && source !== null && deckSlideTotal > 0 && !manualEditMode;
   const showDeckFloatingNav = effectiveDeck && deckSlideTotal > 0 && !manualEditMode && !inTabPresent;
   const deckNavTotal = Math.max(deckSlideTotal, activeDeckSlideIndex + 1, 1);
@@ -14330,18 +14435,17 @@ function HtmlViewer({
     localCommentSideDockActive && commentSidePanelCollapsed ? 'comment-preview-layer-dock-collapsed' : '',
     boardSideDockStacked ? 'comment-preview-layer-side-dock-stacked' : '',
     showDeckThumbnailRail ? 'comment-preview-layer-with-deck-rail' : '',
-    showDeckThumbnailRail && deckThumbnailsCollapsed ? 'comment-preview-layer-deck-rail-collapsed' : '',
   ].filter(Boolean).join(' ');
-  // Edit mode opens clean: the inspector only appears once the user pins an
-  // element (click its hover affordance / a container) or opens page styles by
-  // clicking the empty canvas. No more full-height panel popping on toggle.
+  // Project workspaces open page settings immediately in the external dock;
+  // standalone viewers retain their compact, selection-driven floating card.
   const manualEditPageCardActive =
     manualEditMode && !selectedManualEditTarget && manualEditPageStylesOpen;
   const manualEditPanelActive =
-    manualEditMode && (!!selectedManualEditTarget || manualEditPageCardActive);
+    manualEditMode && workspaceActive && (!!selectedManualEditTarget || manualEditPageCardActive);
   const manualEditResetAvailable = selectedManualEditTarget ? manualEditDraftDirty : false;
   const manualEditPanel = manualEditPanelActive ? (
     <ManualEditPanel
+      docked={manualEditDocked}
       targets={manualEditTargets}
       selectedTarget={selectedManualEditTarget}
       draft={manualEditDraft}
@@ -14388,8 +14492,8 @@ function HtmlViewer({
       onRedo={() => {
         void redoManualEdit();
       }}
-      floatingClassName={manualEditPageCardActive ? 'manual-edit-page-card' : undefined}
-      floatingStyle={selectedManualEditTarget
+      floatingClassName={!manualEditDocked && manualEditPageCardActive ? 'manual-edit-page-card' : undefined}
+      floatingStyle={manualEditDocked ? undefined : selectedManualEditTarget
         ? {
             ...manualEditFloatingPanelStyle(
               selectedManualEditTarget,
@@ -14399,7 +14503,7 @@ function HtmlViewer({
             ...(manualEditPanelPosition ?? {}),
           }
         : { top: 12, right: 12, width: 320 }}
-      onFloatingPositionChange={selectedManualEditTarget ? setManualEditPanelPosition : undefined}
+      onFloatingPositionChange={!manualEditDocked && selectedManualEditTarget ? setManualEditPanelPosition : undefined}
       onPickImage={async (pickedFile) => {
         const result = await uploadProjectFiles(projectId, [pickedFile], undefined, workspaceContext);
         const uploaded = result.uploaded[0];
@@ -14793,80 +14897,127 @@ function HtmlViewer({
     </section>
   ) : null;
 
+  // Whether the workspace row is there to take this viewer's hoisted controls.
+  const leadPortalActive = Boolean(tabLeadHost) && workspaceActive;
+  const tabActionPortalActive = Boolean(tabActionHost) && workspaceActive;
+  // Reload rides up into the ACTIVE page tab, ahead of its name (per product):
+  // reloading is something you do to THAT page, and inside its own pill the
+  // two read as one thing rather than as neighbours. Unlike the viewport
+  // switcher it is not about the rendered view, so it stays in 代码 too.
+  const reloadPreviewButton = (
+    <button
+      type="button"
+      className="icon-only ws-tab-reload od-tooltip"
+      onClick={reloadHtmlPreview}
+      title={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
+      data-tooltip={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
+      data-tooltip-placement="bottom"
+      aria-label={`${t('fileViewer.reloadAria')} ${t('fileViewer.preview')}`}
+    >
+      <Icon name="reload" size={14} />
+    </button>
+  );
+
   return (
     <div className={`viewer html-viewer${inTabPresent ? ' is-tab-present' : ''}${viewerOnly ? ' html-viewer--viewer-only' : ''}`}>
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
-          {showDeckThumbnailRail ? (
+          {tabActionPortalActive
+            ? createPortal(reloadPreviewButton, tabActionHost!)
+            : reloadPreviewButton}
+          {/* 代码 moved up into the workspace row, straight after 预览 (per
+              product) — see APP_CHROME_VIEW_TABS_ID. Hoisted it becomes ONE
+              toggle rather than half a two-segment pill: 预览 already stands
+              beside it up there as a real tab, so a second 预览 segment would
+              only repeat it. The inline two-segment pill below stays as the
+              fallback for every surface that has no workspace row to portal
+              into (the host resolves to null there). */}
+          {viewTabsHost && workspaceActive ? createPortal(
             <button
               type="button"
-              className="icon-only deck-thumbnail-toolbar-toggle od-tooltip"
-              aria-expanded={!deckThumbnailsCollapsed}
-              aria-label={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
-              title={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
-              data-tooltip={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
-              data-tooltip-placement="bottom"
+              className={`ws-tab viewer-code-tab${mode === 'source' ? ' active' : ''}`}
+              aria-pressed={mode === 'source'}
+              disabled={viewerOnly}
+              data-testid="workspace-code-tab"
+              title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.source')}
+              aria-label={t('fileViewer.source')}
               onClick={() => {
-                fireDeckViewerClick('thumbnail_rail_toggle', {
-                  action: deckThumbnailsCollapsed ? 'expand' : 'collapse',
-                  slide_index: activeDeckSlideIndex,
-                  slide_count: deckSlideTotal,
-                });
-                setDeckThumbnailsCollapsed((value) => !value);
+                const nextMode = mode === 'source' ? 'preview' : 'source';
+                fireArtifactToolbarClick(nextMode);
+                selectMode(nextMode);
               }}
             >
-              {/* Same pair as the shell's rail toggle (WorkspaceTabsBar): the
-                  bar sits on the side the rail is on while it is open, and
-                  flips out of the frame once it is collapsed. */}
-              <Icon name={deckThumbnailsCollapsed ? 'layout-right' : 'layout-left'} size={16} />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="icon-only od-tooltip"
-            onClick={reloadHtmlPreview}
-            title={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
-            data-tooltip={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
-            data-tooltip-placement="bottom"
-            aria-label={`${t('fileViewer.reloadAria')} ${t('fileViewer.preview')}`}
-          >
-            <Icon name="reload" size={14} />
-          </button>
-          {/* Two-segment pill tablist: both destinations stay visible and the
-              active one is legible at a glance. A single toggle that flips its
-              own label reads as "what am I looking at now?" and forces the user
-              to click to find out. */}
-          <div className="viewer-tabs viewer-mode-tabs" role="tablist" aria-label="View mode">
-            {([
-              ['preview', t('fileViewer.preview'), 'eye-line'],
-              ['source', t('fileViewer.source'), 'code-s-slash-line'],
-            ] as const).map(([id, label, icon]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                className={`viewer-tab ${mode === id ? 'active' : ''}`}
-                aria-selected={mode === id}
-                disabled={viewerOnly && id === 'source'}
-                title={viewerOnly && id === 'source' ? viewerOnlyDisabledTitle : undefined}
-                onClick={() => {
-                  fireArtifactToolbarClick(id);
-                  selectMode(id);
-                }}
-              >
-                <RemixIcon name={icon} size={14} className="viewer-tab-icon" />
-                <span className="viewer-tab-label">{label}</span>
-              </button>
-            ))}
-          </div>
+              <span className="tab-icon" aria-hidden>
+                <RemixIcon name="code-s-slash-line" size={14} />
+              </span>
+              {/* Same discrete-tab rule its neighbours follow: the label is
+                  present only while this tab is the one you are on, so the row
+                  never shows two open labels. `aria-label` above carries the
+                  name for assistive tech while the text is collapsed. */}
+              <HybridTabLabel show={mode === 'source'}>
+                <span className="ws-tab-label">{t('fileViewer.source')}</span>
+              </HybridTabLabel>
+            </button>,
+            viewTabsHost,
+          ) : (
+            /* Two-segment pill tablist: both destinations stay visible and the
+               active one is legible at a glance. A single toggle that flips its
+               own label reads as "what am I looking at now?" and forces the user
+               to click to find out. */
+            <div className="viewer-tabs viewer-mode-tabs" role="tablist" aria-label="View mode">
+              {([
+                ['preview', t('fileViewer.preview'), 'eye-line'],
+                ['source', t('fileViewer.source'), 'code-s-slash-line'],
+              ] as const).map(([id, label, icon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  className={`viewer-tab ${mode === id ? 'active' : ''}`}
+                  aria-selected={mode === id}
+                  disabled={viewerOnly && id === 'source'}
+                  title={viewerOnly && id === 'source' ? viewerOnlyDisabledTitle : undefined}
+                  onClick={() => {
+                    fireArtifactToolbarClick(id);
+                    selectMode(id);
+                  }}
+                >
+                  <RemixIcon name={icon} size={14} className="viewer-tab-icon" />
+                  <span className="viewer-tab-label">{label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Viewport switcher moved up into the workspace row, immediately
+              before the file tabs (per product) — see APP_CHROME_TAB_LEAD_ID.
+              Up there it sits next to the page it applies to instead of one
+              level down. The inline placement below stays as the fallback for
+              every surface with no workspace row to portal into (the host
+              resolves to null there). Reload keeps its own slot INSIDE the
+              active tab (APP_CHROME_TAB_ACTION_ID) rather than riding along
+              here: it is not about the rendered view, so it must not vanish
+              with the switcher when 代码 takes over. */}
           {showPreviewToolbarControls ? (
-            <span className="viewer-preview-toolbar-inline">
-              <PreviewViewportControls
-                viewport={previewViewport}
-                onViewport={setPreviewViewport}
-                t={t}
-              />
-            </span>
+            leadPortalActive ? (
+              createPortal(
+                <span className="viewer-preview-toolbar-inline">
+                  <PreviewViewportControls
+                    viewport={previewViewport}
+                    onViewport={setPreviewViewport}
+                    t={t}
+                  />
+                </span>,
+                tabLeadHost!,
+              )
+            ) : (
+              <span className="viewer-preview-toolbar-inline">
+                <PreviewViewportControls
+                  viewport={previewViewport}
+                  onViewport={setPreviewViewport}
+                  t={t}
+                />
+              </span>
+            )
           ) : null}
           {showPreviewToolbarControls && showDeckNavigation && !showDeckFloatingNav ? (
             <span
@@ -14910,127 +15061,6 @@ function HtmlViewer({
           ) : null}
         </div>
         <div className="viewer-toolbar-actions">
-          {showPreviewToolbarControls ? (
-            <div className="viewer-toolbar-inline-actions">
-              {mode === 'preview' ? (
-                <button
-                  type="button"
-                  className="viewer-action viewer-action-icon od-tooltip"
-                  data-testid="edit-screenshot-to-chat-button"
-                  data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.editScreenshotToChat')}
-                  data-tooltip-placement="bottom"
-                  title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.editScreenshotToChat')}
-                  aria-label={t('fileViewer.editScreenshotToChat')}
-                  disabled={viewerOnly}
-                  onClick={() => void handleScreenshotToChat()}
-                >
-                  <RemixIcon name="camera-line" size={15} />
-                </button>
-              ) : null}
-              <div className="artifact-tool-menu-anchor">
-                <button
-                  type="button"
-                  className={`viewer-action viewer-action-icon viewer-comment-toggle od-tooltip${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
-                  data-testid="board-mode-toggle"
-                  data-tooltip={t('fileViewer.comment')}
-                  data-tooltip-placement="bottom"
-                  title={t('fileViewer.comment')}
-                  aria-label={t('fileViewer.comment')}
-                  aria-pressed={boardMode && !commentCreateMode && boardTool === 'inspect'}
-                  onClick={activateCommentTool}
-                >
-                  <RemixIcon name="chat-new-line" size={15} />
-                </button>
-              </div>
-              <button
-                className={`viewer-action viewer-action-icon od-tooltip${drawOverlayOpen ? ' active' : ''}`}
-                type="button"
-                data-testid="draw-overlay-toggle"
-                data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.mark')}
-                data-tooltip-placement="bottom"
-                disabled={viewerOnly}
-                title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.mark')}
-                aria-label={t('fileViewer.mark')}
-                aria-pressed={drawOverlayOpen}
-                onClick={activateDrawTool}
-              >
-                <RemixIcon name="mark-pen-line" size={15} />
-              </button>
-              <span className="viewer-toolbar-tool-divider" aria-hidden />
-              <button
-                className={`viewer-action viewer-action-icon od-tooltip${manualEditMode ? ' active' : ''}`}
-                type="button"
-                data-testid="manual-edit-mode-toggle"
-                data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.edit')}
-                data-tooltip-placement="bottom"
-                disabled={viewerOnly || (!manualEditMode && !manualEditEntryAllowed)}
-                title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.edit')}
-                aria-label={t('fileViewer.edit')}
-                aria-pressed={manualEditMode}
-                onClick={activateManualEditTool}
-              >
-                <RemixIcon name="edit-line" size={15} />
-              </button>
-              <span className="viewer-toolbar-tool-divider" aria-hidden />
-              <button
-                ref={commentPanelToggleRef}
-                type="button"
-                className={`viewer-action viewer-comment-count-trigger viewer-comment-toggle od-tooltip${boardMode && commentCreateMode ? ' active' : ''}`}
-                data-testid="comment-panel-toggle"
-                data-tooltip={t('chat.tabComments')}
-                data-tooltip-placement="bottom"
-                title={t('chat.tabComments')}
-                aria-label={`${t('chat.tabComments')} (${visibleSideComments.length})`}
-                aria-pressed={boardMode && commentCreateMode}
-                onClick={(event) => activateCommentCreateTool(event.currentTarget)}
-              >
-                <RemixIcon name="message-3-line" size={15} />
-                <span className="viewer-comment-count" aria-hidden>{visibleSideComments.length}</span>
-              </button>
-              {source !== null && mode === 'preview' ? (
-                <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
-                  <button
-                    type="button"
-                    className="viewer-action zoom-trigger od-tooltip"
-                    aria-haspopup="menu"
-                    aria-expanded={zoomMenuOpen}
-                    title={t('fileViewer.resetZoom')}
-                    data-tooltip={t('fileViewer.resetZoom')}
-                    data-tooltip-placement="bottom"
-                    onClick={() => {
-                      fireArtifactToolbarClick('zoom_level_dropdown');
-                      setZoomMenuOpen((v) => !v);
-                    }}
-                  >
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{previewZoomText}</span>
-                  </button>
-                  {zoomMenuOpen ? (
-                    <div className="zoom-menu-popover" role="menu">
-                      {[50, 75, 100, 125, 150, 200].map((level) => (
-                        <button
-                          key={level}
-                          type="button"
-                          className={`zoom-menu-item${zoomLevelActive(level) ? ' active' : ''}`}
-                          role="menuitem"
-                          onClick={() => {
-                            setPreviewZoomCached(fileViewportKey, level, 'manual');
-                            setZoomMode('manual');
-                            setZoom(level);
-                            setZoomMenuOpen(false);
-                          }}
-                        >
-                          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
-                          {zoomLevelActive(level) ? (
-                            <Icon name="check" size={13} />
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
           <div className="viewer-toolbar-more" ref={toolbarMoreRef}>
             <button
               ref={toolbarMoreTriggerRef}
@@ -15201,44 +15231,7 @@ function HtmlViewer({
       {workspaceActive ? ((filePrimaryActions: ReactNode) => (
         chromeActionsHost ? createPortal(filePrimaryActions, chromeActionsHost) : filePrimaryActions
       ))(<>
-          {showPresent ? (
-            <div className="present-wrap chrome-present-wrap">
-              <button
-                className="chrome-action chrome-action-secondary chrome-action-icon present-trigger od-tooltip"
-                aria-haspopup="menu"
-                aria-expanded={presentMenuOpen}
-                aria-label={t('fileViewer.present')}
-                data-tooltip={t('fileViewer.present')}
-                data-tooltip-placement="bottom"
-                title={t('fileViewer.present')}
-                onClick={() => {
-                  fireArtifactHeaderClick('present_dropdown');
-                  setPresentMenuOpen((v) => !v);
-                }}
-              >
-                <RemixIcon name="slideshow-3-line" size={15} />
-              </button>
-              {presentMenuOpen ? (
-                <div className="present-menu" role="menu">
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}>
-                    <span className="present-icon"><RemixIcon name="eye-line" size={14} /></span>{' '}
-                    <span className="present-menu-copy">
-                      <span>{t('fileViewer.presentInTab')}</span>
-                      {effectiveDeck ? <small>{t('fileViewer.presentInTabDeckHint')}</small> : null}
-                    </span>
-                  </button>
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}>
-                    <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
-                    {t('fileViewer.presentFullscreen')}
-                  </button>
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('new_tab'); presentNewTab(); }}>
-                    <span className="present-icon"><RemixIcon name="share-forward-line" size={14} /></span>{' '}
-                    {t('fileViewer.presentNewTab')}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          {showPresent ? <PreviewUserAvatars /> : null}
           {versioningAvailable && (rawCanShare || rawCanDownload) ? (
             <button
               type="button"
@@ -15282,7 +15275,7 @@ function HtmlViewer({
                 {/* Share and Export are separate header intents again (the
                     0.18.0 unified tabs buried Export one level deep and export
                     reach halved); they still share one popover shell so
-                    switching between them keeps the menu anchored in place.
+                    each intent anchors the menu to its own toolbar position.
                     Export leads and carries the dark (primary) treatment —
                     it is the far more used of the two (30-day: ~14k users
                     exported successfully vs ~0.6k who attempted a deploy). */}
@@ -15290,36 +15283,41 @@ function HtmlViewer({
                   <button
                     type="button"
                     className={
-                      'chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified chrome-action-dark' +
+                      'chrome-action chrome-action-secondary chrome-action-icon chrome-action-unified chrome-action-dark od-tooltip' +
                       (exportReadyNudge ? ' export-ready-nudge' : '')
                     }
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen && unifiedActionTab === 'export'}
                     aria-label={t('fileViewer.unifiedExportTab')}
                     disabled={viewerOnly}
-                    title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
+                    data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.unifiedExportTab')}
+                    data-tooltip-placement="bottom"
+                    title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.unifiedExportTab')}
                     onClick={openDownloadMenu}
                   >
                     <RemixIcon name="download-line" size={15} />
-                    <span>{t('fileViewer.unifiedExportTab')}</span>
                   </button>
                 ) : null}
-                {rawCanShare ? (
+                <WorkspaceAccountDock placement="download" />
+                {rawCanShare ? ((button: ReactNode) => shareHost ? createPortal(button, shareHost) : button)(
                   <button
                     type="button"
-                    className="chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified"
+                    className="chrome-action chrome-action-secondary chrome-action-icon chrome-action-unified od-tooltip"
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen && unifiedActionTab === 'share'}
                     aria-label={shareMenuLabel}
                     disabled={viewerOnly}
-                    title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
+                    data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : shareMenuLabel}
+                    data-tooltip-placement="bottom"
+                    title={viewerOnly ? viewerOnlyDisabledTitle : shareMenuLabel}
                     onClick={openShareMenu}
                   >
                     <RemixIcon name="share-forward-line" size={15} />
-                    <span>{shareMenuLabel}</span>
                   </button>
                 ) : null}
-                {deployMenuOpen && (rawCanShare || rawCanDownload) ? (
+                {deployMenuOpen && (rawCanShare || rawCanDownload) ? ((menu: ReactNode) =>
+                  unifiedActionTab === 'share' && shareHost ? createPortal(menu, shareHost) : menu
+                )(
                   <div className="share-menu-popover chrome-unified-popover" role="menu">
                     {unifiedActionTab === 'share' && rawCanShare ? (
                       <div className="chrome-unified-panel chrome-unified-panel--share">
@@ -15611,58 +15609,6 @@ function HtmlViewer({
                     ) : null}
                     {unifiedActionTab === 'export' && rawCanDownload ? (
                       <div className="chrome-unified-panel">
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    disabled={viewerOnly}
-                    title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                    onClick={() => {
-                      setDeployMenuOpen(false);
-                      // Pixel-perfect screenshot PDF (matches the preview, same
-                      // renderer as image/PPTX). Chosen over Chromium's vector
-                      // printToPDF because that path drops CJK glyphs in the
-                      // packaged runtime (no embedded fonts) — unacceptable for a
-                      // Chinese-first product. Falls back to the vector/browser
-                      // print path on web or on failure.
-                      fireShareExport('pdf', async () => {
-                        if (isOpenDesignHostAvailable()) {
-                          const res = await exportProjectScreenshotPdf({
-                            projectId,
-                            fileName: file.name,
-                            title: exportTitle,
-                            workspaceContext,
-                            // Broader deck signal than the viewer's nav so
-                            // runtime-managed decks (<deck-stage>) paginate per
-                            // slide; the vector fallback below uses the SAME
-                            // signal, so an artifact exports identically with or
-                            // without a desktop host (no per-host divergence).
-                            deck: deckExportSignal,
-                          });
-                          if (res.ok) return;
-                          // A SEMANTIC failure (bad deck routing, unreadable
-                          // renderer output, renderer 502, …) must surface — NOT
-                          // silently downgrade to the vector PDF, which can
-                          // reintroduce the CJK-glyph / fidelity bugs the
-                          // screenshot path exists to avoid. Only a genuinely
-                          // unavailable renderer (no host / 501 / transport)
-                          // falls through to the vector path below.
-                          if (!('unavailable' in res)) throw new Error(res.error);
-                        }
-                        await exportProjectAsPdf({
-                          deck: deckExportSignal,
-                          fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: deckExportSignal, onProgress: onExportProgress }),
-                          filePath: file.name,
-                          projectId,
-                          title: exportTitle,
-                          workspaceContext,
-                        });
-                      });
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
-                    <span>{t('fileViewer.exportPdf')}</span>
-                  </button>
                   {showPptxExport ? (
                     <button
                       type="button"
@@ -15721,25 +15667,6 @@ function HtmlViewer({
                     <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
                     <span>{t('fileViewer.exportZip')}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    disabled={viewerOnly}
-                    title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                    onClick={() => {
-                      setDeployMenuOpen(false);
-                      fireShareExport('html', () => exportProjectAsHtml({
-                        projectId,
-                        filePath: file.name,
-                        fallbackTitle: exportTitle,
-                        workspaceContext,
-                      }));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
-                    <span>{t('fileViewer.exportHtml')}</span>
-                  </button>
                   {showMarkdownExport ? (
                     <button
                       type="button"
@@ -15774,10 +15701,242 @@ function HtmlViewer({
             </div>
           ) : null}
       </>) : null}
+      {/* Floating dock, ported from the canvas-edit branch: the preview's
+          authoring controls float over the artboard as one pill instead of
+          riding the toolbar row. Sits before .viewer-body so it stays pinned
+          to the stage rather than scrolling with the preview's content. */}
+      {showPreviewToolbarControls && mode === 'preview' && !inTabPresent ? (
+        <div className="canvas-dock" data-testid="canvas-dock" ref={canvasDockRef}>
+          <div className="canvas-dock-inner">
+            <div
+              className="canvas-dock-tools"
+              id={canvasEditToolsId}
+              aria-hidden={canvasPresentMode || undefined}
+              inert={canvasPresentMode}
+              data-collapsed={canvasPresentMode ? 'true' : undefined}
+            >
+              {/* Keep the tools mounted for the spring transition. Inert
+                  removes collapsed controls from focus and hit testing
+                  immediately, before the exit animation has finished. */}
+              <div
+                className="canvas-dock-collapsible"
+                data-collapsed={canvasPresentMode ? 'true' : undefined}
+              >
+                <div className="canvas-dock-collapsible-inner">
+              {mode === 'preview' ? (
+                <button
+                  type="button"
+                  className="viewer-action viewer-action-icon od-tooltip"
+                  data-testid="edit-screenshot-to-chat-button"
+                  data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.editScreenshotToChat')}
+                  data-tooltip-placement="bottom"
+                  title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.editScreenshotToChat')}
+                  aria-label={t('fileViewer.editScreenshotToChat')}
+                  disabled={viewerOnly}
+                  onClick={() => void handleScreenshotToChat()}
+                >
+                  <RemixIcon name="camera-line" size={15} />
+                </button>
+              ) : null}
+              <div className="artifact-tool-menu-anchor">
+                <button
+                  type="button"
+                  className={`viewer-action viewer-action-icon viewer-comment-toggle od-tooltip${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
+                  data-testid="board-mode-toggle"
+                  data-tooltip={t('fileViewer.comment')}
+                  data-tooltip-placement="bottom"
+                  title={t('fileViewer.comment')}
+                  aria-label={t('fileViewer.comment')}
+                  aria-pressed={boardMode && !commentCreateMode && boardTool === 'inspect'}
+                  onClick={activateCommentTool}
+                >
+                  <RemixIcon name="chat-new-line" size={15} />
+                </button>
+              </div>
+              <button
+                className={`viewer-action viewer-action-icon od-tooltip${drawOverlayOpen ? ' active' : ''}`}
+                type="button"
+                data-testid="draw-overlay-toggle"
+                data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.mark')}
+                data-tooltip-placement="bottom"
+                disabled={viewerOnly}
+                title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.mark')}
+                aria-label={t('fileViewer.mark')}
+                aria-pressed={drawOverlayOpen}
+                onClick={activateDrawTool}
+              >
+                <RemixIcon name="mark-pen-line" size={15} />
+              </button>
+              {/* The edit pencil that used to sit here is gone: the mode
+                  segment below is the same control wearing a word, and it
+                  carries the pencil's testid and pressed state. */}
+              <span className="viewer-toolbar-tool-divider" aria-hidden />
+              <button
+                ref={commentPanelToggleRef}
+                type="button"
+                className={`viewer-action viewer-comment-count-trigger viewer-comment-toggle od-tooltip${boardMode && commentCreateMode ? ' active' : ''}`}
+                data-testid="comment-panel-toggle"
+                data-tooltip={t('chat.tabComments')}
+                data-tooltip-placement="bottom"
+                title={t('chat.tabComments')}
+                aria-label={`${t('chat.tabComments')} (${visibleSideComments.length})`}
+                aria-pressed={boardMode && commentCreateMode}
+                onClick={(event) => activateCommentCreateTool(event.currentTarget)}
+              >
+                <RemixIcon name="message-3-line" size={15} />
+                <span className="viewer-comment-count" aria-hidden>{visibleSideComments.length}</span>
+              </button>
+                </div>
+              </div>
+              {/* Zoom animates alongside the fold; its upward popover stays
+                  outside the clipping track. Keep the percentage mounted so
+                  preview measurements do not depend on entering Edit. */}
+              {source !== null && mode === 'preview' ? (
+                <div
+                  className="zoom-menu viewer-toolbar-zoom canvas-dock-zoom"
+                  data-collapsed={canvasPresentMode ? 'true' : undefined}
+                  ref={zoomMenuRef}
+                >
+                  <button
+                    type="button"
+                    className="viewer-action zoom-trigger od-tooltip"
+                    aria-haspopup="menu"
+                    aria-expanded={zoomMenuOpen}
+                    title={t('fileViewer.resetZoom')}
+                    data-tooltip={t('fileViewer.resetZoom')}
+                    data-tooltip-placement="bottom"
+                    onClick={() => {
+                      fireArtifactToolbarClick('zoom_level_dropdown');
+                      setZoomMenuOpen((v) => !v);
+                    }}
+                  >
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{previewZoomText}</span>
+                  </button>
+                  {zoomMenuOpen ? (
+                    <div className="zoom-menu-popover" role="menu">
+                      {[50, 75, 100, 125, 150, 200].map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          className={`zoom-menu-item${zoomLevelActive(level) ? ' active' : ''}`}
+                          role="menuitem"
+                          onClick={() => {
+                            setPreviewZoomCached(fileViewportKey, level, 'manual');
+                            setZoomMode('manual');
+                            setZoom(level);
+                            setZoomMenuOpen(false);
+                          }}
+                        >
+                          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
+                          {zoomLevelActive(level) ? (
+                            <Icon name="check" size={13} />
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div
+              className="canvas-dock-tools canvas-dock-present-tools"
+              id={canvasPresentToolsId}
+              role="group"
+              aria-label={t('fileViewer.present')}
+              aria-hidden={!presentMenuOpen || undefined}
+              inert={!presentMenuOpen}
+              data-collapsed={!presentMenuOpen ? 'true' : undefined}
+            >
+              <div className="canvas-dock-collapsible" data-collapsed={!presentMenuOpen ? 'true' : undefined}>
+                <div className="canvas-dock-collapsible-inner">
+                  <button
+                    type="button"
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    aria-label={t('fileViewer.presentInTab')}
+                    title={effectiveDeck ? `${t('fileViewer.presentInTab')} · ${t('fileViewer.presentInTabDeckHint')}` : t('fileViewer.presentInTab')}
+                    data-tooltip={t('fileViewer.presentInTab')}
+                    data-tooltip-placement="top"
+                    disabled={source === null}
+                    onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}
+                  >
+                    <RemixIcon name="eye-line" size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    data-testid="canvas-dock-fullscreen"
+                    aria-label={t('fileViewer.presentFullscreen')}
+                    title={t('fileViewer.presentFullscreen')}
+                    data-tooltip={t('fileViewer.presentFullscreen')}
+                    data-tooltip-placement="top"
+                    disabled={source === null}
+                    onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}
+                  >
+                    <RemixIcon name="fullscreen-line" size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    aria-label={t('fileViewer.presentNewTab')}
+                    title={t('fileViewer.presentNewTab')}
+                    data-tooltip={t('fileViewer.presentNewTab')}
+                    data-tooltip-placement="top"
+                    disabled={source === null}
+                    onClick={() => { firePresentPopoverClick('new_tab'); presentNewTab(); }}
+                  >
+                    <RemixIcon name="share-forward-line" size={15} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            {/* Editing remains a toggle; pressing it again exits through
+                the existing save/flush path. */}
+            <span className="canvas-dock-divider" aria-hidden />
+            <div
+              className="viewer-tabs viewer-mode-tabs canvas-dock-mode-seg"
+            >
+              <button
+                type="button"
+                className={`viewer-tab ${manualEditMode ? 'active' : ''}`}
+                data-testid="manual-edit-mode-toggle"
+                aria-pressed={manualEditMode}
+                aria-expanded={!canvasPresentMode}
+                aria-controls={canvasEditToolsId}
+                disabled={canvasDockSwitchPending || viewerOnly || (!manualEditMode && !manualEditEntryAllowed)}
+                title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
+                onClick={() => {
+                  // Leave 演示 only when the edit is actually going to arm.
+                  // `activateManualEditTool` bails on the same conditions, and
+                  // without this guard a refused entry would still unfold the
+                  // dock — tools out, no mode entered, 编辑 unlit.
+                  if (!manualEditMode && (viewerOnly || !manualEditEntryAllowed)) return;
+                  exitCanvasPresentMode();
+                  activateManualEditTool();
+                }}
+              >
+                <span className="viewer-tab-label">{t('fileViewer.edit')}</span>
+              </button>
+              <button
+                ref={canvasPresentTriggerRef}
+                type="button"
+                className={`viewer-tab ${presentMenuOpen ? 'active' : ''}`}
+                data-testid="canvas-dock-present-toggle"
+                aria-expanded={presentMenuOpen}
+                aria-controls={canvasPresentToolsId}
+                aria-busy={canvasDockSwitchPending || undefined}
+                disabled={canvasDockSwitchPending}
+                onClick={() => { void toggleCanvasPresentationTools(); }}
+              >
+                <span className="viewer-tab-label">{t('fileViewer.present')}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="viewer-body" ref={previewBodyRef}>
         {initialPreviewLoading || sourceModeLoading ? (
           initialPreviewLoading ? (
-            <FileViewerLoadingSkeleton />
+            <FileViewerLoadingPlaceholder />
           ) : (
             <div className="viewer-empty">{t('fileViewer.loading')}</div>
           )
@@ -15789,9 +15948,11 @@ function HtmlViewer({
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
             onMouseLeave={manualEditMode ? clearManualEditHover : undefined}
           >
-            {manualEditPanel}
+            {manualEditDock
+              ? manualEditDock.target && createPortal(manualEditPanel, manualEditDock.target)
+              : manualEditPanel}
             {manualEditHoverAffordance}
-            {showDeckThumbnailRail && !deckThumbnailsCollapsed ? (
+            {showDeckThumbnailRail ? (
               <DeckThumbnailRail
                 count={deckSlideTotal}
                 activeIndex={activeDeckSlideIndex}
@@ -15816,7 +15977,7 @@ function HtmlViewer({
                 <div
                   style={
                     manualEditMode
-                      ? manualEditPreviewShellStyle(previewViewport, previewScale, manualEditViewportWidth)
+                      ? manualEditPreviewShellStyle(previewViewport, previewScale, manualEditDocked ? null : manualEditViewportWidth)
                       : previewScaleShellStyle(previewViewport, previewScale)
                   }
                 >

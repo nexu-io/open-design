@@ -206,6 +206,25 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
+  it('places Home beside the project switcher and preserves Home navigation', async () => {
+    const dock = document.createElement('div');
+    dock.dataset.workspaceDock = 'chat';
+    document.body.append(dock);
+    setWorkspaceTabsDock(dock);
+    try {
+      render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+      const home = await screen.findByTestId('workspace-home-chrome');
+      expect(dock.contains(home)).toBe(true);
+      expect(dock.contains(screen.getByTestId('workspace-tabs-dropdown-trigger'))).toBe(true);
+      fireEvent.click(home);
+      expect(navigate).toHaveBeenCalledWith(homeRoute);
+    } finally {
+      cleanup();
+      setWorkspaceTabsDock(null);
+      dock.remove();
+    }
+  });
+
   it('closes the dock dropdown when its route-owned dock is removed', async () => {
     const firstDock = document.createElement('div');
     const secondDock = document.createElement('div');

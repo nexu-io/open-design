@@ -1,0 +1,310 @@
+/* -------- Floating preview dock ---------------------------------------
+   Ported from the canvas-edit branch (`viewer/canvas.css`): the preview's
+   authoring controls leave the toolbar row and float over the artboard as one
+   pill. Edit and Present each reveal their own set of actions. */
+
+/* The dock is the only absolutely-positioned child the viewer root owns, and
+   `:has` keeps the containing block scoped to viewers that actually have one —
+   every other absolute descendant still anchors where it always did. */
+.viewer:has(> .canvas-dock) {
+  position: relative;
+}
+.canvas-dock {
+  position: absolute;
+  inset-inline: 0;
+  bottom: var(--spacing-16, 16px);
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  /* The dock floats over the artboard; only the pill itself takes pointer
+     events so the canvas underneath stays fully usable. */
+  pointer-events: none;
+}
+.canvas-dock-inner {
+  --canvas-dock-control: var(--bg-fill-tertiary);
+  --canvas-dock-control-hover: var(--bg-fill-secondary);
+  --canvas-dock-gap: var(--spacing-8, 8px);
+  /* Match the reference's soft spring without an SVG filter over the entire
+     dock. Older browsers keep the ease-out fallback. */
+  --canvas-dock-open: 750ms;
+  --canvas-dock-close: 250ms;
+  --canvas-dock-spring: var(--ease-out);
+  --canvas-dock-blur: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--canvas-dock-gap);
+  max-width: calc(100% - 32px);
+  padding: 6px;
+  border: var(--stroke-thin) solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--glass-regular, var(--bg-panel)) 96%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-regular-blur, 28px));
+  backdrop-filter: blur(var(--glass-regular-blur, 28px));
+  /* Soft white bezel around a recessed row of controls. The outer spread
+     supplies the rim without widening the dock's hit box or layout. */
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 92%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--bg-panel) 52%, transparent),
+    var(--shadow-lg);
+  pointer-events: auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.canvas-dock-inner::-webkit-scrollbar {
+  display: none;
+}
+/* The zoom popover opens above the dock. Let it escape the horizontal scroll
+   box while open, instead of clipping it to the pill's 52px height. */
+.canvas-dock-inner:has(.zoom-menu-popover) {
+  overflow: visible;
+}
+.canvas-dock-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--canvas-dock-gap);
+  margin-inline-end: 0;
+  flex: none;
+}
+.canvas-dock-tools[data-collapsed='true'] {
+  /* The child stays mounted at zero width for the fold. Absorb the parent's
+     flex gap once collapsed so the folded set leaves no empty slot in front
+     of the Edit / Present switches. */
+  margin-inline-end: calc(-1 * var(--canvas-dock-gap));
+  gap: 0;
+}
+
+/* The shell grows to the tools' intrinsic width. Each button then separates
+   from the Edit end with a small spring and blur, as in the gooey reference.
+   Keep nodes mounted so an interrupted transition reverses from its current
+   position instead of replaying an entrance keyframe. */
+.canvas-dock-collapsible {
+  display: grid;
+  grid-template-columns: 1fr;
+  opacity: 1;
+  visibility: visible;
+}
+.canvas-dock-collapsible-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--canvas-dock-gap);
+  min-width: 0;
+  overflow: hidden;
+}
+.canvas-dock-collapsible[data-collapsed='true'] {
+  grid-template-columns: 0fr;
+  opacity: 0;
+  /* Folded is not merely invisible: nothing inside may take a click or a tab
+     stop while it is off the strip. */
+  pointer-events: none;
+  visibility: hidden;
+}
+.canvas-dock-collapsible-inner > :not(.viewer-toolbar-tool-divider),
+.canvas-dock-zoom > .zoom-trigger {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  transform-origin: right center;
+  filter: blur(0);
+}
+.canvas-dock-collapsible[data-collapsed='true'] .canvas-dock-collapsible-inner > :not(.viewer-toolbar-tool-divider),
+.canvas-dock-zoom[data-collapsed='true'] > .zoom-trigger {
+  opacity: 0;
+  transform: translateX(18px) scale(0.92);
+  filter: blur(var(--canvas-dock-blur));
+}
+/* Reveal from the Edit button toward the outside of the dock. */
+.canvas-dock-collapsible-inner > :nth-child(1) { --canvas-dock-delay: 220ms; }
+.canvas-dock-collapsible-inner > :nth-child(2) { --canvas-dock-delay: 180ms; }
+.canvas-dock-collapsible-inner > :nth-child(3) { --canvas-dock-delay: 140ms; }
+.canvas-dock-collapsible-inner > :nth-child(5) { --canvas-dock-delay: 100ms; }
+.canvas-dock-zoom { --canvas-dock-delay: 60ms; }
+.canvas-dock-present-tools .canvas-dock-collapsible-inner > :nth-child(1) { --canvas-dock-delay: 180ms; }
+.canvas-dock-present-tools .canvas-dock-collapsible-inner > :nth-child(2) { --canvas-dock-delay: 140ms; }
+.canvas-dock-present-tools .canvas-dock-collapsible-inner > :nth-child(3) { --canvas-dock-delay: 100ms; }
+
+@supports (transition-timing-function: linear(0, 1)) {
+  .canvas-dock-inner {
+    --canvas-dock-spring: linear(0, 0.115 7%, 0.385 17%, 0.705 29%, 0.927 43%, 1.023 58%, 1.028 70%, 1.009 86%, 1);
+  }
+}
+/* WebKit uses the same spring geometry without the transient blur. */
+@supports (-webkit-touch-callout: none) {
+  .canvas-dock-inner { --canvas-dock-blur: 0px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .canvas-dock-tools {
+    transition:
+      gap var(--canvas-dock-open) var(--canvas-dock-spring),
+      margin-inline-end var(--canvas-dock-open) var(--canvas-dock-spring);
+  }
+  .canvas-dock-tools[data-collapsed='true'] {
+    transition-duration: var(--canvas-dock-close);
+    transition-timing-function: var(--ease-out);
+  }
+  .canvas-dock-collapsible {
+    transition:
+      grid-template-columns var(--canvas-dock-open) var(--canvas-dock-spring),
+      opacity var(--duration-normal, 200ms) var(--ease-out),
+      visibility 0s linear 0s;
+  }
+  .canvas-dock-collapsible[data-collapsed='true'] {
+    transition:
+      grid-template-columns var(--canvas-dock-close) var(--ease-out),
+      opacity var(--duration-fast, 150ms) var(--ease-out),
+      /* Hold visibility until the fold finishes, or the tools blink out
+         before the strip has closed behind them. */
+      visibility 0s linear var(--canvas-dock-close);
+  }
+  .canvas-dock-collapsible-inner > :not(.viewer-toolbar-tool-divider),
+  .canvas-dock-zoom > .zoom-trigger {
+    transition:
+      transform var(--canvas-dock-open) var(--canvas-dock-spring) var(--canvas-dock-delay),
+      opacity var(--duration-slow, 300ms) var(--ease-out) var(--canvas-dock-delay),
+      filter var(--duration-slower, 400ms) var(--ease-out) var(--canvas-dock-delay),
+      background var(--duration-normal, 200ms) var(--ease-out),
+      color var(--duration-normal, 200ms) var(--ease-out);
+  }
+  .canvas-dock-collapsible[data-collapsed='true'] .canvas-dock-collapsible-inner > :not(.viewer-toolbar-tool-divider),
+  .canvas-dock-zoom[data-collapsed='true'] > .zoom-trigger {
+    transition-duration: var(--canvas-dock-close);
+    transition-delay: 0s;
+    transition-timing-function: var(--ease-out);
+  }
+  .canvas-dock .canvas-dock-zoom {
+    transition:
+      width var(--canvas-dock-open) var(--canvas-dock-spring),
+      opacity var(--duration-normal, 200ms) var(--ease-out),
+      visibility 0s linear 0s;
+  }
+  .canvas-dock .canvas-dock-zoom[data-collapsed='true'] {
+    transition:
+      width var(--canvas-dock-close) var(--ease-out),
+      opacity var(--duration-fast, 150ms) var(--ease-out),
+      visibility 0s linear var(--canvas-dock-close);
+  }
+}
+.canvas-dock-divider {
+  display: none;
+}
+/* Spacing replaces the toolbar's ruler line so every action reads as one of
+   the reference's independent soft buttons. */
+.canvas-dock .viewer-toolbar-tool-divider {
+  display: none;
+}
+
+/* Round, dark-on-active dock buttons rather than the flat toolbar ones. */
+.canvas-dock .viewer-action {
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--canvas-dock-control);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 72%, transparent);
+}
+.canvas-dock .viewer-action:hover:not(:disabled) {
+  background: var(--canvas-dock-control-hover);
+  color: var(--text-strong);
+}
+.canvas-dock .viewer-action-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.canvas-dock .viewer-action.active,
+.canvas-dock .viewer-action.active:hover {
+  background: var(--text-strong);
+  color: var(--bg);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 16%, transparent),
+    var(--shadow-sm);
+}
+.canvas-dock .zoom-trigger {
+  min-width: 68px;
+  height: 38px;
+  justify-content: center;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.canvas-dock .viewer-comment-count-trigger {
+  min-width: 48px;
+  height: 38px;
+}
+/* Zoom participates in the width transition, but its popover stays outside
+   the tools' clipping track. A fixed control width prevents its text wrapping
+   while the reserved space grows. */
+.canvas-dock .canvas-dock-zoom {
+  flex: none;
+  width: 68px;
+  opacity: 1;
+  visibility: visible;
+}
+.canvas-dock .canvas-dock-zoom[data-collapsed='true'] {
+  width: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* Disabled controls keep the same soft-button silhouette as their neighbours;
+   opacity carries the unavailable state without changing the dock's rhythm. */
+.canvas-dock .viewer-action:disabled {
+  background: var(--canvas-dock-control);
+  border-color: transparent;
+  color: var(--text-muted);
+  opacity: 0.38;
+  cursor: default;
+}
+/* The dock sits at the bottom of the stage, so its one popover has to open
+   upward — the default `top: calc(100% + 6px)` would put the zoom presets off
+   the bottom edge. */
+.canvas-dock .viewer-toolbar-zoom .zoom-menu-popover {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+
+/* Trailing 编辑 toggle, at the dock's 38px control height. */
+.canvas-dock .canvas-dock-mode-seg {
+  position: relative;
+  flex: none;
+  height: 38px;
+  padding: 3px;
+  gap: 0;
+  border-radius: var(--radius-pill);
+  background: var(--canvas-dock-control);
+}
+.canvas-dock .canvas-dock-mode-seg .viewer-tab {
+  height: 32px;
+  padding: 0 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  transition:
+    background var(--duration-normal, 200ms) var(--curve-easy-ease, ease),
+    color var(--duration-normal, 200ms) var(--curve-easy-ease, ease);
+}
+.canvas-dock .canvas-dock-mode-seg .viewer-tab.active,
+.canvas-dock .canvas-dock-mode-seg .viewer-tab.active:hover:not(:disabled) {
+  background: var(--text-strong);
+  border-color: transparent;
+  color: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.canvas-dock .canvas-dock-mode-seg .viewer-tab:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .canvas-dock-collapsible-inner > :not(.viewer-toolbar-tool-divider),
+  .canvas-dock-zoom > .zoom-trigger {
+    transform: none !important;
+    filter: none !important;
+  }
+  .canvas-dock .canvas-dock-mode-seg .viewer-tab {
+    transition-duration: 0.01ms;
+  }
+}

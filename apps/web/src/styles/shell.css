@@ -1158,11 +1158,11 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
 }
 .artifact-version-panel {
   position: fixed;
-  top: 58px;
+  top: 104px;
   right: 24px;
   z-index: 85;
   width: min(390px, calc(100vw - 48px));
-  max-height: min(76vh, 720px);
+  max-height: min(76vh, 720px, calc(100vh - 120px));
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1193,14 +1193,6 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 12px;
-}
-/* While the history panel is open it floats over the tab-row file actions,
-   but the dark 分享 button's right sliver still peeked past the panel's edge
-   and read as a control overflowing the panel frame (dogfood 2026-07-27).
-   The cluster is unreachable behind the fixed panel anyway — hide it. */
-body:has(.artifact-version-panel) .ws-tabs-file-actions,
-body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
-  visibility: hidden;
 }
 .artifact-version-panel__head strong {
   display: block;
@@ -1868,7 +1860,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
      280px min-width kept forcing the menu wide. */
   min-width: 0;
   padding: 6px;
-  background: var(--bg);
+  background: var(--bg-elevated);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   border: 1px solid var(--material-separator);
@@ -2499,6 +2491,10 @@ a.avatar-item:visited {
   right: -10px;
   cursor: col-resize;
 }
+/* Keep the resize hit area out of the persistent message navigation markers. */
+.split:has(.chat-message-rail) > .split-resize-handle::before {
+  left: 0;
+}
 .split-resize-handle::after {
   content: "";
   position: absolute;
@@ -2531,8 +2527,4 @@ a.avatar-item:visited {
 }
 .split-resize-handle:focus-visible {
   outline: none;
-}
-/* Keep the resize hit area out of persistent message navigation markers. */
-.split:has(.chat-message-rail) > .split-resize-handle::before {
-  left: 0;
 }

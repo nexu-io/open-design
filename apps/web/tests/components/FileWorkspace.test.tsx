@@ -20,6 +20,8 @@ import {
   scrollWorkspaceTabsWithWheel,
   settleManualEditExit,
 } from '../../src/components/FileWorkspace';
+import { publishChromeViewMode, resetChromeViewMode } from '../../src/components/workspace/chrome-view-mode';
+import { REMIX_ICON_PATHS } from '../../src/components/remix-icon-paths';
 import { ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT } from '../../src/components/workspace/tab-launcher';
 import { I18nProvider } from '../../src/i18n';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
@@ -230,6 +232,7 @@ const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
 const chatCss = readFileSync(join(process.cwd(), 'src/styles/chat.css'), 'utf8');
 const routinesCss = readFileSync(join(process.cwd(), 'src/styles/viewer/routines.css'), 'utf8');
+const drawerCss = readFileSync(join(process.cwd(), 'src/styles/workspace/drawer.css'), 'utf8');
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -408,15 +411,33 @@ function renderWorkspace(element: React.ReactElement) {
   return host;
 }
 
+/**
+ * What a tab is called. The strip is discrete — only the ACTIVE tab renders its
+ * label as visible text (see workspace/TabLabel) — so identity lives on the
+ * tooltip, which every tab carries whether it is open or collapsed.
+ */
+function tabName(tab: HTMLElement): string {
+  return tab.getAttribute('title')?.trim() || (tab.textContent?.trim() ?? '');
+}
+
 function getTabByName(container: HTMLElement, name: RegExp): HTMLElement {
   const tabs = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]'));
-  const tab = tabs.find((node) => name.test(node.textContent ?? ''));
+  const tab = tabs.find((node) => name.test(tabName(node)));
   if (!tab) throw new Error(`Could not find tab matching ${name}`);
   return tab;
 }
 
+/**
+ * Open the tab launcher. The "+" that used to sit after the strip is gone
+ * (per product), so ⌘T is the way in — the same handler the button called.
+ */
+function openTabLauncher() {
+  // The handler listens on `window` in the capture phase.
+  fireEvent.keyDown(window, { key: 't', metaKey: true });
+}
+
 function renderedTabLabels(): string[] {
-  return screen.getAllByRole('tab').map((tab) => tab.textContent?.trim() ?? '');
+  return screen.getAllByRole('tab').map(tabName);
 }
 
 function createDragDataTransfer() {
@@ -742,7 +763,7 @@ describe('FileWorkspace upload input', () => {
     );
 
     // Creation now lives in the tab strip's "+" launcher, not the empty state.
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    openTabLauncher();
     fireEvent.click(screen.getByTestId('tab-launcher-action-new-sketch'));
 
     await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
@@ -823,7 +844,7 @@ describe('FileWorkspace upload input', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    openTabLauncher();
     fireEvent.click(screen.getByRole('button', { name: /New blank page/i }));
     const title = await screen.findByText('Clean Deck');
     const card = title.closest('article');
@@ -912,7 +933,7 @@ describe('FileWorkspace upload input', () => {
       </I18nProvider>,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    openTabLauncher();
     fireEvent.click(screen.getByRole('button', { name: /新建空白页面/ }));
 
     const dialog = await screen.findByRole('dialog', { name: '新建页面' });
@@ -964,7 +985,7 @@ describe('FileWorkspace upload input', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    openTabLauncher();
     fireEvent.click(screen.getByRole('button', { name: /New blank page/i }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Create page' });
@@ -1060,6 +1081,467 @@ describe('FileWorkspace upload input', () => {
         'Uploaded 1 file(s), but 1 failed (permission denied).',
       );
     });
+  });
+
+  // 设计文件 browses the project's files full-pane: the strip of OPEN file tabs
+  // over it, and the "+" beside them, were a second way to reach a file the
+  // grid below already lists.
+  it('takes the open-file strip and the "+" off the row on 设计文件', () => {
+    render(
+      <FileWorkspace
+        projectId="project-hide"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html'], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const centre = () => document.querySelector('.ws-tabs-center')!;
+    expect(centre().getAttribute('data-hide-tabs')).toBe('true');
+
+    // The other views keep both: that is where open file tabs are the way around.
+    fireEvent.click(screen.getByTestId('project-preview-tab'));
+    expect(centre().getAttribute('data-hide-tabs')).toBeNull();
+  });
+
+  // The strip only ever shows what is OPEN. The "⌄" beside it is the way to
+  // everything else without a detour out to 设计文件 and back.
+  it('selects Preview when generation starts but respects later manual switching', async () => {
+    const props = {
+      projectId: 'generation-preview', projectKind: 'prototype' as const,
+      files: [workspaceFile('index.html')], liveArtifacts: [],
+      onRefreshFiles: vi.fn(), isDeck: false,
+      tabsState: { tabs: ['index.html'], active: DESIGN_FILES_TAB },
+      onTabsStateChange: vi.fn(),
+    };
+    const view = render(<FileWorkspace {...props} streaming={false} />);
+    expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('true');
+    view.rerender(<FileWorkspace {...props} streaming />);
+    await waitFor(() => expect(screen.getByTestId('project-preview-tab').getAttribute('aria-selected')).toBe('true'));
+    fireEvent.click(screen.getByTestId('design-files-tab'));
+    await waitFor(() => expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('true'));
+    view.rerender(<FileWorkspace {...props} streaming />);
+    expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('keeps Preview selected while the first written HTML is not listed yet', async () => {
+    const props = {
+      projectId: 'generation-pending-file', projectKind: 'prototype' as const,
+      files: [], liveArtifacts: [], onRefreshFiles: vi.fn(), isDeck: false,
+      tabsState: { tabs: [], active: DESIGN_FILES_TAB }, onTabsStateChange: vi.fn(),
+    };
+    const view = render(<FileWorkspace {...props} streaming />);
+    view.rerender(<FileWorkspace {...props} streaming openRequest={{ name: 'index.html', nonce: 1 }} />);
+    await waitFor(() => expect(screen.getByTestId('project-preview-tab').getAttribute('aria-selected')).toBe('true'));
+    expect(screen.getByTestId('project-preview-empty')).toBeTruthy();
+  });
+
+  it('keeps the live build surface when an agent write auto-opens its HTML route', async () => {
+    const props = {
+      projectId: 'generation-auto-open', projectKind: 'prototype' as const,
+      files: [workspaceFile('index.html')], liveArtifacts: [],
+      onRefreshFiles: vi.fn(), isDeck: false,
+      tabsState: { tabs: ['index.html'], active: DESIGN_FILES_TAB },
+      onTabsStateChange: vi.fn(),
+    };
+    const view = render(<FileWorkspace {...props} streaming />);
+    view.rerender(<FileWorkspace {...props} streaming openRequest={{ name: 'index.html', nonce: 1 }} />);
+    await waitFor(() => expect(screen.getByTestId('design-files-building')).toBeTruthy());
+    expect(document.querySelector('[data-testid="retained-file-viewer"][aria-hidden="true"]')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('design-files-tab'));
+    await waitFor(() => expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('true'));
+    view.rerender(<FileWorkspace {...props} streaming={false} openRequest={{ name: 'index.html', nonce: 2 }} />);
+    await waitFor(() => expect(screen.queryByTestId('design-files-building')).toBeNull());
+  });
+
+  describe('all-project-files menu', () => {
+    function renderRow(onTabsStateChange = vi.fn()) {
+      render(
+        <FileWorkspace
+          projectId="project-pages-menu"
+          projectKind="prototype"
+          files={[
+            workspaceFile('index.html'),
+            workspaceFile('about.html'),
+            workspaceFile('notes.txt'),
+          ]}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          isDeck={false}
+          tabsState={{ tabs: ['index.html'], active: 'index.html' }}
+          onTabsStateChange={onTabsStateChange}
+        />,
+      );
+      return screen.getByTestId('workspace-pages-menu');
+    }
+    const options = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('.ws-pages-menu [role="option"]'));
+
+    it('lists every project file, not just the open tabs', () => {
+      fireEvent.click(renderRow());
+
+      expect(options().map((row) => row.textContent)).toEqual([
+        expect.stringContaining('index.html'),
+        expect.stringContaining('about.html'),
+        expect.stringContaining('notes.txt'),
+      ]);
+      // The one on screen is marked, so a long list still says where you are.
+      expect(options()[0]!.getAttribute('aria-selected')).toBe('true');
+      expect(options()[1]!.getAttribute('aria-selected')).toBe('false');
+    });
+
+    it('opens the file you pick and closes behind itself', async () => {
+      const onTabsStateChange = vi.fn();
+      fireEvent.click(renderRow(onTabsStateChange));
+      fireEvent.click(options().find((row) => row.textContent?.includes('about.html'))!);
+
+      expect(document.querySelector('.ws-pages-menu')).toBeNull();
+      // `openFile` waits on any in-flight manual edit before it commits.
+      await waitFor(() =>
+        expect(onTabsStateChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tabs: ['index.html', 'about.html'],
+            active: 'about.html',
+          }),
+        ),
+      );
+    });
+
+    it('shows one selector rather than a strip of file tabs', async () => {
+      const trigger = renderRow();
+      expect(trigger.textContent).toContain('index.html');
+      expect(document.querySelectorAll('.ws-tabs-bar [role="tab"]')).toHaveLength(0);
+      fireEvent.click(trigger);
+      fireEvent.click(options().find((row) => row.textContent?.includes('about.html'))!);
+      await waitFor(() => expect(trigger.textContent).toContain('about.html'));
+      expect(document.querySelectorAll('.ws-file-selector')).toHaveLength(1);
+      expect(document.querySelectorAll('.ws-tabs-bar [role="tab"]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-app-chrome-tab-action]')).toHaveLength(1);
+    });
+
+    // Everything in the pill is a fixed box that cannot shrink — and neither
+    // can `.ws-tab-anim`, because motion owns its width. So a tab still sized
+    // for "name + close" does not clamp the name, it pushes the "⌄" out
+    // through the pill's own rounded end.
+    it('leaves the pill room for the controls instead of pushing them out', () => {
+      expect(
+        cssDeclarations(drawerCss, '.ws-tabs-bar .ws-tab:has(.ws-pages-switcher)'),
+      ).toMatch(/max-width:\s*300px/);
+      // The browser tab's fixed width has no room for either control.
+      expect(
+        cssDeclarations(drawerCss, '.ws-tabs-bar .ws-tab.browser-tab:has(.ws-pages-switcher)'),
+      ).toMatch(/width:\s*auto/);
+    });
+
+    // `.ws-tab-add`'s 28px circle is sized against the 44px row; in a 30px
+    // pill it fills the whole height and collides with the rounded end.
+    it('wears the pill\'s icon box in a tab, not the row\'s', () => {
+      const box = cssDeclarations(drawerCss, '.ws-tab > .ws-pages-switcher .ws-pages-trigger');
+      expect(box).toMatch(/width:\s*18px/);
+      expect(box).toMatch(/height:\s*18px/);
+      // Right-anchored there: the trigger sits at the pill's right end, and a
+      // 200–320px panel opening rightward from it runs off the row.
+      expect(
+        cssDeclarations(drawerCss, '.ws-tab > .ws-pages-switcher .ws-pages-menu'),
+      ).toMatch(/right:\s*0/);
+    });
+
+    it('closes on Escape and on a press outside it', () => {
+      const trigger = renderRow();
+
+      fireEvent.click(trigger);
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(document.querySelector('.ws-pages-menu')).toBeNull();
+
+      fireEvent.click(trigger);
+      fireEvent.pointerDown(document.body);
+      expect(document.querySelector('.ws-pages-menu')).toBeNull();
+    });
+
+    it('leaves the row on 设计文件, where the pane below lists the same files', () => {
+      expect(
+        cssDeclarations(drawerCss, ".ws-tabs-center[data-hide-tabs='true'] > .ws-pages-switcher"),
+      ).toMatch(/display:\s*none/);
+    });
+
+    // The overflow fade is an adjacent-sibling rule; inserting anything after
+    // the strip silently moves the fade off whatever now abuts it.
+    it('keeps the overflow fade on whichever control abuts the strip', () => {
+      expect(
+        cssDeclarations(drawerCss, '.ws-tabs-bar.is-overflowing + .ws-pages-switcher'),
+      ).toMatch(/box-shadow/);
+    });
+  });
+
+  it('hides them with layout, not opacity — and leaves the "+" its anchor box', () => {
+    // The strip goes entirely; the "+" only goes invisible, because the
+    // browser new-tab shortcut still opens the launcher from 设计文件 and the
+    // popover anchors to that button's box.
+    expect(
+      cssDeclarations(drawerCss, ".ws-tabs-center[data-hide-tabs='true'] > .ws-tabs-bar"),
+    ).toMatch(/display:\s*none/);
+    expect(
+      cssDeclarations(drawerCss, ".ws-tabs-center[data-hide-tabs='true'] > .ws-add-tab"),
+    ).toMatch(/visibility:\s*hidden/);
+  });
+
+  // A page tab wears no glyph: its NAME is what tells the pages apart, and a
+  // chain repeated down the strip only ate the width that name needs. `<>` is
+  // the one exception — while 代码 is on, the markup IS what the tab shows.
+  it("names a page tab instead of glyphing it, and shows `<>` only for 代码", () => {
+    render(
+      <FileWorkspace
+        projectId="project-glyph"
+        projectKind="prototype"
+        files={[workspaceFile('index.html'), workspaceFile('about.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html', 'about.html'], active: 'index.html' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const tabOf = (name: string) =>
+      getTabByName(document.body, new RegExp(name.replace('.', '\\.')));
+    const glyphOf = (name: string) =>
+      tabOf(name).querySelector('svg path')?.getAttribute('d') ?? '';
+    const FILE_CODE = REMIX_ICON_PATHS['file-code-line']!;
+
+    expect(tabOf('index.html').querySelector('.tab-icon')).toBeNull();
+    // No glyph means the name is the only thing identifying the tab, so an
+    // INACTIVE page tab carries it too rather than collapsing to an empty chip.
+    expect(tabOf('about.html').querySelector('.tab-icon')).toBeNull();
+    expect(tabOf('about.html').textContent).toContain('about.html');
+
+    act(() => publishChromeViewMode('source'));
+
+    expect(glyphOf('index.html')).toBe(FILE_CODE);
+    // 代码 belongs to the tab you are ON: a background page tab is not the one
+    // showing source, so it stays glyphless.
+    expect(tabOf('about.html').querySelector('.tab-icon')).toBeNull();
+
+    act(() => resetChromeViewMode());
+    expect(tabOf('index.html').querySelector('.tab-icon')).toBeNull();
+  });
+
+  // 预览 / 代码 are one selection over whatever the row is showing, and the
+  // viewport switcher (桌面端 / 平板 / 手机) only describes a rendered page.
+  // So with a page open: 预览 reads as the selected view and the switcher sits
+  // in its slot ahead of the file tabs; pick 代码 and the selection moves with
+  // it while the switcher leaves the row entirely.
+  it('selects 预览 while a page renders, and drops the viewport switcher for 代码', () => {
+    render(
+      <FileWorkspace
+        projectId="project-view-pair"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html'], active: 'index.html' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const previewTab = screen.getByTestId('project-preview-tab');
+    const codeTab = screen.getByTestId('workspace-code-tab');
+    const viewportSlot = () => document.querySelector('.ws-tabs-lead-slot')!;
+
+    expect(previewTab.getAttribute('aria-selected')).toBe('true');
+    expect(codeTab.className).not.toContain('active');
+    expect(viewportSlot().querySelector('.viewer-viewport-switcher')).toBeTruthy();
+
+    fireEvent.click(codeTab);
+
+    expect(previewTab.getAttribute('aria-selected')).toBe('false');
+    expect(codeTab.className).toContain('active');
+    // Empty, so `.ws-tabs-lead-slot:empty` collapses it and the tab strip sits
+    // exactly where it does with nothing open. Reload is unaffected: it lives
+    // in the file selector, not in this slot.
+    expect(viewportSlot().childElementCount).toBe(0);
+    expect(screen.getByRole('button', { name: /reload.*preview/i })).toBeTruthy();
+
+    fireEvent.click(codeTab);
+
+    expect(previewTab.getAttribute('aria-selected')).toBe('true');
+    expect(viewportSlot().querySelector('.viewer-viewport-switcher')).toBeTruthy();
+  });
+
+  // Reload rides up into the ACTIVE page tab, ahead of its name: reloading is
+  // done TO that page, and inside its own pill the two read as one thing
+  // rather than as neighbours a row apart.
+  it('puts Reload inside the active page tab, ahead of its name', () => {
+    render(
+      <FileWorkspace
+        projectId="project-reload-row"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html'], active: 'index.html' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const tab = getTabByName(document.querySelector('.ws-tabs-bar')!, /index\.html/);
+    expect(tab.querySelector('.ws-tab-action-slot .ws-tab-reload')).toBeTruthy();
+    // Ahead of the name, in the glyph's place — and the all-files list rides
+    // after it, between the name and the close button (the "+" it used to sit
+    // beside, out after the strip, is gone).
+    expect(Array.from(tab.children).map((el) => el.className)).toEqual([
+      expect.stringContaining('ws-tab-action-slot'),
+      expect.stringContaining('ws-tab-anim'),
+      expect.stringContaining('ws-pages-switcher'),
+      expect.stringContaining('ws-tab-close'),
+    ]);
+    // Moved, not copied — the preview toolbar below no longer carries it.
+    expect(document.querySelector('.viewer-toolbar-left .ws-tab-reload')).toBeNull();
+  });
+
+  // A background page is not one you are reloading, and only one slot may
+  // carry the id the viewer resolves against.
+  it('gives the slot to the active tab only', () => {
+    render(
+      <FileWorkspace
+        projectId="project-reload-one"
+        projectKind="prototype"
+        files={[workspaceFile('index.html'), workspaceFile('about.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html', 'about.html'], active: 'index.html' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(document.querySelectorAll('.ws-tab-action-slot')).toHaveLength(1);
+    expect(
+      getTabByName(document.querySelector('.ws-tabs-bar')!, /about\.html/)
+        .querySelector('.ws-tab-action-slot'),
+    ).toBeNull();
+  });
+
+  // `.icon-only`'s box lives under `.viewer-toolbar` in the viewer styles, so
+  // a button portaled out of that toolbar arrives with no styling at all.
+  it('gives the hoisted Reload a box that fits inside the pill', () => {
+    const box = cssDeclarations(drawerCss, '.ws-tab-action-slot .ws-tab-reload');
+    expect(box).toMatch(/width:\s*18px/);
+    expect(box).toMatch(/height:\s*18px/);
+    // Nothing to portal ⇒ the tab keeps exactly the box it had.
+    expect(cssDeclarations(drawerCss, '.ws-tab-action-slot:empty')).toMatch(/display:\s*none/);
+  });
+
+  // The Preview tab is the entry page in the NORMAL viewer, chrome included:
+  // Export / Share / version history / the comment and zoom bar are on
+  // FileViewer's toolbar, and a preview without them is the one surface where
+  // the page cannot be acted on.
+  it('keeps an empty conversation preview clear of other project outputs', () => {
+    render(<FileWorkspace projectId="empty-conversation" projectKind="prototype"
+      files={[workspaceFile('index.html')]} liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+      tabsState={{ tabs: [], active: '__preview__' }} onTabsStateChange={vi.fn()}
+      conversationPreviewFile={null} />);
+    expect(screen.getByTestId('project-preview-empty')).toBeTruthy();
+    expect(screen.queryByTestId('preview-tab-viewer')).toBeNull();
+  });
+
+  it('keeps the same Preview viewer when Edit protects an already-open file', async () => {
+    mockedFetchProjectFileText.mockResolvedValue('<html><body><main>Preview</main></body></html>');
+    render(
+      <FileWorkspace
+        projectId="preview-dock-switch"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html'], active: '__preview__' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+    const edit = await screen.findByTestId('manual-edit-mode-toggle');
+    await waitFor(() => expect(edit).not.toBeDisabled());
+    fireEvent.click(edit);
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle')).toBe(edit);
+      expect(edit).toHaveAttribute('aria-pressed', 'true');
+    });
+    fireEvent.click(screen.getByTestId('canvas-dock-present-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle')).toBe(edit);
+      expect(edit).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByTestId('canvas-dock-present-toggle')).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+
+  it('shows the entry page in the file viewer, not a bare frame', () => {
+    render(
+      <FileWorkspace
+        projectId="project-preview"
+        projectKind="prototype"
+        files={[workspaceFile('index.html'), workspaceFile('notes.txt')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('project-preview-tab'));
+
+    expect(screen.getByTestId('preview-tab-viewer')).toBeTruthy();
+    // The chrome-less pane is what this replaces.
+    expect(screen.queryByTestId('project-preview-frame')).toBeNull();
+  });
+
+  // While the run is writing that page the build preview owns the tab: it is
+  // the same frame with a cursor on the line being written, which the plain
+  // viewer cannot show.
+  it('leaves the tab to the build preview while a run is writing', () => {
+    render(
+      <FileWorkspace
+        projectId="project-preview"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        streaming
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('project-preview-tab'));
+
+    expect(screen.queryByTestId('preview-tab-viewer')).toBeNull();
+    expect(screen.getByTestId('project-preview')).toBeTruthy();
+  });
+
+  it('says there is nothing to preview before the project has a page', () => {
+    render(
+      <FileWorkspace
+        projectId="project-preview"
+        projectKind="prototype"
+        files={[workspaceFile('notes.txt')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('project-preview-tab'));
+
+    expect(screen.queryByTestId('preview-tab-viewer')).toBeNull();
+    expect(screen.getByTestId('project-preview-empty')).toBeTruthy();
   });
 
   it('starts Design Files navigation fresh when switching projects', () => {
@@ -1318,11 +1800,21 @@ describe('FileWorkspace upload input', () => {
     expect(markup).toContain('class="ws-tabs-shell"');
     expect(markup).toContain('data-testid="workspace-focus-toggle"');
     // The expand control sits before the tabs bar (left side) so its
-    // direction matches where the chat pane re-emerges from. In focus mode
-    // the project tab strip's dock host sits between them (the strip portals
-    // into it — see workspaceTabsDock.ts), so allow it in the order check.
+    // direction matches where the chat pane re-emerges from. It leads the
+    // row's left zone (`.ws-tabs-lead`), ahead of the view switcher and — in
+    // focus mode — the project tab strip's dock host (the strip portals into
+    // it, see workspaceTabsDock.ts); the file tabs follow in the centre zone.
     expect(markup).toMatch(
-      /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*(?:<div class="ws-tabs-project-dock"[^>]*><\/div>\s*)?<div class="ws-tabs-bar"/,
+      /<div class="ws-tabs-shell"><div class="ws-tabs-lead">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*(?:<div class="ws-tabs-project-dock"[^>]*><\/div>\s*)?<div[^>]*class="ws-tabs-views(?: [^"]+)?"/,
+    );
+    // …and the file-tab strip really is the centre zone, after that lead.
+    // The viewport-switcher slot leads that centre zone (the open viewer
+    // portals 桌面端/平板/手机 into it; empty and CSS-collapsed with nothing
+    // open), so the tabs bar follows it.
+    // `data-hide-tabs` rides on the centre zone: 设计文件 (the resting view
+    // here) hides the open-file strip and the "+" through it.
+    expect(markup).toMatch(
+      /<\/div><div class="ws-tabs-center"[^>]*><div id="app-chrome-tab-lead" class="ws-tabs-lead-slot" data-app-chrome-tab-lead="true"><\/div><div class="ws-tabs-bar"/,
     );
   });
 
@@ -1413,7 +1905,7 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(retainedViewer.style.visibility).toBe('hidden');
       expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
 
-      fireEvent.click(screen.getByRole('tab', { name: /artifact\.html/i }));
+      fireEvent.click(screen.getByTestId('project-preview-tab'));
       expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
       expect(screen.getByTestId('retained-file-viewer')).toBe(retainedViewer);
       expect(retainedViewer.style.display).toBe('flex');
@@ -2481,6 +2973,150 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
+  // The Preview tab is the project as it LOOKS; Design Files is what it is made
+  // of. Clicking Preview swaps the pane without touching the open file tabs.
+  // Discrete strip: the active tab carries its label, the rest hold their icon
+  // alone (workspace/TabLabel animates the width between the two). Every tab
+  // still names itself through its tooltip, which is what a collapsed one has.
+  it('shows the label on the active tab only, and names the rest by tooltip', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const preview = screen.getByTestId('project-preview-tab');
+    const designFiles = screen.getByTestId('design-files-tab');
+    expect(designFiles.getAttribute('aria-selected')).toBe('true');
+    expect(designFiles.textContent).toContain('Design Files');
+    expect(preview.textContent?.trim()).toBe('');
+    expect(preview.getAttribute('title')).toBe('Preview');
+
+    fireEvent.click(preview);
+
+    expect(preview.textContent).toContain('Preview');
+    expect(designFiles.textContent?.trim()).toBe('');
+    expect(designFiles.getAttribute('title')).toContain('Design Files');
+  });
+
+  it('opens the project preview from its own root tab', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          {
+            name: 'index.html',
+            size: 1200,
+            mtime: 1_756_000_000_123,
+            kind: 'html',
+            mime: 'text/html',
+          } as never,
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('project-preview-tab'));
+
+    // With a page on disk and no run in flight the pane mounts the real
+    // viewer for it; ProjectPreviewPane covers the other two states (no page
+    // yet, and a run writing one) — see its own tests.
+    expect(screen.getByTestId('preview-tab-viewer')).toBeTruthy();
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+    expect(screen.getByTestId('project-preview-tab').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('false');
+  });
+
+  // Landing on 预览 used to leave the strip naming every surface except the
+  // one on screen: the entry page was being previewed with no tab of its own,
+  // and only opening the file yourself put its chip there.
+  it('names the previewed entry page in the tab strip without opening it', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html'), workspaceFile('about.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const tabsBar = () => document.querySelector<HTMLElement>('.ws-tabs-bar')!;
+    expect(tabsBar().querySelectorAll('[role="tab"]').length).toBe(0);
+
+    fireEvent.click(screen.getByTestId('project-preview-tab'));
+
+    const entryTab = getTabByName(tabsBar(), /index\.html/);
+    expect(entryTab.className).toContain('active');
+    expect(entryTab.textContent).toContain('index.html');
+    // It is what 预览 IS, not an opened tab, so there is nothing to close…
+    expect(entryTab.querySelector('.ws-tab-close')).toBeNull();
+    // …and it does not put itself in the persisted tab list either.
+    expect(tabsBar().querySelectorAll('[role="tab"]').length).toBe(1);
+  });
+
+  // Stepping into 预览 used to collapse that page's own chip to a bare icon,
+  // so the row showed a page with nothing on it naming the page — and only
+  // clicking the chip (i.e. leaving 预览) brought the label back.
+  it('keeps the previewed page\'s own tab expanded while 预览 is the active tab', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html'], active: 'index.html' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const entryTab = () => getTabByName(document.querySelector<HTMLElement>('.ws-tabs-bar')!, /index\.html/);
+    expect(entryTab().textContent).toContain('index.html');
+
+    fireEvent.click(screen.getByTestId('project-preview-tab'));
+
+    expect(entryTab().className).toContain('active');
+    expect(entryTab().textContent).toContain('index.html');
+  });
+
+  it('stands the previewed-page tab down once that page is opened for real', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html'], active: 'index.html' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('project-preview-tab'));
+
+    // One chip for the page, not two: the real tab is already there.
+    const tabsBar = document.querySelector<HTMLElement>('.ws-tabs-bar')!;
+    expect(tabsBar.querySelectorAll('[role="tab"]').length).toBe(1);
+  });
+
   it('shows Design Files when the persisted active file no longer exists', () => {
     render(
       <FileWorkspace
@@ -2498,7 +3134,9 @@ describe('FileWorkspace launcher tab creation', () => {
     expect(screen.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('design-files-empty')).toBeTruthy();
     expect(screen.queryByText(/Open a file from/i)).toBeNull();
-    expect(renderedTabLabels()).toEqual(['Design Files']);
+    // Preview leads the strip: what the project looks like, before what it is
+    // made of. Both are fixed root tabs and neither can be closed.
+    expect(renderedTabLabels()).toEqual(['Preview', 'Design Files']);
   });
 
   it('hides terminal creation while keeping browser creation available', () => {
@@ -2515,7 +3153,7 @@ describe('FileWorkspace launcher tab creation', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    openTabLauncher();
 
     const launcherMenu = within(screen.getByTestId('tab-launcher-menu'));
     expect(launcherMenu.queryByRole('button', { name: /New Terminal/i })).toBeNull();
@@ -2561,11 +3199,40 @@ describe('FileWorkspace launcher tab creation', () => {
     // Design Files is a plain tab in the strip (role="tab"), so it is part of
     // the rendered tab list rather than a dropdown trigger sitting outside it.
     expect(renderedTabLabels()).toEqual([
+      'Preview',
       'Design Files',
       'Browser',
       'New Terminal',
       'Side chat',
     ]);
+  });
+
+  it('does not flash a shared-project notice while read-only access is provisional', () => {
+    const props = {
+      projectId: 'pending-project-access',
+      projectKind: 'prototype' as const,
+      files: [workspaceFile('notes.txt')],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: DESIGN_FILES_TAB },
+      onTabsStateChange: vi.fn(),
+    };
+    const view = render(<FileWorkspace {...props} viewerOnly readonlyNotice={null} />);
+    expect(view.container.querySelector('.workspace-readonly-notice')).toBeNull();
+
+    // An owner finishes loading without ever seeing the shared-project banner.
+    view.rerender(<FileWorkspace {...props} viewerOnly={false} readonlyNotice={null} />);
+    expect(view.container.querySelector('.workspace-readonly-notice')).toBeNull();
+
+    // Confirmed shared viewers still receive the access explanation.
+    view.rerender(<FileWorkspace {...props} viewerOnly readonlyNotice="Shared by a teammate" />);
+    expect(view.container.querySelector('.workspace-readonly-notice')?.textContent)
+      .toContain('Shared by a teammate');
+
+    view.rerender(<FileWorkspace {...props} viewerOnly />);
+    expect(view.container.querySelector('.workspace-readonly-notice')?.textContent)
+      .toContain('This is a shared project');
   });
 
   it('shows project sync progress on the Design Files root tab without hiding materialized files', () => {
@@ -2708,7 +3375,7 @@ describe('FileWorkspace launcher tab creation', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    openTabLauncher();
     fireEvent.click(await screen.findByRole('button', { name: /New Browser/i }));
 
     await waitFor(() => {
@@ -2752,7 +3419,7 @@ describe('FileWorkspace launcher tab creation', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    openTabLauncher();
     fireEvent.click(await screen.findByRole('button', { name: /notes\.html/i }));
 
     await waitFor(() => {
@@ -2789,9 +3456,8 @@ describe('FileWorkspace launcher tab creation', () => {
     });
 
     expect(allowedDefault).toBe(false);
-    expect(screen.getByTestId('workspace-add-tab').getAttribute('aria-expanded')).toBe(
-      'true',
-    );
+    // The "+" that used to carry `aria-expanded` is gone (per product), so the
+    // shortcut's own result — an open launcher — is what this asserts.
     expect(await screen.findByRole('dialog', { name: /New tab/i })).toBeTruthy();
     expect(screen.getByTestId('tab-launcher-search')).toBe(document.activeElement);
   });
@@ -4061,28 +4727,25 @@ describe('FileWorkspace add-module menu', () => {
       />,
     );
 
-    const addButton = screen.getByTestId('workspace-add-tab');
-    expect(addButton.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('tab-launcher-menu')).toBeNull();
 
     act(() => {
-      fireEvent.click(addButton);
+      openTabLauncher();
     });
 
-    expect(addButton.getAttribute('aria-expanded')).toBe('true');
     const browserItem = screen.getByRole('button', { name: /New Browser/ });
     const menu = browserItem.closest('[data-testid="tab-launcher-menu"]');
     expect(menu).not.toBeNull();
     expect(screen.queryByRole('button', { name: /New Terminal/ })).toBeNull();
 
     // The tab strip is a horizontal scroll container that also clips
-    // vertically, so the "+" button lives outside it in `.ws-add-tab`
-    // and the launcher menu is portaled to <body> -- neither can be clipped
-    // by the scrolling bar.
+    // vertically, so the launcher menu is portaled to <body> and cannot be
+    // clipped by the scrolling bar. (The "+" that used to stand outside the
+    // bar for the same reason is gone — ⌘T is the way in.)
     const tabsBar = document.querySelector('.ws-tabs-bar');
     expect(tabsBar).not.toBeNull();
-    expect(tabsBar!.contains(addButton)).toBe(false);
     expect(tabsBar!.contains(menu)).toBe(false);
-    expect(addButton.closest('.ws-add-tab')).not.toBeNull();
+    expect(document.querySelector('.ws-add-tab')).toBeNull();
   });
 
   it('orders launcher sections as create new, files, then tabs in one scroll body', () => {
@@ -4111,7 +4774,7 @@ describe('FileWorkspace add-module menu', () => {
     );
 
     act(() => {
-      fireEvent.click(screen.getByTestId('workspace-add-tab'));
+      openTabLauncher();
     });
 
     const scrollBody = screen.getByTestId('tab-launcher-scroll-body');
@@ -4141,10 +4804,9 @@ describe('FileWorkspace add-module menu', () => {
       />,
     );
 
-    const addButton = screen.getByTestId('workspace-add-tab');
     for (let i = 0; i < 3; i += 1) {
       act(() => {
-        fireEvent.click(addButton);
+        openTabLauncher();
       });
       act(() => {
         fireEvent.click(screen.getByRole('button', { name: /New Browser/ }));
@@ -4153,11 +4815,13 @@ describe('FileWorkspace add-module menu', () => {
 
     const browserTabs = screen
       .getAllByRole('tab')
-      .filter((tab) => /Browser(?: \d+)?/.test(tab.textContent ?? ''));
+      .filter((tab) => /Browser(?: \d+)?/.test(tabName(tab)));
     expect(browserTabs).toHaveLength(3);
+    expect(browserTabs.map(tabName)).toEqual(['Browser', 'Browser 2', 'Browser 3']);
+    // Only the one just opened is expanded; the other two are icon-wide.
     expect(browserTabs.map((tab) => tab.textContent?.trim())).toEqual([
-      'Browser',
-      'Browser 2',
+      '',
+      '',
       'Browser 3',
     ]);
     expect(browserTabs[2]!.getAttribute('aria-selected')).toBe('true');

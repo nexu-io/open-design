@@ -3088,6 +3088,7 @@ export const id: Dict = {
   'manualEdit.title': 'Editor manual',
   'manualEdit.fallbackTitle': 'Edit',
   'manualEdit.movePanel': 'Move edit panel',
+  "manualEdit.resizePanel": "Ubah lebar panel edit",
   'manualEdit.editParams': 'Edit parameter',
   'manualEdit.closePanel': 'Close edit panel',
   'manualEdit.selectLayer': 'Pilih lapisan',

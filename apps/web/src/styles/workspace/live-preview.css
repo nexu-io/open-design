@@ -1,0 +1,51 @@
+.live-build-stage { position: absolute; inset: 0; overflow: hidden; background: #fff; }
+.live-build-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; pointer-events: none; }
+.live-build-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.live-build-outline { position: absolute; box-sizing: border-box; border: 1px solid var(--accent); border-radius: 8px; }
+.live-build-bubble {
+  position: absolute; box-sizing: border-box; width: max-content;
+  max-width: min(280px, calc(100% - 16px)); max-height: calc(100% - 16px);
+  padding: 8px 12px; border-radius: 12px; background: var(--bg-elevated);
+  color: var(--text-strong); box-shadow: 0 3px 16px #0002;
+  font-size: 12px; font-weight: 600; line-height: 1.4;
+  overflow: hidden; transition: top 160ms ease, left 160ms ease;
+}
+.live-build-bubble span, .live-build-bubble small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-build-bubble small { font-weight: 400; color: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) { .live-build-bubble { transition: none; } }
+
+/* Positioning context for the build preview, whose own stage is `inset: 0`. */
+.project-live-preview-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.project-live-preview-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+/* Nothing to preview yet: the particle field turns here with the run's state
+   at its centre. Same box the Design Files pane used to give it — a plain
+   white surface that is the positioning context for the field's own
+   absolutely-positioned canvas, and clips it to the pane. */
+.project-live-preview-empty {
+  flex: 1;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 13px;
+  background-color: #fff;
+}

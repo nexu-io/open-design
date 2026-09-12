@@ -49,6 +49,22 @@
   }
 }
 .viewer-toolbar-left { display: inline-flex; align-items: center; gap: 8px; }
+/* Collapse the bar when nothing renders into it.
+   Everything it used to carry for a plain preview has moved up into the
+   workspace row — 预览/代码, the viewport switcher, Reload, the file actions —
+   and what was left was a white band under the tabs with nothing in it. The
+   check is "does either side hold an element", so the bar comes back on its
+   own for the modes that still fill it (deck rail + slide nav, the comment and
+   board tools, the ⋮ menu) instead of being deleted for all of them. */
+.viewer-toolbar:not(:has(> * > *)) {
+  display: none;
+}
+/* A hidden overflow trigger must not reserve an empty toolbar row.
+   Keep intrinsic height when the narrow-layout menu becomes visible. */
+.html-viewer > .viewer-toolbar:has(> .viewer-toolbar-left:empty):has(> .viewer-toolbar-actions > .viewer-toolbar-more:only-child) {
+  min-height: 0;
+  padding-block: 0;
+}
 .viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; }
 /* Wraps the icon-action group (screenshot/comment/mark/edit/comment-count/
    zoom) as a single unit `.viewer-toolbar-actions` can hide via the 600px
@@ -609,194 +625,10 @@
   background: var(--bg);
   overflow: auto;
 }
-/* Initial-load skeleton for the HTML preview, owned by FileViewer's source===null branch. */
+/* Keep the preview surface quiet while its initial content loads. */
 .viewer-loading {
   height: 100%;
   min-height: 0;
-  display: grid;
-  place-items: center;
-  padding: clamp(24px, 5vw, 56px);
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 34% 36%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg) 88%, var(--bg-panel)), var(--bg));
-  /* Anti-flash: hold the skeleton invisible for ~180ms so fast (local) file
-     loads never flash it — only genuinely slow fetches (shared-project pulls,
-     big files) fade it in. The sentinel that shows it per file switch is
-     deliberate (#4650); this only stops the sub-200ms blink. */
-  animation: od-fade-in 220ms cubic-bezier(0.23, 1, 0.32, 1) 180ms both;
-}
-.viewer-loading-stage {
-  position: relative;
-  width: min(760px, 86%);
-  aspect-ratio: 16 / 9;
-  max-height: 76%;
-  animation: od-viewer-loading-float 2.4s cubic-bezier(0.23, 1, 0.32, 1) infinite alternate;
-}
-.viewer-loading-card {
-  position: absolute;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-  pointer-events: none;
-}
-.viewer-loading-card-back {
-  inset: 0;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle)), color-mix(in srgb, var(--bg-subtle) 88%, var(--accent) 5%));
-  box-shadow: 0 18px 52px color-mix(in srgb, var(--shadow-color, #000) 7%, transparent);
-}
-.viewer-loading-card-back-one {
-  opacity: 0.5;
-  transform: translate(18px, -14px) scale(0.965);
-}
-.viewer-loading-card-back-two {
-  opacity: 0.32;
-  transform: translate(-16px, 16px) scale(0.94);
-}
-.viewer-loading-card-main {
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: clamp(10px, 2vw, 18px);
-  overflow: hidden;
-  padding: clamp(26px, 5vw, 58px);
-  background:
-    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 34%),
-    linear-gradient(140deg, color-mix(in srgb, var(--bg-panel) 96%, var(--accent) 4%), color-mix(in srgb, var(--bg-subtle) 88%, var(--bg-panel) 12%));
-  box-shadow:
-    0 28px 80px color-mix(in srgb, var(--shadow-color, #000) 9%, transparent),
-    0 1px 0 color-mix(in srgb, #fff 40%, transparent) inset;
-}
-.viewer-loading-card-main::before {
-  content: "";
-  position: absolute;
-  inset: -45%;
-  transform: translateX(-42%) rotate(8deg);
-  background: linear-gradient(
-    90deg,
-    transparent 35%,
-    color-mix(in srgb, #fff 34%, transparent) 50%,
-    transparent 65%
-  );
-  animation: od-viewer-loading-sweep 1.8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
-}
-.viewer-loading-kicker,
-.viewer-loading-title,
-.viewer-loading-rule,
-.viewer-loading-line,
-.viewer-loading-bar {
-  position: relative;
-  z-index: 1;
-  display: block;
-  overflow: hidden;
-  border-radius: 999px;
-  background: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--text-muted) 12%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 15%, transparent) 40%,
-    color-mix(in srgb, var(--text-muted) 10%, transparent) 80%
-  );
-  background-size: 220% 100%;
-  animation: od-viewer-loading-sheen 1.55s linear infinite;
-}
-.viewer-loading-kicker {
-  width: 21%;
-  height: clamp(7px, 0.85vw, 10px);
-}
-.viewer-loading-title {
-  width: 64%;
-  height: clamp(24px, 3.5vw, 42px);
-  border-radius: 12px;
-}
-.viewer-loading-title-short {
-  width: 46%;
-}
-.viewer-loading-rule {
-  width: 56%;
-  height: 4px;
-  margin: clamp(2px, 0.6vw, 8px) 0;
-}
-.viewer-loading-content {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 26%);
-  align-items: end;
-  gap: clamp(18px, 4vw, 52px);
-  margin-top: clamp(2px, 1.5vw, 16px);
-}
-.viewer-loading-copy {
-  display: grid;
-  gap: clamp(8px, 1.3vw, 12px);
-  min-width: 0;
-}
-.viewer-loading-line {
-  width: 76%;
-  height: clamp(8px, 1vw, 11px);
-}
-.viewer-loading-line-medium {
-  width: 58%;
-}
-.viewer-loading-line-short {
-  width: 34%;
-}
-.viewer-loading-chart {
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  gap: clamp(6px, 1.2vw, 11px);
-  min-height: clamp(44px, 8vw, 82px);
-}
-.viewer-loading-bar {
-  width: clamp(12px, 2vw, 20px);
-  border-radius: 999px 999px 6px 6px;
-}
-.viewer-loading-bar-one {
-  height: 48%;
-}
-.viewer-loading-bar-two {
-  height: 78%;
-  animation-delay: 120ms;
-}
-.viewer-loading-bar-three {
-  height: 60%;
-  animation-delay: 240ms;
-}
-@keyframes od-viewer-loading-float {
-  from { transform: translateY(3px); }
-  to { transform: translateY(-5px); }
-}
-@keyframes od-viewer-loading-sweep {
-  from { transform: translateX(-42%) rotate(8deg); }
-  to { transform: translateX(42%) rotate(8deg); }
-}
-@keyframes od-viewer-loading-sheen {
-  from { background-position: 120% 0; }
-  to { background-position: -120% 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .viewer-loading,
-  .viewer-loading-stage,
-  .viewer-loading-card-main::before,
-  .viewer-loading-kicker,
-  .viewer-loading-title,
-  .viewer-loading-rule,
-  .viewer-loading-line,
-  .viewer-loading-bar {
-    animation: none;
-  }
-}
-@media (max-width: 720px) {
-  .viewer-loading-stage {
-    width: min(540px, 92%);
-  }
-  .viewer-loading-content {
-    grid-template-columns: 1fr;
-  }
-  .viewer-loading-chart {
-    display: none;
-  }
 }
 .live-artifact-refresh-notice {
   position: sticky;
@@ -1354,107 +1186,32 @@
   /* Auto width — hug the trigger's content instead of a fixed box. */
   width: auto;
 }
+/* The glyph alone: one click advances to the next viewport (see
+   PreviewViewportControls), so there is no label and no chevron to hug — the
+   button is the square its icon needs, sized like the other icon-only controls
+   sharing this row. Still flat at rest: transparent fill, transparent border,
+   no shadow, so it never reads as a raised chip on the bar. */
 .viewer-viewport-trigger {
-  /* Auto width so the button hugs icon + label + chevron. A fixed square hid
-     the label and left nothing but an empty chip when the glyph was missing. */
-  width: auto;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
   min-height: 26px;
-  justify-content: flex-start;
-  /* Icon ↔ label gap = 4px (the label flexes, so this gap is the visible
-     device-icon-to-text spacing; the chevron stays pushed to the right). */
-  gap: 4px;
-  padding: 4px 8px 4px 10px;
-  /* Capsule button. */
+  justify-content: center;
+  gap: 0;
+  padding: 0;
   border-radius: var(--radius-pill);
   border-color: transparent;
   background-color: transparent;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
   line-height: 1.2;
   box-shadow: none;
 }
 .viewer-viewport-trigger > svg {
   flex: 0 0 auto;
 }
-.viewer-viewport-trigger > span {
-  /* Size to the label text, don't stretch to fill the button. */
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
 .viewer-viewport-trigger:hover:not(:disabled) {
   border-color: transparent;
-  background-color: transparent;
-}
-.viewer-viewport-trigger[aria-expanded='true'] {
-  border-color: transparent;
   background-color: var(--bg-subtle);
-  color: var(--text);
-}
-.viewer-viewport-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 80;
-  width: max-content;
-  min-width: 144px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2, 2px);
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-/*
- * In the main preview toolbar the switcher sits at the LEFT edge of the bar, so a
- * right-anchored menu spills past the pane's left boundary. Anchor it to the button's
- * left edge here so it opens rightward into the open toolbar space and stays in bounds.
- * (The live-artifact toolbar keeps the default right anchor: its switcher sits on the right.)
- */
-.viewer-preview-toolbar-inline .viewer-viewport-menu {
-  right: auto;
-  left: 0;
-}
-.viewer-viewport-menu-item {
-  width: 100%;
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  text-align: left;
-}
-.viewer-viewport-menu-item:hover {
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-.viewer-viewport-menu-item.active {
-  /* No stroke on the selected row — the fill, darker text and checkmark
-     already mark it. The border stays transparent (keeps the reserved 1px
-     from the base rule so text doesn't shift). */
-  border-color: transparent;
-  background: color-mix(in srgb, var(--accent-tint) 82%, var(--bg-panel));
-  color: var(--accent-strong);
-}
-.viewer-viewport-menu-label {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.viewer-viewport-menu-label span {
-  white-space: nowrap;
 }
 .live-artifact-preview-layer,
 .comment-preview-layer {

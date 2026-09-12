@@ -486,7 +486,7 @@
 }
 /* Wheel mode (long conversations only, gated by the component): the column
    fills the available rail height and the mask fades exactly the top and
-   bottom 8 dashes (8 × 16px pitch = 128px zones; the 40% bound only kicks in
+   bottom 8 dashes (8 × 12px pitch = 96px zones; the 40% bound only kicks in
    on very short windows so the fades never swallow the middle). When the
    column outgrows the rail, it rolls — the component keeps the active dash
    centered as the chat scrolls. Short conversations show the full column
@@ -495,8 +495,8 @@
   mask-image: linear-gradient(
     to bottom,
     transparent,
-    #000 min(128px, 40%),
-    #000 calc(100% - min(128px, 40%)),
+    #000 min(96px, 40%),
+    #000 calc(100% - min(96px, 40%)),
     transparent
   );
 }
@@ -506,8 +506,8 @@
 .chat-message-rail__marker:where([data-chat-root], [data-chat-root] *) {
   position: relative;
   width: 100%;
-  height: 16px;
-  flex: 0 0 16px;
+  height: 12px;
+  flex: 0 0 12px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -3847,19 +3847,13 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
   max-height: 122px;
   overflow-y: auto;
 }
-/* 稿子 `.queue .q { align-items: flex-start; gap: 8px; padding: 7px 10px;
-   font-size: var(--t-mini); color: var(--text) }`。
-   `display` 这里不重复写:整行的排版模型在上面 `.chat-queued-send-row` 那条里,
-   已经是稿子同一套 `flex`(把手 / 序号 / 动作 `flex: none`,正文 `flex: 1; min-width: 0`)。
-   ⚠️ 这条注释原来写着「靠四列栅格排,换成 flex 会把它们掀了」—— 那是栅格时代的旧话,
-   和上面那条规则自相矛盾;换 flex 的那次改动没顺手把它改过来。 */
+/* 拖动手柄、正文、动作依次排列，手柄与正文间距为 4px。 */
 .chat-queued-send-row:where([data-chat-root], [data-chat-root] *) {
   align-items: flex-start;
-  gap: 8px;
-  /* 稿子的 `.q` **没有** min-height:行高是内容加内距自己长出来的
-     (7 + 20 + 7 = 34)。卡片时代留下的 36px 地板会把每条顶高 2px。 */
+  gap: 4px;
+  /* 卡片高度由内容撑开，上下 6px、左右 4px。 */
   min-height: 0;
-  padding: 7px 10px;
+  padding: 6px 4px;
   border: 0;
   border-radius: 0;
   background: none;
@@ -3867,20 +3861,6 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
 }
 .chat-queued-send-row + .chat-queued-send-row:where([data-chat-root], [data-chat-root] *) {
   border-top: 1px solid var(--border-soft, var(--border));
-}
-/* 稿子 `.queue .q .ix { flex: none; font-family: var(--mono);
-   font-size: var(--t-cap); color: var(--text-soft) }` —— 就这四条。
-   我们多写的 `min-width: 1.2em` 把序号从 7.5px 撑到 14.5px,后面正文整段右移;
-   多写的 `line-height: 20px` 又把行内盒从 18px 顶到 20px,行高跟着高 2px。
-   序号本来就 `flex: none`,`tabular-nums` 已经保证两位数不抖,预留宽度是多余的。 */
-.chat-queued-send-index:where([data-chat-root], [data-chat-root] *) {
-  flex: none;
-  min-width: 0;
-  font-family: var(--mono);
-  font-size: var(--font-size-12);
-  line-height: 1.5;
-  color: var(--text-soft);
-  font-variant-numeric: tabular-nums;
 }
 /* 稿子 `.queue .q .grip { flex: none; display: grid; place-items: center;
    width: 16px; height: 22px; margin-inline-start: -2px; margin-top: -2px;
@@ -11680,11 +11660,6 @@ body.entry-resizing:where([data-chat-root], [data-chat-root] *) { cursor: col-re
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
 }
 
-.workspace-tabs-dropdown__icon:where([data-chat-root], [data-chat-root] *) {
-  display: inline-flex;
-  flex: 0 0 auto;
-  color: var(--text-muted);
-}
 .workspace-tabs-dropdown__label:where([data-chat-root], [data-chat-root] *) {
   flex: 1 1 auto;
   min-width: 0;

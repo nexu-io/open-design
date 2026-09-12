@@ -3088,6 +3088,7 @@ export const ja: Dict = {
   'manualEdit.title': '手動エディター',
   'manualEdit.fallbackTitle': '編集',
   'manualEdit.movePanel': '編集パネルを移動',
+  "manualEdit.resizePanel": "編集パネルの幅を変更",
   'manualEdit.editParams': 'パラメーターを編集',
   'manualEdit.closePanel': '編集パネルを閉じる',
   'manualEdit.selectLayer': 'レイヤーを選択',
