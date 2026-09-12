@@ -1442,8 +1442,13 @@ export function createChatRunService({
       }
       // A torn partial trailing line (a write cut mid-record) would corrupt
       // later reads; truncate the file back to the last complete line first.
+      // With no newline anywhere the whole file is one torn first record, so
+      // it goes back to byte zero instead of growing a valid line after it.
       const lastNewline = content.lastIndexOf('\n');
-      if (lastNewline >= 0 && lastNewline < content.length - 1) {
+      if (content && lastNewline < 0) {
+        fs.truncateSync(run.eventsLogPath, 0);
+        content = '';
+      } else if (lastNewline >= 0 && lastNewline < content.length - 1) {
         const completeBytes = Buffer.byteLength(content.slice(0, lastNewline + 1), 'utf8');
         fs.truncateSync(run.eventsLogPath, completeBytes);
         content = content.slice(0, lastNewline + 1);
@@ -1462,10 +1467,12 @@ export function createChatRunService({
           present.add(record.id);
         }
       }
+      // Cleared only once the file is self-consistent again: a failed read,
+      // truncate, or append above leaves the flag set so the next emit or
+      // finish retries the reconciliation.
+      run.eventsLogReplayNeeded = false;
     } catch {
       // Hard-disk failure: keep the run alive; the memory ring + SSE still work.
-    } finally {
-      run.eventsLogReplayNeeded = false;
     }
   };
 
