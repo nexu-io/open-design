@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { openArtifactProduct } from "@/exact/artifact-product.ts";
+import { openArtifactProduct } from "@/exact/artifact-acquisition.ts";
 import { zipFixture } from "./archive-fixture.ts";
 
 afterEach(() => vi.unstubAllGlobals());

@@ -1,7 +1,8 @@
 import { copyFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { assertArtifactDestinationAbsent, stageArtifactProduct, openArtifactProduct, writeArtifactEntry } from "./artifact-product.ts";
+import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-staging.ts";
+import { openArtifactProduct, writeArtifactEntry } from "./artifact-acquisition.ts";
 import { validateDataResourceReceipt } from "./resource-composition.ts";
 
 type Input = Readonly<{ resourceId: string; output: string }>;

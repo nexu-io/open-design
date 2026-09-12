@@ -2,7 +2,8 @@ import { lstat, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pack, extract } from "@open-design/archive/build";
 import { checkedFile, describeFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { assertArtifactDestinationAbsent, openArtifactProduct, stageArtifactProduct } from "./artifact-product.ts";
+import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-staging.ts";
+import { openArtifactProduct } from "./artifact-acquisition.ts";
 
 type Input = Readonly<{ target: string; output: string }>;
 const RECEIPT = "base-build-receipt.json", ARCHIVE = "base.zip";

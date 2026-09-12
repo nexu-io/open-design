@@ -4,7 +4,7 @@ import { copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm } from "
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { create, extract, list } from "tar";
-import { openArtifactProduct, writeArtifactEntry } from "./artifact-product.ts";
+import { openArtifactProduct, writeArtifactEntry } from "./artifact-acquisition.ts";
 import { readObject } from "./control-common.ts";
 
 const releaseFields = new Set(["artifactBaseUrl", "channel", "publishedAt", "releaseVersion", "signatures"]);

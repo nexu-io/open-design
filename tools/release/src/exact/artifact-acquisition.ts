@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { cp, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { extract, inspect, type ArchiveEntry } from "@open-design/archive";
+import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-staging.ts";
 import { readObject } from "./control-common.ts";
 
 const MAX_BYTES = 2 * 1024 ** 3;
@@ -18,26 +19,6 @@ export async function acquireArtifactProduct(input: Readonly<{ descriptor: strin
   await using product = await openArtifactProduct({ url: descriptor.url, sha256: descriptor.sha256 });
   await stageArtifactProduct(input.output, stage => cp(product.archive.root, stage, { recursive: true }));
   return { directory: resolve(input.output), acquisition: product.acquisition };
-}
-
-export async function assertArtifactDestinationAbsent(path: string) {
-  try { await lstat(path); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
-  throw new Error("artifact product destination already exists");
-}
-
-/** Publish a complete local projection only after every byte has been verified. */
-export async function stageArtifactProduct(output: string, prepare: (stage: string) => Promise<void>) {
-  const destination = resolve(output);
-  await assertArtifactDestinationAbsent(destination);
-  await mkdir(dirname(destination), { recursive: true });
-  const scratch = await mkdtemp(join(dirname(destination), ".product-transport-"));
-  try {
-    const stage = join(scratch, "output"); await mkdir(stage);
-    await prepare(stage);
-    await assertArtifactDestinationAbsent(destination);
-    await rename(stage, destination);
-  } finally { await rm(scratch, { recursive: true, force: true }); }
 }
 
 /** Open a checksum-bound artifact. Selection and cache decisions belong to the

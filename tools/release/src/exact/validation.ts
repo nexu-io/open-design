@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { lstat, mkdir, open, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { canonicalBytes, readObject, writeObject } from "./control-common.ts";
-import { acquireArtifactProduct } from "./artifact-product.ts";
+import { acquireArtifactProduct } from "./artifact-acquisition.ts";
 
 const recipes = {
   "electron.contract.test": [{ directory: "packages/electron-contract", args: ["test"] }],

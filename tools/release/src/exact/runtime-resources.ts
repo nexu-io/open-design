@@ -1,7 +1,8 @@
 import { copyFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { openArtifactProduct, stageArtifactProduct } from "./artifact-product.ts";
+import { stageArtifactProduct } from "./artifact-staging.ts";
+import { openArtifactProduct } from "./artifact-acquisition.ts";
 import { buildReleaseRuntimeResources } from "./resource-build.ts";
 
 const IDS = ["open-design-daemon", "open-design-web"] as const;

@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { exportDataResource, importDataResource } from "@/exact/resource-artifact.ts";
 import { composeReleaseDataResources } from "@/exact/resource-composition.ts";
 import { materializeReleaseDataResources } from "@/exact/resource-build.ts";
-import { acquireArtifactProduct } from "@/exact/artifact-product.ts";
+import { acquireArtifactProduct } from "@/exact/artifact-acquisition.ts";
 import { acquireReleaseDataResources } from "@/exact/resource-acquisition.ts";
 
 const roots: string[] = [];

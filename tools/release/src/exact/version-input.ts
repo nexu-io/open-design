@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { canonicalBytes, describeFile, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { stageArtifactProduct } from "./artifact-product.ts";
+import { stageArtifactProduct } from "./artifact-staging.ts";
 
 export type VersionInputStore = Readonly<{
   read: () => Promise<JsonObject | undefined>;

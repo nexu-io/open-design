@@ -1,7 +1,7 @@
 import { copyFile, lstat, mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { stageArtifactProduct } from "./artifact-product.ts";
+import { stageArtifactProduct } from "./artifact-staging.ts";
 
 /** Project only signed installation inputs. Resource payloads remain with the
  * publisher; neither release bindings nor their existing digests are rewritten. */

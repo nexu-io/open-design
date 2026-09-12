@@ -195,7 +195,8 @@
       "tools/release/src/index.ts",
       "tools/release/esbuild.config.mjs",
       "tools/release/src/exact/capsule-artifact.ts",
-      "tools/release/src/exact/artifact-product.ts",
+      "tools/release/src/exact/artifact-staging.ts",
+      "tools/release/src/exact/artifact-acquisition.ts",
       "tools/release/src/exact/base-artifact.ts",
       "tools/release/src/exact/capsule-budget.ts",
       ".github/actions/release-data/action.yml",
@@ -283,6 +284,7 @@
       "tools/release/src/policy/"
     ],
     "electron-scene": [
+      "suite://release-acquisition",
       ".node-version",
       "suite://closure-resources",
       "package.json",
@@ -474,6 +476,12 @@
       "suite://production-tools-pack",
       "suite://production-tools-release"
     ],
+    "release-acquisition": [
+      "tools/release/src/exact/artifact-acquisition.ts",
+      "tools/release/src/exact/artifact-staging.ts",
+      "tools/release/src/exact/control-common.ts",
+      "suite://production-packages-archive"
+    ],
     "release-executor": [
       "tools/release/src/exact/build-commands.ts",
       "tools/release/src/exact/command-input.ts",
@@ -485,9 +493,10 @@
       "tools/release/package.json",
       "tools/release/esbuild.config.mjs",
       "tools/release/src/exact/control-common.ts",
-      "tools/release/src/exact/artifact-product.ts"
+      "tools/release/src/exact/artifact-staging.ts"
     ],
     "validation-control": [
+      "suite://release-acquisition",
       "tools/release/src/index.ts",
       "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/validation-commands.ts",
@@ -575,6 +584,7 @@
       "suite://production-packages-sidecar-proto"
     ],
     "installed-acceptance": [
+      "suite://release-acquisition",
       "suite://validation-control",
       "suite://release-executor",
       "tools/release/src/exact/acceptance*.ts",

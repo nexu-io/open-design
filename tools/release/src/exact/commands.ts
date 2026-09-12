@@ -22,7 +22,7 @@ import { registerDistributionCommands } from "./distribution-commands.ts";
 import { registerToolchainCommands } from "./toolchain-commands.ts";
 import { registerBuildCommands } from "./build-commands.ts";
 import { required, emit, type Options } from "./command-input.ts";
-import { acquireArtifactProduct } from "./artifact-product.ts";
+import { acquireArtifactProduct } from "./artifact-acquisition.ts";
 import { exportInstallationInput } from "./installation-input.ts";
 import { acquireAcceptanceEvidence, exportAcceptanceWitness } from "./acceptance-reuse.ts";
 

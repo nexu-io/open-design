@@ -2,7 +2,8 @@ import { lstat, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pack, extract } from "@open-design/archive/build";
-import { assertArtifactDestinationAbsent, openArtifactProduct, stageArtifactProduct } from "./artifact-product.ts";
+import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-staging.ts";
+import { openArtifactProduct } from "./artifact-acquisition.ts";
 import { checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { packageBuilder } from "./native-builder.ts";
 

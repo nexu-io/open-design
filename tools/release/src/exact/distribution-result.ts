@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import type { ReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { requiresFormalMacTrust } from "../policy/native-trust.ts";
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-product.ts";
+import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-staging.ts";
 import { releaseObjects } from "./release-object.ts";
 import { publishArtifact } from "./publication-artifact.ts";
 import { distributionStage } from "./distribution-stage.ts";

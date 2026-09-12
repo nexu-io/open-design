@@ -1,6 +1,7 @@
 import { lstat, mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { openArtifactProduct, stageArtifactProduct, writeArtifactEntry } from "./artifact-product.ts";
+import { stageArtifactProduct } from "./artifact-staging.ts";
+import { openArtifactProduct, writeArtifactEntry } from "./artifact-acquisition.ts";
 import { readObject } from "./control-common.ts";
 
 /** Consumers acquire hit transports directly; producers contribute only misses.

@@ -3,7 +3,8 @@ import { join, resolve } from "node:path";
 import { validateElectronCapsuleContent } from "@open-design/shell-electron/build/contracts";
 import { canonicalBytes, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { CAPSULE_RELEASE_BUDGET, verifyCapsuleReleaseBudget } from "./capsule-budget.ts";
-import { assertArtifactDestinationAbsent, openArtifactProduct, stageArtifactProduct, writeArtifactEntry } from "./artifact-product.ts";
+import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-staging.ts";
+import { openArtifactProduct, writeArtifactEntry } from "./artifact-acquisition.ts";
 
 type Input = Readonly<{ target: string; output: string }>;
 const RECEIPT = "capsule-build-receipt.json";

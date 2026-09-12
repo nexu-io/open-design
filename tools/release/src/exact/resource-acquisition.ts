@@ -4,7 +4,7 @@ import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 import { canonicalBytes, checkedFile, readObject } from "./control-common.ts";
 import { importDataResource } from "./resource-artifact.ts";
 import { validateDataResourceReceipt } from "./resource-composition.ts";
-import { stageArtifactProduct } from "./artifact-product.ts";
+import { stageArtifactProduct } from "./artifact-staging.ts";
 
 /** Acquire a complete version input set. Missing local products fail instead
  * of causing implicit builds; cached products are acquired at their consumer,

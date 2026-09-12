@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { assertArtifactDestinationAbsent } from "./artifact-product.ts";
+import { assertArtifactDestinationAbsent } from "./artifact-staging.ts";
 import { importBase, unpackBase } from "./base-artifact.ts";
 import { importToolchain, unpackToolchain } from "./toolchain-artifact.ts";
 import { importSceneArtifact, unpackSceneArtifact } from "./scene-artifact.ts";

@@ -63,7 +63,7 @@ describe("exact Electron release topology", () => {
       " def records(self,token): return [(p,m,('f'*40 if p==path else o),s) for p,m,o,s in cached(token)]",
       " with patch.object(GitFingerprinter,'records',records): after=compute()",
       " return sorted(name for name in before if before[name]['digest']!=after[name]['digest'])",
-      "paths=['apps/web/tests/sidecar-proxy.test.ts','apps/daemon/tests/sidecar-startup.test.ts','packages/electron-kit/tsconfig.tests.json','packages/electron-capsule/tsconfig.tests.json','packages/archive/tests/archive.test.ts','apps/web/app/layout.tsx','apps/daemon/src/server.ts']",
+      "paths=['apps/web/tests/sidecar-proxy.test.ts','apps/daemon/tests/sidecar-startup.test.ts','packages/electron-kit/tsconfig.tests.json','packages/electron-capsule/tsconfig.tests.json','packages/archive/tests/archive.test.ts','apps/web/app/layout.tsx','apps/daemon/src/server.ts','tools/release/src/exact/artifact-acquisition.ts','tools/release/src/exact/artifact-staging.ts']",
       "assert all((root/path).is_file() for path in paths), 'identity probe must name existing source files'",
       "print(json.dumps({path:changed(path) for path in paths}))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), workspaceRoot, lane]);
@@ -77,6 +77,20 @@ describe("exact Electron release topology", () => {
     expect(changes["apps/daemon/src/server.ts"]).toContain("closure_runtime_daemon_darwin_arm64");
     expect(changes["apps/web/app/layout.tsx"]).toContain("closure_runtime_web_darwin_arm64");
     expect(changes["apps/web/app/layout.tsx"]).not.toContain("closure_runtime_daemon_darwin_arm64");
+    const acquisition = changes["tools/release/src/exact/artifact-acquisition.ts"]!;
+    expect(acquisition).toEqual([
+      "electron_scene_darwin_arm64", "electron_scene_win32_x64",
+      "installed_electron_darwin_arm64", "installed_terminal_darwin_arm64", "release_tools",
+      "validation_closure_darwin_arm64", "validation_contract_darwin_arm64", "validation_shell_darwin_arm64",
+    ]);
+    const staging = changes["tools/release/src/exact/artifact-staging.ts"]!;
+    expect(staging).toEqual(expect.arrayContaining([
+      ...dataIds.map(id => `closure_data_${id.replaceAll("-", "_")}_darwin_arm64`),
+      "closure_runtime_web_darwin_arm64", "closure_runtime_daemon_darwin_arm64",
+      "electron_base_darwin_arm64", "electron_platform_darwin_arm64",
+      "electron_capsule_darwin_arm64", "electron_toolchain_darwin_arm64",
+      "electron_scene_darwin_arm64", "terminal_scene_darwin_arm64", "release_tools",
+    ]));
   });
   it.each(["exact", "stable", "prerelease"])("pairs accepted macOS sessions without duplicating first-start in release-%s", async lane => {
     const workflow = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");

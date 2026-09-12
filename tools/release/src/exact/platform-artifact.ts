@@ -2,7 +2,8 @@ import { copyFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { validateNodePlatformResource } from "@open-design/standalone/packages";
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { assertArtifactDestinationAbsent, openArtifactProduct, stageArtifactProduct, writeArtifactEntry } from "./artifact-product.ts";
+import { assertArtifactDestinationAbsent, stageArtifactProduct } from "./artifact-staging.ts";
+import { openArtifactProduct, writeArtifactEntry } from "./artifact-acquisition.ts";
 
 type Input = Readonly<{ target: string; output: string }>;
 const RECEIPT = "platform-build-receipt.json";

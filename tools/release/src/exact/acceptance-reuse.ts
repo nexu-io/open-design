@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import type { ReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { openArtifactProduct } from "./artifact-product.ts";
+import { openArtifactProduct } from "./artifact-acquisition.ts";
 
 /** Compare authenticated business declarations, not workload identities. This
  * catches undeclared dispatch-input drift (such as standaloneVersion) before

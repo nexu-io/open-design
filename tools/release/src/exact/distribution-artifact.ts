@@ -1,7 +1,7 @@
 import { copyFile, lstat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { checkedFile, readObject, writeObject } from "./control-common.ts";
-import { stageArtifactProduct } from "./artifact-product.ts";
+import { stageArtifactProduct } from "./artifact-staging.ts";
 
 /** Published installers travel as references to final version objects. Local
  * distribution without retention keeps the file-backed contribution contract. */

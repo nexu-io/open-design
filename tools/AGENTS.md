@@ -93,6 +93,10 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
   refuse them. Content declaration drift fails before activation; tools do not
   recompute workload identity or implicitly run missing tests. Reuse preserves
   the last physically tested installation baseline instead of relabeling it.
+- Release artifact staging is a filesystem-only producer/consumer primitive in
+  `exact/artifact-staging.ts`. Download, authenticated extraction and selected
+  entry projection live in `exact/artifact-acquisition.ts`; do not rejoin them
+  behind a shared barrel that makes acquisition changes production inputs.
 - `distribution acquire` joins independent scene/base/toolchain acquisition
   with fixed bounded fan-out, including on failure. It neither builds missing
   inputs nor consumes plan state. Release-owned distribution stages separately
