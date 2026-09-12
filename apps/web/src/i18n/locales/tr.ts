@@ -3088,6 +3088,7 @@ export const tr: Dict = {
   'manualEdit.title': 'Manuel düzenleyici',
   'manualEdit.fallbackTitle': 'Düzenle',
   'manualEdit.movePanel': 'Düzenleme panelini taşı',
+  "manualEdit.resizePanel": "Düzenleme panelini yeniden boyutlandır",
   'manualEdit.editParams': 'Parametreleri düzenle',
   'manualEdit.closePanel': 'Düzenleme panelini kapat',
   'manualEdit.selectLayer': 'Bir katman seç',

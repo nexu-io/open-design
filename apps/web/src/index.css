@@ -16,8 +16,10 @@
 @import './styles/workspace/connectors.css';
 @import './styles/workspace/drawer.css';
 @import './styles/workspace/design-files.css';
+@import './styles/workspace/live-preview.css';
 @import './styles/workspace/design-browser.css';
 @import './styles/viewer/core.css';
+@import './styles/viewer/canvas-dock.css';
 @import './styles/viewer/code.css';
 @import './styles/viewer/tools.css';
 @import './styles/viewer/composio.css';

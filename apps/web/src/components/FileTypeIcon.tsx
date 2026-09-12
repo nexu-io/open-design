@@ -1,8 +1,8 @@
 // The one place an uploaded file's type becomes a glyph.
 //
 // Supplied artwork (per product), inlined for the same reason the rail's marks
-// are: every one of these is MULTI-COLOUR — brand fills, two of them
-// gradients — and the shared `Icon` / `RemixIcon` components emit a single
+// are: these use supplied colours — brand fills and a font gradient — while
+// the shared `Icon` / `RemixIcon` components emit a single
 // `currentColor` path, which would flatten a Figma logo into a grey blob.
 //
 // What does NOT live here, deliberately: raster images, vectors and videos.
@@ -21,6 +21,7 @@ export type FileTypeIconName =
   | 'figma'
   | 'font'
   | 'gif'
+  | 'image'
   | 'markdown'
   | 'model3d'
   | 'pdf'
@@ -28,6 +29,25 @@ export type FileTypeIconName =
   | 'unknown'
   | 'word'
   | 'zip';
+
+/** Supplied artwork colours, also used to tint file-icon backplates. */
+export const FILE_TYPE_ICON_COLORS: Record<FileTypeIconName, string> = {
+  audio: '#9500FF',
+  code: '#00CCFF',
+  ebook: '#006FE5',
+  excel: '#F34801',
+  figma: '#A259FF',
+  font: '#029F27',
+  gif: '#F49624',
+  image: '#FF9900',
+  markdown: '#000000',
+  model3d: '#00E3AE',
+  pdf: '#FF0044',
+  ppt: '#1F68FE',
+  unknown: '#848484',
+  word: '#00A365',
+  zip: '#0B06FE',
+};
 
 /** The families that show a thumbnail instead of a glyph. */
 export type FilePreviewKind = 'image' | 'vector' | 'video';
@@ -114,8 +134,10 @@ export function resolveFileTypeIcon(name: string, mime?: string): FileTypeIconNa
   const ext = extensionOf(name);
   const byExtension = ext ? ICON_BY_EXTENSION.get(ext) : undefined;
   if (byExtension) return byExtension;
+  if (IMAGE_EXTENSIONS.has(ext) || VECTOR_EXTENSIONS.has(ext)) return 'image';
 
   const type = (mime ?? '').toLowerCase();
+  if (type.startsWith('image/')) return 'image';
   if (type.startsWith('audio/')) return 'audio';
   if (type === 'application/pdf') return 'pdf';
   if (type === 'text/markdown') return 'markdown';
@@ -132,11 +154,11 @@ export function resolveFileTypeIcon(name: string, mime?: string): FileTypeIconNa
 /**
  * The glyph a thumbnail family falls back to when its thumbnail cannot be
  * produced — a GIF whose object URL failed, a video the browser won't decode.
- * Raster and vector have no artwork of their own in the supplied set (they are
- * never meant to be seen as a glyph), so they take the neutral one.
+ * Raster and vector use the supplied image artwork when a preview fails.
  */
 export function previewFallbackIcon(kind: FilePreviewKind, name: string): FileTypeIconName {
   if (kind === 'image' && extensionOf(name) === 'gif') return 'gif';
+  if (kind === 'image' || kind === 'vector') return 'image';
   return 'unknown';
 }
 
@@ -147,7 +169,7 @@ interface Props {
 }
 
 export function FileTypeIcon({ name, size = 16 }: Props) {
-  // Both gradient marks below need document-unique ids: two chips showing the
+  // Gradient marks need document-unique ids: two chips showing the
   // same type would otherwise emit the same `<linearGradient id>` twice, and a
   // `url(#…)` reference resolves to whichever one is still in the DOM — so
   // removing the first chip blanked the second one's fill.
@@ -230,6 +252,12 @@ export function FileTypeIcon({ name, size = 16 }: Props) {
           <path d="M16 2L20.9997 7L21 20.9925C21 21.5489 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5447 3 21.0082V2.9918C3 2.44405 3.44749 2 3.9985 2H16ZM13 10H12V15H13V10ZM11 10H9C7.89543 10 7 10.8954 7 12V13C7 14.1046 7.89543 15 9 15H10C10.5523 15 11 14.5523 11 14V12H9V13H10V14H9C8.44772 14 8 13.5523 8 13V12C8 11.4477 8.44772 11 9 11H11V10ZM17 10H14V15H15V13H17V12H15V11H17V10Z" fill="#F49624" />
         </svg>
       );
+    case 'image':
+      return (
+        <svg {...common}>
+          <path d="M20 5H4V19L13.2923 9.70649C13.6828 9.31595 14.3159 9.31591 14.7065 9.70641L20 15.0104V5ZM2 3.9934C2 3.44476 2.45531 3 2.9918 3H21.0082C21.556 3 22 3.44495 22 3.9934V20.0066C22 20.5552 21.5447 21 21.0082 21H2.9918C2.44405 21 2 20.5551 2 20.0066V3.9934ZM8 11C6.89543 11 6 10.1046 6 9C6 7.89543 6.89543 7 8 7C9.10457 7 10 7.89543 10 9C10 10.1046 9.10457 11 8 11Z" fill="#FF9900" />
+        </svg>
+      );
     case 'audio':
       return (
         <svg {...common}>
@@ -258,21 +286,7 @@ export function FileTypeIcon({ name, size = 16 }: Props) {
     default:
       return (
         <svg {...common}>
-          <path d="M16 2L21 7V21.0082C21 21.556 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5447 3 21.0082V2.9918C3 2.44405 3.44495 2 3.9934 2H16ZM11 15V17H13V15H11ZM13 13.3551C14.4457 12.9248 15.5 11.5855 15.5 10C15.5 8.067 13.933 6.5 12 6.5C10.302 6.5 8.88637 7.70919 8.56731 9.31346L10.5288 9.70577C10.6656 9.01823 11.2723 8.5 12 8.5C12.8284 8.5 13.5 9.17157 13.5 10C13.5 10.8284 12.8284 11.5 12 11.5C11.4477 11.5 11 11.9477 11 12.5V14H13V13.3551Z" fill={`url(#${gradientId})`} />
-          <defs>
-            <radialGradient
-              id={gradientId}
-              cx="0"
-              cy="0"
-              r="1"
-              gradientUnits="userSpaceOnUse"
-              gradientTransform="translate(4.5 3.5) rotate(50.1944) scale(19.5256 17.5731)"
-            >
-              <stop stopColor="#00FF08" />
-              <stop offset="0.509615" stopColor="#00FFEA" />
-              <stop offset="1" stopColor="#121212" />
-            </radialGradient>
-          </defs>
+          <path d="M16 2L21 7V21.0082C21 21.556 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5447 3 21.0082V2.9918C3 2.44405 3.44495 2 3.9934 2H16ZM11 15V17H13V15H11ZM13 13.3551C14.4457 12.9248 15.5 11.5855 15.5 10C15.5 8.067 13.933 6.5 12 6.5C10.302 6.5 8.88637 7.70919 8.56731 9.31346L10.5288 9.70577C10.6656 9.01823 11.2723 8.5 12 8.5C12.8284 8.5 13.5 9.17157 13.5 10C13.5 10.8284 12.8284 11.5 12 11.5C11.4477 11.5 11 11.9477 11 12.5V14H13V13.3551Z" fill="#848484" />
         </svg>
       );
   }

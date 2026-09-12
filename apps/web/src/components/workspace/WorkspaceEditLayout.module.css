@@ -1,0 +1,112 @@
+.layout {
+  grid-column: 3;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.layout > :global(.workspace) {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.layout:has(.host:not([hidden])) > :global(.workspace) {
+  container: edit-preview / inline-size;
+}
+
+.divider {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+  outline-offset: -1px;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+}
+
+.divider:hover,
+.divider:focus-visible {
+  background: var(--border);
+}
+
+.host {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 8px 8px 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.host[hidden],
+.divider[hidden] {
+  display: none;
+}
+
+.layout[data-resizing] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.layout[data-resizing] iframe {
+  pointer-events: none;
+}
+
+/* The inspector can leave less room than the window's media queries imply.
+   Keep all preview actions reachable within that remaining canvas width. */
+@container edit-preview (max-width: 680px) {
+  .layout :global(.workspace .ws-tabs-shell) {
+    display: flex;
+    flex-wrap: wrap;
+    height: auto;
+  }
+
+  .layout :global(.ws-tabs-lead),
+  .layout :global(.ws-tabs-center) {
+    height: 30px;
+  }
+
+  .layout :global(.ws-tabs-center) {
+    order: 3;
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .layout :global(.ws-tabs-actions),
+  .layout :global(.ws-tabs-actions > *) {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+@container edit-preview (max-width: 720px) {
+  /* The generic viewer-toolbar queries also match this container. The
+     canvas mode switches use text rather than those toolbar tab icons. */
+  .layout :global(.canvas-dock-mode-seg .viewer-tab) {
+    width: auto;
+    min-width: 0;
+    padding-inline: 15px;
+  }
+
+  .layout :global(.canvas-dock-mode-seg .viewer-tab-label) {
+    display: inline;
+  }
+}
+
+@container edit-preview (max-width: 500px) {
+  .layout :global(.canvas-dock-mode-seg) {
+    position: sticky;
+    right: 0;
+    background: var(--bg-panel);
+  }
+}

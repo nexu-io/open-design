@@ -5,6 +5,11 @@ import { AnalyticsProvider } from '../src/analytics/provider';
 import '@excalidraw/excalidraw/index.css';
 import '../src/index.css';
 import '../src/styles/home/index.css';
+// Keep project pane geometry in the initial stylesheet. App is loaded with
+// ssr:false; its async CSS chunk can remain a preload during a dev refresh.
+// Without these rules the workspace collapses to its toolbar's height.
+import '../src/components/workspace/WorkspaceEditLayout.module.css';
+import '../src/components/ManualEditPanel.module.css';
 
 export const metadata: Metadata = {
   title: 'Open Design',

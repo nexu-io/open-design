@@ -290,7 +290,7 @@
 }
 /* Wheel mode (long conversations only, gated by the component): the column
    fills the available rail height and the mask fades exactly the top and
-   bottom 8 dashes (8 × 16px pitch = 128px zones; the 40% bound only kicks in
+   bottom 8 dashes (8 × 12px pitch = 96px zones; the 40% bound only kicks in
    on very short windows so the fades never swallow the middle). When the
    column outgrows the rail, it rolls — the component keeps the active dash
    centered as the chat scrolls. Short conversations show the full column
@@ -299,8 +299,8 @@
   mask-image: linear-gradient(
     to bottom,
     transparent,
-    #000 min(128px, 40%),
-    #000 calc(100% - min(128px, 40%)),
+    #000 min(96px, 40%),
+    #000 calc(100% - min(96px, 40%)),
     transparent
   );
 }
@@ -310,8 +310,8 @@
 .chat-message-rail__marker:where(:not([data-chat-root], [data-chat-root] *)) {
   position: relative;
   width: 100%;
-  height: 16px;
-  flex: 0 0 16px;
+  height: 12px;
+  flex: 0 0 12px;
   padding: 0;
   border: 0;
   background: transparent;

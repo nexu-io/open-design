@@ -13,6 +13,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { WorkspaceEditLayout } from './workspace/WorkspaceEditLayout';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
@@ -246,10 +247,11 @@ import {
 } from '../comments';
 import { historyWithApiAttachmentContext } from '../api-attachment-context';
 import { filterImplicitProducedFiles } from '../produced-files';
-import { AvatarMenu } from './AvatarMenu';
 import { Icon } from './Icon';
 import { useWorkspaceTabsDockRef } from './workspaceTabsDock';
 import { localizePluginTitle } from './plugins-home/localization';
+import { AvatarMenu } from './AvatarMenu';
+import historyDockStyles from './chat/ConversationHistoryDock.module.css';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { PresenceBar } from '../collab/PresenceBar';
 import { useProjectCollab } from '../collab/useProjectCollab';
@@ -280,7 +282,6 @@ import type { AnchorWriteBack } from '../comments';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './chat/ProjectChatPane';
-import historyDockStyles from './chat/ConversationHistoryDock.module.css';
 import type { ChatSendMeta, ChatSendOutcome } from './ChatComposer';
 import {
   CritiqueTheaterMount,
@@ -292,12 +293,15 @@ import {
   decideAutoOpenAfterWrite,
   selectAutoOpenProducedArtifact,
   selectAutoOpenTurnArtifact,
+  selectLiveTurnArtifact,
+  selectConversationArtifact,
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import {
   DESIGN_SYSTEM_TAB,
+  PREVIEW_TAB,
   FileWorkspace,
   type BrowserOpenRequest,
   type FileRefreshResult,
@@ -1972,14 +1976,13 @@ export function ProjectView({
     refreshPresence: collabRefreshPresence,
     checkStatusNow: collabCheckStatusNow,
   } = projectCollab;
-  // Read-only banner copy: when the collab cloud resolved who shared this project,
-  // name them ("这是 麻薯 创建的共享项目…"); otherwise fall back to the name-less
-  // notice. Only computed when the viewer is actually read-only.
-  const readonlyNoticeText = projectCollab.viewerOnly
+  // Pending access checks also withhold editing, but are not evidence that this
+  // is someone else's shared project. Only confirmed viewers get that notice.
+  const readonlyNoticeText = projectCollab.viewerOnly && projectCollab.isSharedNonOwner
     ? projectCollab.ownerDisplayName
       ? t('workspace.readonlyNoticeBy', { owner: projectCollab.ownerDisplayName })
       : t('workspace.readonlyNotice')
-    : undefined;
+    : null;
   // Team-share file-sync badge for the design-files tab bar + empty state
   // (recvqghymxqQQq). A member downloads (their local mirror trails the
   // published head); the owner uploads (a local edit hasn't published yet).
@@ -2094,6 +2097,8 @@ export function ProjectView({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
+  const pendingConversationPreviewRef = useRef<string | null>(null);
+  const [conversationPreview, setConversationPreview] = useState<{ id: string; file: string | null } | null>(null);
   const [pendingEmptyConversationSeed, setPendingEmptyConversationSeed] =
     useState<{ projectId: string; authorityKey: string } | null>(null);
   const activeConversation = useMemo(
@@ -2458,14 +2463,14 @@ export function ProjectView({
   // tool card, an attachment chip, or a produced-file chip in chat. We
   // include a nonce so re-clicking the same name after the user closed the
   // tab still focuses it.
-  const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number; preview?: boolean } | null>(null);
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
   // Like `openRequest`, but additionally asks the preview workspace to open the
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
   // existing export/deploy surface rather than introducing a new share backend.
-  const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number; preview?: boolean } | null>(null);
   // Parallel to shareRequest, but opens the workspace's Download/Export menu.
-  const [downloadRequest, setDownloadRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [downloadRequest, setDownloadRequest] = useState<{ name: string; nonce: number; preview?: boolean } | null>(null);
   const [designSystemEditRequest, setDesignSystemEditRequest] =
     useState<{ module: 'logo'; nonce: number } | null>(null);
   // When a queued chat send starts processing, ask the workspace to flip the
@@ -3507,6 +3512,45 @@ export function ProjectView({
   }, []);
 
   useEffect(() => {
+    if (!activeConversationId || pendingConversationPreviewRef.current !== activeConversationId
+      || !messagesInitialized || messagesConversationId !== activeConversationId) return;
+    const name = selectConversationArtifact(messages.filter((message) => message.role === 'assistant').map((message) => ({
+      producedFiles: message.producedFiles,
+      touchedPaths: extractTouchedFilePathsFromEvents(message.events),
+    })), projectFiles);
+    // The file list may still be loading; don't consume a known output early.
+    if (committedFilesGeneration === 0) return;
+    pendingConversationPreviewRef.current = null;
+    setConversationPreview({ id: activeConversationId, file: name });
+    setOpenRequest({ name: name ?? PREVIEW_TAB, nonce: Date.now(), preview: true });
+  }, [activeConversationId, messagesInitialized, messagesConversationId, messages, projectFiles, committedFilesGeneration]);
+
+  useEffect(() => {
+    if (streaming) setConversationPreview(null);
+  }, [streaming]);
+
+  // The page a run is writing gets its tab as soon as it lands, instead of
+  // waiting for the turn to settle the way every `selectAutoOpen*` path below
+  // does — a long run otherwise leaves the artifact on disk with no way into
+  // it. The ref holds what this run already opened, so a file rewritten forty
+  // times opens one tab; it clears when the run ends, so the next one opens
+  // its own. See `selectLiveTurnArtifact` for which page that is.
+  const liveTurnArtifactRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!streaming) {
+      liveTurnArtifactRef.current = null;
+      return;
+    }
+    const artifact = selectLiveTurnArtifact(projectFiles, {
+      streaming,
+      alreadyOpened: liveTurnArtifactRef.current,
+    });
+    if (!artifact) return;
+    liveTurnArtifactRef.current = artifact;
+    requestOpenFile(artifact);
+  }, [streaming, projectFiles, requestOpenFile]);
+
+  useEffect(() => {
     const designSystemId = brandReady?.designSystemId;
     if (!designSystemId) return;
     if (handledBrandReadyDesignSystemRef.current === designSystemId) return;
@@ -3729,6 +3773,21 @@ export function ProjectView({
       // changes instead of leaving the project view in its empty shell.
     });
   }, [daemonLive, refreshWorkspaceItems, filesRefresh]);
+
+  // CLI writes can finish after their tool-use event, and some workspaces do
+  // not forward a watcher event until publish. Keep a bounded polling floor
+  // while generating so the first real file can appear before the run ends.
+  useEffect(() => {
+    if (!streaming) return;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await refreshProjectFiles({ fresh: true });
+      if (!disposed) timer = setTimeout(poll, 3000);
+    };
+    timer = setTimeout(poll, 3000);
+    return () => { disposed = true; clearTimeout(timer); };
+  }, [streaming, refreshProjectFiles]);
 
   // Live-reload: when the daemon's chokidar watcher reports a file change,
   // bump filesRefresh so the file list refetches with new mtimes — which
@@ -4010,7 +4069,7 @@ export function ProjectView({
   const lastSyncedRouteKeyRef = useRef<string | null>(null);
   const lastSeenRouteConversationIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const target = openTabsState.active && (
+    const target = !pendingConversationPreviewRef.current && openTabsState.active && (
       openTabsState.tabs.includes(openTabsState.active)
       || projectFileNames.has(openTabsState.active)
       || isLiveArtifactTabId(openTabsState.active)
@@ -9021,6 +9080,9 @@ export function ProjectView({
     setFailedMessagesConversationId(null);
     setConversationLoadError(null);
     messagesConversationIdRef.current = null;
+    pendingConversationPreviewRef.current = id;
+    setConversationPreview({ id, file: null });
+    setOpenRequest({ name: PREVIEW_TAB, nonce: Date.now(), preview: true });
     setActiveConversationId(id);
     // Push the new conversation id into the URL synchronously so the
     // route-sync effect at L512 sees a matching `routeConversationId`
@@ -9033,7 +9095,7 @@ export function ProjectView({
         kind: 'project',
         projectId: project.id,
         conversationId: id,
-        fileName: openTabsState.active ?? null,
+        fileName: null,
       },
       { replace: true },
     );
@@ -10765,8 +10827,7 @@ export function ProjectView({
   // resulting SSE stream.
   const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
 
-  // CLI / agent selector lives below the chat conversation (composer footer),
-  // not in the top-right header.
+
   const executionControls = (
     <>
       <AvatarMenu
@@ -10847,19 +10908,17 @@ export function ProjectView({
           ].filter(Boolean).join(' ')}
           aria-hidden={chatSlotHidden || undefined}
         >
-          {/* Workspace tab strip dock: on the project route the strip leaves
-              the full-width chrome row and sits here, directly above the chat
-              card, level with the workspace column's tab row (which rises to
-              the window top since the chrome row collapses). Unmounting
-              (workspace-focused mode, leaving the route) automatically
-              returns the strip to the chrome row. */}
+          {/* Home, project switcher, history and collapse share one top row.
+              Focus mode releases this dock for the preview's dock host. */}
           {!workspaceFocused ? (
             <div
               className="split-chat-tabs-dock"
               data-testid="workspace-tabs-dock"
+              data-workspace-dock="chat"
               ref={chatTabsDockRef}
             >
-              {/* Conversation controls follow the docked project dropdown. */}
+              {/* The dropdown portals into this dock; the history and collapse
+                  controls follow it on the right. */}
               <div className={historyDockStyles.dock} ref={setHistoryPortalTarget} data-testid="chat-history-dock" />
               <button
                 type="button"
@@ -11079,7 +11138,6 @@ export function ProjectView({
               onCollapse={() => setWorkspaceFocused(true)}
               collapseControlLifted={!workspaceFocused}
               backLabel={t('project.backToProjects')}
-              composerFooterAccessory={executionControls}
               projectHeader={(
                 <span className="chat-project-title-line">
                   <span
@@ -11108,6 +11166,7 @@ export function ProjectView({
                   ) : null}
                 </span>
               )}
+              composerFooterAccessory={executionControls}
               designSystemPicker={(
                 <DesignSystemPicker
                   variant="home"
@@ -11154,6 +11213,7 @@ export function ProjectView({
             onBlur={handleChatResizeBlur}
           />
         ) : null}
+        <WorkspaceEditLayout key={project.id}>
         <FileWorkspace
           projectId={project.id}
           projectName={currentProject.name}
@@ -11178,6 +11238,7 @@ export function ProjectView({
           streaming={currentConversationActionDisabled}
           commentQueueOnSend={commentQueueOnSend}
           commentSendDisabled={currentConversationQueueDisabled}
+          conversationPreviewFile={conversationPreview?.id === activeConversationId && !currentConversationActionDisabled ? conversationPreview.file : undefined}
           openRequest={openRequest}
           browserOpenRequest={browserOpenRequest}
           pinnedBrowserTabId={projectIsProgrammaticBrandExtraction ? BRAND_BROWSER_TAB_ID : null}
@@ -11255,6 +11316,7 @@ export function ProjectView({
           onLaunchTerminalAuth={handleLaunchAntigravityOauth}
           conversationId={activeConversationId}
         />
+        </WorkspaceEditLayout>
       </div>
       {contextPluginDetails ? (
         <PluginDetailsModal

@@ -715,7 +715,6 @@
 }
 .manual-edit-content-inspector {
   padding-bottom: var(--spacing-12);
-  border-bottom: var(--stroke-thin) solid var(--border);
 }
 .cc-section { display: flex; flex-direction: column; gap: var(--spacing-8); }
 .cc-section-inactive { opacity: 0.58; }
@@ -1079,7 +1078,7 @@
   color: var(--manual-edit-field-text);
   padding: 0 var(--spacing-8); height: 40px; font-size: var(--font-size-13, 13px); gap: var(--spacing-2);
 }
-.cc-quad-axis { color: var(--manual-edit-field-muted); font-style: normal; font-size: var(--font-size-12, 12px); flex: 0 0 auto; font-weight: 600; }
+.cc-quad-axis { display: inline-flex; align-items: center; color: var(--manual-edit-field-muted); font-style: normal; font-size: var(--font-size-12, 12px); flex: 0 0 auto; font-weight: 600; }
 .cc-step-quad {
   flex-basis: 12px;
   width: 12px;
@@ -1672,6 +1671,7 @@
 }
 
 .manual-edit-content-inspector .manual-edit-field textarea {
+  border-radius: 16px;
   max-height: 132px;
 }
 
@@ -1994,4 +1994,57 @@
     max-width: none;
     padding: 16px;
   }
+}
+
+.manual-edit-content-inspector textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+.manual-edit-content-inspector textarea::-webkit-scrollbar {
+  background: transparent;
+  width: 4px;
+  height: 4px;
+}
+.manual-edit-content-inspector textarea::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 4px;
+}
+.manual-edit-content-inspector textarea::-webkit-scrollbar-track,
+.manual-edit-content-inspector textarea::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Inspector field names sit above their controls, including paired fields. */
+.manual-edit-modal .cc-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.manual-edit-modal .cc-row > .cc-label {
+  max-width: none;
+  padding: 0;
+  overflow: visible;
+  white-space: normal;
+}
+.manual-edit-modal .cc-row > .cc-value {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 0 8px;
+  border: var(--stroke-thin) solid var(--manual-edit-field-border);
+  border-radius: var(--radius-medium);
+  background: var(--manual-edit-field-bg);
+}
+.manual-edit-modal .cc-row > .cc-value:hover {
+  background: var(--manual-edit-field-bg-hover);
+}
+.manual-edit-modal .cc-row > .cc-value:focus-within {
+  border-color: var(--blue, #1A74FF);
+}
+.manual-edit-modal .cc-row > .cc-select > .cc-chevron {
+  right: 8px;
 }

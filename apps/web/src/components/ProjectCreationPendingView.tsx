@@ -132,7 +132,6 @@ export function ProjectCreationPendingView({
           </div>
           <div className={styles.workspaceBody}>
             <span className={styles.workspaceTitle}>{t('designFiles.crumbs')}</span>
-            <span className={styles.workspaceEmpty}>{t('designFiles.empty')}</span>
           </div>
         </section>
       </div>

@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
+import { WorkspaceEditLayout } from '../../src/components/workspace/WorkspaceEditLayout';
 
 const { saveTemplateMock } = vi.hoisted(() => ({
   saveTemplateMock: vi.fn(),
@@ -656,20 +657,6 @@ describe('FileViewer preview scale', () => {
     expect(css).toContain('.viewer-action');
   });
 
-  it('uses a layered skeleton for the initial preview loading state', () => {
-    const css = readExpandedIndexCss();
-
-    expect(css).toContain('.viewer-loading-stage');
-    expect(css).toContain('aspect-ratio: 16 / 9;');
-    expect(css).toContain('.viewer-loading-card-back-one');
-    expect(css).toContain('.viewer-loading-card-main::before');
-    expect(css).toContain('.viewer-loading-chart');
-    expect(css).toContain('@keyframes od-viewer-loading-sweep');
-    expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.viewer-loading-stage,[\s\S]*animation: none;/,
-    );
-  });
-
   it('waits for exact Team authority before loading initial raw source', async () => {
     const file = baseFile({
       name: 'first-open.html',
@@ -912,7 +899,7 @@ describe('FileViewer preview scale', () => {
     );
   });
 
-  it('keeps the preview viewport trigger flat by default', () => {
+  it('keeps the preview viewport trigger flat, and down to its glyph', () => {
     const css = readExpandedIndexCss();
     const rules = Array.from(css.matchAll(/\.viewer-viewport-trigger\s*\{[^}]+\}/g), (match) => match[0]);
 
@@ -922,11 +909,11 @@ describe('FileViewer preview scale', () => {
     expect(rules.some((rule) => rule.includes('border-color: transparent;'))).toBe(true);
     expect(rules.some((rule) => rule.includes('box-shadow: none;'))).toBe(true);
     expect(rules.every((rule) => !rule.includes('box-shadow: var(--shadow-xs);'))).toBe(true);
-    // …and it must hug its content so the label and chevron stay visible. A
-    // fixed square hid the label and left an empty chip behind (issue: the
-    // deck toolbar's "empty grey block").
-    expect(rules.some((rule) => rule.includes('width: auto;'))).toBe(true);
-    expect(rules.every((rule) => !rule.includes('width: 30px;'))).toBe(true);
+    // Icon only (per product): one click cycles to the next viewport, so there
+    // is no label or chevron to hug and the button is the square its glyph
+    // needs — the same size as the other icon-only controls on this row.
+    expect(rules.some((rule) => rule.includes('width: 26px;'))).toBe(true);
+    expect(rules.every((rule) => !rule.includes('width: auto;'))).toBe(true);
   });
 
   it('clips deck thumbnail loading overlays to the thumbnail frame radius', () => {
@@ -959,9 +946,6 @@ describe('FileViewer preview scale', () => {
     );
     expect(css).toMatch(
       /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-button\.active \.deck-thumbnail-number\s*\{[\s\S]*box-shadow: 0 0 0 2px/,
-    );
-    expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail\.comment-preview-layer-deck-rail-collapsed \.comment-preview-canvas\s*\{[\s\S]*border-left: 1px solid var\(--border-strong\);[\s\S]*border-radius: var\(--deck-device-frame-radius\);/,
     );
   });
 
@@ -1955,6 +1939,23 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).not.toContain('class="deck-nav"');
   });
 
+  // Reload is hoisted into the workspace tab row when there is one. Every
+  // other surface — a standalone viewer, a preview with no row above it —
+  // resolves no host, so the button has to stay where it has always been.
+  it('keeps Reload in the toolbar when there is no workspace row to hoist it into', () => {
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({ name: 'page.html', path: 'page.html', mime: 'text/html', kind: 'html' })}
+        liveHtml="<html><body>hi</body></html>"
+      />,
+    );
+
+    expect(container.querySelector('.viewer-toolbar-left .ws-tab-reload')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /reload preview/i })).toBeTruthy();
+  });
+
   it('reloads a URL-loaded HTML preview with a new cache key without replacing the iframe', () => {
     const file = baseFile({
       name: 'page.html',
@@ -2057,8 +2058,10 @@ describe('FileViewer SVG artifacts', () => {
     const refreshedRequest = latestPreviewContentSizeRequest(previewWindow);
     expect(refreshedRequest.documentEpoch).toBe(refreshedUrl.searchParams.get('odPreviewEpoch'));
     act(() => postPreviewContentSizeResponse(previewWindow, refreshedRequest, 1440, 900));
+    // The dock stays collapsed here: entering Edit would change the iframe
+    // transport being measured. Read the mounted zoom value without arming it.
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     });
 
   });
@@ -2438,7 +2441,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(refreshedRequest.documentEpoch).toBe(refreshedUrl.searchParams.get('odPreviewEpoch'));
     act(() => postPreviewContentSizeResponse(previewWindow, refreshedRequest, 1440, 900));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     });
 
     rerender(
@@ -2794,6 +2797,101 @@ describe('FileViewer SVG artifacts', () => {
     expect(urlFrame?.getAttribute('data-od-active')).toBe('false');
   });
 
+  it('opens the project edit dock immediately and releases it when the viewer becomes inactive', async () => {
+    const file = baseFile({ name: 'docked.html', path: 'docked.html', mime: 'text/html', kind: 'html' });
+    const viewer = (active: boolean) => (
+      <WorkspaceEditLayout>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file}
+          liveHtml='<html><body><main data-od-id="hero-card">Hero</main></body></html>'
+          workspaceActive={active} />
+      </WorkspaceEditLayout>
+    );
+    const view = render(viewer(true));
+    const dock = screen.getByTestId('workspace-edit-dock');
+    expect(dock).not.toBeVisible();
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(dock).toBeVisible());
+    expect(within(dock).getByRole('button', { name: 'Close edit panel' })).toBeVisible();
+    expect(within(dock).queryByRole('button', { name: 'Move edit panel' })).toBeNull();
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const frameSource = frame.srcdoc;
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize edit panel' }), { key: 'ArrowLeft' });
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+    expect(frame.srcdoc).toBe(frameSource);
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: manualEditTarget('hero-card', 'Hero card', 20) },
+    })));
+    expect(await within(dock).findByText('Hero card')).toBeVisible();
+    view.rerender(viewer(false));
+    await waitFor(() => expect(dock).not.toBeVisible());
+    expect(dock.childElementCount).toBe(0);
+  });
+
+  it.each(['Save', 'Cancel'])('returns the dock to page settings after %s and can close and reopen it', async (action) => {
+    render(<WorkspaceEditLayout>
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={baseFile({ name: 'dock-actions.html', path: 'dock-actions.html', mime: 'text/html', kind: 'html' })}
+        liveHtml='<html><body><main data-od-id="hero-card">Hero</main></body></html>' />
+    </WorkspaceEditLayout>);
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    const dock = screen.getByTestId('workspace-edit-dock');
+    await waitFor(() => expect(dock).toBeVisible());
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const select = () => act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: manualEditTarget('hero-card', 'Hero card', 20) },
+    })));
+    select();
+    expect(await within(dock).findByText('Hero card')).toBeVisible();
+    fireEvent.click(within(dock).getByRole('button', { name: action }));
+    await waitFor(() => expect(within(dock).queryByText('Hero card')).toBeNull());
+    expect(dock).toBeVisible();
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(dock).getByRole('button', { name: 'Close edit panel' }));
+    await waitFor(() => expect(dock).not.toBeVisible());
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    select();
+    expect(await within(dock).findByText('Hero card')).toBeVisible();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(dock).not.toBeVisible());
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('retains a failed text save in the project edit dock', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, opts?: { method?: string }) => {
+      if (String(url).includes('/files') && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ error: { message: 'disk full' } }), {
+          status: 500, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    }));
+    render(<WorkspaceEditLayout>
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={baseFile({ name: 'dock-failure.html', path: 'dock-failure.html', mime: 'text/html', kind: 'html' })}
+        liveHtml='<html><body><p data-od-id="copy">Original</p></body></html>' />
+    </WorkspaceEditLayout>);
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    const dock = screen.getByTestId('workspace-edit-dock');
+    await waitFor(() => expect(dock).toBeVisible());
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: {
+        ...manualEditTarget('copy', 'Copy', 20), kind: 'text', tagName: 'p',
+        text: 'Original', fields: { text: 'Original' }, isLayoutContainer: false,
+        outerHtml: '<p data-od-id="copy">Original</p>',
+      } },
+    })));
+    fireEvent.change(await within(dock).findByDisplayValue('Original'), { target: { value: 'Unsaved copy' } });
+    fireEvent.click(within(dock).getByRole('button', { name: 'Save' }));
+    expect(await within(dock).findByText(/disk full/)).toBeVisible();
+    expect(within(dock).getByDisplayValue('Unsaved copy')).toBeVisible();
+    expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('keeps the manual edit inspector pinned after clicking a target', async () => {
     const heroTarget = manualEditTarget('hero-card', 'Hero card', 20);
     const trendTarget = manualEditTarget('trend-card', 'Trend card', 320);
@@ -2854,7 +2952,7 @@ describe('FileViewer SVG artifacts', () => {
   // #3646 / #3647 exit-path regression: leaving edit mode while an inline text
   // edit is live must ask the iframe to commit and WAIT for the session to end
   // before tearing down, otherwise the final edit is dropped.
-  it('waits for the iframe to finish the inline text edit before leaving edit mode (#3646)', async () => {
+  it.each(['edit', 'presentation'] as const)('waits for the iframe to finish the inline text edit before leaving through %s (#3646)', async (exitThrough) => {
     const textTarget = {
       ...manualEditTarget('copy', 'Editable copy', 20),
       kind: 'text' as const,
@@ -2906,11 +3004,12 @@ describe('FileViewer SVG artifacts', () => {
 
     // Exiting asks the iframe to commit, then must stay in edit mode until the
     // session is acknowledged (the prior fix tore down here and lost the edit).
-    fireEvent.click(toggle);
+    fireEvent.click(exitThrough === 'edit' ? toggle : screen.getByTestId('canvas-dock-present-toggle'));
     await waitFor(() => {
       expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-text-finish', commit: true }, '*');
     });
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('canvas-dock-present-toggle')).toHaveAttribute('aria-expanded', 'false');
 
     // The iframe acks the finished session; only now does exit complete.
     window.dispatchEvent(new MessageEvent('message', {
@@ -2920,6 +3019,7 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      if (exitThrough === 'presentation') expect(screen.getByTestId('canvas-dock-present-toggle')).toHaveAttribute('aria-expanded', 'true');
     });
   });
 
@@ -3066,7 +3166,7 @@ describe('FileViewer SVG artifacts', () => {
   // #4291 review: if the exit-time text commit fails, the close path must NOT
   // tear down edit mode (which clears the error) and look like a successful
   // save — it has to keep edit mode open with the error preserved.
-  it('keeps edit mode open and preserves the error when the exit-time text commit fails (#4291)', async () => {
+  it.each(['edit', 'presentation'] as const)('keeps edit mode open when the exit-time text commit fails through %s (#4291)', async (exitThrough) => {
     const textTarget = {
       ...manualEditTarget('card-title', 'Pricing that scales', 20),
       kind: 'text' as const,
@@ -3128,7 +3228,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
 
     // Exit while editing; the iframe commits new text, but the save fails.
-    fireEvent.click(toggle);
+    fireEvent.click(exitThrough === 'edit' ? toggle : screen.getByTestId('canvas-dock-present-toggle'));
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-commit', id: 'card-title', value: 'New title' },
@@ -3141,6 +3241,7 @@ describe('FileViewer SVG artifacts', () => {
     // The save error is surfaced and edit mode stays open instead of tearing down.
     expect(await screen.findByText(/Could not save the edited file/)).toBeTruthy();
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('canvas-dock-present-toggle')).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('keeps edit mode open when inline finish times out without an ack or commit witness', async () => {
@@ -3852,6 +3953,52 @@ describe('FileViewer SVG artifacts', () => {
     expect(nextFrame?.getAttribute('src')).toContain('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewEpoch=');
   });
 
+  it('expands presentation actions inside the canvas dock and switches back to edit tools', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={baseFile({ name: 'page.html', path: 'page.html', mime: 'text/html', kind: 'html' })}
+        liveHtml="<html><body>Preview</body></html>" />,
+    );
+    const dock = screen.getByTestId('canvas-dock');
+    const present = within(dock).getByRole('button', { name: 'Present' });
+    expect(container.querySelector('.chrome-present-wrap')).toBeNull();
+    expect(present).toHaveAttribute('aria-expanded', 'false');
+    expect(within(dock).queryByRole('button', { name: 'Fullscreen' })).toBeNull();
+
+    fireEvent.click(present);
+    await waitFor(() => expect(present).toHaveAttribute('aria-expanded', 'true'));
+    const actions = within(dock).getByRole('group', { name: 'Present' });
+    expect(within(actions).getAllByRole('button')).toHaveLength(3);
+    expect(within(actions).getByRole('button', { name: 'In this tab' })).toBeTruthy();
+    expect(within(actions).getByRole('button', { name: 'Fullscreen' })).toBeTruthy();
+    expect(within(actions).getByRole('button', { name: 'New tab' })).toBeTruthy();
+    expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(present);
+    expect(present).toHaveAttribute('aria-expanded', 'false');
+    expect(within(dock).queryByRole('group', { name: 'Present' })).toBeNull();
+    fireEvent.click(present);
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true'));
+    expect(present).toHaveAttribute('aria-expanded', 'false');
+    expect(within(dock).getByRole('button', { name: 'Mark' })).toBeTruthy();
+  });
+
+  it('can expand presentation tools while source is loading without enabling unavailable actions', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    render(<FileViewer projectId="loading-preview" projectKind="prototype"
+      file={baseFile({ name: 'pending.html', path: 'pending.html', mime: 'text/html', kind: 'html' })} />);
+    const dock = screen.getByTestId('canvas-dock');
+    const present = within(dock).getByRole('button', { name: 'Present' });
+    expect(present).not.toBeDisabled();
+    fireEvent.click(present);
+    await waitFor(() => expect(present).toHaveAttribute('aria-expanded', 'true'));
+    const actions = within(dock).getByRole('group', { name: 'Present' });
+    for (const action of within(actions).getAllByRole('button')) expect(action).toBeDisabled();
+    fireEvent.click(present);
+    expect(present).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('allows downloads in the in-tab HTML presentation iframe', { timeout: 10_000 }, async () => {
     const file = baseFile({
       name: 'page.html',
@@ -3887,7 +4034,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /present/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
+    fireEvent.click(screen.getByRole('button', { name: /in this tab/i }));
 
     await waitFor(() => {
       const frame = document.body.querySelector('.present-overlay iframe');
@@ -3938,7 +4085,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /present/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
+    fireEvent.click(screen.getByRole('button', { name: /in this tab/i }));
 
     const frame = await waitFor(() => {
       const nextFrame = document.body.querySelector<HTMLIFrameElement>('.present-overlay iframe');
@@ -4176,7 +4323,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(container.querySelector('.viewer-source')?.textContent).toContain('section class="slide"');
     fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
     expect(container.querySelector('.deck-nav')).toBeNull();
-    expect(container.querySelector('.deck-thumbnail-toolbar-toggle')).toBeTruthy();
+    expect(container.querySelector('.deck-thumbnail-toolbar-toggle')).toBeNull();
     expect(container.querySelector('.deck-thumbnail-rail .deck-thumbnail-toggle')).toBeNull();
     expect(container.querySelector('.deck-floating-nav')).toBeTruthy();
     const thumbnailFrames = Array.from(
@@ -4190,9 +4337,7 @@ describe('FileViewer SVG artifacts', () => {
     }
     expect(screen.getByTestId('speaker-notes-panel')).toBeTruthy();
     expect(screen.getByText('No speaker notes for this slide.')).toBeTruthy();
-    fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
-    expect(container.querySelector('.comment-preview-layer-deck-rail-collapsed')).toBeTruthy();
-    expect(container.querySelector('.deck-thumbnail-toolbar-toggle')).toBeTruthy();
+    expect(container.querySelector('.deck-thumbnail-rail')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Manual' })).toBeNull();
     expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
     expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
@@ -4424,33 +4569,6 @@ describe('FileViewer SVG artifacts', () => {
       // rather than a specific value.
       expect(typeof views[0].slide_count).toBe('number');
       expect(typeof views[0].artifact_id).toBe('string');
-    });
-
-    it('tracks thumbnail rail toggle with expand/collapse action', () => {
-      const { container } = render(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={deckFile()}
-          isDeck
-          liveHtml={twoSlideDeck}
-        />,
-      );
-
-      fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
-      fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
-
-      const toggles = trackedEvents('ui_click').filter(
-        (props) => props?.element === 'thumbnail_rail_toggle',
-      );
-      expect(toggles).toHaveLength(2);
-      expect(toggles[0]).toMatchObject({
-        page_name: 'artifact',
-        area: 'deck_viewer',
-        element: 'thumbnail_rail_toggle',
-        action: 'collapse',
-      });
-      expect(toggles[1]).toMatchObject({ action: 'expand' });
     });
 
     it('tracks slide navigation once per move via the shared handler', () => {
@@ -5370,7 +5488,7 @@ describe('FileViewer SVG artifacts', () => {
       context,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
 
     // Share panel: everything that produces a link or reusable asset —
     // publish, deploy, social share, save as template. No file formats.
@@ -5391,10 +5509,10 @@ describe('FileViewer SVG artifacts', () => {
 
     // Export panel: pure file formats, nothing publish/deploy flavored.
     const menuItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
-    expect(menuItems).toContain('Export as PDF');
+    expect(menuItems).not.toContain('Export as PDF');
     expect(menuItems).toContain('Export as image');
     expect(menuItems).toContain('Download as .zip');
-    expect(menuItems).toContain('Export as standalone HTML');
+    expect(menuItems).not.toContain('Export as standalone HTML');
     expect(screen.queryByText('SHARE ON YOUR OWN HOSTING')).toBeNull();
     expect(menuItems).not.toContain('Publish online above to enable share ↑');
     expect(menuItems).not.toContain('Deploy to Vercel');
@@ -5457,7 +5575,7 @@ describe('FileViewer SVG artifacts', () => {
       context,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
     // The single-file publish card — the thing the dogfood report said was
     // missing — is back for a personal workspace.
@@ -5504,7 +5622,7 @@ describe('FileViewer SVG artifacts', () => {
       context,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
     fireEvent.click(await screen.findByRole('menuitem', { name: /Get a share link/i }));
 
@@ -5560,7 +5678,7 @@ describe('FileViewer SVG artifacts', () => {
         context,
       );
 
-      fireEvent.click(await screen.findByRole('button', { name: /share/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
       expect(await screen.findByRole('menu')).toBeTruthy();
 
       // Located by the explanation it carries, not by a testid the fix added —
@@ -5624,7 +5742,7 @@ describe('FileViewer SVG artifacts', () => {
       context,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
 
     const help = await screen.findByTestId('workspace-access-help');
@@ -5656,7 +5774,7 @@ describe('FileViewer SVG artifacts', () => {
       context,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
     await screen.findByText('Get a share link');
     expect(screen.queryByText('Share project in workspace')).toBeNull();
@@ -5683,7 +5801,7 @@ describe('FileViewer SVG artifacts', () => {
       context,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
     await screen.findByText('Get a share link');
     expect(screen.queryByText('Nothing to share yet')).toBeNull();
@@ -5705,7 +5823,7 @@ describe('FileViewer SVG artifacts', () => {
       context,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
     expect(screen.getByText('Share project in workspace')).toBeTruthy();
   });
@@ -5726,7 +5844,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
     // Gone, not merely disabled — a signed-out caller has no id to publish
     // under and the daemon answers 409 WORKSPACE_IDENTITY_REQUIRED.
@@ -5794,55 +5912,18 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
-    const restoreHost = installMockOpenDesignHost();
-    const fetchMock = vi.fn(async (input: unknown) => {
-      const url = typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.pathname
-          : typeof (input as { url?: unknown })?.url === 'string'
-            ? (input as { url: string }).url
-            : '';
-      if (url === '/api/projects/project-1/export/pdf-image') {
-        return new Response('PDF', { status: 200 });
-      }
-      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><section class="slide">Testimonial</section><section class="slide">Carousel</section></body></html>'
+      />,
+    );
 
-    try {
-      render(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={file}
-          liveHtml='<html><body><section class="slide">Testimonial</section><section class="slide">Carousel</section></body></html>'
-        />,
-      );
-
-      await openUnifiedExportTab();
-
-      const downloadItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
-      expect(downloadItems).not.toContain('Export as PPTX');
-
-      fireEvent.click(screen.getByRole('menuitem', { name: /Export as PDF/i }));
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          '/api/projects/project-1/export/pdf-image',
-          expect.objectContaining({
-            method: 'POST',
-            body: JSON.stringify({
-              fileName: 'slides.html',
-              title: 'slides',
-              deck: false,
-            }),
-          }),
-        );
-      });
-    } finally {
-      restoreHost();
-    }
+    await openUnifiedExportTab();
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+    expect(items).toEqual(['Export as image', 'Download as .zip']);
   });
 
   it('keeps untyped .slide HTML pages on page-mode export routing', async () => {
@@ -5852,55 +5933,18 @@ describe('FileViewer SVG artifacts', () => {
       mime: 'text/html',
       kind: 'html',
     });
-    const restoreHost = installMockOpenDesignHost();
-    const fetchMock = vi.fn(async (input: unknown) => {
-      const url = typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.pathname
-          : typeof (input as { url?: unknown })?.url === 'string'
-            ? (input as { url: string }).url
-            : '';
-      if (url === '/api/projects/project-1/export/pdf-image') {
-        return new Response('PDF', { status: 200 });
-      }
-      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><section class="slide">One</section><section class="slide">Two</section></body></html>'
+      />,
+    );
 
-    try {
-      render(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={file}
-          liveHtml='<html><body><section class="slide">One</section><section class="slide">Two</section></body></html>'
-        />,
-      );
-
-      await openUnifiedExportTab();
-
-      const downloadItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
-      expect(downloadItems).not.toContain('Export as PPTX');
-
-      fireEvent.click(screen.getByRole('menuitem', { name: /Export as PDF/i }));
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          '/api/projects/project-1/export/pdf-image',
-          expect.objectContaining({
-            method: 'POST',
-            body: JSON.stringify({
-              fileName: 'landing.html',
-              title: 'landing',
-              deck: false,
-            }),
-          }),
-        );
-      });
-    } finally {
-      restoreHost();
-    }
+    await openUnifiedExportTab();
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+    expect(items).toEqual(['Export as image', 'Download as .zip']);
   });
 
   it('opens a PPTX mode dialog in a browser and defaults to editable export', async () => {
@@ -6426,57 +6470,6 @@ describe('FileViewer SVG artifacts', () => {
     );
   });
 
-  it('does not show an export-started toast when desktop PDF export is canceled', async () => {
-    const file = baseFile({
-      name: 'index.html',
-      path: 'index.html',
-      mime: 'text/html',
-      kind: 'html',
-      artifactManifest: {
-        version: 1,
-        kind: 'html',
-        title: 'Page',
-        entry: 'index.html',
-        renderer: 'html',
-        exports: ['html'],
-      },
-    });
-    const fetchMock = vi.fn(async (input: unknown) => {
-      const url = typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.pathname
-          : typeof (input as { url?: unknown })?.url === 'string'
-            ? (input as { url: string }).url
-            : '';
-      if (url === '/api/projects/project-1/export/pdf') {
-        return new Response(JSON.stringify({ ok: true, canceled: true }), { status: 200 });
-      }
-      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <FileViewer projectId="project-1" projectKind="prototype" file={file}
-        liveHtml="<html><body><h1>Hello</h1></body></html>"
-      />,
-    );
-
-    await openUnifiedExportTab();
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Export as PDF/i }));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/projects/project-1/export/pdf',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(screen.queryByText('Export started')).toBeNull();
-  });
 
   it('disables share link actions while the artifact is still streaming', async () => {
     const file = baseFile({
@@ -7038,12 +7031,17 @@ describe('FileViewer tweaks toolbar', () => {
     });
   }
 
-  it('renders Annotation, Edit, and Draw as the primary preview tools', async () => {
+  it('expands Annotation and Draw from the Edit tool group', async () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
       />,
     );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+    });
 
     expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
     expect(screen.queryByTestId('inspect-mode-toggle')).toBeNull();
@@ -7063,7 +7061,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByRole('button', { name: 'Pods' })).toBeNull();
 
     fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
-    expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
+    expect(await screen.findByPlaceholderText('Add a note for this mark')).toBeTruthy();
     // Every mark tool is its own always-visible segment; switching does not
     // hide the others.
     expect(screen.getByRole('button', { name: 'Box select' })).toBeTruthy();
@@ -7167,10 +7165,13 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     const viewportButton = screen.getByRole('button', { name: 'Preview viewport' });
-    expect(viewportButton.textContent).toContain('Desktop');
+    // The glyph IS the state; the tooltip/title names it. One click advances
+    // to the next preset — desktop → tablet → phone → desktop.
+    expect(viewportButton.getAttribute('data-viewport')).toBe('desktop');
     fireEvent.click(viewportButton);
-    fireEvent.click(screen.getByRole('option', { name: /tablet/i }));
-    expect(screen.getByRole('button', { name: 'Preview viewport' }).textContent).toContain('Tablet');
+    expect(
+      screen.getByRole('button', { name: 'Preview viewport' }).getAttribute('data-viewport'),
+    ).toBe('tablet');
 
     rerender(
       <FileViewer
@@ -7181,7 +7182,9 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    expect((await screen.findByRole('button', { name: 'Preview viewport' })).textContent).toContain('Desktop');
+    expect(
+      (await screen.findByRole('button', { name: 'Preview viewport' })).getAttribute('data-viewport'),
+    ).toBe('desktop');
 
     rerender(
       <FileViewer
@@ -7192,7 +7195,9 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    expect((await screen.findByRole('button', { name: 'Preview viewport' })).textContent).toContain('Tablet');
+    expect(
+      (await screen.findByRole('button', { name: 'Preview viewport' })).getAttribute('data-viewport'),
+    ).toBe('tablet');
   });
 
   it('keeps the Draw bar open after queueing an annotation', () => {
@@ -8329,8 +8334,9 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
+    // desktop → tablet → mobile.
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
-    fireEvent.click(screen.getByRole('option', { name: 'Mobile' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
 
     expect(screen.getByTestId('comment-preview-layout').classList).not.toContain(
@@ -8466,12 +8472,16 @@ describe('FileViewer tweaks toolbar', () => {
     const commentsButton = screen.getByTestId('comment-panel-toggle');
     expect(commentsButton.textContent).toContain('1');
     expect(commentsButton.getAttribute('aria-label')).toBe('Comments (1)');
+    // Dock order: the authoring tools lead (comment tool, mark, comments
+    // count) and the 编辑 · 演示 mode segment closes the strip — `edit` is that
+    // segment's first tab now, not a pencil sitting mid-row, so it follows the
+    // comments count rather than preceding it.
     expect(
-      screen.getByTestId('board-mode-toggle').compareDocumentPosition(screen.getByTestId('manual-edit-mode-toggle')) &
+      screen.getByTestId('board-mode-toggle').compareDocumentPosition(commentsButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      screen.getByTestId('manual-edit-mode-toggle').compareDocumentPosition(commentsButton) &
+      commentsButton.compareDocumentPosition(screen.getByTestId('manual-edit-mode-toggle')) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
@@ -8551,8 +8561,8 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
+    // desktop → tablet.
     fireEvent.click(screen.getByLabelText('Preview viewport'));
-    fireEvent.click(screen.getByRole('option', { name: 'Tablet' }));
     clickAgentTool('board-mode-toggle');
 
     const layout = screen.getByTestId('comment-preview-layout');
@@ -8604,7 +8614,7 @@ describe('FileViewer tweaks toolbar', () => {
     act(() => postPreviewContentSizeResponse(previewWindow, neutralRequest, 1440, 900));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     });
     let scaledRequest = latestPreviewContentSizeRequest(previewWindow);
     await waitFor(() => {
@@ -8615,7 +8625,7 @@ describe('FileViewer tweaks toolbar', () => {
       postPreviewContentSizeResponse(previewWindow, neutralRequest, 90_000, 90_000);
       postPreviewContentSizeResponse(previewWindow, scaledRequest, 90_000, 90_000);
     });
-    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     const scaledShell = Array.from(container.querySelectorAll('div')).find(
       (node) => node.style.transform === 'scale(0.625)',
     );
@@ -8624,9 +8634,13 @@ describe('FileViewer tweaks toolbar', () => {
     viewerBodyWidth = 720;
     window.dispatchEvent(new Event('resize'));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '50%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '50%', hidden: true })).toBeTruthy();
     });
 
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+    });
     fireEvent.click(screen.getByRole('button', { name: '50%' }));
     fireEvent.click(screen.getByRole('menuitem', { name: '75%' }));
 
@@ -8634,7 +8648,7 @@ describe('FileViewer tweaks toolbar', () => {
     window.dispatchEvent(new Event('resize'));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '75%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '75%', hidden: true })).toBeTruthy();
     });
   });
 
@@ -8669,7 +8683,7 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.load(frame);
     const responsiveRequest = latestPreviewContentSizeRequest(previewWindow);
     act(() => postPreviewContentSizeResponse(previewWindow, responsiveRequest, 900, 900));
-    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '100%', hidden: true })).toBeTruthy();
 
     viewerBodyWidth = 720;
     window.dispatchEvent(new Event('resize'));
@@ -8691,7 +8705,7 @@ describe('FileViewer tweaks toolbar', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '80%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '80%', hidden: true })).toBeTruthy();
     });
   });
 
@@ -8758,7 +8772,7 @@ describe('FileViewer tweaks toolbar', () => {
     act(() => postPreviewContentWidth(previewWindow, 1440, 900));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     });
   });
 
@@ -8799,13 +8813,13 @@ describe('FileViewer tweaks toolbar', () => {
     act(() => postPreviewContentWidth(previewWindow, 900));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '100%', hidden: true })).toBeTruthy();
     });
     viewerBodyWidth = 720;
     window.dispatchEvent(new Event('resize'));
-    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '100%', hidden: true })).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '100%', hidden: true })).toBeTruthy();
     });
     const scaledShell = Array.from(container.querySelectorAll('div')).find(
       (node) => node.style.transform === 'scale(1)',
@@ -8843,24 +8857,24 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.load(firstFrame);
     act(() => postPreviewContentWidth(firstWindow, 1440, 900));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     });
     const preReloadRequest = latestPreviewContentSizeRequest(firstWindow);
     const preReloadRequestCount = previewContentSizeRequests(firstWindow).length;
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '100%', hidden: true })).toBeTruthy();
     });
     await Promise.resolve();
     expect(previewContentSizeRequests(firstWindow)).toHaveLength(preReloadRequestCount);
     act(() => {
       postPreviewContentSizeResponse(firstWindow, preReloadRequest, 96_400, 96_400);
     });
-    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '100%', hidden: true })).toBeTruthy();
     first.unmount();
 
     const sameRevision = render(<FileViewer {...props} />);
-    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     const remountedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     const remountedWindow = installSandboxedPreviewWindow(remountedFrame);
     fireEvent.load(remountedFrame);
@@ -8871,7 +8885,7 @@ describe('FileViewer tweaks toolbar', () => {
     sameRevision.unmount();
 
     render(<FileViewer {...props} file={{ ...file, mtime: 1710000001 }} />);
-    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '100%', hidden: true })).toBeTruthy();
   });
 
   it.each([
@@ -8908,7 +8922,7 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.load(frame);
     act(() => postPreviewContentWidth(previewWindow, 1440, 900));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     });
 
     fireEvent.click(screen.getByTestId(toggleTestId));
@@ -8926,10 +8940,10 @@ describe('FileViewer tweaks toolbar', () => {
     );
     await Promise.resolve();
 
-    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '63%', hidden: true })).toBeTruthy();
     fireEvent.click(screen.getByTestId(toggleTestId));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '100%', hidden: true })).toBeTruthy();
     });
   });
 

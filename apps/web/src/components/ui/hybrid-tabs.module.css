@@ -1,0 +1,35 @@
+/* The view switcher shares existing tab controls, including the viewer portal. */
+.tabs:global(.ws-tabs-views) {
+  gap: 4px;
+}
+
+.tabs:global(.ws-tabs-views) :global(.ws-tab) {
+  gap: 0;
+  max-width: none;
+  border-radius: var(--radius-pill);
+}
+
+.tabs:global(.ws-tabs-views) :global(.ws-tab)::before {
+  display: none;
+}
+
+.label {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.content {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: max-content;
+  padding-inline-start: 8px;
+}
+
+.content > * {
+  flex: none;
+  width: max-content;
+}

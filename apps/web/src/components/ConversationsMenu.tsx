@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
-import { conversationMetaLabel } from './ChatPane';
+import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 import type { Conversation } from '../types';
 
 interface Props {

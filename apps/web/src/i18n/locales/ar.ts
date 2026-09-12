@@ -3088,6 +3088,7 @@ export const ar: Dict = {
   'manualEdit.title': 'المحرر اليدوي',
   'manualEdit.fallbackTitle': 'تحرير',
   'manualEdit.movePanel': 'نقل لوحة التحرير',
+  "manualEdit.resizePanel": "تغيير عرض لوحة التحرير",
   'manualEdit.editParams': 'تعديل المعلمات',
   'manualEdit.closePanel': 'إغلاق لوحة التحرير',
   'manualEdit.selectLayer': 'اختر طبقة',

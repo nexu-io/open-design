@@ -3088,6 +3088,7 @@ export const de: Dict = {
   'manualEdit.title': 'Manueller Editor',
   'manualEdit.fallbackTitle': 'Bearbeiten',
   'manualEdit.movePanel': 'Bearbeitungsfenster verschieben',
+  "manualEdit.resizePanel": "Breite des Bearbeitungsbereichs ändern",
   'manualEdit.editParams': 'Parameter bearbeiten',
   'manualEdit.closePanel': 'Bearbeitungsfenster schließen',
   'manualEdit.selectLayer': 'Ebene auswählen',

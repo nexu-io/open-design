@@ -68,7 +68,9 @@ describe('ManualEditPanel', () => {
     // One localized parameters list carries what the old hardcoded English
     // TYPOGRAPHY / SIZE / LAYOUT / BOX headers used to split apart.
     const parameters = sectionByTitle(PARAMETERS);
-    for (const label of ['Text color', 'Background', 'Font', 'Font size', 'Weight', 'Line height', 'Letter spacing', 'Radius', 'Width', 'Height', 'Padding', 'Margin']) {
+    expect(sectionByTitle('CONTENT').textContent).toContain('Text color');
+    expect(parameters.textContent).not.toContain('Text color');
+    for (const label of ['Background', 'Font', 'Font size', 'Weight', 'Line height', 'Letter spacing', 'Radius', 'Width', 'Height', 'Padding', 'Margin']) {
       expect(parameters.textContent).toContain(label);
     }
     for (const legacyHead of ['TYPOGRAPHY', 'SIZE', 'LAYOUT', 'BOX']) {
@@ -821,7 +823,7 @@ describe('ManualEditPanel', () => {
 
   function quadCellInput(label: string, axis: string): HTMLInputElement {
     const cell = Array.from(quadRow(label).querySelectorAll('.cc-quad-cell'))
-      .find((candidate) => candidate.querySelector('.cc-quad-axis')?.textContent === axis) as HTMLElement | undefined;
+      .find((candidate) => candidate.querySelector('input')?.getAttribute('aria-label') === axis) as HTMLElement | undefined;
     if (!cell) throw new Error(`${label} ${axis} cell not found`);
     const input = cell.querySelector('input') as HTMLInputElement | null;
     if (!input) throw new Error(`${label} ${axis} input not found`);

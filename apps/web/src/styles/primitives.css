@@ -389,7 +389,8 @@ code {
    `data-marquee` is set by MarqueeLabel only when the name actually overflows,
    so labels that already fit never move. */
 :hover > .od-marquee[data-marquee='on'] > .od-marquee__text,
-:focus-visible > .od-marquee[data-marquee='on'] > .od-marquee__text {
+:focus-visible > .od-marquee[data-marquee='on'] > .od-marquee__text,
+.workspace-tabs-dropdown__row:is(:hover, :focus-within) > .workspace-tabs-dropdown__row-main > .od-marquee[data-marquee='on'] > .od-marquee__text {
   flex: 0 0 auto;
   max-width: none;
   text-overflow: clip;
@@ -408,7 +409,8 @@ code {
   /* No crawl for readers who asked for none — the name stays truncated, which
      is the state the ellipsis already advertises. */
   :hover > .od-marquee[data-marquee='on'] > .od-marquee__text,
-  :focus-visible > .od-marquee[data-marquee='on'] > .od-marquee__text {
+  :focus-visible > .od-marquee[data-marquee='on'] > .od-marquee__text,
+  .workspace-tabs-dropdown__row:is(:hover, :focus-within) > .workspace-tabs-dropdown__row-main > .od-marquee[data-marquee='on'] > .od-marquee__text {
     flex: 0 1 auto;
     max-width: 100%;
     text-overflow: ellipsis;

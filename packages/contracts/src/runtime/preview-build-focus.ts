@@ -1,21 +1,7 @@
-/**
- * Cross-runtime protocol used by a live artifact preview to tell the Open
- * Design host WHERE in the rendered page the agent is currently working, so the
- * host can park a cursor there.
- *
- * Two ways to say where. The host can send a short literal string the agent
- * just wrote (see the web's `RunProgressStep.anchor`), which the frame finds
- * by text; or it can name one of the page's own top-level SECTIONS, which the
- * frame enumerates and broadcasts after every load. Either way the frame
- * scrolls the target into view and reports its box in its own viewport
- * coordinates. Sections are what let the host walk the cursor down a page as
- * it is written — one stop per part that just appeared — instead of jumping
- * once to wherever the last written run of text happens to be. The frame is sandboxed
- * without `allow-same-origin`, so its origin is opaque: it must post to `'*'`,
- * and the host must identify it by `event.source`, never by `event.origin`.
- *
- * Keep this module browser-API free. The browser code is serialized as a
- * string so both the web and daemon runtimes inject exactly the same script.
+/** Sandbox preview protocol. The host sends write text and an activity title;
+ * the frame resolves a real module and reports its viewport rectangle. Browser
+ * code is serialized for injection by the daemon; this module stays runtime-pure.
+ * Host consumers validate event.source because sandbox origins are opaque.
  */
 
 export const PREVIEW_BUILD_FOCUS_BRIDGE_MARKER = 'data-od-preview-build-focus';
@@ -50,12 +36,13 @@ export interface PreviewBuildFocusRequest {
   version: typeof PREVIEW_BUILD_FOCUS_PROTOCOL_VERSION;
   /** Echoed back, so the host can drop results for a request it has replaced. */
   requestId: string;
-  /** Text to locate. Null asks for the last visible box in the document. */
+  /** Text to locate. Null does not imply an arbitrary fallback. */
   anchor: string | null;
   /** A section key from the frame's own broadcast. Takes precedence over
    *  `anchor` when set — the host is pointing at a PART of the page, not at a
    *  run of text inside it. */
   section: string | null;
+  title?: string | null;
 }
 
 /** One top-level part of the previewed page, as the frame sees it. */
@@ -78,6 +65,7 @@ export interface PreviewBuildFocusResult {
   requestId: string;
   /** False when nothing could be located — the host then hides the cursor. */
   found: boolean;
+  label?: string;
   /** The located box, in the FRAME's viewport CSS px. */
   x: number;
   y: number;
@@ -143,6 +131,7 @@ export function parsePreviewBuildFocusResult(value: unknown): PreviewBuildFocusR
     version: PREVIEW_BUILD_FOCUS_PROTOCOL_VERSION,
     requestId: message.requestId.slice(0, 64),
     found: message.found,
+    ...(typeof message.label === 'string' ? { label: message.label.slice(0, 40) } : {}),
     x,
     y,
     width: Math.max(0, width),
@@ -183,6 +172,7 @@ export function previewBuildFocusRequest(
   requestId: string,
   anchor: string | null,
   section: string | null = null,
+  title?: string | null,
 ): PreviewBuildFocusRequest {
   const trimmed = typeof anchor === 'string' ? anchor.trim() : '';
   const key = typeof section === 'string' ? section.trim() : '';
@@ -190,6 +180,7 @@ export function previewBuildFocusRequest(
     type: PREVIEW_BUILD_FOCUS_REQUEST_TYPE,
     version: PREVIEW_BUILD_FOCUS_PROTOCOL_VERSION,
     requestId,
+    ...(title ? { title: title.slice(0, 96) } : {}),
     anchor: trimmed ? trimmed.slice(0, PREVIEW_BUILD_FOCUS_MAX_ANCHOR_CHARS) : null,
     section: key ? key.slice(0, PREVIEW_BUILD_FOCUS_MAX_SECTION_KEY_CHARS) : null,
   };
@@ -212,12 +203,13 @@ export function buildPreviewBuildFocusBridge(): string {
   var VERSION = ${PREVIEW_BUILD_FOCUS_PROTOCOL_VERSION};
   var SECTIONS = ${JSON.stringify(PREVIEW_BUILD_FOCUS_SECTIONS_TYPE)};
   var MAX_TEXT_NODES = ${PREVIEW_BUILD_FOCUS_MAX_TEXT_NODES};
-  var MAX_FALLBACK = ${PREVIEW_BUILD_FOCUS_MAX_FALLBACK_ELEMENTS};
   var MAX_SECTIONS = ${PREVIEW_BUILD_FOCUS_MAX_SECTIONS};
   var MAX_LABEL = ${PREVIEW_BUILD_FOCUS_MAX_LABEL_CHARS};
   var lastRequestId = null;
   var lastAnchor = null;
   var lastSection = null;
+  var lastTitle = null;
+  var activeTarget = null;
   var pending = false;
   function reduced(){
     try {
@@ -240,7 +232,7 @@ export function buildPreviewBuildFocusBridge(): string {
       var raw = node.nodeValue || '';
       if (!raw) continue;
       var parent = node.parentElement;
-      if (!parent) continue;
+      if (!parent || skippable(parent) || !parent.getBoundingClientRect().width) continue;
       if (raw.indexOf(anchor) !== -1) return parent;
       if (!loose && collapse(raw).indexOf(needle) !== -1) loose = parent;
     }
@@ -256,6 +248,8 @@ export function buildPreviewBuildFocusBridge(): string {
   // otherwise every page would report a single section covering all of it.
   function sectionRoots(){
     if (!document.body) return [];
+    var semantic = document.body.querySelectorAll('section, article, [data-slide], .slide');
+    if (semantic.length) return Array.prototype.slice.call(semantic, 0, MAX_SECTIONS);
     var parent = document.body;
     for (var depth = 0; depth < 3; depth++) {
       var kids = [];
@@ -289,6 +283,7 @@ export function buildPreviewBuildFocusBridge(): string {
       if (!el || typeof el.getBoundingClientRect !== 'function') continue;
       var box = el.getBoundingClientRect();
       if (box.width <= 0 || box.height <= 0) continue;
+      if (!collapse(el.innerText || el.textContent) && !el.matches('img, svg, canvas, video') && !el.querySelector('img, svg, canvas, video')) continue;
       var label = labelFor(el, i);
       out.push({
         el: el,
@@ -313,19 +308,6 @@ export function buildPreviewBuildFocusBridge(): string {
     }
     return null;
   }
-  function lastVisibleElement(){
-    if (!document.body) return null;
-    var all = document.body.querySelectorAll('*');
-    var start = all.length - 1;
-    var limit = Math.max(0, all.length - MAX_FALLBACK);
-    for (var i = start; i >= limit; i--) {
-      var el = all[i];
-      if (!el || typeof el.getBoundingClientRect !== 'function') continue;
-      var box = el.getBoundingClientRect();
-      if (box.width > 0 && box.height > 0) return el;
-    }
-    return document.body;
-  }
   function post(requestId, found, el){
     var box = found && el && typeof el.getBoundingClientRect === 'function'
       ? el.getBoundingClientRect()
@@ -336,6 +318,7 @@ export function buildPreviewBuildFocusBridge(): string {
         version: VERSION,
         requestId: requestId,
         found: Boolean(found && box),
+        label: el ? labelFor(el, 0) : '',
         x: box ? box.left : 0,
         y: box ? box.top : 0,
         width: box ? box.width : 0,
@@ -345,42 +328,40 @@ export function buildPreviewBuildFocusBridge(): string {
       }, '*');
     } catch (_) {}
   }
-  function locate(requestId, anchor, section){
-    var target = section ? findSection(section) : null;
-    if (!target && anchor) target = findByText(anchor);
-    var found = Boolean(target);
-    if (!target) target = lastVisibleElement();
-    if (!target) { post(requestId, false, null); return; }
-    try {
-      target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reduced() ? 'auto' : 'smooth' });
-    } catch (_) {
-      try { target.scrollIntoView(); } catch (__) {}
+  function locate(requestId, anchor, section, title){
+    var target = anchor ? findByText(anchor) : null;
+    var list = sectionList();
+    if (target) {
+      target = target.closest('section, article, [data-slide], .slide') || target;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].el === target || (!target.matches('section, article, [data-slide], .slide') && list[i].el.contains(target))) { target = list[i].el; break; }
+      }
     }
-    var el = target;
-    // \`found\` stays false when the anchor did not match: the page was still
-    // scrolled to its newest content, but the host must NOT draw a cursor —
-    // pointing confidently at a guess is worse than pointing at nothing.
-    //
-    // Measured TWICE, and this is not belt-and-braces. A smooth scroll is still
-    // animating two frames later, so the first box is the element's pre-scroll
-    // position — off-screen for anything below the fold. The early post keeps
-    // the cursor responsive when the target was already in view; the settled
-    // one corrects it. Same requestId, so the host simply takes the latest.
-    requestAnimationFrame(function(){
-      requestAnimationFrame(function(){ post(requestId, found, el); });
-    });
-    var settled = false;
-    function settle(){
-      if (settled) return;
-      settled = true;
-      requestAnimationFrame(function(){ post(requestId, found, el); });
+    if (!target && section) target = findSection(section);
+    if (!target && title) {
+      var matches = list.filter(function(item){
+        return item.label.length > 3 && (collapse(title).indexOf(item.label) !== -1 || item.label.indexOf(collapse(title)) !== -1);
+      });
+      if (matches.length === 1) target = matches[0].el;
     }
-    if ('onscrollend' in window) {
-      window.addEventListener('scrollend', settle, { once: true });
+    if (!target) { activeTarget = null; post(requestId, false, null); return; }
+    if (target !== activeTarget) {
+      try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reduced() ? 'auto' : 'smooth' }); } catch (_) {}
     }
-    setTimeout(settle, 520);
+    activeTarget = target;
+    requestAnimationFrame(function(){ post(requestId, true, target); });
   }
+  function measure(){
+    if (pending || !lastRequestId) return;
+    pending = true;
+    requestAnimationFrame(function(){
+      pending = false;
+      post(lastRequestId, Boolean(activeTarget && activeTarget.isConnected), activeTarget);
+    });
+  }
+  window.addEventListener('scroll', measure, true);
   window.addEventListener('message', function(event){
+    if (event.source !== window.parent) return;
     var data = event && event.data;
     if (!data || typeof data !== 'object') return;
     if (data.type !== REQUEST || data.version !== VERSION) return;
@@ -388,21 +369,23 @@ export function buildPreviewBuildFocusBridge(): string {
     lastRequestId = data.requestId;
     lastAnchor = typeof data.anchor === 'string' ? data.anchor : null;
     lastSection = typeof data.section === 'string' ? data.section : null;
-    locate(lastRequestId, lastAnchor, lastSection);
+    lastTitle = typeof data.title === 'string' ? data.title.slice(0, 96) : null;
+    locate(lastRequestId, lastAnchor, lastSection, lastTitle);
   });
-  window.addEventListener('resize', function(){
-    if (!lastRequestId || pending) return;
-    pending = true;
-    requestAnimationFrame(function(){
-      pending = false;
-      if (lastRequestId) locate(lastRequestId, lastAnchor, lastSection);
-    });
-  });
+  window.addEventListener('resize', measure);
   function ready(){
     try { window.parent.postMessage({ type: READY, version: VERSION }, '*'); } catch (_) {}
     // One frame later: at DOMContentLoaded the parts exist but have no boxes
     // yet, and a section with no box is not a section the cursor can visit.
     requestAnimationFrame(postSections);
+    if (document.body && !window.__odBuildObserved) {
+      window.__odBuildObserved = true;
+      new MutationObserver(function(){
+        postSections();
+        if (lastRequestId) locate(lastRequestId, lastAnchor, lastSection, lastTitle);
+      }).observe(document.body, { childList: true, subtree: true, characterData: true });
+      if (typeof ResizeObserver === 'function') new ResizeObserver(measure).observe(document.body);
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', ready);

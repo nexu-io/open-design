@@ -3,6 +3,8 @@ import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } f
 import { useT } from '../i18n';
 import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { Icon } from './Icon';
+import { RemixIcon } from './RemixIcon';
+import styles from './ManualEditPanel.module.css';
 
 export interface ManualEditDraft {
   text: string;
@@ -44,6 +46,7 @@ export function ManualEditPanel({
   onApplyTokenSuggestion,
   onInspectValueSelect,
   pageStylesEnabled = true,
+  docked = false,
   floatingStyle,
   floatingClassName,
   onFloatingPositionChange,
@@ -60,6 +63,7 @@ export function ManualEditPanel({
   busy?: boolean;
   resetAvailable?: boolean;
   pageStylesEnabled?: boolean;
+  docked?: boolean;
   onSelectTarget: (target: ManualEditTarget) => void;
   onDraftChange: (draft: ManualEditDraft) => void;
   onStyleChange?: (id: string, styles: Partial<ManualEditStyles>, label: string) => void;
@@ -181,8 +185,9 @@ export function ManualEditPanel({
 
   return (
     <aside
-      className={`manual-edit-right${floatingStyle ? ' manual-edit-floating' : ''}${floatingClassName ? ` ${floatingClassName}` : ''}`}
+      className={`manual-edit-right${docked ? ` ${styles.docked}` : ''}${floatingStyle ? ' manual-edit-floating' : ''}${floatingClassName ? ` ${floatingClassName}` : ''}`}
       style={floatingStyle}
+      aria-label={t('manualEdit.title')}
     >
       <section
         className={`manual-edit-modal cc-panel${floatingStyle && !dragEnabled ? ' is-drag-locked' : ''}`}
@@ -225,12 +230,12 @@ export function ManualEditPanel({
         <div className="manual-edit-scroll">
           {targetForInspector ? (
             <>
-              <ContentInspector
-                target={targetForInspector}
-                draft={draft}
-                onDraftChange={onDraftChange}
-              />
               <StyleInspector
+                renderContent={(colorControl) => (
+                  <ContentInspector target={targetForInspector} draft={draft} onDraftChange={onDraftChange}>
+                    {colorControl}
+                  </ContentInspector>
+                )}
                 target={targetForInspector}
                 styles={draft.styles}
                 onChange={changeTargetStyle}
@@ -362,7 +367,9 @@ function ContentInspector({
   target,
   draft,
   onDraftChange,
+  children,
 }: {
+  children?: ReactNode;
   target: ManualEditTarget;
   draft: ManualEditDraft;
   onDraftChange: (draft: ManualEditDraft) => void;
@@ -381,6 +388,7 @@ function ContentInspector({
             <span>{t('manualEdit.altText')}</span>
             <input value={draft.alt} onChange={(event) => update({ alt: event.currentTarget.value })} />
           </label>
+          {children}
         </Section>
       </div>
     );
@@ -397,6 +405,7 @@ function ContentInspector({
             <span>{t('manualEdit.href')}</span>
             <input value={draft.href} onChange={(event) => update({ href: event.currentTarget.value })} />
           </label>
+          {children}
         </Section>
       </div>
     );
@@ -409,6 +418,7 @@ function ContentInspector({
             <span>{t('manualEdit.text')}</span>
             <textarea value={draft.text} rows={4} onChange={(event) => update({ text: event.currentTarget.value })} />
           </label>
+          {children}
         </Section>
       </div>
     );
@@ -417,14 +427,15 @@ function ContentInspector({
     <div className="cc-inspector manual-edit-content-inspector">
       <Section title={t('manualEdit.sectionContent')}>
         <label className="manual-edit-field">
-          <span>{t('manualEdit.selectedHtml')}</span>
           <textarea
+            aria-label={t('manualEdit.selectedHtml')}
             className="manual-edit-code"
             value={draft.outerHtml}
             onChange={(event) => update({ outerHtml: event.currentTarget.value })}
           />
         </label>
-      </Section>
+        {children}
+        </Section>
     </div>
   );
 }
@@ -757,9 +768,10 @@ const COLOR_SUGGESTION_PROPS: ReadonlySet<ProjectDesignTokenSuggestionProp> = ne
 ]);
 
 function StyleInspector({
-  target, styles, onChange, onApply,
+  target, styles, onChange, onApply, renderContent,
   tokenSuggestions = [], tokenSuggestionsLoading = false, onApplyTokenSuggestion, onInspectValueSelect,
 }: {
+  renderContent: (colorControl: ReactNode) => ReactNode;
   target: ManualEditTarget;
   styles: ManualEditStyles;
   onChange: (key: keyof ManualEditStyles, value: string) => void;
@@ -795,9 +807,12 @@ function StyleInspector({
   const activeIsColor = activeProp ? COLOR_SUGGESTION_PROPS.has(activeProp) : false;
 
   return (
+    <>
+      {renderContent(
+        <ColorRow label={t('manualEdit.textColor')} value={styles.color} placeholder={summary?.color} onChange={(v) => u('color', v)} onFocus={() => activate('color', t('manualEdit.textColor'))} />
+      )}
     <div className="cc-inspector">
       <Section title={t('manualEdit.parameters')}>
-        <ColorRow label={t('manualEdit.textColor')} value={styles.color} placeholder={summary?.color} onChange={(v) => u('color', v)} onFocus={() => activate('color', t('manualEdit.textColor'))} />
         <ColorRow label={t('manualEdit.background')} value={styles.backgroundColor} placeholder={summary?.backgroundColor} onChange={(v) => u('backgroundColor', v)} onFocus={() => activate('backgroundColor', t('manualEdit.background'))} />
         <UnitRow label={t('manualEdit.opacity')} value={styles.opacity} placeholder="1" onChange={(v) => u('opacity', v)} unit="" onFocus={() => activate('opacity', t('manualEdit.opacity'))} />
         <FontRow label={t('manualEdit.fontFamily')} value={styles.fontFamily} placeholder={summary?.fontFamily} onChange={(v) => u('fontFamily', v)} onFocus={() => activate('fontFamily', t('manualEdit.fontFamily'))} />
@@ -892,6 +907,7 @@ function StyleInspector({
         </div>
       ) : null}
     </div>
+    </>
   );
 }
 
@@ -1146,17 +1162,17 @@ function QuadRow({ label, axes, values, onChange, onFocus }: {
       </button>
       {open ? (
         <div className="cc-quad-grid">
-          <QuadCell axis={axes?.t ?? 'T'} value={values.t} onChange={(v) => onChange('t', v)} />
-          <QuadCell axis={axes?.r ?? 'R'} value={values.r} onChange={(v) => onChange('r', v)} />
-          <QuadCell axis={axes?.b ?? 'B'} value={values.b} onChange={(v) => onChange('b', v)} />
-          <QuadCell axis={axes?.l ?? 'L'} value={values.l} onChange={(v) => onChange('l', v)} />
+          <QuadCell icon="layout-top-line" axis={axes?.t ?? 'T'} value={values.t} onChange={(v) => onChange('t', v)} />
+          <QuadCell icon="layout-right-line" axis={axes?.r ?? 'R'} value={values.r} onChange={(v) => onChange('r', v)} />
+          <QuadCell icon="layout-bottom-line" axis={axes?.b ?? 'B'} value={values.b} onChange={(v) => onChange('b', v)} />
+          <QuadCell icon="layout-left-line" axis={axes?.l ?? 'L'} value={values.l} onChange={(v) => onChange('l', v)} />
         </div>
       ) : null}
     </div>
   );
 }
 
-function QuadCell({ axis, value, onChange }: { axis: string; value: string; onChange: (v: string) => void }) {
+function QuadCell({ axis, icon, value, onChange }: { axis: string; icon: string; value: string; onChange: (v: string) => void }) {
   const display = stripPxUnit(value);
   const canStep = isNumericInput(display);
   const stepBy = (direction: -1 | 1) => {
@@ -1165,9 +1181,9 @@ function QuadCell({ axis, value, onChange }: { axis: string; value: string; onCh
   };
   return (
     <span className="cc-quad-cell">
-      <em className="cc-quad-axis">{axis}</em>
+      <em className="cc-quad-axis" title={axis}><RemixIcon name={icon} size={16} /></em>
       <button type="button" className="cc-step cc-step-quad" disabled={!canStep} aria-label={`${axis} decrease`} onClick={() => stepBy(-1)}>−</button>
-      <input value={display} placeholder="0"
+      <input aria-label={axis} value={display} placeholder="0"
         onChange={(e) => {
           const raw = e.currentTarget.value.trim();
           if (raw === '') onChange('');

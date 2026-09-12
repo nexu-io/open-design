@@ -977,17 +977,100 @@
 /* Project page audit pass: one final rule set for the active project shell.
    Keep the outer panes flat; only controls and repeated items get radius. */
 .workspace-shell:where(:not([data-chat-root], [data-chat-root] *)) {
-  /* 52px tab-bar row: 10px above + 32px tab + 10px below, so the tabs get 10px
-     top/bottom breathing room and the row below (sidebar) keeps its own 10px
-     top margin — one consistent 10px rhythm around the strip. */
-  grid-template-rows: 52px minmax(0, 1fr);
+  /* 28px account controls with 8px above and below. */
+  grid-template-rows: 44px minmax(0, 1fr);
+}
+/* Both project toolbars share the top row, inset 8px from the window. */
+.workspace-shell.workspace-shell--project {
+  position: relative;
+  grid-template-rows: 0 minmax(0, 1fr);
+}
+.workspace-shell.workspace-shell--project > .workspace-tabs-chrome.app-chrome-header {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  overflow: visible;
+}
+.workspace-shell--project > .workspace-tabs-chrome > .workspace-tabs-home-chrome,
+.workspace-shell--project > .workspace-tabs-chrome > .workspace-tabs-strip {
+  order: 2;
+  margin-left: 0;
+  flex: 0 0 auto;
+}
+.workspace-shell--project > .workspace-tabs-chrome > .workspace-tabs-home-chrome,
+.workspace-shell--project > .workspace-tabs-chrome .workspace-tab.is-pinned {
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
+}
+.workspace-shell--project .app .split-chat-slot {
+  padding-top: 8px;
+}
+.split-chat-tabs-dock > .workspace-tabs-home-chrome {
+  order: -1;
+  flex: 0 0 32px;
+  width: 32px;
+  min-width: 32px;
+  margin: 0;
+}
+.workspace-shell--desktop[data-host-platform='darwin'] .split-chat-tabs-dock {
+  padding-left: 68px;
+}
+html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin'] .split-chat-tabs-dock {
+  padding-left: 0;
+}
+.workspace-shell--project .app .workspace {
+  margin-top: 8px;
+}
+/* With chat hidden, reserve the shared chrome row above the full-width
+   preview so the account and preview controls remain independently usable. */
+.workspace-shell--project .app .split.split-focus .workspace {
+  margin-top: 56px;
+}
+/* The project chrome no longer spans the window. Restore native dragging
+   in the exposed top gutter, the reserved chat header space, and the empty
+   parts of the preview toolbar. Its three control groups stay interactive. */
+.workspace-shell--desktop.workspace-shell--project::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  z-index: 119;
+  -webkit-app-region: drag;
+}
+.workspace-shell--desktop.workspace-shell--project:has(.split-focus)::before {
+  height: 56px;
+}
+.workspace-shell--desktop.workspace-shell--project .split-chat-slot::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  -webkit-app-region: drag;
+}
+.workspace-shell--desktop.workspace-shell--project .ws-tabs-shell,
+.workspace-shell--desktop.workspace-shell--project .split-chat-tabs-dock {
+  -webkit-app-region: drag;
+}
+.workspace-shell--desktop.workspace-shell--project .ws-tabs-shell > *,
+.workspace-shell--desktop.workspace-shell--project .ws-tabs-shell > * *,
+.workspace-shell--desktop.workspace-shell--project .split-chat-tabs-dock > *,
+.workspace-shell--desktop.workspace-shell--project .split-chat-tabs-dock > * * {
+  -webkit-app-region: no-drag;
 }
 /* ── Project-route tab-strip dock (workspaceTabsDock.ts) ──────────────────
    On the project route the strip portals into .split-chat-tabs-dock at the
-   top of the chat column, one level below the chrome row and level with the
-   workspace column's 设计文件 row (which stays put). The chrome row remains,
-   keeping only Home (.workspace-tabs-home-chrome) — the floating account
-   cluster rides the window's top-right on its own. No dock registered
+   top of the chat column, beside Home and level with the preview toolbar.
+   The chrome row retains the native traffic-light spacer. No dock registered
    (home / marketplace, workspace-focused mode) → the strip renders in the
    classic full-width chrome row again. */
 .split-chat-tabs-dock:where(:not([data-chat-root], [data-chat-root] *)) {
@@ -1016,7 +1099,7 @@
   display: none;
 }
 /* Collapse-chat control, lifted from the chat card header into the dock row
-   (left of the white tab dropdown). */
+   (right of the project dropdown). */
 .split-chat-collapse:where(:not([data-chat-root], [data-chat-root] *)) {
   order: 2;
   appearance: none;
@@ -1036,8 +1119,8 @@
   -webkit-app-region: no-drag;
 }
 .split-chat-collapse:hover:where(:not([data-chat-root], [data-chat-root] *)) {
-  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  background: var(--bg-subtle);
+  box-shadow: none;
 }
 .split-chat-tabs-dock .workspace-tabs-strip:where(:not([data-chat-root], [data-chat-root] *)) {
   align-items: center;
@@ -1087,11 +1170,10 @@
   box-shadow: none;
 }
 
-.workspace-tabs-dropdown__icon:where(:not([data-chat-root], [data-chat-root] *)) {
-  display: inline-flex;
-  flex: 0 0 auto;
-  color: var(--text-muted);
+.workspace-tabs-dropdown__trigger:hover:not(:disabled):where(:not([data-chat-root], [data-chat-root] *)) {
+  background: transparent;
 }
+
 .workspace-tabs-dropdown__label:where(:not([data-chat-root], [data-chat-root] *)) {
   flex: 1 1 auto;
   min-width: 0;
@@ -1275,12 +1357,12 @@
   min-height: 0;
 }
 .workspace-shell .workspace-tabs-chrome.app-chrome-header:where(:not([data-chat-root], [data-chat-root] *)) {
-  --workspace-tabs-chrome-height: 52px;
+  --workspace-tabs-chrome-height: 44px;
   /* Flush with the page below it — the bar shares the app surface. */
   --workspace-tab-bar-bg: var(--bg);
   --workspace-active-tab-border: color-mix(in srgb, var(--border-strong) 38%, transparent);
-  height: 52px;
-  min-height: 52px;
+  height: 44px;
+  min-height: 44px;
   padding: 0 8px 0 0;
   background: var(--workspace-tab-bar-bg);
   border-bottom: 0;
@@ -1637,7 +1719,7 @@
      giving a 10px tab-to-content spacing (was 18px). Bottom/left stay 8px; the
      slot's overflow:hidden (shell.css) clips the card's shadow cleanly at the
      slot edge. Right side is 0 so the gap to the workspace card is just the
-     8px resize-handle column (not 8+8+8=24px). */
+     4px resize-handle column. */
   padding: 0 0 8px 8px;
   background: var(--veil-page, transparent);
 }
@@ -1645,46 +1727,19 @@
   /* overflow:hidden still rounds the content (the composer is a separate
      fixed/portaled layer, so it isn't clipped and auto-follows the inset via
      composerPortalRect). */
-  /* Hairline outline (per product: #F7F7F7) so the card keeps an edge where
-     it meets the ground — the pair with .app .workspace below, which carries
-     the same stroke. Literal rather than a token: the neutral ladder's
-     lightest border step (--border-soft #ededed) reads a shade too dark
-     against the white card, and the app is forced light (FORCED_APP_THEME),
-     so there is no dark path to keep in sync. */
-  border: var(--stroke-thin) solid #f7f7f7;
+  border: 0;
   border-radius: var(--radius-lg);
   box-shadow: none;
-  /* Pure-white frosted glass: a white tint over the regular blur so the chat
-     panel reads paper-white instead of showing the raw ground. Dark theme
-     falls back to the standard Regular material, and the degraded blocks
-     below flatten it to a solid surface. */
-  background: color-mix(in srgb, #fff 85%, transparent);
-  -webkit-backdrop-filter: var(--material-regular-backdrop);
-  backdrop-filter: var(--material-regular-backdrop);
+  /* Let the page ground show through without tint or backdrop blur. */
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   overflow: hidden;
-}
-[data-theme='dark'] .app .split-chat-slot > .pane {
-  background: var(--material-regular);
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .app .split-chat-slot > .pane {
-    background: var(--material-regular);
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  .app .split-chat-slot > .pane:where(:not([data-chat-root], [data-chat-root] *)) {
-    background: var(--bg-elevated);
-  }
-}
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .app .split-chat-slot > .pane:where(:not([data-chat-root], [data-chat-root] *)) {
-    background: var(--bg-elevated);
-  }
 }
 .app .split-resize-handle:where(:not([data-chat-root], [data-chat-root] *)) {
   --split-resize-gradient-surface: #fff;
-  width: 8px;
-  min-width: 8px;
+  width: var(--project-chat-handle-width, 4px);
+  min-width: 0;
   background: transparent;
 }
 
@@ -2876,7 +2931,7 @@
      (.split-chat-slot > .pane). Inset 8px keeps the ground gutter between
      the cards; overflow:hidden rounds the content and the toolbar dropdowns
      open downward into the preview so they aren't clipped. Left side is 0 so
-     the gap to the chat card is just the 8px resize-handle column (focus
+     the gap to the chat card is just the 4px resize-handle column (focus
      mode restores it below). Top margin is 0 so the card sits 8px higher,
      matching the chat card; the tab strip's own 10px bottom breathing is the
      only tab-to-content gap (10px, was 18px). */
@@ -2884,7 +2939,7 @@
   padding: 0;
   /* Same hairline as the chat card (#F7F7F7) — see the note there. */
   border: var(--stroke-thin) solid #f7f7f7;
-  border-radius: var(--radius-lg);
+  border-radius: 16px;
   box-shadow: none;
   /* Same effect as the top tab strip: no fill, no frost of its own — the
      ground (app wash in the browser, wallpaper vibrancy on desktop) shows
@@ -2903,7 +2958,19 @@
   margin-left: 8px;
 }
 .app .ws-tabs-shell:where(:not([data-chat-root], [data-chat-root] *)) {
-  padding: 6px 14px;
+  /* 8px above/below the 30px controls; keep the 12px side insets. */
+  padding: 8px 12px;
+  height: 46px;
+  min-height: 46px;
+  /* The row is ONE TAB TALL, full stop. It is a grid, so its height was
+     whatever its tallest child happened to be — and one of those children is
+     a portal host (`.ws-tabs-lead-slot`, which the open viewer fills with the
+     viewport switcher and Reload). A taller child stretched the row, the
+     side tracks are `height: 100%`, and the 30px tabs centred inside the
+     taller box: the strip's 12px inset measured 16 with a page open and 12
+     without, and the tabs stepped up and down as the user moved between
+     panes. Pinning the row means nothing portaled in can move them again. */
+  grid-template-rows: 30px;
   border-bottom: none;
   /* Match the solid panel below instead of the shared chat-header glass. */
   background: var(--bg);
@@ -2913,13 +2980,24 @@
 .app .ws-focus-expand:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius);
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app .ws-focus-expand:hover:where(:not([data-chat-root], [data-chat-root] *)) {
+  background: var(--bg-subtle);
+  box-shadow: none;
 }
 .app .ws-tabs-bar:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 6px;
-  height: auto;
-  min-height: 38px;
-  padding-block: 4px;
+  /* Exactly one tab tall, with nothing of its own inside. It used to be 38px
+     with 4px of block padding, which is 8px of slack the tabs floated in: the
+     strip's own inset then measured 7px to this row and 11px to a tab inside
+     it, and any box with slack in it is free to move. */
+  height: 30px;
+  min-height: 30px;
+  padding-block: 0;
   scrollbar-width: none;
 }
 .app .ws-tabs-bar:where(:not([data-chat-root], [data-chat-root] *))::-webkit-scrollbar {
@@ -2929,7 +3007,9 @@
   box-sizing: border-box;
   height: 30px;
   min-height: 30px;
-  padding: 0 11px;
+  /* One number for both states: an expanded tab and a collapsed, icon-only one
+     are the same object, and the strip's own side padding is the same 12. */
+  padding: 0 12px;
   /* Rounded rect (12px), matching the top workspace tab strip — not a full
      pill — so the Design Files tab and file tabs read as one family. */
   border-radius: 12px;
@@ -3159,10 +3239,10 @@
 .app .df-file-row + .df-file-row .df-cell-kind:where(:not([data-chat-root], [data-chat-root] *)),
 .app .df-file-row + .df-file-row .df-cell-time:where(:not([data-chat-root], [data-chat-root] *)),
 .app .df-file-row + .df-file-row .df-cell-menu:where(:not([data-chat-root], [data-chat-root] *)) {
-  border-top: 1px solid var(--border-soft);
+  border-top: 0;
 }
 .app .df-file-row:hover:where(:not([data-chat-root], [data-chat-root] *)) {
-  background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
+  background: var(--accent-tint);
 }
 /* A selected row must keep its blue fill on hover — otherwise the generic
    hover background wins (higher specificity) and the white selected text
@@ -4287,3 +4367,30 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled:w
    360px track plus the row-density overrides that came with it — was
    removed. Leaving the grid rule behind reserved an empty 360px column and
    the panel content stopped short of the panel edge. */
+
+.workspace-tabs-dropdown__row { position: relative; }
+.workspace-tabs-dropdown__more {
+  flex: 0 0 28px; width: 28px; height: 28px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 6px; background: transparent; opacity: 0;
+}
+.workspace-tabs-dropdown__row:hover .workspace-tabs-dropdown__more,
+.workspace-tabs-dropdown__row:focus-within .workspace-tabs-dropdown__more,
+.workspace-tabs-dropdown__more[aria-expanded="true"] { opacity: 1; }
+/* The row owns the hover surface, including the trailing actions button. */
+.workspace-tabs-dropdown__row > .workspace-tabs-dropdown__row-main:hover:not(:disabled),
+.workspace-tabs-dropdown__row > .workspace-tabs-dropdown__more:hover:not(:disabled) {
+  background: transparent;
+}
+.workspace-tabs-dropdown__actions {
+  position: absolute; right: 0; top: 100%; z-index: 10; min-width: 0;
+  padding: 6px; border: 1px solid var(--border-soft); border-radius: 10px;
+  background: var(--bg); box-shadow: var(--shadow-md);
+}
+.workspace-tabs-dropdown__actions button {
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%;
+  padding: 8px 10px;
+  border: 0; background: transparent; text-align: left; border-radius: 6px;
+}
+.workspace-tabs-dropdown__actions button:hover { background: var(--bg-subtle); }
+.workspace-tabs-dropdown__actions .is-danger { color: var(--red, #dc2626); }
