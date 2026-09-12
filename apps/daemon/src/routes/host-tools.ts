@@ -164,33 +164,55 @@ async function probeMacBundle(name: string | readonly string[]): Promise<{ name:
   return null;
 }
 
-async function resolveEntry(entry: CatalogueEntry): Promise<{
+export interface ResolveEntryDeps {
+  platform: Platform;
+  probeCommandOnPath: typeof probeCommandOnPath;
+  probeMacBundle: typeof probeMacBundle;
+  resolveMacOpenCommand: typeof resolveMacOpenCommand;
+}
+
+function defaultResolveEntryDeps(): ResolveEntryDeps {
+  return {
+    platform: currentPlatform(),
+    probeCommandOnPath,
+    probeMacBundle,
+    resolveMacOpenCommand,
+  };
+}
+
+async function resolveEntry(
+  entry: CatalogueEntry,
+  deps: ResolveEntryDeps = defaultResolveEntryDeps(),
+): Promise<{
   available: boolean;
   resolvedPath?: string;
   launch?: { command: string; argsForDir: (resolvedDir: string) => string[] };
 }> {
-  if (entry.command) {
-    const resolved = await probeCommandOnPath(entry.command);
-    if (resolved) {
-      return {
-        available: true,
-        resolvedPath: resolved,
-        launch: { command: resolved, argsForDir: entry.commandArgs ?? ((resolvedDir) => [resolvedDir]) },
-      };
-    }
-  }
-  if (entry.macOpenBundle && process.platform === 'darwin') {
-    const bundle = await probeMacBundle(entry.macOpenBundle);
+  // On macOS, prefer macOpenBundle over CLI for entries that have both.
+  // This avoids launching agent-only CLI wrappers (e.g. Cursor's `cursor`)
+  // that exit 1 immediately instead of opening the editor (#6610).
+  if (entry.macOpenBundle && deps.platform === 'darwin') {
+    const bundle = await deps.probeMacBundle(entry.macOpenBundle);
     if (bundle) {
       return {
         available: true,
         resolvedPath: bundle.path,
         launch: {
-          command: await resolveMacOpenCommand(),
+          command: await deps.resolveMacOpenCommand(),
           argsForDir: entry.macOpenArgs
             ? ((resolvedDir) => entry.macOpenArgs?.(bundle.name, resolvedDir) ?? ['-a', bundle.name, resolvedDir])
             : ((resolvedDir) => ['-a', bundle.name, resolvedDir]),
         },
+      };
+    }
+  }
+  if (entry.command) {
+    const resolved = await deps.probeCommandOnPath(entry.command);
+    if (resolved) {
+      return {
+        available: true,
+        resolvedPath: resolved,
+        launch: { command: resolved, argsForDir: entry.commandArgs ?? ((resolvedDir) => [resolvedDir]) },
       };
     }
   }
@@ -207,10 +229,11 @@ export interface HostToolLaunchPlan {
 export async function resolveHostToolLaunchPlan(
   editorId: HostEditorId,
   resolvedDir: string,
+  deps?: ResolveEntryDeps,
 ): Promise<HostToolLaunchPlan> {
   const entry = CATALOGUE.find((c) => c.id === editorId);
   if (!entry) return { available: false };
-  const probe = await resolveEntry(entry);
+  const probe = await resolveEntry(entry, deps);
   if (!probe.available || !probe.launch) {
     return {
       available: false,
@@ -225,12 +248,13 @@ export async function resolveHostToolLaunchPlan(
   };
 }
 
-// Spawn a detached host-tool launch and wait for the OS to confirm it
-// actually started. Node emits `spawn` once the child is running and `error`
-// when the launch is refused (missing binary, quarantine, EACCES). The
-// `error` event arrives on a later tick, so the route must await this before
-// replying — otherwise it reports success for a launch the OS rejected and
-// the user sees nothing happen (#3871).
+const HOST_TOOL_EXIT_GRACE_MS = 500;
+
+// Spawn a detached host-tool launch and wait briefly for an immediate failure.
+// Node emits `spawn` once the child is running and `error` when the launch
+// is refused (missing binary, quarantine, EACCES). A wrapper may also spawn
+// successfully and exit non-zero immediately, so wait for that failure class
+// before reporting success (#3871, #6610).
 export function launchHostTool(
   command: string,
   args: string[],
@@ -247,23 +271,50 @@ export function launchHostTool(
     // cmd.exe with CommandLineToArgvW-safe verbatim args and everything else
     // directly — no shell, no metacharacter interpretation.
     const invocation = createCommandInvocation({ command, args });
+    // The packaged daemon needs this flag to run under Electron as Node, but
+    // external Electron-based GUI apps inherit it and may then exit immediately.
+    // Strip it only from this child process; leave the daemon environment intact.
+    const childEnv = { ...process.env };
+    delete childEnv.ELECTRON_RUN_AS_NODE;
     const child = spawn(invocation.command, invocation.args, {
       detached: true,
+      env: childEnv,
       stdio: 'ignore',
       windowsHide: process.platform === 'win32',
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
     let settled = false;
+    let spawned = false;
+    let exitGraceTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const settle = (result: { ok: true } | { ok: false; error: string }) => {
+      if (settled) return;
+      settled = true;
+      if (exitGraceTimer) clearTimeout(exitGraceTimer);
+      if (spawned) child.unref();
+      resolve(result);
+    };
+
     child.once('spawn', () => {
       if (settled) return;
-      settled = true;
-      child.unref();
-      resolve({ ok: true });
+      spawned = true;
+      exitGraceTimer = setTimeout(() => settle({ ok: true }), HOST_TOOL_EXIT_GRACE_MS);
     });
     child.once('error', (err) => {
+      settle({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    });
+    child.once('exit', (code, signal) => {
       if (settled) return;
-      settled = true;
-      resolve({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      if (code === 0) {
+        settle({ ok: true });
+        return;
+      }
+      const error = signal
+        ? `Host tool was terminated by signal ${signal}`
+        : typeof code === 'number'
+          ? `Host tool exited with code ${code}`
+          : 'Host tool exited before reporting a status';
+      settle({ ok: false, error });
     });
   });
 }
