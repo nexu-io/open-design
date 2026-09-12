@@ -85,6 +85,13 @@ describe('validateCapabilityList', () => {
     ]);
   });
 
+  it('accepts exact pipeline:* for a persisted grant', () => {
+    expect(validateCapabilityList(['pipeline:*'])).toEqual({
+      accepted: ['pipeline:*'],
+      rejected: [],
+    });
+  });
+
   it('rejects unknown shapes without dropping good entries', () => {
     const { accepted, rejected } = validateCapabilityList([
       'fs:read',

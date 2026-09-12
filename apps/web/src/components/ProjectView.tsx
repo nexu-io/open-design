@@ -9811,6 +9811,8 @@ export function ProjectView({
           sessionMode: runSessionMode,
           appliedPluginSnapshotId:
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
+          pluginId: meta?.appliedPluginSnapshot?.pluginId,
+          pluginInputs: meta?.appliedPluginSnapshot?.inputs,
           research: meta?.research,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: daemonByokOpenCode ? config.model : choice?.model ?? null,
@@ -10045,6 +10047,8 @@ export function ProjectView({
           sessionMode: runSessionMode,
           appliedPluginSnapshotId:
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
+          pluginId: meta?.appliedPluginSnapshot?.pluginId,
+          pluginInputs: meta?.appliedPluginSnapshot?.inputs,
           research: meta?.research,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: config.model,
