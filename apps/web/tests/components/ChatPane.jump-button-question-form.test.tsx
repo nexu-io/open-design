@@ -13,7 +13,7 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
   };
 }
 
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import type { ChatMessage } from '../../src/types';
@@ -117,7 +117,34 @@ function questionFormMessages(): ChatMessage[] {
   ];
 }
 
-function chatPaneEl(messages: ChatMessage[]) {
+function steppedQuestionFormMessages(): ChatMessage[] {
+  const formContent = [
+    '<question-form id="stepped" title="Quick check">',
+    JSON.stringify({
+      questions: [
+        { id: 'a', label: 'What are we building?', type: 'text', required: true },
+        { id: 'b', label: 'Anything else?', type: 'textarea' },
+      ],
+    }),
+    '</question-form>',
+  ].join('\n');
+  return [
+    {
+      id: 'assistant-stepped',
+      role: 'assistant',
+      content: formContent,
+      createdAt: 1_700_000_000_000,
+      startedAt: 1_700_000_000_000,
+      endedAt: 1_700_000_003_000,
+      runStatus: 'succeeded',
+    },
+  ];
+}
+
+function chatPaneEl(
+  messages: ChatMessage[],
+  options: { interactiveQuestionForm?: boolean } = {},
+) {
   return (
     <ChatPane
       messages={messages}
@@ -132,6 +159,7 @@ function chatPaneEl(messages: ChatMessage[]) {
       activeConversationId={null}
       onSelectConversation={() => {}}
       onDeleteConversation={() => {}}
+      onSubmitQuestionForm={options.interactiveQuestionForm ? () => {} : undefined}
     />
   );
 }
@@ -145,22 +173,100 @@ describe('jump-to-latest button after landing on a question form (recvqajMdAnfmd
     render(chatPaneEl(questionFormMessages()));
     await flushFrames();
 
-    const btn = document.querySelector('.chat-jump-btn');
-    expect(btn).not.toBeNull();
-    expect(btn!.className).not.toContain('chat-jump-btn-active');
-    expect(btn!.getAttribute('aria-hidden')).toBe('true');
+    // 按钮**一直挂着**(退场动画要它在),所以「露没露出来」只能看 aria-hidden;
+    // 那个 -active 类和 aria-hidden 出自同一个布尔量,再断言一遍是零覆盖。
+    const btn = screen.getByTestId('chat-jump-btn');
+    expect(btn.getAttribute('aria-hidden')).toBe('true');
+    expect(btn.getAttribute('tabindex')).toBe('-1');
   });
 
-  it('still shows when aligning the form to the top genuinely leaves content below the fold', async () => {
-    // scrollTop well short of the natural max: 200px of real content remains
-    // below the form once it is aligned to the top.
-    geom = { scrollHeight: 1000, clientHeight: 400, scrollTop: 400 };
+  it('still shows when aligning the form to the top leaves a lot of content below', async () => {
+    /*
+     * 门槛跟着视口高度走了(`runtime/chat/jump-to-latest.ts`):用户 2026-08-27 说
+     * 「这个总是有事没事就出现…只有在很上面时才出现不行吗」,原来写死的 120px
+     * 半屏不到就弹。
+     *
+     * 这一条原来的夹具是「表单顶到头之后**还剩 200px**」—— 在 400px 高的面板里
+     * 那正是他嫌太急的那一档,现在按设计不出。把夹具抬到真正「很上面」的量级,
+     * 这一条守的仍是同一件事:表单顶到头之后底下**确实还有一大截**时,要有入口。
+     */
+    geom = { scrollHeight: 1600, clientHeight: 400, scrollTop: 400 };
     render(chatPaneEl(questionFormMessages()));
     await flushFrames();
 
-    const btn = document.querySelector('.chat-jump-btn');
-    expect(btn).not.toBeNull();
-    expect(btn!.className).toContain('chat-jump-btn-active');
-    expect(btn!.getAttribute('aria-hidden')).toBe('false');
+    const btn = screen.getByTestId('chat-jump-btn');
+    expect(btn.getAttribute('aria-hidden')).toBe('false');
+    expect(btn.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('keeps the first visible message at the same viewport coordinate after Next relayout', async () => {
+    geom = { scrollHeight: 2000, clientHeight: 400, scrollTop: 0 };
+    const { container } = render(chatPaneEl(steppedQuestionFormMessages(), {
+      interactiveQuestionForm: true,
+    }));
+    await flushFrames();
+
+    const log = screen.getByTestId('chat-log');
+    log.getBoundingClientRect = () => ({
+      top: 100,
+      bottom: 500,
+      left: 0,
+      right: 300,
+      width: 300,
+      height: 400,
+      x: 0,
+      y: 100,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    const message = container.querySelector<HTMLElement>(
+      '[data-assistant-message-id="assistant-stepped"]',
+    );
+    if (!message) throw new Error('expected assistant message root');
+    message.getBoundingClientRect = () => {
+      const top = 980 - geom.scrollTop;
+      return {
+        top,
+        bottom: top + 600,
+        left: 0,
+        right: 300,
+        width: 300,
+        height: 600,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+    const footer = container.querySelector<HTMLElement>('.question-form-foot');
+    if (!footer) throw new Error('expected stepped question footer');
+    footer.getBoundingClientRect = () => {
+      const contentTop = screen.queryByText('2/2') ? 1_380 : 1_200;
+      const top = contentTop - geom.scrollTop;
+      return {
+        top,
+        bottom: top + 36,
+        left: 0,
+        right: 300,
+        width: 300,
+        height: 36,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+
+    // Ignore frames left by initial form landing; this assertion starts from
+    // an explicit reading position inside the already-settled transcript.
+    rafCallbacks = [];
+    geom.scrollTop = 900;
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A dashboard' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    expect(screen.getByText('2/2')).toBeTruthy();
+
+    // Model a browser/layout correction that kept the replaced footer fixed.
+    // The ChatPane frame must undo it in favor of the first visible message.
+    geom.scrollTop = 1080;
+    await flushFrames();
+    expect(geom.scrollTop).toBe(900);
+    expect(message.getBoundingClientRect().top).toBe(80);
   });
 });

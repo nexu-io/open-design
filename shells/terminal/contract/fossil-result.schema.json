@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/fossil-result-v1.schema.json",
+  "title": "Terminal fossil result v1",
+  "type": "object",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "required": ["schemaVersion", "outcome", "operation", "shell"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "outcome": {"const": "ready"},
+        "operation": {"type": "string"},
+        "shell": {"$ref": "#/$defs/shell"},
+        "result": {}
+      }
+    },
+    {
+      "additionalProperties": false,
+      "required": ["schemaVersion", "outcome", "operation", "error"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "outcome": {"const": "rejected"},
+        "operation": {"type": "string"},
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {"enum": ["invalid-request", "invalid-installation", "operation-failed", "installer-required", "no-generation", "resource-unavailable", "standalone-occupied", "standalone-start-failed"]},
+            "message": {"type": "string"}
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "shell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "version", "digest"],
+      "properties": {
+        "type": {"const": "terminal"},
+        "version": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

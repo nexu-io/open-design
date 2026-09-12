@@ -16,6 +16,7 @@ import {
   createRunSideEffectLedger,
   foldEventIntoRunSideEffectLedger,
 } from '../../src/runtimes/run-lifecycle-analytics.js';
+import { createChatRunService } from '../../src/runtimes/runs.js';
 
 type Captured = {
   eventName: string;
@@ -24,10 +25,16 @@ type Captured = {
   context: { deviceId: string };
 };
 
-function harness() {
+function harness(finishCaptureResult: unknown = {
+  status: 'queued',
+  acknowledgement: 'local_buffer',
+  errorType: null,
+}) {
   const captured: Captured[] = [];
   const recoveries: Array<{ runId: string; properties: Record<string, unknown>; insertId: string }> = [];
   const completed: string[] = [];
+  const deliveryBegun: string[] = [];
+  const deliveryFinalized: Array<{ runId: string; result: unknown }> = [];
   let settle: (status: { status: string; errorCode?: string | null; exitCode?: number | null }) => void = () => {};
   const terminal = new Promise<{ status: string }>((resolve) => {
     settle = (status) => resolve(status as { status: string });
@@ -45,11 +52,20 @@ function harness() {
             insertId: recovery.insertId,
           });
         },
+        beginAnalyticsDelivery: (run) => { deliveryBegun.push(run.id); },
+        finalizeAnalyticsDelivery: (run, result) => {
+          deliveryFinalized.push({ runId: run.id, result });
+        },
         markAnalyticsCompleted: (run) => { completed.push(run.id); },
         setDeliverableValidation: () => {},
       },
       analytics: {
-        capture: (args) => { captured.push(args as Captured); },
+        capture: (args) => {
+          captured.push(args as Captured);
+          return args.eventName === 'run_finished'
+            ? finishCaptureResult
+            : { status: 'queued', acknowledgement: 'local_buffer', errorType: null };
+        },
       },
       getAppVersion: () => '0.0.0-test',
     },
@@ -63,7 +79,15 @@ function harness() {
     },
   });
 
-  return { captured, completed, lifecycle, recoveries, settle };
+  return {
+    captured,
+    completed,
+    deliveryBegun,
+    deliveryFinalized,
+    lifecycle,
+    recoveries,
+    settle,
+  };
 }
 
 function fakeRun(overrides: Record<string, unknown> = {}) {
@@ -117,6 +141,157 @@ describe('run analytics lifecycle', () => {
     expect(finished.insertId).toBe(`${created.insertId}-finish`);
     expect(h.recoveries.at(-1)?.insertId).toBe(created.insertId);
     expect(h.completed).toEqual(['run-under-test']);
+  });
+
+  it('keeps failed PostHog enqueue delivery recoverable instead of marking analytics complete', async () => {
+    const deliveryFailure = {
+      status: 'failed',
+      acknowledgement: 'none',
+      errorType: 'enqueue_failed',
+    };
+    const h = harness(deliveryFailure);
+    h.lifecycle.install({
+      run: fakeRun(),
+      body: { agentId: 'codex' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+
+    h.settle({ status: 'failed', errorCode: 'AGENT_EXIT_1' });
+    await settled(h, 'run_finished');
+    await vi.waitFor(() => expect(h.deliveryFinalized).toHaveLength(1));
+
+    expect(h.deliveryBegun).toEqual(['run-under-test']);
+    expect(h.deliveryFinalized).toEqual([{
+      runId: 'run-under-test',
+      result: deliveryFailure,
+    }]);
+    expect(h.completed).toEqual([]);
+  });
+
+  it('publishes the bounded terminal lifecycle envelope for the current attempt', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({
+        terminalLifecycle: {
+          version: 1,
+          runAttempt: 2,
+          runtimeGenerationId: '0f2d4d9e-f034-4ed5-8330-314bd1d525cc',
+          terminationOrigin: 'watchdog_cleanup',
+          terminalIntegrity: 'late',
+          terminalPersistence: { status: 'acknowledged', errorType: null },
+          posthogDelivery: {
+            status: 'in_flight',
+            acknowledgement: 'none',
+            attemptCount: 1,
+            errorType: null,
+          },
+          unfinishedState: 'recovery_pending',
+          duplicateTerminalCount: 1,
+          lateTerminalCount: 1,
+        },
+      }),
+      body: { agentId: 'amr' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+
+    h.settle({ status: 'failed', errorCode: 'AGENT_EXIT_1' });
+    const finished = await settled(h, 'run_finished');
+
+    expect(finished.properties).toMatchObject({
+      terminal_integrity: 'late',
+      run_attempt: 2,
+      runtime_generation_id: '0f2d4d9e-f034-4ed5-8330-314bd1d525cc',
+      termination_origin: 'watchdog_cleanup',
+      terminal_persistence_status: 'acknowledged',
+      terminal_persistence_error_type: null,
+      posthog_delivery_status: 'queued',
+      posthog_acknowledgement: 'local_buffer',
+      posthog_delivery_attempt_count: 1,
+      posthog_error_type: null,
+      mature_unfinished_state: 'unknown',
+      duplicate_terminal_count: 1,
+      late_terminal_count: 1,
+    });
+  });
+
+  it('settles matching and conflicting terminal claims before capturing run_finished', async () => {
+    const captured: Captured[] = [];
+    const runs = createChatRunService({
+      createSseResponse: () => ({
+        send: vi.fn(() => true),
+        end: vi.fn(),
+        cleanup: vi.fn(),
+      }),
+      createSseErrorPayload: (code: string, message: string) => ({
+        error: { code, message },
+      }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+    });
+    const lifecycle = createRunAnalyticsLifecycle({
+      db: {} as never,
+      design: {
+        runs: {
+          ...runs,
+          beginAnalyticsDelivery: (run: ReturnType<typeof runs.create>) => {
+            runs.beginAnalyticsDelivery(run);
+            queueMicrotask(() => {
+              runs.finish(run, 'failed', 1, null);
+              runs.finish(run, 'succeeded', 0, null);
+            });
+          },
+        } as never,
+        analytics: {
+          capture: (args) => {
+            captured.push(args as Captured);
+            return {
+              status: 'queued',
+              acknowledgement: 'local_buffer',
+              errorType: null,
+            };
+          },
+        },
+        getAppVersion: () => '0.0.0-test',
+      },
+      paths: {
+        PROJECTS_DIR: '/nonexistent/projects',
+        RUNTIME_DATA_DIR: '/nonexistent/data',
+      },
+      agents: { detectAgents: async () => [] },
+      telemetry: {
+        reportRunCompletionTelemetryFallback: () => {},
+        resolveRunProjectKindForAnalytics: () => null,
+        runArtifactBaselines: { take: () => undefined },
+        runRetryEventsForAnalytics: () => [],
+      },
+    });
+    const run = runs.create({
+      projectId: null,
+      conversationId: null,
+      agentId: 'amr',
+    });
+    lifecycle.install({
+      run: run as never,
+      body: { agentId: 'amr' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await vi.waitFor(() => {
+      expect(captured.some((event) => event.eventName === 'run_created')).toBe(true);
+    });
+
+    runs.finish(run, 'failed', 1, null);
+
+    await vi.waitFor(() => {
+      expect(captured.some((event) => event.eventName === 'run_finished')).toBe(true);
+    });
+    const finished = captured.find((event) => event.eventName === 'run_finished');
+    expect(finished?.properties).toMatchObject({
+      terminal_integrity: 'late',
+      duplicate_terminal_count: 1,
+      late_terminal_count: 1,
+    });
   });
 
   it('publishes only bounded prompt budget facts on run_finished', async () => {

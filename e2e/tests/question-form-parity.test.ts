@@ -111,6 +111,14 @@ const CORPUS: Record<string, string> = {
   'an upper-cased tag': `<QUESTION-FORM>${BODY}</QUESTION-FORM>`,
   'a fenced JSON body': `<question-form>\n\`\`\`json\n${BODY}\n\`\`\`\n</question-form>`,
   'a bare top-level questions array': '<question-form>[{"id":"surface","label":"Which?"}]</question-form>',
+  'a legacy child-tag form from persisted history': [
+    '<question-form id="audio" title="Audio brief">',
+    '<question-select id="format" label="Format"><option value="mp3">MP3</option></question-select>',
+    '<question-text id="mood" label="Mood" />',
+    '</question-form>',
+  ].join(''),
+  'malformed legacy child markup':
+    '<question-form><question-select id="format"><option>MP3</question-select></question-form>',
   'an empty questions array': '<question-form>{"questions":[]}</question-form>',
   'questions holding no objects': '<question-form>{"questions":["surface"]}</question-form>',
   'prose where the body should be': '<question-form>无需提出</question-form>',
@@ -129,7 +137,65 @@ const CORPUS: Record<string, string> = {
   'a wrapper whose inner marker also fails': '<question-form>\n<question-form>无需提出</question-form>\n</question-form>',
 };
 
+// CI run 34445640093, job 102770086632, fixed seed 20260827 exposed
+// code/protocol ownership drifting after the web splitter gained context guards.
+// Pin both a reduced witness and the original first mismatch. Explicit counts
+// keep agreement from being obtained by teaching both parsers to drop real forms.
+const LEGACY_FORM = "<ask-question><question-text id='topic' label='Topic' /></ask-question>";
+const CONTEXT_CORPUS = [
+  {
+    name: 'a quoted opener followed by a stray close is documentation, not a broken form',
+    text: 'see `<question-form>` in the docs</question-form>',
+    renderable: 0, unrenderable: 0, unterminated: false,
+  },
+  {
+    name: 'the first fixed-seed CI mismatch keeps a real unfinished alias distinct from quoted markup',
+    text: 'see `<question-form>` in the docs无需提出</QUESTION-FORM><ask-question>Planning complete.\n{"questions":[]}',
+    renderable: 0, unrenderable: 0, unterminated: true,
+  },
+  {
+    name: 'a complete canonical form inside a fenced example asks no question',
+    text: `\`\`\`html\n${FORM}\n\`\`\`\n`,
+    renderable: 0, unrenderable: 0, unterminated: false,
+  },
+  {
+    name: 'a legacy form quoted inside a real card field is card data',
+    text: `<od-card type="memory-applied">${JSON.stringify({ summary: LEGACY_FORM, used: [] })}</od-card>`,
+    renderable: 0, unrenderable: 0, unterminated: false,
+  },
+  {
+    name: 'real canonical and legacy sibling forms still both ask questions',
+    text: `${FORM}\n${LEGACY_FORM}`,
+    renderable: 2, unrenderable: 0, unterminated: false,
+  },
+  {
+    name: 'a form label mentioning card syntax does not own its real sibling',
+    text: `<question-form>${JSON.stringify({ questions: [{ id: 'syntax', label: 'Explain <od-card> syntax', type: 'text' }] })}</question-form>${FORM}`,
+    renderable: 2, unrenderable: 0, unterminated: false,
+  },
+  {
+    name: 'a real malformed form outside code still records a parse failure',
+    text: '<question-form>not json</question-form>',
+    renderable: 0, unrenderable: 1, unterminated: false,
+  },
+  {
+    name: 'a real unfinished form outside code still reports an unfinished marker',
+    text: '<question-form>{"questions":[',
+    renderable: 0, unrenderable: 0, unterminated: true,
+  },
+] as const;
+
 describe('question-form parse parity between web and daemon', () => {
+  for (const sample of CONTEXT_CORPUS) {
+    it(`[P1] ${sample.name}`, () => {
+      const counts = { renderable: sample.renderable, unrenderable: sample.unrenderable };
+      expect(webRender(sample.text)).toEqual(counts);
+      expect(scanQuestionForms(sample.text)).toEqual({
+        ...counts, unterminated: sample.unterminated,
+      });
+    });
+  }
+
   for (const [shape, text] of Object.entries(CORPUS)) {
     it(`[P1] agrees on ${shape}`, () => {
       const web = webRender(text);

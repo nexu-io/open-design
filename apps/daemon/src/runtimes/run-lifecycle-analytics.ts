@@ -303,13 +303,20 @@ export function foldEventIntoRunSideEffectLedger(
     const toolName = typeof pending === 'string' ? '' : (pending.toolName ?? '');
     ledger.writtenFilePaths.add(path);
     const isExplicitArtifact = normalizeToolName(toolName) === 'create_artifact';
-    if (isArtifactPath(path) || path.endsWith('.artifact.json') || isExplicitArtifact) {
-      const target = path.endsWith('.artifact.json') ? path.slice(0, -'.artifact.json'.length) : path;
-      ledger.artifactPaths.add(target);
+    if (isArtifactPath(path) || isExplicitArtifact) {
+      ledger.artifactPaths.add(path);
     }
     if (isDesignSystemFile(path)) ledger.designSystemFileWritten = true;
     if (isPreviewModulePath(path)) ledger.previewModulePaths.add(path);
   }
+}
+
+export function recordRunSideEffectEvent(
+  ledger: RunSideEffectLedger,
+  event: string,
+  data: unknown,
+): void {
+  foldEventIntoRunSideEffectLedger(ledger, { event, data });
 }
 
 function ledgerArtifactWriteSeen(ledger: RunSideEffectLedger): boolean {

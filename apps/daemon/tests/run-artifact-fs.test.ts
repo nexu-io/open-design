@@ -236,6 +236,25 @@ test('a CSS-only visible edit modifies the primary HTML artifact without inflati
   }), 'modified');
 });
 
+test('module-script variants participate in render dependency syntax checks', () => {
+  const root = tmpProject();
+  const esm = path.join(root, 'app.mjs');
+  const commonjs = path.join(root, 'legacy.cjs');
+  fs.writeFileSync(esm, 'export const ready = false;');
+  fs.writeFileSync(commonjs, 'module.exports = false;');
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(esm, 'export const ready = true;');
+  fs.writeFileSync(commonjs, 'module.exports = true;');
+  const after = snapshotProjectArtifacts(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.renderDependencyTouched, 2);
+  assert.deepEqual(
+    diff.renderDependencyTouchedPaths.map((file) => path.basename(file)).sort(),
+    ['app.mjs', 'legacy.cjs'],
+  );
+});
+
 test('first generation is created even when the run edits a pre-seeded HTML file', () => {
   const root = tmpProject();
   const page = path.join(root, 'index.html');
@@ -317,3 +336,54 @@ test('a no-op turn (no file writes) reports zero', () => {
     filesWritten: 0,
   });
 });
+
+test('writing export artifact with companion manifest counts exactly one target', () => {
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'export.md'), '# Export');
+  fs.writeFileSync(path.join(root, 'export.md.artifact.json'), JSON.stringify({
+    version: 1,
+    kind: 'markdown-document',
+    title: 'export.md',
+    entry: 'export.md',
+    renderer: 'markdown',
+    status: 'complete',
+    exports: ['md'],
+  }));
+
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after);
+
+  assert.equal(diff.touched, 1);
+  assert.equal(diff.created, 1);
+  assert.deepEqual(diff.touchedPaths, [path.join(root, 'export.md')]);
+  assert.equal(diff.filesWritten, 2);
+});
+
+test('sidecar-only change when companion target is in baseline does not count as artifact', () => {
+  const root = tmpProject();
+  fs.writeFileSync(path.join(root, 'export.md'), '# Export');
+  const before = snapshotProjectArtifacts(root);
+
+  // Modify / add only the sidecar manifest
+  fs.writeFileSync(path.join(root, 'export.md.artifact.json'), JSON.stringify({
+    version: 1,
+    kind: 'markdown-document',
+    title: 'export.md',
+    entry: 'export.md',
+    renderer: 'markdown',
+    status: 'complete',
+    exports: ['md'],
+  }));
+
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after);
+
+  assert.equal(diff.touched, 0);
+  assert.equal(diff.created, 0);
+  assert.equal(diff.modified, 0);
+  assert.deepEqual(diff.touchedPaths, []);
+  assert.equal(diff.filesWritten, 1);
+});
+

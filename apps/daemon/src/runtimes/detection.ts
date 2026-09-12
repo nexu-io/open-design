@@ -503,6 +503,54 @@ async function probeCapabilities(
   }
 }
 
+// A value no option can legitimately accept, so the CLI is forced to validate
+// the flag before it does any work.
+const HIDDEN_FLAG_PROBE_VALUE = '__od_capability_probe__';
+
+/**
+ * Detect flags the CLI accepts but leaves out of `--help`.
+ *
+ * Argument parsers reject an unrecognised *option* ("unknown option '--x'")
+ * differently from a recognised option carrying an unusable *value*
+ * ("option '--x <v>' argument '…' is invalid…"). Both exit non-zero before the
+ * agent contacts a model, so this costs one spawn and no tokens.
+ *
+ * Support is only recorded on positive evidence — the failure text has to name
+ * the flag and must not be an unknown-option complaint. A timeout, a missing
+ * binary, or any wording this probe does not recognise leaves the capability
+ * false, so `buildArgs` keeps the flag off rather than risking a spawn that
+ * dies on an unknown option.
+ */
+async function probeHiddenCapabilityFlags(
+  def: RuntimeAgentDef,
+  launchPath: string,
+  env: NodeJS.ProcessEnv,
+): Promise<RuntimeCapabilityMap> {
+  const spec = def.hiddenCapabilityFlags;
+  if (!spec) return {};
+  const caps: RuntimeCapabilityMap = {};
+  await Promise.all(
+    Object.entries(spec.flags).map(async ([flag, key]) => {
+      let output = '';
+      try {
+        const { stdout, stderr } = await execAgentFile(
+          launchPath,
+          [...spec.probeArgsPrefix, flag, HIDDEN_FLAG_PROBE_VALUE],
+          { env, timeout: 5000, maxBuffer: 1024 * 1024 },
+        );
+        output = `${stdout ?? ''}\n${stderr ?? ''}`;
+      } catch (error) {
+        const failure = error as { stdout?: unknown; stderr?: unknown };
+        const out = typeof failure?.stdout === 'string' ? failure.stdout : '';
+        const err = typeof failure?.stderr === 'string' ? failure.stderr : '';
+        output = `${out}\n${err}`;
+      }
+      caps[key] = output.includes(flag) && !output.includes('unknown option');
+    }),
+  );
+  return caps;
+}
+
 async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
@@ -659,12 +707,21 @@ async function probe(
   // so a single agent's detection wall is max(help, models, auth) ≈ 5s rather
   // than the sum ≈ 15s. `--help` capabilities are cached on `agentCapabilities`
   // for buildArgs to consult.
-  const [caps, modelResult, auth, amrOpenCodeVersion] = await Promise.all([
-    probeCapabilities(def, launch.launchPath, probeEnv),
-    fetchModels(def, launch.launchPath, probeEnv),
-    probeAgentAuthStatus(def, launch.launchPath, probeEnv),
-    probeAmrOpenCodeVersion(def, probeEnv),
-  ]);
+  const [helpCaps, hiddenCaps, modelResult, auth, amrOpenCodeVersion] =
+    await Promise.all([
+      probeCapabilities(def, launch.launchPath, probeEnv),
+      probeHiddenCapabilityFlags(def, launch.launchPath, probeEnv),
+      fetchModels(def, launch.launchPath, probeEnv),
+      probeAgentAuthStatus(def, launch.launchPath, probeEnv),
+      probeAmrOpenCodeVersion(def, probeEnv),
+    ]);
+  // `probeCapabilities` returns null when the agent declares no help metadata;
+  // hidden-flag results still deserve to land, so only collapse to null when
+  // neither probe produced anything.
+  const caps =
+    helpCaps || Object.keys(hiddenCaps).length > 0
+      ? { ...(helpCaps ?? {}), ...hiddenCaps }
+      : null;
   const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
   if (caps) {
     agentCapabilities.set(def.id, caps);

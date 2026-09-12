@@ -45,39 +45,24 @@ function failedMessage(): ChatMessage {
 }
 
 describe('AssistantMessage error-pill suppression', () => {
-  it('keeps the error pill when this message does NOT own the top-level card', () => {
+  /*
+   * 这一族原来守的是「**只有**拥有报错卡的那条消息才藏 error 行」—— 也就是说
+   * 其余任何一条失败消息都还把上游原文戳在对话里。用户 2026-08-27 指认了两次
+   * (「为什么还会有这种错误样式?? 你的错误卡片呢??」「设计稿里哪有这种状态行」),
+   * 裁决是**一律不出**:当前那一轮由报错卡说,历史轮次由壳头那句「运行失败」说,
+   * 上游原文归卡上的「查看详情」。所以三条断言全部翻面。
+   */
+  it.each([
+    ['nobody owns the card', null],
+    ['another message owns it', 'some-other-message'],
+    ['this message owns it', 'msg-failed'],
+  ])('never renders the raw error detail — %s', (_name, owner) => {
     render(
       <AssistantMessage
         message={failedMessage()}
         streaming={false}
         projectId="p1"
-        errorCardOwnerId={null}
-        onFeedback={vi.fn()}
-      />,
-    );
-    expect(screen.getByText('boom-401')).toBeTruthy();
-  });
-
-  it('keeps the pill for a non-last failed run even when another message owns the card', () => {
-    render(
-      <AssistantMessage
-        message={failedMessage()}
-        streaming={false}
-        projectId="p1"
-        errorCardOwnerId="some-other-message"
-        onFeedback={vi.fn()}
-      />,
-    );
-    expect(screen.getByText('boom-401')).toBeTruthy();
-  });
-
-  it('suppresses the pill only for the message that owns the top-level card', () => {
-    render(
-      <AssistantMessage
-        message={failedMessage()}
-        streaming={false}
-        projectId="p1"
-        errorCardOwnerId="msg-failed"
+        errorCardOwnerId={owner}
         onFeedback={vi.fn()}
       />,
     );

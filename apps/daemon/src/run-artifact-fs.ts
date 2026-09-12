@@ -37,8 +37,10 @@ function isTrackedRunFile(name: string): boolean {
 
 const RENDER_DEPENDENCY_EXTENSIONS = new Set([
   '.css',
+  '.cjs',
   '.js',
   '.jsx',
+  '.mjs',
   '.ts',
   '.tsx',
 ]);
@@ -347,19 +349,22 @@ export function diffRunArtifacts(
     // Windows project runs, not just POSIX.
     const classifyPath = filePath.replace(/\\/g, '/');
     const isManifest = classifyPath.endsWith('.artifact.json');
-    const hasCompanionManifest = after.has(`${filePath}.artifact.json`) || after.has(`${filePath.replace(/\//g, '\\')}.artifact.json`);
-    if (isArtifactPath(classifyPath) || isManifest || hasCompanionManifest) {
+    const hasCompanionManifest = !isManifest && (
+      after.has(`${filePath}.artifact.json`) ||
+      after.has(`${filePath.replace(/\//g, '\\')}.artifact.json`) ||
+      after.has(`${filePath.replace(/\\/g, '/')}.artifact.json`)
+    );
+    if (!isManifest && (isArtifactPath(classifyPath) || hasCompanionManifest)) {
       if (isNew) created += 1;
       else modified += 1;
-      const targetPath = isManifest ? filePath.slice(0, -'.artifact.json'.length) : filePath;
-      if (!touchedPaths.includes(targetPath)) {
-        touchedPaths.push(targetPath);
+      if (!touchedPaths.includes(filePath)) {
+        touchedPaths.push(filePath);
       }
       if (contentChanged) {
         if (isNew) contentCreated += 1;
         else contentModified += 1;
-        if (!contentTouchedPaths.includes(targetPath)) {
-          contentTouchedPaths.push(targetPath);
+        if (!contentTouchedPaths.includes(filePath)) {
+          contentTouchedPaths.push(filePath);
         }
         if (isSupportingMediaPath(classifyPath)) supportingMediaTouched += 1;
       }

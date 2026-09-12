@@ -29,9 +29,11 @@ import type { RunEventForFailureClassification } from '../run-failure-classifica
 import type { RunWorkspaceScope } from './project-amr-trace-env.js';
 import type { OdNextRolloutDecision } from '../strategies/od-next/rollout.js';
 import type { OdNextTaskInputSnapshotDescriptor } from '../strategies/od-next/task-input-snapshot.js';
+import type { RunTerminalLifecycleV1 } from '../observability/run-terminal-lifecycle.js';
 
 import { getProject } from '../db.js';
 import {
+  validateProjectDeliverable,
   validateRunDeliverable,
   type RunDeliverableValidationResult,
 } from '../run-deliverable-validation.js';
@@ -92,6 +94,29 @@ export async function validateChatRunDeliverable(input: {
   });
 }
 
+/**
+ * Does the project this run belongs to hold a usable canonical deliverable?
+ *
+ * The presentation-side question, resolved through the same project record
+ * lookup as `validateChatRunDeliverable` so both answers describe one project.
+ * Never feed it to a completion gate — see `DeliverableValidationScope`.
+ */
+export async function validateChatProjectDeliverable(input: {
+  db: Parameters<typeof getProject>[0];
+  projectsRoot: string;
+  run: RunForDeliverableValidation;
+}): Promise<RunDeliverableValidationResult> {
+  const project = input.run.projectId
+    ? toProjectRecord(getProject(input.db, input.run.projectId))
+    : null;
+  return validateProjectDeliverable({
+    projectsRoot: input.projectsRoot,
+    projectId: input.run.projectId,
+    projectMetadata:
+      project?.metadata ?? input.run.projectMetadata ?? null,
+  });
+}
+
 /** The run facts `runTouchedArtifactPaths` reads. */
 export interface RunForTouchedArtifactPaths {
   artifactOutcome?: { diff?: { touchedPaths?: unknown } } | undefined;
@@ -145,11 +170,18 @@ export interface ChatRun {
   cancelRequested?: boolean;
   cancelOrigin?: ChatRunStatusResponse['cancelOrigin'];
   terminalTrigger?: ChatRunStatusResponse['terminalTrigger'];
+  terminalLifecycle?: RunTerminalLifecycleV1;
+  runtimeGenerationId?: string | null;
   exitCode?: number | null;
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
   failureAction?: string | null;
+  /** The classifier's `retryable` verdict for this run's failure. Independent of
+   *  `failureAction`: a failure can be non-retryable and still carry an action
+   *  other than `'none'`. `null` when the run has not failed / was not
+   *  classified. */
+  retryable?: boolean | null;
   projectMetadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
@@ -163,6 +195,7 @@ export interface ChatRun {
   analyticsContext?: AnalyticsContext;
   analyticsRecovery?: { context?: AnalyticsContext } | null;
   externalPluginAnalytics?: Record<string, unknown> | null;
+  cumulativeRetryAttemptCount?: number;
   manualResumeAttemptCount?: number;
   rechargeWaitDurationMs?: number;
   artifactOriginStatus?:
@@ -176,6 +209,8 @@ export interface ChatRun {
   deliverableValidation?: ChatRunStatusResponse['deliverableValidation'];
   deliverableEntryFile?: string;
   deliverableArtifactKind?: ChatRunStatusResponse['deliverableArtifactKind'];
+  deliverableSyntaxRepair?: ChatRunStatusResponse['deliverableSyntaxRepair'];
+  deliverableSyntaxValidation?: ChatRunStatusResponse['deliverableSyntaxValidation'];
   /** Shells staged for an OD Next prototype run, project-relative. */
   odNextStagedDeviceFrames?: string[];
   /** Run-finish observation: did the delivered entry carry the staged handset shell? */

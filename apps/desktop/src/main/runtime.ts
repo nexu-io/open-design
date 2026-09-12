@@ -451,6 +451,7 @@ export type DesktopRuntimeOptions = {
    */
   rendererLogPath?: string | null;
   requestQuit?: () => void;
+  onMainWindowReady?: () => void;
   /**
    * Optional pre-created splash window. The packaged entry creates the splash
    * BEFORE awaiting the daemon/web sidecars so the brand animation is on screen
@@ -2849,9 +2850,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // The web bundle is loading in the hidden main window from here on; let
     // the splash status line reflect that final phase while we poll for mount.
     setSplashStage(splash, "workspace");
+    let mounted = false;
     const deadline = Date.now() + WEB_MOUNT_REVEAL_TIMEOUT_MS;
     while (!stopped && !window.isDestroyed() && Date.now() < deadline) {
-      const mounted = await window.webContents
+      mounted = await window.webContents
         .executeJavaScript(`document.documentElement.getAttribute("data-od-app-mounted") === "1"`, true)
         .catch(() => false);
       if (mounted === true) break;
@@ -2865,6 +2867,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     const remaining = MIN_SPLASH_MS - (Date.now() - splashStartedAt);
     if (remaining > 0) await delay(remaining);
     revealMainWindow();
+    // A timeout/crash fallback can also reveal a window. Only a mounted,
+    // healthy app is a successful updater desktop observation.
+    if (mounted && !rendererFailed && revealed && !window.isDestroyed()) {
+      try { options.onMainWindowReady?.(); } catch {}
+    }
   };
 
   const schedule = (delayMs: number) => {

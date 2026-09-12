@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppliedStrategyBindingV2,
   OdNextRuntimeCapabilitySnapshotV1,
@@ -47,10 +47,6 @@ import {
 } from '../src/strategies/task-store.js';
 import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
 import { prepareStrategyRequest } from '../src/strategies/od-next/coordinator.js';
-import {
-  clearOdNextRolloutStop,
-  latchOdNextRolloutStop,
-} from '../src/strategies/od-next/rollout.js';
 import {
   hashOdNextRuntimeCapabilitySnapshotV1,
   resolveBundledOdNextRuntimeCapability,
@@ -151,11 +147,18 @@ describe('OD Next automatic production through the real server', () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
   let sequence = 0;
+  let previousCodexTransport: string | undefined;
+
+  beforeEach(() => {
+    previousCodexTransport = process.env.OD_CODEX_TRANSPORT;
+    process.env.OD_CODEX_TRANSPORT = 'exec-json';
+  });
 
   afterEach(async () => {
+    if (previousCodexTransport == null) delete process.env.OD_CODEX_TRANSPORT;
+    else process.env.OD_CODEX_TRANSPORT = previousCodexTransport;
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
-    delete process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS;
     uuidControl.forced.length = 0;
     pendingAutomaticFixtureIdentity = null;
     await stopServer(started);
@@ -281,7 +284,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('selected-example-upgrade', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
 
     const createAffectedProject = async (label: string) => {
       const project = await createProjectForScenario(
@@ -393,7 +395,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('stale-selected-example', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     const exampleDir = path.join(binDir, 'stale-selected-example');
     await cp(CREATIVE_VOLTAGE_EXAMPLE_DIR, exampleDir, { recursive: true });
     const staleExamplePluginId = 'example-stale-creative-voltage';
@@ -495,82 +496,89 @@ describe('OD Next automatic production through the real server', () => {
     }
   });
 
-  // ACCEPTANCE for the opt-in switch. Nothing configured takes the ordinary
-  // route; the SAME running daemon takes the OD Next route on the next run
-  // once `odNextStrategyMode` is saved through the public app-config API. No
-  // restart, no environment variable — that is what "configure it and it
-  // takes effect" has to mean for a packaged install.
-  it('admits OD Next on the next run once the installation configures it, and not before', async () => {
-    const fixture = await createPublicRolloutFixture('app-config-opt-in', 'design');
+  // ACCEPTANCE for the opt-out switch. Nothing configured takes the OD Next
+  // route — that is the default this build ships. The SAME running daemon
+  // takes the ordinary route on the next run once `odNextStrategyMode: 'off'`
+  // is saved through the public app-config API. No restart, no environment
+  // variable — that is what "configure it and it takes effect" has to mean for
+  // a packaged install, where the saved mode is the only control a user has:
+  // the packaged child environment allowlist carries no `OD_NEXT_*` key.
+  it('runs OD Next by default and leaves it on the next run once the installation opts out', async () => {
+    const fixture = await createPublicRolloutFixture('app-config-opt-out', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
-    const beforeOptIn = await postRun(started.url, publicRunRequest(
+    const beforeOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run before this installation opted in.',
-      'app-config-opt-in-before',
+      'Run before this installation opted out.',
+      'app-config-opt-out-before',
     ));
-    expect(beforeOptIn.strategyTask).toBeUndefined();
-    expect(beforeOptIn.pluginId).toBe('example-web-prototype');
-    await waitForRunTerminal(started.url, beforeOptIn.runId as string);
-    const ordinaryInvocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(ordinaryInvocations).toHaveLength(1);
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(beforeOptOut.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+    expect(await readDurableRunState(beforeOptOut.runId as string)).toMatchObject({
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
+    });
+    await fetch(
+      `${started.url}/api/runs/${encodeURIComponent(beforeOptOut.runId as string)}/cancel`,
+      { method: 'POST' },
+    );
+    await waitForRunTerminal(started.url, beforeOptOut.runId as string);
 
-    const optIn = await fetch(`${started.url}/api/app-config`, {
+    const optOut = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ odNextStrategyMode: 'active' }),
+      body: JSON.stringify({ odNextStrategyMode: 'off' }),
     });
-    expect(optIn.status).toBe(200);
-    expect((await optIn.json() as { config?: { odNextStrategyMode?: string } }).config?.odNextStrategyMode)
-      .toBe('active');
+    expect(optOut.status).toBe(200);
+    expect((await optOut.json() as { config?: { odNextStrategyMode?: string } }).config?.odNextStrategyMode)
+      .toBe('off');
 
-    // A typo is refused rather than absorbed. Dropping it would switch this
-    // installation back off while the caller saw success — the one failure
-    // mode a control switch must not have.
+    // A typo is refused rather than absorbed. Dropping it would leave the key
+    // unconfigured, and unconfigured is `active` — so an absorbed typo would
+    // revoke this opt-out while the caller saw success. That is the one
+    // failure mode a control switch must not have.
     const typo = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ odNextStrategyMode: 'acive' }),
+      body: JSON.stringify({ odNextStrategyMode: 'of' }),
     });
     expect(typo.status).toBe(400);
     expect((await typo.json() as { error?: { code?: string } }).error?.code)
       .toBe('INVALID_APP_CONFIG_VALUE');
-    const stillActive = await fetch(`${started.url}/api/app-config`);
-    expect((await stillActive.json() as { config?: { odNextStrategyMode?: string } })
-      .config?.odNextStrategyMode).toBe('active');
+    const stillOff = await fetch(`${started.url}/api/app-config`);
+    expect((await stillOff.json() as { config?: { odNextStrategyMode?: string } })
+      .config?.odNextStrategyMode).toBe('off');
 
-    const afterOptIn = await postRun(started.url, publicRunRequest(
+    // Count first, compare after: the canceled run above may or may not have
+    // reached a spawn, so what this asserts is the invocations the ordinary
+    // run added — not the whole log.
+    const invocationsBefore = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
+    const afterOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run after this installation opted in.',
-      'app-config-opt-in-after',
+      'Run after this installation opted out.',
+      'app-config-opt-out-after',
     ));
-    expect(afterOptIn.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
-    expect(await readDurableRunState(afterOptIn.runId as string)).toMatchObject({
-      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
-    });
+    expect(afterOptOut.strategyTask).toBeUndefined();
+    expect(afterOptOut.pluginId).toBe('example-web-prototype');
+    await waitForRunTerminal(started.url, afterOptOut.runId as string);
+    const ordinaryInvocations = (await readProjectInvocations(fixture.logPath, fixture.projectId))
+      .slice(invocationsBefore);
+    expect(ordinaryInvocations).toHaveLength(1);
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
 
     // The operator-facing surface names the authority that decided, so the
     // person who just configured the mode can confirm theirs is the one in
-    // effect rather than inferring it from the resulting mode.
+    // effect rather than inferring it from the resulting mode — which matters
+    // more now that `default` and a saved `off` resolve to opposite routes.
     const status = await fetch(`${started.url}/api/strategies/od-next/rollout`);
     expect(status.status).toBe(200);
     expect((await status.json() as { status: unknown }).status).toMatchObject({
-      requestedMode: 'active',
+      requestedMode: 'off',
       requestedModeSource: 'app_config',
-      effectiveMode: 'active',
+      effectiveMode: 'off',
     });
-
-    await fetch(
-      `${started.url}/api/runs/${encodeURIComponent(afterOptIn.runId as string)}/cancel`,
-      { method: 'POST' },
-    );
-    await waitForRunTerminal(started.url, afterOptIn.runId as string);
     // Two full runs against a real server, plus config writes and a status
     // read — the heaviest case in this file, and the only one that drives more
     // than a single run. The suite default of 20s leaves it no headroom on a
@@ -581,7 +589,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('prestart-skill-fallback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -615,7 +622,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('preclaim-task-fallback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const strategySnapshotCountAtStart = (database().prepare(`
@@ -670,7 +676,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('approved-profiles', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1004,7 +1009,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('legacy-scenario-compat', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const legacy = await createProjectForScenario(
@@ -1049,7 +1053,6 @@ describe('OD Next automatic production through the real server', () => {
     );
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
 
     const resolvedCapability = resolveBundledOdNextRuntimeCapability({
@@ -1087,62 +1090,90 @@ describe('OD Next automatic production through the real server', () => {
     expect(canceled.status).toBe(200);
   });
 
-  it('exposes the instance stop latch through the shared API and CLI CAS reset', async () => {
+  it('reports the deciding authority through the shared API and CLI, and offers no reset', async () => {
+    // This used to cover the instance stop latch and its compare-and-swap
+    // reset. Both are gone: nothing but the saved mode turns OD Next off, so
+    // there is no latch to inspect and no operator recovery to protect. What is
+    // still worth an endpoint is the authority — `default` and a saved `off`
+    // produce opposite routes, and the mode alone does not say which happened.
     const fixture = await createPublicRolloutFixture('rollout-control', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    latchOdNextRolloutStop(database(), {
-      mode: 'off',
-      reasonCode: 'route_mode_drift',
+    delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    // Cases in this file share one data dir, and an earlier one leaves a saved
+    // `off` behind. Clearing the key is the deliberate way back to the default,
+    // and asserting it here is also what proves `null` still means that.
+    const cleared = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: null }),
     });
+    expect(cleared.status).toBe(200);
 
-    const beforeResult = await runOdCli([
+    const defaultResult = await runOdCli([
       'strategy', 'rollout', 'status', '--daemon-url', started.url, '--json',
     ]);
-    expect(beforeResult.stderr).toBe('');
-    const before = JSON.parse(beforeResult.stdout) as {
-      status: { scope: string; revision: number; latch: { mode: string; reasonCode: string } | null };
-    };
-    expect(before.status).toMatchObject({
+    expect(defaultResult.stderr).toBe('');
+    expect((JSON.parse(defaultResult.stdout) as { status: unknown }).status).toEqual({
+      strategyId: 'od-next-strategy',
       scope: 'daemon_instance',
-      latch: { mode: 'off', reasonCode: 'route_mode_drift' },
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
 
-    const resetResult = await runOdCli([
-      'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
+    const optOut = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: 'off' }),
+    });
+    expect(optOut.status).toBe(200);
+
+    const savedResult = await runOdCli([
+      'strategy', 'rollout', 'status', '--daemon-url', started.url, '--json',
     ]);
-    expect(resetResult.stderr).toBe('');
-    const reset = JSON.parse(resetResult.stdout) as {
-      status: {
-        revision: number;
-        latch: null;
-        lastEvent: { action: string; reasonCode: string } | null;
-      };
-    };
-    expect(reset.status.revision).toBe(before.status.revision + 1);
-    expect(reset.status.latch).toBeNull();
-    expect(reset.status.lastEvent).toMatchObject({
-      action: 'cleared',
-      reasonCode: 'operator_reset',
+    expect(savedResult.stderr).toBe('');
+    expect((JSON.parse(savedResult.stdout) as { status: unknown }).status).toMatchObject({
+      requestedMode: 'off',
+      requestedModeSource: 'app_config',
+      effectiveMode: 'off',
     });
 
-    const staleReset = await fetch(`${started.url}/api/strategies/od-next/rollout/reset`, {
+    // The reset endpoint and its CLI subcommand are both gone, and gone the
+    // same way — a daemon that still answered it would be a daemon that still
+    // had something to reset.
+    const reset = await fetch(`${started.url}/api/strategies/od-next/rollout/reset`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedRevision: before.status.revision }),
+      body: JSON.stringify({ expectedRevision: 0 }),
     });
-    expect(staleReset.status).toBe(409);
-    await expect(staleReset.json()).resolves.toMatchObject({
-      error: { code: 'ROLLOUT_REVISION_CONFLICT' },
-      status: { revision: reset.status.revision },
-    });
+    expect(reset.status).toBe(404);
+    // `runOdCli` rejects on a non-zero exit, and an unknown subcommand is
+    // exactly that: usage, exit 2. Catching keeps the assertion on what the CLI
+    // told the operator rather than on the rejection itself.
+    const resetCli = await runOdCli([
+      'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
+    ]).then(
+      (ok) => ({ code: 0, stdout: ok.stdout, stderr: ok.stderr }),
+      (error: { code?: number; stdout?: string; stderr?: string }) => ({
+        code: error.code ?? -1,
+        stdout: error.stdout ?? '',
+        stderr: error.stderr ?? '',
+      }),
+    );
+    expect(resetCli.code).toBe(2);
+    // Named, not silently absent from a usage dump. `reset` shipped in 0.21.0
+    // and 0.21.1, so an operator who scripted it gets told what happened and
+    // what replaced it — and gets a non-zero exit, because the recovery it
+    // asked for neither happened nor can.
+    expect(resetCli.stderr).toContain('od strategy rollout reset was removed');
+    expect(resetCli.stderr).toContain('od config set odNextStrategyMode off');
   });
 
   it('keeps active retry/task recipe-only while rollback lazily resolves the ordinary default', async () => {
     const fixture = await createPublicRolloutFixture('rollback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     const strategyTaskCountAtStart = (
       database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as {
         count: number;
@@ -1168,6 +1199,16 @@ describe('OD Next automatic production through the real server', () => {
         selections: [],
       });
     expect(activeTask?.runs[0]?.finalText).toEqual(activeTask?.promptBundle);
+    const promptBundleText = activeTask?.promptBundle.text ?? '';
+    const doneKey = /<od-done key="([a-f0-9]{16})"\/>/.exec(promptBundleText)?.[1];
+    expect(doneKey).toMatch(/^[a-f0-9]{16}$/);
+    expect(promptBundleText).toContain('route=direct_edit');
+    expect(promptBundleText).toContain(`<od-next key="${doneKey}" value="Add an orders list page"/>`);
+    expect(promptBundleText).toContain(`<od-focus key="${doneKey}"`);
+    expect(promptBundleText.slice(
+      promptBundleText.indexOf('<open_design_core_system_prompt>'),
+      promptBundleText.indexOf('</open_design_core_system_prompt>'),
+    )).not.toContain(doneKey);
     expect(activeTask?.promptBundle.utf8Bytes).toBe(
       Buffer.byteLength(activeTask?.promptBundle.text ?? '', 'utf8'),
     );
@@ -1176,10 +1217,10 @@ describe('OD Next automatic production through the real server', () => {
     ).get(fixture.projectId) as { snapshotId: string | null }).snapshotId)
       .toBeNull();
 
-    latchOdNextRolloutStop(database(), {
-      mode: 'observe',
-      reasonCode: 'threshold_exceeded',
-    });
+    // The rest of this case needs later runs on the ordinary route. Saying so
+    // through the mode is now the only way to say it: a run can no longer put
+    // this daemon on the legacy path for the runs that follow it.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     const replayed = await postRun(started!.url, activeBody);
     expect(replayed).toMatchObject({
       runId: active.runId,
@@ -1222,7 +1263,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('web-cli-skill-parity', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const dataDir = process.env.OD_DATA_DIR!;
@@ -1306,7 +1346,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('project-skill-row', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const skillDir = path.join(process.env.OD_DATA_DIR!, 'skills', 'home-picked-skill');
@@ -1362,7 +1401,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('context-plugin-authority', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const contextual = await createProjectForScenario(
@@ -1398,7 +1436,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('headless-conversation', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1429,7 +1466,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('persisted-task-tamper', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1480,7 +1516,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('persisted-task-scope-drift', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const body = publicRunRequest(
@@ -1516,7 +1551,6 @@ describe('OD Next automatic production through the real server', () => {
     );
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     expect(fixture.projectMetadata?.scenarioBinding).toMatchObject({
       provenance: 'explicit_user',
       pluginId: 'example-web-prototype',
@@ -1837,7 +1871,9 @@ describe('OD Next automatic production through the real server', () => {
     expect(invocations[0]?.stdin).not.toContain('<task_config>');
     expect(invocations[0]?.stdin).not.toContain('<user_prompt>');
     // The Bundle is a tree: each spec slot is its own element, not a '---'
-    // section inside one blob, and the user's words come last.
+    // section inside one blob, and the user's words come last. Markdown inside
+    // a CDATA prompt is allowed to contain a thematic break, so inspect only
+    // the XML envelope when guarding against the rejected flat serialization.
     for (const nested of [
       '<execution_boundary>',
       '<core_strategy>',
@@ -1855,7 +1891,11 @@ describe('OD Next automatic production through the real server', () => {
     ]) {
       expect(invocations[0]!.stdin).toContain(nested);
     }
-    expect(invocations[0]!.stdin).not.toContain('\n\n---\n\n');
+    const structuralEnvelope = invocations[0]!.stdin.replace(
+      /<!\[CDATA\[[\s\S]*?\]\]>/gu,
+      '<![CDATA[…]]>',
+    );
+    expect(structuralEnvelope).not.toContain('\n\n---\n\n');
     expect(invocations[0]!.stdin).not.toContain('## Active stage:');
     expect(invocations[0]!.stdin.lastIndexOf('<user_first_prompt>'))
       .toBeGreaterThan(invocations[0]!.stdin.lastIndexOf('</context>'));
@@ -1901,7 +1941,10 @@ describe('OD Next automatic production through the real server', () => {
     expect(invocations[1]?.stdin).not.toContain('# User request');
     expect(invocations[2]?.stdin).not.toContain('# User request');
     expect(invocations[1]?.stdin).not.toContain('open-design.strategy-state/v2');
-    expect(invocations[2]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(invocations[2]?.stdin).toContain('## Closing Runtime State');
+    expect(invocations[2]?.stdin).toContain('schema open-design.strategy-state/v2');
+    expect(invocations[2]?.stdin).toContain('inputStage production');
+    expect(invocations[2]?.stdin).toContain('no Plan Contract block');
     expect(statuses[0]!.updatedAt).toBeLessThanOrEqual(invocations[1]!.startedAt);
     expect(statuses[1]!.updatedAt).toBeLessThanOrEqual(invocations[2]!.startedAt);
     for (const invocation of invocations) {
@@ -2170,6 +2213,69 @@ describe('OD Next automatic production through the real server', () => {
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(invocationCount);
   });
 
+  it.each([
+    { declaredEntry: true, childFile: 'plant-taxonomy-guide.html' },
+    { declaredEntry: false, childFile: 'plant-taxonomy-guide.html' },
+    { declaredEntry: false, childFile: 'index.html' },
+  ])('completes a linked $childFile write without Runtime State (declared entry: $declaredEntry, OPEND-2887)', async ({ declaredEntry, childFile }) => {
+    const fixture = await createFixture('repair');
+    const entryFile = 'plant-science-landing.html';
+    const upload = await fetch(`${started!.url}/api/projects/${fixture.projectId}/files`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: entryFile, content: `<!doctype html><a href="${childFile}">分类导览</a>` }),
+    });
+    expect(upload.ok).toBe(true);
+    if (declaredEntry) {
+      const update = await fetch(`${started!.url}/api/projects/${fixture.projectId}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ metadata: { kind: 'prototype', entryFile } }),
+      });
+      expect(update.ok).toBe(true);
+    }
+    await writeFile(`${fixture.logPath}.linked-page`, childFile);
+    queueFixtureIds(fixture);
+    const created = await postRun(started!.url, createRunRequest(fixture, 'Build the taxonomy page linked from the existing landing page.'));
+    const terminal = await waitForRunTerminal(started!.url, created.runId as string);
+    expect(terminal).toMatchObject({
+      status: 'succeeded', deliverableValid: true, deliverableEntryFile: entryFile,
+      strategyTask: { outcome: 'completed', terminal: true },
+    });
+    const task = getStrategyTaskExecution(database(), terminal.strategyTask!.taskExecutionId)!;
+    expect(task.runs).toHaveLength(1);
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(1);
+    expect(parseOdNextPromptBundleV2(invocations[0]!.stdin).coreSystemPrompt.outputContract)
+      .toContain('Emit exactly one Runtime State block on every response.');
+    const reloaded = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+    const { messages } = await reloaded.json() as { messages: Array<{ runId?: string; strategyTaskDelivered?: boolean }> };
+    expect(messages.find((message) => message.runId === task.latestRunId)?.strategyTaskDelivered).toBe(true);
+    const cli = await runOdCli(['run', 'info', task.latestRunId!, '--daemon-url', started!.url, '--json']);
+    expect(JSON.parse(cli.stdout)).toMatchObject({ strategyTask: { outcome: 'completed' } });
+    if (!declaredEntry) {
+      const project = await fetch(`${started!.url}/api/projects/${fixture.projectId}`);
+      expect(await project.json()).toMatchObject({ project: { metadata: { entryFile } } });
+      await writeFile(`${fixture.logPath}.linked-page-edit`, '1');
+    }
+    const followup = await postRun(started!.url, {
+      ...createRunRequest(fixture, declaredEntry ? 'Confirm the delivered page.' : 'Update the taxonomy page.'),
+      userMessageId: `followup-user-${fixture.projectId}`,
+      assistantMessageId: `followup-assistant-${fixture.projectId}`,
+      clientRequestId: `followup-request-${fixture.projectId}`,
+    });
+    const followupTerminal = await waitForRunTerminal(started!.url, followup.runId as string);
+    expect(followupTerminal).toMatchObject(declaredEntry ? {
+      deliverableValid: false, deliverableValidation: 'no_artifact',
+      strategyTask: { outcome: 'blocked', terminal: true },
+    } : {
+      deliverableValid: true, deliverableEntryFile: entryFile,
+      strategyTask: { outcome: 'completed', terminal: true },
+    });
+    expect(followupTerminal.strategyTask!.taskExecutionId).not.toBe(task.taskExecutionId);
+    const resumed = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(resumed).toHaveLength(2);
+    expect(resumed[1]!.argv).toContain('resume');
+  });
+
   it('does not report unfinished work when the task delivered under a stale plan', async () => {
     // QA on project 3ffc55f1: the turn wrote its deliverable and OD Next
     // settled the task `completed`, but the agent's last plan snapshot still
@@ -2394,7 +2500,6 @@ describe('OD Next automatic production through the real server', () => {
       const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design');
       started = publicFixture.started;
       binDir = publicFixture.binDir;
-      clearOdNextRolloutStop(database());
       process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
       process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
       const template = await createStrategyTemplate();
@@ -2994,7 +3099,14 @@ function finish() {
     process.exit(2);
   }
   let text;
-  if (mode === 'direct') {
+  if (fs.existsSync(logPath + '.linked-page')) {
+    const childFile = fs.readFileSync(logPath + '.linked-page', 'utf8');
+    const edited = fs.existsSync(logPath + '.linked-page-edit');
+    if (edited || !fs.existsSync(path.join(process.cwd(), childFile))) {
+      fs.writeFileSync(path.join(process.cwd(), childFile), '<!doctype html><title>Taxonomy</title><a href="plant-science-landing.html">Home</a>' + (edited ? '<p>Updated taxonomy</p>' : ''));
+    }
+    text = '已交付 ' + childFile + '。';
+  } else if (mode === 'direct') {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Direct</title>');
     text = ${JSON.stringify(direct)};
   } else if (mode === 'complex' && stdin.includes('native continuation — production')) {

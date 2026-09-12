@@ -13,6 +13,7 @@ import {
   captureEditablePptxLayeredBackgrounds,
   captureUntilPainted,
   collectLayeredPptxBackgroundTargets,
+  compareBgraBitmaps,
   isolateLayeredPptxBackground,
   pngInspectionHasPaint,
   restoreLayeredPptxBackgroundIsolation,
@@ -21,6 +22,18 @@ import {
 
 const execFileP = promisify(execFile);
 const desktopRoot = fileURLToPath(new URL('../..', import.meta.url));
+
+/**
+ * Budget for one Electron probe process (`xvfb-run … electron <probeDir>` on
+ * Linux). The probes only need a second or two once Chromium is up, but a
+ * cold Electron start on a busy CI runner can take well over ten seconds,
+ * and `execFile` kills a timed-out child with a bare "Command failed" and no
+ * stderr — which is exactly what an otherwise green run shows when it flakes.
+ * Generous on purpose: a probe that really hangs still fails, just later.
+ */
+const ELECTRON_PROBE_TIMEOUT_MS = 60_000;
+/** Per-test budget for a test that runs one probe: the probe plus setup. */
+const ELECTRON_PROBE_TEST_TIMEOUT_MS = 90_000;
 
 function bgraWithUniformAlpha(alpha: number): Buffer {
   const bitmap = Buffer.alloc(16);
@@ -56,6 +69,43 @@ function bgraBitmapHasPaint(bitmap) {
 }
 function pngBufferHasPaint(data) {
   return bgraBitmapHasPaint(nativeImage.createFromBuffer(data).toBitmap());
+}
+function bgraPixelDelta(a, aOffset, b, bOffset) {
+  let worst = 0;
+  for (let channel = 0; channel < 4; channel += 1) {
+    const delta = Math.abs(a[aOffset + channel] - b[bOffset + channel]);
+    if (delta > worst) worst = delta;
+  }
+  return worst;
+}
+function compareBgraBitmaps(reference, exported, width, height) {
+  let totalChannelDelta = 0;
+  for (let offset = 0; offset < reference.length; offset += 1) {
+    totalChannelDelta += Math.abs(reference[offset] - exported[offset]);
+  }
+  const meanChannelDelta = totalChannelDelta / (width * height * 4);
+  let maxChannelDelta = 0;
+  if (width < 3 || height < 3) {
+    for (let offset = 0; offset < reference.length; offset += 4) {
+      const strict = bgraPixelDelta(reference, offset, exported, offset);
+      if (strict > maxChannelDelta) maxChannelDelta = strict;
+    }
+    return { maxChannelDelta, meanChannelDelta };
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const offset = (y * width + x) * 4;
+      let best = bgraPixelDelta(reference, offset, exported, offset);
+      for (let dy = -1; dy <= 1 && best > maxChannelDelta; dy += 1) {
+        for (let dx = -1; dx <= 1 && best > maxChannelDelta; dx += 1) {
+          const candidate = bgraPixelDelta(reference, offset, exported, ((y + dy) * width + (x + dx)) * 4);
+          if (candidate < best) best = candidate;
+        }
+      }
+      if (best > maxChannelDelta) maxChannelDelta = best;
+    }
+  }
+  return { maxChannelDelta, meanChannelDelta };
 }
 `;
 
@@ -217,6 +267,82 @@ async function runExport(
   expect(result.error).toBeUndefined();
 }
 
+/** Opaque BGRA canvas with a filled rectangle, so a shape can be moved by whole pixels. */
+function bgraCanvasWithRect(
+  width: number,
+  height: number,
+  rect: { x: number; y: number; w: number; h: number },
+  color: [number, number, number],
+): Uint8Array {
+  const bitmap = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const inside = x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
+      bitmap[offset] = inside ? color[0] : 0;
+      bitmap[offset + 1] = inside ? color[1] : 0;
+      bitmap[offset + 2] = inside ? color[2] : 0;
+      bitmap[offset + 3] = 255;
+    }
+  }
+  return bitmap;
+}
+
+describe('BGRA capture comparison', () => {
+  const size = { height: 24, width: 24 };
+  const rect = { h: 8, w: 8, x: 8, y: 8 };
+  const reference = bgraCanvasWithRect(size.width, size.height, rect, [200, 100, 50]);
+
+  test('reports no difference between identical bitmaps', () => {
+    const comparison = compareBgraBitmaps(reference, reference, size.width, size.height);
+
+    expect(comparison).toEqual({ maxChannelDelta: 0, meanChannelDelta: 0 });
+  });
+
+  test('absorbs a one-pixel boundary shift, the way an isolated re-render moves an edge', () => {
+    const shifted = bgraCanvasWithRect(size.width, size.height, { ...rect, x: rect.x + 1 }, [200, 100, 50]);
+
+    expect(compareBgraBitmaps(reference, shifted, size.width, size.height).maxChannelDelta).toBe(0);
+  });
+
+  test('still reports a shift the neighbourhood cannot explain', () => {
+    const shifted = bgraCanvasWithRect(size.width, size.height, { ...rect, x: rect.x + 3 }, [200, 100, 50]);
+
+    expect(compareBgraBitmaps(reference, shifted, size.width, size.height).maxChannelDelta).toBe(200);
+  });
+
+  test('still reports a colour change at full magnitude', () => {
+    const recoloured = bgraCanvasWithRect(size.width, size.height, rect, [200, 100, 250]);
+
+    expect(compareBgraBitmaps(reference, recoloured, size.width, size.height).maxChannelDelta).toBe(200);
+  });
+
+  test('still reports content that the export dropped entirely', () => {
+    const empty = bgraCanvasWithRect(size.width, size.height, { h: 0, w: 0, x: 0, y: 0 }, [200, 100, 50]);
+
+    expect(compareBgraBitmaps(reference, empty, size.width, size.height).maxChannelDelta).toBe(200);
+  });
+
+  test('skips the outer frame for the maximum but still counts it in the mean', () => {
+    const framed = Uint8Array.from(reference);
+    framed[0] = 255;
+    framed[1] = 255;
+    framed[2] = 255;
+
+    const comparison = compareBgraBitmaps(reference, framed, size.width, size.height);
+
+    expect(comparison.maxChannelDelta).toBe(0);
+    expect(comparison.meanChannelDelta).toBeGreaterThan(0);
+  });
+
+  test('compares bitmaps too small to have an interior strictly', () => {
+    const a = bgraCanvasWithRect(2, 2, { h: 1, w: 1, x: 0, y: 0 }, [200, 100, 50]);
+    const b = bgraCanvasWithRect(2, 2, { h: 1, w: 1, x: 1, y: 0 }, [200, 100, 50]);
+
+    expect(compareBgraBitmaps(a, b, 2, 2).maxChannelDelta).toBe(200);
+  });
+});
+
 describe('chromium empty-capture retry', () => {
   test('treats fully transparent inspections as unpainted', () => {
     expect(pngInspectionHasPaint({ maxAlpha: 0 })).toBe(false);
@@ -268,9 +394,28 @@ app.whenReady().then(() => {
       const electronPath = join(desktopRoot, 'node_modules', 'electron', 'dist', electronRelativePath);
       const env: NodeJS.ProcessEnv = { ...process.env };
       delete env.ELECTRON_RUN_AS_NODE;
+      // Same flags as every other probe in this file: the CI runner has no
+      // usable Chromium sandbox or GPU, and a probe that asks for either can
+      // exit before `app.whenReady()` with nothing on stdout.
+      const electronArgs = [probeDir, '--no-sandbox', '--disable-gpu'];
       const command = process.platform === 'linux' ? 'xvfb-run' : electronPath;
-      const args = process.platform === 'linux' ? ['-a', electronPath, probeDir] : [probeDir];
-      const { stdout, stderr } = await execFileP(command, args, { env, timeout: 10_000 });
+      const args = process.platform === 'linux' ? ['-a', electronPath, ...electronArgs] : electronArgs;
+      let stderr: string;
+      let stdout: string;
+      try {
+        ({ stderr, stdout } = await execFileP(command, args, { env, timeout: ELECTRON_PROBE_TIMEOUT_MS }));
+      } catch (error) {
+        // `execFile` reports a non-zero exit as a bare "Command failed"; the
+        // child's own output is what says why.
+        const failure = error as Error & { stderr?: string; stdout?: string };
+        throw new Error(
+          [
+            failure.message,
+            failure.stdout ? `stdout:\n${failure.stdout}` : '',
+            failure.stderr ? `stderr:\n${failure.stderr}` : '',
+          ].filter(Boolean).join('\n'),
+        );
+      }
       const marker = stdout.split(/\r?\n/).find((line) => line.startsWith('OD_PNG_PAINT:'));
       if (!marker) throw new Error(`Electron paint probe returned no result: ${stdout || stderr}`);
       expect(JSON.parse(marker.slice('OD_PNG_PAINT:'.length))).toEqual({
@@ -282,7 +427,7 @@ app.whenReady().then(() => {
     } finally {
       await rm(probeDir, { force: true, recursive: true });
     }
-  }, 15_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('retries a transparent capture then returns paint', async () => {
     const retries: number[] = [];
@@ -548,25 +693,25 @@ describe('editable PPTX layered backgrounds', () => {
       captures: 1,
       media: [expect.stringMatching(/\.png$/)],
     });
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('keeps layered-background captures at 2x CSS resolution on a dpr=2 renderer', async () => {
     const capture = await probeDpr2LayeredBackgroundCapture();
 
     expect(capture).toMatchObject({ devicePixelRatio: 2, height: 120, width: 240 });
-  }, 20_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('bounds clipped-backdrop hit testing independently of overlap area', async () => {
     const capture = await probeDpr2LayeredBackgroundCapture();
 
     expect(capture.largeAreaHitTests).toBeLessThanOrEqual(4_101);
-  }, 20_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('includes a 1px clipped backdrop nested in a layered blend compositor root', async () => {
     const capture = await probeDpr2LayeredBackgroundCapture();
 
     expect(capture.largeStripeExportedRgb).toEqual(capture.largeStripeChromiumRgb);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures standard and WebKit text-clipped layered gradients as Chromium-painted text', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -601,7 +746,7 @@ describe('editable PPTX layered backgrounds', () => {
       expect(fixture.comparison.maxChannelDelta, comparisonContext).toBeLessThanOrEqual(224);
       expect(fixture.nativeContent).toBe(-1);
     }
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures standard and WebKit text-clipped layered pseudos as Chromium-painted text', async () => {
     const captures = await probePseudoTextClipCaptures();
@@ -630,7 +775,7 @@ describe('editable PPTX layered backgrounds', () => {
       expect(fixture.result.paintedPixels, fixture.name).toBeGreaterThan(0);
       expect(fixture.result.transparentPixels, fixture.name).toBeGreaterThan(0);
     }
-  }, 20_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('keeps layered pseudo backgrounds behind native pseudo content', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -638,7 +783,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.pseudoLayerOrder.background, JSON.stringify(media.pseudoLayerOrder)).toBeGreaterThanOrEqual(0);
     expect(media.pseudoLayerOrder.content).toBeGreaterThanOrEqual(0);
     expect(media.pseudoLayerOrder.background).toBeLessThan(media.pseudoLayerOrder.content);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('keeps an opaque pseudo fallback in raster media without covering native content and border', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -648,7 +793,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.pseudoNativeStyle.content).toBeGreaterThanOrEqual(0);
     expect(media.pseudoNativeStyle.border).toBeGreaterThanOrEqual(0);
     expect(media.pseudoNativeStyle.fallbackFill).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('preserves a layered pseudo box shadow in its exported raster media', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -660,7 +805,7 @@ describe('editable PPTX layered backgrounds', () => {
     });
     expect(image?.topLeftRgb, JSON.stringify(image)).toEqual([255, 0, 0]);
     expect(image?.centerRgb, JSON.stringify(image)).toEqual([0, 0, 255]);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('flattens a multiply-blended layered background against an authored pseudo backdrop', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -671,7 +816,7 @@ describe('editable PPTX layered backgrounds', () => {
       media: [expect.stringMatching(/\.png$/)],
     });
     expect(image?.centerRgb, JSON.stringify(image)).toEqual([64, 96, 64]);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('flattens a multiply-blended layered background against nested backdrop descendants', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -681,7 +826,7 @@ describe('editable PPTX layered backgrounds', () => {
       media: [expect.stringMatching(/\.png$/)],
     });
     expect(image?.centerRgb, JSON.stringify(image)).toEqual([64, 96, 64]);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('uses CSS paint order when selecting a blended background backdrop', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -691,7 +836,7 @@ describe('editable PPTX layered backgrounds', () => {
       media: [expect.stringMatching(/\.png$/)],
     });
     expect(image?.centerRgb, JSON.stringify(image)).toEqual([64, 96, 64]);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('includes a narrow clipped stripe in a layered blend target backdrop', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -709,7 +854,7 @@ describe('editable PPTX layered backgrounds', () => {
       .toBeLessThanOrEqual(1);
     expect(media.clippedStripeBackdropChromiumComparison.maxChannelDelta, comparisonContext)
       .toBeLessThanOrEqual(16);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('includes an explicit slide background behind a materialized layered pseudo', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -720,7 +865,7 @@ describe('editable PPTX layered backgrounds', () => {
       media: [expect.stringMatching(/\.png$/)],
     });
     expect(image?.centerRgb, JSON.stringify(image)).toEqual([64, 96, 64]);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('aligns a captured layered background with native content after export normalization', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -729,7 +874,7 @@ describe('editable PPTX layered backgrounds', () => {
       background: { height: 971550, width: 2171700, x: 1314450, y: 1028700 },
       content: { height: 971550, width: 2171700, x: 1314450, y: 1028700 },
     });
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('flattens a backdrop-filtered layered background against its authored backdrop', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -745,7 +890,7 @@ describe('editable PPTX layered backgrounds', () => {
       image?.centerRgb.every((channel, index) => Math.abs(channel - [96, 223, 223][index]!) <= 1),
       JSON.stringify(image),
     ).toBe(true);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('preserves background blending for standard and backdrop-dependent pseudos', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -754,7 +899,7 @@ describe('editable PPTX layered backgrounds', () => {
 
     expect(standard?.centerRgb, JSON.stringify(standard)).toEqual([64, 96, 64]);
     expect(materialized?.centerRgb, JSON.stringify(materialized)).toEqual([64, 96, 64]);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures non-empty backdrop-dependent pseudos with their Chromium-painted foregrounds', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -771,7 +916,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(comparison.meanChannelDelta, comparisonContext).toBeLessThanOrEqual(8);
     expect(comparison.maxChannelDelta, comparisonContext).toBeLessThanOrEqual(160);
     expect(media.compositedPseudoContentNativeContent).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures a filtered layered pseudo with its generated content and border', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -790,7 +935,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.selfFilteredPseudoChromiumComparison.maxChannelDelta, comparisonContext)
       .toBeLessThanOrEqual(160);
     expect(media.selfFilteredPseudoNativeContent).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures a real blended target with its Chromium-painted foreground', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -807,7 +952,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.realBlendChromiumComparison.meanChannelDelta, comparisonContext).toBeLessThanOrEqual(10);
     expect(media.realBlendChromiumComparison.maxChannelDelta, comparisonContext).toBeLessThanOrEqual(64);
     expect(media.realBlendNativeContent).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('keeps a materialized pseudo fallback in its PNG without a duplicate native fill', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -822,7 +967,7 @@ describe('editable PPTX layered backgrounds', () => {
       JSON.stringify(image),
     ).toBe(true);
     expect(media.materializedOpaquePseudoNativeFill).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures only the layered background pixels from a replaced element', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -837,7 +982,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(image?.translucentPixels, JSON.stringify(image)).toBeGreaterThan(0);
     expect(image?.opaquePixels, JSON.stringify(image)).toBe(0);
     expect(media.replacedForegroundMedia).toHaveLength(1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('keeps a slide-root layered pseudo background above the opaque slide background', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -854,13 +999,13 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.rootPseudoLayerOrder.content).toBeGreaterThanOrEqual(0);
     expect(media.rootPseudoLayerOrder.slideBackground).toBeLessThan(media.rootPseudoLayerOrder.background);
     expect(media.rootPseudoLayerOrder.background).toBeLessThan(media.rootPseudoLayerOrder.content);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('skips hidden, zero-sized, and off-slide layered backgrounds without aborting export', async () => {
     const media = await probeLayeredBackgroundMedia();
 
     expect(media.skippedTargets).toBe(0);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('preserves clipping and effective opacity in the exported layered-background pixels', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -871,7 +1016,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(image?.transparentPixels, JSON.stringify(image)).toBeGreaterThan(0);
     expect(image?.maxAlpha).toBeGreaterThanOrEqual(120);
     expect(image?.maxAlpha).toBeLessThanOrEqual(136);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures a layered target foreground with its own opacity applied once', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -899,7 +1044,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.nestedOpacityNativeContent).toBe(-1);
     expect(media.nestedOpacityNativeShape).toBe(-1);
     expect(image?.topLeftRgb[0], JSON.stringify(image)).toBeGreaterThan(image?.topLeftRgb[1] ?? 0);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('keeps a whole-paint slide capture as the export root with full-slide geometry', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -915,7 +1060,7 @@ describe('editable PPTX layered backgrounds', () => {
       y: 0,
     });
     expect(media.slideRootMaskNativeContent).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures intermediate compositor paint with a partially transparent layered child', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -934,7 +1079,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(image?.maxAlpha).toBeGreaterThanOrEqual(120);
     expect(image?.maxAlpha).toBeLessThanOrEqual(136);
     expect(media.nestedCompositorNativeFill).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures a painted static wrapper inside an opacity group without re-emitting its fill', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -955,7 +1100,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.paintedWrapperOrder.image).toBeGreaterThanOrEqual(0);
     expect(media.paintedWrapperOrder.nativeFill).toBe(-1);
     expect(media.paintedWrapperOrder.image).toBeLessThan(media.paintedWrapperOrder.nativeContent);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures a compositor root solid background below its native foreground', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -976,7 +1121,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.solidCompositorOrder.image).toBeGreaterThanOrEqual(0);
     expect(media.solidCompositorOrder.nativeFill).toBe(-1);
     expect(media.solidCompositorOrder.image).toBeLessThan(media.solidCompositorOrder.nativeContent);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('propagates blended-child backdrop dependency to its opacity capture root', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -993,7 +1138,7 @@ describe('editable PPTX layered backgrounds', () => {
       JSON.stringify(image),
     ).toBe(true);
     expect(image?.minAlpha).toBe(255);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures an ancestor blend context with its layered child and backdrop', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -1005,7 +1150,7 @@ describe('editable PPTX layered backgrounds', () => {
     });
     expect(image?.centerRgb, JSON.stringify(image)).toEqual([64, 96, 64]);
     expect(image?.minAlpha).toBe(255);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures native foreground inside an unsupported ancestor filter context', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -1024,7 +1169,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.ancestorFilterForegroundChromiumComparison.maxChannelDelta, comparisonContext)
       .toBeLessThanOrEqual(160);
     expect(media.ancestorFilterForegroundNativeContent).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures slide-root filter effects with layered backgrounds and native foreground', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -1043,7 +1188,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.slideFilterForegroundChromiumComparison.maxChannelDelta, comparisonContext)
       .toBeLessThanOrEqual(160);
     expect(media.slideFilterForegroundNativeContent).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test.each([
     ['a layered element clip path', 'selfClipForeground'],
@@ -1066,7 +1211,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(probe.comparison.maxChannelDelta, comparisonContext).toBeLessThanOrEqual(160);
     expect(probe.nativeContent).toBe(-1);
     expect(probe.nativeBorder).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('captures a real masked element complete instead of emitting unmasked native foreground', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -1079,7 +1224,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(image?.translucentPixels).toBeGreaterThan(0);
     expect(image?.maxAlpha).toBeGreaterThan(240);
     expect(media.maskedNativeContent).toBe(-1);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('preserves mask geometry on a normal layered pseudo background', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -1093,7 +1238,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(image?.minAlpha).toBe(0);
     expect(image?.maxAlpha).toBe(255);
     expect(image?.transparentPixels, JSON.stringify(image)).toBeGreaterThan(image?.opaquePixels ?? 0);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('preserves mask geometry on a background-blended layered pseudo', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -1107,7 +1252,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(image?.minAlpha).toBe(0);
     expect(image?.maxAlpha).toBe(255);
     expect(image?.transparentPixels, JSON.stringify(image)).toBeGreaterThan(image?.opaquePixels ?? 0);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   test('masks pseudo content and border in the captured layer without native duplicates', async () => {
     const media = await probeLayeredBackgroundMedia();
@@ -1124,7 +1269,7 @@ describe('editable PPTX layered backgrounds', () => {
     expect(media.maskedPseudoContentOrder.image).toBeGreaterThanOrEqual(0);
     expect(media.maskedPseudoContentOrder.nativeContent).toBe(-1);
     expect(media.maskedPseudoContentOrder.image).toBeLessThan(media.maskedPseudoContentOrder.sibling);
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 });
 
 type LayeredBackgroundProbe = {
@@ -1425,7 +1570,7 @@ app.whenReady().then(async () => {
     let stderr: string;
     let stdout: string;
     try {
-      ({ stderr, stdout } = await execFileP(command, args, { env, timeout: 10_000 }));
+      ({ stderr, stdout } = await execFileP(command, args, { env, timeout: ELECTRON_PROBE_TIMEOUT_MS }));
     } catch (error) {
       const failure = error as Error & { stderr?: string; stdout?: string };
       throw new Error(
@@ -1589,7 +1734,7 @@ app.whenReady().then(async () => {
     let stderr: string;
     let stdout: string;
     try {
-      ({ stderr, stdout } = await execFileP(command, args, { env, timeout: 10_000 }));
+      ({ stderr, stdout } = await execFileP(command, args, { env, timeout: ELECTRON_PROBE_TIMEOUT_MS }));
     } catch (error) {
       const failure = error as Error & { stderr?: string; stdout?: string };
       throw new Error(
@@ -2394,22 +2539,12 @@ function comparePng(referenceData, exportedData) {
   if (referenceSize.width !== exportedSize.width || referenceSize.height !== exportedSize.height) {
     throw new Error('Cannot compare PNGs with different dimensions: ' + JSON.stringify({ referenceSize, exportedSize }));
   }
-  const referenceBitmap = reference.toBitmap();
-  const exportedBitmap = exported.toBitmap();
-  let maxChannelDelta = 0;
-  let totalChannelDelta = 0;
-  for (let offset = 0; offset < referenceBitmap.length; offset += 4) {
-    for (let channel = 0; channel < 4; channel += 1) {
-      const delta = Math.abs(referenceBitmap[offset + channel] - exportedBitmap[offset + channel]);
-      maxChannelDelta = Math.max(maxChannelDelta, delta);
-      totalChannelDelta += delta;
-    }
-  }
-  const pixels = referenceSize.width * referenceSize.height;
-  return {
-    maxChannelDelta,
-    meanChannelDelta: totalChannelDelta / (pixels * 4),
-  };
+  return compareBgraBitmaps(
+    reference.toBitmap(),
+    exported.toBitmap(),
+    referenceSize.width,
+    referenceSize.height,
+  );
 }
 
 function inspectPseudoLayerOrder(entries, mediaName) {
@@ -3075,7 +3210,7 @@ app.whenReady().then(async () => {
     let stderr: string;
     let stdout: string;
     try {
-      ({ stderr, stdout } = await execFileP(command, args, { env, timeout: 20_000 }));
+      ({ stderr, stdout } = await execFileP(command, args, { env, timeout: ELECTRON_PROBE_TIMEOUT_MS }));
     } catch (error) {
       const failure = error as Error & { stderr?: string; stdout?: string };
       throw new Error(

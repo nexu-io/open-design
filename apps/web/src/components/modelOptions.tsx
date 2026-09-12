@@ -4,6 +4,7 @@ import type { AgentModelOption } from '../types';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 import { modelProviderIconSrc } from './modelProviderIcon';
+import { anchorSelectionInView } from './pickerSelectionAnchor';
 import {
   getModelCostTier,
   getModelCapabilityTag,
@@ -430,6 +431,22 @@ export const SearchableModelSelect = forwardRef<
     }
   }, [open]);
 
+  // Land the opened list on the model in effect (OPEND-2812) instead of on the
+  // top of the catalog. Once per open: the popover re-measures on scroll and
+  // resize, and re-anchoring there would yank the list back out from under a
+  // user who is browsing it. `popoverStyle` is a dependency because the popover
+  // does not mount until the first measurement lands.
+  const selectionAnchoredRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!open) {
+      selectionAnchoredRef.current = false;
+      return;
+    }
+    if (selectionAnchoredRef.current || !popoverRef.current) return;
+    selectionAnchoredRef.current = true;
+    anchorSelectionInView(popoverRef.current, '[data-selected="true"]');
+  }, [open, popoverStyle]);
+
   /** One option row — shared by the flat list and the two-level browse's
    *  models pane, so cost-tier / capability-tag / upgrade-lock affordances
    *  render identically in either layout. `index` only needs to be unique
@@ -653,6 +670,10 @@ export const SearchableModelSelect = forwardRef<
                               type="button"
                               className={`model-select-searchable__company${isActive ? ' is-active' : ''}${hasSelected ? ' has-selected' : ''}`}
                               data-testid={`model-company-${group.key}`}
+                              /* The company rail scrolls too — mark the one
+                                 holding the selection so opening anchors both
+                                 panes on it, not just the models pane. */
+                              data-selected={hasSelected ? 'true' : undefined}
                               onMouseEnter={() => setHoverCompany(group.key)}
                               onFocus={() => setHoverCompany(group.key)}
                               onClick={() => setHoverCompany(group.key)}

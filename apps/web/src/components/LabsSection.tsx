@@ -24,7 +24,7 @@ import styles from './LabsSection.module.css';
  * surface deletable in one piece when the experiment converges.
  */
 
-type SwitchLock = 'latched' | 'env' | 'unreadable';
+type SwitchLock = 'env' | 'unreadable';
 
 interface LabsHarnessState {
   on: boolean;
@@ -51,15 +51,16 @@ async function writeHarnessMode(mode: OdNextRolloutMode): Promise<void> {
  * and silently clearing it would break someone's debugging session. The user's
  * next deliberate toggle resolves it to `active` / `off` naturally.
  *
- * The lock order matters. A latch is the safety valve — it overrides the saved
- * mode in `readOdNextRolloutControlStatus` — so it wins over the environment
- * note, which in turn wins over a plain saved value.
+ * The environment is the only authority that locks the switch. A mode set
+ * through `OD_NEXT_STRATEGY_ROLLOUT` outranks the installation's saved value,
+ * so the single-field PUT this component makes would be written and then
+ * ignored — the lock is what stops the switch from claiming an edit the
+ * daemon will not act on. Every other status is a plain, operable value.
  */
 export function harnessStateFromStatus(
   status: OdNextRolloutControlResponse['status'],
 ): LabsHarnessState {
   const on = status.requestedMode === 'active';
-  if (status.latch) return { on, lock: 'latched' };
   if (status.requestedModeSource === 'env') return { on, lock: 'env' };
   return { on, lock: null };
 }
@@ -284,28 +285,37 @@ export function LabsSection({ autosave }: LabsSectionProps) {
     settleAutosave(autosaveClaimRef.current, 'idle');
   }, [settleAutosave]);
 
+  /**
+   * Read the mode this daemon is in.
+   *
+   * Split out of the mount effect so a failed read is not permanent. An
+   * unreachable daemon must not blank the page, so the row renders locked with
+   * the reason spelled out — but a lock that only lifts on remount means a
+   * transient failure leaves the user staring at a switch that does nothing,
+   * and this switch is the only control a packaged install has over OD Next.
+   * `toggle` calls this again instead of ignoring the click, so the dead state
+   * becomes its own retry.
+   */
+  const readStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/strategies/od-next/rollout');
+      if (!response.ok) throw new Error(`rollout status failed (${response.status})`);
+      const body = (await response.json()) as OdNextRolloutControlResponse;
+      if (!mountedRef.current) return;
+      setState(harnessStateFromStatus(body.status));
+    } catch {
+      if (!mountedRef.current) return;
+      setState({ on: false, lock: 'unreadable' });
+    }
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch('/api/strategies/od-next/rollout');
-        if (!response.ok) throw new Error(`rollout status failed (${response.status})`);
-        const body = (await response.json()) as OdNextRolloutControlResponse;
-        if (cancelled) return;
-        setState(harnessStateFromStatus(body.status));
-      } catch {
-        if (cancelled) return;
-        // An unreachable daemon must not blank the page: show the row, locked,
-        // with the reason spelled out.
-        setState({ on: false, lock: 'unreadable' });
-      }
-    })();
+    void readStatus();
     return () => {
-      cancelled = true;
       mountedRef.current = false;
     };
-  }, []);
+  }, [readStatus]);
 
   const answerOptOut = useCallback(
     (answer: { reason: TrackingLabsOptOutReason[]; customReason?: string }) => {
@@ -336,7 +346,17 @@ export function LabsSection({ autosave }: LabsSectionProps) {
   }, [answerOptOut]);
 
   const toggle = useCallback(() => {
-    if (!state || state.lock || writeInFlightRef.current) return;
+    if (writeInFlightRef.current) return;
+    // A read that failed is the one lock the user can do something about, so
+    // spend the click on trying again rather than swallowing it. The
+    // environment lock stays inert on purpose: the daemon would ignore the
+    // write, and pretending otherwise is worse than doing nothing.
+    if (state?.lock === 'unreadable') {
+      setState(LOADING);
+      void readStatus();
+      return;
+    }
+    if (!state || state.lock) return;
     const next = !state.on;
     const previous = state.on;
     const token = ++writeTokenRef.current;
@@ -404,15 +424,13 @@ export function LabsSection({ autosave }: LabsSectionProps) {
         }
       }
     })();
-  }, [analytics.track, answerOptOut, reportSaved, settleAutosave, state]);
+  }, [analytics.track, answerOptOut, readStatus, reportSaved, settleAutosave, state]);
 
-  const lockNoticeKey = state?.lock === 'latched'
-    ? 'labs.latchedNotice'
-    : state?.lock === 'env'
-      ? 'labs.envOverrideNotice'
-      : state?.lock === 'unreadable'
-        ? 'labs.loadFailedNotice'
-        : null;
+  const lockNoticeKey = state?.lock === 'env'
+    ? 'labs.envOverrideNotice'
+    : state?.lock === 'unreadable'
+      ? 'labs.loadFailedNotice'
+      : null;
 
   const on = state?.on ?? false;
   // A section that has not resolved yet is not operable either — treating the

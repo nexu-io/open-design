@@ -3,7 +3,9 @@
  * emits to ask the user a structured set of clarifying questions before
  * starting design work.
  *
- * Body must be JSON. Example:
+ * Canonical bodies are JSON. A narrow legacy reader also accepts the
+ * `question-select` / `question-text` child-tag shape already persisted in
+ * older conversations. New output must keep using JSON. Example:
  *
  *   <question-form id="discovery" title="Quick brief">
  *   {
@@ -26,6 +28,8 @@
  * forms — so AssistantMessage can render the form inline.
  */
 import { parsePartialJson } from '../runtime/partial-json';
+import { chatProtocolSkipRanges } from './chat-protocol-context';
+import { rangeContains, type Range } from './markdown-context';
 
 export type QuestionType =
   | 'radio'
@@ -47,14 +51,40 @@ export type QuestionType =
   | 'direction-cards';
 
 /**
+ * 颜色答案的规范形 —— **唯一**的一处实现。
+ *
+ * 规范形是 `#` + **6 位小写** hex,`null` 表示「这不是一个颜色」。
+ *
+ * 为什么小写:原生 `<input type="color">` 的 value sanitization algorithm 会把值
+ * 小写化。规范形若定成大写,受控组件每一帧都在和 DOM 打架 —— props 写下
+ * `#3B82F6`,读回来是 `#3b82f6`,两边永远对不上。交付稿本身也全篇小写。
+ *
+ * 为什么只收 6 位:交付稿 `interactions.js` 的正则就是 `^#[0-9a-f]{6}$`。
+ * alpha(`#rrggbbaa`)和 3 位简写(`#abc`)一概判非法 —— 答案是要作为**文本**
+ * 发回给模型、并被历史回放的,多一种形态就多一种下游要认的东西;悄悄收下它们
+ * 等于扩大协议。要改成收,得先有产品裁决。
+ *
+ * 输入侧只留一处宽容:允许缺 `#`(粘贴 `3b82f6`)。这不构成协议扩大 —— 吐出去的
+ * 仍然只有一种形态。
+ */
+export function normalizeHexColor(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const body = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+  if (!/^[0-9a-fA-F]{6}$/.test(body)) return null;
+  return `#${body.toLowerCase()}`;
+}
+
+/**
  * Rich card metadata for a single `direction-cards` option. The picker
  * renders a swatch row, a serif/sans type sample, a mood blurb, and a
  * "refs" line so users can scan visually instead of squinting at radio
- * labels. The agent emits this metadata inline in the form JSON so the
- * UI can render without additional fetches.
+ * labels. This remains a legacy-compatibility payload: current catalog-backed
+ * forms omit it and let the host supply versioned cards for the project kind.
  */
 export interface DirectionCard {
-  /** The radio value — what comes back in the user's answer. Match a label in `options`. */
+  /** Legacy radio value returned in the answer; matches an option when legacy options exist. */
   id: string;
   /** Short headline on the card (e.g. "Editorial — Monocle / FT magazine"). */
   label: string;
@@ -74,6 +104,25 @@ export interface FormOption {
   label: string;
   value: string;
   description?: string;
+  /**
+   * 这一项归属的分组名。**只对「查找型单选」有意义**,而且一律可选 ——
+   * 缺了就是今天那条平铺的选项列表,逐元素一致。
+   *
+   * 渲染约定只有一条,不需要第二个字段来描述层级:**第一个出现的分组直接展开
+   * 并带上组名,其后的每一组各自收在一个开关后面,开关上的字就是那一组的组名。**
+   * 交付稿的「常用语言 / 更多语言」正好是这条规则下的两组;host 因此不必编一句
+   * 「更多选项」压在模型自己的措辞上。
+   */
+  group?: string;
+  /**
+   * 行尾那枚副标(交付稿里是 `ZH-CN` 这种语言代码)。一律可选。
+   * 它是**给人扫读用的短标记**,不是答案:提交出去的仍然是 `value`。
+   */
+  trailingLabel?: string;
+  /** Host-only context returned to the agent for a catalog-backed visual choice. */
+  foundationDirectionId?: string;
+  /** Host-only refinement text returned with the selected visual choice. */
+  agentGuidance?: string;
 }
 
 export interface FormQuestion {
@@ -83,6 +132,32 @@ export interface FormQuestion {
   options?: FormOption[];
   placeholder?: string;
   required?: boolean;
+  /**
+   * **休眠件** —— 解析进来,但**没有任何人再读它**。
+   *
+   * 每题副标题。曾经渲染在题目和控件之间。
+   *
+   * 什么时候、因为什么停用:
+   *  · 2026-09-07(OPEND-2707 ①,已合并):`QuestionForm.tsx` 停止渲染它,
+   *    `styles/viewer/composio.css` 的 `.qf-help` 规则一并删除。一道题就是
+   *    「题目 + 必填标识 + 控件」,副标题夹在中间读起来像卡片自己的旁白,
+   *    还占着一整行的行盒。
+   *  · 2026-09-08(OPEND-2707 ②,用户拍板「改彻底,提示词也改」):
+   *    提示词不再要求模型写这个字段,宿主自己写的唯一一条(ElevenLabs 选音色题)
+   *    并进了那道题的 `label`。全仓自此**没有生产者**。
+   *
+   * 为什么字段还留着:删掉它会让 `tests/components/QuestionForm.no-question-subtitle.test.tsx`
+   * 和 `tests/components/QuestionForm.test.tsx` 编译不过 —— 前者正是「副标题不再
+   * 渲染」这条不变量的唯一正面证据。同时,缓存的旧提示词 / 旧客户端 / 模型记住的
+   * 旧格式仍可能发来带这个键的表单,解析器继续容忍它,这类输入的解析形状才不会变。
+   * 参照 `specs/current/chat-panel-decisions-sheet.md`「六个 qf.visual* 键一个不删」。
+   *
+   * 怎么找回:渲染那一半的原文在 `4c5873c7cc`(#7863)的 parent 里 ——
+   * `git show 4c5873c7cc^:apps/web/src/components/QuestionForm.tsx` 拿渲染分支,
+   * `git show 4c5873c7cc^:apps/web/src/styles/viewer/composio.css` 拿 `.qf-help` 规则。
+   * 提示词那一半要同时撤掉 `e2e/tests/question-form-help-retired.test.ts` 的守卫,
+   * 那需要一次新的产品裁决。
+   */
   help?: string;
   defaultValue?: string | string[];
   /** Only applies when `type === 'checkbox'`. Caps the number of selected options. */
@@ -103,14 +178,13 @@ export interface FormQuestion {
   multiple?: boolean;
   /** File inputs only. Mirrors the native file input accept attribute. */
   accept?: string;
-  /** Only present when `type === 'direction-cards'`. Mapped to options by `id`. */
+  /** Legacy compatibility for `direction-cards`; current host-owned forms omit it. */
   cards?: DirectionCard[];
 }
 
 export interface QuestionForm {
   id: string;
   title: string;
-  description?: string;
   questions: FormQuestion[];
   submitLabel?: string;
   /**
@@ -136,24 +210,43 @@ const INVALID_QUESTION_FORM_FALLBACK =
 // time so `<Question-Form>` and `<ASK-QUESTION>` still parse.
 const OPEN_RE = /<(question-form|ask-question)\b([^>]*)>/i;
 
+/** Recognize only an existing complete form; never recurse into the scanner. */
+export function readQuestionFormPayloadAt(input: string, openStart: number): Range | null {
+  const match = OPEN_RE.exec(input.slice(openStart));
+  if (!match || match.index !== 0) return null;
+  const openEnd = openStart + match[0].length;
+  const closeTag = `</${(match[1] ?? 'question-form').toLowerCase()}>`;
+  const closeStart = findCloseTag(input, openEnd, closeTag);
+  if (closeStart < 0) return null;
+  const body = input.slice(openEnd, closeStart);
+  if (!parseForm(body, parseAttrs(match[2] ?? '')).form) return null;
+  return [openEnd, closeStart + closeTag.length];
+}
+
 export function splitOnQuestionForms(input: string): FormSegment[] {
   const out: FormSegment[] = [];
+  const protectedRanges = chatProtocolSkipRanges(input, readQuestionFormPayloadAt);
   let cursor = 0;
+  let searchFrom = 0;
   // Scan repeatedly for question-form / ask-question opens; for each,
   // locate the matching close tag and try to parse the JSON body. Complete
   // protocol blocks that fail parsing render a safe fallback instead of
   // leaking their raw JSON into prose.
   while (cursor < input.length) {
     const slice = input.slice(cursor);
-    const m = OPEN_RE.exec(slice);
+    const m = OPEN_RE.exec(input.slice(searchFrom));
     if (!m) {
       out.push({ kind: 'text', text: slice });
       break;
     }
     const tagName = (m[1] ?? 'question-form').toLowerCase();
     const closeTag = `</${tagName}>`;
-    const openStart = cursor + m.index;
+    const openStart = searchFrom + m.index;
     const openEnd = openStart + m[0].length;
+    if (rangeContains(protectedRanges, openStart)) {
+      searchFrom = openEnd;
+      continue;
+    }
     const closeIdx = findCloseTag(input, openEnd, closeTag);
     if (closeIdx === -1) {
       // No matching close tag found for this open tag name. The body may
@@ -169,6 +262,7 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
         }
         out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
         cursor = resumeAt;
+        searchFrom = cursor;
         continue;
       }
       // Genuinely unterminated — leave the rest as prose.
@@ -185,6 +279,7 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
     if (parseResult.form) {
       out.push({ kind: 'form', form: parseResult.form, raw: input.slice(openStart, blockEnd) });
       cursor = blockEnd;
+      searchFrom = cursor;
     } else {
       // The body between this open tag and the matched close tag isn't valid
       // JSON. If the body itself contains another question-form / ask-question
@@ -199,10 +294,12 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
         // nested open are emitted — no duplication.
         out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
         cursor = resumeAt;
+        searchFrom = cursor;
       } else {
         recordQuestionFormParseFailure(parseResult.reason, tagName, body);
         out.push({ kind: 'text', text: INVALID_QUESTION_FORM_FALLBACK });
         cursor = blockEnd;
+        searchFrom = cursor;
       }
     }
   }
@@ -227,6 +324,7 @@ export function findFirstQuestionForm(
 export function stripTrailingOpenQuestionForm(
   input: string,
 ): { text: string; hadOpenForm: boolean } {
+  const protectedRanges = chatProtocolSkipRanges(input, readQuestionFormPayloadAt);
   let cursor = 0;
   while (cursor < input.length) {
     const slice = input.slice(cursor);
@@ -236,6 +334,10 @@ export function stripTrailingOpenQuestionForm(
     const closeTag = `</${tagName}>`;
     const openStart = cursor + m.index;
     const openEnd = openStart + m[0].length;
+    if (rangeContains(protectedRanges, openStart)) {
+      cursor = openEnd;
+      continue;
+    }
     const closeIdx = findCloseTag(input, openEnd, closeTag);
     if (closeIdx === -1) {
       if (!couldCompleteAsQuestionFormBody(input.slice(openEnd))) {
@@ -279,7 +381,17 @@ export function hasUnterminatedQuestionForm(input: string): boolean {
 export function couldCompleteAsQuestionFormBody(tail: string): boolean {
   const body = stripLeadingJsonFence(tail).trim();
   if (body.length === 0) return true;
-  return body.startsWith('{') || body.startsWith('[');
+  if (body.startsWith('{') || body.startsWith('[')) return true;
+  return couldCompleteAsLegacyQuestionFormBody(body);
+}
+
+const LEGACY_QUESTION_TAGS = ['<question-select', '<question-text'] as const;
+
+function couldCompleteAsLegacyQuestionFormBody(body: string): boolean {
+  const lower = body.toLowerCase();
+  return LEGACY_QUESTION_TAGS.some(
+    (tag) => tag.startsWith(lower) || lower.startsWith(tag),
+  );
 }
 
 // Consume a leading ```` ```json ```` fence, including one that is itself only
@@ -305,9 +417,58 @@ export function containsQuestionFormAsk(input: string): boolean {
     if (!m) return false;
     const tagName = (m[1] ?? 'question-form').toLowerCase();
     const openEnd = cursor + m.index + m[0].length;
-    if (findCloseTag(input, openEnd, `</${tagName}>`) !== -1) return true;
-    if (couldCompleteAsQuestionFormBody(input.slice(openEnd))) return true;
-    cursor = openEnd;
+    const closeTag = `</${tagName}>`;
+    const closeIdx = findCloseTag(input, openEnd, closeTag);
+    if (closeIdx === -1) {
+      const nestedOpen = OPEN_RE.exec(input.slice(openEnd));
+      if (nestedOpen) {
+        cursor = openEnd + nestedOpen.index;
+        continue;
+      }
+      return couldCompleteAsQuestionFormBody(input.slice(openEnd));
+    }
+    const body = input.slice(openEnd, closeIdx);
+    if (parseForm(body, parseAttrs(m[2] ?? '')).form) return true;
+    const nestedOpen = OPEN_RE.exec(body);
+    cursor = nestedOpen
+      ? openEnd + nestedOpen.index
+      : closeIdx + closeTag.length;
+  }
+  return false;
+}
+
+/**
+ * True when a complete protocol block was emitted but cannot render.
+ *
+ * This is intentionally separate from {@link containsQuestionFormAsk}: an
+ * invalid closed form is neither a text answer nor a clarification handshake.
+ * Delivery classification uses this signal to avoid turning a protocol error
+ * into a green, report-only success. Unterminated bodies are excluded because
+ * they may still be arriving while run finalization and SSE delivery race.
+ */
+export function containsUnrenderableQuestionForm(input: string): boolean {
+  let cursor = 0;
+  while (cursor < input.length) {
+    const m = OPEN_RE.exec(input.slice(cursor));
+    if (!m) return false;
+    const tagName = (m[1] ?? 'question-form').toLowerCase();
+    const closeTag = `</${tagName}>`;
+    const openEnd = cursor + m.index + m[0].length;
+    const closeIdx = findCloseTag(input, openEnd, closeTag);
+    if (closeIdx === -1) {
+      const nestedOpen = OPEN_RE.exec(input.slice(openEnd));
+      if (!nestedOpen) return false;
+      cursor = openEnd + nestedOpen.index;
+      continue;
+    }
+    const body = input.slice(openEnd, closeIdx);
+    if (parseForm(body, parseAttrs(m[2] ?? '')).form) {
+      cursor = closeIdx + closeTag.length;
+      continue;
+    }
+    const nestedOpen = OPEN_RE.exec(body);
+    if (!nestedOpen) return true;
+    cursor = openEnd + nestedOpen.index;
   }
   return false;
 }
@@ -358,7 +519,10 @@ function parseForm(body: string, attrs: Record<string, string>): FormParseResult
   try {
     data = JSON.parse(stripped);
   } catch {
-    return { form: null, reason: 'invalid-json' };
+    const legacyForm = parseLegacyForm(body, attrs);
+    return legacyForm
+      ? { form: legacyForm }
+      : { form: null, reason: 'invalid-json' };
   }
   if (!data || typeof data !== 'object') return { form: null, reason: 'unsupported-payload' };
   const obj = Array.isArray(data) ? {} : (data as Record<string, unknown>);
@@ -377,7 +541,6 @@ function parseForm(body: string, attrs: Record<string, string>): FormParseResult
   const id = attrs.id ?? (typeof obj.id === 'string' ? obj.id : 'discovery');
   const title =
     attrs.title ?? (typeof obj.title === 'string' ? obj.title : 'A few quick questions');
-  const description = typeof obj.description === 'string' ? obj.description : undefined;
   const submitLabel = typeof obj.submitLabel === 'string' ? obj.submitLabel : undefined;
   const lang = typeof obj.lang === 'string' && obj.lang.trim().length > 0 ? obj.lang.trim() : undefined;
   return {
@@ -385,11 +548,123 @@ function parseForm(body: string, attrs: Record<string, string>): FormParseResult
       id,
       title,
       questions,
-      ...(description ? { description } : {}),
       ...(submitLabel ? { submitLabel } : {}),
       ...(lang ? { lang } : {}),
     },
   };
+}
+
+/**
+ * Compatibility reader for the child-tag protocol persisted by older runs.
+ * It is deliberately narrow: the body must contain only `question-select` or
+ * `question-text` children (plus whitespace), and select options must be
+ * balanced `<option>` elements. Arbitrary XML must remain unrenderable.
+ */
+function parseLegacyForm(
+  body: string,
+  attrs: Record<string, string>,
+): QuestionForm | null {
+  const questions: FormQuestion[] = [];
+  const childRe = /<(question-select|question-text)\b([^>]*?)(\/?)>/gi;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = childRe.exec(body)) !== null) {
+    if (body.slice(cursor, match.index).trim()) return null;
+    const tagName = (match[1] ?? '').toLowerCase();
+    const questionAttrs = parseAttrs(match[2] ?? '');
+    const selfClosing = match[3] === '/';
+    const openEnd = match.index + match[0].length;
+    let inner = '';
+    let nextCursor = openEnd;
+    if (!selfClosing) {
+      const closeTag = `</${tagName}>`;
+      const closeIdx = findCloseTag(body, openEnd, closeTag);
+      if (closeIdx === -1) return null;
+      inner = body.slice(openEnd, closeIdx);
+      nextCursor = closeIdx + closeTag.length;
+    }
+
+    const id = cleanLegacyText(questionAttrs.id) || `q${questions.length + 1}`;
+    const labelAttr =
+      cleanLegacyText(questionAttrs.label) ||
+      cleanLegacyText(questionAttrs.prompt) ||
+      cleanLegacyText(questionAttrs.question);
+    const required = questionAttrs.required?.toLowerCase() === 'true';
+    const placeholder = cleanLegacyText(questionAttrs.placeholder);
+
+    if (tagName === 'question-select') {
+      const parsed = parseLegacyOptions(inner);
+      if (!parsed || parsed.options.length === 0) return null;
+      const label = labelAttr || parsed.leadingText || id;
+      questions.push({
+        id,
+        label,
+        type: 'select',
+        options: parsed.options,
+        ...(required ? { required: true } : {}),
+        ...(placeholder ? { placeholder } : {}),
+      });
+    } else {
+      if (/<[^>]+>/.test(inner)) return null;
+      const label = labelAttr || cleanLegacyText(inner) || id;
+      questions.push({
+        id,
+        label,
+        type: 'text',
+        ...(required ? { required: true } : {}),
+        ...(placeholder ? { placeholder } : {}),
+      });
+    }
+    cursor = nextCursor;
+    childRe.lastIndex = nextCursor;
+  }
+  if (questions.length === 0 || body.slice(cursor).trim()) return null;
+  return {
+    id: cleanLegacyText(attrs.id) || 'discovery',
+    title: cleanLegacyText(attrs.title) || 'A few quick questions',
+    questions,
+  };
+}
+
+function parseLegacyOptions(
+  inner: string,
+): { options: FormOption[]; leadingText?: string } | null {
+  const optionRe = /<option\b([^>]*)>([\s\S]*?)<\/option\s*>/gi;
+  const options: FormOption[] = [];
+  let cursor = 0;
+  let leadingText: string | undefined;
+  let match: RegExpExecArray | null;
+  while ((match = optionRe.exec(inner)) !== null) {
+    const rawBetween = inner.slice(cursor, match.index);
+    if (/<[^>]+>/.test(rawBetween)) return null;
+    const between = cleanLegacyText(rawBetween);
+    if (between) {
+      if (options.length > 0 || leadingText) return null;
+      leadingText = between;
+    }
+    const optionAttrs = parseAttrs(match[1] ?? '');
+    const label = cleanLegacyText(match[2] ?? '');
+    if (!label || /<[^>]+>/.test(match[2] ?? '')) return null;
+    const value =
+      cleanLegacyText(optionAttrs.value) || cleanLegacyText(optionAttrs.id) || label;
+    options.push({ label, value });
+    cursor = match.index + match[0].length;
+  }
+  const trailing = inner.slice(cursor);
+  if (/<[^>]+>/.test(trailing) || cleanLegacyText(trailing)) return null;
+  return { options, ...(leadingText ? { leadingText } : {}) };
+}
+
+function cleanLegacyText(value: string | undefined): string {
+  if (!value) return '';
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
@@ -415,7 +690,7 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
       ? qo.maxSelections
       : undefined;
   const cards = parseDirectionCards(qo.cards);
-  const defaultValue = parseDefaultValue(qo, options);
+  const defaultValue = normalizeDefaultValueForType(type, parseDefaultValue(qo, options));
   const allowCustom =
     qo.allowCustom === false
       ? false
@@ -470,6 +745,14 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
   const attrs = parseAttrs(m[2] ?? '');
   const closeIdx = findCloseTag(input, openEnd, closeTag);
   const rawBody = closeIdx === -1 ? input.slice(openEnd) : input.slice(openEnd, closeIdx);
+  if (couldCompleteAsLegacyQuestionFormBody(rawBody.trim())) {
+    const completed = parseLegacyForm(rawBody, attrs);
+    return completed ?? {
+      id: cleanLegacyText(attrs.id) || 'discovery',
+      title: cleanLegacyText(attrs.title) || 'A few quick questions',
+      questions: [],
+    };
+  }
   // Strip the fenced ```json wrapper some models emit. The opening fence is
   // removed always; the trailing fence is removed too once it streams in
   // (possibly only a partial ``` so far) — otherwise the leftover backticks
@@ -496,7 +779,6 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
   const topTitle = typeof top.title === 'string' && top.title.trim().length > 0 ? top.title : undefined;
   const id = attrs.id ?? completeTopLevelString(body, 'id') ?? 'discovery';
   const title = attrs.title ?? topTitle ?? 'A few quick questions';
-  const description = typeof top.description === 'string' ? top.description : undefined;
   // Carry submitLabel through the preview too — `tryParseForm` reads it for the
   // final form and `QuestionForm` renders `form.submitLabel ?? default`, so
   // omitting it here makes a custom CTA flicker in only once the close tag
@@ -511,7 +793,6 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
     id,
     title,
     questions,
-    ...(description ? { description } : {}),
     ...(submitLabel ? { submitLabel } : {}),
     ...(lang ? { lang } : {}),
   };
@@ -782,11 +1063,34 @@ function parseOption(raw: unknown): FormOption | null {
     typeof obj.description === 'string' && obj.description.trim().length > 0
       ? obj.description.trim()
       : undefined;
+  const group =
+    typeof obj.group === 'string' && obj.group.trim().length > 0
+      ? obj.group.trim()
+      : undefined;
+  const trailingLabel =
+    typeof obj.trailingLabel === 'string' && obj.trailingLabel.trim().length > 0
+      ? obj.trailingLabel.trim()
+      : undefined;
   return {
     label,
     value,
     ...(description ? { description } : {}),
+    ...(group ? { group } : {}),
+    ...(trailingLabel ? { trailingLabel } : {}),
   };
+}
+
+/**
+ * 类型自己的规范化。目前只有颜色有话要说:模型爱写 `#3B82F6` / `3b82f6`,
+ * 落到状态和原生控件之前先收成规范形。收不了的默认值当没给 —— 与其让控件
+ * 拿着一个渲染不出来的值,不如让用户从空开始选。
+ */
+function normalizeDefaultValueForType(
+  type: QuestionType,
+  value: string | string[] | undefined,
+): string | string[] | undefined {
+  if (type !== 'color' || typeof value !== 'string') return value;
+  return normalizeHexColor(value) ?? undefined;
 }
 
 function parseDefaultValue(
@@ -864,13 +1168,60 @@ export function formatFormAnswers(
   return lines.join('\n');
 }
 
+/**
+ * `[form answers — <id>]` —— {@link formatFormAnswers} 顶上那一行**机器载荷**。
+ *
+ * 它是写给 agent 的路由头,不是写给人的。id 后面允许任意文字是因为
+ * `QuestionForm.parseSubmittedAnswers` 也只认「以 `[form answers` 开头」,
+ * agent 复述时可以改写这一行。
+ */
+const FORM_ANSWERS_HEADER_LINE = /^\[form answers\b[^\n]*\n?/i;
+
+/**
+ * 这条用户消息是不是一份表单答案。
+ *
+ * 判据和 `QuestionForm.parseSubmittedAnswers` 同源:只认 `[form answers` 开头,
+ * 用户随口说的话不会被误判。
+ */
+export function isFormAnswersMessage(content: string): boolean {
+  return /^\[form answers\b/i.test(content.trim());
+}
+
+/**
+ * 一份表单答案里**给人看的**那一半。
+ *
+ * 交付成功的答案根本不画用户气泡(#5496:摘要已经长在上一条助手消息上)。
+ * 但发送失败的那一条必须留在流水里 —— 它是「这一轮为什么没了」的唯一凭据,
+ * 也挂着唯一的复原入口(那颗「重试」)。放它出来的同时不能把
+ * `[form answers — <id>]` 这行机器载荷摆到用户脸上,所以这里只去掉头一行,
+ * 底下那几条 `- 问题: 回答` 本来就是人话。
+ *
+ * 去掉之后什么都不剩(agent 只复述了个头)时原样返回,宁可露出机器载荷也
+ * 不给一个空气泡 —— 空气泡等于这一轮又消失了一次。
+ */
+export function formAnswersDisplayBody(content: string): string {
+  if (!isFormAnswersMessage(content)) return content;
+  const body = content.trim().replace(FORM_ANSWERS_HEADER_LINE, '').trim();
+  return body.length > 0 ? body : content;
+}
+
 function formOptionDisplayForValue(
-  question: Pick<FormQuestion, 'options'>,
+  question: Pick<FormQuestion, 'options' | 'type'>,
   value: string,
 ): string {
   const match = question.options?.find((option) => option.value === value || option.label === value);
   if (!match) return value;
   if (match.value === match.label) return match.label;
+  if (
+    question.type === 'direction-cards' &&
+    match.foundationDirectionId &&
+    match.agentGuidance
+  ) {
+    return (
+      `${match.label} [foundation: ${match.foundationDirectionId}; ` +
+      `guidance: ${match.agentGuidance}] [value: ${match.value}]`
+    );
+  }
   return `${match.label} [value: ${match.value}]`;
 }
 

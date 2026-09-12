@@ -21,6 +21,8 @@ import {
   DEFAULT_STAGE_TIMEOUT_MS,
   ACP_ARTIFACT_ECHO_START_RE,
   ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT,
+  ACP_IN_FLIGHT_TOOL_MIN_INTERVAL_MS,
+  ACP_IN_FLIGHT_TOOL_OUTPUT_LIMIT,
   AMR_STDERR_RETRY_TAIL_LIMIT,
   ACP_STDERR_DIAGNOSTIC_TAIL_LIMIT,
 } from './constants.js';
@@ -318,6 +320,12 @@ export function attachAcpSession({
     thinkOnly: boolean;
     firstSeenAt: number;
     emitted: boolean;
+    /** True once this call has been put on screen as an in-flight row. */
+    shown: boolean;
+    /** Payload of the last in-flight publication; identical state is never re-sent. */
+    lastShownSignature: string;
+    /** `Date.now()` of the last in-flight publication, for the rate floor. */
+    lastShownAt: number;
   };
   const acpToolRunEventState = new Map<string, AcpToolRunState>();
 
@@ -326,6 +334,62 @@ export function attachAcpSession({
     if (st.path) input.file_path = st.path;
     else delete input.file_path;
     return input;
+  };
+
+  /**
+   * Put a still-running tool call on screen, or refresh the row already there.
+   *
+   * ACP publishes a call as whole status frames, and OD used to transcribe only
+   * the terminal one — so a call was invisible for its entire life. Across 202
+   * real AMR calls that hid 855 seconds of work behind a blank execution shell:
+   * shell commands at p90 37.3s, one `task` for 222.0s.
+   *
+   * Three invariants this must not break, each of which had a way to bite:
+   *
+   *  1. **It is not a terminal.** It deliberately does not go through
+   *     `emitTerminalToolPair`, which also writes the `tool_result` and sets
+   *     `emittedConcreteToolEvent` — AMR's "did this turn produce anything"
+   *     check reads that flag, and arming it for a call still in progress would
+   *     let a turn that produced nothing be scored as if it had.
+   *  2. **It never becomes a second row.** The id is the same telemetry id the
+   *     settled `tool_use` will carry, so the client retires the early form
+   *     rather than drawing another line (`dropSupersededInFlightToolUses`).
+   *     That also means repeats are safe: the client keeps the LATEST one, so a
+   *     name or path guessed from an early frame is corrected in place when a
+   *     later frame knows better.
+   *  3. **A row that appeared must be closed.** See `emitTerminalToolPair` for
+   *     the one case where that outranks the think-only filter.
+   *
+   * Rate: the first publication of a call is never delayed — appearing at once
+   * is the whole point. Later ones need both a changed payload and
+   * `ACP_IN_FLIGHT_TOOL_MIN_INTERVAL_MS` since the last, so a chatty agent
+   * cannot turn one call into a frame-rate event stream.
+   */
+  const showInFlightTool = (toolCallId: string, st: AcpToolRunState): void => {
+    // The settled pair is already out (or this is noise, or the row would be
+    // orphaned by the think filter) — nothing in-flight to say.
+    if (st.emitted || st.thinkOnly) return;
+    const output = st.resultContent
+      ? st.resultContent.slice(0, ACP_IN_FLIGHT_TOOL_OUTPUT_LIMIT)
+      : '';
+    const payload = {
+      type: 'tool_in_flight' as const,
+      id: acpTelemetryToolCallId(toolCallId),
+      name: st.name,
+      input: buildToolUseInput(st),
+      startedAt: st.firstSeenAt,
+      ...(output ? { output: acpSafeToolResultContent(st.name, output) } : {}),
+    };
+    const signature = JSON.stringify([payload.name, payload.input, payload.output ?? '']);
+    const now = Date.now();
+    if (st.shown) {
+      if (signature === st.lastShownSignature) return;
+      if (now - st.lastShownAt < ACP_IN_FLIGHT_TOOL_MIN_INTERVAL_MS) return;
+    }
+    st.shown = true;
+    st.lastShownSignature = signature;
+    st.lastShownAt = now;
+    send('agent', payload);
   };
 
   // Where a terminal tool pair came from. `agent_frame` means the agent sent a
@@ -344,7 +408,14 @@ export function attachAcpSession({
     st.emitted = true;
     // Think/reason frames are activity noise for AMR no-output detection and
     // must not appear as concrete tool_use/tool_result events.
-    if (st.thinkOnly) return;
+    //
+    // Unless the row is already on screen. `thinkOnly` is sticky-on, so a frame
+    // arriving after the call was published could flip it — and dropping the
+    // ending then would strand a live-looking row that never resolves, which is
+    // the exact "is it stuck?" confusion this whole change exists to remove.
+    // Whatever appeared must be closed; the filter still covers every call that
+    // was classified before it was ever shown.
+    if (st.thinkOnly && !st.shown) return;
     // A host flush is the daemon writing the tool's ending for it, not the agent
     // reporting one. Same payload either way — only the provenance differs, and
     // it travels out-of-band so the transcript is unchanged.
@@ -403,7 +474,39 @@ export function attachAcpSession({
     // session immediately.
     if (stageWatchdogDisabled) return;
     stageTimer = setTimeout(() => {
-      fail(`ACP ${label} timed out after ${stageTimeoutMs}ms`);
+      // This is the DAEMON's own verdict, not the agent's: nobody reported a
+      // failure, we decided the stage was over and killed the child. Say so in
+      // structured form.
+      //
+      // Emitted bare (`{ message }`), the only thing that could still recover
+      // "this run timed out" was a regex over the English sentence below
+      // (`isTimeoutText` in run-failure-classification.ts). Every path that
+      // rewrites, wraps, localizes or drops an ACP error message therefore
+      // silently downgraded the run to `process_exit / exit_code` — which is
+      // `retryable: false` / `user_action: 'none'`, i.e. the generic failure
+      // card with no Retry, for a failure whose whole remedy IS a retry.
+      //
+      // `details.kind` is the same discriminator the other named ACP failures
+      // already carry (`acp_child_exit`, `acp_no_visible_output`, `amr_model`),
+      // so the classifier can read the verdict instead of re-deriving it.
+      //
+      // The value is namespaced to this watchdog on purpose. `details` is NOT a
+      // daemon-private slot: the JSON-RPC error branch below copies an agent's
+      // `error.data` into it verbatim (`fail(rpcErr, { details })`), so a
+      // generic `kind: 'timeout'` — a value any vendor SDK might plausibly emit
+      // for its own timeout — would arrive at `hasDaemonTimeoutVerdict`
+      // indistinguishable from this one and claim a watchdog kill that never
+      // happened. `acp_stage_timeout` names the specific daemon mechanism, so
+      // no upstream payload collides with it by accident.
+      fail(`ACP ${label} timed out after ${stageTimeoutMs}ms`, {
+        retryable: true,
+        details: {
+          kind: 'acp_stage_timeout',
+          action: 'retry',
+          phase: label,
+          timeout_ms: stageTimeoutMs,
+        },
+      });
     }, stageTimeoutMs);
   };
 
@@ -452,6 +555,24 @@ export function attachAcpSession({
     if (!terminalOwnedByCaller && !child.killed) child.kill('SIGTERM');
   };
 
+  /**
+   * Terminate the turn with a message, and optionally a structured payload.
+   *
+   * `options.details` is emitted as `error.details`, and that slot is SHARED:
+   * daemon-authored verdicts (`acp_stage_timeout`, `acp_child_exit`,
+   * `acp_no_visible_output`, `amr_model`) and agent-supplied JSON-RPC
+   * `error.data` — copied in verbatim by the two `fail(rpcErr, { details })`
+   * call sites in the message handler — land in the same place and are
+   * indistinguishable once emitted. Anything downstream that reads a
+   * daemon verdict out of `details` is therefore trusting a name, not an
+   * origin: keep those names namespaced to the mechanism that writes them
+   * (`acp_stage_timeout`, not `timeout`) so no upstream payload collides by
+   * accident.
+   *
+   * To make a daemon verdict genuinely unforgeable it needs its own option and
+   * its own emitted field, one no agent payload is ever copied into. That is a
+   * frame-shape change and is deliberately not done here.
+   */
   const fail = (
     message: string,
     options: { forceModelUnavailable?: boolean; details?: unknown; retryable?: boolean } = {},
@@ -1085,8 +1206,9 @@ export function attachAcpSession({
         // file_path.
         if (toolCallId) {
           const nextName = acpToolName(update);
-          const nextInput = acpToolInput(update);
-          const nextPath = acpArtifactWritePathRanked(update);
+          const pathOptions = { sessionCwd: effectiveCwd };
+          const nextInput = acpToolInput(update, pathOptions);
+          const nextPath = acpArtifactWritePathRanked(update, pathOptions);
           const nextResult = acpToolResultContent(update);
           const nextThinkOnly = isAcpThinkOnlyTool(update);
           const kindRaw = typeof update.kind === 'string' ? update.kind.trim() : '';
@@ -1103,6 +1225,9 @@ export function attachAcpSession({
               thinkOnly: nextThinkOnly,
               firstSeenAt: Date.now(),
               emitted: false,
+              shown: false,
+              lastShownSignature: '',
+              lastShownAt: 0,
             };
             acpToolRunEventState.set(toolCallId, st);
           } else if (!st.emitted) {
@@ -1133,6 +1258,11 @@ export function attachAcpSession({
             const failed = isAcpTerminalFailureStatus(update);
             emitTerminalToolPair(toolCallId, st, failed);
             // Keep the entry (emitted=true) so a repeated terminal cannot re-emit.
+          } else {
+            // Not terminal: the call is running, so say so now rather than after
+            // it finishes. `showInFlightTool` decides whether this frame carries
+            // anything new; the first frame of a call always does.
+            showInFlightTool(toolCallId, st);
           }
         }
         if (isAcpArtifactWriteUpdate(update, acpArtifactWriteToolCallIds)) {

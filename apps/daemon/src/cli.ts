@@ -13,11 +13,12 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.j
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
+import { runDeliverableSyntaxToolCli } from './tools-deliverable-syntax-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { SidecarFactory } from '@open-design/sidecar';
 import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
-import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS } from '@open-design/contracts';
+import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS, mediaFailureNextStep } from '@open-design/contracts';
 import type { ArtifactLintFinding, LintArtifactCliResultEnvelope, LintArtifactResponse, LintFailOn } from '@open-design/contracts';
 import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export-cli-request.js';
 import { exportRoutePath } from './export-cli-routing.js';
@@ -249,14 +250,14 @@ const PROJECT_STRING_FLAGS = new Set([
   'client-request-id',
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
-  'source',
+  'source', 'out',
 ]);
 const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   ...PROJECT_STRING_FLAGS,
   'workspace',
   'workspace-member',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail']);
 const WORKSPACE_STRING_FLAGS = new Set([
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
   'member', 'role', 'email', 'app-user', 'lifecycle-state',
@@ -349,7 +350,7 @@ const BRAND_BOOLEAN_FLAGS = new Set([
 ]);
 const AGENT_STRING_FLAGS = new Set(['daemon-url']);
 const AGENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-const STRATEGY_STRING_FLAGS = new Set(['daemon-url', 'expected-revision']);
+const STRATEGY_STRING_FLAGS = new Set(['daemon-url']);
 const STRATEGY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
@@ -433,22 +434,18 @@ const SUBCOMMAND_MAP = {
 function printStrategyHelp() {
   console.log(`Usage:
   od strategy rollout status [--json] [--daemon-url <url>]
-  od strategy rollout reset [--expected-revision <n>] [--json] [--daemon-url <url>]
 
-Inspect or reset the OD Next safety latch for this daemon instance. Reset is
-compare-and-swap protected; when --expected-revision is omitted the CLI first
-reads status and submits that exact revision.
+Report which OD Next mode this daemon is running and which authority chose it.
 
-OD Next is opt-in and off until this installation asks for it:
+OD Next runs by default; this installation opts out of it here:
 
-  od config set odNextStrategyMode active    Opt in; takes effect next run.
-  od config set odNextStrategyMode off       Opt back out.
+  od config set odNextStrategyMode off       Opt out; takes effect next run.
+  od config set odNextStrategyMode active    Opt back in.
 
-The status subcommand reports which authority set the mode in effect (env /
-app_config / default), so you can confirm the configuration landed.
+Status names the authority in effect (env / app_config / default), which the
+mode alone does not: leaving it unset and saving 'off' produce opposite routes.
 
 Options:
-  --expected-revision <n>  Reset only the status revision you inspected.
   --json                   Emit the daemon response as JSON.
   --daemon-url <url>       Override the Open Design daemon HTTP base.`);
 }
@@ -459,12 +456,6 @@ function printStrategyRolloutStatus(status) {
   console.log(`Requested mode\t${status.requestedMode}`);
   if (status.requestedModeSource) console.log(`Requested by\t${status.requestedModeSource}`);
   console.log(`Effective mode\t${status.effectiveMode}`);
-  console.log(`Latch\t${status.latch?.mode ?? 'none'}`);
-  if (status.latch?.reasonCode) console.log(`Reason\t${status.latch.reasonCode}`);
-  console.log(`Revision\t${status.revision}`);
-  if (status.lastEvent) {
-    console.log(`Last event\t${status.lastEvent.action}:${status.lastEvent.reasonCode}`);
-  }
 }
 
 async function runStrategy(args) {
@@ -478,7 +469,28 @@ async function runStrategy(args) {
     process.exit(args.length === 0 ? 2 : 0);
   }
   const [area, action = 'status', ...rest] = args;
-  if (area !== 'rollout' || (action !== 'status' && action !== 'reset')) {
+  // `reset` cleared the stop latch, and the latch is gone: nothing can disable
+  // OD Next for an installation any more except that installation saving `off`.
+  // Named here rather than left to the usage dump, because it has shipped in
+  // every release since 0.21.0 and an operator who scripted it deserves to be
+  // told what happened rather than shown a list it is missing from.
+  //
+  // It fails instead of succeeding as a no-op. The command meant "recover this
+  // machine's rollout"; reporting success for a recovery that neither happened
+  // nor can happen is the same lie the latch itself told, and this release is
+  // removing that lie rather than relocating it.
+  if (area === 'rollout' && action === 'reset') {
+    console.error(
+      'od strategy rollout reset was removed: the daemon-instance stop latch it '
+      + 'cleared no longer exists, so there is nothing to reset.\n'
+      + 'OD Next now runs unless this installation opts out. To opt out:\n'
+      + '  od config set odNextStrategyMode off\n'
+      + 'To check which authority decides the mode:\n'
+      + '  od strategy rollout status',
+    );
+    process.exit(2);
+  }
+  if (area !== 'rollout' || action !== 'status') {
     printStrategyHelp();
     process.exit(2);
   }
@@ -498,34 +510,7 @@ async function runStrategy(args) {
     if (!response.ok) return structuredHttpFailure(response);
     return response.json();
   };
-  if (action === 'status') {
-    const payload = await readStatus();
-    if (flags.json) return process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-    printStrategyRolloutStatus(payload.status);
-    return;
-  }
-
-  const inspected = await readStatus();
-  const expectedRevision = flags['expected-revision'] == null
-    ? inspected.status.revision
-    : Number(flags['expected-revision']);
-  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
-    console.error('--expected-revision must be a non-negative integer');
-    process.exit(2);
-  }
-  let response;
-  try {
-    response = await fetch(`${base}/api/strategies/od-next/rollout/reset`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedRevision }),
-    });
-  } catch (error) {
-    surfaceFetchError(error, base);
-    process.exit(3);
-  }
-  if (!response.ok) return structuredHttpFailure(response);
-  const payload = await response.json();
+  const payload = await readStatus();
   if (flags.json) return process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   printStrategyRolloutStatus(payload.status);
 }
@@ -867,6 +852,16 @@ if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
       process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
       process.exitCode = 1;
     });
+} else if (argv[0] === 'tools' && argv[1] === 'deliverable-syntax') {
+  runDeliverableSyntaxToolCli(argv.slice(2))
+    .then(({ exitCode }) => {
+      process.exitCode = exitCode;
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
+      process.exitCode = 1;
+    });
 } else if (argv[0] === 'tools' && argv[1] === 'connectors') {
   runConnectorsToolCli(argv.slice(2))
     .then(({ exitCode }) => {
@@ -967,6 +962,9 @@ function printRootHelp() {
 
   od tools live-artifacts <create|list|update|refresh> [options]
       Manage live artifacts through daemon wrapper commands.
+
+  od tools deliverable-syntax check [--json]
+      Check the current deliverable syntax through the daemon wrapper.
 
   od tools directions [--id <id> | --label <label>] [--json]
       List the built-in design directions, or print one direction's full
@@ -1914,11 +1912,19 @@ async function runMediaGenerate(rawArgs) {
   });
 }
 
+// A dispatch that never produced a media task still has to answer "so what
+// now?" -- the caller reads the same `nextStep` here as it does off a failed
+// task snapshot, so one branch in the agent covers both shapes.
 async function exitWithMediaError(error, exitCode) {
   const safeError = {
     code: error.code,
     message: error.message,
     ...(typeof error.retryable === 'boolean' ? { retryable: error.retryable } : {}),
+    nextStep: mediaFailureNextStep({
+      code: error.code,
+      message: error.message,
+      retryable: typeof error.retryable === 'boolean' ? error.retryable : undefined,
+    }),
   };
   process.stderr.write(JSON.stringify({ error: safeError }) + '\n');
   await flushStreamsAndExit(exitCode);
@@ -7013,6 +7019,16 @@ async function runProject(args) {
   od project handoff <id> --conversation <id> --api-key <key> --model <model>
                     [--base-url <url>] [--max-tokens <n>]
                     Synthesize a resume-conversation handoff prompt.
+  od project artifact-snapshot list --project <id> --conversation <id>
+                    --message <id> [--json]
+                    List one chat message's artifact refs — which version each
+                    card shows and which one clicking it opens.
+  od project artifact-snapshot inspect <snapshotId> --project <id> [--json]
+                    Print one immutable snapshot's metadata (digest, size,
+                    capture state, lineage).
+  od project artifact-snapshot export <snapshotId> --project <id> --out <path>
+                    [--thumbnail] [--json]
+                    Write a snapshot's exact historical bytes to a local file.
 
 Common options:
   --daemon-url <url>   OpenDesign daemon HTTP base.
@@ -7364,6 +7380,95 @@ Common options:
       console.log(`[project] opened ${id} in ${editor} (${data.path ?? ''})`);
       return;
     }
+    // Chat artifact snapshots. The UI reads these through the same endpoints;
+    // this is the embeddability half of the dual-track rule, so an external
+    // agent can inspect and export a turn's exact bytes without the web app.
+    case 'artifact-snapshot': {
+      const action = rest[0];
+      const projectId = String(flags.project ?? '').trim();
+      if (!projectId) {
+        console.error('od project artifact-snapshot requires --project <id>');
+        process.exit(2);
+      }
+      const scope = `/api/projects/${encodeURIComponent(projectId)}`;
+      if (action === 'list') {
+        const conversationId = String(flags.conversation ?? '').trim();
+        const messageId = String(flags.message ?? '').trim();
+        if (!conversationId || !messageId) {
+          console.error('od project artifact-snapshot list requires --conversation <id> --message <id>');
+          process.exit(2);
+        }
+        const resp = await fetch(
+          `${base}${scope}/conversations/${encodeURIComponent(conversationId)}`
+            + `/messages/${encodeURIComponent(messageId)}/artifacts`,
+          { headers: workspaceHeaders },
+        );
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        const artifacts = data?.artifacts ?? [];
+        if (artifacts.length === 0) {
+          console.log('No artifact refs on this message.');
+          return;
+        }
+        for (const ref of artifacts) {
+          console.log(
+            // No `opens:` column: every card opens the workspace's latest
+            // file, so printing it per row would only imply it varies.
+            `${ref.label}\t${ref.kind}\tshows:${ref.displayPolicy}`
+              + `\t${ref.snapshotState}\t${ref.snapshotId ?? '-'}`,
+          );
+        }
+        return;
+      }
+      if (action === 'inspect') {
+        const snapshotId = String(rest[1] ?? '').trim();
+        if (!snapshotId) {
+          console.error('od project artifact-snapshot inspect requires <snapshotId>');
+          process.exit(2);
+        }
+        const resp = await fetch(
+          `${base}${scope}/chat-artifact-snapshots/${encodeURIComponent(snapshotId)}`,
+          { headers: workspaceHeaders },
+        );
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        const snapshot = data?.snapshot ?? {};
+        console.log(`${snapshot.id}\t${snapshot.kind}\t${snapshot.state}`);
+        console.log(`  captured from: ${snapshot.sourcePathAtCapture}`);
+        console.log(`  digest:        ${snapshot.contentDigest ?? '-'}`);
+        console.log(`  bytes:         ${snapshot.byteSize ?? '-'}`);
+        if (snapshot.failureCode) console.log(`  failure:       ${snapshot.failureCode}`);
+        return;
+      }
+      if (action === 'export') {
+        const snapshotId = String(rest[1] ?? '').trim();
+        const out = String(flags.out ?? '').trim();
+        if (!snapshotId || !out) {
+          console.error('od project artifact-snapshot export requires <snapshotId> --out <path>');
+          process.exit(2);
+        }
+        const which = flags.thumbnail ? 'thumbnail' : 'content';
+        const resp = await fetch(
+          `${base}${scope}/chat-artifact-snapshots/${encodeURIComponent(snapshotId)}/${which}`,
+          { headers: workspaceHeaders },
+        );
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        writeFileSync(out, buffer);
+        if (flags.json) {
+          return process.stdout.write(
+            JSON.stringify({ snapshotId, out, byteSize: buffer.byteLength }, null, 2) + '\n',
+          );
+        }
+        console.log(`[project] wrote ${buffer.byteLength} bytes to ${out}`);
+        return;
+      }
+      console.error('usage: od project artifact-snapshot <list|inspect|export> …');
+      process.exit(2);
+      return;
+    }
     default:
       console.error(`unknown subcommand: od project ${sub}`);
       process.exit(2);
@@ -7664,6 +7769,13 @@ async function runRun(args) {
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
+  od run steer  <runId> [--message "<text>" | --prompt-file <path|->] [--json]
+                                            Push a message into the turn that is
+                                            STILL RUNNING (「引导对话」) instead of
+                                            cancelling and resending. Only agents
+                                            whose CLI keeps stdin open mid-turn
+                                            can take it; the rest refuse with
+                                            RUN_STEERING_UNSUPPORTED.
   od run continue <runId> [--follow]        Continue a resumable failed run.
   od run list   [--project <id>]            List recent runs.
   od run info   <runId>                     One run's status.
@@ -7764,6 +7876,37 @@ Common options:
       }
       return;
     }
+    // B11 「引导对话」. The dual of `cancel`: the turn is NOT stopped, the text is
+    // written onto the agent child's still-open stdin so the model reads it
+    // mid-turn. Long instructions go through --prompt-file <path|-> so a
+    // heredoc / jq pipeline stays clean (same contract as `od automation`).
+    case 'steer': {
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
+      const text = (
+        (typeof flags.message === 'string' && flags.message.length > 0
+          ? flags.message
+          : await readPromptFromFlags(flags)) ?? ''
+      ).trim();
+      if (!id || !text) {
+        console.error(
+          'Usage: od run steer <runId> --message "<text>" [--json]\n'
+          + '       od run steer <runId> --prompt-file <path|-> [--json]',
+        );
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/steer`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
+        body: JSON.stringify({ text }),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      // Clean stdout stays machine-chainable; the hint goes to stderr.
+      process.stderr.write('[run] delivered into the running turn — the agent keeps its work\n');
+      console.log(`${id}\t${data?.messageId ?? ''}\t${data?.run?.status ?? '-'}`);
+      return;
+    }
     case 'continue': {
       const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       if (!id) {
@@ -7802,6 +7945,12 @@ Common options:
         projectId: status.projectId,
         conversationId: status.conversationId,
         message,
+        // This message is a continuation directive, not a self-contained
+        // request, and this command ships no transcript with it. Declaring that
+        // lets the daemon — the only layer that knows whether the stored
+        // session survived its model/cwd/cursor guard — decide whether to send
+        // the directive alone or reseed the original request alongside it.
+        resumeContinuation: true,
         analyticsHints: { entryFrom: 'resume_continue' },
         ...(status.agentId ? { agentId: status.agentId } : {}),
       };
@@ -9476,14 +9625,14 @@ async function runLibraryList(name, args) {
   const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   const apiPath = name === 'design-systems' ? '/api/design-systems' : `/api/${name}`;
-  const designSystemWorkspaceHeaders = name === 'design-systems'
+  const workspaceHeaders = name === 'design-systems' || name === 'skills'
     ? workspaceHeadersFromExplicitFlags(flags) ?? {}
     : undefined;
   switch (sub) {
     case 'list': {
       const resp = await fetch(`${base}${apiPath}`, {
-        ...(designSystemWorkspaceHeaders
-          ? { headers: designSystemWorkspaceHeaders }
+        ...(workspaceHeaders
+          ? { headers: workspaceHeaders }
           : {}),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -9503,8 +9652,8 @@ async function runLibraryList(name, args) {
         process.exit(2);
       }
       const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`, {
-        ...(designSystemWorkspaceHeaders
-          ? { headers: designSystemWorkspaceHeaders }
+        ...(workspaceHeaders
+          ? { headers: workspaceHeaders }
           : {}),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -9527,8 +9676,8 @@ async function runSkills(args) {
   if (!args[0] || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od skill install <https://github.com/owner/repo|github:owner/repo|https://…tar.gz|https://…tgz> [--json]
-  od skill list
-  od skill show <id>
+  od skill list [--workspace <id> --workspace-member <id>]
+  od skill show <id> [--workspace <id> --workspace-member <id>]
   od skill uninstall <id>
 
 \`od skills …\` remains an alias for compatibility.`);

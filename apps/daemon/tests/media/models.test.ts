@@ -4,6 +4,7 @@ import {
   IMAGE_MODELS,
   MEDIA_PROVIDERS,
   canonicalMediaModelId,
+  findMediaModel,
 } from '../../src/media/models.js';
 
 describe('image model defaults', () => {
@@ -17,5 +18,10 @@ describe('image model defaults', () => {
 
   it('migrates the removed Codex image model id to Vela', () => {
     expect(canonicalMediaModelId('codex-gpt-image-2')).toBe('vela/gpt-image-2');
+  });
+
+  it('preserves explicit OpenAI BYOK model selection', () => {
+    expect(canonicalMediaModelId('gpt-image-2')).toBe('gpt-image-2');
+    expect(findMediaModel('gpt-image-2')?.provider).toBe('openai');
   });
 });

@@ -28,6 +28,13 @@ export interface AgentResumeContext {
   newSessionId: string;
   /** True when a prior session id exists AND it is still safe to resume. */
   isResuming: boolean;
+  /**
+   * The assistant turn the stored session last produced. Unlike the fields
+   * above this is reported even when the guard REJECTED the session: it is the
+   * anchor for "which request was that session working on", which a refused
+   * continuation turn needs in order to reseed context.
+   */
+  storedLastMessageId: string | null;
   /** Hash of the stable instruction block last sent on this session, or null. */
   storedStablePromptHash: string | null;
   /** Last effective input usage reported for this exact resumed session. */
@@ -244,10 +251,56 @@ export function resolveAgentResumeContext(
     resumeSessionId: resumable ? storedSessionId : null,
     newSessionId: randomUUID(),
     isResuming: resumable,
+    storedLastMessageId: record?.lastMessageId ?? null,
     storedStablePromptHash: resumable ? (record?.stablePromptHash ?? null) : null,
     storedInputTokens: resumable ? (record?.lastInputTokens ?? null) : null,
     storedStableSections: resumable ? parseStableSections(record?.stablePromptSections) : null,
     invalidationReason,
+  };
+}
+
+/**
+ * Whether a continuation turn must be handed the request it is continuing.
+ *
+ * "Continue the run" sends a directive, not a request: *continue where you left
+ * off; otherwise complete the original request*. That sentence is only
+ * answerable inside the session that heard the original request. Two surfaces
+ * offer it — the chat error card and `od run continue` — and neither can tell
+ * whether the session will actually be continued: they see `resumable` (and, in
+ * the UI, agent identity), while `evaluateResumeInvalidation` above ALSO
+ * compares the stored model, cwd and cursor. Changing the model in Settings
+ * between the failure and the click is enough to diverge them.
+ *
+ * When they do diverge the daemon opens a fresh session, and the directive lands
+ * somewhere that has never seen the request it names. Callers that ship a full
+ * rendered transcript in `message` are unaffected (the transcript survives the
+ * non-resume branch); callers that send only the directive are not, so the
+ * daemon reseeds the request itself from persisted history.
+ *
+ * Deliberately requires a stored session WITH a cursor: that cursor is the exact
+ * anchor for "which request", and without one there is nothing to be precise
+ * about — guessing a request would be worse than sending none.
+ */
+export function resolveResumeContinuationSeed(input: {
+  /** The caller declared this turn's message is a continuation directive. */
+  isContinuation: boolean;
+  /** The daemon could not continue a stored session on this turn. */
+  requiresFullTranscript: boolean;
+  /** Stored handle at resolve time — present even when the guard rejected it. */
+  storedSessionId: string | null;
+  /** Stored resume cursor; the assistant turn the refused session produced. */
+  storedLastMessageId: string | null;
+}): { required: boolean; anchorAssistantMessageId: string | null } {
+  const required =
+    input.isContinuation === true
+    && input.requiresFullTranscript === true
+    && typeof input.storedSessionId === 'string'
+    && input.storedSessionId.length > 0
+    && typeof input.storedLastMessageId === 'string'
+    && input.storedLastMessageId.length > 0;
+  return {
+    required,
+    anchorAssistantMessageId: required ? input.storedLastMessageId : null,
   };
 }
 
@@ -456,6 +509,14 @@ const AMR_RESUME_FAILURE_PATTERN = /"kind"\s*:\s*"resume_failed"/;
 const AMR_OPENCODE_EVENT_STREAM_RESUME_FAILURE_PATTERNS: RegExp[] = [
   /opencode SSE ended before prompt completion/i,
   /opencode event stream:\s*opencode SSE ended before prompt completion/i,
+  // vela 0.0.35 (#1847) split the compaction continuation onto its own
+  // request, and worded its EOF differently. Same bridge, same stream, same
+  // "the event stream ended before the prompt finished" — only the phase it
+  // died in is new, so it belongs to the same recoverable class. Until this
+  // line existed the wording matched nothing in the repository, so a
+  // compaction that died mid-continuation could not even reach the re-seed
+  // path and ended the conversation on a hard failure instead.
+  /opencode compaction continuation ended before prompt completion/i,
 ];
 
 /** True when vela's ACP output carries a resume_failed signal. */

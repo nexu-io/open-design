@@ -1,3 +1,5 @@
+import { recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
+export { recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -158,11 +160,40 @@ export function applyOsLocaleSwitch(electronApp: Electron.App): string {
 export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): void {
   if (!electronApp.isReady()) {
     electronApp.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
+    // 关掉内层滚动容器的橡皮筋回弹(产品裁决 2026-09-07:「直接关掉」)。
+    //
+    // ## 为什么
+    //
+    // Electron 40 → 41 把 Chromium 从 144 跳到 **146,整个跳过了 145**,而
+    // `kOverscrollEffectOnNonRootScrollers` 的默认值正好在 145 从 DISABLED 翻成
+    // ENABLED(已拉 branch-heads/7559 与 7680 的 `cc/base/features.cc` 逐字核实)。
+    // 它管的是「非根滚动容器撞到滚动边界时怎么表现」——145 之前只有整页会弹,
+    // 之后聊天区这类内层容器也会弹。
+    //
+    // 我们在追的缺陷是:聊天区的滚动范围被**永久冻**在某个早期内容高度上,
+    // 布局全对、JS 程序性滚动能到底,但**滚轮和键盘都到不了**(scroll unification
+    // 之后两者都走合成器)。位置(滚动边界)、平台(macOS 弹性 overscroll)、
+    // 版本窗口三样都对得上。
+    //
+    // ⚠️ **这是缓解不是根治**:合成页面 89 个用例没能复现,因果链没有建立。
+    // 判据仍然是 `client_chat_scroll_frozen` 的事件量 —— 带着这一行还在报,
+    // 说明这条线错了,该把这两个 feature 放回去再找别的。
+    //
+    // ## 代价
+    //
+    // macOS 上所有内层滚动区失去橡皮筋回弹(整页仍然弹)。产品知情并选择了它 ——
+    // 相对「滚不动」这个代价可以接受。
+    //
+    // 必须在 whenReady 之前:Chromium 在会话初始化时就消费这些开关。
+    electronApp.commandLine.appendSwitch(
+      "disable-features",
+      "OverscrollEffectOnNonRootScrollers,OverscrollBehaviorRespectedOnAllScrollContainers",
+    );
   }
 }
 
 export type DesktopMainOptions = {
-  beforeShutdown?: () => Promise<void>;
+  beforeShutdown?: (record?: (event: UpdateLifecycleObservation) => Promise<void>) => Promise<void>;
   onExternalShow?: () => void | Promise<void>;
   discoverWebUrl: () => Promise<string | null>;
   /**
@@ -747,7 +778,9 @@ export async function runDesktopMain(
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
   let removeDiagnosticsIpc: () => void = () => undefined;
-  let shuttingDown = false;
+  let shutdownPromise: Promise<void> | null = null;
+  let shutdownComplete = false;
+  let shutdownRequestCount = 0;
   let pendingUpdateDialogRequest = false;
 
   async function snapshotUpdateForStatus(): Promise<{
@@ -798,22 +831,32 @@ export async function runDesktopMain(
     };
   }
 
-  async function shutdown(): Promise<void> {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    await options.beforeShutdown?.().catch((error: unknown) => {
-      console.error("desktop beforeShutdown failed", error);
+  // Every quit entry point joins the same cleanup, including repeated updater
+  // requests while sidecars are still draining.
+  function shutdown(): Promise<void> {
+    shutdownRequestCount += 1;
+    shutdownPromise ??= Promise.resolve().then(async () => {
+      const startedAt = Date.now();
+      let shutdownFailed = false;
+      console.info("[open-design desktop] shutdown started");
+      updateScheduler?.stop("shutdown");
+      await updater.recordLifecycle?.({ stage: "shutdown_started", outcome: "started" });
+      await options.beforeShutdown?.((event) => updater.recordLifecycle?.(event) ?? Promise.resolve()).catch((error: unknown) => {
+        shutdownFailed = true;
+        console.error("desktop beforeShutdown failed", error);
+      });
+      console.info("[open-design desktop] shutdown sidecars settled", { durationMs: Date.now() - startedAt });
+      disposeMenu();
+      removeDiagnosticsIpc();
+      await desktop?.close().catch(() => { shutdownFailed = true; });
+      // Mark clean only after teardown; a stalled cleanup is not a clean exit.
+      endDesktopSessionCleanly({ stateFilePath: sessionStatePath });
+      console.info("[open-design desktop] shutdown completed", { durationMs: Date.now() - startedAt });
+      await updater.recordLifecycle?.({ stage: "shutdown_completed", outcome: shutdownFailed ? "failed" : "completed", duration_ms: Date.now() - startedAt, repeated_quit_count: shutdownRequestCount - 1 });
+      shutdownComplete = true;
+      app.quit();
     });
-    updateScheduler?.stop("shutdown");
-    disposeMenu();
-    removeDiagnosticsIpc();
-    await desktop?.close().catch(() => undefined);
-    // Mark the session clean only AFTER teardown actually completed, right
-    // before app.quit(). Doing it at the start of shutdown would flag a quit as
-    // clean even if a later await hangs and the process is then force-quit or
-    // OS-killed — which is itself an abnormal exit worth reporting.
-    endDesktopSessionCleanly({ stateFilePath: sessionStatePath });
-    app.quit();
+    return shutdownPromise;
   }
 
   function shutdownAndExit(): void {
@@ -914,6 +957,9 @@ export async function runDesktopMain(
     onRevealed: () => markDesktopSessionRunning({ stateFilePath: sessionStatePath }),
     onUpdateMenuLabels: menuController.setUpdateLabels,
     requestQuit: shutdownAndExit,
+    onMainWindowReady: () => {
+      void recordIncomingUpdateLifecycle({ root: options.update?.installerObservationRoot, namespace: updater.config.namespace ?? "default", channel: updater.config.channel, version: updater.config.currentVersion }, { stage: "desktop_ready", outcome: "completed" });
+    },
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
     updater,
@@ -984,7 +1030,7 @@ export async function runDesktopMain(
   if (updater.shouldAutoCheck()) updateScheduler.start();
 
   app.on("before-quit", (event) => {
-    if (shuttingDown) return;
+    if (shutdownComplete) return;
     event.preventDefault();
     void shutdown().finally(() => process.exit(0));
   });

@@ -134,6 +134,26 @@ export function isTopPlanTier(tier: string | null | undefined): boolean {
 }
 
 /**
+ * Whether a resolved plan id is a MAX tier — personal `max` OR `team_max`.
+ *
+ * Deliberately a different question from {@link isTopPlanTier}. That one asks
+ * "is there anything left to upgrade to", and answers false for personal `max`
+ * because the whole team ladder still sits above it. This one asks "is this
+ * subscriber on the Max product", and the 2026-08-26 balance ruling is explicit
+ * that both ladders' Max count: 「Max」= 个人 Max 和团队 Max 都算. Reusing
+ * `isTopPlanTier` for it would silently drop every personal Max user into the
+ * non-Max branch.
+ *
+ * Segment matching, same as its sibling, so a billing-period suffix
+ * (`max_yearly`, `team_max_yearly`) still reads as Max.
+ */
+export function isMaxPlanTier(tier: string | null | undefined): boolean {
+  const normalized = tier?.trim().toLowerCase() ?? '';
+  if (!normalized) return false;
+  return normalized.split(/[_-]+/).filter(Boolean).includes('max');
+}
+
+/**
  * Whether an 「升级」 affordance has anywhere left to send this plan tier, and
  * may therefore be rendered at all.
  *

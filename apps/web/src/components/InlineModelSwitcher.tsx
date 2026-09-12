@@ -80,6 +80,7 @@ import {
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
+import { anchorSelectionInView } from './pickerSelectionAnchor';
 import {
   agentModelIsSelectable,
   defaultAgentModelId,
@@ -204,6 +205,8 @@ export function InlineModelSwitcher({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const compactModelListRef = useRef<HTMLDivElement | null>(null);
+  const compactSelectionAnchoredRef = useRef(false);
   const campaignBenefitTrackedForOpenRef = useRef(false);
   // Viewport clamp for the popover (issue #99): the anchor chip can sit
   // anywhere on screen (home hero mid-page, chat composer at the bottom), so
@@ -784,6 +787,23 @@ export function InlineModelSwitcher({
     [currentAgent, inlineAgentModelOptions],
   );
 
+  // The compact list caps at six visible rows and scrolls, so a longer catalog
+  // used to open on row one with the model actually in effect below the fold —
+  // the hunting OPEND-2812 reports. Anchor the list on the row it already marks
+  // `aria-checked`; nothing new is remembered here, the selection is read back
+  // out of the rendered list. Once per open, so a later re-render (the catalog
+  // arriving, the popover re-measuring) cannot yank the list back under a user
+  // who has started browsing it.
+  useLayoutEffect(() => {
+    if (!open) {
+      compactSelectionAnchoredRef.current = false;
+      return;
+    }
+    if (compactSelectionAnchoredRef.current || !compactModelListRef.current) return;
+    compactSelectionAnchoredRef.current = true;
+    anchorSelectionInView(compactModelListRef.current, '[aria-checked="true"]');
+  }, [compactModelRows, open]);
+
   useEffect(() => {
     if (!open) {
       campaignBenefitTrackedForOpenRef.current = false;
@@ -1075,9 +1095,21 @@ export function InlineModelSwitcher({
   // a user-configured endpoint, treated as connected.
   const chipConnected =
     config.mode === 'daemon' ? currentAgent?.available === true : true;
-  const chipAgentLabel = currentAgent
-    ? displayAgentName(currentAgent)
-    : t('inlineSwitcher.chipTitle');
+  /**
+   * 紧凑 chip 的读屏标签 / 提示里那个「谁在跑」。
+   *
+   * **必须跟着 `config.mode` 分岔**,和非紧凑那支的 `chipPrimary` 同一条规则。
+   * 原来无条件取 `displayAgentName(currentAgent)`,而 API/BYOK 模式下
+   * `config.agentId` 还留着上一个 daemon agent —— 真机上配好 OpenRouter 之后
+   * chip 念的是「Claude Code · google/gemini-2.5-flash」,可那一轮真正跑的是
+   * `byok-opencode`。可见文字只有模型名,所以只有读屏用户会被念错。
+   */
+  const chipAgentLabel =
+    config.mode === 'daemon'
+      ? currentAgent
+        ? displayAgentName(currentAgent)
+        : t('inlineSwitcher.chipTitle')
+      : apiProtocolLabel(apiProtocol);
 
   const handleChipClick = useCallback(() => {
     const nextOpen = !open;
@@ -1370,7 +1402,11 @@ export function InlineModelSwitcher({
             // the execution settings entry below.
             <div className="inline-switcher__row">
               {currentAgent && compactModelRows.length > 0 ? (
-                <div className="inline-switcher__agent-grid" role="radiogroup">
+                <div
+                  className="inline-switcher__agent-grid"
+                  role="radiogroup"
+                  ref={compactModelListRef}
+                >
                   {compactModelRows.map(({ model: m, selectable }) => {
                     const active = currentModelId === m.id;
                     // A model above the caller's plan is shown, but honestly:

@@ -148,13 +148,8 @@ describe('AMR runtime def', () => {
     expect(def?.streamFormat).toBe('acp-json-rpc');
   });
 
-  it('builds the documented `vela agent run --runtime opencode` argv', () => {
-    expect(amrAgentDef.buildArgs()).toEqual([
-      'agent',
-      'run',
-      '--runtime',
-      'opencode',
-    ]);
+  it('builds the documented `vela agent run` argv', () => {
+    expect(amrAgentDef.buildArgs()).toEqual(['agent', 'run']);
   });
 
   it('fails closed instead of exposing static stale fallback models', () => {

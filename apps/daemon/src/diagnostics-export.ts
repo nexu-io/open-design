@@ -26,10 +26,21 @@ import {
 } from '@open-design/sidecar';
 
 import { readCurrentAppVersionInfo } from './app-version.js';
+import {
+  CHAT_SCROLL_FORENSICS_SUMMARY_FILE,
+  buildChatScrollForensicsSummary,
+} from './diagnostics-client-evidence.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { spawnEnvForAgent } from './agents.js';
 import { collectBrowserUseDiscoveryFacts } from './browser/index.js';
 import { readRecentApiFailures } from './http/api-failure-journal.js';
+import {
+  createDiagnosticsEvidence,
+  diagnosticsEvidencePaths,
+  getDiagnosticsEvidence,
+  type DiagnosticsEvidence,
+} from './services/diagnostics-evidence.js';
+import { diagnosticId } from './services/diagnostics-environment.js';
 import { readVelaLoginStatus } from './integrations/vela.js';
 
 interface ResolvedDiagnosticsAgentEnvironment {
@@ -84,6 +95,7 @@ async function resolveDiagnosticsAgentEnvironment(
 }
 
 export interface DiagnosticsHandlerOptions {
+  evidence?: DiagnosticsEvidence;
   /** Sidecar runtime context, present when daemon is launched via tools-dev or packaged sidecar. */
   runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null;
   /** Project root used to derive crash-report match strings. */
@@ -225,6 +237,7 @@ function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<LegacySideca
 }
 
 export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOptions): RequestHandler {
+  const evidence = options.evidence ?? getDiagnosticsEvidence() ?? createDiagnosticsEvidence();
   return async (_req, res) => {
     try {
       const versionInfo = await readCurrentAppVersionInfo().catch(() => null);
@@ -244,6 +257,15 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
           xdgDataHome: agentEnvironment.openCodeXdgDataHome ?? process.env.XDG_DATA_HOME ?? null,
         })),
       ];
+      await evidence.refresh();
+      if (options.dataDir) {
+        const paths = diagnosticsEvidencePaths(options.dataDir);
+        for (const [name, absolutePath] of [['latest', paths.current], ['previous', paths.previous]] as const) {
+          if (await shouldListOptionalSource(absolutePath)) sources.push({
+            name: `logs/diagnostics/environment-evidence.${name}.json`, absolutePath, kind: 'json', tailBytes: 256 * 1024,
+          });
+        }
+      }
       const username = safeUsername();
       const crashDumpsDir = resolveDesktopCrashDumpsDir(options.runtime);
 
@@ -284,6 +306,20 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         },
         sources,
         summaries: {
+          'environment-evidence.json': evidence.snapshot(),
+          // Renderer-side scene for the chat scroll freeze. Always written,
+          // even when nothing was posted, so an empty slot reads as a stated
+          // fact instead of a missing file. See diagnostics-client-evidence.ts.
+          [CHAT_SCROLL_FORENSICS_SUMMARY_FILE]: {
+            ...buildChatScrollForensicsSummary(),
+            app: {
+              version: versionInfo?.version ?? null,
+              channel: versionInfo?.channel ?? null,
+              packaged: versionInfo?.packaged ?? null,
+              platform: versionInfo?.platform ?? null,
+              arch: versionInfo?.arch ?? null,
+            },
+          },
           'recent-api-failures.json': {
             retainedLimit: 100,
             privacy:
@@ -300,6 +336,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
                 );
                 return {
                   profile: status.profile,
+                  userId: diagnosticId(status.user?.id),
                   loggedIn: status.loggedIn,
                   sessionState: status.sessionState,
                   credentialRevision: status.credentialRevision,

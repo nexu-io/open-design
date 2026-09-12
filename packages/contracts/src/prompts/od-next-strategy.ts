@@ -10,6 +10,7 @@ import {
   type StrategyInputStageV2,
   type StrategyTaskTypeV2,
 } from '../plugins/strategy-v2.js';
+import { renderChatTurnHostProtocolInstructions } from './chat-turn-host-protocol.js';
 import type { ChatSessionMode } from '../api/chat.js';
 import {
   renderDeckFrameworkDirective,
@@ -73,6 +74,25 @@ export interface OdNextStrategyStableRequestContextV2 {
   agentId?: string | null | undefined;
   sessionMode?: ChatSessionMode | undefined;
   locale?: string | undefined;
+  /**
+   * The name of the plan tool THIS runtime actually has, as one sentence the
+   * host resolved — or null/absent when the host has no verified name for it.
+   *
+   * A fact about the selected Coding Agent, not a new rule: the planning
+   * surface below already asks for a live Todo plan, and the charter it
+   * mirrors sanctions "otherwise, provide a numbered plan in your response".
+   * A model never told its tool's NAME reads the prose branch as the compliant
+   * one — which is what a codex run did on 2026-09-03, answering an explicit
+   * request to plan with a seven-item list in its reply body and no tool call.
+   *
+   * The host resolves the sentence (`planToolNoteForRuntime` in
+   * `apps/daemon/src/prompts/system.ts`) so the runtime→tool-name table has
+   * exactly one home. This layer only carries it: a runtime the host has no
+   * verified name for passes nothing and pays nothing, and this file must
+   * never grow its own copy of that table — a second source of truth for tool
+   * names is precisely what the Claude Code 2.1 rename punished.
+   */
+  planToolNote?: string | null | undefined;
   /**
    * The host detected an explicit deck request in the user-authored
    * conversation even though the project is bound to another Task Profile.
@@ -164,6 +184,14 @@ export type OdNextStrategyContinuationV2 =
       taskExecutionId: string;
       taskRunIndex: number;
       planContractHash: string;
+      /** Per-run nonce; omitted for non-completing continuation stages. */
+      hostProtocolKey?: string;
+      /**
+       * Run UI locale, for the host protocols the production stage closes with
+       * (OPEND-2765). Only the follow-up-suggestion rule reads it; the rest of
+       * this payload is machine structure and stays English.
+       */
+      locale?: string;
       nativeBuildPackageBindings?: readonly {
         buildPackageId: string;
         nativeAgentHandle: string;
@@ -433,6 +461,8 @@ For a Full Plan route, the request and clarification stages are planning-only. Y
 
 Ask only when one unresolved answer would materially change scope, direction, the canonical deliverable, main outputs, editability, or substantial rework. Use one inline \`<question-form>\` containing one to three questions with recommended defaults. The form is assistant text parsed by the host, not a native tool call. If the known context is sufficient, continue without a form — do not output, quote, or explain the \`<question-form>\` marker to announce that you are skipping it. The host parses that marker wherever it appears, so writing it as a heading, label, or declaration line leaves the user waiting on a form that does not exist.
 
+Not every turn is a design request. A greeting, an off-topic question, a stray keystroke, or an answer that skipped the one question you were allowed to ask can leave you with nothing to design — and the clarification budget is one round, so a second form is not available to rescue it. Do not invent a subject to satisfy the route: turning \`111\` or \`hello\` into a prototype about the number 111 delivers work the user never asked for, and the user cannot tell you misread them from the finished artifact. Answer them in visible prose the way you would answer any other message — say plainly what you would need in order to start — and declare \`outcome: blocked\`. Your reply is what the user reads, the task settles there, and they can come back with a real request. Reserve this for a request you genuinely cannot act on: a thin but real brief still gets the one clarification round, and an ambiguous one still gets your best reading plus stated assumptions.
+
 Keep the Todo plan live while performing Build work. Direct Edit stays local and bounded. Full Plan freezes its decisions before Production, and every Build Package uses the same frozen Design Spec.`;
 
 const OMITTED_PROJECT_METADATA_KEYS = new Set([
@@ -535,6 +565,19 @@ export function composeOdNextStrategyStableRequestContextV2(
   if (Object.keys(runtimeSelection).length > 0) {
     factualStructured('runtime-selection', runtimeSelection);
   }
+  // Sits next to the runtime identity it is derived from, and inside this
+  // per-run block rather than the Bundle head: the head is byte-identical
+  // across every task sharing a strategy version, task type, and execution
+  // profile, and which agent is driving is not one of those dimensions. So the
+  // note costs bytes but no cache-prefix churn, and only on runs that have a
+  // plan tool to be told about.
+  //
+  // Guarded, unlike the deck directive below. That block bypasses
+  // `assertOdNextPlanningBuildOnlyV2` because it is a long protocol document
+  // whose legitimate wording brushes the forbidden vocabulary; one short
+  // sentence naming a tool has no such excuse, and a note that ever did
+  // contain post-Build semantics should stop the run rather than ship.
+  instructionText('runtime-plan-tool', context.planToolNote ?? undefined);
   const deckFrameworkMode = context.deckFrameworkMode
     ?? (context.deckIntent ? 'canonical' : undefined);
   if (deckFrameworkMode) {
@@ -713,8 +756,16 @@ export function renderOdNextOutputContractV2(
     executionMode: null,
     reasonCodes: [],
   } satisfies StrategyRuntimeStateV2;
+  const blockedStateExample = {
+    schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
+    route: 'full_plan',
+    inputStage: 'request',
+    outcome: 'blocked',
+    executionMode: null,
+    reasonCodes: [],
+  } satisfies StrategyRuntimeStateV2;
 
-  return `The JSON field sets below are the exact V2 contract shapes. Replace example values with resolved run values; do not add fields. Every value named \`copy-…\`, plus the all-zero capabilitySnapshotHash, is a placeholder: copy the real value byte-for-byte from the <recipe_identity> attributes or the <runtime_facts> block in <context>, and never invent one. Every buildRequirements entry is an object with exactly id and text; every readinessArtifacts entry is an object with exactly id, version, and a 64-character lowercase-hex digest. Every buildPackages entry is an object with exactly id, objective, inputs, outputs, sharedConstraints, dependsOn, and allowedResources, where inputs, dependsOn, and allowedResources are string arrays that may be empty, outputs and sharedConstraints are non-empty string arrays, and dependsOn lists ids of other Build Packages in this same plan. A simple plan leaves buildPackages empty; a complex plan needs at least two Build Packages, an acyclic dependsOn graph, and exactly one owning Build Package per output. Ids must be unique within requiredDeliverables and within buildRequirements, and taskProfile.canonicalDeliverable.id must itself appear as one of the requiredDeliverables ids: when a plan declares several deliverables, list the canonical one among them rather than alongside them. designSpec.source is exactly existing-artifact, brand, or resolved-baseline. Emit JSON only between the matching tags, without Markdown fences or a second copy. Emit exactly one Runtime State block on every response. Emit at most one Plan Contract block, only when a complete Full Plan is ready. Keep machine blocks separate from visible prose.
+  return `The JSON field sets below are the exact V2 contract shapes. Replace example values with resolved run values; do not add fields. Every value named \`copy-…\`, plus the all-zero capabilitySnapshotHash, is a placeholder: copy the real value byte-for-byte from the <recipe_identity> attributes or the <runtime_facts> block in <context>, and never invent one. Every buildRequirements entry is an object with exactly id and text; every readinessArtifacts entry is an object with exactly id, version, and a 64-character lowercase-hex digest. Every buildPackages entry is an object with exactly id, objective, inputs, outputs, sharedConstraints, dependsOn, and allowedResources, where inputs, dependsOn, and allowedResources are string arrays that may be empty, outputs and sharedConstraints are non-empty string arrays, and dependsOn lists ids of other Build Packages in this same plan. A simple plan leaves buildPackages empty; a complex plan needs at least two Build Packages, an acyclic dependsOn graph, and exactly one owning Build Package per output. Ids must be unique within requiredDeliverables and within buildRequirements, and taskProfile.canonicalDeliverable.id must itself appear as one of the requiredDeliverables ids: when a plan declares several deliverables, list the canonical one among them rather than alongside them. designSpec.source is exactly existing-artifact, brand, or resolved-baseline. Emit JSON only between the matching tags, without Markdown fences or a second copy. Write every machine block as plain text in the response body, between the exact tags shown below. Emit exactly one Runtime State block on every response. Emit at most one Plan Contract block, only when a complete Full Plan is ready. On the production stage emit no Plan Contract and exactly one Runtime State block, with inputStage production, the executionMode locked by the accepted Plan Contract, and a terminal outcome: completed once every required deliverable is written, otherwise blocked or canceled. Keep machine blocks separate from visible prose.
 
 Plan Contract wrapper and exact shape:
 
@@ -732,6 +783,12 @@ When the outcome is clarification_required, executionMode MUST be null — the e
 
 <${OD_NEXT_RUNTIME_STATE_BLOCK}>
 ${stableJson(clarificationStateExample)}
+</${OD_NEXT_RUNTIME_STATE_BLOCK}>
+
+\`outcome\` is one of clarification_required, plan_ready, completed, blocked, or canceled. The first three carry the task forward. \`blocked\` settles it without a deliverable — declare it when you cannot act on the request at all, and put the explanation the user should read in your visible prose, because that reply is all they get. \`canceled\` is Open Design's to declare, not yours. A blocked state emits no Plan Contract block and leaves executionMode null:
+
+<${OD_NEXT_RUNTIME_STATE_BLOCK}>
+${stableJson(blockedStateExample)}
 </${OD_NEXT_RUNTIME_STATE_BLOCK}>
 
 The visible decision summary contains only the goal, deliverables, key constraints, assumptions, risks, and open decisions. Machine blocks are consumed by Open Design and must not be paraphrased.`;
@@ -975,7 +1032,12 @@ export function composeOdNextStrategyContinuationV2(
           nativeAgentHandle: requireText(binding.nativeAgentHandle, 'nativeAgentHandle'),
           dependsOn: binding.dependsOn.map((dependency) => requireText(dependency, 'dependsOn')),
         })))}\n\`\`\``;
-    payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Lay the deliverable out so exactly one of those resolves.${bindingBlock}`;
+    const hostProtocol = renderChatTurnHostProtocolInstructions(
+      input.hostProtocolKey ?? '',
+      'od_next_production',
+      input.locale,
+    ).text;
+    payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Lay the deliverable out so exactly one of those resolves.${bindingBlock}\n\n## Closing Runtime State\n\nFinish the delivery response with exactly one ${OD_NEXT_RUNTIME_STATE_BLOCK} block written as plain text between its tags, and no Plan Contract block: schema ${OD_NEXT_RUNTIME_STATE_SCHEMA}, route full_plan, inputStage production, executionMode equal to the mode locked by the accepted Plan Contract, outcome completed once every required deliverable is written (otherwise blocked or canceled), reasonCodes [], and no other fields.${hostProtocol ? `\n\nPlace the Closing Runtime State before any final follow-up markers required by the host protocols below.\n\n${hostProtocol}` : ''}`;
   }
   return serializeOdNextRequestTurnV1({
     taskExecutionId: input.taskExecutionId,

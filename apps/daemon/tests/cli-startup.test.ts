@@ -287,6 +287,7 @@ describe('CLI startup boundaries', () => {
         error: {
           code: 'MEDIA_DISPATCHER_UNREACHABLE',
           message: 'local media dispatcher could not be reached',
+          nextStep: 'retry-later',
         },
       });
       expect(stderr).not.toContain('OD_DATA_DIR');
