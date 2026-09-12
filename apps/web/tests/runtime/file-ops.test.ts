@@ -267,3 +267,30 @@ describe('countArtifactFileOps', () => {
     expect(countFileOps(rows).edit).toBe(4);
   });
 });
+
+
+describe('daemon-confirmed canonical project root', () => {
+  it.each([
+    ['/alias/project', '/real/project', '/real/project/assets/a.png', 'assets/a.png'],
+    ['/workspace/p', '/workspace/actual', '/workspace/actual/assets/a.png', 'assets/a.png'],
+    ['/workspace/p', '/workspace/actual', '/api/projects/other/raw/assets/a.png', 'a.png'],
+    ['C:\\alias\\project', 'D:\\real\\project', 'd:\\REAL\\project\\assets\\a.png', 'assets/a.png'],
+    ['/tmp/project', '/real/project', '/private/tmp/project/assets/a.png', 'a.png'],
+    ['/alias/project', '/real/project', '/real/project-other/assets/a.png', 'a.png'],
+    ['/alias/project', '/real/project', '/real/Project/assets/a.png', 'a.png'],
+    ['/alias/project', '/real/project', '/outside/assets/a.png', 'a.png'],
+    ['C:\\alias\\project', 'D:\\real\\project', 'E:\\real\\project\\assets\\a.png', 'a.png'],
+  ])('resolves %s / %s only with a complete root proof', (resolvedDir, canonicalResolvedDir, fullPath, expected) => {
+    expect(deriveFileOps([use('Write', { file_path: fullPath }, 'w'), ok('w')], {
+      projectId: 'p', resolvedDir, canonicalResolvedDir,
+    })[0]?.path).toBe(expected);
+  });
+
+  it('keeps equal basenames in separate nested directories distinct', () => {
+    const rows = deriveFileOps([
+      use('Write', { file_path: '/real/project/assets/a.png' }, 'a'), ok('a'),
+      use('Write', { file_path: '/real/project/reference/a.png' }, 'b'), ok('b'),
+    ], { projectId: 'p', resolvedDir: '/alias/project', canonicalResolvedDir: '/real/project' });
+    expect(rows.map((row) => row.path)).toEqual(['assets/a.png', 'reference/a.png']);
+  });
+});

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { ChatMessage } from '../../src/types';
@@ -36,6 +36,8 @@ const chatPaneHarness = vi.hoisted(() => ({
   ) => unknown),
   onStop: null as null | (() => void),
   messages: [] as ChatMessage[],
+  canonicalResolvedDir: null as string | null,
+  projectId: '',
 }));
 
 // Records the WHOLE open request, not just `openRequest.name`. Reading only
@@ -135,14 +137,20 @@ vi.mock('../../src/components/ChatPane', () => ({
     messages,
     onSend,
     onStop,
+    projectCanonicalResolvedDir,
+    projectId,
   }: {
     messages: ChatMessage[];
     onSend: typeof chatPaneHarness.onSend;
     onStop: typeof chatPaneHarness.onStop;
+    projectCanonicalResolvedDir?: string | null;
+    projectId?: string;
   }) => {
     chatPaneHarness.messages = messages;
     chatPaneHarness.onSend = onSend;
     chatPaneHarness.onStop = onStop;
+    chatPaneHarness.canonicalResolvedDir = projectCanonicalResolvedDir ?? null;
+    chatPaneHarness.projectId = projectId ?? '';
     return null;
   },
 }));
@@ -171,18 +179,18 @@ vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => null,
 }));
 
-function renderProjectView(options?: { resolvedDir?: string | null; metadata?: unknown }) {
+function projectViewElement(options?: { projectId?: string; resolvedDir?: string | null; canonicalResolvedDir?: string; metadata?: unknown }) {
   const project = {
-    id: 'project-1',
+    id: options?.projectId ?? 'project-1',
     name: 'Project',
     skillId: null,
     designSystemId: null,
     ...(options?.metadata ? { metadata: options.metadata } : {}),
   } as never;
-  return render(
+  return (
     <ProjectView
       project={project}
-      initialProjectDetail={{ project, resolvedDir: options?.resolvedDir ?? null }}
+      initialProjectDetail={{ project, resolvedDir: options?.resolvedDir ?? null, canonicalResolvedDir: options?.canonicalResolvedDir }}
       routeConversationId={null}
       routeFileName={null}
       config={
@@ -208,8 +216,12 @@ function renderProjectView(options?: { resolvedDir?: string | null; metadata?: u
       onTouchProject={() => {}}
       onProjectChange={() => {}}
       onProjectsRefresh={() => {}}
-    />,
+    />
   );
+}
+
+function renderProjectView(options?: Parameters<typeof projectViewElement>[0]) {
+  return render(projectViewElement(options));
 }
 
 type Handlers = {
@@ -265,12 +277,118 @@ describe('ProjectView auto-open of a finished turn (OPEND-2588)', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
     chatPaneHarness.onSend = null;
     chatPaneHarness.onStop = null;
     chatPaneHarness.messages = [];
+    chatPaneHarness.canonicalResolvedDir = null;
+    chatPaneHarness.projectId = "";
     workspaceHarness.lastRequest = null;
     workspaceHarness.requests = [];
     window.sessionStorage.clear();
+  });
+
+  it.each([true, false])('rereads lazy detail once after the first accepted files (success=%s)', async (succeeds) => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchProjectFiles.mockResolvedValue([]);
+    const detailReads = vi.fn();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input) === '/api/projects/project-1') {
+        detailReads();
+        return new Response(JSON.stringify({ project: { id: 'project-1', name: 'Project', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 }, resolvedDir: '/alias/project', canonicalResolvedDir: '/canonical/project' }), { status: succeeds ? 200 : 503 });
+      }
+      return new Response('{}', { status: 404 });
+    });
+    let handlers: Handlers | null = null;
+    streamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated('first-run');
+      handlers = options.handlers;
+      return new Promise<void>(() => {});
+    });
+    renderProjectView({ resolvedDir: '/alias/project' });
+    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+    expect(detailReads).not.toHaveBeenCalled();
+    void chatPaneHarness.onSend!('Draw a picture', [], []);
+    await waitFor(() => expect(handlers).toBeTruthy());
+    fetchProjectFiles.mockResolvedValue(IMAGE_TURN_FILES);
+    await act(async () => handlers!.onAgentEvent({ kind: 'tool_use', id: 'write-first', name: 'Write', input: { file_path: '/canonical/project/image-01.png' } }));
+    await act(async () => handlers!.onAgentEvent({ kind: 'tool_result', toolUseId: 'write-first', content: 'Wrote image.', isError: false }));
+    await waitFor(() => expect(detailReads).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(chatPaneHarness.canonicalResolvedDir).toBe(succeeds ? '/canonical/project' : null));
+    // Repeated real file-refresh triggers cannot turn a failed/missing proof
+    // into polling. The task remains running throughout this observation.
+    await act(async () => handlers!.onAgentEvent({ kind: 'tool_use', id: 'write-second', name: 'Write', input: { file_path: '/canonical/project/image-02.png' } }));
+    await act(async () => handlers!.onAgentEvent({ kind: 'tool_result', toolUseId: 'write-second', content: 'Wrote image.', isError: false }));
+    expect(detailReads).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reread a detail that already proves the existing root', async () => {
+    listConversations.mockImplementation(async (id: string) => [{ id: `conv-${id}`, projectId: id, title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchProjectFiles.mockResolvedValue(IMAGE_TURN_FILES);
+    const detailReads = vi.fn();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input) === '/api/projects/project-1') detailReads();
+      return new Response('{}', { status: 404 });
+    });
+    renderProjectView({ resolvedDir: '/alias/project', canonicalResolvedDir: '/canonical/project' });
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+    await waitFor(() => expect(chatPaneHarness.canonicalResolvedDir).toBe('/canonical/project'));
+    expect(detailReads).not.toHaveBeenCalled();
+  });
+
+  it('aborts a pending canonical read on project switch and does not reuse the previous files', async () => {
+    listConversations.mockImplementation(async (id: string) => [{ id: `conv-${id}`, projectId: id, title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchProjectFiles.mockResolvedValue(IMAGE_TURN_FILES);
+    let reply!: (response: Response) => void;
+    let signal: AbortSignal | null | undefined;
+    const reads = vi.fn();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input) === '/api/projects/project-1') {
+        reads('a');
+        signal = init?.signal;
+        return new Promise((resolve) => { reply = resolve; });
+      }
+      if (String(input) === '/api/projects/project-2') {
+        reads('b');
+        return new Response(JSON.stringify({ project: { id: 'project-2', name: 'Project B', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 }, resolvedDir: '/alias/b' }));
+      }
+      return new Response('{}', { status: 404 });
+    });
+    const view = renderProjectView({ resolvedDir: '/alias/a' });
+    await waitFor(() => expect(reads).toHaveBeenCalledWith('a'));
+    fetchProjectFiles.mockResolvedValue([]);
+    view.rerender(projectViewElement({ projectId: 'project-2', resolvedDir: '/alias/b' }));
+    await waitFor(() => expect(reads).toHaveBeenCalledWith('b'));
+    expect(signal?.aborted).toBe(true);
+    await act(async () => reply(new Response(JSON.stringify({ project: { id: 'project-1', name: 'Project A', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 }, canonicalResolvedDir: '/canonical/a' }))));
+    await waitFor(() => expect(chatPaneHarness.projectId).toBe('project-2'));
+    expect(chatPaneHarness.canonicalResolvedDir).toBeNull();
+    expect(reads.mock.calls.map(([owner]) => owner)).toEqual(['a', 'b']);
   });
 
   it('opens every image a batch-generation turn produced, not just one', async () => {

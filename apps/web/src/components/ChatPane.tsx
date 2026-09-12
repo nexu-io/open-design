@@ -657,6 +657,7 @@ interface Props {
   // Daemon-resolved on-disk working directory of the current project —
   // positive-proof anchor for chat file-link routing (see AssistantMessage).
   projectResolvedDir?: string | null;
+  projectCanonicalResolvedDir?: string | null;
   onEnsureProject: () => Promise<string | null>;
   previewComments?: PreviewComment[];
   attachedComments?: PreviewComment[];
@@ -1337,6 +1338,7 @@ export function ChatPane({
   activeDesignSystem = null,
   projectFileNames,
   projectResolvedDir,
+  projectCanonicalResolvedDir,
   onEnsureProject,
   previewComments = [],
   attachedComments = [],
@@ -4600,6 +4602,7 @@ export function ChatPane({
                   projectMetadata={projectMetadata}
                   projectFileNames={projectFileNames}
                   projectResolvedDir={projectResolvedDir}
+                  projectCanonicalResolvedDir={projectCanonicalResolvedDir}
                   mediaTasksByRunId={mediaTasksByRunId}
                   onRequestOpenFile={onRequestOpenFile}
                   onRequestPluginDetails={onRequestPluginDetails}
@@ -5695,6 +5698,7 @@ function ChatRows({
   projectMetadata,
   projectFileNames,
   projectResolvedDir,
+  projectCanonicalResolvedDir,
   mediaTasksByRunId,
   onRequestOpenFile,
   onRequestPluginDetails,
@@ -5778,6 +5782,7 @@ function ChatRows({
   // Daemon-resolved on-disk working directory of the current project —
   // positive-proof anchor for chat file-link routing (see AssistantMessage).
   projectResolvedDir?: string | null;
+  projectCanonicalResolvedDir?: string | null;
   mediaTasksByRunId: Map<string, ProjectMediaTask[]>;
   onRequestOpenFile?: (name: string) => void;
   onRequestPluginDetails?: (pluginId: string) => void;
@@ -5912,6 +5917,7 @@ function ChatRows({
         projectMetadata={projectMetadata}
         projectFileNames={projectFileNames}
         projectResolvedDir={projectResolvedDir}
+        projectCanonicalResolvedDir={projectCanonicalResolvedDir}
         mediaTasks={m.runId ? mediaTasksByRunId.get(m.runId) : undefined}
         onRequestOpenFile={onRequestOpenFile}
         onRetryImage={onRetryImage}

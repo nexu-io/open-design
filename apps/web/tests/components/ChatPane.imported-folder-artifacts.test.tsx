@@ -5,7 +5,7 @@ import { forwardRef, useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
-import type { Conversation, ProjectFile, ProjectMetadata } from '../../src/types';
+import type { ChatMessage, Conversation, ProjectFile, ProjectMetadata } from '../../src/types';
 
 const composerMocks = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -45,8 +45,8 @@ const conversations: Conversation[] = [
   { id: 'conv-1', projectId: 'project-1', title: 'Conversation 1', createdAt: 1, updatedAt: 1 },
 ];
 
-function renderPane(extra: Partial<React.ComponentProps<typeof ChatPane>>) {
-  return render(
+function paneElement(extra: Partial<React.ComponentProps<typeof ChatPane>>) {
+  return (
     <ChatPane
       projectKindForTracking="prototype"
       messages={[]}
@@ -63,8 +63,12 @@ function renderPane(extra: Partial<React.ComponentProps<typeof ChatPane>>) {
       onDeleteConversation={vi.fn()}
       projectMetadata={{ kind: 'prototype' }}
       {...extra}
-    />,
+    />
   );
+}
+
+function renderPane(extra: Partial<React.ComponentProps<typeof ChatPane>>) {
+  return render(paneElement(extra));
 }
 
 function file(name: string, kind: ProjectFile['kind'], mtime: number): ProjectFile {
@@ -173,4 +177,27 @@ describe('ChatPane imported folder artifacts', () => {
     expect(within(artifactGrid).getByText('site/index.html')).toBeTruthy();
     expect(screen.queryByTestId('chat-design-artifacts-more')).toBeNull();
   });
+});
+
+
+it('updates a running nested Write card when canonical project detail arrives', () => {
+  const message: ChatMessage = {
+    id: 'running-write', role: 'assistant', content: '', createdAt: 1,
+    runId: 'run-write', runStatus: 'running',
+    events: [
+      { kind: 'tool_use', id: 'write', name: 'Write', input: { file_path: '/canonical/project/assets/pokemon/squirtle.png' } },
+      { kind: 'tool_result', toolUseId: 'write', content: 'Wrote 4539 bytes.', isError: false },
+      { kind: 'artifact_focus', open: 'assets/pokemon/squirtle.png' },
+    ],
+  };
+  const onRequestOpenFile = vi.fn();
+  const props = { messages: [message], streaming: true, projectResolvedDir: '/alias/project', onRequestOpenFile };
+  const view = renderPane(props);
+  expect(view.container.querySelector('img.artifact-card-media')?.getAttribute('src')).toBe('/api/projects/project-1/raw/squirtle.png');
+  // Same message and event identities: canonical detail alone must invalidate
+  // the memoized AssistantMessage and reach the real card URL/click target.
+  view.rerender(paneElement({ ...props, projectCanonicalResolvedDir: '/canonical/project' }));
+  expect(view.container.querySelector('img.artifact-card-media')?.getAttribute('src')).toBe('/api/projects/project-1/raw/assets/pokemon/squirtle.png');
+  fireEvent.click(screen.getByTestId('artifact-card-open-assets/pokemon/squirtle.png'));
+  expect(onRequestOpenFile).toHaveBeenCalledWith('assets/pokemon/squirtle.png');
 });
