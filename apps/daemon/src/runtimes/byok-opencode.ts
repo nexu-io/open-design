@@ -25,6 +25,16 @@ export type ProviderPackage =
   | '@ai-sdk/azure'
   | '@ai-sdk/google';
 
+// Endpoint the resolved package actually calls, so the pre-spawn breadcrumb
+// stays accurate for non-OpenAI protocols.
+const REQUEST_PATH_BY_PACKAGE: Record<ProviderPackage, string> = {
+  '@ai-sdk/openai': '/responses',
+  '@ai-sdk/openai-compatible': '/chat/completions',
+  '@ai-sdk/anthropic': '/messages',
+  '@ai-sdk/google': '/models',
+  '@ai-sdk/azure': '/chat/completions',
+};
+
 export interface OpenCodeByokProviderConfig {
   providerId: string;
   modelId: string;
@@ -128,8 +138,7 @@ export function describeOpenCodeByokResolution(
   } catch {
     baseUrlHost = null;
   }
-  const requestPath =
-    entry.npm === '@ai-sdk/openai' ? '/responses' : '/chat/completions';
+  const requestPath = REQUEST_PATH_BY_PACKAGE[entry.npm];
   return { baseUrlHost, npm: entry.npm, modelId: resolved.modelId, baseURL, requestPath };
 }
 

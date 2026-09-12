@@ -518,6 +518,29 @@ describe('byok-opencode runtime config', () => {
     expect(JSON.stringify(info)).not.toContain('sk-deepseek-secret');
   });
 
+  it('labels the request path by resolved provider package', () => {
+    expect(describeOpenCodeByokResolution(
+      { protocol: 'anthropic', apiKey: 'sk-anthropic', baseUrl: 'https://api.anthropic.com' },
+      'claude-sonnet-4',
+    )).toMatchObject({ npm: '@ai-sdk/anthropic', requestPath: '/messages' });
+    expect(describeOpenCodeByokResolution(
+      { protocol: 'google', apiKey: 'sk-google', baseUrl: 'https://generativelanguage.googleapis.com' },
+      'gemini-2.5-pro',
+    )).toMatchObject({ npm: '@ai-sdk/google', requestPath: '/models' });
+    expect(describeOpenCodeByokResolution(
+      { protocol: 'openai', apiKey: 'sk-openai', baseUrl: 'api.openai.com' },
+      'gpt-5.5',
+    )).toMatchObject({ npm: '@ai-sdk/openai', requestPath: '/responses' });
+    expect(describeOpenCodeByokResolution(
+      { protocol: 'azure', apiKey: 'sk-azure', baseUrl: 'https://example.openai.azure.com' },
+      'gpt-4o',
+    )).toMatchObject({ npm: '@ai-sdk/azure', requestPath: '/chat/completions' });
+    expect(describeOpenCodeByokResolution(
+      { protocol: 'openai', apiKey: 'sk-relay', baseUrl: 'api.deepseek.com/v1' },
+      'deepseek-v4-pro',
+    )).toMatchObject({ npm: '@ai-sdk/openai-compatible', requestPath: '/chat/completions' });
+  });
+
   it('completes schemeless loopback hosts to https before local-ollama rules apply', () => {
     const out = buildOpenCodeByokProviderConfig(
       { protocol: 'ollama', apiKey: '', baseUrl: 'localhost:11434' },
