@@ -13,9 +13,14 @@
 // since the BYOK chat session already authenticates with the same API key.
 
 import path from 'node:path';
-import { writeFile, readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { writeFile, readdir } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { assertAndFetchExternalAsset } from './connectionTest.js';
+import {
+  openContainedFile,
+  resolveContainedPath,
+  type ContainedFileHandle,
+} from './media/contained-file.js';
 import { resolveProviderConfig } from './media/config.js';
 import { IMAGE_MODELS } from './media/models.js';
 import { ensureProject } from './projects.js';
@@ -1291,34 +1296,22 @@ interface ReferenceImagePart {
   filename: string;
 }
 
-// Canonical containment invariant for project reference images: the realpath'd
-// target of the candidate must stay inside `dir`. realpath follows symlinks, so
-// a project-local symlink to an outside file throws EPATHESCAPE before any
-// stat/readFile can observe the target's size or bytes.
-async function resolveContainedPath(dir: string, candidate: string): Promise<string> {
-  const rootReal = await realpath(dir).catch(() => dir);
-  const real = await realpath(candidate);
-  if (real !== rootReal && !real.startsWith(rootReal + path.sep)) {
-    const err = new Error('path escapes project dir via symlink');
-    (err as NodeJS.ErrnoException).code = 'EPATHESCAPE';
-    throw err;
-  }
-  return real;
-}
-
-// Read a project image file into an upload part. Null for non-images /
-// unreadable, and null when `dir` is given and the canonical target escapes the
-// project directory (a project-local symlink pointing outside is skipped).
-async function fileToImagePart(filePath: string, dir?: string): Promise<ReferenceImagePart | null> {
-  const mime = IMAGE_EXT_MIME[path.extname(filePath).toLowerCase()];
+// Read an already-resolved project image file into an upload part. Null for
+// non-images / unreadable, and null when the file escapes the project directory
+// or is swapped for an outside symlink before it can be opened.
+async function fileToImagePart(resolvedPath: string): Promise<ReferenceImagePart | null> {
+  const mime = IMAGE_EXT_MIME[path.extname(resolvedPath).toLowerCase()];
   if (!mime) return null;
+  let opened: ContainedFileHandle | null = null;
   try {
-    if (dir) filePath = await resolveContainedPath(dir, filePath);
-    const buf = await readFile(filePath);
+    opened = await openContainedFile(resolvedPath);
+    const buf = await opened.read();
     if (!buf.length) return null;
-    return { bytes: buf, mime, filename: path.basename(filePath) };
+    return { bytes: buf, mime, filename: path.basename(resolvedPath) };
   } catch {
     return null;
+  } finally {
+    if (opened) await opened.close().catch(() => {});
   }
 }
 
@@ -1366,31 +1359,38 @@ async function resolveAIHubMixReferenceImage(
     if ((err as NodeJS.ErrnoException).code === 'EPATHESCAPE') throw err;
     return null;
   }
-  return fileToImagePart(canonical, dir);
+  return fileToImagePart(canonical);
 }
 
 // Fallback for i2v models when no image_url is given: the most recently
 // modified image already in the project folder (typically the uploaded
 // reference or the last generated frame). Entries whose canonical target
-// escapes the project directory are skipped without being read.
+// escapes the project directory, or is swapped before it can be opened, are
+// skipped without being read.
 async function newestProjectImagePart(dir: string): Promise<ReferenceImagePart | null> {
   try {
     const entries = await readdir(dir);
     const images = entries.filter((f) => IMAGE_EXT_MIME[path.extname(f).toLowerCase()]);
     if (!images.length) return null;
-    const withMtime: Array<{ f: string; m: number }> = [];
+    const withMtime: Array<{ resolved: string; mtimeMs: number }> = [];
     for (const f of images) {
-      let real: string;
+      let resolved: string;
+      let opened: ContainedFileHandle;
       try {
-        real = await resolveContainedPath(dir, path.join(dir, f));
+        resolved = await resolveContainedPath(dir, path.join(dir, f));
+        opened = await openContainedFile(resolved);
       } catch {
         continue;
       }
-      withMtime.push({ f: real, m: (await stat(real)).mtimeMs });
+      try {
+        withMtime.push({ resolved, mtimeMs: opened.mtimeMs });
+      } finally {
+        await opened.close().catch(() => {});
+      }
     }
     if (!withMtime.length) return null;
-    withMtime.sort((a, b) => b.m - a.m);
-    return fileToImagePart(withMtime[0]!.f, dir);
+    withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    return fileToImagePart(withMtime[0]!.resolved);
   } catch {
     return null;
   }

@@ -50,7 +50,7 @@
 // so the CLI can exit non-zero and the agent can't silently narrate the
 // placeholder as the final result.
 
-import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -68,6 +68,11 @@ import type {
   DesktopRenderFramesInput,
   DesktopRenderFramesResult,
 } from '@open-design/sidecar-proto';
+import {
+  openContainedFile,
+  resolveContainedPath,
+  type ContainedFileHandle,
+} from './contained-file.js';
 import {
   AUDIO_DURATIONS_SEC,
   type AudioKind,
@@ -226,21 +231,6 @@ function stubsAllowed() {
   return v === '1' || v === 'true';
 }
 
-// Canonical containment invariant for project reference images: the realpath'd
-// target of the candidate must stay inside `dir`. realpath follows symlinks, so
-// a project-local symlink to an outside file throws EPATHESCAPE before any
-// stat/readFile can observe the target's size or bytes.
-async function resolveContainedPath(dir: string, candidate: string): Promise<string> {
-  const rootReal = await realpath(dir).catch(() => dir);
-  const real = await realpath(candidate);
-  if (real !== rootReal && !real.startsWith(rootReal + path.sep)) {
-    const err = new Error('path escapes project dir via symlink');
-    (err as NodeJS.ErrnoException).code = 'EPATHESCAPE';
-    throw err;
-  }
-  return real;
-}
-
 /**
  * Resolve a project-relative `--image` path into a base64 data URL the
  * upstream model APIs (Volcengine i2v, OpenAI image-edit, etc.) accept
@@ -264,8 +254,9 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
   }
   // Canonical containment re-check: the lexical prefix check above passes for a
   // project-local symlink, but the symlink may point outside. realpath(abs)
-  // resolves the true target; reject it before stat/readFile touch the target.
-  // A dangling/missing link realpaths as ENOENT and maps to the not-found error.
+  // resolves the true target; reject it before any read can observe the
+  // target's size or bytes. A dangling/missing link realpaths as ENOENT and
+  // maps to the not-found error.
   let real: string;
   try {
     real = await resolveContainedPath(projectRootResolved, abs);
@@ -277,48 +268,55 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
     }
     throw new Error(`--image not found: ${rel}`);
   }
-  let info;
+  let opened: ContainedFileHandle;
   try {
-    info = await stat(real);
-  } catch {
+    // Open the validated target without following a final symlink, then read
+    // size and bytes from that same handle so a concurrent replacement cannot
+    // swap in an unchecked file between validation and read.
+    opened = await openContainedFile(real);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOTFILE') {
+      throw new Error(`--image is not a regular file: ${rel}`);
+    }
     throw new Error(`--image not found: ${rel}`);
   }
-  if (!info.isFile()) {
-    throw new Error(`--image is not a regular file: ${rel}`);
+  try {
+    // Cap at 16 MB. Beyond this, base64 inflation alone (≈4/3) starts
+    // hitting body-size limits at the upstream APIs and our own express
+    // 4mb body cap on inbound requests; bigger payloads should travel
+    // via the dedicated upload endpoint, not the dispatcher.
+    const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+    if (opened.size > MAX_IMAGE_BYTES) {
+      throw new Error(
+        `--image too large (${opened.size} bytes; max ${MAX_IMAGE_BYTES}).`,
+      );
+    }
+    const bytes = await opened.read();
+    const ext = path.extname(abs).toLowerCase();
+    // Tight allowlist: only what i2v / image-edit endpoints actually
+    // consume. Avoids smuggling arbitrary content through as data URLs.
+    const mime = ({
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
+    })[ext];
+    if (!mime) {
+      throw new Error(
+        `--image has unsupported extension "${ext}". Use png, jpg, jpeg, webp, or gif.`,
+      );
+    }
+    return {
+      path: rel.trim(),
+      abs: real,
+      mime,
+      size: bytes.length,
+      dataUrl: `data:${mime};base64,${bytes.toString('base64')}`,
+    };
+  } finally {
+    await opened.close().catch(() => {});
   }
-  // Cap at 16 MB. Beyond this, base64 inflation alone (≈4/3) starts
-  // hitting body-size limits at the upstream APIs and our own express
-  // 4mb body cap on inbound requests; bigger payloads should travel
-  // via the dedicated upload endpoint, not the dispatcher.
-  const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
-  if (info.size > MAX_IMAGE_BYTES) {
-    throw new Error(
-      `--image too large (${info.size} bytes; max ${MAX_IMAGE_BYTES}).`,
-    );
-  }
-  const bytes = await readFile(real);
-  const ext = path.extname(abs).toLowerCase();
-  // Tight allowlist: only what i2v / image-edit endpoints actually
-  // consume. Avoids smuggling arbitrary content through as data URLs.
-  const mime = ({
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.webp': 'image/webp',
-    '.gif': 'image/gif',
-  })[ext];
-  if (!mime) {
-    throw new Error(
-      `--image has unsupported extension "${ext}". Use png, jpg, jpeg, webp, or gif.`,
-    );
-  }
-  return {
-    path: rel.trim(),
-    abs: real,
-    mime,
-    size: bytes.length,
-    dataUrl: `data:${mime};base64,${bytes.toString('base64')}`,
-  };
 }
 
 function clampNumber(value: unknown, allowed: number[]): number | undefined {

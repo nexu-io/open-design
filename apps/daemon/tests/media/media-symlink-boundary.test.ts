@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { executeAIHubMixGenerateVideo } from '../../src/byok-tools.js';
+import { containedFileTestHooks } from '../../src/media/contained-file.js';
 import { generateMedia } from '../../src/media/index.js';
 
 // Regression tests for issue nexu-io/open-design#6779: project-local
@@ -40,6 +41,7 @@ describe('media reference-image symlink boundary (issue #6779)', () => {
   });
 
   afterEach(async () => {
+    containedFileTestHooks.afterResolve = null;
     globalThis.fetch = realFetch;
     vi.unstubAllGlobals();
     if (originalMinimaxApiKey == null) {
@@ -54,6 +56,16 @@ describe('media reference-image symlink boundary (issue #6779)', () => {
     }
     await rm(root, { recursive: true, force: true });
   });
+
+  // Deterministic race seam: replace the canonically-resolved entry with an
+  // outside symlink after resolution but before the no-follow open.
+  function swapResolvedEntryForOutsideLink(outsideFile: string, name: string) {
+    containedFileTestHooks.afterResolve = async (resolvedPath) => {
+      if (path.basename(resolvedPath) !== name) return;
+      await rm(resolvedPath, { force: true });
+      await symlink(outsideFile, resolvedPath);
+    };
+  }
 
   async function writeConfig(data: unknown) {
     const file = path.join(projectRoot, '.od', 'media-config.json');
@@ -355,5 +367,140 @@ describe('media reference-image symlink boundary (issue #6779)', () => {
       generateMedia(minimaxArgs({ image: outsideFile })),
     ).rejects.toThrow(/outside the project directory/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an entry swapped after canonical resolution before reading the outside target', async () => {
+    await writeConfig({ providers: { minimax: {} } });
+    await writeFile(path.join(projectDir, 'race.png'), Buffer.from(PNG_BASE64, 'base64'));
+
+    const outsideDir = path.join(root, 'outside');
+    await mkdir(outsideDir, { recursive: true });
+    // Outside target above MAX_IMAGE_BYTES: reopening the pathname instead of
+    // the verified handle would surface the outside size as "--image too large".
+    const outsideFile = path.join(outsideDir, 'secret.png');
+    await writeFile(outsideFile, Buffer.alloc(16 * 1024 * 1024 + 1, 0x42));
+    swapResolvedEntryForOutsideLink(outsideFile, 'race.png');
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await generateMedia(minimaxArgs({ image: './race.png' }))
+      .then(() => null, (err: unknown) => err as Error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.message).not.toMatch(/too large/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never submits outside bytes when a reference entry is swapped after canonical resolution', async () => {
+    await writeFile(
+      path.join(projectDir, 'race.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x07, 0x07, 0x07]),
+    );
+
+    const secretBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xde, 0xad, 0xbe, 0xef]);
+    const secretB64 = secretBytes.toString('base64');
+    const outsideDir = path.join(root, 'outside');
+    await mkdir(outsideDir, { recursive: true });
+    const outsideFile = path.join(outsideDir, 'secret.png');
+    await writeFile(outsideFile, secretBytes);
+    swapResolvedEntryForOutsideLink(outsideFile, 'race.png');
+
+    let submitBody: any = null;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url === 'https://aihubmix.com/v1/videos') {
+        submitBody = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ id: 'v-race' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://aihubmix.com/v1/videos/v-race') {
+        return new Response(
+          JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(Buffer.from([0x01]), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeAIHubMixGenerateVideo(
+      {
+        prompt: 'animate',
+        model: 'aihubmix-happyhorse-1.0-i2v',
+        image_url: '/api/projects/project-1/files/race.png',
+      },
+      {
+        projectRoot,
+        projectsRoot,
+        projectId: 'project-1',
+        upstreamApiKey: 'ahm-byok-key',
+        upstreamBaseUrl: 'https://aihubmix.com/v1',
+        videoPollIntervalMs: 1,
+      },
+    );
+
+    // The raced named reference resolves to nothing: no submit carries the
+    // outside bytes, and the i2v model reports the missing reference instead.
+    expect(result.ok).toBe(false);
+    expect(submitBody).toBeNull();
+    expect(submitBody?.input?.media?.[0]?.url ?? '').not.toContain(secretB64);
+  });
+
+  it('skips a fallback entry swapped after canonical resolution in the newest-image scan', async () => {
+    await writeFile(
+      path.join(projectDir, 'race.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x08, 0x08, 0x08]),
+    );
+
+    const secretBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xde, 0xad, 0xbe, 0xef]);
+    const secretB64 = secretBytes.toString('base64');
+    const outsideDir = path.join(root, 'outside');
+    await mkdir(outsideDir, { recursive: true });
+    const outsideFile = path.join(outsideDir, 'secret.png');
+    await writeFile(outsideFile, secretBytes);
+    swapResolvedEntryForOutsideLink(outsideFile, 'race.png');
+
+    let submitBody: any = null;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url === 'https://aihubmix.com/v1/videos') {
+        submitBody = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ id: 'v-race-fallback' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://aihubmix.com/v1/videos/v-race-fallback') {
+        return new Response(
+          JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(Buffer.from([0x01]), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeAIHubMixGenerateVideo(
+      {
+        prompt: 'animate',
+        model: 'aihubmix-happyhorse-1.0-i2v',
+      },
+      {
+        projectRoot,
+        projectsRoot,
+        projectId: 'project-1',
+        upstreamApiKey: 'ahm-byok-key',
+        upstreamBaseUrl: 'https://aihubmix.com/v1',
+        videoPollIntervalMs: 1,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/needs a reference image/);
+    expect(submitBody).toBeNull();
+    expect(submitBody?.input?.media?.[0]?.url ?? '').not.toContain(secretB64);
   });
 });
