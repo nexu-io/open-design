@@ -3271,8 +3271,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       activeAppliedPlugin && activeAppliedPlugin.pluginId !== DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
         ? activeAppliedPlugin
         : null;
-    const showAdmissionPendingButton = composedSendPending && !streaming;
-    const showStopButton = streaming && !hasComposerPayload;
+    // The transcript can enter streaming before the send's admission completes.
+    const showAdmissionPendingButton = composedSendPending;
+    const showStopButton = streaming && !hasComposerPayload && !showAdmissionPendingButton;
     const showSendButton = (!streaming || hasComposerPayload) && !showAdmissionPendingButton;
     /* 托盘里要摆的那一排卡:已传好的 `staged` 与还在传 / 传失败的 `pendingUploads`
        合成一排,顺序按用户当初挑文件的顺序(合并规则是纯函数,单测在
