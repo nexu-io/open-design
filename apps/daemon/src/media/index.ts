@@ -70,7 +70,6 @@ import type {
 } from '@open-design/sidecar-proto';
 import {
   openContainedFile,
-  resolveContainedPath,
   type ContainedFileHandle,
 } from './contained-file.js';
 import {
@@ -252,30 +251,23 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
       `--image path "${rel}" resolves outside the project directory.`,
     );
   }
-  // Canonical containment re-check: the lexical prefix check above passes for a
-  // project-local symlink, but the symlink may point outside. realpath(abs)
-  // resolves the true target; reject it before any read can observe the
-  // target's size or bytes. A dangling/missing link realpaths as ENOENT and
-  // maps to the not-found error.
-  let real: string;
+  // Resolve and open through the anchored project root: the lexical prefix
+  // check above passes for a project-local symlink, and a concurrent writer
+  // could still swap the entry or a parent directory. openContainedFile pins
+  // the root handle, re-checks containment, opens without following a final
+  // symlink, and reads from that same handle. A dangling/missing link maps to
+  // the not-found error.
+  let opened: ContainedFileHandle;
   try {
-    real = await resolveContainedPath(projectRootResolved, abs);
+    opened = await openContainedFile(projectRootResolved, abs);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EPATHESCAPE') {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EPATHESCAPE') {
       throw new Error(
         `--image path "${rel}" resolves outside the project directory.`,
       );
     }
-    throw new Error(`--image not found: ${rel}`);
-  }
-  let opened: ContainedFileHandle;
-  try {
-    // Open the validated target without following a final symlink, then read
-    // size and bytes from that same handle so a concurrent replacement cannot
-    // swap in an unchecked file between validation and read.
-    opened = await openContainedFile(real);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOTFILE') {
+    if (code === 'ENOTFILE') {
       throw new Error(`--image is not a regular file: ${rel}`);
     }
     throw new Error(`--image not found: ${rel}`);
@@ -309,7 +301,7 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
     }
     return {
       path: rel.trim(),
-      abs: real,
+      abs: opened.resolvedPath,
       mime,
       size: bytes.length,
       dataUrl: `data:${mime};base64,${bytes.toString('base64')}`,

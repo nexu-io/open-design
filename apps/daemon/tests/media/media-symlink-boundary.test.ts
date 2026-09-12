@@ -67,6 +67,16 @@ describe('media reference-image symlink boundary (issue #6779)', () => {
     };
   }
 
+  // Deterministic race seam: replace a directory on the resolved path with an
+  // outside symlink after canonical resolution, so every pathname-based check
+  // still agrees while the anchored root is the only thing that can catch it.
+  function swapDirectoryForOutsideLink(directory: string, outsideDir: string) {
+    containedFileTestHooks.afterResolve = async () => {
+      await rm(directory, { recursive: true, force: true });
+      await symlink(outsideDir, directory);
+    };
+  }
+
   async function writeConfig(data: unknown) {
     const file = path.join(projectRoot, '.od', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
@@ -500,6 +510,84 @@ describe('media reference-image symlink boundary (issue #6779)', () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/needs a reference image/);
+    expect(submitBody).toBeNull();
+    expect(submitBody?.input?.media?.[0]?.url ?? '').not.toContain(secretB64);
+  });
+
+  it('rejects a parent directory swapped after canonical resolution before reading the outside target', async () => {
+    await writeConfig({ providers: { minimax: {} } });
+    const subDir = path.join(projectDir, 'sub');
+    await mkdir(subDir, { recursive: true });
+    await writeFile(path.join(subDir, 'race.png'), Buffer.from(PNG_BASE64, 'base64'));
+
+    // Outside directory holding a same-named, oversized file: a pathname-based
+    // check agrees on the swapped path, so only the anchored root can catch it.
+    const outsideDir = path.join(root, 'outside');
+    await mkdir(outsideDir, { recursive: true });
+    await writeFile(path.join(outsideDir, 'race.png'), Buffer.alloc(16 * 1024 * 1024 + 1, 0x42));
+    swapDirectoryForOutsideLink(subDir, outsideDir);
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await generateMedia(minimaxArgs({ image: './sub/race.png' }))
+      .then(() => null, (err: unknown) => err as Error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.message).not.toMatch(/too large/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never submits outside bytes when a project directory is swapped after canonical resolution', async () => {
+    await writeFile(
+      path.join(projectDir, 'race.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x09, 0x09, 0x09]),
+    );
+
+    const secretBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xde, 0xad, 0xbe, 0xef]);
+    const secretB64 = secretBytes.toString('base64');
+    const outsideDir = path.join(root, 'outside');
+    await mkdir(outsideDir, { recursive: true });
+    await writeFile(path.join(outsideDir, 'race.png'), secretBytes);
+    swapDirectoryForOutsideLink(projectDir, outsideDir);
+
+    let submitBody: any = null;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url === 'https://aihubmix.com/v1/videos') {
+        submitBody = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ id: 'v-dir-race' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://aihubmix.com/v1/videos/v-dir-race') {
+        return new Response(
+          JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(Buffer.from([0x01]), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeAIHubMixGenerateVideo(
+      {
+        prompt: 'animate',
+        model: 'aihubmix-happyhorse-1.0-i2v',
+        image_url: '/api/projects/project-1/files/race.png',
+      },
+      {
+        projectRoot,
+        projectsRoot,
+        projectId: 'project-1',
+        upstreamApiKey: 'ahm-byok-key',
+        upstreamBaseUrl: 'https://aihubmix.com/v1',
+        videoPollIntervalMs: 1,
+      },
+    );
+
+    expect(result.ok).toBe(false);
     expect(submitBody).toBeNull();
     expect(submitBody?.input?.media?.[0]?.url ?? '').not.toContain(secretB64);
   });

@@ -16,11 +16,7 @@ import path from 'node:path';
 import { writeFile, readdir } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { assertAndFetchExternalAsset } from './connectionTest.js';
-import {
-  openContainedFile,
-  resolveContainedPath,
-  type ContainedFileHandle,
-} from './media/contained-file.js';
+import { openContainedFile, type ContainedFileHandle } from './media/contained-file.js';
 import { resolveProviderConfig } from './media/config.js';
 import { IMAGE_MODELS } from './media/models.js';
 import { ensureProject } from './projects.js';
@@ -1296,19 +1292,21 @@ interface ReferenceImagePart {
   filename: string;
 }
 
-// Read an already-resolved project image file into an upload part. Null for
-// non-images / unreadable, and null when the file escapes the project directory
-// or is swapped for an outside symlink before it can be opened.
-async function fileToImagePart(resolvedPath: string): Promise<ReferenceImagePart | null> {
-  const mime = IMAGE_EXT_MIME[path.extname(resolvedPath).toLowerCase()];
-  if (!mime) return null;
+// Read a project image file into an upload part through the anchored project
+// root. Null for non-images / unreadable, and null when the file escapes the
+// project directory or is swapped for an outside target before it can be read.
+// EPATHESCAPE propagates so the caller can surface it as a tool error.
+async function fileToImagePart(dir: string, candidate: string): Promise<ReferenceImagePart | null> {
   let opened: ContainedFileHandle | null = null;
   try {
-    opened = await openContainedFile(resolvedPath);
+    opened = await openContainedFile(dir, candidate);
+    const mime = IMAGE_EXT_MIME[path.extname(opened.resolvedPath).toLowerCase()];
+    if (!mime) return null;
     const buf = await opened.read();
     if (!buf.length) return null;
-    return { bytes: buf, mime, filename: path.basename(resolvedPath) };
-  } catch {
+    return { bytes: buf, mime, filename: path.basename(opened.resolvedPath) };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EPATHESCAPE') throw err;
     return null;
   } finally {
     if (opened) await opened.close().catch(() => {});
@@ -1343,30 +1341,23 @@ async function resolveAIHubMixReferenceImage(
   }
   // Treat as a project-local file. basename() strips any path so a value like
   // "../../etc/passwd" collapses to a filename inside the project dir. The
-  // canonical containment re-check rejects a project-local symlink whose target
-  // is outside; the caller converts the EPATHESCAPE throw into a tool error so
-  // no outside bytes are ever submitted on its behalf. Any OTHER resolution
-  // failure (e.g. ENOENT for a stale/missing image_url) is not a boundary
-  // violation: return null so the caller's existing newestProjectImagePart
-  // fallback for i2v models behaves exactly as it did before the boundary fix.
+  // anchored read rejects a project-local symlink or swapped directory whose
+  // target is outside; the caller converts the EPATHESCAPE throw into a tool
+  // error so no outside bytes are ever submitted on its behalf. Any OTHER
+  // resolution failure (e.g. ENOENT for a stale/missing image_url) is not a
+  // boundary violation: return null so the caller's existing
+  // newestProjectImagePart fallback for i2v models behaves exactly as it did
+  // before the boundary fix.
   const name = path.basename(raw.split('?')[0]!);
   if (!name) return null;
-  const candidate = path.join(dir, name);
-  let canonical: string;
-  try {
-    canonical = await resolveContainedPath(dir, candidate);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EPATHESCAPE') throw err;
-    return null;
-  }
-  return fileToImagePart(canonical);
+  return fileToImagePart(dir, path.join(dir, name));
 }
 
 // Fallback for i2v models when no image_url is given: the most recently
 // modified image already in the project folder (typically the uploaded
-// reference or the last generated frame). Entries whose canonical target
-// escapes the project directory, or is swapped before it can be opened, are
-// skipped without being read.
+// reference or the last generated frame). Entries whose target escapes the
+// project directory, or is swapped before it can be read, are skipped without
+// being read.
 async function newestProjectImagePart(dir: string): Promise<ReferenceImagePart | null> {
   try {
     const entries = await readdir(dir);
@@ -1374,23 +1365,23 @@ async function newestProjectImagePart(dir: string): Promise<ReferenceImagePart |
     if (!images.length) return null;
     const withMtime: Array<{ resolved: string; mtimeMs: number }> = [];
     for (const f of images) {
-      let resolved: string;
       let opened: ContainedFileHandle;
       try {
-        resolved = await resolveContainedPath(dir, path.join(dir, f));
-        opened = await openContainedFile(resolved);
+        opened = await openContainedFile(dir, path.join(dir, f));
       } catch {
         continue;
       }
       try {
-        withMtime.push({ resolved, mtimeMs: opened.mtimeMs });
+        withMtime.push({ resolved: opened.resolvedPath, mtimeMs: opened.mtimeMs });
       } finally {
         await opened.close().catch(() => {});
       }
     }
     if (!withMtime.length) return null;
     withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
-    return fileToImagePart(withMtime[0]!.resolved);
+    // Re-read the winner through the anchored root; the entry may have changed
+    // since the mtime scan.
+    return await fileToImagePart(dir, withMtime[0]!.resolved);
   } catch {
     return null;
   }
