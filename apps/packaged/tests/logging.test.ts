@@ -326,6 +326,32 @@ describe('installStdioErrorGuard (async stdio pipe-closure guard)', () => {
     expect(() => (stdout as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
     expect(() => (stderr as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
   });
+
+  it('does not stack a duplicate listener when the same stream is guarded more than once', () => {
+    const stream = fakeStream();
+    // The packaged entry installs the guard before the launcher
+    // inspection, and `createPackagedDesktopLogger` installs it again
+    // once the structured logger exists (see index.ts).
+    installStdioErrorGuard([stream]);
+    installStdioErrorGuard([stream]);
+
+    expect((stream as unknown as EventEmitter).listenerCount('error')).toBe(1);
+
+    const epipe = new Error('write EPIPE') as NodeJS.ErrnoException;
+    epipe.code = 'EPIPE';
+    expect(() => (stream as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
+  });
+
+  it('keeps re-throwing non-harmless errors after a repeated install', () => {
+    const stream = fakeStream();
+    installStdioErrorGuard([stream]);
+    installStdioErrorGuard([stream]);
+
+    const eacces = new Error('permission denied') as NodeJS.ErrnoException;
+    eacces.code = 'EACCES';
+
+    expect(() => (stream as unknown as EventEmitter).emit('error', eacces)).toThrow(eacces);
+  });
 });
 
 describe('createPackagedDesktopLogger log-write failures', () => {

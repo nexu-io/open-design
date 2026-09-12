@@ -295,9 +295,20 @@ export function createPackagedDesktopLogger(paths: PackagedNamespacePaths): Pack
  *
  * Streams are passed in (rather than reading `process.stdout` /
  * `process.stderr` directly) so this can be unit tested against fakes.
+ *
+ * The packaged entry installs this early, before the launcher
+ * inspection echoes `inspect-unavailable` through the raw `console`;
+ * `createPackagedDesktopLogger` installs it again once the structured
+ * logger exists. Each stream is guarded at most once, so the second
+ * call cannot stack a duplicate `'error'` listener that would fire the
+ * handler twice for a single stream failure.
  */
+const guardedStdioStreams = new WeakSet<NodeJS.WritableStream>();
+
 export function installStdioErrorGuard(streams: Iterable<NodeJS.WritableStream>): void {
   for (const stream of streams) {
+    if (guardedStdioStreams.has(stream)) continue;
+    guardedStdioStreams.add(stream);
     stream.on("error", (error) => {
       if (isHarmlessStdoutError(error)) return;
       throw error;

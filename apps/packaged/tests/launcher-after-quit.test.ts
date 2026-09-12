@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import {
   inspectExistingDesktopForLauncher,
   waitForLauncherAfterQuit,
 } from "../src/launcher-after-quit.js";
+import { installStdioErrorGuard } from "../src/logging.js";
 import type { PackagedNamespacePaths } from "../src/paths.js";
 
 /** Build a `stopProcesses` result without signalling any real PID. */
@@ -49,6 +51,28 @@ function fakePaths(root: string): PackagedNamespacePaths {
     updateRoot: join(root, "updates"),
     webIdentityPath: join(root, "runtime", "web-root.json"),
   };
+}
+
+/**
+ * A stdout/stderr stand-in for a packaged first launch: no controlling
+ * terminal, so every write fails *asynchronously* with EPIPE — the
+ * detached pipe that crashed the main process before the stdio guard
+ * existed (issue #6964). `onWrite` lets a test observe what was true at
+ * the moment the write happened.
+ */
+function detachedPipe(): NodeJS.WritableStream & { onWrite: () => void } {
+  const stream = new EventEmitter() as unknown as NodeJS.WritableStream & { onWrite: () => void };
+  stream.onWrite = () => {};
+  (stream as unknown as { write: (chunk: unknown) => boolean }).write = () => {
+    stream.onWrite();
+    process.nextTick(() => {
+      const error = new Error("write EPIPE") as NodeJS.ErrnoException;
+      error.code = "EPIPE";
+      stream.emit("error", error);
+    });
+    return true;
+  };
+  return stream;
 }
 
 describe("waitForLauncherAfterQuit", () => {
@@ -291,6 +315,45 @@ describe("inspectExistingDesktopForLauncher", () => {
       expect(result).toEqual({ action: "continue", reason: "inspect-failed" });
       const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
       expect(log).toContain("inspect-unavailable namespace=release-beta-win action=continue error=pipe closed");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("survives the pre-logger first-launch echo on a detached stdout", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-prelogger-stdio-"));
+    // The entry inspects the launcher with the raw `console` before
+    // `createPackagedDesktopLogger` exists, so the guard has to be in
+    // place first. Mirrors that ordering here: guard, then inspect.
+    const stdout = detachedPipe();
+    const stderr = detachedPipe();
+    const guardedAtWrite: boolean[] = [];
+    stdout.onWrite = () => guardedAtWrite.push(
+      (stdout as unknown as EventEmitter).listenerCount("error") > 0,
+    );
+
+    try {
+      const paths = fakePaths(root);
+      installStdioErrorGuard([stdout, stderr]);
+
+      const result = await inspectExistingDesktopForLauncher("release-beta-win", {
+        logger: {
+          info: (message: string) => stdout.write(message),
+          warn: (message: string) => stderr.write(message),
+        },
+        paths,
+        requestIpc: (async () => {
+          throw new Error("pipe closed");
+        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+      });
+      // Drain the detached pipe's asynchronous EPIPE 'error' event.
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(result).toEqual({ action: "continue", reason: "inspect-failed" });
+      // The guard must already be listening when the unguarded
+      // `console.info` echo that crashed first launches is written.
+      expect(guardedAtWrite.length).toBeGreaterThan(0);
+      expect(guardedAtWrite.every(Boolean)).toBe(true);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -52,6 +52,7 @@ import {
 import {
   attachPackagedDesktopProcessLogging,
   createPackagedDesktopLogger,
+  installStdioErrorGuard,
   type PackagedDesktopLogger,
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
@@ -146,6 +147,14 @@ async function main(): Promise<void> {
   const namespace = argvStamp?.namespace ?? config.namespace;
   const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
   const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
+  // The launcher diagnostics below run before `createPackagedDesktopLogger`
+  // (they only need `initialPaths`, and the structured logger is created
+  // later), so they echo through the raw `console`. On the normal first
+  // launch the desktop IPC socket is absent, `requestJsonIpc` rejects, and
+  // `inspectExistingDesktopForLauncher` logs `inspect-unavailable` to a
+  // detached stdout — the same EPIPE crash this guard exists to swallow.
+  // Install it before those diagnostics rather than waiting for the logger.
+  installStdioErrorGuard([process.stdout, process.stderr]);
   if (!await waitForLauncherAfterQuit(afterQuit, initialPaths)) {
     app.exit(1);
     return;
