@@ -410,19 +410,59 @@ last=\$(printf '%s\\n' "\$out" | tail -1)
 task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('taskId',''))" 2>/dev/null)
 since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
 since="\${since:-0}"
-while [ -n "\$task_id" ]; do
+if [ -z "\$task_id" ]; then printf '%s\\n' "\$last"; exit 0; fi
+ambiguous=0
+lookups=0
+while :; do
   out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
   ec=\$?
   last=\$(printf '%s\\n' "\$out" | tail -1)
-  since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
-  since="\${since:-0}"
-  if [ "\$ec" -eq 0 ]; then
-    task_id=""
-  elif [ "\$ec" -ne 2 ]; then
-    echo "\$out" >&2; exit "\$ec"
+  status=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','') if isinstance(d,dict) else '')" 2>/dev/null)
+  ns=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince','') if isinstance(d,dict) else '')" 2>/dev/null)
+  # Keep the previous cursor whenever the line does not parse as a status object.
+  if [ -n "\$ns" ]; then since="\$ns"; fi
+  if [ "\$status" = "failed" ] || [ "\$status" = "interrupted" ]; then
+    echo "\$last" >&2; exit 5
+  fi
+  if [ "\$status" = "done" ]; then
+    has_file=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if isinstance(d,dict) and d.get('file') else 'no')" 2>/dev/null)
+    if [ "\$has_file" = "yes" ]; then break; fi
+    ambiguous=\$((ambiguous+1))
+  elif [ -z "\$status" ]; then
+    if [ "\$ec" -ne 0 ] && [ "\$ec" -ne 2 ]; then echo "\$out" >&2; exit "\$ec"; fi
+    ambiguous=\$((ambiguous+1))
+  else
+    ambiguous=0
+  fi
+  # Bounded recovery: only after repeated ambiguous results, look the task up by ID.
+  if [ "\$ambiguous" -ge 3 ] && [ "\$lookups" -lt 3 ]; then
+    ambiguous=0
+    lookups=\$((lookups+1))
+    recovered=\$(python3 -c 'import json,os,sys,urllib.request
+base=(os.environ.get("OD_DAEMON_URL") or "http://127.0.0.1:7456").rstrip("/")
+pid=os.environ.get("OD_PROJECT_ID","")
+url=base+"/api/projects/"+pid+"/media/tasks?includeDone=true"
+try:
+    with urllib.request.urlopen(url,timeout=10) as r:
+        tasks=json.load(r).get("tasks",[])
+except Exception:
+    tasks=[]
+tid=sys.argv[1]
+for t in tasks:
+    if str(t.get("taskId",""))==tid:
+        if t.get("status")=="done" and t.get("file"):
+            print(json.dumps({"file":t["file"]}))
+        elif t.get("status") in ("failed","interrupted"):
+            print(json.dumps({"status":t["status"],"error":t.get("error",{})}))
+        break' "\$task_id" 2>/dev/null)
+    if [ -n "\$recovered" ]; then
+      last="\$recovered"
+      rstatus=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','done'))" 2>/dev/null)
+      if [ -z "\$rstatus" ] || [ "\$rstatus" = "done" ]; then break; fi
+      echo "\$last" >&2; exit 5
+    fi
   fi
 done
-# At this point ec is 0 (done) or 5 (failed). Final result on the last stdout line of \$out.
 printf '%s\\n' "\$last"
 \`\`\`
 
@@ -430,6 +470,14 @@ Each \`generate\` call lasts at most ~25s and each \`wait\` call at most ~120s,
 both well within your shell tool's timeout. Progress lines stream to stderr as
 they arrive, so the user sees live status in chat throughout the loop instead of
 waiting silently for a single multi-minute call.
+
+**Empty or ambiguous poll results are not failures.** An empty stdout,
+whitespace-only, or non-JSON handoff from \`media wait\` is \`unknown\` — do NOT
+narrate failure. Re-run \`"$OD_NODE_BIN" "$OD_BIN" media wait <taskId> --since <n>\`
+with the same \`since\`. If the live poll stays ambiguous, recover via
+\`GET /api/projects/<projectId>/media/tasks?includeDone=true\` and only report
+\`failed\`/\`interrupted\` when \`status\` is explicitly that; treat \`done\` with a
+file as success even when earlier polls were empty.
 
 **Always write your shell invocation as the full generate+wait loop above**, even
 for image models. \`flux-pro-ultra\` routinely takes 60–180s; \`sora-2\` and
