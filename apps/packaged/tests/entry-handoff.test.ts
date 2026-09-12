@@ -27,6 +27,7 @@ function compile(name: string, entry = false): string {
 }
 const entryCode = compile("index", true);
 const helperCode = compile("launcher-after-quit");
+const agentToolInvocationCode = compile("agent-tool-invocation");
 function evaluate(code: string, modules: Record<string, unknown>, globals: Record<string, unknown> = {}) {
   const exports: Record<string, unknown> = {};
   runInNewContext(code, {
@@ -102,6 +103,7 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
     } },
   };
   modules["./launcher-after-quit.js"] = evaluate(helperCode, modules);
+  modules["./agent-tool-invocation.js"] = evaluate(agentToolInvocationCode, modules);
   const argv = ["electron", "index.js", ...(kind === "duplicate" ? [] : [
     ...launcherProto.buildLauncherAfterQuitArgs({ targetPid: 4242, timeoutMs: 1000 }),
     ...launcherProto.buildLauncherDelegatedArgs({ generation: 8, version }),
