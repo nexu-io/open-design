@@ -216,11 +216,33 @@ describe('packaged stale sidecar retirement', () => {
     }
   }
 
+  // Probes that force the pre-#8056 behavior: endpoint inconclusive and the
+  // precise scan sees a live stamped generation, so the full retire flow runs.
+  const liveGenerationProbes = () => ({
+    findSidecarProcesses: vi.fn(async () => [{ command: 'daemon --od-stamp-app=daemon', pid: 4321, ppid: 1 }]),
+    getSidecarStatus: vi.fn(async () => {
+      throw new Error('sidecar runtime is starting');
+    }),
+  });
+
+  // Probes for the common clean-boot case: nothing listens on the private
+  // endpoint (transport-level ENOENT) and the precise scan finds no stamped
+  // process, so retire can be skipped without entering the lifecycle atomic.
+  const noPriorGenerationProbes = () => ({
+    findSidecarProcesses: vi.fn(async () => []),
+    getSidecarStatus: vi.fn(async () => {
+      const error = new Error('connect ENOENT');
+      (error as NodeJS.ErrnoException).code = 'ENOENT';
+      throw error;
+    }),
+  });
+
   it('delegates a clean first boot to the sidecar lifecycle atomic', async () => {
     await withLog(async (logPath) => {
       const stop = vi.fn(async () => ({ ...stopped({ matchedPids: [] }), alreadyStopped: true }));
       await expect(retireExistingSidecar(testStamp(), logPath, {
         stop,
+        ...liveGenerationProbes(),
       })).resolves.toBeUndefined();
       expect(stop).toHaveBeenCalledOnce();
     });
@@ -231,6 +253,7 @@ describe('packaged stale sidecar retirement', () => {
       const stop = vi.fn(async () => stopped());
       await expect(retireExistingSidecar(testStamp(), logPath, {
         stop,
+        ...liveGenerationProbes(),
       })).resolves.toBeUndefined();
       expect(stop).toHaveBeenCalledOnce();
     });
@@ -241,6 +264,7 @@ describe('packaged stale sidecar retirement', () => {
       const stop = vi.fn(async () => stopped());
       await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
         stop,
+        ...liveGenerationProbes(),
       })).resolves.toBeUndefined();
       expect(stop).toHaveBeenCalledOnce();
     });
@@ -250,6 +274,7 @@ describe('packaged stale sidecar retirement', () => {
     await withLog(async (logPath) => {
       await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
         stop: async () => stopped({ matchedPids: [], staleEndpointRemoved: true }),
+        ...liveGenerationProbes(),
       })).resolves.toBeUndefined();
     });
   });
@@ -258,7 +283,150 @@ describe('packaged stale sidecar retirement', () => {
     await withLog(async (logPath) => {
       await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
         stop: async () => stopped({ remainingPids: [4321] }),
+        ...liveGenerationProbes(),
       })).rejects.toThrow('generation remains: 4321');
+    });
+  });
+
+  it('skips the lifecycle atomic on a clean boot when no prior generation exists', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      const probes = noPriorGenerationProbes();
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+        ...probes,
+      })).resolves.toBeUndefined();
+      expect(stop).not.toHaveBeenCalled();
+      expect(probes.findSidecarProcesses).toHaveBeenCalledOnce();
+      expect(probes.getSidecarStatus).toHaveBeenCalledWith(
+        testStamp(),
+        { timeoutMs: 400 },
+      );
+    });
+  });
+
+  it('records the skip in the sidecar lifecycle log', async () => {
+    await withLog(async (logPath) => {
+      await retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop: vi.fn(),
+        ...noPriorGenerationProbes(),
+      });
+      const log = readFileSync(logPath, 'utf8');
+      expect(log).toContain('no prior web generation found; skipping retire');
+      expect(log).not.toContain('retiring prior web generation');
+    });
+  });
+
+  it('retires through the full flow when the endpoint answers but the scan disagrees', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      const getSidecarStatus = vi.fn(async () => ({ state: 'running' }) as unknown as Record<string, unknown>);
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+        getSidecarStatus: getSidecarStatus as unknown as typeof import('@open-design/sidecar').getSidecarStatus,
+        findSidecarProcesses: vi.fn(async () => []),
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retires through the full flow when the endpoint is dead but a stamped process lingers', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+        getSidecarStatus: vi.fn(async () => {
+          const error = new Error('connect ECONNREFUSED');
+          (error as NodeJS.ErrnoException).code = 'ECONNREFUSED';
+          throw error;
+        }),
+        findSidecarProcesses: vi.fn(async () => [
+          { command: 'daemon --od-stamp-app=daemon', pid: 4321, ppid: 1 },
+        ]),
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('falls back to the full flow when both probes fail to answer', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+        getSidecarStatus: vi.fn(async () => {
+          throw new Error('IPC request timed out');
+        }),
+        findSidecarProcesses: vi.fn(async () => {
+          throw new Error('enumeration failed');
+        }),
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retires through the full flow when the endpoint probe is inconclusive, even with an empty scan', async () => {
+    // answered === null (application-level error, no transport code) means the
+    // endpoint may be live but still starting: only a confirmed
+    // ENOENT/ECONNREFUSED probe may proceed to the scan-and-skip branch, so an
+    // inconclusive status request must fall through to stopSidecar even when
+    // the one snapshot this run takes sees nothing.
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+        getSidecarStatus: vi.fn(async () => {
+          throw new Error('sidecar runtime is starting');
+        }),
+        findSidecarProcesses: vi.fn(async () => []),
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+      const log = readFileSync(logPath, 'utf8');
+      expect(log).toContain('retiring prior daemon generation');
+      expect(log).not.toContain('skipping retire');
+    });
+  });
+
+  it('fails closed into the full flow when process enumeration errors, never skipping retire', async () => {
+    // If findSidecarProcesses cannot answer, "no prior generation" must NOT be
+    // the conclusion: the fast path falls through to stopSidecar, preserving
+    // the pre-#8056 fail-closed behavior for an enumeration outage.
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+        getSidecarStatus: vi.fn(async () => {
+          const error = new Error('connect ENOENT');
+          (error as NodeJS.ErrnoException).code = 'ENOENT';
+          throw error;
+        }),
+        findSidecarProcesses: vi.fn(async () => {
+          throw new Error('Get-CimInstance failed');
+        }),
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+      const log = readFileSync(logPath, 'utf8');
+      expect(log).toContain('retiring prior daemon generation');
+      expect(log).not.toContain('skipping retire');
+    });
+  });
+
+  it('lets the next child launch when only a stale endpoint remains and nothing is running', async () => {
+    // A stale endpoint (dead socket/pipe no process owns) with no stamped
+    // process behind it must not block the launch: the skip path runs, and
+    // createJsonIpcServer's bind-time cleanup (prepareIpcPath) removes the
+    // stale endpoint before the new child binds.
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop,
+        getSidecarStatus: vi.fn(async () => {
+          const error = new Error('connect ECONNREFUSED');
+          (error as NodeJS.ErrnoException).code = 'ECONNREFUSED';
+          throw error;
+        }),
+        findSidecarProcesses: vi.fn(async () => []),
+      })).resolves.toBeUndefined();
+      expect(stop).not.toHaveBeenCalled();
     });
   });
 });
