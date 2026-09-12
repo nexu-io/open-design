@@ -36,7 +36,7 @@ export const inject = [
   'sessionPersistence',
 ];
 
-const PLUGIN_VERSION = '0.1.0';
+const PLUGIN_VERSION = '0.1.1';
 
 type Output = { write(chunk: string): unknown };
 type ExitFallbackTimer = { unref(): unknown };
@@ -77,6 +77,118 @@ function contentText(content: readonly ContentBlock[]): string {
   };
   visit(content);
   return text.join('');
+}
+
+// Visible assistant text excludes reasoning so thinking never leaks into result.output.
+function assistantVisibleText(content: readonly ContentBlock[]): string {
+  const text: string[] = [];
+  const visit = (blocks: readonly ContentBlock[]) => {
+    for (const block of blocks) {
+      if (block.type === 'text') text.push(block.text);
+      if (block.type === 'tool-result') visit(block.content);
+    }
+  };
+  visit(content);
+  return text.join('');
+}
+
+type TextSource = 'stream' | 'legacy' | 'settlement';
+type ThinkingSource = 'stream' | 'legacy';
+type AssistantDelta = { type?: unknown; text?: unknown };
+
+type TurnOutput = {
+  assistantOutput: string;
+  textFromStream: boolean;
+  textFromLegacy: boolean;
+  textFromSettlement: boolean;
+  thinkingFromStream: boolean;
+  thinkingFromLegacy: boolean;
+};
+
+function createTurnOutput(): TurnOutput {
+  return {
+    assistantOutput: '',
+    textFromStream: false,
+    textFromLegacy: false,
+    textFromSettlement: false,
+    thinkingFromStream: false,
+    thinkingFromLegacy: false,
+  };
+}
+
+function asDelta(chunk: unknown): AssistantDelta {
+  return typeof chunk === 'object' && chunk !== null ? chunk as AssistantDelta : {};
+}
+
+function deltaText(chunk: AssistantDelta): string {
+  return typeof chunk.text === 'string' ? chunk.text : '';
+}
+
+function textTaken(turn: TurnOutput, source: TextSource): boolean {
+  if (source === 'stream') return turn.textFromLegacy || turn.textFromSettlement;
+  if (source === 'legacy') return turn.textFromStream || turn.textFromSettlement;
+  return turn.textFromStream || turn.textFromLegacy;
+}
+
+function markText(turn: TurnOutput, source: TextSource): void {
+  if (source === 'stream') turn.textFromStream = true;
+  else if (source === 'legacy') turn.textFromLegacy = true;
+  else turn.textFromSettlement = true;
+}
+
+function thinkingTaken(turn: TurnOutput, source: ThinkingSource): boolean {
+  return source === 'stream' ? turn.thinkingFromLegacy : turn.thinkingFromStream;
+}
+
+function markThinking(turn: TurnOutput, source: ThinkingSource): void {
+  if (source === 'stream') turn.thinkingFromStream = true;
+  else turn.thinkingFromLegacy = true;
+}
+
+function emitTextDelta(
+  output: Output,
+  request: ExecuteCommand,
+  turn: TurnOutput,
+  text: string,
+  source: TextSource,
+): void {
+  if (text === '' || textTaken(turn, source)) return;
+  writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: text });
+  turn.assistantOutput += text;
+  markText(turn, source);
+}
+
+function emitThinkingDelta(
+  output: Output,
+  request: ExecuteCommand,
+  turn: TurnOutput,
+  text: string,
+  source: ThinkingSource,
+): void {
+  if (text === '' || thinkingTaken(turn, source)) return;
+  writeFrame(output, { v: 1, type: 'thinking', request_id: request.request_id, content: text });
+  markThinking(turn, source);
+}
+
+function emitAssistantChunk(
+  output: Output,
+  request: ExecuteCommand,
+  turn: TurnOutput,
+  chunk: unknown,
+  source: ThinkingSource,
+): void {
+  const delta = asDelta(chunk);
+  if (delta.type === 'text-delta') emitTextDelta(output, request, turn, deltaText(delta), source);
+  else if (delta.type === 'reasoning-delta') emitThinkingDelta(output, request, turn, deltaText(delta), source);
+}
+
+// 0.1.1 Events has session/event but not agent/assistant-stream. Subscribe by name.
+function onRuntimeEvent(
+  ctx: Context,
+  name: string,
+  listener: (...args: unknown[]) => void,
+): () => void {
+  return (ctx.on as unknown as (event: string, fn: (...args: unknown[]) => void) => () => void)(name, listener);
 }
 
 function resultStatus(reason: TurnEndReason | undefined): 'completed' | 'cancelled' | 'failed' {
@@ -211,17 +323,12 @@ function emitSessionEvent(
   provider: string,
   model: string,
   event: SessionEvent,
+  turn: TurnOutput,
 ): void {
   switch (event.type) {
-    case 'assistant/chunk': {
-      const chunk = event.data.chunk;
-      if (chunk.type === 'text-delta' && chunk.text !== '') {
-        writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: chunk.text });
-      } else if (chunk.type === 'reasoning-delta' && chunk.text !== '') {
-        writeFrame(output, { v: 1, type: 'thinking', request_id: request.request_id, content: chunk.text });
-      }
+    case 'assistant/chunk':
+      emitAssistantChunk(output, request, turn, event.data.chunk, 'legacy');
       return;
-    }
     case 'tool/call':
       writeFrame(output, {
         v: 1,
@@ -243,12 +350,32 @@ function emitSessionEvent(
         is_error: event.data.message.content[0].isError === true,
       });
       return;
-    case 'assistant/message':
+    case 'assistant/message': {
       if (event.data.usage) writeFrame(output, usageFrame(request.request_id, provider, model, event.data.usage));
+      // Settlement fills text only when live/legacy chunks never arrived (0.1.5).
+      emitTextDelta(output, request, turn, assistantVisibleText(event.data.message.content), 'settlement');
       return;
+    }
     default:
       return;
   }
+}
+
+function emitAssistantStream(
+  output: Output,
+  request: ExecuteCommand,
+  sessionId: unknown,
+  turn: TurnOutput,
+  payload: unknown,
+): void {
+  const data = typeof payload === 'object' && payload !== null
+    ? payload as { agent?: { session?: { id?: unknown } }; frame?: { type?: unknown; chunk?: unknown } }
+    : {};
+  const payloadSessionId = data.agent?.session?.id;
+  // Fused 0.1.5 dispatch injects agent; a bare { frame } emit is still this turn.
+  if (payloadSessionId !== undefined && String(payloadSessionId) !== String(sessionId)) return;
+  if (data.frame?.type !== 'chunk') return;
+  emitAssistantChunk(output, request, turn, data.frame.chunk, 'stream');
 }
 
 async function execute(
@@ -269,19 +396,19 @@ async function execute(
   let handle: AgentHandle | undefined;
   let firstSeq = Number.POSITIVE_INFINITY;
   let turnEnd: SessionEvent<'turn/end'> | undefined;
-  let assistantOutput = '';
+  const turn = createTurnOutput();
   const setup = (agentCtx: Context) => {
     const selected: ModelSelectionRef = { current: selection, assembled: undefined };
     installModelSelection(agentCtx, selected);
   };
-  let disposeEvent = () => {};
+  let disposeListeners = () => {};
   const onSessionEvent = (session: { id: unknown }, event: SessionEvent) => {
     if (String(session.id) !== String(sessionId) || event.seq < firstSeq) return;
-    emitSessionEvent(output, request, selection.provider, selection.model, event);
-    if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
-      assistantOutput += event.data.chunk.text;
-    }
+    emitSessionEvent(output, request, selection.provider, selection.model, event, turn);
     if (event.type === 'turn/end') turnEnd = event;
+  };
+  const onAssistantStream = (payload: unknown) => {
+    emitAssistantStream(output, request, sessionId, turn, payload);
   };
 
   try {
@@ -329,7 +456,12 @@ async function execute(
       return;
     }
     firstSeq = handle.agent.session.seq + 1;
-    disposeEvent = ctx.on('session/event', onSessionEvent);
+    const disposeSession = ctx.on('session/event', onSessionEvent);
+    const disposeStream = onRuntimeEvent(ctx, 'agent/assistant-stream', onAssistantStream);
+    disposeListeners = () => {
+      disposeSession();
+      disposeStream();
+    };
     await handle.agent.followup(createUserMessage({
       content: [{ type: 'text', text: request.prompt }],
       source: { kind: 'user' },
@@ -350,7 +482,7 @@ async function execute(
       request_id: request.request_id,
       status,
       session_id: String(sessionId),
-      ...terminalOutput(assistantOutput),
+      ...terminalOutput(turn.assistantOutput),
       stop_reason: reason?.kind ?? 'unknown',
       resume_rejected: false,
       ...(failed === undefined ? {} : { error: failed }),
@@ -370,7 +502,7 @@ async function execute(
       error: errorFacts(error, 'DSH_PROFILE_EXECUTION_FAILED'),
     });
   } finally {
-    disposeEvent();
+    disposeListeners();
     await handle?.dispose().catch(() => undefined);
     onHandle(undefined);
   }
@@ -471,12 +603,14 @@ export function apply(ctx: Context): void {
 }
 
 export const internals = {
+  assistantVisibleText,
   contentText,
   createCancellationLatch,
   errorFacts,
   emitSessionEvent,
   execute,
   listModelCatalog,
+  pluginVersion: PLUGIN_VERSION,
   requestProfileExit,
   resultStatus,
   resultError,
