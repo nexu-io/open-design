@@ -597,16 +597,17 @@ export async function retireExistingSidecar(
   } = {},
 ): Promise<void> {
   const answered = await probeSidecarEndpointAnswered(stamp, deps);
-  if (answered !== true) {
+  if (answered === false) {
     const findProcesses = deps.findSidecarProcesses ?? findSidecarProcesses;
     const prior = await findProcesses(stamp).catch(() => null);
     if (prior != null && prior.length === 0) {
-      // Nothing is listening on the private endpoint and the precise process
-      // scan finds no stamped generation: the full retire flow could only
-      // return alreadyStopped, so skip it and its repeated enumerations.
-      // Skipping is safe for the child about to spawn: the IPC server unlinks
-      // a stale endpoint before binding (createJsonIpcServer/prepareIpcPath),
-      // so no leftover state can break the new bind.
+      // Confirmed dead endpoint (transport-level ENOENT/ECONNREFUSED) and the
+      // precise process scan finds no stamped generation: the full retire flow
+      // could only return alreadyStopped, so skip it and its repeated
+      // enumerations. Skipping is safe for the child about to spawn: the IPC
+      // server unlinks a stale endpoint before binding
+      // (createJsonIpcServer/prepareIpcPath), so no leftover state can break
+      // the new bind.
       await appendSidecarLifecycleLog(
         logPath,
         `[open-design packaged] no prior ${stamp.app} generation found; skipping retire`,

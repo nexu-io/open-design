@@ -364,6 +364,28 @@ describe('packaged stale sidecar retirement', () => {
     });
   });
 
+  it('retires through the full flow when the endpoint probe is inconclusive, even with an empty scan', async () => {
+    // answered === null (application-level error, no transport code) means the
+    // endpoint may be live but still starting: only a confirmed
+    // ENOENT/ECONNREFUSED probe may proceed to the scan-and-skip branch, so an
+    // inconclusive status request must fall through to stopSidecar even when
+    // the one snapshot this run takes sees nothing.
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+        getSidecarStatus: vi.fn(async () => {
+          throw new Error('sidecar runtime is starting');
+        }),
+        findSidecarProcesses: vi.fn(async () => []),
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+      const log = readFileSync(logPath, 'utf8');
+      expect(log).toContain('retiring prior daemon generation');
+      expect(log).not.toContain('skipping retire');
+    });
+  });
+
   it('fails closed into the full flow when process enumeration errors, never skipping retire', async () => {
     // If findSidecarProcesses cannot answer, "no prior generation" must NOT be
     // the conclusion: the fast path falls through to stopSidecar, preserving
