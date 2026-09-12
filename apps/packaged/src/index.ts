@@ -64,6 +64,15 @@ import { reportStartupFailure, resolveStartupDistinctId } from "./startup-teleme
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
+// The launcher inspection below runs with the raw `console` before
+// `createPackagedDesktopLogger` exists. On the normal first launch the desktop
+// IPC socket is absent, `requestJsonIpc` rejects, and
+// `inspectExistingDesktopForLauncher` echoes `inspect-unavailable` to a
+// detached stdout — the same EPIPE this guard exists to swallow. Install it
+// here, before `main()` can emit any pre-logger diagnostic, rather than
+// waiting for the structured logger. Safe to install again later.
+installStdioErrorGuard([process.stdout, process.stderr]);
+
 let packagedLogger: PackagedDesktopLogger | null = null;
 const secondInstanceHandoff = createPackagedSecondInstanceHandoff();
 
@@ -147,14 +156,6 @@ async function main(): Promise<void> {
   const namespace = argvStamp?.namespace ?? config.namespace;
   const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
   const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
-  // The launcher diagnostics below run before `createPackagedDesktopLogger`
-  // (they only need `initialPaths`, and the structured logger is created
-  // later), so they echo through the raw `console`. On the normal first
-  // launch the desktop IPC socket is absent, `requestJsonIpc` rejects, and
-  // `inspectExistingDesktopForLauncher` logs `inspect-unavailable` to a
-  // detached stdout — the same EPIPE crash this guard exists to swallow.
-  // Install it before those diagnostics rather than waiting for the logger.
-  installStdioErrorGuard([process.stdout, process.stderr]);
   if (!await waitForLauncherAfterQuit(afterQuit, initialPaths)) {
     app.exit(1);
     return;
