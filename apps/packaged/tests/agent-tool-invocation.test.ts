@@ -1,6 +1,15 @@
+import { EventEmitter } from "node:events";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, posix } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { isAgentToolInvocation } from "../src/agent-tool-invocation.js";
+import {
+  isAgentToolInvocation,
+  runAgentToolInvocation,
+  type AgentToolSpawn,
+} from "../src/agent-tool-invocation.js";
 
 // Truth table implemented by the predicate (argv-shape only; environment is
 // deliberately NOT an input — agents legitimately launching the desktop
@@ -101,5 +110,107 @@ describe("isAgentToolInvocation", () => {
     expect(isAgentToolInvocation([])).toBe(false);
     expect(isAgentToolInvocation([DESKTOP_EXE])).toBe(false);
     expect(isAgentToolInvocation([DESKTOP_EXE, ""], { daemonCliEntry: null })).toBe(false);
+  });
+});
+
+describe("runAgentToolInvocation (Electron-as-Node re-spawn)", () => {
+  function captureSpawn(): {
+    calls: { args: readonly string[]; command: string; env: NodeJS.ProcessEnv; stdio: string }[];
+    child: EventEmitter;
+    spawnChild: AgentToolSpawn;
+  } {
+    const calls: { args: readonly string[]; command: string; env: NodeJS.ProcessEnv; stdio: string }[] = [];
+    const child = new EventEmitter();
+    const spawnChild = ((
+      command: string,
+      args: readonly string[],
+      options: { env: NodeJS.ProcessEnv; stdio: string },
+    ) => {
+      calls.push({ args, command, env: options.env, stdio: options.stdio });
+      return child;
+    }) as unknown as AgentToolSpawn;
+    return { calls, child, spawnChild };
+  }
+
+  it("runs the macOS App Helper, not the main executable, for an agent tools call", async () => {
+    const root = mkdtempSync(join(tmpdir(), "od-agent-tool-helper-"));
+    try {
+      const appPath = posix.join(root.replaceAll("\\", "/"), "Open Design.app");
+      const execPath = posix.join(appPath, "Contents", "MacOS", "Open Design");
+      const helperPath = posix.join(
+        appPath,
+        "Contents",
+        "Frameworks",
+        "Open Design Helper.app",
+        "Contents",
+        "MacOS",
+        "Open Design Helper",
+      );
+      mkdirSync(posix.join(appPath, "Contents", "MacOS"), { recursive: true });
+      mkdirSync(dirname(helperPath), { recursive: true });
+      writeFileSync(execPath, "#!/bin/sh\n", "utf8");
+      writeFileSync(helperPath, "#!/bin/sh\n", "utf8");
+
+      const { calls, spawnChild } = captureSpawn();
+      await runAgentToolInvocation({
+        argv: [BUNDLED_DAEMON_CLI, "tools", "live-artifacts", "list"],
+        execPath,
+        exit: () => {},
+        platform: "darwin",
+        spawnChild,
+      });
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.command.replaceAll("\\", "/")).toBe(helperPath);
+      expect(calls[0]!.args).toEqual([BUNDLED_DAEMON_CLI, "tools", "live-artifacts", "list"]);
+      expect(calls[0]!.env.ELECTRON_RUN_AS_NODE).toBe("1");
+      expect(calls[0]!.stdio).toBe("inherit");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps the main executable where the platform has no Electron helper", async () => {
+    const { calls, spawnChild } = captureSpawn();
+
+    await runAgentToolInvocation({
+      argv: [BUNDLED_DAEMON_CLI],
+      execPath: "/opt/open-design/open-design",
+      exit: () => {},
+      platform: "linux",
+      spawnChild,
+    });
+
+    expect(calls[0]!.command).toBe("/opt/open-design/open-design");
+  });
+
+  it("preserves the child's numeric exit code", async () => {
+    const { child, spawnChild } = captureSpawn();
+    const exits: number[] = [];
+
+    await runAgentToolInvocation({ argv: [BUNDLED_DAEMON_CLI], exit: (code) => exits.push(code), spawnChild });
+    child.emit("exit", 7, null);
+
+    expect(exits).toEqual([7]);
+  });
+
+  it("reports a signal-terminated child (code null) as a non-zero exit", async () => {
+    const { child, spawnChild } = captureSpawn();
+    const exits: number[] = [];
+
+    await runAgentToolInvocation({ argv: [BUNDLED_DAEMON_CLI], exit: (code) => exits.push(code), spawnChild });
+    child.emit("exit", null, "SIGINT");
+
+    expect(exits).toEqual([1]);
+  });
+
+  it("reports a failed spawn as a non-zero exit", async () => {
+    const { child, spawnChild } = captureSpawn();
+    const exits: number[] = [];
+
+    await runAgentToolInvocation({ argv: [BUNDLED_DAEMON_CLI], exit: (code) => exits.push(code), spawnChild });
+    child.emit("error", new Error("spawn ENOENT"));
+
+    expect(exits).toEqual([1]);
   });
 });
