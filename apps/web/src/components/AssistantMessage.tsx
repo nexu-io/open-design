@@ -176,6 +176,7 @@ interface Props {
   // classifying absolute disk hrefs in chat file links — see
   // `resolveChatFileLink`.
   projectResolvedDir?: string | null;
+  projectCanonicalResolvedDir?: string | null;
   mediaTasks?: ProjectMediaTask[];
   onRequestOpenFile?: (name: string) => void;
   /**
@@ -300,6 +301,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'projectMetadata',
   'projectFileNames',
   'projectResolvedDir',
+  'projectCanonicalResolvedDir',
   'mediaTasks',
   'onRequestOpenFile',
   'onRequestPluginFolderAgentAction',
@@ -407,6 +409,7 @@ function AssistantMessageImpl({
   projectFiles = [],
   projectFileNames,
   projectResolvedDir,
+  projectCanonicalResolvedDir,
   mediaTasks = [],
   onRequestOpenFile,
   onRetryImage,
@@ -711,8 +714,12 @@ function AssistantMessageImpl({
    * agent 给的绝对路径只能退回基名,住在子目录里的产物就点不开、封面也画不出来。
    */
   const fileOpScope = useMemo(
-    () => ({ projectId, resolvedDir: projectResolvedDir }),
-    [projectId, projectResolvedDir],
+    () => ({
+      projectId,
+      resolvedDir: projectResolvedDir,
+      canonicalResolvedDir: projectCanonicalResolvedDir,
+    }),
+    [projectId, projectResolvedDir, projectCanonicalResolvedDir],
   );
   const fileOps = useMemo(
     () => deriveFileOps(displayEvents, fileOpScope),

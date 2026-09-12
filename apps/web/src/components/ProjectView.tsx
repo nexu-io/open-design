@@ -2724,10 +2724,12 @@ export function ProjectView({
   // to the Design Files panel so the file list shows a loading state instead
   // of silently sitting on the old tree for the few seconds the scan takes.
   const [projectFilesSnapshot, setProjectFilesSnapshot] = useState<{
+    projectId: string;
+    authorityKey: string;
     files: ProjectFile[];
     refreshKey: number;
     generation: number;
-  }>({ files: [], refreshKey: 0, generation: 0 });
+  }>({ projectId: project.id, authorityKey: projectRunAuthorityKey, files: [], refreshKey: 0, generation: 0 });
   const projectFiles = projectFilesSnapshot.files;
   const committedFilesRefreshKey = projectFilesSnapshot.refreshKey;
   const committedFilesGeneration = projectFilesSnapshot.generation;
@@ -2736,6 +2738,37 @@ export function ProjectView({
   committedFilesRefreshKeyRef.current = committedFilesRefreshKey;
   const projectFilesRef = useRef<ProjectFile[]>([]);
   const projectFilesRequestSeqRef = useRef(0);
+  const canonicalRootRefreshesRef = useRef(new Set<string>());
+  const canonicalRootRefreshControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    canonicalRootRefreshControllerRef.current?.abort();
+  }, [project.id, projectRunAuthorityKey]);
+  useEffect(() => {
+    if (
+      projectFilesSnapshot.projectId !== project.id
+      || projectFilesSnapshot.authorityKey !== projectRunAuthorityKey
+      || projectFilesSnapshot.generation === 0
+      || projectFiles.length === 0
+      || projectDetail.loading
+      || projectDetail.canonicalResolvedDir
+    ) return;
+    const owner = JSON.stringify([project.id, projectRunAuthorityKey]);
+    if (canonicalRootRefreshesRef.current.has(owner)) return;
+    // Lazy roots do not exist at the first detail read. A real accepted file
+    // snapshot is the one-shot signal to ask the daemon for root proof again.
+    canonicalRootRefreshesRef.current.add(owner);
+    const controller = new AbortController();
+    canonicalRootRefreshControllerRef.current = controller;
+    void projectDetail.refresh(controller.signal);
+  }, [
+    project.id,
+    projectRunAuthorityKey,
+    projectFilesSnapshot,
+    projectFiles.length,
+    projectDetail.loading,
+    projectDetail.canonicalResolvedDir,
+    projectDetail.refresh,
+  ]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
@@ -4431,6 +4464,8 @@ export function ProjectView({
       // request must never publish a new key or generation alongside an older
       // file snapshot.
       setProjectFilesSnapshot({
+        projectId: project.id,
+        authorityKey: projectRunAuthorityKey,
         files: next,
         refreshKey: requestedRefreshKey,
         generation: acceptedGeneration,
@@ -13375,6 +13410,7 @@ export function ProjectView({
               activeDesignSystem={chatDesignSystemSummary}
               projectFileNames={projectFileNames}
               projectResolvedDir={projectDetail.resolvedDir}
+              projectCanonicalResolvedDir={projectDetail.canonicalResolvedDir}
               skills={skills}
               onEnsureProject={handleEnsureProject}
               previewComments={previewComments}

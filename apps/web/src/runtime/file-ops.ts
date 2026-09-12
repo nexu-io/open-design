@@ -118,6 +118,8 @@ export interface FileOpProjectScope {
   projectId?: string | null;
   /** daemon 算出来的项目工作目录(`GET /api/projects/:id` 的 `resolvedDir`) */
   resolvedDir?: string | null;
+  /** Optional filesystem-confirmed root alias from the same project detail. */
+  canonicalResolvedDir?: string | null;
 }
 
 /**
@@ -133,10 +135,14 @@ export interface FileOpProjectScope {
  */
 function workspaceFileKey(fullPath: string, scope: FileOpProjectScope | undefined): string {
   const fallback = basename(fullPath);
-  if (!scope?.resolvedDir) return fallback;
-  const target = resolveChatFileLink(fullPath, undefined, scope.projectId, scope.resolvedDir);
-  // 别的项目的文件(`project-file`)不归右侧工作区管,交给它只会开出一个空 tab。
-  return target?.kind === 'workspace-file' ? target.filePath : fallback;
+  for (const root of [scope?.resolvedDir, scope?.canonicalResolvedDir]) {
+    if (!root) continue;
+    const target = resolveChatFileLink(fullPath, undefined, scope?.projectId, root);
+    if (target?.kind === 'workspace-file') return target.filePath;
+    // A sibling-directory inference may precede the canonical-root proof.
+    // Explicit other-project URLs stay project-file under either root.
+  }
+  return fallback;
 }
 
 export function deriveFileOps(

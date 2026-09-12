@@ -545,6 +545,8 @@ export interface ProjectDesignTokenSuggestionsResponse {
 // `resolveProjectDir(...)` so the web client never reconstructs the path.
 export interface ProjectDetailResponse extends ProjectResponse {
   resolvedDir: string;
+  /** Filesystem-confirmed alias of the authorized project root; absent until it exists. */
+  canonicalResolvedDir?: string;
 }
 
 export type ProjectVisibility = 'personal' | 'team';
