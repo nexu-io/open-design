@@ -336,3 +336,54 @@ test('a no-op turn (no file writes) reports zero', () => {
     filesWritten: 0,
   });
 });
+
+test('writing export artifact with companion manifest counts exactly one target', () => {
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'export.md'), '# Export');
+  fs.writeFileSync(path.join(root, 'export.md.artifact.json'), JSON.stringify({
+    version: 1,
+    kind: 'markdown-document',
+    title: 'export.md',
+    entry: 'export.md',
+    renderer: 'markdown',
+    status: 'complete',
+    exports: ['md'],
+  }));
+
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after);
+
+  assert.equal(diff.touched, 1);
+  assert.equal(diff.created, 1);
+  assert.deepEqual(diff.touchedPaths, [path.join(root, 'export.md')]);
+  assert.equal(diff.filesWritten, 2);
+});
+
+test('sidecar-only change when companion target is in baseline does not count as artifact', () => {
+  const root = tmpProject();
+  fs.writeFileSync(path.join(root, 'export.md'), '# Export');
+  const before = snapshotProjectArtifacts(root);
+
+  // Modify / add only the sidecar manifest
+  fs.writeFileSync(path.join(root, 'export.md.artifact.json'), JSON.stringify({
+    version: 1,
+    kind: 'markdown-document',
+    title: 'export.md',
+    entry: 'export.md',
+    renderer: 'markdown',
+    status: 'complete',
+    exports: ['md'],
+  }));
+
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after);
+
+  assert.equal(diff.touched, 0);
+  assert.equal(diff.created, 0);
+  assert.equal(diff.modified, 0);
+  assert.deepEqual(diff.touchedPaths, []);
+  assert.equal(diff.filesWritten, 1);
+});
+
