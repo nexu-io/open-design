@@ -48,6 +48,44 @@ describe("MCP stdio fatal error handlers", () => {
     dispose();
   });
 
+  it("still exits when the stderr diagnostic write throws", () => {
+    const writeStderr = vi.fn(() => {
+      throw new Error("ERR_STREAM_DESTROYED");
+    });
+    const exit = vi.fn();
+    const dispose = _installMcpFatalErrorHandlers({ writeStderr, exit });
+
+    (
+      process as unknown as {
+        emit(name: string, ...values: unknown[]): boolean;
+      }
+    ).emit("uncaughtException", new Error("stdio crashed"));
+
+    expect(writeStderr).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(1);
+    dispose();
+  });
+
+  it("still exits when the fatal reason cannot be stringified", () => {
+    const writeStderr = vi.fn();
+    const exit = vi.fn();
+    const dispose = _installMcpFatalErrorHandlers({ writeStderr, exit });
+
+    (
+      process as unknown as {
+        emit(name: string, ...values: unknown[]): boolean;
+      }
+    ).emit("unhandledRejection", {
+      toString() {
+        throw new Error("unstringifiable reason");
+      },
+    });
+
+    expect(writeStderr).not.toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(1);
+    dispose();
+  });
+
   it("reports non-Error unhandled rejections and removes both handlers", () => {
     const writeStderr = vi.fn();
     const exit = vi.fn();

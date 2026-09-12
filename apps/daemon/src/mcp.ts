@@ -1814,12 +1814,45 @@ export function _installMcpFatalErrorHandlers(options: {
     process.exit(code);
   });
   let exiting = false;
+  const finish = () => {
+    try {
+      exit(1);
+    } catch {
+      process.exitCode = 1;
+    }
+  };
+  // process.exit() does not wait for a pending pipe write, so the diagnostic
+  // can be lost on the MCP client's stderr pipe (see flushStreamsAndExit in
+  // cli.ts). Injected streams are synchronous, so those exit immediately.
+  const flushThenExit = () => {
+    if (options.writeStderr || options.exit) {
+      finish();
+      return;
+    }
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const done = () => {
+      if (timeout) clearTimeout(timeout);
+      finish();
+    };
+    try {
+      timeout = setTimeout(done, 250);
+      timeout.unref?.();
+      process.stderr.write('', done);
+    } catch {
+      done();
+    }
+  };
   const reportAndExit = (kind: string, reason: unknown) => {
     if (exiting) return;
     exiting = true;
-    const error = reason instanceof Error ? reason : new Error(String(reason));
-    writeStderr(`[od mcp] ${kind}: ${error.stack ?? error.message}\n`);
-    exit(1);
+    try {
+      const error = reason instanceof Error ? reason : new Error(String(reason));
+      writeStderr(`[od mcp] ${kind}: ${error.stack ?? error.message}\n`);
+    } catch {
+      // A diagnostic that cannot be written must not block the fatal exit.
+    } finally {
+      flushThenExit();
+    }
   };
   const onUncaughtException = (error: Error) => {
     reportAndExit('uncaught exception', error);
