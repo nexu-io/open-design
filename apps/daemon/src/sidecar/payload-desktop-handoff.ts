@@ -297,8 +297,7 @@ export async function prepareLegacyPayloadDesktopHandoff(options: {
   ]);
   if (runtime == null) return { kind: "none", reason: "invalid-runtime" };
   if (outer == null) return { kind: "none", reason: "invalid-install-anchor" };
-  if (payloadExecutablePath == null) return { kind: "none", reason: "invalid-payload" };
-  if (desktopStatus != null && desktopStatus.pid === outer.pid &&
+  if (payloadExecutablePath != null && desktopStatus != null && desktopStatus.pid === outer.pid &&
       typeof desktopStatus.executablePath === "string" &&
       await samePath(desktopStatus.executablePath, payloadExecutablePath, platform)) {
     return { kind: "none", reason: "payload-desktop-active" };
@@ -346,6 +345,7 @@ export async function prepareLegacyPayloadDesktopHandoff(options: {
   if (!canCaptureInitialState && !canCaptureConfirmedBinding && !canResumePreparedState) {
     return { kind: "none", reason: "launcher-state-not-eligible" };
   }
+  if (payloadExecutablePath == null) return { kind: "none", reason: "invalid-payload" };
 
   const now = (options.now ?? (() => new Date()))().toISOString();
   const descriptor: LauncherDesktopHandoffDescriptor = canResumePreparedState && existing != null
