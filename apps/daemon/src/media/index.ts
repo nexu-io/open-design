@@ -69,6 +69,10 @@ import type {
   DesktopRenderFramesResult,
 } from '@open-design/sidecar-proto';
 import {
+  openContainedFile,
+  type ContainedFileHandle,
+} from './contained-file.js';
+import {
   AUDIO_DURATIONS_SEC,
   type AudioKind,
   type MediaModel,
@@ -247,48 +251,64 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
       `--image path "${rel}" resolves outside the project directory.`,
     );
   }
-  let info;
+  // Resolve and open through the anchored project root: the lexical prefix
+  // check above passes for a project-local symlink, and a concurrent writer
+  // could still swap the entry or a parent directory. openContainedFile pins
+  // the root handle, re-checks containment, opens without following a final
+  // symlink, and reads from that same handle. A dangling/missing link maps to
+  // the not-found error.
+  let opened: ContainedFileHandle;
   try {
-    info = await stat(abs);
-  } catch {
+    opened = await openContainedFile(projectRootResolved, abs);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EPATHESCAPE') {
+      throw new Error(
+        `--image path "${rel}" resolves outside the project directory.`,
+      );
+    }
+    if (code === 'ENOTFILE') {
+      throw new Error(`--image is not a regular file: ${rel}`);
+    }
     throw new Error(`--image not found: ${rel}`);
   }
-  if (!info.isFile()) {
-    throw new Error(`--image is not a regular file: ${rel}`);
+  try {
+    // Cap at 16 MB. Beyond this, base64 inflation alone (≈4/3) starts
+    // hitting body-size limits at the upstream APIs and our own express
+    // 4mb body cap on inbound requests; bigger payloads should travel
+    // via the dedicated upload endpoint, not the dispatcher.
+    const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+    if (opened.size > MAX_IMAGE_BYTES) {
+      throw new Error(
+        `--image too large (${opened.size} bytes; max ${MAX_IMAGE_BYTES}).`,
+      );
+    }
+    const bytes = await opened.read();
+    const ext = path.extname(abs).toLowerCase();
+    // Tight allowlist: only what i2v / image-edit endpoints actually
+    // consume. Avoids smuggling arbitrary content through as data URLs.
+    const mime = ({
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
+    })[ext];
+    if (!mime) {
+      throw new Error(
+        `--image has unsupported extension "${ext}". Use png, jpg, jpeg, webp, or gif.`,
+      );
+    }
+    return {
+      path: rel.trim(),
+      abs: opened.resolvedPath,
+      mime,
+      size: bytes.length,
+      dataUrl: `data:${mime};base64,${bytes.toString('base64')}`,
+    };
+  } finally {
+    await opened.close().catch(() => {});
   }
-  // Cap at 16 MB. Beyond this, base64 inflation alone (≈4/3) starts
-  // hitting body-size limits at the upstream APIs and our own express
-  // 4mb body cap on inbound requests; bigger payloads should travel
-  // via the dedicated upload endpoint, not the dispatcher.
-  const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
-  if (info.size > MAX_IMAGE_BYTES) {
-    throw new Error(
-      `--image too large (${info.size} bytes; max ${MAX_IMAGE_BYTES}).`,
-    );
-  }
-  const bytes = await readFile(abs);
-  const ext = path.extname(abs).toLowerCase();
-  // Tight allowlist: only what i2v / image-edit endpoints actually
-  // consume. Avoids smuggling arbitrary content through as data URLs.
-  const mime = ({
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.webp': 'image/webp',
-    '.gif': 'image/gif',
-  })[ext];
-  if (!mime) {
-    throw new Error(
-      `--image has unsupported extension "${ext}". Use png, jpg, jpeg, webp, or gif.`,
-    );
-  }
-  return {
-    path: rel.trim(),
-    abs,
-    mime,
-    size: bytes.length,
-    dataUrl: `data:${mime};base64,${bytes.toString('base64')}`,
-  };
 }
 
 function clampNumber(value: unknown, allowed: number[]): number | undefined {
