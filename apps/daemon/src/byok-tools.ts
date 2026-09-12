@@ -13,7 +13,7 @@
 // since the BYOK chat session already authenticates with the same API key.
 
 import path from 'node:path';
-import { writeFile, readFile, readdir, stat } from 'node:fs/promises';
+import { writeFile, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { assertAndFetchExternalAsset } from './connectionTest.js';
 import { resolveProviderConfig } from './media/config.js';
@@ -1291,11 +1291,29 @@ interface ReferenceImagePart {
   filename: string;
 }
 
-// Read a project image file into an upload part. Null for non-images / unreadable.
-async function fileToImagePart(filePath: string): Promise<ReferenceImagePart | null> {
+// Canonical containment invariant for project reference images: the realpath'd
+// target of the candidate must stay inside `dir`. realpath follows symlinks, so
+// a project-local symlink to an outside file throws EPATHESCAPE before any
+// stat/readFile can observe the target's size or bytes.
+async function resolveContainedPath(dir: string, candidate: string): Promise<string> {
+  const rootReal = await realpath(dir).catch(() => dir);
+  const real = await realpath(candidate);
+  if (real !== rootReal && !real.startsWith(rootReal + path.sep)) {
+    const err = new Error('path escapes project dir via symlink');
+    (err as NodeJS.ErrnoException).code = 'EPATHESCAPE';
+    throw err;
+  }
+  return real;
+}
+
+// Read a project image file into an upload part. Null for non-images /
+// unreadable, and null when `dir` is given and the canonical target escapes the
+// project directory (a project-local symlink pointing outside is skipped).
+async function fileToImagePart(filePath: string, dir?: string): Promise<ReferenceImagePart | null> {
   const mime = IMAGE_EXT_MIME[path.extname(filePath).toLowerCase()];
   if (!mime) return null;
   try {
+    if (dir) filePath = await resolveContainedPath(dir, filePath);
     const buf = await readFile(filePath);
     if (!buf.length) return null;
     return { bytes: buf, mime, filename: path.basename(filePath) };
@@ -1331,25 +1349,48 @@ async function resolveAIHubMixReferenceImage(
     }
   }
   // Treat as a project-local file. basename() strips any path so a value like
-  // "../../etc/passwd" collapses to a filename inside the project dir.
+  // "../../etc/passwd" collapses to a filename inside the project dir. The
+  // canonical containment re-check rejects a project-local symlink whose target
+  // is outside; the caller converts the EPATHESCAPE throw into a tool error so
+  // no outside bytes are ever submitted on its behalf. Any OTHER resolution
+  // failure (e.g. ENOENT for a stale/missing image_url) is not a boundary
+  // violation: return null so the caller's existing newestProjectImagePart
+  // fallback for i2v models behaves exactly as it did before the boundary fix.
   const name = path.basename(raw.split('?')[0]!);
   if (!name) return null;
-  return fileToImagePart(path.join(dir, name));
+  const candidate = path.join(dir, name);
+  let canonical: string;
+  try {
+    canonical = await resolveContainedPath(dir, candidate);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EPATHESCAPE') throw err;
+    return null;
+  }
+  return fileToImagePart(canonical, dir);
 }
 
 // Fallback for i2v models when no image_url is given: the most recently
 // modified image already in the project folder (typically the uploaded
-// reference or the last generated frame).
+// reference or the last generated frame). Entries whose canonical target
+// escapes the project directory are skipped without being read.
 async function newestProjectImagePart(dir: string): Promise<ReferenceImagePart | null> {
   try {
     const entries = await readdir(dir);
     const images = entries.filter((f) => IMAGE_EXT_MIME[path.extname(f).toLowerCase()]);
     if (!images.length) return null;
-    const withMtime = await Promise.all(
-      images.map(async (f) => ({ f, m: (await stat(path.join(dir, f))).mtimeMs })),
-    );
+    const withMtime: Array<{ f: string; m: number }> = [];
+    for (const f of images) {
+      let real: string;
+      try {
+        real = await resolveContainedPath(dir, path.join(dir, f));
+      } catch {
+        continue;
+      }
+      withMtime.push({ f: real, m: (await stat(real)).mtimeMs });
+    }
+    if (!withMtime.length) return null;
     withMtime.sort((a, b) => b.m - a.m);
-    return fileToImagePart(path.join(dir, withMtime[0]!.f));
+    return fileToImagePart(withMtime[0]!.f, dir);
   } catch {
     return null;
   }
@@ -1479,7 +1520,15 @@ export async function executeAIHubMixGenerateVideo(
   //     accept an optional reference but never require one.
   const requiresReference = wireModel.toLowerCase().includes('i2v');
   const acceptsReference = cap.caps.includes('i2v');
-  let refImage = await resolveAIHubMixReferenceImage(args.image_url, dir, ctx);
+  let refImage: ReferenceImagePart | null;
+  try {
+    refImage = await resolveAIHubMixReferenceImage(args.image_url, dir, ctx);
+  } catch (err) {
+    return {
+      ok: false,
+      error: `invalid reference image: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
   if (!refImage && requiresReference) {
     refImage = await newestProjectImagePart(dir);
     if (refImage) {

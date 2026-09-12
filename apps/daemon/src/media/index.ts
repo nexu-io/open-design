@@ -50,7 +50,7 @@
 // so the CLI can exit non-zero and the agent can't silently narrate the
 // placeholder as the final result.
 
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -226,6 +226,21 @@ function stubsAllowed() {
   return v === '1' || v === 'true';
 }
 
+// Canonical containment invariant for project reference images: the realpath'd
+// target of the candidate must stay inside `dir`. realpath follows symlinks, so
+// a project-local symlink to an outside file throws EPATHESCAPE before any
+// stat/readFile can observe the target's size or bytes.
+async function resolveContainedPath(dir: string, candidate: string): Promise<string> {
+  const rootReal = await realpath(dir).catch(() => dir);
+  const real = await realpath(candidate);
+  if (real !== rootReal && !real.startsWith(rootReal + path.sep)) {
+    const err = new Error('path escapes project dir via symlink');
+    (err as NodeJS.ErrnoException).code = 'EPATHESCAPE';
+    throw err;
+  }
+  return real;
+}
+
 /**
  * Resolve a project-relative `--image` path into a base64 data URL the
  * upstream model APIs (Volcengine i2v, OpenAI image-edit, etc.) accept
@@ -247,9 +262,24 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
       `--image path "${rel}" resolves outside the project directory.`,
     );
   }
+  // Canonical containment re-check: the lexical prefix check above passes for a
+  // project-local symlink, but the symlink may point outside. realpath(abs)
+  // resolves the true target; reject it before stat/readFile touch the target.
+  // A dangling/missing link realpaths as ENOENT and maps to the not-found error.
+  let real: string;
+  try {
+    real = await resolveContainedPath(projectRootResolved, abs);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EPATHESCAPE') {
+      throw new Error(
+        `--image path "${rel}" resolves outside the project directory.`,
+      );
+    }
+    throw new Error(`--image not found: ${rel}`);
+  }
   let info;
   try {
-    info = await stat(abs);
+    info = await stat(real);
   } catch {
     throw new Error(`--image not found: ${rel}`);
   }
@@ -266,7 +296,7 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
       `--image too large (${info.size} bytes; max ${MAX_IMAGE_BYTES}).`,
     );
   }
-  const bytes = await readFile(abs);
+  const bytes = await readFile(real);
   const ext = path.extname(abs).toLowerCase();
   // Tight allowlist: only what i2v / image-edit endpoints actually
   // consume. Avoids smuggling arbitrary content through as data URLs.
@@ -284,7 +314,7 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
   }
   return {
     path: rel.trim(),
-    abs,
+    abs: real,
     mime,
     size: bytes.length,
     dataUrl: `data:${mime};base64,${bytes.toString('base64')}`,
