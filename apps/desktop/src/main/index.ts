@@ -394,6 +394,20 @@ type DesktopMenuController = {
   setUpdateLabels(labels: DesktopUpdateMenuLabels): void;
 };
 
+export function createZoomMenuItems(): MenuItemConstructorOptions[] {
+  return [
+    { role: "resetZoom" },
+    { role: "zoomIn" },
+    { role: "zoomOut" },
+    // Windows users reach zoom-out as Ctrl+Shift+- (the Shift spelling of the
+    // same key), but the built-in `zoomOut` role only registers the bare
+    // Cmd/Ctrl+- accelerator, so the Shift spelling silently does nothing
+    // (issue #8095). Register the Shift spelling explicitly; hidden menu
+    // items still register their accelerators on Windows/Linux.
+    { role: "zoomOut", accelerator: "CmdOrCtrl+Shift+-", visible: false },
+  ];
+}
+
 function installDesktopMenu(
   runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
   options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> & {
@@ -537,9 +551,7 @@ function installDesktopMenu(
             click: toggleDevelopMenu,
           },
           { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
+          ...createZoomMenuItems(),
           { type: "separator" },
           { role: "togglefullscreen" },
         ],
