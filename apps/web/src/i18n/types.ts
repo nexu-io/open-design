@@ -4523,6 +4523,16 @@ export interface Dict {
   'chat.artifact.publish': string;
   'chat.compactBoundary': string;
   'chat.compactDone': string;
+  'chat.compactAutoStarted': string;
+  'chat.compactAutoDone': string;
+  'chat.compactAutoDryRun': string;
+  'chat.compactAutoFailed': string;
+  'chat.contextWindowAutoLine': string;
+  'chat.contextWindowCapacity': string;
+  'chat.contextWindowModel': string;
+  'chat.contextWindowNote': string;
+  'chat.contextWindowTitle': string;
+  'chat.contextWindowUsed': string;
   'chat.compactFailed': string;
   'chat.compactProgress': string;
   'chat.compactSlash': string;

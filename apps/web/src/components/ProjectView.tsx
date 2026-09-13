@@ -292,6 +292,7 @@ import {
 import { historyWithApiAttachmentContext } from '../api-attachment-context';
 import { filterImplicitProducedFiles } from '../produced-files';
 import { AvatarMenu } from './AvatarMenu';
+import { ContextWindowRing } from './ContextWindowRing';
 import { Icon } from './Icon';
 import { useWorkspaceTabsDockRef } from './workspaceTabsDock';
 import { localizePluginTitle } from './plugins-home/localization';
@@ -383,6 +384,7 @@ import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
+import { maybeAutoCompactConversation } from '../state/compaction-auto';
 import {
   dismissHomeAttachmentUpload,
   homeAttachmentUploadsFor,
@@ -9790,6 +9792,33 @@ export function ProjectView({
           recoveryActionType: taskAnalytics.recoveryActionType,
           recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
         };
+        // Auto-compaction preflight: estimate the outgoing transcript against
+        // the selected model's context window and compact ahead of the run
+        // when it crosses the threshold. Never blocks the send — any failure
+        // falls through to the full history.
+        try {
+          const autoCompaction = await maybeAutoCompactConversation({
+            projectId: project.id,
+            conversationId: runConversationId,
+            agentId: config.agentId,
+            model: daemonByokOpenCode ? config.model : choice?.model ?? null,
+            history: nextHistory,
+            workspaceContext: projectRunWorkspaceContext,
+            onProgress: (_stage, message) => {
+              setProjectActionsToast({
+                message: message ?? t('chat.compactAutoStarted'),
+                details: null,
+              });
+            },
+          });
+          if (autoCompaction.compacted) {
+            setProjectActionsToast({ message: t('chat.compactAutoDone'), details: null });
+          } else if (autoCompaction.dryRun) {
+            setProjectActionsToast({ message: t('chat.compactAutoDryRun'), details: null });
+          }
+        } catch {
+          setProjectActionsToast({ message: t('chat.compactAutoFailed'), details: null });
+        }
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -10024,6 +10053,31 @@ export function ProjectView({
         const byokHasExistingArtifact = projectFilesRef.current.some(
           (file) => Boolean(file.artifactManifest),
         );
+        // Auto-compaction preflight on the BYOK path too (see the daemon-mode
+        // block above). Never blocks the send.
+        try {
+          const autoCompaction = await maybeAutoCompactConversation({
+            projectId: project.id,
+            conversationId: runConversationId,
+            agentId: 'byok-opencode',
+            model: config.model,
+            history: byokOpenCodeHistory,
+            workspaceContext: projectRunWorkspaceContext,
+            onProgress: (_stage, message) => {
+              setProjectActionsToast({
+                message: message ?? t('chat.compactAutoStarted'),
+                details: null,
+              });
+            },
+          });
+          if (autoCompaction.compacted) {
+            setProjectActionsToast({ message: t('chat.compactAutoDone'), details: null });
+          } else if (autoCompaction.dryRun) {
+            setProjectActionsToast({ message: t('chat.compactAutoDryRun'), details: null });
+          }
+        } catch {
+          setProjectActionsToast({ message: t('chat.compactAutoFailed'), details: null });
+        }
         void streamViaDaemon({
           agentId: 'byok-opencode',
           history: byokOpenCodeHistory,
@@ -13200,9 +13254,27 @@ export function ProjectView({
   const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
 
   // CLI / agent selector lives below the chat conversation (composer footer),
-  // not in the top-right header.
+  // not in the top-right header. Next to it, the context-window ring renders
+  // the same per-model window resolution and token estimator the auto-
+  // compaction decision uses (pure local estimate, no daemon traffic).
+  const contextRingAgentId =
+    config.mode === 'daemon'
+      ? config.agentId ?? 'unknown'
+      : apiProtocolAgentId(config.apiProtocol);
+  const contextRingModel =
+    config.mode === 'daemon'
+      ? (effectiveAgentModelChoice(
+          config.agentId ? agentsById.get(config.agentId) : null,
+          config.agentId ? config.agentModels?.[config.agentId] : undefined,
+        )?.model ?? null)
+      : config.model ?? null;
   const executionControls = (
     <>
+      <ContextWindowRing
+        agentId={contextRingAgentId}
+        model={contextRingModel}
+        history={messages}
+      />
       <AvatarMenu
         config={config}
         agents={agents}

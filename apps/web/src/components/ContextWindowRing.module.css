@@ -1,0 +1,118 @@
+/* 上下文窗口圆环（输入区右下角，agent 选择器旁）。环为纯观测仪表，
+   hover 弹出详情卡；卡本身也是纯 CSS 状态，无 JS 开关。 */
+
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 4px;
+  cursor: default;
+}
+
+.ring {
+  display: block;
+}
+
+.track {
+  stroke: var(--border);
+}
+
+.fill {
+  stroke: var(--text-muted);
+  transition: stroke 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    stroke-dashoffset 300ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.wrap[data-tone='warn'] .fill {
+  stroke: #e8a13c;
+}
+
+.wrap[data-tone='danger'] .fill {
+  stroke: #e5484d;
+}
+
+.card {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: -4px;
+  width: 248px;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px);
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1), visibility 160ms;
+  z-index: 40;
+}
+
+.wrap:hover .card,
+.wrap:focus-within .card {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cardTitle {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.cardPercent {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.rowLabel {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.rowValue {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.cardNote {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
