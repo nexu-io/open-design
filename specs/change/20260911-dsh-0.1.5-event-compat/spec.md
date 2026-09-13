@@ -177,11 +177,18 @@ Per execute turn, after `firstSeq` is set:
 1. Subscribe `session/event` (existing) and `agent/assistant-stream` (new).
 2. Ignore events whose `session.id` / `agent.session.id` ≠ this turn's session.
 3. Ignore `session/event` with `event.seq < firstSeq` (existing resume trim).
-4. Live stream `start` / `end` frames: no OD frames.
+4. Live stream `start`: discard any unsettled buffer from a previous attempt.
+   Live stream `end`:
+   - `outcome.kind === 'committed'` and `eventType === 'assistant/message'`:
+     flush the buffered chunks as OD `text` / `thinking`
+   - `assistant/attempt`, `abandoned`, or any other outcome: discard the buffer
+   Do not emit OD frames for `start` / `end` themselves.
 5. Live stream `chunk`:
-   - `text-delta` with non-empty text → `text` frame; append to `assistantOutput`
-   - `reasoning-delta` with non-empty text → `thinking` frame; do **not** append
-     to `assistantOutput` (matches today's chunk path)
+   - buffer only; do **not** emit until a committed `assistant/message` end
+   - `text-delta` with non-empty text → later `text` frame; append to
+     `assistantOutput` on flush
+   - `reasoning-delta` with non-empty text → later `thinking` frame; do **not**
+     append to `assistantOutput` (matches today's chunk path)
    - other chunk types: ignore for OD JSONL (tool deltas already have
      `tool/call` + `tool/result` session events)
 6. Legacy `assistant/chunk`: keep today's mapping. If live stream already
@@ -230,6 +237,7 @@ existing cancel tests.
 | F4 thinking         | stream reasoning-delta `"hmm"` then text-delta `"ok"`                                      | `thinking` then `text`, `result.output==="ok"` (not `"hmmok"`) |
 | F5 attempt          | `assistant/attempt` with content/stream text, then `turn/end` completed with empty message | no `text`, no `result.output`                                  |
 | F6 empty message    | `assistant/message` content `[]` (max-tokens / content-less) + usage                       | `usage` only; no `output` field                                |
+| F7 attempt then ok  | live `text-delta` `"retry"` + `end` `assistant/attempt`, then `"ok"` + `end` message       | one `text:"ok"`, `result.output==="ok"` (no `"retry"`)         |
 
 F2 is the #7992 reproduction. Tests must go red on current `main`.
 

@@ -96,6 +96,8 @@ type TextSource = 'stream' | 'legacy' | 'settlement';
 type ThinkingSource = 'stream' | 'legacy';
 type AssistantDelta = { type?: unknown; text?: unknown };
 
+type StreamDelta = { kind: 'text' | 'thinking'; text: string };
+
 type TurnOutput = {
   assistantOutput: string;
   textFromStream: boolean;
@@ -103,6 +105,7 @@ type TurnOutput = {
   textFromSettlement: boolean;
   thinkingFromStream: boolean;
   thinkingFromLegacy: boolean;
+  pendingStream: StreamDelta[];
 };
 
 function createTurnOutput(): TurnOutput {
@@ -113,6 +116,7 @@ function createTurnOutput(): TurnOutput {
     textFromSettlement: false,
     thinkingFromStream: false,
     thinkingFromLegacy: false,
+    pendingStream: [],
   };
 }
 
@@ -180,6 +184,34 @@ function emitAssistantChunk(
   const delta = asDelta(chunk);
   if (delta.type === 'text-delta') emitTextDelta(output, request, turn, deltaText(delta), source);
   else if (delta.type === 'reasoning-delta') emitThinkingDelta(output, request, turn, deltaText(delta), source);
+}
+
+function bufferStreamChunk(turn: TurnOutput, chunk: unknown): void {
+  const delta = asDelta(chunk);
+  const text = deltaText(delta);
+  if (text === '') return;
+  if (delta.type === 'text-delta') turn.pendingStream.push({ kind: 'text', text });
+  else if (delta.type === 'reasoning-delta') turn.pendingStream.push({ kind: 'thinking', text });
+}
+
+function flushPendingStream(output: Output, request: ExecuteCommand, turn: TurnOutput): void {
+  const pending = turn.pendingStream;
+  turn.pendingStream = [];
+  for (const item of pending) {
+    if (item.kind === 'text') emitTextDelta(output, request, turn, item.text, 'stream');
+    else emitThinkingDelta(output, request, turn, item.text, 'stream');
+  }
+}
+
+function discardPendingStream(turn: TurnOutput): void {
+  turn.pendingStream = [];
+}
+
+function streamEndCommitsMessage(outcome: unknown): boolean {
+  const data = typeof outcome === 'object' && outcome !== null
+    ? outcome as { kind?: unknown; eventType?: unknown }
+    : {};
+  return data.kind === 'committed' && data.eventType === 'assistant/message';
 }
 
 // 0.1.1 Events has session/event but not agent/assistant-stream. Subscribe by name.
@@ -369,13 +401,29 @@ function emitAssistantStream(
   payload: unknown,
 ): void {
   const data = typeof payload === 'object' && payload !== null
-    ? payload as { agent?: { session?: { id?: unknown } }; frame?: { type?: unknown; chunk?: unknown } }
+    ? payload as {
+      agent?: { session?: { id?: unknown } };
+      frame?: { type?: unknown; chunk?: unknown; outcome?: unknown };
+    }
     : {};
   const payloadSessionId = data.agent?.session?.id;
   // Fused 0.1.5 dispatch injects agent; a bare { frame } emit is still this turn.
   if (payloadSessionId !== undefined && String(payloadSessionId) !== String(sessionId)) return;
-  if (data.frame?.type !== 'chunk') return;
-  emitAssistantChunk(output, request, turn, data.frame.chunk, 'stream');
+  const frame = data.frame;
+  if (frame?.type === 'start') {
+    // A new attempt must not inherit tokens from a stream that never settled.
+    discardPendingStream(turn);
+    return;
+  }
+  if (frame?.type === 'chunk') {
+    bufferStreamChunk(turn, frame.chunk);
+    return;
+  }
+  if (frame?.type === 'end') {
+    // Chunks arrive before end says message vs attempt; only flush a commit.
+    if (streamEndCommitsMessage(frame.outcome)) flushPendingStream(output, request, turn);
+    else discardPendingStream(turn);
+  }
 }
 
 async function execute(

@@ -167,6 +167,10 @@ describe('@open-design/dsh-runtime 0.1.5 event contract', () => {
         chunk: { type: 'reasoning-delta', text: 'hmm' },
       });
       stream({ type: 'chunk', chunk: { type: 'text-delta', text: 'ok' } });
+      stream({
+        type: 'end',
+        outcome: { kind: 'committed', eventType: 'assistant/message' },
+      });
       session(turnEnd(1));
     });
     assert.deepEqual(
@@ -251,6 +255,10 @@ describe('@open-design/dsh-runtime 0.1.5 event contract', () => {
         data: { chunk: { type: 'text-delta', text: 'ok' } },
       });
       stream({ type: 'chunk', chunk: { type: 'text-delta', text: 'ok' } });
+      stream({
+        type: 'end',
+        outcome: { kind: 'committed', eventType: 'assistant/message' },
+      });
       session(turnEnd(2));
     });
     assert.deepEqual(
@@ -263,6 +271,10 @@ describe('@open-design/dsh-runtime 0.1.5 event contract', () => {
   test('live stream without injected agent still fills text', async () => {
     const frames = await runTurn(({ session, stream }) => {
       stream({ type: 'chunk', chunk: { type: 'text-delta', text: 'ok' } }, null);
+      stream({
+        type: 'end',
+        outcome: { kind: 'committed', eventType: 'assistant/message' },
+      }, null);
       session(turnEnd(1));
     });
     assert.deepEqual(
@@ -275,9 +287,53 @@ describe('@open-design/dsh-runtime 0.1.5 event contract', () => {
   test('live stream from another session is ignored', async () => {
     const frames = await runTurn(({ session, stream }) => {
       stream({ type: 'chunk', chunk: { type: 'text-delta', text: 'nope' } }, 'other');
+      stream({
+        type: 'end',
+        outcome: { kind: 'committed', eventType: 'assistant/message' },
+      }, 'other');
       session(turnEnd(1));
     });
     assert.deepEqual(framesOf(frames, 'text'), []);
     assert.equal(frames.at(-1)?.output, undefined);
+  });
+
+  test('F7 failed live attempt is discarded; only the committed attempt is visible', async () => {
+    const frames = await runTurn(({ session, stream }) => {
+      stream({ type: 'start', turn: 1, step: 1 });
+      stream({ type: 'chunk', chunk: { type: 'text-delta', text: 'retry' } });
+      stream({
+        type: 'end',
+        outcome: { kind: 'committed', eventType: 'assistant/attempt' },
+      });
+      session({
+        type: 'assistant/attempt',
+        seq: 1,
+        data: {
+          message: { content: [{ type: 'text', text: 'retry' }] },
+          stream: [{ type: 'text-chunks', texts: ['retry'] }],
+        },
+      });
+      stream({ type: 'start', turn: 1, step: 1 });
+      stream({ type: 'chunk', chunk: { type: 'text-delta', text: 'ok' } });
+      stream({
+        type: 'end',
+        outcome: { kind: 'committed', eventType: 'assistant/message' },
+      });
+      session({
+        type: 'assistant/message',
+        seq: 2,
+        data: {
+          usage: USAGE,
+          message: { content: [{ type: 'text', text: 'ok' }] },
+        },
+      });
+      session(turnEnd(3));
+    });
+    assert.deepEqual(
+      framesOf(frames, 'text').map((frame) => frame.content),
+      ['ok'],
+    );
+    assert.equal(framesOf(frames, 'usage').length, 1);
+    assert.equal(frames.at(-1)?.output, 'ok');
   });
 });
