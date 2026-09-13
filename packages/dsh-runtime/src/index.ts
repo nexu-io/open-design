@@ -106,6 +106,7 @@ type TurnOutput = {
   thinkingFromStream: boolean;
   thinkingFromLegacy: boolean;
   pendingStream: StreamDelta[];
+  deferredSettlementText: string;
 };
 
 function createTurnOutput(): TurnOutput {
@@ -117,6 +118,7 @@ function createTurnOutput(): TurnOutput {
     thinkingFromStream: false,
     thinkingFromLegacy: false,
     pendingStream: [],
+    deferredSettlementText: '',
   };
 }
 
@@ -205,6 +207,13 @@ function flushPendingStream(output: Output, request: ExecuteCommand, turn: TurnO
 
 function discardPendingStream(turn: TurnOutput): void {
   turn.pendingStream = [];
+  turn.deferredSettlementText = '';
+}
+
+function flushDeferredSettlement(output: Output, request: ExecuteCommand, turn: TurnOutput): void {
+  const text = turn.deferredSettlementText;
+  turn.deferredSettlementText = '';
+  emitTextDelta(output, request, turn, text, 'settlement');
 }
 
 function streamEndCommitsMessage(outcome: unknown): boolean {
@@ -384,8 +393,14 @@ function emitSessionEvent(
       return;
     case 'assistant/message': {
       if (event.data.usage) writeFrame(output, usageFrame(request.request_id, provider, model, event.data.usage));
-      // Settlement fills text only when live/legacy chunks never arrived (0.1.5).
-      emitTextDelta(output, request, turn, assistantVisibleText(event.data.message.content), 'settlement');
+      const visible = assistantVisibleText(event.data.message.content);
+      // Production 0.1.5 emits assistant/message before the stream end.
+      // Hold settlement text so buffered thinking still precedes text.
+      if (turn.pendingStream.length > 0) {
+        turn.deferredSettlementText = visible;
+        return;
+      }
+      emitTextDelta(output, request, turn, visible, 'settlement');
       return;
     }
     default:
@@ -421,8 +436,12 @@ function emitAssistantStream(
   }
   if (frame?.type === 'end') {
     // Chunks arrive before end says message vs attempt; only flush a commit.
-    if (streamEndCommitsMessage(frame.outcome)) flushPendingStream(output, request, turn);
-    else discardPendingStream(turn);
+    if (streamEndCommitsMessage(frame.outcome)) {
+      flushPendingStream(output, request, turn);
+      flushDeferredSettlement(output, request, turn);
+    } else {
+      discardPendingStream(turn);
+    }
   }
 }
 

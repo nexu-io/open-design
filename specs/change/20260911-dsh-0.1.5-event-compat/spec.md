@@ -198,13 +198,15 @@ Per execute turn, after `firstSeq` is set:
    second source must not emit duplicate `text` frames.
 7. `assistant/message`:
    - always emit `usage` when `data.usage` is present (today)
-   - if `assistantOutput === ''`, take text from `data.message.content` via
-     existing `contentText()` (text + nested tool-result text; skip using
-     reasoning blocks as `result.output` — `contentText` currently joins
-     reasoning too; **change: `result.output` / fallback `text` frames use
-     text blocks only**, so thinking does not leak into the visible answer)
-   - if fallback text is non-empty, emit one `text` frame and set
-     `assistantOutput`
+   - if this attempt still has buffered live chunks, retain visible text and
+     do **not** emit yet. Production 0.1.5 appends the durable message before
+     the committed stream `end`; emitting now would put `text` before
+     `thinking`.
+   - otherwise, if no live/legacy text has been written, emit one `text`
+     frame from text blocks only (not reasoning) and set `assistantOutput`
+   - after a committed `assistant/message` end: flush buffered deltas in
+     arrival order, then emit the retained settlement text only if no
+     streamed text was emitted
 8. `assistant/attempt`: no `text`, no `thinking`, no `assistantOutput` mutation.
    Usage on attempt is ignored unless we later learn 0.1.5 puts usage only
    there; first implementation follows current `assistant/message`-only usage.
@@ -238,6 +240,7 @@ existing cancel tests.
 | F5 attempt          | `assistant/attempt` with content/stream text, then `turn/end` completed with empty message | no `text`, no `result.output`                                  |
 | F6 empty message    | `assistant/message` content `[]` (max-tokens / content-less) + usage                       | `usage` only; no `output` field                                |
 | F7 attempt then ok  | live `text-delta` `"retry"` + `end` `assistant/attempt`, then `"ok"` + `end` message       | one `text:"ok"`, `result.output==="ok"` (no `"retry"`)         |
+| F8 production order | live reasoning+text, then `assistant/message`, then committed `end`                        | chronological `thinking` then `text` (not reversed)            |
 
 F2 is the #7992 reproduction. Tests must go red on current `main`.
 

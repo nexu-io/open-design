@@ -329,7 +329,9 @@ The profile plugin (`plugin_version` 0.1.1) maps Harness events onto the same
 OD JSONL frames. Live tokens come from process-local
 `agent/assistant-stream` chunk frames (`text-delta` → `text`,
 `reasoning-delta` → `thinking`), flushed only when that attempt's `end`
-commits `assistant/message`. A retried or failed attempt is discarded.
+commits `assistant/message`. Durable `assistant/message` can arrive first;
+settlement text waits so thinking still precedes text. A retried or failed
+attempt is discarded.
 Durable settlement is `assistant/message` (usage always; text only when no
 live/legacy chunk already filled `result.output`). `assistant/attempt` is
 not user-visible text. `dsh` 0.1.2 still arrives as `assistant/chunk`. A

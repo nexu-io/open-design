@@ -336,4 +336,38 @@ describe('@open-design/dsh-runtime 0.1.5 event contract', () => {
     assert.equal(framesOf(frames, 'usage').length, 1);
     assert.equal(frames.at(-1)?.output, 'ok');
   });
+
+  test('F8 production order keeps thinking before text when message precedes end', async () => {
+    const frames = await runTurn(({ session, stream }) => {
+      stream({ type: 'start', turn: 1, step: 1 });
+      stream({ type: 'chunk', chunk: { type: 'reasoning-delta', text: 'hmm' } });
+      stream({ type: 'chunk', chunk: { type: 'text-delta', text: 'ok' } });
+      session({
+        type: 'assistant/message',
+        seq: 1,
+        data: {
+          usage: USAGE,
+          message: {
+            content: [
+              { type: 'reasoning', text: 'hmm' },
+              { type: 'text', text: 'ok' },
+            ],
+          },
+        },
+      });
+      stream({
+        type: 'end',
+        outcome: { kind: 'committed', eventType: 'assistant/message' },
+      });
+      session(turnEnd(2));
+    });
+    assert.deepEqual(
+      frames
+        .filter((frame) => frame.type === 'thinking' || frame.type === 'text')
+        .map((frame) => [frame.type, frame.content]),
+      [['thinking', 'hmm'], ['text', 'ok']],
+    );
+    assert.equal(framesOf(frames, 'text').length, 1);
+    assert.equal(frames.at(-1)?.output, 'ok');
+  });
 });
