@@ -4521,6 +4521,12 @@ export interface Dict {
   'chat.artifact.export': string;
   'chat.artifact.pending': string;
   'chat.artifact.publish': string;
+  'chat.compactBoundary': string;
+  'chat.compactDone': string;
+  'chat.compactFailed': string;
+  'chat.compactProgress': string;
+  'chat.compactSlash': string;
+  'chat.compactUnavailableReason': string;
   'chat.edge.paused': string;
   'chat.edge.reconnectCta': string;
   'chat.edge.reconnectDetail': string;

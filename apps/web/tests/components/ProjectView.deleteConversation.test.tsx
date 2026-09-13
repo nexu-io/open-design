@@ -82,6 +82,10 @@ vi.mock('../../src/analytics/provider', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  COMPACTION_ELIGIBLE_AGENT_IDS: new Set(['anthropic-api','openai-api','azure-openai-api','google-gemini-api','ollama-cloud-api','senseaudio-api','aihubmix-api','bedrock-api','antigravity','byok-opencode']),
+  fetchConversationCompaction: vi.fn().mockResolvedValue(null),
+
+
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),

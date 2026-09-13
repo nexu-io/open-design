@@ -37,7 +37,12 @@ vi.mock('../../src/components/ChatComposer', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  COMPACTION_ELIGIBLE_AGENT_IDS: new Set(['anthropic-api','openai-api','azure-openai-api','google-gemini-api','ollama-cloud-api','senseaudio-api','aihubmix-api','bedrock-api','antigravity','byok-opencode']),
+  fetchConversationCompaction: vi.fn().mockResolvedValue(null),
+
   fetchVelaLoginStatus: fetchVelaLoginStatusMock,
+  // #5991: ChatPane mount 时会拉取压缩 checkpoint;未压缩的会话返回 null。
+  compactConversation: vi.fn(),
 }));
 
 // Capture the props ChatPane hands the inline pill, and expose a button that

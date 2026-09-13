@@ -96,6 +96,11 @@ import {
 } from '../../plugins/index.js';
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
+import type {
+  InternalPhysicalRun,
+  InternalRunCreateInput,
+  InternalRunCreationService,
+} from '../../services/internal-run-service.js';
 import { listSkills } from '../../skills.js';
 import { isSafeId } from '../../projects.js';
 import {
@@ -271,6 +276,23 @@ function sameLocalCatalogScopes(left: unknown, right: unknown): boolean {
 }
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
+  /**
+   * Threaded down to `registerProjectConversationRoutes` for the
+   * `POST …/compact` internal summary run (#5991). server.ts passes a
+   * deferred wrapper because its `startChatRun` binding is declared below
+   * the `registerProjectRoutes` call site.
+   */
+  startChatRun?: (chatBody: Record<string, unknown>, run: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * Threaded down to `registerProjectConversationRoutes` next to
+   * `startChatRun`: the choke-pointed internal Run starter the
+   * `POST …/compact` summary run starts through (#5991). Spread into the
+   * conversation-routes deps via `...ctx` below.
+   */
+  internalRuns?: InternalRunCreationService<
+    InternalRunCreateInput,
+    InternalPhysicalRun
+  >;
   pluginScope?: {
     loadRegistry: (options: {
       workspaceId?: string | null;

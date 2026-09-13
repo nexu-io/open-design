@@ -97,6 +97,10 @@ const residualAllowedExactPaths = new Set([
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
+  // Test fixture executed directly by Node: a fake `agy` executable the
+  // conversation-compaction e2e injects onto PATH to emulate the Antigravity
+  // CLI (plain-stream stdout). Owned by the test harness, not app runtime.
+  "apps/daemon/tests/fixtures/fake-agy.mjs",
   // CI-only plugin-preview renderer. Kept .mjs and run directly by Node so its
   // runtime deps (puppeteer-core + a headless Chrome + ffmpeg) are provided by
   // the CI environment and never pulled into the daemon/web TS build or bundle.
