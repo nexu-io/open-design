@@ -678,6 +678,13 @@ describe('OD Next V2 prompt recipe', () => {
     expect(clarification).toContain('Clarification answer');
     expect(contractRepair).toContain('serialization-only');
     expect(production).toContain(`planContractHash=${A}`);
+    expect(production).toContain('write it in bounded chunks');
+    expect(production).toContain('temporary, non-runnable path');
+    expect(production).toContain('leave observable progress between writes');
+    expect(production).toMatch(
+      /atomically move or rename.*only after the file is complete/i,
+    );
+    expect(production).toContain('never expose a partial file as the runnable entry');
     expect(production).toMatch(/^<open_design_request_turn/);
     expect(production).toContain('task_execution_id="task-1"');
     expect(production).toContain('stage="production" task_run_index="1"');
