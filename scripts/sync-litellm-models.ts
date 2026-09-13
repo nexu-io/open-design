@@ -4,8 +4,9 @@
 // LiteLLM (MIT, https://github.com/BerriAI/litellm) maintains the de-facto
 // community catalog of model context/output caps and pricing across every
 // major provider. We vendor a filtered slice (chat-mode max_output_tokens
-// only) so the web client can default `max_tokens` per model without an
-// extra network call at runtime.
+// plus max_input_tokens as the context window) so the web client can
+// default `max_tokens` and size context-aware decisions (auto-compaction)
+// per model without an extra network call at runtime.
 //
 // Usage:
 //   node --experimental-strip-types scripts/sync-litellm-models.ts
@@ -32,6 +33,8 @@ interface LiteLLMEntry {
   mode?: string;
   max_tokens?: number | string;
   max_output_tokens?: number | string;
+  max_input_tokens?: number | string;
+  context_window?: number | string;
 }
 
 async function main() {
@@ -41,6 +44,7 @@ async function main() {
   const raw = (await res.json()) as Record<string, unknown>;
 
   const out: Record<string, number> = {};
+  const contextWindows: Record<string, number> = {};
   let scanned = 0;
   for (const [id, value] of Object.entries(raw)) {
     if (id === 'sample_spec') continue;
@@ -52,11 +56,18 @@ async function main() {
     if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
       out[id] = candidate;
     }
+    const window = entry.max_input_tokens ?? entry.context_window;
+    if (typeof window === 'number' && Number.isFinite(window) && window > 0) {
+      contextWindows[id] = window;
+    }
   }
 
   // Sort keys so diffs stay readable when models churn.
   const sorted = Object.fromEntries(
     Object.entries(out).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  const sortedWindows = Object.fromEntries(
+    Object.entries(contextWindows).sort(([a], [b]) => a.localeCompare(b)),
   );
 
   const payload = {
@@ -65,6 +76,7 @@ async function main() {
     _license:
       'BerriAI/litellm is MIT-licensed; see https://github.com/BerriAI/litellm/blob/main/LICENSE',
     models: sorted,
+    contextWindows: sortedWindows,
   };
 
   const json = JSON.stringify(payload, null, 2) + '\n';
