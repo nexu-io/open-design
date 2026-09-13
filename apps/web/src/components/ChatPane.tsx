@@ -106,6 +106,7 @@ import { stripArtifact } from '../artifacts/strip';
 import type { TodoItem } from '../runtime/todos';
 import type {
   AppliedPluginSnapshot,
+  ChatConversationCompaction,
   ChatSessionMode,
   RunContextSelection,
   WorkspaceContextItem,
@@ -135,6 +136,7 @@ import {
   trailingMessageIgnoringHostCards,
 } from '../runtime/chat/host-authored-message';
 import { Reconnect } from './chat/Reconnect';
+import { CompactionBoundary } from './chat/CompactionBoundary';
 import { UserStatusCard } from './chat/UserStatusCard';
 import type { ChatReconnectView } from '../runtime/chat/reconnect-state';
 import { TodoCard } from './ToolCard';
@@ -159,6 +161,9 @@ import {
   RUN_FAILURE_FALLBACK_MESSAGE_KEY,
 } from '../runtime/amr-guidance';
 import {
+  COMPACTION_ELIGIBLE_AGENT_IDS,
+  compactConversation,
+  fetchConversationCompaction,
   fetchVelaLoginStatus,
   type VelaLoginStatus,
 } from '../providers/daemon';
@@ -1449,12 +1454,75 @@ export function ChatPane({
     [messages, projectMetadata],
   );
   /**
+   * #5991 手动上下文压缩 —— UI 侧编排。checkpoint 是会话当前的压缩点
+   * (`{cutAtMessageId, summaryText, ledger}`),画成转录里的一条边界行;
+   * 会话切换时向 daemon 拉取,压缩成功后直接用 `compactConversation` 的
+   * 返回值就地更新 —— 压缩不改变消息历史,无需重拉消息。
+   */
+  const [conversationCheckpoint, setConversationCheckpoint] = useState<ChatConversationCompaction | null>(null);
+  // 会话切换时重置并拉取 checkpoint。404(还没压缩过)返回 null;其他失败
+  // 静默回落成「没有边界行」—— 压缩永远不能阻塞转录,与 provider 侧
+  // 发送路径的降级语义一致。
+  useEffect(() => {
+    let cancelled = false;
+    setConversationCheckpoint(null);
+    if (!projectId || !activeConversationId) return undefined;
+    void fetchConversationCompaction(projectId, activeConversationId, workspaceContext)
+      .then((checkpoint) => {
+        if (!cancelled) setConversationCheckpoint(checkpoint ?? null);
+      })
+      .catch(() => {
+        // 加载失败按「无 checkpoint」渲染,边界行缺席而不是挡住转录。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, activeConversationId, workspaceContext]);
+  /**
+   * 压缩资格:镜像 daemon 的会话门槛 —— 对话里至少有一条来自可压缩运行时
+   * (API 模式各协议 / antigravity)的助手消息。daemon 侧按「消息行里存在
+   * antigravity turn(或 antigravity agent-session)」放行 POST /compact;
+   * antigravity 是无状态 BYOK 适配器,并不总会留下 agent-session 行,所以
+   * 这里同样以消息行为准。BYOK OpenCode 运行时不在此列(ACP 会话,首版
+   * 明确排除)。
+   */
+  const compactionAvailable = useMemo(
+    () => displayMessages.some(
+      (message) =>
+        message.role === 'assistant'
+        && !!message.agentId
+        && COMPACTION_ELIGIBLE_AGENT_IDS.has(message.agentId),
+    ),
+    [displayMessages],
+  );
+  /**
+   * `/compact` 的实际执行体,交给 composer 调。成功返回 `{ok:true}` 并就地
+   * 更新 checkpoint(边界行随即出现在被截断消息之后);失败返回本地化文案,
+   * 由 composer 的 composer-hint 状态行展示。daemon 错误细节不进 UI ——
+   * 压缩失败从不改动会话,重试即可。
+   */
+  const handleCompactConversation = useCallback(async (): Promise<{ ok: boolean; message?: string }> => {
+    if (!projectId || !activeConversationId) {
+      return { ok: false, message: t('chat.compactFailed') };
+    }
+    try {
+      const checkpoint = await compactConversation(projectId, activeConversationId, { workspaceContext });
+      setConversationCheckpoint(checkpoint);
+      return { ok: true };
+    } catch {
+      return { ok: false, message: t('chat.compactFailed') };
+    }
+  }, [projectId, activeConversationId, workspaceContext, t]);
+  /**
    * 转录**画得出来**的那一份 —— 正文、右侧导轨、钉顶三处共用这一个数组。
    *
    * 算一次往下发,而不是各自调一次 `buildChatRenderItems`:后者仍然是三份实现,
    * 只是此刻长得一样。见 `buildChatRenderItems` 的注释。
    */
-  const chatRenderItems = useMemo(() => buildChatRenderItems(displayMessages), [displayMessages]);
+  const chatRenderItems = useMemo(
+    () => buildChatRenderItems(displayMessages, conversationCheckpoint),
+    [displayMessages, conversationCheckpoint],
+  );
   /** Live handle on the chat-health surface, for the effects that feed it. */
   const chatSurfaceRef = useRef<ChatSurfaceHandle | null>(null);
   const chatVirtualized = isChatVirtualized(chatRenderItems);
@@ -4110,6 +4178,8 @@ export function ChatPane({
       currentDesignSystemId={currentDesignSystemId}
       onActiveDesignSystemChange={onActiveDesignSystemChange}
       onShowToast={onShowToast}
+      compactAvailable={compactionAvailable}
+      onCompactConversation={handleCompactConversation}
     />
     </>
   );
@@ -4823,7 +4893,7 @@ function ChatMessageRail({
   const railMessages = useMemo<ChatRailMessage[]>(
     () =>
       items.reduce<ChatRailMessage[]>((railItems, item) => {
-        if (item.message.role !== 'user') return railItems;
+        if (item.kind !== 'message' || item.message.role !== 'user') return railItems;
         railItems.push({
           message: item.message,
           messageIndex: item.messageIndex,
@@ -5139,19 +5209,29 @@ function scrollChatLogToMessage(
   });
 }
 
-type ChatRenderItem = {
-  kind: 'message';
-  key: string;
-  message: ChatMessage;
-  /**
-   * 这条消息在**未过滤**的 `displayMessages` 里的下标。
-   *
-   * 导轨跳转的降级路径按「第几条 / 一共几条」估一个滚动比例
-   * (`scrollChatLogToMessage`),量的是整条流水,不是画出来的那一部分。
-   * 记在这里,是为了让导轨不必再拿着原数组自己数一遍 —— 它现在只认渲染项。
-   */
-  messageIndex: number;
-};
+type ChatRenderItem =
+  | {
+      kind: 'message';
+      key: string;
+      message: ChatMessage;
+      /**
+       * 这条消息在**未过滤**的 `displayMessages` 里的下标。
+       *
+       * 导轨跳转的降级路径按「第几条 / 一共几条」估一个滚动比例
+       * (`scrollChatLogToMessage`),量的是整条流水,不是画出来的那一部分。
+       * 记在这里,是为了让导轨不必再拿着原数组自己数一遍 —— 它现在只认渲染项。
+       */
+      messageIndex: number;
+    }
+  | {
+      /**
+       * #5991 手动上下文压缩的边界行。插在被截断的那条消息之后:
+       * 左侧内容已归档进 checkpoint,右侧是压缩后新发生的回合。
+       * 消费方按 `kind` 分流,导轨/钉顶都跳过它。
+       */
+      kind: 'compactionBoundary';
+      key: string;
+    };
 
 function ChatConversationLoading({ t }: { t: TranslateFn }) {
   return (
@@ -5366,6 +5446,9 @@ function ChatRows({
   });
 
   const renderItem = (item: ChatRenderItem) => {
+    if (item.kind === 'compactionBoundary') {
+      return <CompactionBoundary />;
+    }
     const m = item.message;
     const messageStreaming = isAssistantMessageStreaming(
       m,
@@ -5619,23 +5702,38 @@ function VirtualChatRow({
  *
  * 机器载荷那一半由 `formAnswersDisplayBody` 在气泡里摘掉,#5496 那条取向照旧成立。
  */
-function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
+export function buildChatRenderItems(
+  messages: ChatMessage[],
+  checkpoint: ChatConversationCompaction | null,
+): ChatRenderItem[] {
   const items: ChatRenderItem[] = [];
+  const boundaryKey = checkpoint
+    ? `compaction-boundary:${checkpoint.conversationId}:${checkpoint.cutAtMessageId}`
+    : null;
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i]!;
-    if (
+    const isCutMessage = checkpoint != null && message.id === checkpoint.cutAtMessageId;
+    const isHiddenFormAnswer =
       message.role === 'user'
       && message.sendFailed !== true
-      && isFormAnswersMessage(message.content)
-    ) {
-      continue;
+      && isFormAnswersMessage(message.content);
+    if (!isHiddenFormAnswer) {
+      items.push({
+        kind: 'message',
+        key: `message:${message.id}`,
+        message,
+        messageIndex: i,
+      });
     }
-    items.push({
-      kind: 'message',
-      key: `message:${message.id}`,
-      message,
-      messageIndex: i,
-    });
+    /*
+     * 边界行插在**被截断的那条消息之后**(checkpoint 之后的第一个回合之前):
+     * cutAtMessageId 是最后一条被压进摘要的消息,它连同更早的回合都已被
+     * 摘要替代。截断消息本身若是要收走的表单答案,上面已经跳过,但边界
+     * 仍留在它的位置上 —— 它标记的是「这条之后都是新回合」,与这条画不画无关。
+     */
+    if (isCutMessage) {
+      items.push({ kind: 'compactionBoundary', key: boundaryKey ?? `compaction-boundary:${message.id}` });
+    }
   }
   return items;
 }
@@ -5662,13 +5760,20 @@ function isChatVirtualized(items: ChatRenderItem[]): boolean {
  */
 function tailRenderedUserMessage(items: ChatRenderItem[]): ChatMessage | null {
   for (let i = items.length - 1; i >= 0; i -= 1) {
-    const message = items[i]!.message;
+    const item = items[i]!;
+    if (item.kind !== 'message') continue;
+    const message = item.message;
     if (message.role === 'user') return message;
   }
   return null;
 }
 
 function estimateChatRenderItemHeight(item: ChatRenderItem): number {
+  if (item.kind === 'compactionBoundary') {
+    // 一行迷你灰字 + 图标(~16px)上下留白。估算值略高于实际,虚拟窗口
+    // 会在测量后校正。
+    return 34 + CHAT_VIRTUAL_ROW_GAP_PX;
+  }
   const message = item.message;
   const contentLength = message.content?.length ?? 0;
   const attachmentCount = (message.attachments?.length ?? 0) + (message.commentAttachments?.length ?? 0);

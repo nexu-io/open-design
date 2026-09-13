@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildCompactionCheckpointBlock,
   buildDaemonTranscript,
   buildDaemonPriorTranscript,
+  compactConversation,
   DAEMON_RUN_FINISHED_EVENT,
   DAEMON_STREAM_RECONNECT_LIMIT,
+  fetchConversationCompaction,
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
@@ -13,6 +16,7 @@ import {
   type DaemonReconnectState,
   type DaemonRunFinishedEventDetail,
 } from '../../src/providers/daemon';
+import type { ChatConversationCompaction, ChatMessage } from '@open-design/contracts';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
 import { parseSseFrame } from '../../src/providers/sse';
 
@@ -746,6 +750,69 @@ describe('streamViaDaemon', () => {
       '## user\nsame text\n\n## assistant\nanswer same text',
     );
     expect(latestUserPromptFromHistory(history)).toBe('same text');
+  });
+
+  it('packs an API-mode conversation through its compaction checkpoint (#5991)', async () => {
+    const handlers = createDaemonHandlers();
+    const checkpoint = makeCompactionCheckpoint({ cutAtMessageId: '2' });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ compaction: checkpoint }))
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-compacted' }))
+      .mockResolvedValueOnce(sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'antigravity',
+      history: [
+        { id: '1', role: 'user', content: 'build the page' },
+        { id: '2', role: 'assistant', content: 'page done', agentId: 'antigravity' },
+        { id: '3', role: 'user', content: 'now add a footer' },
+      ],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      '/api/projects/project-1/conversations/conversation-1/compaction',
+    );
+    const [, createRunInit] = fetchMock.mock.calls[1] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.message).toContain('## compact checkpoint');
+    expect(body.message).toContain('Prior turns: built the login page header and footer.');
+    expect(body.message).toContain('now add a footer');
+    expect(body.message).not.toContain('build the page');
+    expect(body.message).not.toContain('page done');
+  });
+
+  it('falls back to the full transcript when the compaction fetch fails (#5991)', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('boom', { status: 500 }))
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-uncompacted' }))
+      .mockResolvedValueOnce(sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'google-gemini-api',
+      history: [
+        { id: '1', role: 'user', content: 'hello' },
+        { id: '2', role: 'assistant', content: 'hi', agentId: 'google-gemini-api' },
+      ],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[1] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.message).not.toContain('## compact checkpoint');
+    expect(body.message).toContain('hello');
+    expect(body.message).toContain('hi');
   });
 
   it('truncates oversized prior messages before composing daemon context', () => {
@@ -2892,6 +2959,250 @@ describe('streamViaDaemon', () => {
       .map((event) => event.label);
     expect(statusLabels).not.toContain('waiting_for_first_output');
     expect(statusLabels).not.toContain('tool_call_update');
+  });
+});
+
+function makeCompactionCheckpoint(
+  overrides: Partial<ChatConversationCompaction> = {},
+): ChatConversationCompaction {
+  return {
+    conversationId: 'conversation-1',
+    cutAtMessageId: '2',
+    summaryText: 'Prior turns: built the login page header and footer.',
+    ledger: [
+      { identifier: 'artifact:a', description: 'Login page HTML', fileName: 'login.html' },
+      { identifier: 'artifact:b', description: 'Header styles' },
+    ],
+    ...overrides,
+  };
+}
+
+describe('buildDaemonTranscript manual compaction (#5991)', () => {
+  it('replaces pre-cut turns with the checkpoint block and keeps post-cut turns', () => {
+    const transcript = buildDaemonTranscript(
+      [
+        { id: '1', role: 'user', content: 'build the login page' },
+        { id: '2', role: 'assistant', content: 'done, wrote login.html' },
+        { id: '3', role: 'user', content: 'add a footer' },
+      ],
+      'antigravity',
+      makeCompactionCheckpoint(),
+    );
+
+    expect(transcript).toContain('## compact checkpoint');
+    expect(transcript).toContain('## prior summary');
+    expect(transcript).toContain('Prior turns: built the login page header and footer.');
+    expect(transcript).toContain('## workspace ledger');
+    expect(transcript).toContain('- artifact:a: Login page HTML (file: login.html)');
+    expect(transcript).toContain('- artifact:b: Header styles');
+    expect(transcript).not.toContain('build the login page');
+    expect(transcript).not.toContain('done, wrote login.html');
+    expect(transcript).toContain('## user\nadd a footer');
+  });
+
+  it('keeps the latest user turn even when the cut covers the whole history', () => {
+    const transcript = buildDaemonTranscript(
+      [
+        { id: '1', role: 'user', content: 'draft the header' },
+        { id: '2', role: 'assistant', content: 'header done', agentId: 'antigravity' },
+        { id: '3', role: 'user', content: 'make it taller' },
+      ],
+      'antigravity',
+      makeCompactionCheckpoint({ cutAtMessageId: '2' }),
+    );
+
+    expect(transcript).toContain('## compact checkpoint');
+    expect(transcript).toContain('make it taller');
+    expect(transcript).not.toContain('draft the header');
+    expect(transcript).not.toContain('header done');
+  });
+
+  it('falls back to the full transcript when the boundary message is gone', () => {
+    const history: ChatMessage[] = [
+      { id: '1', role: 'user', content: 'first request' },
+      { id: '2', role: 'assistant', content: 'first answer' },
+      { id: '3', role: 'user', content: 'second request' },
+    ];
+    const transcript = buildDaemonTranscript(
+      history,
+      'antigravity',
+      makeCompactionCheckpoint({ cutAtMessageId: 'deleted-message-id' }),
+    );
+
+    expect(transcript).not.toContain('## compact checkpoint');
+    expect(transcript).toContain('first request');
+    expect(transcript).toContain('first answer');
+    expect(transcript).toContain('second request');
+  });
+
+  it('cuts inside the scoped agent tail (scope first, then cut)', () => {
+    const history: ChatMessage[] = [
+      { id: '1', role: 'user', content: 'claude only' },
+      { id: '2', role: 'assistant', content: 'claude answer', agentId: 'claude' },
+      { id: '3', role: 'user', content: 'start api work' },
+      { id: '4', role: 'assistant', content: 'api part one', agentId: 'antigravity' },
+      { id: '5', role: 'user', content: 'api part two request' },
+      { id: '6', role: 'assistant', content: 'api part two', agentId: 'antigravity' },
+      { id: '7', role: 'user', content: 'continue' },
+    ];
+    const transcript = buildDaemonTranscript(
+      history,
+      'antigravity',
+      makeCompactionCheckpoint({ cutAtMessageId: '4' }),
+    );
+
+    expect(transcript).toContain('## compact checkpoint');
+    expect(transcript).toContain('api part two');
+    expect(transcript).toContain('continue');
+    expect(transcript).not.toContain('claude answer');
+    expect(transcript).not.toContain('start api work');
+    expect(transcript).not.toContain('api part one');
+  });
+
+  it('renders only the checkpoint block when every message is compacted', () => {
+    const transcript = buildDaemonTranscript(
+      [{ id: '2', role: 'assistant', content: 'old answer' }],
+      'antigravity',
+      makeCompactionCheckpoint(),
+    );
+
+    expect(transcript).toContain('## compact checkpoint');
+    expect(transcript).toContain('## prior summary');
+    expect(transcript).not.toContain('old answer');
+    expect(transcript).not.toContain('## assistant');
+  });
+
+  it('renders the ledger byte-stably in stored order and omits it when empty', () => {
+    // The daemon writes the ledger identifier-sorted (first occurrence wins);
+    // the web block renders it verbatim in stored order for byte-stable
+    // replays — it must NOT re-sort or re-merge.
+    const entries = [
+      { identifier: 'a-first', description: 'html' },
+      { identifier: 'z-last', description: 'styles' },
+    ];
+    const blockA = buildCompactionCheckpointBlock(makeCompactionCheckpoint({ ledger: entries }));
+    const blockB = buildCompactionCheckpointBlock(makeCompactionCheckpoint({ ledger: entries }));
+    expect(blockA).toBe(blockB);
+    expect(blockA.indexOf('- a-first:')).toBeLessThan(blockA.indexOf('- z-last:'));
+
+    const empty = buildCompactionCheckpointBlock(makeCompactionCheckpoint({ ledger: [] }));
+    expect(empty).not.toContain('## workspace ledger');
+    expect(empty).toContain('## prior summary');
+  });
+});
+
+describe('fetchConversationCompaction', () => {
+  it('returns null for a conversation without a checkpoint (404)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not found', { status: 404 })),
+    );
+    await expect(fetchConversationCompaction('p-1', 'c-1')).resolves.toBeNull();
+  });
+
+  it('resolves the checkpoint payload', async () => {
+    const checkpoint = makeCompactionCheckpoint();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ compaction: checkpoint }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })),
+    );
+    await expect(fetchConversationCompaction('p-1', 'c-1')).resolves.toEqual(checkpoint);
+  });
+});
+
+describe('compactConversation', () => {
+  it('POSTs to the compact endpoint and resolves the terminal compaction frame', async () => {
+    const checkpoint = makeCompactionCheckpoint();
+    const fetchMock = vi.fn(async () =>
+      sseResponse(
+        [
+          ': keepalive',
+          '',
+          'event: progress',
+          'data: {"stage":"summarizing"}',
+          '',
+          'event: compaction',
+          `data: ${JSON.stringify({ compaction: checkpoint })}`,
+          '',
+          '',
+        ].join('\n'),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const progress: Array<[string, string | undefined]> = [];
+    await expect(
+      compactConversation('p-1', 'c-1', {
+        onProgress: (stage, message) => progress.push([stage, message]),
+      }),
+    ).resolves.toEqual(checkpoint);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/p-1/conversations/c-1/compact',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(progress).toEqual([['summarizing', undefined]]);
+  });
+
+  it('sends an explicit cutAtMessageId when requested', async () => {
+    const checkpoint = makeCompactionCheckpoint();
+    const fetchMock = vi.fn(async () =>
+      sseResponse(`event: compaction\ndata: ${JSON.stringify({ compaction: checkpoint })}\n\n`),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await compactConversation('p-1', 'c-1', { cutAtMessageId: 'm-42' });
+
+    const [, init] = fetchMock.mock.calls[0]! as unknown as [RequestInfo, RequestInit];
+    expect(init?.body).toBe(JSON.stringify({ cutAtMessageId: 'm-42' }));
+  });
+
+  it('rejects with the daemon error envelope on non-2xx responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ error: { code: 'RUN_LIMIT', message: 'a run is already active' } }),
+          { status: 409, headers: { 'content-type': 'application/json' } },
+        )),
+    );
+
+    await expect(compactConversation('p-1', 'c-1')).rejects.toThrow('a run is already active');
+  });
+
+  it('rejects with the streamed error frame once the stream has started', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse(
+          [
+            'event: progress',
+            'data: {"stage":"summarizing"}',
+            '',
+            'event: error',
+            'data: {"message":"the model refused to summarize"}',
+            '',
+            '',
+          ].join('\n'),
+        )),
+    );
+
+    await expect(compactConversation('p-1', 'c-1')).rejects.toThrow(
+      'the model refused to summarize',
+    );
+  });
+
+  it('rejects when the stream ends without a terminal frame', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => sseResponse('event: progress\ndata: {"stage":"summarizing"}\n\n')),
+    );
+
+    await expect(compactConversation('p-1', 'c-1')).rejects.toThrow('ended without a result');
   });
 });
 

@@ -1,0 +1,28 @@
+/*
+ * 手动上下文压缩边界行（#5991）。与 PauseLine 同一条视觉基线：
+ * 一行 flex、一枚 14px 图标、迷你字号灰字；多出的一条细分隔线把
+ * 「归档在左、续写在右」的截断关系画出来。
+ */
+.line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--chat-t-mini);
+  color: var(--chat-text-muted);
+}
+
+/* 图标不另染色，跟着上面那行 currentColor 走 */
+.line svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* 右侧细分隔线：填满剩余宽度，示意「以上已压缩」。颜色与聊天气泡
+   描边同一档（--chat-border-soft），不抢正文。 */
+.rule {
+  flex: 1;
+  height: 1px;
+  margin-left: 4px;
+  background: var(--chat-border-soft);
+}

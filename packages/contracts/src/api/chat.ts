@@ -1341,6 +1341,35 @@ export function isChatArtifactStaticCoverReady(
   return chatArtifactStaticCoverUrl(ref) !== null;
 }
 
+/**
+ * One entry of a manual-compaction checkpoint's workspace ledger (#5991).
+ *
+ * The ledger is the machine-washed record of the compacted span's produced
+ * files / artifacts / traces — merged by identifier (first occurrence wins)
+ * and key-sorted at write time. It is NEVER summarized; consumers render it
+ * verbatim so the packed transcript stays byte-stable across replays.
+ */
+export interface CompactionLedgerEntry {
+  identifier: string;
+  description: string;
+  fileName?: string | null;
+}
+
+/**
+ * Manual context compaction checkpoint for API-mode (BYOK) conversations.
+ *
+ * The web transcript builder replaces every message at or before
+ * `cutAtMessageId` with the model-generated `summaryText` plus the
+ * machine-washed `ledger`, so packed transcripts stop growing with raw
+ * history. One checkpoint per conversation; a re-compaction overwrites it.
+ */
+export interface ChatConversationCompaction {
+  conversationId: string;
+  cutAtMessageId: string;
+  summaryText: string;
+  ledger: CompactionLedgerEntry[];
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
