@@ -3631,6 +3631,10 @@ const FAL_IMAGE_USES_ASPECT_RATIO = new Set([
   'fal-ai/flux-pro/v1.1',
 ]);
 
+const FAL_IMAGE_USES_IMAGE_URLS = new Set([
+  'fal-ai/bytedance/seedream/v4/edit',
+]);
+
 const FAL_IMAGE_SIZES: Record<string, string> = {
   '1:1':  'square_hd',
   '16:9': 'landscape_16_9',
@@ -3772,7 +3776,9 @@ async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): P
   } else {
     input.image_size = FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd';
   }
-  if (ctx.imageRef?.dataUrl) {
+  if (FAL_IMAGE_USES_IMAGE_URLS.has(endpoint) && ctx.imageRefs.length > 0) {
+    input.image_urls = ctx.imageRefs.map((ref) => ref.dataUrl);
+  } else if (ctx.imageRef?.dataUrl) {
     input.image_url = ctx.imageRef.dataUrl;
   }
 
