@@ -20,6 +20,10 @@ describe('CLI startup boundaries', () => {
     ['config', ['config', 'get', 'apiProtocol', '--daemon-url', 'http://127.0.0.1:9']],
     ['diagnostics', ['diagnostics', 'export', '--daemon-url', 'http://127.0.0.1:9']],
     ['amr', ['amr', 'status', '--daemon-url', 'http://127.0.0.1:9']],
+    // Regression for #7611: `automation create` reaches the ids-splitting
+    // constants through the top-of-file dispatch, before module evaluation
+    // passes their `const` declarations.
+    ['automation', ['automation', 'create', '--name', 'demo', '--prompt', 'hello', '--schedule', 'hourly:0', '--daemon-url', 'http://127.0.0.1:9']],
   ])('initializes flag constants before dispatching od %s', async (_name, args) => {
     let output = '';
     try {
