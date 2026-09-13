@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -24,6 +24,7 @@ import type { PluginFolderAgentAction } from './design-files/pluginFolderActions
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { FileSyncBadge } from '../collab/FileSyncBadge';
 import { Icon } from './Icon';
+import { FILE_TYPE_ICON_COLORS, FileTypeIcon, previewFallbackIcon, resolveFileTypeIcon } from './FileTypeIcon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { RemixIcon } from './RemixIcon';
 import {
@@ -34,11 +35,9 @@ import {
   getHtmlThumbnailSource,
   loadHtmlThumbnailSource,
 } from './html-thumbnail-source-cache';
-import { BuildPreviewToggle } from './design-files/BuildPreviewToggle';
-import { DesignFilesEmptyState } from './design-files/DesignFilesEmptyState';
 import { DesignFilesBuildingState } from './design-files/DesignFilesBuildingState';
 import { selectBuildPreviewHtmlEntry } from './auto-open-file';
-import type { RunProgressStep } from '../runtime/run-progress';
+import type { RunPhase, RunProgressStep } from '../runtime/run-progress';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -74,6 +73,9 @@ interface Props {
   /** The running turn's tool calls, newest first. The empty state names the
    *  first one as the current step and stacks the rest beneath it. */
   runSteps?: RunProgressStep[];
+  /** What the run is doing before it has called anything — the same phase the
+   *  chat footer names, so both sides of the split word it identically. */
+  runPhase?: RunPhase;
   files: ProjectFile[];
   // Persisted folders from `/api/projects/:id/folders`, including empty ones
   // that no file lives under. Without these, a folder only appears once a file
@@ -270,10 +272,12 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
 
 function DesignFileImageThumb({
   src,
+  fileName,
   title,
   onOpen,
 }: {
   src: string;
+  fileName: string;
   title: string;
   onOpen: () => void;
 }) {
@@ -305,7 +309,7 @@ function DesignFileImageThumb({
       {status === 'loading' ? <span className="df-image-skeleton" aria-hidden /> : null}
       {status === 'error' ? (
         <span className="df-image-error" aria-hidden>
-          <Icon name="image" size={24} />
+          <FileTypeIcon name={previewFallbackIcon('image', fileName)} size={24} />
         </span>
       ) : null}
       <img
@@ -453,6 +457,7 @@ export function DesignFilesPanel({
   reloading,
   running = false,
   runSteps,
+  runPhase = 'preparing',
   files,
   folders,
   liveArtifacts,
@@ -878,6 +883,7 @@ export function DesignFilesPanel({
   }
 
   function renderFileRow(f: ProjectFile, category: FileCategory) {
+    const fileTypeIcon = resolveFileTypeIcon(f.name, f.mime);
     const isSelected = selected.has(f.name);
     const isHovered = hover === f.name;
     const renameState = renaming?.name === f.name ? renaming : null;
@@ -916,10 +922,12 @@ export function DesignFilesPanel({
         <span
           className="df-row-icon df-row-openable"
           data-kind={category}
+          data-file-type={fileTypeIcon}
+          style={{ '--df-file-icon-color': FILE_TYPE_ICON_COLORS[fileTypeIcon] } as CSSProperties}
           aria-hidden
           onClick={() => onOpenFile(f.name)}
         >
-          {categoryGlyph(category)}
+          <FileTypeIcon name={fileTypeIcon} size={24} />
         </span>
         <div className="df-row-name-wrap">
           {renameState ? (
@@ -1029,7 +1037,7 @@ export function DesignFilesPanel({
       <div
         key={f.name}
         data-testid={`design-file-row-${f.name}`}
-        className={`df-card ${isSelected ? 'selected' : ''}`}
+        className={`df-card df-card--page ${isSelected ? 'selected' : ''}`}
       >
         <span
           className="df-card-check"
@@ -1069,6 +1077,9 @@ export function DesignFilesPanel({
           />
         </button>
         <div className="df-card-meta">
+          <span className="recent-projects__card-kind" title={categoryLabel(category, t)}>
+            <Icon name="artboard" size={14} />
+          </span>
           <div className="df-card-meta-text">
             {renameState ? (
               <input
@@ -1115,7 +1126,7 @@ export function DesignFilesPanel({
               </button>
             )}
             <span className="df-card-sub">
-              {categoryLabel(category, t)} · {relativeTime(f.mtime, t)}
+              {relativeTime(f.mtime, t)}
             </span>
           </div>
           {viewerOnly ? (
@@ -1192,6 +1203,7 @@ export function DesignFilesPanel({
         </span>
         <DesignFileImageThumb
           src={src}
+          fileName={f.name}
           title={openLabel}
           onOpen={() => onOpenFile(f.name)}
         />
@@ -1227,11 +1239,20 @@ export function DesignFilesPanel({
   function renderDirRow(dirName: string) {
     const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
     const count = descendantFileCountByDir.get(fullPath) ?? 0;
+    const isFigmaFolder = dirName.toLowerCase() === 'figma';
     return (
       <div key={`dir:${fullPath}`} className="df-row df-dir-row" onClick={() => setCurrentDir(fullPath)}>
         <span className="df-row-check" aria-hidden />
-        <span className="df-row-icon" data-kind="folder" aria-hidden>
-          <Icon name="folder" size={14} />
+        <span
+          className="df-row-icon"
+          data-kind="folder"
+          data-file-type={isFigmaFolder ? 'figma' : undefined}
+          style={isFigmaFolder
+            ? { '--df-file-icon-color': FILE_TYPE_ICON_COLORS.figma } as CSSProperties
+            : undefined}
+          aria-hidden
+        >
+          {isFigmaFolder ? <FileTypeIcon name="figma" size={24} /> : <Icon name="folder" size={14} />}
         </span>
         <div className="df-row-name-wrap">
           <button type="button" className="df-row-name-btn" onClick={() => setCurrentDir(fullPath)}>
@@ -1461,18 +1482,32 @@ export function DesignFilesPanel({
       ) : null}
       <div className="df-main">
         <div className="df-topbar">
-          <div className="df-topbar-left">{breadcrumbs}</div>
+          <div className="df-topbar-left">
+            {currentDir || rootDirName ? breadcrumbs : null}
+              {availableTabs.length > 0 ? (
+                <div className="df-tabbar" data-testid="design-files-tabbar">
+                  {availableTabs.length > 0 ? (
+                    <div className="df-tabs" role="tablist" data-testid="design-files-tabs">
+                      {availableTabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={resolvedTab === tab.id}
+                          className={`df-tab ${resolvedTab === tab.id ? 'active' : ''}`}
+                          data-testid={`design-files-tab-${tab.id}`}
+                          onClick={() => setActiveTab(tab.id)}
+                        >
+                          {tab.label}
+                          <span className="df-tab-count">{tab.count}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+          </div>
           <div className="df-topbar-right">
-            {/* Only while there is something to preview: a run in flight that
-                has already written a page. Outside that window the pane has
-                one view, and a switch with nothing on its other side would be
-                a control that does nothing. */}
-            {buildPreviewFile && running ? (
-              <BuildPreviewToggle
-                checked={!buildPreviewDismissed}
-                onChange={(next) => setBuildPreviewDismissed(!next)}
-              />
-            ) : null}
             {fileActions}
           </div>
         </div>
@@ -1566,6 +1601,7 @@ export function DesignFilesPanel({
                 file={buildPreviewFile}
                 filesRefreshKey={filesRefreshKey ?? 0}
                 steps={runSteps ?? []}
+                phase={runPhase}
                 workspaceContext={workspaceContext}
               />
             </div>
@@ -1587,30 +1623,10 @@ export function DesignFilesPanel({
                 </div>
               </div>
             ) : (
-              <div className="df-empty" data-testid="design-files-empty">
-                <DesignFilesEmptyState running={running} steps={runSteps} />
-              </div>
+              <div className="df-empty" data-testid="design-files-empty" />
             )
           ) : (
             <>
-              {availableTabs.length > 0 ? (
-                <div className="df-tabs" role="tablist" data-testid="design-files-tabs">
-                  {availableTabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={resolvedTab === tab.id}
-                      className={`df-tab ${resolvedTab === tab.id ? 'active' : ''}`}
-                      data-testid={`design-files-tab-${tab.id}`}
-                      onClick={() => setActiveTab(tab.id)}
-                    >
-                      {tab.label}
-                      <span className="df-tab-count">{tab.count}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
               {resolvedTab === 'live-artifacts' ? (
                 <div className="df-section" key="live-artifacts">
                   {liveArtifacts.map((artifact) => (
@@ -2085,7 +2101,7 @@ function FilePreviewPlaceholder({
 }) {
   return (
     <div className="df-preview-placeholder" title={title}>
-      {categoryGlyph(fileCategory(file))}
+      <FileTypeIcon name={resolveFileTypeIcon(file.name, file.mime)} size={32} />
     </div>
   );
 }
@@ -2129,11 +2145,6 @@ function sectionLabel(category: FileCategory, t: TranslateFn): string {
 function categoryLabel(category: FileCategory, t: TranslateFn): string {
   if (category === 'stylesheet') return t('designFiles.kindStylesheet');
   return kindLabel(category, t);
-}
-
-function categoryGlyph(category: FileCategory): string {
-  if (category === 'stylesheet') return '#';
-  return kindGlyph(category);
 }
 
 function filesFromClipboardData(clipboardData: DataTransfer | null): File[] {
@@ -2231,19 +2242,6 @@ function readEntryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEn
       reject(createFileSystemReadError('Could not read dropped folder', error));
     });
   });
-}
-
-function kindGlyph(kind: ProjectFileKind): string {
-  if (kind === 'html') return '⟨⟩';
-  if (kind === 'image') return '▣';
-  if (kind === 'sketch') return '✎';
-  if (kind === 'text') return '¶';
-  if (kind === 'code') return '{}';
-  if (kind === 'pdf') return 'PDF';
-  if (kind === 'document') return 'DOC';
-  if (kind === 'presentation') return 'PPT';
-  if (kind === 'spreadsheet') return 'XLS';
-  return '·';
 }
 
 function kindLabel(kind: ProjectFileKind, t: TranslateFn): string {

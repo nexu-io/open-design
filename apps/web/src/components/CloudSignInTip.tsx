@@ -219,35 +219,42 @@ export function CloudSignInTip() {
           {headBadge}
           <p>{t('settings.amrSigningIn')}</p>
           {status?.activationUrl ? (
-            <div className="amr-login-activation" role="group">
-              <span className="amr-login-activation__hint">
-                {status.browserOpenFailed
-                  ? t('settings.amrActivationBrowserFailed')
-                  : t('settings.amrActivationHint')}
-              </span>
-              <div className="amr-login-activation__actions">
-                <a
-                  className="amr-login-activation__open"
-                  href={status.activationUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {t('settings.amrActivationOpen')}
-                </a>
-              </div>
-            </div>
+            <p className="entry-local-mode-tip__hint">
+              {status.browserOpenFailed
+                ? t('settings.amrActivationBrowserFailed')
+                : t('settings.amrActivationHint')}
+            </p>
           ) : null}
-          <button
-            type="button"
-            className="entry-local-mode-tip__cancel"
-            onClick={(event) => {
-              event.stopPropagation();
-              void cancel();
-            }}
-          >
-            {t('settings.amrCancelSignIn')}
-          </button>
+          {/* One row, cancel on the left and the activation link on the right
+              (per product). The link used to sit above in its own bordered
+              `.amr-login-activation` group — that box only existed to pair the
+              hint with the button, so with the button down here the hint is
+              back to being a plain line. In this rail card the pair is narrow
+              enough to share a row in zh; longer locales wrap to two full-width
+              rows rather than clipping either label. */}
+          <div className="entry-local-mode-tip__actions">
+            <button
+              type="button"
+              className="entry-local-mode-tip__cancel"
+              onClick={(event) => {
+                event.stopPropagation();
+                void cancel();
+              }}
+            >
+              {t('settings.amrCancelSignIn')}
+            </button>
+            {status?.activationUrl ? (
+              <a
+                className="entry-local-mode-tip__open"
+                href={status.activationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {t('settings.amrActivationOpen')}
+              </a>
+            ) : null}
+          </div>
         </>
       ) : state === 'error' ? (
         <>

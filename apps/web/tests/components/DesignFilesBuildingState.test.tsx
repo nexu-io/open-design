@@ -124,84 +124,61 @@ describe('DesignFilesBuildingState', () => {
     expect(frame?.getAttribute('class')).toBeTruthy();
   });
 
-  it('names the page and the current step, and draws no cursor before the frame answers', () => {
+  it('keeps loading until there is rendered content, then shows the page without an activity bubble', () => {
     renderState();
-    // The page being built, once — the step log carries the rest.
-    expect(screen.getByRole('status').textContent).toBe('index.html');
-    expect(screen.getByText('编辑 index.html')).toBeTruthy();
-    // Nothing is known about WHERE yet; a cursor at 0,0 would be a lie.
-    expect(screen.queryByTestId('build-focus-cursor')).toBeNull();
+    const { frame } = watchFrame();
+    send(frame, sectionsMessage([]));
+    expect(frame.style.opacity).toBe('0');
+    send(frame, sectionsMessage([{ key: 'a', label: 'Hero' }]));
+    expect(frame.style.opacity).toBe('1');
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByTestId('build-focus-outline')).toBeNull();
   });
 
-  it('falls back to "thinking" when the turn has called nothing yet', () => {
-    renderState({ steps: [] });
-    expect(screen.getByText('思考中')).toBeTruthy();
-  });
-
-  // The way out moved to the topbar switch (DesignFilesPanel owns it), so this
-  // surface carries no control of its own on top of the page it is rendering.
-  it('puts no button on top of the page it renders', () => {
-    renderState();
-    expect(screen.queryByRole('button')).toBeNull();
-  });
-
-  // A whole page landing in one Write is ONE step with one anchor, which used
-  // to send the cursor straight to the footer. The frame reports the page's
-  // own parts instead, and the cursor rests on each one that just appeared.
-  it('walks the parts that just landed, one stop at a time', () => {
+  it('does not tour sections and preserves the plan title and anchor', () => {
     vi.useFakeTimers();
-    renderState();
+    renderState({ steps: [step({ title: 'Build hero', location: { file: 'index.html', anchor: 'Studio Nine' } })] });
     const { posted, frame } = watchFrame();
-
-    send(frame, sectionsMessage([
-      { key: '0|header|Studio Nine', label: 'Studio Nine' },
-      { key: '1|section|Selected work', label: 'Selected work' },
-    ]));
-    expect(posted.at(-1)?.section).toBe('0|header|Studio Nine');
-
-    act(() => {
-      vi.advanceTimersByTime(1200);
-    });
-    expect(posted.at(-1)?.section).toBe('1|section|Selected work');
-
-    // Tour over: back to the step's own anchor, which is the right target for
-    // an edit inside a part that already exists.
-    act(() => {
-      vi.advanceTimersByTime(1200);
-    });
-    expect(posted.at(-1)?.section).toBeNull();
-    expect(posted.at(-1)?.anchor).toBe('Studio Nine');
+    send(frame, sectionsMessage([{ key: 'a', label: 'Hero' }, { key: 'b', label: 'Footer' }]));
+    const request = posted.at(-1)!;
+    expect(request.anchor).toBe('Studio Nine');
+    expect(request.title).toBe('Build hero');
+    const count = posted.length;
+    act(() => vi.advanceTimersByTime(5000));
+    expect(posted).toHaveLength(count);
+    send(frame, { ...rectMessage(request.requestId as string), label: 'Hero' });
+    expect(screen.getByTestId('build-focus-outline')).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+    const outlineStyle = screen.getByTestId('build-focus-outline').getAttribute('style');
+    send(frame, { ...rectMessage('stale'), label: 'Footer', y: 500 });
+    expect(screen.getByTestId('build-focus-outline').getAttribute('style')).toBe(outlineStyle);
   });
 
-  it('names the part it is pointing at, not the file', () => {
-    renderState();
-    const { posted, frame } = watchFrame();
-
-    send(frame, sectionsMessage([{ key: '1|section|Selected work', label: 'Selected work' }]));
-    const requestId = posted.at(-1)?.requestId;
-    expect(typeof requestId).toBe('string');
-    send(frame, rectMessage(requestId as string));
-
-    expect(screen.getByTestId('build-focus-cursor').textContent).toContain('Selected work');
-    expect(screen.getByTestId('build-focus-cursor').textContent).not.toContain('index.html');
+  it('keeps the prior frame through empty refreshes and swaps only when ready', () => {
+    const { rerender } = renderState();
+    const { frame } = watchFrame();
+    send(frame, sectionsMessage([{ key: 'a', label: 'Hero' }]));
+    rerender(<I18nProvider initial="zh-CN"><DesignFilesBuildingState projectId="p1" file={file()}
+      filesRefreshKey={8} steps={[step()]} workspaceContext={null} /></I18nProvider>);
+    const next = [...document.querySelectorAll('iframe')].find((item) => item !== frame)!;
+    expect(frame.style.opacity).toBe('1');
+    expect(next.style.opacity).toBe('0');
+    send(next, sectionsMessage([]));
+    expect(frame.isConnected).toBe(true);
+    send(next, sectionsMessage([{ key: 'a', label: 'Updated hero' }]));
+    expect(frame.isConnected).toBe(false);
+    expect(next.style.opacity).toBe('1');
   });
 
-  // A load that only changed things INSIDE existing parts adds no keys, so
-  // there is nothing to tour and the step's anchor keeps the cursor.
-  it('does not re-tour parts it has already shown', () => {
-    vi.useFakeTimers();
-    renderState();
-    const { posted, frame } = watchFrame();
-    const parts = sectionsMessage([{ key: '0|header|Studio Nine', label: 'Studio Nine' }]);
-
-    send(frame, parts);
-    expect(posted.at(-1)?.section).toBe('0|header|Studio Nine');
-    act(() => {
-      vi.advanceTimersByTime(1200);
-    });
-
-    const before = posted.length;
-    send(frame, parts);
-    expect(posted.slice(before).every((message) => message.section === null)).toBe(true);
+  it('retains the last frame on failure and removes the activity outline', () => {
+    const { rerender } = renderState();
+    const { frame } = watchFrame();
+    send(frame, sectionsMessage([{ key: 'a', label: 'Hero' }]));
+    rerender(<I18nProvider initial="zh-CN"><DesignFilesBuildingState projectId="p1" file={file()}
+      filesRefreshKey={7} steps={[step()]} workspaceContext={null} failure="failed" /></I18nProvider>);
+    expect(frame.isConnected).toBe(true);
+    expect(frame.style.opacity).toBe('1');
+    expect(screen.queryByTestId('build-focus-outline')).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('失败');
   });
 });

@@ -1,0 +1,16 @@
+.dock {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+.dock:empty {
+  display: none;
+}
+.dock > :global(.entry-top-right-cluster) {
+  position: static;
+}
+.dock :global(.entry-top-right-credits-panel) {
+  left: auto;
+  right: 0;
+}

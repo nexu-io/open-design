@@ -1,0 +1,22 @@
+.field {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-size-14, 14px);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.field > input { width: 100%; font-variant-numeric: tabular-nums; }
+.field.field[data-animated] > input { color: transparent; }
+.overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+  align-content: center;
+  text-align: inherit;
+  color: var(--manual-edit-field-text);
+}
+.field[data-animated] > .overlay { visibility: visible; }

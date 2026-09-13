@@ -188,16 +188,18 @@ describe('FileViewer image export', () => {
 
     const { activeFrame } = renderHtmlPreview();
     await openImageExportDialog();
-    expect(screen.getByRole('radio', { name: 'PNG' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: /Format: PNG/i })).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: /File name/i }), { target: { value: 'my-export.png' } });
 
     // Pick the format BEFORE saving — the chosen format drives the single capture.
-    fireEvent.click(screen.getByRole('radio', { name: 'JPEG' }));
+    fireEvent.click(screen.getByRole('combobox', { name: /Format:/i }));
+    fireEvent.click(await screen.findByRole('option', { name: 'JPEG' }));
     await clickSave();
 
     await waitFor(() => {
       expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500, undefined);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'jpeg');
-      expect(prepareImageExportTargetMock).toHaveBeenCalledWith('workspace', 'jpeg', { useNativePicker: false });
+      expect(prepareImageExportTargetMock).toHaveBeenCalledWith('my-export', 'jpeg', { useNativePicker: false });
     });
     // Captured exactly once — no eager capture on open or on format change.
     expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(1);
@@ -215,7 +217,8 @@ describe('FileViewer image export', () => {
     const save = await waitForSaveButton();
     expect((save as HTMLButtonElement).disabled).toBe(false);
 
-    fireEvent.click(screen.getByRole('radio', { name: 'JPEG' }));
+    fireEvent.click(screen.getByRole('combobox', { name: /Format:/i }));
+    fireEvent.click(await screen.findByRole('option', { name: 'JPEG' }));
 
     expect(requestPreviewSnapshotMock).not.toHaveBeenCalled();
     expect(captureHostIframeSnapshotMock).not.toHaveBeenCalled();

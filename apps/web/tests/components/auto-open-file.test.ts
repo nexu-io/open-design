@@ -4,6 +4,8 @@ import {
   decideAutoOpenAfterWrite,
   selectAutoOpenProducedArtifact,
   selectAutoOpenTurnArtifact,
+  selectLiveTurnArtifact,
+  selectConversationArtifact,
 } from '../../src/components/auto-open-file';
 
 describe('decideAutoOpenAfterWrite', () => {
@@ -485,5 +487,71 @@ describe('selectAutoOpenTurnArtifact', () => {
 
       expect(result).toBe('index.html');
     });
+  });
+});
+
+// Every other selector here answers at the END of a turn. This one answers
+// while the run is still writing, so the page it is producing has a tab in the
+// strip instead of sitting on disk until the turn settles.
+describe('selectLiveTurnArtifact', () => {
+  const files = [
+    { name: 'index.html', mtime: 20 },
+    { name: 'site.css', mtime: 30 },
+  ];
+
+  it('opens the page the run is writing', () => {
+    expect(selectLiveTurnArtifact(files, { streaming: true, alreadyOpened: null })).toBe(
+      'index.html',
+    );
+  });
+
+  it('opens nothing when no run is in flight', () => {
+    expect(selectLiveTurnArtifact(files, { streaming: false, alreadyOpened: null })).toBe(null);
+  });
+
+  // A page rewritten forty times is still one tab.
+  it('does not re-open the page this run already opened', () => {
+    expect(
+      selectLiveTurnArtifact(files, { streaming: true, alreadyOpened: 'index.html' }),
+    ).toBe(null);
+  });
+
+  // The same page the build preview moves to: a shallower entry wins over the
+  // deep one that landed first, and the strip follows the pane.
+  it('follows the entry page when a shallower one lands', () => {
+    expect(
+      selectLiveTurnArtifact(
+        [{ name: 'deep/page.html', mtime: 10 }, { name: 'index.html', mtime: 20 }],
+        { streaming: true, alreadyOpened: 'deep/page.html' },
+      ),
+    ).toBe('index.html');
+  });
+
+  it('opens nothing while the run has produced no page', () => {
+    expect(
+      selectLiveTurnArtifact([{ name: 'notes.md', mtime: 5 }], {
+        streaming: true,
+        alreadyOpened: null,
+      }),
+    ).toBe(null);
+  });
+});
+
+
+describe('selectConversationArtifact', () => {
+  const files = [{ name: 'index.html', kind: 'html', mtime: 999 },
+    { name: 'blog.html', kind: 'html', mtime: 1 }, { name: 'deck.html', kind: 'html', mtime: 2 }];
+  it('selects the newest assistant output instead of the project entry', () => {
+    expect(selectConversationArtifact([{ producedFiles: [files[2]!] }, { producedFiles: [files[1]!] }], files)).toBe('blog.html');
+  });
+  it('keeps the preceding output when a later turn only contains text', () => {
+    expect(selectConversationArtifact([{ producedFiles: [files[1]!] }, {}], files)).toBe('blog.html');
+  });
+  it('resolves a successful edit for older turns without produced-file metadata', () => {
+    expect(selectConversationArtifact([{ touchedPaths: ['/project/deck.html'] }], files)).toBe('deck.html');
+  });
+  it('does not borrow another conversation output or reopen a deleted file', () => {
+    expect(selectConversationArtifact([], files)).toBeNull();
+    expect(selectConversationArtifact([{ producedFiles: [{ name: 'deleted.html' }] }], files)).toBeNull();
   });
 });

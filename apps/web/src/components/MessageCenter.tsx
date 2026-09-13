@@ -360,7 +360,9 @@ function MessageItem({
       data-tooltip={archived ? t('messageCenter.unarchive') : t('messageCenter.archive')}
       data-testid="message-center-archive"
     >
-      <Icon name={archived ? 'inbox-unarchive' : 'inbox-archive'} size={15} />
+      {/* One glyph for both directions (per product): the label, tooltip and
+          aria-label still say which way this click goes. */}
+      <Icon name="more-vertical" size={15} />
     </button>
     {expanded && message.ctaLabel && ctaUrl ? <div className={styles.itemActions}><button type="button" className={styles.primaryAction} onClick={() => window.open(ctaUrl, '_blank', 'noopener,noreferrer')}>{message.ctaLabel}</button></div> : null}
   </article>;

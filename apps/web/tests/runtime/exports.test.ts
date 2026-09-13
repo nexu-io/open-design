@@ -1650,12 +1650,12 @@ describe('exportAsImage', () => {
 
     expect(showSaveFilePicker).toHaveBeenCalledOnce();
     expect(target?.method).toBe('download');
-    expect(target?.filename).toBe('My-Design.jpg');
+    expect(target?.filename).toBe('My Design.jpg');
 
     await target?.save(new Blob(['jpeg'], { type: 'image/jpeg' }));
 
     expect(clickMock).toHaveBeenCalledOnce();
-    expect(anchors[0]!.download).toBe('My-Design.jpg');
+    expect(anchors[0]!.download).toBe('My Design.jpg');
   });
 
   it('falls back to download when the native save picker reports a cross-realm SecurityError', async () => {
@@ -1669,7 +1669,7 @@ describe('exportAsImage', () => {
 
     expect(showSaveFilePicker).toHaveBeenCalledOnce();
     expect(target?.method).toBe('download');
-    expect(target?.filename).toBe('My-Design.webp');
+    expect(target?.filename).toBe('My Design.webp');
   });
 
   it('can skip the native save picker to avoid pre-creating empty files', async () => {
@@ -1680,6 +1680,33 @@ describe('exportAsImage', () => {
 
     expect(showSaveFilePicker).not.toHaveBeenCalled();
     expect(target?.method).toBe('download');
-    expect(target?.filename).toBe('My-Design.png');
+    expect(target?.filename).toBe('My Design.png');
+  });
+
+  it.each([
+    ['png', '慢杂志 设计稿.png'],
+    ['jpeg', '慢杂志 设计稿.jpg'],
+    ['webp', '慢杂志 设计稿.webp'],
+  ] as const)('preserves the entered Chinese filename and spaces for %s downloads', async (format, filename) => {
+    vi.stubGlobal('window', {});
+    const target = await prepareImageExportTarget('慢杂志 设计稿', format, { useNativePicker: false });
+
+    expect(target?.filename).toBe(filename);
+    await target?.save(new Blob(['image']));
+    expect(anchors[0]!.download).toBe(filename);
+  });
+
+  it('removes path separators and filesystem-invalid characters without removing Chinese text', async () => {
+    vi.stubGlobal('window', {});
+    const target = await prepareImageExportTarget('  慢/杂志\\版本:一?  ', 'png', { useNativePicker: false });
+
+    expect(target?.filename).toBe('慢-杂志-版本-一-.png');
+  });
+
+  it('uses a default stem when the filename has no usable characters', async () => {
+    vi.stubGlobal('window', {});
+    const target = await prepareImageExportTarget(' ... ', 'png', { useNativePicker: false });
+
+    expect(target?.filename).toBe('artifact.png');
   });
 });

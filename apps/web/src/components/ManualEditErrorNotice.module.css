@@ -1,0 +1,22 @@
+.notice {
+  z-index: 1000;
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-medium, 8px);
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+  transform: translateX(-50%);
+}
+.anchored { position: fixed; }
+.fallback {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  width: max-content;
+  max-width: min(480px, calc(100% - 24px));
+}

@@ -55,8 +55,9 @@ import { resetCloudSignInTipDismissal } from './CloudSignInTip';
 import { SignOutConfirmDialog } from './SignOutConfirmDialog';
 import { notifyAmrLoginStatusChanged } from './amrLoginPolling';
 import { Icon } from './Icon';
-import { MarqueeLabel } from './MarqueeLabel';
+import { useWorkspaceAccountDock } from './workspace/WorkspaceAccountDock';
 import { GITHUB_STARS_FALLBACK_LABEL, formatStars, useGithubStars } from './useGithubStars';
+import { MarqueeLabel } from './MarqueeLabel';
 import { PlanWordmark, planBadgeTierForWorkspace } from './PlanWordmark';
 import { RemixIcon } from './RemixIcon';
 import { InviteDialog } from './InviteDialog';
@@ -830,6 +831,26 @@ function formatBillingTier(tier: string, t: ReturnType<typeof useI18n>['t']): st
     .join(' ');
 }
 
+// Mounted only in entry views, so project pages do not fetch a hidden count.
+function EntryGithubChip({ onClick }: { onClick: () => void }) {
+  const stars = useGithubStars();
+  const label = stars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(stars);
+  return (
+    <a
+      className="entry-top-right-github"
+      href={REPO_URL}
+      {...externalLinkProps}
+      aria-label={`GitHub · ${label} stars`}
+      title={`GitHub · ${label} stars`}
+      data-testid="entry-top-right-github"
+      onClick={onClick}
+    >
+      <Icon name="github-filled" size={15} />
+      <span>{label}</span>
+    </a>
+  );
+}
+
 interface EntryTopRightClusterProps {
   /** Analytics page the cluster reports from: the entry views map through
    *  `entryViewToTracking`, the workspace mount reports 'project'. */
@@ -856,9 +877,9 @@ interface EntryTopRightClusterProps {
 }
 
 /**
- * Top-right floating cluster (portaled to document.body): an optional leading
- * slot and the standalone credits pill — one flex row riding the workbench
- * top-right corner.
+ * Shared account cluster: fixed at the entry view's top-right, or portaled
+ * beside the project's download action. Contains an optional leading slot and
+ * the standalone credits pill.
  *
  * It still OWNS the account module (menu state, hover timers, message centre,
  * sign-out) but renders it into `accountHost` instead of the corner, so the
@@ -887,6 +908,7 @@ export function EntryTopRightCluster({
   const { t } = useI18n();
   const analytics = useAnalytics();
   const workspaceDimensions = workspaceAnalyticsDimensions(context);
+  const projectAccountHost = useWorkspaceAccountDock();
 
   const isTeam = Boolean(context) && context!.workspaceType === 'team';
   const permissions = context?.permissions;
@@ -980,7 +1002,6 @@ export function EntryTopRightCluster({
   // Sign-out confirm gate (recvqgMWpJZqhL): the menu item only ARMS the
   // confirmation dialog; the real logout chain runs on explicit confirm.
   const [confirmSignOut, setConfirmSignOut] = useState(false);
-  const githubStars = useGithubStars();
   // Signed-in account email for the menu head (#5517 shows it under the
   // display name). The workspace context carries no email, so lazily read the
   // vela login-status projection the first time the menu opens — never on
@@ -1153,25 +1174,9 @@ export function EntryTopRightCluster({
       {createPortal(
         <div className="entry-top-right-cluster">
           {leadingSlot}
-          {/* GitHub star chip: its own option in the cluster, right after the
-              campaign badge (per product) — it used to live in the account
-              menu's social row. */}
-          <a
-            className="entry-top-right-github"
-            href={REPO_URL}
-            {...externalLinkProps}
-            aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            data-testid="entry-top-right-github"
-            onClick={() => trackAccountAction('github')}
-          >
-            {/* 15, not the wordmark's 14: the octocat only fills 81% of its
-                24-unit viewBox while the plan wordmark fills 90% of its own, so
-                equal box heights drew an optically smaller mark. 15 puts the
-                two drawn glyphs on the same ~12.5px height. */}
-            <Icon name="github-filled" size={15} />
-            <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
-          </a>
+          {page !== 'project' ? (
+            <EntryGithubChip onClick={() => trackAccountAction('github')} />
+          ) : null}
           {/* One shared capsule for the account module (per product: 头像和积分
               合并成一个胶囊): credits segment on the left (same availability
               rule as the menu's billing card; clicking jumps to B's billing
@@ -1567,7 +1572,7 @@ export function EntryTopRightCluster({
               )
             : null}
         </div>,
-        document.body,
+        (page === 'project' ? projectAccountHost : null) ?? document.body,
       )}
       {/* Panel + unread polling live here (outside the hover menu, which
           unmounts when closed); the 消息中心 menu row above just opens it.

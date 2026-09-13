@@ -3627,6 +3627,7 @@ export interface Dict {
   // Workspace / file viewer / design files panel
   'workspace.designFiles': string;
   'workspace.focusMode': string;
+  'workspace.resizePanel': string;
   'workspace.showChat': string;
   'workspace.closeTab': string;
   'workspace.deleteFileConfirm': string;
@@ -3937,6 +3938,7 @@ export interface Dict {
   'manualEdit.title': string;
   'manualEdit.fallbackTitle': string;
   'manualEdit.movePanel': string;
+  'manualEdit.resizePanel': string;
   'manualEdit.editParams': string;
   'manualEdit.closePanel': string;
   'manualEdit.selectLayer': string;
@@ -3960,6 +3962,8 @@ export interface Dict {
   'manualEdit.invalidAttributes': string;
   'manualEdit.changes': string;
   'manualEdit.undo': string;
+  'manualEdit.previousStep': string;
+  'manualEdit.nextStep': string;
   'manualEdit.redo': string;
   'manualEdit.noChanges': string;
   'manualEdit.imageUrl': string;
@@ -3995,6 +3999,11 @@ export interface Dict {
   'manualEdit.deleteElement': string;
   'manualEdit.deleteElementConfirm': string;
   'manualEdit.alignCenter': string;
+  'manualEdit.pickColor': string;
+  'manualEdit.colorHue': string;
+  'manualEdit.colorSaturation': string;
+  'manualEdit.colorBrightness': string;
+  'manualEdit.colorFormat': string;
   'manualEdit.opacity': string;
   'manualEdit.uploadImage': string;
   'manualEdit.uploadingImage': string;
@@ -4055,6 +4064,7 @@ export interface Dict {
   'fileViewer.previewAssetBlockedDetail': string;
   'fileViewer.presenterReset': string;
   'fileViewer.present': string;
+  'fileViewer.presentOptions': string;
   'fileViewer.presentInTab': string;
   'fileViewer.presentFullscreen': string;
   'fileViewer.presentNewTab': string;

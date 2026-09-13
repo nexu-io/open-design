@@ -1,0 +1,65 @@
+.popover {
+  position: fixed;
+  z-index: 10000;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  width: min(280px, calc(100vw - 16px));
+  box-sizing: border-box;
+  padding: 4px;
+  max-height: calc(100vh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-family: var(--sans);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 16%);
+}
+.selection {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: 9px;
+  background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent);
+  touch-action: none;
+  cursor: crosshair;
+}
+.thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 45%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.adjustments, .fields { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.eyedropper { width: 32px; height: 32px; min-width: 32px; padding: 0; border-radius: 8px; }
+.sliders { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; gap: 10px; }
+.range {
+  display: block;
+  appearance: none;
+  width: 100%; height: 12px; margin: 0; padding: 0;
+  min-width: 0; min-height: 0; border: 0; border-radius: 999px; cursor: pointer;
+}
+.hue { background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.checker { border-radius: 999px; background: repeating-conic-gradient(#c8c8c8 0% 25%, #fff 0% 50%) 0 0 / 8px 8px; }
+.range::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; background: #fff; border: 1px solid #999; border-radius: 50%; box-shadow: 0 1px 3px #0003; }
+.range::-moz-range-thumb { width: 14px; height: 14px; background: #fff; border: 1px solid #999; border-radius: 50%; }
+.popover :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fields .mode, .fields .value, .fields .alpha input {
+  height: 32px; min-height: 32px; padding: 0 6px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--bg-subtle); color: var(--text); font-size: 11px;
+  font-family: var(--sans);
+}
+.fields .mode { width: 61px; flex: 0 0 61px; padding-right: 14px; }
+.fields .value { flex: 1; min-width: 0; }
+.alpha { position: relative; width: 47px; flex: 0 0 47px; }
+.fields .alpha input { width: 100%; padding-right: 14px; appearance: textfield; }
+.alpha input::-webkit-inner-spin-button { appearance: none; }
+.alpha span { position: absolute; right: 5px; top: 9px; font-size: 11px; pointer-events: none; }
+.keyboardChannels { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.keyboardChannels:focus-within { position: static; width: auto; height: auto; clip-path: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }

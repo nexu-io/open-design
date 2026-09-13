@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { runProgressSteps } from '../../src/runtime/run-progress';
+import {
+  pendingQuestionTitle,
+  runFailureState,
+  runProgressPhase,
+  runProgressSteps,
+} from '../../src/runtime/run-progress';
 import type { AgentEvent, ChatMessage } from '../../src/types';
 
 function toolUse(id: string, name: string, input: unknown): AgentEvent {
@@ -8,6 +13,18 @@ function toolUse(id: string, name: string, input: unknown): AgentEvent {
 
 function assistant(events: AgentEvent[], id = 'a1'): ChatMessage {
   return { id, role: 'assistant', content: '', events };
+}
+
+function form(title: string, id = 'f1'): string {
+  return `<question-form>${JSON.stringify({
+    id,
+    title,
+    questions: [{ id: 'q1', type: 'text', label: 'Who?' }],
+  })}</question-form>`;
+}
+
+function asked(content: string, id = 'a1'): ChatMessage {
+  return { id, role: 'assistant', content, events: [] };
 }
 
 function user(content: string, id = 'u1'): ChatMessage {
@@ -166,3 +183,173 @@ describe('runProgressSteps anchors', () => {
     expect(step?.anchor).toBeNull();
   });
 });
+
+// The chat footer and the Design Files ring describe ONE run. The footer says
+// "preparing" until the turn produces something, "thinking" once the run
+// reports it is reasoning, and "working" the moment content lands; the ring
+// reads the same three states from here, so the split can never show
+// "Preparing…" on the left beside "Thinking" on the right.
+describe('runProgressPhase', () => {
+  it('is preparing before the turn has said anything', () => {
+    expect(runProgressPhase([])).toBe('preparing');
+    expect(runProgressPhase([user('Build a portfolio')])).toBe('preparing');
+    expect(runProgressPhase([assistant([])])).toBe('preparing');
+  });
+
+  // A "thinking" STATUS is the run talking about itself, not output: the
+  // wording changes, the phase does not.
+  it('is thinking once the run reports reasoning, with nothing produced yet', () => {
+    expect(runProgressPhase([assistant([{ kind: 'status', label: 'thinking' }])])).toBe('thinking');
+    expect(
+      runProgressPhase([assistant([{ kind: 'status', label: 'context_compaction' }])]),
+    ).toBe('preparing');
+  });
+
+  it('is working the moment the turn produces content', () => {
+    expect(runProgressPhase([assistant([{ kind: 'text', text: 'Here it is' }])])).toBe('working');
+    expect(runProgressPhase([assistant([{ kind: 'thinking', text: 'hmm' }])])).toBe('working');
+    expect(runProgressPhase([assistant([toolUse('1', 'Write', {})])])).toBe('working');
+    // An empty text delta is not content — the turn has still said nothing.
+    expect(
+      runProgressPhase([assistant([{ kind: 'status', label: 'thinking' }, { kind: 'text', text: '  ' }])]),
+    ).toBe('thinking');
+  });
+
+  it('reads the LAST turn only, and resets at a new user message', () => {
+    expect(
+      runProgressPhase([
+        assistant([{ kind: 'text', text: 'done' }], 'a1'),
+        user('now the pricing page', 'u2'),
+      ]),
+    ).toBe('preparing');
+  });
+});
+
+// A turn that ends by ASKING is finished but not done — the run stopped
+// because it needs an answer. The ring named nothing in that state while an
+// open form sat in the chat column beside it.
+describe('pendingQuestionTitle', () => {
+  it('names the question the last turn is waiting on', () => {
+    expect(pendingQuestionTitle([asked(`Here is the plan.\n${form('开场三问')}`)])).toBe(
+      '开场三问',
+    );
+  });
+
+  it('is null when the turn asked nothing', () => {
+    expect(pendingQuestionTitle([])).toBe(null);
+    expect(pendingQuestionTitle([asked('All done.')])).toBe(null);
+    expect(pendingQuestionTitle([assistant([])])).toBe(null);
+  });
+
+  // The moment the user replies, their message is last: the form is answered
+  // and there is nothing left to wait for.
+  it('is null once the user has replied', () => {
+    expect(
+      pendingQuestionTitle([asked(form('开场三问')), user('主角是我', 'u2')]),
+    ).toBe(null);
+  });
+
+  it('takes the last form when a turn asks twice', () => {
+    expect(
+      pendingQuestionTitle([asked(`${form('第一问', 'f1')}\n${form('第二问', 'f2')}`)]),
+    ).toBe('第二问');
+  });
+});
+
+describe('runFailureState', () => {
+  it('reports nothing without an assistant turn to report on', () => {
+    expect(runFailureState([])).toBeNull();
+    expect(runFailureState([user('Build a portfolio')])).toBeNull();
+  });
+
+  it('reads the run status the chat card reads', () => {
+    expect(runFailureState([{ ...assistant([]), runStatus: 'failed' }])).toBe('failed');
+    expect(runFailureState([{ ...assistant([]), runStatus: 'canceled' }])).toBe('canceled');
+    expect(runFailureState([{ ...assistant([]), runStatus: 'succeeded' }])).toBeNull();
+  });
+
+  // Still in flight: `running` owns that state, and a queued turn has not had
+  // the chance to fail yet.
+  it('does not call an unfinished run a failure', () => {
+    expect(runFailureState([{ ...assistant([]), runStatus: 'running' }])).toBeNull();
+    expect(runFailureState([{ ...assistant([]), runStatus: 'queued' }])).toBeNull();
+  });
+
+  it('counts a result that never reached the conversation', () => {
+    expect(
+      runFailureState([{ ...assistant([]), resultDeliveryState: 'no_result' }]),
+    ).toBe('failed');
+    expect(
+      runFailureState([{ ...assistant([]), resultDeliveryState: 'delivery_failed' }]),
+    ).toBe('failed');
+  });
+
+  // The card's own fallback for a message with no terminal status of its own.
+  it('falls back to the tool calls when the run reported no status', () => {
+    const errored: ChatMessage = {
+      ...assistant([
+        toolUse('1', 'Bash', { command: 'pnpm build' }),
+        { kind: 'tool_result', toolUseId: '1', content: 'boom', isError: true },
+      ]),
+      endedAt: 2,
+    };
+    expect(runFailureState([errored])).toBe('failed');
+
+    const settled: ChatMessage = {
+      ...assistant([
+        toolUse('1', 'Bash', { command: 'pnpm build' }),
+        { kind: 'tool_result', toolUseId: '1', content: 'ok', isError: false },
+      ]),
+      endedAt: 2,
+    };
+    expect(runFailureState([settled])).toBeNull();
+  });
+
+  it('counts a tool call that never came back in a turn that never ended', () => {
+    const dropped = assistant([toolUse('1', 'Bash', { command: 'pnpm build' })]);
+    expect(runFailureState([dropped])).toBe('failed');
+    expect(runFailureState([{ ...dropped, endedAt: 2 }])).toBeNull();
+  });
+
+  // The user answering moves the conversation on; the turn before their
+  // message is history, not the state of the pane.
+  it('stops reporting once the user has replied', () => {
+    expect(
+      runFailureState([{ ...assistant([]), runStatus: 'failed' }, user('Try again', 'u2')]),
+    ).toBeNull();
+  });
+});
+
+
+describe('plan progress titles', () => {
+  it('prefers the active plan title over subsequent low-level tools', () => {
+    const steps = runProgressSteps([assistant([
+      toolUse('plan', 'TodoWrite', { todos: [
+        { content: 'Create proposal', status: 'in_progress' },
+        { content: 'Validate', status: 'pending' },
+      ] }),
+      toolUse('search', 'ToolSearch', { query: 'select:TaskUpdate' }),
+    ])]);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.title).toBe('Create proposal');
+  });
+  it('follows plan updates and uses the first pending step when none is active', () => {
+    const steps = runProgressSteps([assistant([
+      toolUse('plan', 'TodoWrite', { todos: [
+        { content: 'Create proposal', status: 'completed' },
+        { content: 'Validate', status: 'pending' },
+      ] }),
+    ])]);
+    expect(steps[0]?.title).toBe('Validate');
+  });
+});
+
+ it('retains write location after plan and tool updates', () => {
+   const steps = runProgressSteps([assistant([
+     toolUse('write', 'Write', { file_path: 'index.html', content: '<h1>Studio Nine Design</h1>' }),
+     toolUse('plan', 'TodoWrite', { todos: [{ content: 'Build hero', status: 'in_progress' }] }),
+     toolUse('search', 'ToolSearch', { query: 'select:TaskUpdate' }),
+   ])]);
+   expect(steps[0]?.title).toBe('Build hero');
+   expect(steps[0]?.location).toEqual({ file: 'index.html', anchor: 'Studio Nine Design' });
+ });

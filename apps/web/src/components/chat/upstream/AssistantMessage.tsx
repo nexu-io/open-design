@@ -3006,6 +3006,10 @@ function feedbackReasonLabel(
     case "weak_visual":
       return t("assistant.feedbackReasonNegativeVisual");
     case "incomplete_output":
+      return t("assistant.feedbackReasonNegativeCouldNotRun");
+    case "hard_to_use":
+      return t("assistant.feedbackReasonNegativeTooSlow");
+    case "incomplete_output":
       return t("assistant.feedbackReasonNegativeIncomplete");
     case "hard_to_use":
       return t("assistant.feedbackReasonNegativeHard");

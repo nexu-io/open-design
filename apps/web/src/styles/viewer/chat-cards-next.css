@@ -33,7 +33,7 @@
    `var(--amber-border, var(--orange-border, var(--green-border)))`，
    目前一路回落到绿色。在 :root 定义它会把那处静默翻成琥珀色，
    而本次改版根本用不到它。要用请就地写 color-mix。 */
-:root {
+:root:where(:not([data-chat-root], [data-chat-root] *)) {
   --t-cap: var(--font-size-12);   /* 角标、耗时、类名 */
   --t-mini: var(--font-size-12);  /* 状态标签、辅助行 */
   --t-body: var(--font-size-13);  /* 正文、气泡、按钮 */
@@ -51,11 +51,11 @@
    （12/12/4/12）。380px 是稿子里刻意的常数：对话里有形状的只有
    「你说的话」和「它问你的话」，两者同宽、一左一右。
    两个 token 在暗色下互换，所以反色自动成立，不需要额外暗色规则。 */
-.chat-log .msg.user {
+.chat-log .msg.user:where(:not([data-chat-root], [data-chat-root] *)) {
   max-width: min(84%, 380px);
 }
 
-.chat-log .msg.user .user-text {
+.chat-log .msg.user .user-text:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 9px 13px;
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
   background: var(--text-strong);
@@ -65,7 +65,7 @@
 }
 
 /* 稿子的 .msg-row.is-hover：悬停时气泡退一档，不是加深 */
-.chat-log .msg.user .user-text-wrap:hover > .user-text {
+.chat-log .msg.user .user-text-wrap:hover > .user-text:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--text);
 }
 
@@ -75,12 +75,12 @@
    下方、距上方内容 4px；生产的 `.user-actions`(chat.css:916) 本来
    就是这个位置和间距，所以位置不动，只把按钮本身对齐稿子的规格：
    30×30 方格、--radius-sm、hover --bg-fill-secondary。 */
-.chat-log .msg.user .user-actions {
+.chat-log .msg.user .user-actions:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 4px;
   gap: 4px;
 }
 
-.chat-log .msg.user .user-copy-btn {
+.chat-log .msg.user .user-copy-btn:where(:not([data-chat-root], [data-chat-root] *)) {
   display: grid;
   place-items: center;
   width: 30px;
@@ -90,12 +90,12 @@
   color: var(--text-soft);
 }
 
-.chat-log .msg.user .user-copy-btn:hover {
+.chat-log .msg.user .user-copy-btn:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-secondary);
   color: var(--text-strong);
 }
 
-.chat-log .msg.user .user-copy-btn svg {
+.chat-log .msg.user .user-copy-btn svg:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 16px;
   height: 16px;
 }
@@ -105,7 +105,7 @@
    --bg-panel 色带用 --border-soft 分隔。去掉投影和强调色渐变 ——
    这张卡不靠色彩争注意力，靠和气泡同宽。
    composio.css 里这一族都是裸类选择器，同特异度靠顺序取胜。 */
-.question-form {
+.question-form:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 380px;
   max-width: 100%;
   border-radius: var(--radius);
@@ -113,7 +113,7 @@
   box-shadow: none;
 }
 
-.question-form-head {
+.question-form-head:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
   padding: 9px 11px;
   border-bottom: 1px solid var(--border-soft);
@@ -121,30 +121,30 @@
   font-size: var(--t-mini);
 }
 
-.question-form-icon {
+.question-form-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 20px;
   height: 20px;
   font-size: var(--t-cap);
 }
 
-.question-form-title {
+.question-form-title:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: var(--t-mini);
   letter-spacing: normal;
   color: var(--text-strong);
 }
 
-.question-form-desc {
+.question-form-desc:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: var(--t-cap);
 }
 
-.question-form-body {
+.question-form-body:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 6px;
   padding: 10px 11px 8px;
   font-size: var(--t-body);
   line-height: var(--lh-body);
 }
 
-.question-form-foot {
+.question-form-foot:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
   padding: 8px 11px;
   border-top: 1px solid var(--border-soft);
@@ -152,7 +152,7 @@
 }
 
 /* 选项：稿子的 `.opt` 是整行卡而不是胶囊，hover 才加深描边 */
-.question-form .qf-chip {
+.question-form .qf-chip:where(:not([data-chat-root], [data-chat-root] *)) {
   gap: 8px;
   padding: 8px 11px;
   border: 1px solid var(--border);
@@ -163,28 +163,28 @@
   color: var(--text);
 }
 
-.question-form .qf-options {
+.question-form .qf-options:where(:not([data-chat-root], [data-chat-root] *)) {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
 }
 
-.question-form .qf-chip:hover {
+.question-form .qf-chip:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--border-strong);
   background: var(--bg-panel);
 }
 
-.question-form .qf-chip-on {
+.question-form .qf-chip-on:where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: color-mix(in srgb, var(--brand) 82%, var(--border-strong));
 }
 
 /* 「自己填」是选项之一，不是卡外的补充说明 —— 虚线，同列排 */
-.question-form .qf-chip-other {
+.question-form .qf-chip-other:where(:not([data-chat-root], [data-chat-root] *)) {
   border-style: dashed;
   color: var(--text-muted);
 }
 
-.question-form .qf-chip-other:hover {
+.question-form .qf-chip-other:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   border-style: solid;
   color: var(--text-strong);
 }
@@ -193,7 +193,7 @@
    AssistantMessage.tsx:2994 的 .question-form-summary 一族。
    收成一张 fit-content 的安静小卡；稿子刻意删掉了那枚对勾图标 ——
    「已确认」四个字本身就是状态，再加个勾是重复。 */
-.question-form-summary {
+.question-form-summary:where(:not([data-chat-root], [data-chat-root] *)) {
   width: fit-content;
   max-width: 100%;
   padding: 8px 11px;
@@ -204,23 +204,23 @@
   line-height: var(--lh-row);
 }
 
-.question-form-summary-icon {
+.question-form-summary-icon:where(:not([data-chat-root], [data-chat-root] *)) {
   display: none;
 }
 
-.question-form-summary-title {
+.question-form-summary-title:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-bottom: 3px;
   font-size: var(--t-mini);
   color: var(--brand-text);
 }
 
-.question-form-summary-items {
+.question-form-summary-items:where(:not([data-chat-root], [data-chat-root] *)) {
   flex-direction: column;
   gap: 2px;
 }
 
 /* 键名退一档、答案给最深一档 —— 撤掉胶囊底，它是文本不是标记 */
-.question-form-summary-item {
+.question-form-summary-item:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 0;
   border: none;
   border-radius: 0;
@@ -228,7 +228,7 @@
   color: var(--text-strong);
 }
 
-.question-form-summary-item > span:first-child {
+.question-form-summary-item > span:first-child:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-inline-end: 6px;
   color: var(--text-soft);
   font-weight: 600;
@@ -240,7 +240,7 @@
    --border 发丝线把标题和内容分开、耗时走等宽小一号。
    height:auto 是必须的 —— packages/components/src/styles.css:8 的
    全局 `button { height: 36px }` 会撑高这一行。 */
-.chat-log .task-activity .action-card-toggle {
+.chat-log .task-activity .action-card-toggle:where(:not([data-chat-root], [data-chat-root] *)) {
   height: auto;
   margin-inline: -7px;
   padding: 6px 7px;
@@ -249,23 +249,23 @@
   font-size: var(--t-mini);
 }
 
-.chat-log .task-activity .action-card-toggle:hover {
+.chat-log .task-activity .action-card-toggle:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
 }
 
-.chat-log .task-activity .action-card-toggle .summary {
+.chat-log .task-activity .action-card-toggle .summary:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: var(--t-mini);
   color: var(--text-strong);
 }
 
 /* 稿子把耗时放在标题行右侧：等宽、小一号、最浅一档 */
-.chat-log .task-activity .task-activity-elapsed {
+.chat-log .task-activity .task-activity-elapsed:where(:not([data-chat-root], [data-chat-root] *)) {
   font-family: var(--mono);
   font-size: var(--t-cap);
   color: var(--text-soft);
 }
 
-.chat-log .task-activity .action-card-body {
+.chat-log .task-activity .action-card-body:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 6px 0 2px;
   border-top: var(--stroke-thin) solid var(--border);
 }
@@ -273,7 +273,7 @@
 /* code.css:1614 在执行记录左侧画了一条 1px 竖脊。稿子里没有这东西 ——
    它整套靠留白和缩进分层（分支上专门有一次提交叫「折叠展开不再画
    分隔线,改用留白分层」）。展开时标题下那条横发丝线保留，竖脊去掉。 */
-.chat-log .task-activity .action-card-body::before {
+.chat-log .task-activity .action-card-body:where(:not([data-chat-root], [data-chat-root] *))::before {
   display: none;
 }
 
@@ -289,23 +289,23 @@
    —— 在上下文里它是**完全扁平**的，只靠 29px 缩进和 15px 状态点
    分层。所以这里保持无框，不要照画廊那一版加描边。
    29px = 状态点(15) + 间距(7) + 挂角(7)。 */
-.chat-log .op-card {
+.chat-log .op-card:where(:not([data-chat-root], [data-chat-root] *)) {
   border: none;
   border-radius: 0;
   background: none;
 }
 
-.chat-log .op-card:hover {
+.chat-log .op-card:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: none;
 }
 
-.chat-log .op-card + .op-card {
+.chat-log .op-card + .op-card:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 0;
 }
 
 /* 子选择器把特异度提到 (0,3,0)，才压得过 code.css:1644 的
    `.action-card-body > .op-card .op-card-head { padding: 6px 0 }` */
-.chat-log .op-card > .op-card-head {
+.chat-log .op-card > .op-card-head:where(:not([data-chat-root], [data-chat-root] *)) {
   height: auto;
   gap: 8px;
   margin-inline: -7px;
@@ -316,49 +316,49 @@
   color: var(--text);
 }
 
-.chat-log .op-card-head:hover {
+.chat-log .op-card-head:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-fill-tertiary);
 }
 
 /* 文件名走等宽，和上方 thinking 段里提到的同一个名字同一副字 */
-.chat-log .op-card-head .op-title code,
-.chat-log .op-card-head .op-meta {
+.chat-log .op-card-head .op-title code:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-log .op-card-head .op-meta:where(:not([data-chat-root], [data-chat-root] *)) {
   font-family: var(--mono);
   font-size: var(--t-cap);
   color: var(--text-soft);
 }
 
 /* 失败行整条转红。ToolCard.tsx:682 的徽标带 data-tool-state */
-.chat-log .op-card:has(.op-status[data-tool-state='error']) {
+.chat-log .op-card:has(.op-status[data-tool-state='error']):where(:not([data-chat-root], [data-chat-root] *)) {
   border-color: var(--red-border);
   background: var(--red-bg);
 }
 
 /* 运行中的紧凑行是刻意贴平的内联态，别被上面的行卡外观污染
    （routines.css `.app .task-activity-current-row .op-card` 的意图） */
-.chat-log .task-activity-current-row .op-card {
+.chat-log .task-activity-current-row .op-card:where(:not([data-chat-root], [data-chat-root] *)) {
   border: none;
   background: transparent;
 }
 
-.chat-log .task-activity-current-row .op-card + .op-card {
+.chat-log .task-activity-current-row .op-card + .op-card:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 0;
 }
 
 /* 紧凑行的头部也保持贴平（routines.css:1929 原本就是 4px 0，
    上面提到 (0,3,0) 之后要在这里重新让路） */
-.chat-log .task-activity-current-row .op-card > .op-card-head {
+.chat-log .task-activity-current-row .op-card > .op-card-head:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 4px 0;
 }
 
 /* 钉在输入框上方的任务卡不在 .chat-log 里，单列一条 */
-.chat-pinned-todo .op-card {
+.chat-pinned-todo .op-card:where(:not([data-chat-root], [data-chat-root] *)) {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
 }
 
-.chat-pinned-todo .op-card-head {
+.chat-pinned-todo .op-card-head:where(:not([data-chat-root], [data-chat-root] *)) {
   height: auto;
   gap: 8px;
   padding: 7px 11px;
@@ -375,7 +375,7 @@
    .op-status-running 同为单类，后写的会盖掉前者
    （chat-disclosure-accessibility.test.ts 保护的正是这一点，但它
    只读 tools.css，不会拦住这里的错误）。 */
-.chat-log .action-card-status {
+.chat-log .action-card-status:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 15px;
   height: 15px;
   padding: 0;
@@ -386,24 +386,24 @@
   background: none;
 }
 
-.chat-log .action-card-status.op-status-ok {
+.chat-log .action-card-status.op-status-ok:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--brand-weak);
   color: var(--brand-text);
 }
 
-.chat-log .action-card-status.op-status-error {
+.chat-log .action-card-status.op-status-error:where(:not([data-chat-root], [data-chat-root] *)) {
   background: none;
   color: var(--red);
 }
 
-.chat-log .action-card-status > * {
+.chat-log .action-card-status > *:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 10px;
   height: 10px;
 }
 
 /* 工具行头部的类别图标：稿子的 `.ti` 是 15px 线性图标，没有底片。
    只改盒子，不设 color。 */
-.chat-log .op-card-head .op-status {
+.chat-log .op-card-head .op-status:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 15px;
   height: 15px;
   padding: 0;
@@ -412,7 +412,7 @@
   background: none;
 }
 
-.chat-log .op-card-head .op-status > * {
+.chat-log .op-card-head .op-status > *:where(:not([data-chat-root], [data-chat-root] *)) {
   width: 15px;
   height: 15px;
 }
@@ -425,8 +425,8 @@
    本轮只做表面。稿子的两列网格 + 16:10 缩略图 + 行内
    预览/发布/导出 需要改 DOM（缩略图节点根本不存在），留作后续；
    在缩略图落地前保持单列 —— 两列的无图行卡比现在的列表更差。 */
-.chat-log .produced-file,
-.chat-log .file-ops-row {
+.chat-log .produced-file:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-log .file-ops-row:where(:not([data-chat-root], [data-chat-root] *)) {
   padding: 7px 9px;
   gap: 8px;
   border: 1px solid var(--border);
@@ -434,24 +434,24 @@
   background: var(--bg);
 }
 
-.chat-log .produced-file + .produced-file,
-.chat-log .file-ops-row + .file-ops-row {
+.chat-log .produced-file + .produced-file:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-log .file-ops-row + .file-ops-row:where(:not([data-chat-root], [data-chat-root] *)) {
   margin-top: 6px;
 }
 
-.chat-log .produced-file:hover,
-.chat-log .file-ops-row:hover {
+.chat-log .produced-file:hover:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-log .file-ops-row:hover:where(:not([data-chat-root], [data-chat-root] *)) {
   background: var(--bg-panel);
 }
 
-.chat-log .produced-file-name,
-.chat-log .file-ops-row-path {
+.chat-log .produced-file-name:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-log .file-ops-row-path:where(:not([data-chat-root], [data-chat-root] *)) {
   font-family: var(--mono);
   font-size: var(--t-mini);
   color: var(--text-strong);
 }
 
-.chat-log .produced-files-label {
+.chat-log .produced-files-label:where(:not([data-chat-root], [data-chat-root] *)) {
   font-size: var(--t-cap);
   color: var(--text-soft);
 }
@@ -460,10 +460,10 @@
    共享的 @open-design/components Button 不动（波及全应用）。
    逐个点名 chat 卡片里的按钮面，靠 (0,1,1) 压过
    packages/components/src/styles.css:2 的裸 `button` (0,0,1)。 */
-.chat-log .question-form-foot button,
-.chat-log [data-user-action-footer='true'] button,
-.chat-log .produced-file-actions .ghost,
-.chat-log .file-ops-row-open {
+.chat-log .question-form-foot button:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-log [data-user-action-footer='true'] button:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-log .produced-file-actions .ghost:where(:not([data-chat-root], [data-chat-root] *)),
+.chat-log .file-ops-row-open:where(:not([data-chat-root], [data-chat-root] *)) {
   height: auto;
   padding: 4px 11px;
   border-radius: var(--radius-pill);

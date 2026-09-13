@@ -629,7 +629,14 @@ type ImageExportTargetOptions = {
 
 function imageExportFilename(title: string, format: ImageExportFormat): string {
   const spec = IMAGE_EXPORT_SPECS[format];
-  return `${safeFilename(title, 'artifact')}.${spec.extension}`;
+  // This title is editable in the export dialog. Keep its display characters
+  // (including CJK and spaces), removing only characters invalid in filenames.
+  const stem = title
+    .replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, '-')
+    .trim()
+    .slice(0, 120)
+    .replace(/[. ]+$/g, '');
+  return `${stem || 'artifact'}.${spec.extension}`;
 }
 
 function downloadImageExportTarget(filename: string): ImageExportTarget {

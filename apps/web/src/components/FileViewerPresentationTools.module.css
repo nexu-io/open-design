@@ -1,0 +1,98 @@
+.anchor {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  max-width: calc(100% - 32px);
+}
+
+.anchor > :global(.canvas-dock-inner) {
+  max-width: 100%;
+}
+
+.anchor .presentationGroup {
+  gap: var(--canvas-dock-gap);
+}
+
+.anchor .presentationGroup > :global(.viewer-tab) {
+  width: 32px;
+  min-width: 32px;
+  padding-inline: 0;
+}
+
+.anchor .presentationGroup > .optionsTrigger {
+  width: 24px;
+  min-width: 24px;
+}
+
+.anchor .optionsTrigger[aria-expanded='true'] {
+  background: var(--canvas-dock-control-hover);
+}
+
+/* A sibling of the scrollable dock so the upward panel is never clipped. */
+.popover {
+  --canvas-dock-control: transparent;
+  --canvas-dock-control-hover: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: max-content;
+  gap: var(--spacing-8, 8px);
+  padding: 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--bg-elevated);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px) scale(0.96);
+  transform-origin: bottom right;
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    visibility 0s linear 140ms;
+}
+
+.popover[data-open='true'] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition-duration: 200ms, 200ms, 0s;
+  transition-delay: 0s;
+}
+
+/* The floating surface has its own contrast pair, independent of the dock. */
+.anchor .popover :global(.viewer-action) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-8, 8px);
+  width: 100%;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  color: var(--text-strong);
+  background: transparent;
+}
+
+.anchor .popover :global(.viewer-action:hover:not(:disabled)) {
+  color: var(--text-strong);
+  background: var(--canvas-dock-control-hover);
+}
+
+.anchor .popover :global(.viewer-action:disabled) {
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    transform: none;
+    transition: none;
+  }
+}

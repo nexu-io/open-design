@@ -147,6 +147,32 @@ function siteEntryDepth(file: CandidateFile): number | null {
  * markdown and media — a build preview has nothing to render for those, and
  * falling back to one would swap a page for a picture mid-run.
  */
+/**
+ * The artifact a run should already have open as a tab WHILE it is still
+ * writing, or null when there is nothing new to open.
+ *
+ * Every other `selectAutoOpen*` here answers at the END of a turn: the run
+ * finished, so hand the user what it made. That left a long run with its page
+ * on disk and no way into it — the pane showed the work but the tab strip
+ * stayed empty until the turn settled.
+ *
+ * The page is the one the build preview is already watching
+ * (`selectBuildPreviewHtmlEntry`), so the strip and the pane can never point
+ * at two different artifacts. `alreadyOpened` is what this run opened last, so
+ * a file rewritten forty times opens exactly one tab — and a run that later
+ * produces a SHALLOWER entry (a bare `page.html`, then `index.html`) moves to
+ * it, which is the same page the preview moves to.
+ */
+export function selectLiveTurnArtifact(
+  files: ReadonlyArray<CandidateFile>,
+  options: { streaming: boolean; alreadyOpened: string | null },
+): string | null {
+  if (!options.streaming) return null;
+  const entry = selectBuildPreviewHtmlEntry(files);
+  if (!entry) return null;
+  return entry === options.alreadyOpened ? null : entry;
+}
+
 export function selectBuildPreviewHtmlEntry(
   files: ReadonlyArray<CandidateFile>,
 ): string | null {
@@ -304,4 +330,26 @@ export function selectAutoOpenProducedArtifact(
     if (nextMtime >= selectedMtime) selected = file;
   }
   return selected?.name ?? null;
+}
+
+/** Select from this conversation only, newest assistant turn first. Historical
+ * produced-file metadata supplies ordering even when other conversations have
+ * since edited the same project files. Missing outputs are never reopened. */
+export function selectConversationArtifact(
+  turns: ReadonlyArray<{ producedFiles?: ReadonlyArray<CandidateFile>; touchedPaths?: readonly string[] }>,
+  files: ReadonlyArray<CandidateFile>,
+): string | null {
+  for (const turn of [...turns].reverse()) {
+    const candidates = (turn.producedFiles ?? []).filter((output) => files.some((file) => file.name === output.name));
+    const known = new Set(candidates.map((file) => file.name));
+    for (const path of turn.touchedPaths ?? []) {
+      const name = decideAutoOpenAfterWrite(path, files).fileName;
+      if (!name || known.has(name)) continue;
+      const file = files.find((file) => file.name === name);
+      if (file) { candidates.push(file); known.add(name); }
+    }
+    const name = selectAutoOpenProducedArtifact(candidates, { preferSiteEntry: true });
+    if (name) return name;
+  }
+  return null;
 }

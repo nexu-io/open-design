@@ -8,10 +8,8 @@ import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normaliz
 import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } from '../../src/providers/registry';
 import { emptyManualEditStyles, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 
-// The rewritten panel renders ONE localized "Parameters" list instead of the
-// old hardcoded CONTENT / TYPOGRAPHY / SIZE / LAYOUT / BOX group headers, so
-// tests address controls by their translated row label rather than by group.
-const PARAMETERS = 'Parameters';
+// Style controls share one list without a heading. Address controls by their
+// translated row label rather than relying on a group title.
 
 const target: ManualEditTarget = {
   id: 'hero-title',
@@ -65,10 +63,12 @@ describe('ManualEditPanel', () => {
   it('renders the style inspector without the advanced editor entry', () => {
     renderPanel();
 
-    // One localized parameters list carries what the old hardcoded English
-    // TYPOGRAPHY / SIZE / LAYOUT / BOX headers used to split apart.
-    const parameters = sectionByTitle(PARAMETERS);
-    for (const label of ['Text color', 'Background', 'Font', 'Font size', 'Weight', 'Line height', 'Letter spacing', 'Radius', 'Width', 'Height', 'Padding', 'Margin']) {
+    const parameters = styleSection();
+    expect(parameters.querySelector('.cc-section-head')).toBeNull();
+    expect(sectionHeads()).not.toContain('Parameters');
+    expect(host.querySelector('.manual-edit-content-inspector')?.textContent).toContain('Text color');
+    expect(parameters.textContent).not.toContain('Text color');
+    for (const label of ['Background', 'Font', 'Font size', 'Weight', 'Line height', 'Letter spacing', 'Radius', 'Width', 'Height', 'Padding', 'Margin']) {
       expect(parameters.textContent).toContain(label);
     }
     for (const legacyHead of ['TYPOGRAPHY', 'SIZE', 'LAYOUT', 'BOX']) {
@@ -110,70 +110,41 @@ describe('ManualEditPanel', () => {
     expect(onClearSelection).not.toHaveBeenCalled();
   });
 
-  it('keeps inspector controls scrollable separately from footer actions', () => {
+  it('keeps history, reset and save in the footer without cancel or delete', () => {
     renderPanel();
-
-    const scrollRegion = host.querySelector('.manual-edit-scroll');
     const footer = host.querySelector('.manual-edit-footer');
-    const deleteButton = host.querySelector('button[aria-label="Delete element"]');
-
-    expect(scrollRegion?.textContent).toContain(PARAMETERS);
-    expect(scrollRegion?.contains(deleteButton)).toBe(false);
-    expect(footer?.contains(deleteButton)).toBe(true);
-    expect(deleteButton?.textContent).toBe('');
-    expect(footer?.textContent).toContain('Cancel');
+    expect(host.querySelector('.manual-edit-scroll')?.contains(rowInput('Opacity'))).toBe(true);
+    for (const label of ['Previous step', 'Next step']) {
+      const button = footer?.querySelector(`button[aria-label="${label}"]`);
+      expect(button?.textContent).toBe('');
+      expect(button?.querySelector('svg path')).not.toBeNull();
+    }
+    expect(footer?.textContent).toContain('Reset');
     expect(footer?.textContent).toContain('Save');
+    expect(footer?.textContent).not.toContain('Cancel');
+    expect(host.querySelector('button[aria-label="Delete element"]')).toBeNull();
+    expect(Array.from(footer!.querySelectorAll('button')).slice(0, 3).every(button => button.disabled)).toBe(true);
   });
 
-  it('routes delete as a direct icon-only action', () => {
-    const onApplyPatch = vi.fn<OnApplyPatch>();
-    renderPanel({ onApplyPatch });
-
-    const footer = host.querySelector('.manual-edit-footer');
-    const deleteButton = host.querySelector('button[aria-label="Delete element"]') as HTMLButtonElement | null;
-    if (!deleteButton) throw new Error('Delete button not found');
-
-    act(() => {
-      deleteButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(footer?.contains(deleteButton)).toBe(true);
-    expect(deleteButton.textContent).toBe('');
-    expect(deleteButton.className).toContain('manual-edit-delete-btn');
-    expect(onApplyPatch).toHaveBeenCalledWith(
-      { id: 'hero-title', kind: 'remove-element' },
-      'Delete element',
-    );
-  });
-
-  it('routes footer reset, cancel, and save actions', () => {
+  it('routes history, reset and save actions', () => {
     const onResetDraft = vi.fn<OnResetDraft>();
-    const onCancelDraft = vi.fn<OnCancelDraft>();
     const onSaveDraft = vi.fn<OnSaveDraft>();
-    renderPanel({ resetAvailable: true, onResetDraft, onCancelDraft, onSaveDraft });
-
-    const footerButtons = Array.from(host.querySelectorAll('.manual-edit-footer button'));
-    const reset = footerButtons.find((button) => button.textContent === 'Reset') as HTMLButtonElement | undefined;
-    const cancel = footerButtons.find((button) => button.textContent === 'Cancel') as HTMLButtonElement | undefined;
-    const save = footerButtons.find((button) => button.textContent === 'Save') as HTMLButtonElement | undefined;
-    if (!reset || !cancel || !save) throw new Error('Footer action buttons not found');
-
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    renderPanel({ resetAvailable: true, canUndo: true, canRedo: true, onUndo, onRedo, onResetDraft, onSaveDraft });
     act(() => {
-      reset.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-      cancel.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-      save.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      for (const button of host.querySelectorAll('.manual-edit-footer button')) {
+        button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      }
     });
-
-    expect(onResetDraft).toHaveBeenCalledTimes(1);
-    expect(onCancelDraft).toHaveBeenCalledTimes(1);
-    expect(onSaveDraft).toHaveBeenCalledTimes(1);
+    for (const callback of [onUndo, onRedo, onResetDraft, onSaveDraft]) expect(callback).toHaveBeenCalledTimes(1);
   });
 
   it('edits selected text content from the panel', () => {
     const onDraftChange = vi.fn<OnDraftChange>();
     renderPanel({ onDraftChange });
 
-    const textArea = sectionByTitle('CONTENT').querySelector('textarea') as HTMLTextAreaElement | null;
+    const textArea = host.querySelector('.manual-edit-content-inspector textarea') as HTMLTextAreaElement | null;
     if (!textArea) throw new Error('Content textarea not found');
 
     act(() => {
@@ -199,14 +170,11 @@ describe('ManualEditPanel', () => {
       },
     });
 
-    const fontSelect = host.querySelector('select') as HTMLSelectElement | null;
+    const fontSelect = host.querySelector('[role=combobox]') as HTMLButtonElement | null;
     if (!fontSelect) throw new Error('Font select not found');
     expect(fontSelect.value).toBe('Roboto, Arial, sans-serif');
 
-    act(() => {
-      fontSelect.value = 'Georgia, serif';
-      fontSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    });
+    chooseOption(fontSelect, 'Georgia');
 
     expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({
       styles: expect.objectContaining({ fontFamily: 'Georgia, serif' }),
@@ -230,6 +198,20 @@ describe('ManualEditPanel', () => {
     const sizeInput = rowInput('Font size');
 
     expect(sizeInput.value).toBe('32');
+  });
+
+  it('formats inspector precision while preserving pixel line heights when stepping', () => {
+    const onStyleChange = vi.fn();
+    renderPanel({ onStyleChange, styles: {
+      ...emptyManualEditStyles(), fontSize: '18.25px', lineHeight: '31.54px', borderTopWidth: '1.26px',
+    } });
+    expect(rowInput('Font size').value).toBe('18');
+    expect(rowInput('Line height').value).toBe('31.5');
+    expect(rowInput('Border width').value).toBe('1.3');
+    act(() => {
+      stepper('Line height', 'increase').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { lineHeight: '31.6px' }, 'Style: Hero Title');
   });
 
   it('increments text typography rows with normalized values', () => {
@@ -257,12 +239,9 @@ describe('ManualEditPanel', () => {
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { fontSize: '33px' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { lineHeight: '1.5' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { letterSpacing: '0px' }, 'Style: Hero Title');
-    // Box/spacing controls used to live in their own English-headed groups.
-    // They now ride in the same localized list, so the port's contract is
-    // "exactly one parameters group", not "typography-only".
-    expect(sectionHeads().filter((head) => head === PARAMETERS)).toHaveLength(1);
-    expect(sectionByTitle(PARAMETERS).textContent).toContain('Opacity');
-    expect(sectionByTitle(PARAMETERS).textContent).toContain('Padding');
+    // Typography and spacing controls remain together in the untitled list.
+    expect(styleSection().textContent).toContain('Opacity');
+    expect(styleSection().textContent).toContain('Padding');
   });
 
   it('does not persist an unchanged target style when the inspector opens', () => {
@@ -391,11 +370,14 @@ describe('ManualEditPanel', () => {
     act(() => {
       bgSwatch.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     });
-    const colorTile = host.querySelector('button[aria-label="#3b82f6"]') as HTMLButtonElement | null;
-    if (!colorTile) throw new Error('Background color tile not found');
+    expect(onStyleChange).not.toHaveBeenCalled();
+    const hexInput = dom.window.document.querySelector('[role="dialog"] input[aria-label="HEX"]') as HTMLInputElement | null;
+    if (!hexInput) throw new Error('Color picker HEX input not found');
     act(() => {
-      colorTile.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      hexInput.value = '#3b82f6';
+      Simulate.change(hexInput);
     });
+    act(() => { Simulate.blur(hexInput); });
 
     expect(onStyleChange).toHaveBeenCalledWith('__body__', { backgroundColor: '#3b82f6' }, 'Page styles');
     expect(onStyleChange).not.toHaveBeenCalledWith(
@@ -414,13 +396,10 @@ describe('ManualEditPanel', () => {
     const onStyleChange = vi.fn();
     renderPanel({ onStyleChange, selectedTarget: null });
 
-    const fontSelect = host.querySelector('.cc-row select') as HTMLSelectElement | null;
+    const fontSelect = host.querySelector('.cc-row [role=combobox]') as HTMLButtonElement | null;
     if (!fontSelect) throw new Error('Font select not found');
 
-    act(() => {
-      fontSelect.value = 'Georgia, serif';
-      fontSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    });
+    chooseOption(fontSelect, 'Georgia');
 
     expect(onStyleChange).toHaveBeenCalledWith('__body__', { fontFamily: 'Georgia, serif' }, 'Page styles');
     expect(onStyleChange).not.toHaveBeenCalledWith(
@@ -450,13 +429,10 @@ describe('ManualEditPanel', () => {
     const onStyleChange = vi.fn();
     renderPanel({ onStyleChange, selectedTarget: null });
 
-    const fontSelect = host.querySelector('.cc-row select') as HTMLSelectElement | null;
+    const fontSelect = host.querySelector('.cc-row [role=combobox]') as HTMLButtonElement | null;
     if (!fontSelect) throw new Error('Font select not found');
 
-    act(() => {
-      fontSelect.value = '';
-      fontSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    });
+    chooseOption(fontSelect, 'inherit');
 
     expect(onStyleChange).toHaveBeenCalledWith('__body__', { fontFamily: '' }, 'Page styles');
     expect(onStyleChange).not.toHaveBeenCalledWith(
@@ -480,7 +456,7 @@ describe('ManualEditPanel', () => {
     // Layout rows now live in the shared parameters list rather than their own
     // group, so "not editable" has to be asserted as disabled controls plus the
     // explanatory hint — not as a missing section.
-    const parameters = sectionByTitle(PARAMETERS);
+    const parameters = styleSection();
     expect(rowSelect('Direction').disabled).toBe(true);
     expect(rowSelect('Distribution').disabled).toBe(true);
     expect(rowInput('Gap').disabled).toBe(true);
@@ -488,10 +464,7 @@ describe('ManualEditPanel', () => {
     // The alignment slot degrades to text-align so it is never a dead control.
     const align = rowSelect('Align');
     expect(align.disabled).toBe(false);
-    act(() => {
-      align.value = 'center';
-      align.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    });
+    chooseOption(align, 'Align center');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { textAlign: 'center' }, 'Style: Hero Title');
 
     expect(normalizeManualEditStyles({ gap: '12', flexDirection: 'column' }, { layoutEnabled: false })).toEqual({
@@ -512,7 +485,7 @@ describe('ManualEditPanel', () => {
       },
     });
 
-    const parameters = sectionByTitle(PARAMETERS);
+    const parameters = styleSection();
     expect(parameters.classList.contains('cc-section-inactive')).toBe(false);
     expect(parameters.textContent).not.toContain('Layout controls are available for flex or grid containers.');
     const gapInput = rowInput('Gap');
@@ -522,12 +495,14 @@ describe('ManualEditPanel', () => {
     expect(directionSelect.disabled).toBe(false);
     // A flex/grid container gets the real cross-axis alignment control.
     expect(rowSelect('Align').disabled).toBe(false);
-    expect(Array.from(rowSelect('Align').options).map((option) => option.value)).toContain('baseline');
+    act(() => rowSelect('Align').click());
+    expect(document.querySelector('[role=listbox]')?.textContent).toContain('Baseline');
+    act(() => rowSelect('Align').click());
+    chooseOption(directionSelect, 'Vertical');
 
     act(() => {
       gapIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-      directionSelect.value = 'column';
-      directionSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
     });
 
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { gap: '9px' }, 'Style: Hero Title');
@@ -772,10 +747,9 @@ describe('ManualEditPanel', () => {
     };
   }
 
-  function sectionByTitle(title: string): HTMLElement {
-    const section = Array.from(host.querySelectorAll('.cc-section'))
-      .find((candidate) => candidate.querySelector('.cc-section-head')?.textContent === title) as HTMLElement | undefined;
-    if (!section) throw new Error(`${title} section not found`);
+  function styleSection(): HTMLElement {
+    const section = rowInput('Opacity').closest<HTMLElement>('.cc-section');
+    if (!section) throw new Error('Style controls section not found');
     return section;
   }
 
@@ -799,8 +773,15 @@ describe('ManualEditPanel', () => {
     return input;
   }
 
-  function rowSelect(label: string): HTMLSelectElement {
-    const select = rowByLabel(label).querySelector('select') as HTMLSelectElement | null;
+  function chooseOption(trigger: HTMLButtonElement, label: string) {
+    act(() => trigger.click());
+    const option = Array.from(document.querySelectorAll<HTMLButtonElement>('[role=option]')).find(el => el.textContent === label);
+    if (!option) throw new Error(`Option ${label} not found`);
+    act(() => option.click());
+  }
+
+  function rowSelect(label: string): HTMLButtonElement {
+    const select = rowByLabel(label).querySelector('[role=combobox]') as HTMLButtonElement | null;
     if (!select) throw new Error(`${label} select not found`);
     return select;
   }
@@ -821,7 +802,7 @@ describe('ManualEditPanel', () => {
 
   function quadCellInput(label: string, axis: string): HTMLInputElement {
     const cell = Array.from(quadRow(label).querySelectorAll('.cc-quad-cell'))
-      .find((candidate) => candidate.querySelector('.cc-quad-axis')?.textContent === axis) as HTMLElement | undefined;
+      .find((candidate) => candidate.querySelector('input')?.getAttribute('aria-label') === axis) as HTMLElement | undefined;
     if (!cell) throw new Error(`${label} ${axis} cell not found`);
     const input = cell.querySelector('input') as HTMLInputElement | null;
     if (!input) throw new Error(`${label} ${axis} input not found`);
@@ -841,6 +822,10 @@ describe('ManualEditPanel', () => {
     attributesText = '{}',
     selectedTarget = target,
     styles = emptyManualEditStyles(),
+    canUndo = false,
+    canRedo = false,
+    onUndo = vi.fn(),
+    onRedo = vi.fn(),
     resetAvailable = false,
     pageStylesEnabled = true,
     floatingStyle,
@@ -862,6 +847,10 @@ describe('ManualEditPanel', () => {
     attributesText?: string;
     selectedTarget?: ManualEditTarget | null;
     styles?: ReturnType<typeof emptyManualEditStyles>;
+    canUndo?: boolean;
+    canRedo?: boolean;
+    onUndo?: () => void;
+    onRedo?: () => void;
     resetAvailable?: boolean;
     pageStylesEnabled?: boolean;
     floatingStyle?: CSSProperties;
@@ -886,8 +875,8 @@ describe('ManualEditPanel', () => {
           draft={draft}
           history={[]}
           error={null}
-          canUndo={false}
-          canRedo={false}
+          canUndo={canUndo}
+          canRedo={canRedo}
           resetAvailable={resetAvailable}
           pageStylesEnabled={pageStylesEnabled}
           onSelectTarget={vi.fn<(target: ManualEditTarget) => void>()}
@@ -900,8 +889,8 @@ describe('ManualEditPanel', () => {
           onCancelDraft={onCancelDraft}
           onSaveDraft={onSaveDraft}
           onResetDraft={onResetDraft}
-          onUndo={vi.fn<() => void>()}
-          onRedo={vi.fn<() => void>()}
+          onUndo={onUndo}
+          onRedo={onRedo}
           floatingStyle={floatingStyle}
           onFloatingPositionChange={onFloatingPositionChange}
           tokenSuggestions={tokenSuggestions}

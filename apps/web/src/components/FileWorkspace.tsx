@@ -3,6 +3,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -10,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Button } from '@open-design/components';
+import { WorkspaceAccountDock } from './workspace/WorkspaceAccountDock';
 import { createPortal } from 'react-dom';
 import type { DesignSystemEditClickProps, TrackingArtifactKind, TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
@@ -117,6 +119,8 @@ import {
 import { useProjectCollabContext } from '../collab/collab-context';
 import { createTerminal, killTerminal, listPlugins, moveWorkspaceProject } from '../state/projects';
 import { MoveToTeamConfirmDialog, moveConfirmSkipped } from './MoveToTeamConfirmDialog';
+import { selectBuildPreviewHtmlEntry } from './auto-open-file';
+import { ProjectPreviewPane } from './design-files/ProjectPreviewPane';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import {
   DesignBrowserPanel,
@@ -127,7 +131,12 @@ import {
 } from './DesignBrowserPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
-import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
+import {
+  APP_CHROME_FILE_ACTIONS_ID,
+  APP_CHROME_TAB_ACTION_ID,
+  APP_CHROME_TAB_LEAD_ID,
+  APP_CHROME_VIEW_TABS_ID,
+} from './AppChromeHeader';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
 import { Icon, type IconName } from './Icon';
@@ -167,8 +176,22 @@ import {
   type SketchItem,
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
+
+import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
+import { TabLabel } from './workspace/TabLabel';
+import HybridTabs, { HybridTabLabel } from './ui/hybrid-tabs';
+import {
+  requestChromeViewMode,
+  useChromeViewMode,
+  useChromeViewOwned,
+} from './workspace/chrome-view-mode';
 import type { ChatMessage } from '../types';
-import { runProgressSteps } from '../runtime/run-progress';
+import {
+  pendingQuestionTitle,
+  runFailureState,
+  runProgressPhase,
+  runProgressSteps,
+} from '../runtime/run-progress';
 import type { CommentSendResult } from './comment-send-result';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -227,7 +250,9 @@ interface Props {
   streaming?: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
-  openRequest?: { name: string; nonce: number } | null;
+  openRequest?: { name: string; nonce: number; preview?: boolean } | null;
+  /** Explicit conversation selection; null means this conversation has no output. */
+  conversationPreviewFile?: string | null;
   browserOpenRequest?: BrowserOpenRequest | null;
   // Browser tab whose <webview> must stay mounted even while another workspace
   // tab is active. Set for programmatic brand extraction: the chat "Continue
@@ -355,11 +380,12 @@ interface Props {
    * Read-only view of a team-shared project. A member who received a project
    * shared to the team sees it single-writer/read-only (they can view and
    * comment but not edit files or drive artifact changes through chat). When
-   * true, edit affordances are withheld and a notice explains why.
+   * true, edit affordances are withheld. The notice can be suppressed while
+   * the access check is still pending.
    */
   viewerOnly?: boolean;
-  /** Optional override for the read-only notice text. */
-  readonlyNotice?: string;
+  /** Override the notice text; null hides it without relaxing read-only access. */
+  readonlyNotice?: string | null;
   /**
    * Team-share file-sync state for the project. It is rendered on the Design
    * Files root tab and open design-file tabs (never terminal / side-chat /
@@ -433,6 +459,8 @@ function shouldKeepCurrentSketchState(
 }
 
 export const DESIGN_FILES_TAB = '__design_files__';
+/** The project as it looks — its entry page, rendered. See ProjectPreviewPane. */
+export const PREVIEW_TAB = '__preview__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
 
 // Module-level default so a caller that omits `previewComments` doesn't mint
@@ -1288,6 +1316,7 @@ export function FileWorkspace({
   commentQueueOnSend = false,
   commentSendDisabled = false,
   openRequest,
+  conversationPreviewFile,
   browserOpenRequest,
   pinnedBrowserTabId,
   shareRequest,
@@ -1447,6 +1476,12 @@ export function FileWorkspace({
   // "+" launcher (file search + registry-driven create-new actions:
   // Side Chat, Terminal, Browser).
   const [launcherOpen, setLauncherOpen] = useState(false);
+  // The strip's own "⌄": every file in the project, so reaching one that has
+  // no tab open does not mean a detour through the 设计文件 pane and back.
+  const [pagesMenuOpen, setPagesMenuOpen] = useState(false);
+  const pagesMenuRef = useRef<HTMLDivElement | null>(null);
+  const pagesMenuId = useId();
+  useDismissOnOutsideInteraction(pagesMenuOpen, pagesMenuRef, () => setPagesMenuOpen(false));
   const [projectShareMenuOpen, setProjectShareMenuOpen] = useState(false);
   const [projectShareAccess, setProjectShareAccess] = useState<'private' | 'workspace'>('private');
   const [projectShareAccessMenuOpen, setProjectShareAccessMenuOpen] = useState(false);
@@ -1618,6 +1653,18 @@ export function FileWorkspace({
   // event by design — a tool call landing IS the update the pane is there to
   // show.
   const runSteps = useMemo(() => runProgressSteps(messages), [messages]);
+  // The word the pane puts on a run that has not called anything yet. Same
+  // reducer the chat footer's own status is built from, so "Preparing…" on the
+  // left can never sit beside "Thinking" on the right.
+  const runPhase = useMemo(() => runProgressPhase(messages), [messages]);
+  // A turn that ended by ASKING is finished but not done. The ring names the
+  // question so the pane says what the run is waiting for instead of going
+  // blank while an open form sits in the chat column.
+  const runQuestion = useMemo(() => pendingQuestionTitle(messages), [messages]);
+  // A turn that FAILED is the other way a run stops without finishing. Same
+  // reducer shape as the two above, so the ring reports the end of a run the
+  // way the chat's task card heads it instead of going blank on an error.
+  const runFailure = useMemo(() => runFailureState(messages), [messages]);
 
   // Known-file set for the side chat's file-link routing — same shape
   // ProjectView feeds its primary ChatPane.
@@ -1983,12 +2030,15 @@ export function FileWorkspace({
 
   // When the persisted tab list changes and the active tab is gone, fall
   // back to the last remaining tab. Skip transient activeTab values
-  // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
+  // (the fixed root tabs, pending sketches) since those aren't in
+  // persistedTabs — a root tab is not a file that can go missing, and
+  // treating one as such kicks the user straight back out of it.
   useEffect(() => {
     const latestPersistedTabs = tabsStateRef.current.tabs;
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === PREVIEW_TAB
     ) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
@@ -2015,9 +2065,10 @@ export function FileWorkspace({
   // add the file to the open-tabs set and focus it.
   useEffect(() => {
     if (!openRequest) return;
+    if (openRequest.preview) requestChromeViewMode('preview');
     const name = openRequest.name;
     if (!name) return;
-    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB) {
+    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB || name === PREVIEW_TAB) {
       const nextActive =
         name === DESIGN_SYSTEM_TAB && !designSystemProject
           ? DESIGN_FILES_TAB
@@ -2161,8 +2212,8 @@ export function FileWorkspace({
       setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
       return;
     }
-    if (tabId === DESIGN_FILES_TAB) {
-      setPersistedActive(DESIGN_FILES_TAB);
+    if (tabId === DESIGN_FILES_TAB || tabId === PREVIEW_TAB) {
+      setPersistedActive(tabId);
       return;
     }
     if (isBrowserTabId(tabId)) {
@@ -2199,12 +2250,17 @@ export function FileWorkspace({
 
   function openWorkspaceTabLauncher() {
     setLauncherOpen(true);
+    // No "+" to return focus to any more; the menu takes focus itself.
     launcherBtnRef.current?.focus();
   }
 
   function closeActiveWorkspaceTab() {
     if (!workspaceTabIds.includes(activeTab)) return;
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
+    if (
+      activeTab === DESIGN_FILES_TAB
+      || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === PREVIEW_TAB
+    ) return;
     if (isBrowserTabId(activeTab)) {
       closeBrowserTab(activeTab);
       return;
@@ -3001,6 +3057,7 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === PREVIEW_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     const onDisk = visibleFiles.find((f) => f.name === activeTab);
@@ -3024,6 +3081,27 @@ export function FileWorkspace({
       ? activeFile
       : null;
   const activeHtmlViewerFile = activeViewerFile?.kind === 'html' ? activeViewerFile : null;
+  // The Preview tab shows the project's entry page — and it shows it in the
+  // NORMAL viewer, chrome and all. A bare frame was a page you could look at
+  // and do nothing with: Export, Share, version history, the comment and zoom
+  // bar all live on FileViewer's toolbar, so a preview without that toolbar
+  // is the one surface in the workspace where the page cannot be acted on.
+  //
+  // Same entry pick as the build preview and the Design Files preview link
+  // (`selectBuildPreviewHtmlEntry`) — one project, one "the preview".
+  const previewEntryFile = useMemo(() => {
+    const name = conversationPreviewFile !== undefined ? conversationPreviewFile : selectBuildPreviewHtmlEntry(visibleFiles);
+    return name ? visibleFiles.find((file) => file.name === name) ?? null : null;
+  }, [visibleFiles, conversationPreviewFile]);
+  // While a run is writing that page, the build preview owns the tab instead:
+  // it is the same frame with a cursor on the line being written, which the
+  // plain viewer cannot show. The toolbar comes back the moment the run ends.
+  const previewViewerFile = activeTab === PREVIEW_TAB && !streaming && !runFailure ? previewEntryFile : null;
+  // A Preview entry with an open file tab must live in the same retained slot
+  // before and after Edit protects it. Moving between two render branches
+  // would remount the viewer and immediately discard the active dock mode.
+  const activeRetainedHtmlFile = activeHtmlViewerFile
+    ?? (previewViewerFile?.kind === 'html' && persistedTabs.includes(previewViewerFile.name) ? previewViewerFile : null);
   const htmlViewerFileSnapshotsRef = useRef<{
     projectId: string;
     files: Map<string, ProjectFile>;
@@ -3038,7 +3116,7 @@ export function FileWorkspace({
     // Updating mtime under an inactive iframe changes its src and defeats the
     // keep-alive. Adopt the newest revision exactly when that tab activates.
     if (
-      candidate.name === activeHtmlViewerFile?.name
+      candidate.name === activeRetainedHtmlFile?.name
       || !htmlViewerFileSnapshots.has(candidate.name)
     ) {
       htmlViewerFileSnapshots.set(candidate.name, candidate);
@@ -3049,12 +3127,12 @@ export function FileWorkspace({
     setProtectedHtmlViewerFileNames(new Set());
   }, [projectId]);
   useEffect(() => {
-    if (!activeHtmlViewerFile) return;
+    if (!activeRetainedHtmlFile) return;
     setLiveHtmlViewerFileNames((current) => [
-      activeHtmlViewerFile.name,
-      ...current.filter((name) => name !== activeHtmlViewerFile.name),
+      activeRetainedHtmlFile.name,
+      ...current.filter((name) => name !== activeRetainedHtmlFile.name),
     ].slice(0, HTML_VIEWER_KEEPALIVE_CAP));
-  }, [activeHtmlViewerFile?.name, projectId]);
+  }, [activeRetainedHtmlFile?.name, projectId]);
   useEffect(() => {
     setLiveHtmlViewerFileNames((current) => {
       const openHtmlNames = new Set(persistedTabs);
@@ -3221,11 +3299,11 @@ export function FileWorkspace({
     }
   }, [committedHtmlFileNames, effectiveFilesGeneration, filesGeneration, iframeKeepAlivePool, onRefreshFiles, pendingDeletedManualEditRevision, persistedTabs, projectId, protectedHtmlViewerFileNames, settleManualEdit]);
   const mountedHtmlViewerFiles = useMemo(() => {
-    const candidates = activeHtmlViewerFile
+    const candidates = activeRetainedHtmlFile
         ? [
-            activeHtmlViewerFile.name,
+            activeRetainedHtmlFile.name,
             ...protectedHtmlViewerFileNames,
-            ...liveHtmlViewerFileNames.filter((name) => name !== activeHtmlViewerFile.name),
+            ...liveHtmlViewerFileNames.filter((name) => name !== activeRetainedHtmlFile.name),
           ]
         : [...protectedHtmlViewerFileNames, ...liveHtmlViewerFileNames];
     // Manual Edit is exited (and pending edits flushed) before activation can
@@ -3239,7 +3317,7 @@ export function FileWorkspace({
       .filter((name) => retainedNames.has(name))
       .map((name) => htmlViewerFileSnapshots.get(name))
       .filter((file): file is ProjectFile => file != null);
-  }, [activeHtmlViewerFile, liveHtmlViewerFileNames, persistedTabs, protectedHtmlViewerFileNames, visibleFiles]);
+  }, [activeRetainedHtmlFile, liveHtmlViewerFileNames, persistedTabs, protectedHtmlViewerFileNames, visibleFiles]);
   const mountedHtmlViewerNames = mountedHtmlViewerFiles.map((file) => file.name);
   const previousMountedHtmlViewersRef = useRef({ projectId, names: new Set<string>() });
   useEffect(() => {
@@ -3276,13 +3354,54 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === PREVIEW_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
 
+  // Which of 预览 / 代码 the row is on. The 代码 tab is portaled in by the open
+  // viewer, so its state has to reach this component through a store.
+  const chromeViewMode = useChromeViewMode();
+  // False when no open viewer is portaling the real 代码 tab into the row —
+  // the row then draws its own so the strip keeps the same three tabs.
+  const chromeViewOwned = useChromeViewOwned();
+  // Select Preview once when generation starts, including mounting into a
+  // running project. Do not override manual view changes during the run.
+  const generationPreviewRef = useRef({ projectId, running: false });
+  useEffect(() => {
+    const previous = generationPreviewRef.current;
+    const running = Boolean(streaming);
+    generationPreviewRef.current = { projectId, running };
+    if (!running || designSystemProject) return;
+    if (previous.projectId === projectId && previous.running) return;
+    requestChromeViewMode('preview');
+    setPersistedActive(PREVIEW_TAB);
+    // Activation is gated by the existing manual-edit save path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, streaming, designSystemProject]);
+
+  const previewTabActive = activeTab === PREVIEW_TAB;
+  // Agent writes auto-open a file route. That route must keep the build surface
+  // while streaming rather than bypassing it through the retained FileViewer.
+  const liveFilePreviewActive = Boolean(streaming
+    && (activeHtmlViewerFile || /\.html?$/i.test(activeTab ?? ''))
+    && chromeViewMode !== 'source');
+  // 预览 and 代码 are ONE selection over whatever surface the row is showing,
+  // so while an open file's viewer owns the pair that viewer's mode decides —
+  // a page being rendered lights 预览 even though the active workspace tab is
+  // the file's own. With nothing open the pair falls back to the project's
+  // Preview tab, the only 预览 there is then.
+  const previewTabSelected = liveFilePreviewActive || (chromeViewOwned ? chromeViewMode === 'preview' : previewTabActive);
+  // 预览 and that page's own tab are ONE surface, so the strip names it from
+  // either side: stepping into 预览 used to collapse the page's chip to a bare
+  // icon and leave the row showing a page nothing on it named, until you
+  // clicked the chip to get the label back. The name belongs to whatever is on
+  // screen, and on 预览 that is this page.
+  const previewEntryTabName = previewTabActive ? previewEntryFile?.name ?? null : null;
   const activeTabHasRenderableSurface =
-    (activeTab === DESIGN_SYSTEM_TAB && Boolean(designSystemProject))
+    previewTabActive
+    || (activeTab === DESIGN_SYSTEM_TAB && Boolean(designSystemProject))
     || (isBrowserTabId(activeTab) && browserTabs.some((tab) => tab.id === activeTab))
     || isTerminalTabId(activeTab)
     || (isSideChatTabId(activeTab) && Boolean(chatConfig) && Boolean(chatAgentsById))
@@ -3295,6 +3414,7 @@ export function FileWorkspace({
   // persisted state: an in-flight file refresh may still restore the target.
   const designFilesTabActive =
     activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface;
+
 
   // Identity-stable props for the memoized FileViewer. Without these, every
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
@@ -3490,7 +3610,6 @@ export function FileWorkspace({
     }
     return [...persistedTabs, ...extras];
   }, [persistedTabs, sketches]);
-
   const orderedWorkspaceTabs = useMemo(
     () => orderWorkspaceTabs(tabNames, browserTabs),
     [browserTabs, tabNames],
@@ -3720,6 +3839,25 @@ export function FileWorkspace({
   }, [onWorkspaceContextsChange, workspaceContexts]);
 
   useEffect(() => {
+    const shell = tabsBarRef.current?.closest<HTMLElement>('.ws-tabs-shell');
+    const lead = shell?.querySelector<HTMLElement>('.ws-tabs-lead');
+    const actions = shell?.querySelector<HTMLElement>('.ws-tabs-actions');
+    if (!shell || !lead || !actions) return;
+    // Equal side tracks keep the entire link group on the preview's centreline,
+    // including when account controls or member portraits change width.
+    const measure = () => {
+      const sideWidth = Math.ceil(Math.max(lead.getBoundingClientRect().width, actions.getBoundingClientRect().width));
+      shell.style.setProperty('--ws-toolbar-side-width', `${sideWidth}px`);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(lead);
+    observer.observe(actions);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     const tabBar = tabsBarRef.current;
     if (!tabBar) return;
     let frame = 0;
@@ -3866,6 +4004,73 @@ export function FileWorkspace({
     }
   }
 
+  // One selector names the current preview; its menu includes every design file.
+  const selectedFileLabel = previewEntryTabName ?? activeWorkspaceContext?.label
+    ?? t('workspace.allProjectFiles');
+  const pagesSwitcher =
+    visibleFiles.length > 0 ? (
+          <div className="ws-pages-switcher ws-file-selector" ref={pagesMenuRef}>
+            <span
+              id={APP_CHROME_TAB_ACTION_ID}
+              className="ws-tab-action-slot"
+              data-app-chrome-tab-action="true"
+            />
+            <button
+              type="button"
+              className="ws-file-selector-trigger"
+              data-testid="workspace-pages-menu"
+              aria-haspopup="listbox"
+              aria-expanded={pagesMenuOpen}
+              aria-controls={pagesMenuOpen ? pagesMenuId : undefined}
+              aria-label={t('workspace.allProjectFiles')}
+              title={t('workspace.allProjectFiles')}
+              data-tooltip={t('workspace.allProjectFiles')}
+              data-tooltip-placement="bottom"
+              onClick={() => setPagesMenuOpen((v) => !v)}
+            >
+              <span className="ws-file-selector-label" title={selectedFileLabel}>{selectedFileLabel}</span>
+              <Icon name="chevron-down" size={15} />
+            </button>
+            {/* The 设计文件 pane already lists every file, and this whole zone
+                is hidden there — an open menu would keep a document-level
+                pointerdown listener alive inside a `display: none` box. */}
+            {pagesMenuOpen && !designFilesTabActive ? (
+              <div
+                className="ws-pages-menu"
+                id={pagesMenuId}
+                role="listbox"
+                aria-label={t('workspace.allProjectFiles')}
+              >
+                {visibleFiles.map((file) => {
+                  const selected = activeTab === file.name || previewEntryTabName === file.name;
+                  const icon = kindIconName(file.kind, false);
+                  return (
+                    <button
+                      key={file.name}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      className={`ws-pages-menu-item${selected ? ' active' : ''}`}
+                      title={file.name}
+                      onClick={() => {
+                        setPagesMenuOpen(false);
+                        openFile(file.name);
+                      }}
+                    >
+                      <span className="ws-pages-menu-label">
+                        {icon ? <Icon name={icon} size={14} /> : null}
+                        <span className="ws-pages-menu-name">{file.name}</span>
+                      </span>
+                      {selected ? <Icon name="check" size={13} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+    ) : null;
+
+
   return (
     <div
       className={[
@@ -3888,6 +4093,7 @@ export function FileWorkspace({
       ) : null}
       <SketchEnginePrewarm />
       <div className="ws-tabs-shell">
+        <div className="ws-tabs-lead">
         {onFocusModeChange && focusMode ? (
           <button
             type="button"
@@ -3900,7 +4106,7 @@ export function FileWorkspace({
             aria-label={t('workspace.showChat')}
             onClick={() => onFocusModeChange(false)}
           >
-            <Icon name="chevron-right" size={15} />
+            <Icon name="panel-right" size={16} />
           </button>
         ) : null}
         {/* Focus mode keeps the project tab strip on this same row (the chat
@@ -3914,10 +4120,141 @@ export function FileWorkspace({
             ref={focusTabsDockRef}
           />
         ) : null}
+        {/* View switcher (预览 / 设计文件 / 设计系统) — the left zone of the
+            row's three-column grid. Split out of `.ws-tabs-bar` so the file
+            tabs can sit in the centre column on the row's true centreline;
+            these three never scroll and never move. */}
+        <HybridTabs
+          className="ws-tabs-views"
+          role="tablist"
+          aria-label={t('workspace.viewTabs')}
+        >
+          {designSystemProject ? (
+            <button
+              type="button"
+              className={`ws-tab design-system-tab ${activeTab === DESIGN_SYSTEM_TAB ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === DESIGN_SYSTEM_TAB}
+              aria-label={t('dsManager.tabDesignSystem')}
+              tabIndex={0}
+              data-testid="design-system-project-tab"
+              onClick={() => setPersistedActive(DESIGN_SYSTEM_TAB)}
+              title={t('dsManager.tabDesignSystem')}
+            >
+              <span className="tab-icon" aria-hidden>
+                <Icon name="blocks" size={13} />
+              </span>
+              <HybridTabLabel show={activeTab === DESIGN_SYSTEM_TAB}>
+                <span className="ws-tab-label">{t('dsManager.tabDesignSystem')}</span>
+              </HybridTabLabel>
+            </button>
+          ) : null}
+          {/* What the project LOOKS like, before what it is made of. */}
+          <button
+            type="button"
+            className={`ws-tab preview-tab ${previewTabSelected ? 'active' : ''}`}
+            role="tab"
+            aria-selected={previewTabSelected}
+            aria-label={t('workspace.previewTab')}
+            tabIndex={0}
+            data-testid="project-preview-tab"
+            onClick={() => {
+              // 预览 is a selection, not just a destination: picking it also
+              // takes the open viewer out of 代码, so the row never shows an
+              // active 预览 beside an expanded 代码.
+              requestChromeViewMode('preview');
+              setPersistedActive(PREVIEW_TAB);
+            }}
+            title={t('workspace.previewTab')}
+          >
+            <span className="tab-icon" aria-hidden>
+              <Icon name="eye" size={14} />
+            </span>
+            {/* 预览 and 代码 are two views of one surface, so the row carries
+                one label between them: while the open viewer is on 代码 (the
+                tab portaled into the slot below), this one collapses. */}
+            <HybridTabLabel show={previewTabSelected}>
+              <span className="ws-tab-label">{t('workspace.previewTab')}</span>
+            </HybridTabLabel>
+          </button>
+          {/* Pure portal host, directly after 预览 (per product): the open
+              viewer drops its 代码 control in here. Empty — and collapsed by
+              CSS — whenever nothing is open to show source for. */}
+          <div
+            id={APP_CHROME_VIEW_TABS_ID}
+            className="ws-tabs-view-slot"
+            data-app-chrome-view-tabs="true"
+          />
+          {/* The row's own 代码 tab, for every moment no viewer is portaling
+              the real one in — on 设计文件, or before a page has been opened.
+              Without it the strip would drop from three tabs to two and back
+              as the user moves between panes; the three are one selection, so
+              they all stay put and only the chosen one carries a label.
+              Clicking it goes where 代码 lives: the preview surface, in source
+              view (the request the open viewer then follows). */}
+          {!chromeViewOwned && previewEntryFile ? (
+            <button
+              type="button"
+              className="ws-tab viewer-code-tab"
+              role="tab"
+              aria-selected={false}
+              tabIndex={0}
+              data-testid="workspace-code-tab-idle"
+              aria-label={t('fileViewer.source')}
+              title={t('fileViewer.source')}
+              onClick={() => {
+                requestChromeViewMode('source');
+                setPersistedActive(PREVIEW_TAB);
+              }}
+            >
+              <span className="tab-icon" aria-hidden>
+                <Icon name="code-slash" size={14} />
+              </span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={`ws-tab design-files-tab ${designFilesTabActive ? 'active' : ''}`}
+            role="tab"
+            aria-selected={designFilesTabActive}
+            aria-label={designFilesTabTitle}
+            tabIndex={0}
+            data-testid="design-files-tab"
+            onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
+            title={designFilesTabTitle}
+          >
+            <span className="tab-icon" aria-hidden>
+              {fileSyncBadge ? (
+                <FileSyncBadge state={fileSyncBadge} size={14} />
+              ) : (
+                <Icon name="folder-5" size={14} />
+              )}
+            </span>
+            <HybridTabLabel show={designFilesTabActive}>
+              <span className="ws-tab-label">{designFilesTabLabel}</span>
+            </HybridTabLabel>
+          </button>
+        </HybridTabs>
+        </div>
+        {/* Design Files has its own full-pane file browser. Keep this host
+            mounted for viewer portals, but hide the selector in that view. */}
+        <div
+          className="ws-tabs-center"
+          data-hide-tabs={designFilesTabActive ? 'true' : undefined}
+        >
+        {/* Pure portal host, directly before the file tabs (per product): the
+            open viewer drops its viewport switcher (桌面端 / 平板 / 手机) in
+            here so it sits beside the page it applies to. Empty — and
+            collapsed by CSS — whenever nothing is open to preview. */}
+        <div
+          id={APP_CHROME_TAB_LEAD_ID}
+          className="ws-tabs-lead-slot"
+          data-app-chrome-tab-lead="true"
+        />
         <div
           ref={tabsBarRef}
           className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
-          role="tablist"
+          role="group"
           aria-label={t('workspace.pages')}
           onWheel={(event) => {
             // Translate vertical wheel into horizontal tab scroll so Windows
@@ -3938,147 +4275,9 @@ export function FileWorkspace({
             clearTabDragState();
           }}
         >
-          {designSystemProject ? (
-            <button
-              type="button"
-              className={`ws-tab design-system-tab ${activeTab === DESIGN_SYSTEM_TAB ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === DESIGN_SYSTEM_TAB}
-              tabIndex={0}
-              data-testid="design-system-project-tab"
-              onClick={() => setPersistedActive(DESIGN_SYSTEM_TAB)}
-              title={t('dsManager.tabDesignSystem')}
-            >
-              <span className="tab-icon" aria-hidden>
-                <Icon name="blocks" size={13} />
-              </span>
-              <span className="ws-tab-label">{t('dsManager.tabDesignSystem')}</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={`ws-tab design-files-tab ${designFilesTabActive ? 'active' : ''}`}
-            role="tab"
-            aria-selected={designFilesTabActive}
-            aria-label={designFilesTabTitle}
-            tabIndex={0}
-            data-testid="design-files-tab"
-            onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
-            title={designFilesTabTitle}
-          >
-            <span className="tab-icon" aria-hidden>
-              {fileSyncBadge ? (
-                <FileSyncBadge state={fileSyncBadge} size={14} />
-              ) : (
-                <Icon name="grid" size={14} />
-              )}
-            </span>
-            <span className="ws-tab-label">{designFilesTabLabel}</span>
-          </button>
-          {visibleOrderedWorkspaceTabs.map((entry) => {
-            if (entry.kind === 'browser') {
-              const browserTab = entry.browserTab;
-              const browserUrl = browserTab.url?.trim() ?? '';
-              const browserTitle = browserUrl
-                ? browserTab.title?.trim() || labelFromUrl(browserUrl)
-                : browserTab.label;
-              const browserHandlers = tabHandlersFor(browserTab.id);
-              return (
-                <Tab
-                  key={browserTab.id}
-                  label={browserTitle}
-                  title={browserUrl ? `${browserTitle}\n${browserUrl}` : browserTitle}
-                  active={activeTab === browserTab.id}
-                  onActivate={browserHandlers.onActivate}
-                  onClose={browserHandlers.onClose}
-                  kind="browser"
-                />
-              );
-            }
-            const name = entry.name;
-            const sketchEntry = sketches[name];
-            const dirtyMark =
-              sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
-            const onDisk = visibleFiles.find((f) => f.name === name);
-            const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
-            const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
-            const isTerminal = isTerminalTabId(name);
-            const isSideChat = isSideChatTabId(name);
-            // Terminal and side-chat tabs are not files: give them a friendly
-            // label + glyph instead of the raw `terminal:<id>` / `chat:<id>` id.
-            let label: string;
-            if (isTerminal) {
-              // Number multiple terminals so the tabs stay distinguishable.
-              const ordinal = tabNames.filter(isTerminalTabId).indexOf(name) + 1;
-              label =
-                ordinal > 1
-                  ? `${t('workspace.newTerminal')} ${ordinal}`
-                  : t('workspace.newTerminal');
-            } else if (isSideChat) {
-              const conv = conversations.find(
-                (c) => c.id === conversationIdFromSideChatTabId(name),
-              );
-              label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
-            } else {
-              label = `${liveArtifact?.title ?? name}${dirtyMark}`;
-            }
-            const iconNameOverride: IconName | undefined = isTerminal
-              ? 'terminal'
-              : isSideChat
-                ? 'comment'
-                : undefined;
-            const handlers = tabHandlersFor(name);
-            // The sync badge only makes sense on a real design-file tab: a
-            // terminal / side-chat tab has no on-disk content to sync, and a
-            // live artifact is baked output, not the source file being pulled
-            // or published.
-            const tabSyncBadge =
-              fileSyncBadge && !isTerminal && !isSideChat && !liveArtifact
-                ? fileSyncBadge
-                : null;
-            return (
-              <Tab
-                key={name}
-                label={label}
-                iconNameOverride={iconNameOverride}
-                syncBadge={tabSyncBadge}
-                active={activeTab === name}
-                onActivate={handlers.onActivate}
-                onClose={handlers.onClose}
-                kind={kind}
-                liveArtifact={liveArtifact}
-                draggable={persistedTabs.includes(name)}
-                dragging={draggedTabName === name}
-                dragOverEdge={
-                  dragOverTab?.name === name && draggedTabName !== name
-                    ? dragOverTab.edge
-                    : null
-                }
-                onDragStart={handlers.onDragStart}
-                onDragOver={handlers.onDragOver}
-                onDragLeave={handlers.onDragLeave}
-                onDrop={handlers.onDrop}
-                onDragEnd={handlers.onDragEnd}
-              />
-            );
-          })}
+          {pagesSwitcher}
         </div>
-        <div className="ws-add-tab">
-          <button
-            ref={launcherBtnRef}
-            type="button"
-            className="icon-only ws-tab-add od-tooltip"
-            data-testid="workspace-add-tab"
-            aria-haspopup="dialog"
-            aria-expanded={launcherOpen}
-            title={t('workspace.newTab')}
-            data-tooltip={t('workspace.newTab')}
-            data-tooltip-placement="bottom"
-            aria-label={t('workspace.newTab')}
-            onClick={() => setLauncherOpen((v) => !v)}
-          >
-            <Icon name="plus" size={15} />
-          </button>
+        <div className="share-menu chrome-share-menu chrome-share-menu--unified ws-tabs-share" data-app-chrome-share="true" />
         </div>
         {/* Pinned to the right for project/file actions; the tab launcher sits
             next to the file tabs so its spatial relationship stays clear. */}
@@ -4097,6 +4296,7 @@ export function FileWorkspace({
             data-app-chrome-file-actions="true"
             hidden={!viewerFileActive}
           />
+          <WorkspaceAccountDock placement="fallback" />
           {headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
@@ -4104,7 +4304,9 @@ export function FileWorkspace({
       </div>
       {launcherOpen ? (
         <TabLauncherMenu
-          anchor={launcherBtnRef.current}
+          /* The "+" it used to hang off is gone (per product), so it anchors to
+             the tab strip — which is where the tab it creates will appear. */
+          anchor={launcherBtnRef.current ?? tabsBarRef.current}
           files={visibleFiles}
           workspaceContexts={workspaceContexts}
           openTabNames={tabNames}
@@ -4152,7 +4354,7 @@ export function FileWorkspace({
           />
         </div>
       ) : null}
-      {viewerOnly ? (
+      {viewerOnly && readonlyNotice !== null ? (
         <div className="workspace-readonly-notice" role="status">
           <Icon name="lock" size={14} />
           <span>{readonlyNotice ?? t('workspace.readonlyNotice')}</span>
@@ -4241,6 +4443,36 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
+        ) : (previewTabActive || liveFilePreviewActive) ? (
+          previewViewerFile ? (
+            // Already mounted below (it is an open tab, or kept alive): that
+            // instance is the active one — see `workspaceActive` — so rendering
+            // it again here would put the same page on screen twice.
+            mountedHtmlViewerNames.includes(previewViewerFile.name) ? null : (
+              // Same box the mounted viewers get, so the chrome sits on the
+              // pane's own edges rather than inside a shrink-wrapped block.
+              <div
+                data-testid="preview-tab-viewer"
+                style={{ display: 'flex', flex: '1 1 auto', flexDirection: 'column', minHeight: 0 }}
+              >
+                {renderFileViewer(previewViewerFile, true)}
+              </div>
+            )
+          ) : (
+            // No page yet, or a run is writing one: the pane says so, or shows
+            // it being written.
+            <ProjectPreviewPane
+              projectId={projectId}
+              files={liveFilePreviewActive && activeHtmlViewerFile ? [activeHtmlViewerFile] : conversationPreviewFile !== undefined ? (previewEntryFile ? [previewEntryFile] : []) : visibleFiles}
+              filesRefreshKey={filesRefreshKey ?? 0}
+              workspaceContext={workspaceContext}
+              running={Boolean(streaming)}
+              steps={runSteps}
+              phase={runPhase}
+              question={runQuestion}
+              failure={runFailure}
+            />
+          )
         ) : designFilesTabActive ? (
           <DesignFilesPanel
             key={projectId}
@@ -4252,6 +4484,7 @@ export function FileWorkspace({
             reloading={reloading}
             running={Boolean(streaming)}
             runSteps={runSteps}
+            runPhase={runPhase}
             files={visibleFiles}
             folders={projectFolders}
             liveArtifacts={liveArtifactEntries}
@@ -4407,7 +4640,13 @@ export function FileWorkspace({
           </div>
         )}
         {mountedHtmlViewerFiles.map((file) => {
-          const workspaceActive = activeHtmlViewerFile?.name === file.name;
+          // The Preview tab shows this same page when it is the entry: activate
+          // the viewer that is already mounted rather than mounting a second
+          // one for one file (two would race over the share/download requests,
+          // which are addressed by file NAME).
+          const workspaceActive =
+            (!liveFilePreviewActive && activeHtmlViewerFile?.name === file.name)
+            || previewViewerFile?.name === file.name;
           return (
             <div
               key={`${projectId}:${file.name}`}
@@ -8285,6 +8524,7 @@ const Tab = memo(function Tab({
   iconNameOverride,
   syncBadge,
   liveArtifact,
+  trailing,
   draggable = false,
   dragging = false,
   dragOverEdge,
@@ -8308,6 +8548,9 @@ const Tab = memo(function Tab({
    *  with an animated downloading/uploading badge while set. */
   syncBadge?: FileSyncBadgeState | null;
   liveArtifact?: LiveArtifactWorkspaceEntry;
+  /** A control the tab carries on its right, before the close button. Used for
+   *  the all-files list, which belongs to the page you are on. */
+  trailing?: ReactNode;
   draggable?: boolean;
   dragging?: boolean;
   dragOverEdge?: TabDropEdge | null;
@@ -8318,7 +8561,13 @@ const Tab = memo(function Tab({
   onDragEnd?: () => void;
 }) {
   const t = useT();
-  const iconName = iconNameOverride ?? kindIconName(kind);
+  // Whether THIS tab is showing the page rendered. The 代码 view is one
+  // surface's other half (see `chrome-view-mode`), and it belongs to the tab
+  // you are on — a background tab is not the one showing source, so only the
+  // active tab follows the store.
+  const chromeViewMode = useChromeViewMode();
+  const rendering = !(active && chromeViewMode === 'source');
+  const iconName = iconNameOverride ?? kindIconName(kind, rendering);
   const syncBadgeLabel = syncBadge
     ? syncBadge === 'downloading'
       ? t('workspace.fileSyncDownloading')
@@ -8341,6 +8590,10 @@ const Tab = memo(function Tab({
       ].filter(Boolean).join(' ')}
       onClick={onActivate}
       onKeyDown={(e) => {
+        // Only the tab's own key presses activate it. The pill holds real
+        // controls now (Reload, Close), and preventing THEIR default is what
+        // swallows the Enter that was meant to press them.
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onActivate();
@@ -8368,19 +8621,41 @@ const Tab = memo(function Tab({
           <Icon name={iconName} size={13} />
         </span>
       ) : null}
-      <span className="ws-tab-text">
-        <span className="ws-tab-label">{label}</span>
-        {meta ? <span className="ws-tab-meta">{meta}</span> : null}
-      </span>
-      {liveArtifact ? (
-        <LiveArtifactBadges
-          compact
-          className="ws-live-artifact-badges"
-          status={liveArtifact.status}
-          refreshStatus={liveArtifact.refreshStatus}
+      {/* Pure portal host, in the glyph's place ahead of the name: the open
+          viewer drops its Reload in here (per product) so the control and the
+          page it reloads read as one chip. Only the ACTIVE tab renders it —
+          that is what keeps the id unique, and a background page is not one
+          you are reloading. Empty (and CSS-collapsed) for every tab whose
+          surface has nothing to portal. */}
+      {active ? (
+        <span
+          id={APP_CHROME_TAB_ACTION_ID}
+          className="ws-tab-action-slot"
+          data-app-chrome-tab-action="true"
         />
       ) : null}
-      {closable && onClose ? (
+      {/* Discrete strip: the label, the badges and the close button are the
+          ACTIVE tab's — an icon-wide tab has no room for them, and the title
+          the tooltip carries is how a collapsed tab still names itself.
+          A tab with NO glyph is the exception: collapsing it would leave an
+          empty chip, so a page tab (which dropped its chain) carries its name
+          whether or not it is the one you are on. */}
+      <TabLabel show={active || iconName === null}>
+        <span className="ws-tab-text">
+          <span className="ws-tab-label">{label}</span>
+          {meta ? <span className="ws-tab-meta">{meta}</span> : null}
+        </span>
+        {liveArtifact ? (
+          <LiveArtifactBadges
+            compact
+            className="ws-live-artifact-badges"
+            status={liveArtifact.status}
+            refreshStatus={liveArtifact.refreshStatus}
+          />
+        ) : null}
+      </TabLabel>
+      {trailing}
+      {active && closable && onClose ? (
         <button
           type="button"
           className="ws-tab-close od-tooltip"
@@ -8449,16 +8724,25 @@ function wheelDeltaToPixels(delta: number, deltaMode: number): number {
 
 function kindIconName(
   kind?: string,
+  /** True while the tab is showing the page RENDERED rather than its source. */
+  rendering = true,
 ):
   | 'file-code'
   | 'globe'
   | 'image'
   | 'pencil'
   | 'file'
+  | 'link-m'
   | null {
   if (kind === 'browser') return 'globe';
   if (kind === 'live-artifact') return 'file-code';
-  if (kind === 'html') return 'file-code';
+  // A page being SHOWN wears no glyph at all (per product): its NAME is what
+  // tells the pages apart, and a chain repeated down a strip of pages says
+  // nothing about which one you want — it only eats the width the name needs.
+  // `<>` still takes over the moment the 代码 view does, because there the
+  // markup IS what the tab is showing and that is worth a glyph. Source files
+  // (`code`) are never anything but their markup, so they keep `<>` always.
+  if (kind === 'html') return rendering ? null : 'file-code';
   if (kind === 'image') return 'image';
   if (kind === 'sketch') return 'pencil';
   if (kind === 'code') return 'file-code';

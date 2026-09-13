@@ -19,6 +19,7 @@ export type IconName =
   | 'chevron-left'
   | 'chevron-right'
   | 'close'
+  | 'code-slash'
   | 'copy'
   | 'crop'
   | 'comment'
@@ -33,10 +34,9 @@ export type IconName =
   | 'file'
   | 'file-code'
   | 'file-text'
-  | 'inbox-archive'
-  | 'inbox-unarchive'
   | 'folder'
   | 'folder-2'
+  | 'folder-5'
   | 'folder-transfer'
   | 'folder-filled'
   | 'fork'
@@ -62,6 +62,7 @@ export type IconName =
   | 'lightbulb'
   | 'arrow-right'
   | 'link'
+  | 'link-m'
   | 'lock'
   | 'mail'
   | 'log-in'
@@ -72,6 +73,7 @@ export type IconName =
   | 'minimize'
   | 'minus'
   | 'more-horizontal'
+  | 'more-vertical'
   | 'orbit'
   | 'remix-loop'
   | 'make-same'
@@ -79,6 +81,7 @@ export type IconName =
   | 'layout-left'
   | 'layout-right'
   | 'panel-left'
+  | 'panel-right'
   | 'nodes'
   | 'palette'
   | 'palette-filled'
@@ -151,6 +154,7 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   'chevron-right': 'arrow-right-s-line',
   close: 'close-line',
   comment: 'chat-1-line',
+  'code-slash': 'code-s-slash-line',
   copy: 'file-copy-line',
   dashboard: 'dashboard-line',
   discord: 'discord-line',
@@ -163,10 +167,9 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   file: 'file-line',
   'file-code': 'file-code-line',
   'file-text': 'file-text-line',
-  'inbox-archive': 'inbox-archive-line',
-  'inbox-unarchive': 'inbox-unarchive-line',
   folder: 'folder-line',
   'folder-2': 'folder-2-line',
+  'folder-5': 'folder-5-line',
   'folder-transfer': 'folder-transfer-line',
   'folder-filled': 'folder-fill',
   fork: 'git-branch-line',
@@ -192,6 +195,7 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   'layout-grid-2': 'layout-grid-2-line',
   lightbulb: 'lightbulb-line',
   link: 'link',
+  'link-m': 'link-m',
   lock: 'lock-line',
   'log-in': 'login-circle-line',
   'log-out': 'logout-box-r-line',
@@ -202,6 +206,7 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   minus: 'subtract-line',
   moon: 'moon-line',
   'more-horizontal': 'more-line',
+  'more-vertical': 'more-2-line',
   orbit: 'planet-line',
   'paint-bucket': 'paint-line',
   palette: 'palette-line',
@@ -701,6 +706,12 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       return (
         <svg {...common} fill="currentColor" stroke="none">
           <path d="M21 3C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H21ZM20 5H4V19H20V5ZM18 7V17H16V7H18Z" />
+        </svg>
+      );
+    case 'panel-right':
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M21 3C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H21ZM15 5H4V19H15V5ZM20 5H17V19H20V5Z" />
         </svg>
       );
     case 'panel-left':

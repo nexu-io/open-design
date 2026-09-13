@@ -167,11 +167,14 @@ describe("DesignFilesPanel sections", () => {
     expect(screen.queryByTestId("design-files-empty-new-document")).toBeNull();
   });
 
-  it("shows the agent's state in the empty state instead of starter CTAs", () => {
-    renderPanel([], { running: true });
+  // This pane lists files. The particle field with the run's state in it lives
+  // on the Preview tab now — the surface that reports what the project looks
+  // like, and why there is nothing to look at yet.
+  it("leaves the empty list blank, without the run's animation or starter CTAs", () => {
+    renderPanel([], { running: true, runPhase: "thinking" });
 
-    const center = screen.getByTestId("design-files-empty-chat");
-    expect(center.textContent).toContain("Thinking");
+    expect(screen.getByTestId("design-files-empty").textContent).toBe("");
+    expect(screen.queryByTestId("design-files-empty-chat")).toBeNull();
     // Creating things now happens through the tab strip's "+" launcher.
     expect(screen.queryByTestId("design-files-empty-new-sketch")).toBeNull();
     expect(screen.queryByTestId("design-files-empty-new-document")).toBeNull();
@@ -180,16 +183,14 @@ describe("DesignFilesPanel sections", () => {
     expect(screen.queryByTestId("design-files-empty-create-design-system")).toBeNull();
   });
 
-  it("carries the agent's state while it runs, and nothing at rest", () => {
-    renderPanel([], { running: true });
-    expect(screen.getByTestId("design-files-empty-chat").textContent).toContain("Thinking");
+  it("reads the same whether or not a run is in flight", () => {
+    renderPanel([], { running: true, runPhase: "working" });
+    const running = screen.getByTestId("design-files-empty").textContent;
 
     cleanup();
 
-    // At rest the ring is just the particle field: a line of copy inside the
-    // circle reads as a caption on the animation, not as the pane's state.
     renderPanel([], { running: false });
-    expect(screen.getByTestId("design-files-empty-chat").textContent).toBe("");
+    expect(screen.getByTestId("design-files-empty").textContent).toBe(running);
   });
 
   it("groups files into category tabs and shows one group at a time", () => {
@@ -536,7 +537,7 @@ describe("DesignFilesPanel page thumbnails", () => {
     // Over the inline cap the card thumb never URL-loads the iframe; it falls
     // back to the glyph placeholder.
     expect(container.querySelector(".df-card-thumb iframe")).toBeNull();
-    expect(container.querySelector(".df-preview-placeholder")?.textContent).toContain("⟨⟩");
+    expect(container.querySelector(".df-preview-placeholder svg")).toBeTruthy();
   });
 
   it("builds small HTML thumbnails asynchronously without URL-loading the iframe first", async () => {
@@ -693,18 +694,9 @@ describe("DesignFilesPanel directory navigation", () => {
     );
   });
 
-  it("always renders the root breadcrumb on the default-root view", () => {
-    // Regression: managed-storage projects have currentDir==='' and no
-    // rootDirName, which previously collapsed the whole breadcrumb nav to null
-    // and left the toolbar blank on the left for the most common path. The root
-    // crumb must always render, falling back to the t('designFiles.crumbs')
-    // label when no rootDirName exists.
+  it("omits the generic project breadcrumb on the root view", () => {
     renderPanel([file({ name: "top.html", kind: "html" })]);
-
-    expect(document.querySelector(".df-breadcrumbs")).toBeTruthy();
-    expect(document.querySelector(".df-breadcrumb-current")?.textContent).toBe(
-      "Project",
-    );
+    expect(document.querySelector(".df-breadcrumbs")).toBeNull();
   });
 
   it("shows rootDirName as the root breadcrumb when one is provided", () => {
@@ -1085,22 +1077,9 @@ describe("building preview", () => {
     expect(screen.getByTestId("design-file-row-notes.md")).toBeTruthy();
   });
 
-  // One switch, both directions. The button it replaced only went one way:
-  // once the preview was dismissed, the run had no route back to it.
-  it("lets the user leave the preview for the files, and come back", () => {
+  it("omits the fullscreen preview switch while generating", () => {
     renderPanel([page()], { running: true });
-
-    const toggle = screen.getByTestId("design-files-preview-toggle");
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(screen.queryByTestId("design-files-building")).toBeNull();
-    expect(screen.getByTestId("design-file-row-index.html")).toBeTruthy();
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByTestId("design-files-building")).toBeTruthy();
+    expect(screen.queryByTestId("design-files-preview-toggle")).toBeNull();
   });
 
   // A switch with nothing on its other side would be a control that does

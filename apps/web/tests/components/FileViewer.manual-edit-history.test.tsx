@@ -317,6 +317,60 @@ describe('FileViewer manual edit history regressions', () => {
     });
   });
 
+  it('resets all edits across targets and uses explicit save as the next reset baseline', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="body">Body</p></body></html>';
+    let persisted = initialSource;
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/files') && init?.method === 'POST') {
+        persisted = (JSON.parse(String(init.body)) as { content: string }).content;
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), { status: 200 });
+      }
+      if (url.includes('/raw/preview.html')) return new Response(persisted, { status: 200 });
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml={initialSource} />);
+    await enterManualEditMode();
+    await selectManualEditTarget();
+    const edit = async (id: string, value: string) => {
+      act(() => panelState.props!.onApplyPatch({ kind: 'set-text', id, value }, 'Change text'));
+      await waitFor(() => {
+        expect(persisted).toContain(value);
+        expect(panelState.props!.busy).toBe(false);
+      });
+    };
+    await edit('hero', 'New hero');
+    await edit('body', 'New body');
+    act(() => panelState.props!.onResetDraft());
+    await waitFor(() => {
+      expect(persisted).toBe(initialSource);
+      expect(panelState.props!.resetAvailable).toBe(false);
+      expect(panelState.props!.draft.text).toBe('Hero');
+    });
+    await edit('hero', 'Saved hero');
+    act(() => panelState.props!.onSaveDraft());
+    await waitFor(() => expect(panelState.props!.canUndo).toBe(false));
+    const savedBaseline = persisted;
+    await edit('body', 'Later body');
+    act(() => panelState.props!.onResetDraft());
+    await waitFor(() => {
+      expect(persisted).toBe(savedBaseline);
+      expect(panelState.props!.resetAvailable).toBe(false);
+    });
+    act(() => panelState.props!.onDraftChange({ ...panelState.props!.draft, text: 'Pending text' }));
+    await waitFor(() => expect(panelState.props!.canUndo).toBe(true));
+    act(() => panelState.props!.onUndo());
+    await waitFor(() => {
+      expect(panelState.props!.canRedo).toBe(true);
+      expect(persisted).toBe(savedBaseline);
+    });
+    act(() => panelState.props!.onRedo());
+    await waitFor(() => {
+      expect(persisted).toContain('Pending text');
+      expect(panelState.props!.draft.text).toBe('Pending text');
+    });
+  });
+
   it('only exposes reset after the selected element draft changes', async () => {
     const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1></body></html>';
     const fetchMock = vi.fn(async (input: string | URL | Request) => {

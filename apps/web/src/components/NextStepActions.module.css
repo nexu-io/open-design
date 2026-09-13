@@ -7,11 +7,10 @@
   font-size: 12px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent-tint) 50%, var(--bg-panel)) 0%,
-    var(--bg-panel) 60%
-  );
+  /* No plate (per product): the rows carry their own surface, so the tinted
+     gradient underneath only added a second card behind them. The hairline
+     border and the radius stay — they are what still groups the rows. */
+  background: transparent;
   animation: next-step-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
@@ -142,7 +141,10 @@
   padding: 6px 10px;
   font-size: 12px;
   color: var(--text-default);
-  background: var(--bg-panel);
+  /* No resting fill (per product): the rows read as outlined capsules on the
+     conversation surface. Hover still fills — that is a state, not the
+     resting look. */
+  background: transparent;
   border: 1px solid var(--border-soft);
   /* Full capsule, matching the quick pills above the composer. */
   border-radius: 999px;
@@ -167,7 +169,7 @@
 
 .toolboxRow:disabled:hover,
 .moreRow:disabled:hover {
-  background: var(--bg-panel);
+  background: transparent;
   border-color: var(--border-soft);
 }
 

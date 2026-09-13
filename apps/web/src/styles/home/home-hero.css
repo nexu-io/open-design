@@ -3256,52 +3256,6 @@
     transform 120ms var(--ease-out),
     visibility 0s linear 120ms;
 }
-/* Preview control, sitting ON the poster at its top-right corner (per
-   product) and revealed with the row. A dark scrim disc rather than a bare
-   glyph: it lands on whatever the poster happens to show there, which is as
-   often white paper as it is ink. Hidden with opacity + visibility, never
-   `display` — the poster must not reflow under the pointer — and
-   `pointer-events` come back only once it is visible, so an invisible control
-   can never swallow a click meant for the row. */
-.home-hero__plugin-preset-row-preview {
-  position: absolute;
-  /* Never a click target of its own: the poster behind it takes the click, so
-     the badge must not swallow one that lands on its 20px disc. */
-  pointer-events: none;
-  top: 4px;
-  right: 4px;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, #000 55%, transparent);
-  color: #fff;
-  cursor: pointer;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity 120ms var(--ease-out),
-    visibility 0s linear 120ms;
-}
-.home-hero__plugin-preset-row-preview svg {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 13px;
-}
-.home-hero__plugin-preset-row:not(:disabled):hover .home-hero__plugin-preset-row-preview,
-.home-hero__plugin-preset-row:not(:disabled):focus-visible .home-hero__plugin-preset-row-preview {
-  opacity: 1;
-  visibility: visible;
-  transition-delay: 0s;
-}
-/* Deepens with the POSTER's hover, not its own — the badge takes no pointer
-   events, so `:hover` on it would never fire. */
-.home-hero__plugin-preset-row-thumb:hover .home-hero__plugin-preset-row-preview {
-  background: color-mix(in srgb, #000 72%, transparent);
-}
 /* The prompt underneath, one step back so the name leads the row. */
 .home-hero__plugin-preset-row-text {
   color: var(--text-muted);

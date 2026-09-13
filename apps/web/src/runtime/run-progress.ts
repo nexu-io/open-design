@@ -1,8 +1,14 @@
+import { buildTurnBlocks } from './chat/build-turn-blocks';
+import { splitOnQuestionForms } from '../artifacts/question-form';
 import type { AgentEvent, ChatMessage } from '../types';
 import { toolCategoryForName } from '../components/ToolCard';
 
 /** One tool call, reduced to the line the Design Files empty state shows. */
 export interface RunProgressStep {
+  /** Current plan title, shared with the chat execution record. */
+  title?: string;
+  /** Latest write location, independent of the displayed activity. */
+  location?: { file: string | null; anchor: string | null };
   /** The `tool_use` id — stable across re-renders of the same streamed turn. */
   id: string;
   /** Drives the verb ("Editing" / "Running" / …) the caller renders. */
@@ -23,6 +29,147 @@ export interface RunProgressStep {
    * invalidated project-wide on every file change.)
    */
   anchor: string | null;
+}
+
+/** What a turn is doing before it has produced anything — the same three
+ *  states the chat footer names under the assistant's avatar. */
+export type RunPhase = 'preparing' | 'thinking' | 'working';
+
+/**
+ * The phase of the last assistant turn.
+ *
+ * This is the other pane's half of ONE status. The chat footer
+ * (`AssistantFooter`) says "preparing" until the turn produces something,
+ * swaps to "thinking" once the run reports that it is reasoning, and to
+ * "working" the moment real content lands. The Design Files surfaces used to
+ * say a flat "thinking" through all three, so the two sides of the split
+ * disagreed about the same run: the chat column read "Preparing…" while the
+ * ring beside it read "Thinking".
+ *
+ * Content is what the turn actually produced — prose, reasoning, a tool call,
+ * an artifact. `status` / `usage` / `diagnostic` events are the run talking
+ * about itself, not output, which is why a "thinking" STATUS only changes the
+ * wording while a "thinking" BLOCK means the turn is already working.
+ */
+export function runProgressPhase(messages: ChatMessage[]): RunPhase {
+  const message = lastAssistantTurn(messages);
+  return message ? phaseFromEvents(message.events ?? []) : 'preparing';
+}
+
+function phaseFromEvents(events: AgentEvent[]): RunPhase {
+  let reportedThinking = false;
+  for (const event of events) {
+    if (!event) continue;
+    if (event.kind === 'text') {
+      if (event.text.trim()) return 'working';
+      continue;
+    }
+    if (
+      event.kind === 'thinking' ||
+      event.kind === 'tool_use' ||
+      event.kind === 'live_artifact' ||
+      event.kind === 'plugin_candidate'
+    ) {
+      return 'working';
+    }
+    if (event.kind === 'status' && event.label === 'thinking') reportedThinking = true;
+  }
+  return reportedThinking ? 'thinking' : 'preparing';
+}
+
+/**
+ * The title of the question the last turn is waiting on, or null.
+ *
+ * A turn that ends by asking (`<question-form>`) is finished but NOT done: the
+ * run stopped because it needs an answer. The pane's ring showed nothing at
+ * all in that state — the field just turned — while the chat column beside it
+ * held an open form. The title is the one line that says what the wait is
+ * about.
+ *
+ * Only the very last message counts, and only if it is the assistant's: the
+ * moment the user replies their message is last, the form is answered, and
+ * there is nothing to wait for.
+ */
+export function pendingQuestionTitle(messages: ChatMessage[]): string | null {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== 'assistant') return null;
+  const content = last.content;
+  if (!content) return null;
+  // The LAST form in the turn: a turn that asks twice is waiting on the
+  // second one.
+  let title: string | null = null;
+  for (const segment of splitOnQuestionForms(content)) {
+    if (segment.kind !== 'form') continue;
+    const next = segment.form.title.trim();
+    if (next) title = next;
+  }
+  return title;
+}
+
+/** How the last turn ENDED when it did not end well — the two terminal states
+ *  the chat's own task card puts a heading on. */
+export type RunFailure = 'failed' | 'canceled';
+
+/**
+ * The last turn's failure, or null.
+ *
+ * The ring reports the work, and a run that DIED is still something the work
+ * did: the pane used to go blank the moment a failed turn settled, so the chat
+ * column carried a red "Run failed" header while the field beside it just
+ * turned, saying nothing had happened. This is the same read
+ * `TaskActivityCard` makes — the same message fields, in the same order, so
+ * one run can never be headed "Run failed" on one side of the split and
+ * nothing at all on the other.
+ *
+ * A turn still in flight is not a failure (`running` owns that state), and a
+ * user message on top means the next turn has not started, so the one before
+ * it is history.
+ */
+export function runFailureState(messages: ChatMessage[]): RunFailure | null {
+  const message = lastAssistantTurn(messages);
+  if (!message) return null;
+  if (message.runStatus === 'canceled') return 'canceled';
+  if (message.runStatus === 'failed') return 'failed';
+  // The result never reached the conversation. The turn may have run fine
+  // upstream; from here it produced nothing, which is the failure.
+  if (
+    message.resultDeliveryState === 'no_result' ||
+    message.resultDeliveryState === 'delivery_failed'
+  ) {
+    return 'failed';
+  }
+  // Anything else the run said about itself is either a success or a state
+  // that has not settled yet.
+  if (message.runStatus) return null;
+  // No terminal status of its own — an older message, or a run whose end never
+  // came back. The card falls back to the tool calls, and so does this: one
+  // that came back an error, or (in a turn that never reported an end) one
+  // that never came back at all.
+  const events = message.events ?? [];
+  const settled = new Set<string>();
+  for (const event of events) {
+    if (event.kind !== 'tool_result') continue;
+    if (event.isError) return 'failed';
+    settled.add(event.toolUseId);
+  }
+  if (message.endedAt) return null;
+  for (const event of events) {
+    if (event.kind === 'tool_use' && !settled.has(event.id)) return 'failed';
+  }
+  return null;
+}
+
+/** The turn the Design Files surfaces are reporting on: the newest assistant
+ *  message, unless the user has already spoken after it. */
+function lastAssistantTurn(messages: ChatMessage[]): ChatMessage | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message) continue;
+    if (message.role === 'user') return null;
+    if (message.role !== 'assistant') continue;
+    return message;
+  }
+  return null;
 }
 
 /** Steps kept for the trail. Older ones are off-screen behind the fade anyway. */
@@ -48,14 +195,33 @@ const MAX_TARGET_CHARS = 44;
  * not progress, and the panel would be claiming work it is no longer doing.
  */
 export function runProgressSteps(messages: ChatMessage[]): RunProgressStep[] {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i];
-    if (!message) continue;
-    if (message.role === 'user') return [];
-    if (message.role !== 'assistant') continue;
-    return stepsFromEvents(message.events ?? []);
+  const message = lastAssistantTurn(messages);
+  if (!message) return [];
+  const events = message.events ?? [];
+  const toolSteps = stepsFromEvents(events);
+  const write = [...events].reverse().find((event) => event.kind === 'tool_use'
+    && ['edit', 'write'].includes(toolCategoryForName(event.name)));
+  const fields = write?.kind === 'tool_use' && write.input && typeof write.input === 'object'
+    ? write.input as Record<string, unknown> : null;
+  const location = write?.kind === 'tool_use' ? {
+    file: fields ? firstString(fields, ['file_path', 'filePath', 'path', 'notebook_path']) : null,
+    anchor: anchorFor(toolCategoryForName(write.name), write.input),
+  } : undefined;
+  const blocks = buildTurnBlocks({ events, runStatus: 'running' });
+  for (const block of [...blocks].reverse()) {
+    if (block.kind !== 'shell') continue;
+    const segment = block.segments.find((item) => item.status === 'in_progress')
+      ?? block.segments.find((item) => item.status === 'pending');
+    if (segment) {
+      return [{
+        id: `plan:${block.id}:${segment.content}`,
+        title: segment.content,
+        location,
+        category: 'todo', toolName: 'TodoWrite', target: null, anchor: null,
+      }];
+    }
   }
-  return [];
+  return toolSteps.map((step) => ({ ...step, location }));
 }
 
 function stepsFromEvents(events: AgentEvent[]): RunProgressStep[] {

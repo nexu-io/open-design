@@ -523,8 +523,7 @@ test('[P1] powered WebGL HTML artifacts open through the isolated preview route'
   await expect(frame.getByTestId('powered-status')).toContainText(/isolated|not-isolated/);
 });
 
-test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', async ({ page }) => {
-  test.setTimeout(60_000);
+test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', async ({ page }, testInfo) => {
 
   await page.addInitScript(() => {
     class TestClipboardItem {
@@ -553,26 +552,86 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   await expect(artifactPreview(page)).toBeVisible();
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: 'Original Hero' })).toBeVisible();
 
-  // The screenshot step is gone: `screenshot-copy-button` no longer exists in
-  // apps/web, and FileViewer's own suite asserts its absence. Comments, mark
-  // and edit below are still live, so the rest of this spec stands.
-  await page.getByTestId('board-mode-toggle').click();
-  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  const commentsButton = page.getByTestId('comment-panel-toggle');
+  await commentsButton.click();
+  await expect(commentsButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('comment-side-panel')).toBeVisible();
+  await expect(artifactPreviewFrame(page).locator('html[data-od-comment-mode]')).toHaveCount(1);
   await artifactPreviewFrame(page).locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Panel-level comment');
   await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
   await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
 
-  await expect(page.getByTestId('comment-side-panel')).toHaveCount(0);
-  const commentsButton = page.getByTestId('comment-panel-toggle');
   await commentsButton.click();
   await expect(commentsButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('comment-side-panel')).toHaveCount(0);
   await commentsButton.click();
   await expect(page.getByTestId('comment-side-panel')).toBeVisible();
   await expect(page.getByTestId('comment-side-panel')).toContainText('Panel-level comment');
   await expect(commentsButton).toContainText('1');
+  const sharedDock = page.getByTestId('workspace-edit-dock');
+  const dockLayout = page.getByTestId('workspace-edit-layout');
+  const dockDivider = dockLayout.getByRole('separator');
+  const assertDockPlacement = async (panel: ReturnType<Page['locator']>) => {
+    await expect(sharedDock).toBeVisible();
+    await expect(sharedDock.locator(panel)).toBeVisible();
+    await expect(page.getByTestId('comment-float-host')).toHaveCount(0);
+    await expect(dockDivider).toHaveCount(1);
+    await expect.poll(async () => {
+      const [layout, workspace, dock, content, workspaceMargin] = await Promise.all([
+        dockLayout.boundingBox(),
+        page.getByTestId('file-workspace').boundingBox(),
+        sharedDock.boundingBox(),
+        panel.boundingBox(),
+        page.getByTestId('file-workspace').evaluate(element => parseFloat(getComputedStyle(element).marginRight)),
+      ]);
+      if (!layout || !workspace || !dock || !content) return false;
+      return Math.abs(dock.x + dock.width - layout.x - layout.width) < 1
+        && Math.abs(workspace.x + workspace.width + workspaceMargin + 4 - dock.x) < 1
+        && Math.abs(dock.y - layout.y) < 1
+        && Math.abs(dock.height - layout.height) < 1
+        && content.x >= dock.x
+        && content.x + content.width <= dock.x + dock.width + 1
+        && content.y >= dock.y
+        && content.y + content.height <= dock.y + dock.height + 1;
+    }, { message: 'The inspector must occupy the shared right column without overlaying the preview' }).toBe(true);
+  };
+  await assertDockPlacement(page.getByTestId('comment-side-panel'));
+  await expect(page.locator('.comment-preview-layer-with-side-dock')).toHaveCount(0);
+  await expect(dockDivider).toHaveAttribute('aria-valuenow', '320');
+  await dockDivider.press('Shift+ArrowLeft');
+  await expect(dockDivider).toHaveAttribute('aria-valuenow', '360');
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await assertDockPlacement(page.locator('.manual-edit-modal'));
+  await expect(page.getByTestId('comment-side-panel')).toHaveCount(0);
+  await expect(dockDivider).toHaveAttribute('aria-valuenow', '360');
+  await commentsButton.click();
+  await assertDockPlacement(page.getByTestId('comment-side-panel'));
+  await expect(page.locator('.manual-edit-modal')).toHaveCount(0);
+  await expect(dockDivider).toHaveAttribute('aria-valuenow', '360');
+  await testInfo.attach('comments-shared-right-dock', { body: await page.screenshot(), contentType: 'image/png' });
+
+  const originalViewport = page.viewportSize()!;
+  await page.setViewportSize({ width: 800, height: originalViewport.height });
+  await assertDockPlacement(page.getByTestId('comment-side-panel'));
+  await expect.poll(async () => {
+    const layoutWidth = (await dockLayout.boundingBox())!.width;
+    const panelWidth = Number(await dockDivider.getAttribute('aria-valuenow'));
+    return panelWidth <= Math.max(0, layoutWidth - 204) && panelWidth < 360;
+  }, { message: 'A narrow window must preserve canvas space by clamping the inspector width' }).toBe(true);
+  await page.setViewportSize(originalViewport);
+  await expect(dockDivider).toHaveAttribute('aria-valuenow', '360');
+  await assertDockPlacement(page.getByTestId('comment-side-panel'));
   await page.getByRole('button', { name: /hide comments/i }).click();
+  await expect(sharedDock).toBeHidden();
+  await expect(commentsButton).toBeFocused();
+  await commentsButton.click();
+  await page.getByRole('button', { name: /hide comments/i }).focus();
+  await page.keyboard.press('Escape');
+  await expect(sharedDock).toBeHidden();
+  await expect(commentsButton).toBeFocused();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
 
   await holdNextRunOpen(page);

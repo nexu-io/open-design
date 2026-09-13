@@ -454,9 +454,13 @@
   margin: 0;
   padding: 8px;
   box-sizing: border-box;
-  border: 1px solid var(--border);
+  /* No plate at rest: the card sat on --bg-panel inside a white rail, which
+     read as a grey slab under the footer. The border stays as `transparent`
+     rather than being dropped so the hover state can colour it without
+     reflowing the 2px it occupies. */
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: transparent;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.4;
@@ -470,10 +474,12 @@
   user-select: none;
   transition: border-color 120ms, background 120ms, transform 120ms;
 }
+/* The plate the card used to wear at rest is now its hover state — the only
+   thing marking this as a button once the resting grey is gone. */
 .entry-local-mode-tip:hover,
 .entry-local-mode-tip:focus-visible {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
+  border-color: var(--border);
+  background: var(--bg-panel);
   outline: none;
   transform: translateY(-1px);
 }
@@ -512,19 +518,38 @@
 }
 .entry-local-mode-tip.is-signing:hover {
   transform: none;
-  border-color: var(--border);
-  background: var(--bg-panel);
+  border-color: transparent;
+  background: transparent;
+}
+.entry-local-mode-tip__hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+/* Cancel (left) + 打开登录页 (right) share one row. `flex: 1 1 auto` keeps the
+   flex base at label width, so the pair wraps to two full-width rows in a
+   locale whose labels are too long for this ~150px rail card instead of
+   shrinking below their text. */
+.entry-local-mode-tip__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
 }
 .entry-local-mode-tip__cancel {
-  justify-self: start;
-  margin-top: 2px;
-  padding: 3px 10px;
+  flex: 1 1 auto;
+  /* 6px side padding, not the 10px this button wore when it was alone on
+     its own row: the pair has to clear 取消登录 + 打开登录页 inside a ~140px
+     content box to stay on one row. */
+  padding: 3px 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.4;
+  white-space: nowrap;
   cursor: pointer;
   transition: border-color 120ms, background 120ms, color 120ms;
 }
@@ -532,6 +557,30 @@
   border-color: var(--border-strong);
   background: var(--bg-subtle);
   color: var(--text);
+}
+/* Same box as the cancel beside it, filled — the row's primary action. */
+.entry-local-mode-tip__open {
+  flex: 1 1 auto;
+  /* 6px side padding, not the 10px this button wore when it was alone on
+     its own row: the pair has to clear 取消登录 + 打开登录页 inside a ~140px
+     content box to stay on one row. */
+  padding: 3px 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.entry-local-mode-tip__open:hover {
+  border-color: var(--accent-strong, var(--accent));
+  background: var(--accent-strong, var(--accent));
 }
 
 /* ---------- Rail account skeleton (RailAccountSyncTip) ----------
@@ -1678,7 +1727,7 @@
 .entry-top-right-cluster {
   position: fixed;
   z-index: 150;
-  top: 9px;
+  top: 8px;
   /* 12px off the window's own edge: the same inset `.entry-main` keeps
      (margin-right 12px), so the cluster's right edge lands on the content
      card's right edge below it (per product: 升级按钮的最右侧和下边白色卡片的
@@ -6784,14 +6833,11 @@
    比头像高出一圈). */
 /* Credits and the avatar read as two separate controls (per product): the
    wrapper is a bare flex row — each child paints its own surface. */
-/* Standalone GitHub star chip in the top-right cluster, sitting between the
-   campaign badge and the account capsule. Same pill material as the capsule
-   so the three read as one row of chips. */
+/* GitHub star count remains in the entry header; project chrome omits it. */
 .entry-top-right-github {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  /* Shared cluster row height — see .entry-deepseek-campaign-badge. */
   min-height: 28px;
   padding: 0 11px;
   border: 1px solid var(--material-separator);

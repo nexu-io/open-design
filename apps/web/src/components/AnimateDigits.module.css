@@ -1,0 +1,3 @@
+.digits { display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; }
+.cell { position: relative; display: grid; place-items: center; }
+.cell > * { grid-column: 1; grid-row: 1; }

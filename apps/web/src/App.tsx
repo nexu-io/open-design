@@ -5265,11 +5265,13 @@ function AppInner() {
   return (
     <>
       <div
-        className={`workspace-shell workspace-shell--${clientType}`}
+        className={`workspace-shell workspace-shell--${clientType}${route.kind === 'project' ? ' workspace-shell--project' : ''}`}
         data-client-type={clientType}
         data-host-platform={hostPlatform}
       >
         <WorkspaceTabsBar
+          onRenameProject={handleRenameProject}
+          onDeleteProject={handleDeleteProject}
           route={route}
           // The ambient list may still be loading (or belong to a different
           // selected Workspace) while a deep-linked project is already open.
@@ -5289,10 +5291,8 @@ function AppInner() {
           identityScopeKey={workspaceTabsIdentityScopeKey}
           workspaceContext={workspaceContext}
         />
-        {/* Avatar + credits keep their home-view spot (the fixed top-right
-            corner over the tabs chrome) while a project tab is open, even
-            though EntryShell — the cluster's usual owner — is unmounted here.
-            Home and the other entry views mount theirs through EntryNavRail;
+        {/* Project credits portal into the left chrome row. Home and the other
+            entry views keep their fixed account cluster through EntryNavRail;
             the routes are mutually exclusive, so exactly one is on screen. */}
         {route.kind === 'project' ? (
           <WorkspaceTopRightAccountCluster

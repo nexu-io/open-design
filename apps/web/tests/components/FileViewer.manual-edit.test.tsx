@@ -16,6 +16,43 @@ afterEach(() => {
 });
 
 describe('FileViewer manual edit regressions', () => {
+  it('automatically saves a numeric adjustment without closing the inspector', async () => {
+    let source = '<!doctype html><html><body><main data-od-id="hero">Hero</main><p data-od-id="second">Second</p></body></html>';
+    const writes: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body));
+        source = payload.content;
+        writes.push(source);
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/raw/')) return new Response(source, { status: 200 });
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml={source} />);
+    await enterManualEditMode();
+    await selectManualEditTarget();
+    fireEvent.change(await findStyleInput(FONT_SIZE_ROW), { target: { value: '18' } });
+    await waitFor(() => expect(writes).toHaveLength(1), { timeout: 2500 });
+    expect(writes[0]).toContain('font-size: 18px');
+    expect(document.querySelector('.manual-edit-right')).not.toBeNull();
+    // Switching targets before the debounce expires must flush the old target.
+    fireEvent.change(await findStyleInput(FONT_SIZE_ROW), { target: { value: '19' } });
+    await selectManualEditTarget({ ...heroTarget(), id: 'second', text: 'Second', fields: { text: 'Second' } });
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]).toContain('font-size: 19px');
+    await waitFor(async () => expect((await findStyleInput(FONT_SIZE_ROW)).value).not.toBe('19'));
+    fireEvent.change(await findStyleInput(FONT_SIZE_ROW), { target: { value: '22' } });
+    fireEvent.click(screen.getByText('Save'));
+    await waitFor(() => expect(writes).toHaveLength(3));
+    expect(writes).toHaveLength(3);
+    expect(writes[2]).toContain('font-size: 19px');
+    expect(writes[2]).toContain('font-size: 22px');
+  });
+
   function clickManualTool(testId: string) {
     fireEvent.click(screen.getByTestId(testId));
   }
@@ -371,7 +408,7 @@ describe('FileViewer manual edit regressions', () => {
     });
   });
 
-  it('closes the inspector without saving on cancel, staying in edit mode', async () => {
+  it('resets pending edits without saving, staying in edit mode', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     const fetchMock = vi.fn(async () =>
       new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
@@ -389,10 +426,10 @@ describe('FileViewer manual edit regressions', () => {
     const baseSizeInput = await findStyleInput(FONT_SIZE_ROW);
 
     fireEvent.change(baseSizeInput, { target: { value: '18' } });
-    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByText('Reset'));
 
     await waitFor(() => {
-      expect(document.querySelector('.manual-edit-right')).toBeNull();
+      expect(document.querySelector('.manual-edit-right')).not.toBeNull();
     });
     expect(document.querySelector('.manual-edit-workspace')).not.toBeNull();
     expect(fetchMock).not.toHaveBeenCalledWith(
@@ -401,7 +438,7 @@ describe('FileViewer manual edit regressions', () => {
     );
   });
 
-  it('closes the inspector after save succeeds, staying in edit mode', async () => {
+  it('keeps the inspector open after save succeeds', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
@@ -433,7 +470,7 @@ describe('FileViewer manual edit regressions', () => {
         '/api/projects/project-1/files',
         expect.objectContaining({ method: 'POST' }),
       );
-      expect(document.querySelector('.manual-edit-right')).toBeNull();
+      expect(document.querySelector('.manual-edit-right')).not.toBeNull();
     });
     expect(document.querySelector('.manual-edit-workspace')).not.toBeNull();
   });
@@ -490,7 +527,7 @@ describe('FileViewer manual edit regressions', () => {
         '/api/projects/project-1/files',
         expect.objectContaining({ method: 'POST' }),
       );
-      expect(document.querySelector('.manual-edit-right')).toBeNull();
+      expect(document.querySelector('.manual-edit-right')).not.toBeNull();
     });
 
     // The reloaded document's bridge asks where to scroll back to. The reply
@@ -546,8 +583,8 @@ describe('FileViewer manual edit regressions', () => {
     await enterManualEditMode();
     await selectManualEditTarget();
     await findStyleInput(FONT_SIZE_ROW);
-    // Nothing is dirty before the drag, so no Reset is offered.
-    expect(screen.queryByText('Reset')).toBeNull();
+    // Nothing is dirty before the drag, so Reset is disabled.
+    expect((screen.getByText('Reset') as HTMLButtonElement).disabled).toBe(true);
 
     await dropManualEditDrag('hero', 'translate(12px, 8px)');
 
@@ -592,7 +629,7 @@ describe('FileViewer manual edit regressions', () => {
     // into this element's draft.
     await dropManualEditDrag('side', 'translate(40px, 0px)');
 
-    expect(screen.queryByText('Reset')).toBeNull();
+    expect((screen.getByText('Reset') as HTMLButtonElement).disabled).toBe(true);
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/projects/project-1/files',
       expect.objectContaining({ method: 'POST' }),
@@ -654,7 +691,7 @@ describe('FileViewer manual edit regressions', () => {
     expect(payload.content).not.toContain('<main data-od-id="hero">Hero</main>');
   });
 
-  it('keeps the preview mounted and does not save when deleting the only rendered root', async () => {
+  it('offers no delete action and keeps the rendered root intact', async () => {
     const source = '<!doctype html><html><body><main data-od-id="app-root">App</main><script>window.bootApp && window.bootApp();</script></body></html>';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
@@ -683,11 +720,7 @@ describe('FileViewer manual edit regressions', () => {
       outerHtml: '<main data-od-id="app-root">App</main>',
     });
 
-    fireEvent.click(screen.getByLabelText('Delete element'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Cannot remove the last rendered element in the document.')).toBeTruthy();
-    });
+    expect(screen.queryByLabelText('Delete element')).toBeNull();
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toContain('data-od-id="app-root"');
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/projects/project-1/files',

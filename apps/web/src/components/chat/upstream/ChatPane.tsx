@@ -1873,6 +1873,7 @@ export function ChatPane({
   } | null>(null);
   const [composerSlotHeight, setComposerSlotHeight] = useState(0);
   const [editingQueuedSendId, setEditingQueuedSendId] = useState<string | null>(null);
+  const [queuedSendExpanded, setQueuedSendExpanded] = useState(false);
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
   const lastAssistantId = useMemo(() => {
@@ -1945,7 +1946,7 @@ export function ChatPane({
    * 也不是他伸手要够的东西;人贴着底时他已经在最新上,回底按钮无事可做,
    * 位置该让给进度。两者因此天然不同时出现,不需要谁给谁让一档。
    */
-  const showJumpToLatest = scrolledFromBottom;
+  const showJumpToLatest = scrolledFromBottom && !queuedSendExpanded;
   const planPillVisible = planPillEligible && !scrolledFromBottom;
   const retryAssistant = retryableAssistantMessage(
     displayMessages,
@@ -4605,6 +4606,7 @@ export function ChatPane({
               key={activeConversationId ?? projectId ?? 'draft'}
               containerRef={queuedSendStripRef}
               items={queuedItems}
+              onExpandedChange={setQueuedSendExpanded}
               editingId={editingQueuedSendId}
               onEdit={(item) => {
                 trackMessageQueueClick(analytics.track, {
@@ -5867,10 +5869,12 @@ function queuedTipPlacement(
   onSendNow,
   onSteer,
   steerBlockedReason,
+  onExpandedChange,
 }: {
   containerRef?: MutableRefObject<HTMLDivElement | null>;
   editingId?: string | null;
   items: QueuedSendItem[];
+  onExpandedChange?: (expanded: boolean) => void;
   onEdit?: (item: QueuedSendItem) => void;
   onRemove?: (id: string) => void;
   onReorder?: (orderedIds: string[]) => void;
@@ -5960,6 +5964,7 @@ function queuedTipPlacement(
   return (
     <QueuedSendStack
       containerRef={containerRef}
+      onExpandedChange={onExpandedChange}
       label={`${t('chat.queuedHeader')} · ${items.length}`}
       dragging={Boolean(dragState)}
       onDragLeave={(event) => {
@@ -5989,8 +5994,6 @@ function queuedTipPlacement(
               onDragOver={(event) => handleDragOver(event, item.id)}
               onDrop={(event) => handleDrop(event, item.id)}
             >
-              {/* 稿子这一行是 `grip → ix → tx → qops`:**拖动手柄在最左**,序号跟在它右边。
-                  原来这两个是反的(序号在最左),整行的起手就和稿子对不上。 */}
               <button
                 type="button"
                 className="chat-queued-send-drag-handle chat-queued-send-tooltip od-tooltip"
@@ -6005,8 +6008,6 @@ function queuedTipPlacement(
               >
                 <Icon name="grip-vertical" size={14} />
               </button>
-              {/* 序号:出队后重排是数组下标的自然结果,不用另外维护 */}
-              <span className="chat-queued-send-index" data-testid="chat-queued-send-index" aria-hidden>{index + 1}</span>
               <div className="chat-queued-send-main">
                 <span className="chat-queued-send-title">{summarizeQueuedPrompt(item, t)}</span>
               </div>

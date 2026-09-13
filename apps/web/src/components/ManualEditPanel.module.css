@@ -1,0 +1,266 @@
+/* The inspector sits on the same unpainted app ground as the chat pane.
+   Form fields retain their own surfaces; the outer shell is not a card. */
+.docked {
+  --manual-edit-scrollbar-thumb: color-mix(in srgb, var(--text-faint) 40%, transparent);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.docked :global(.manual-edit-modal.cc-panel) {
+  --manual-edit-field-bg: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  --manual-edit-field-bg-hover: var(--manual-edit-field-bg);
+  --manual-edit-field-border: transparent;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  scrollbar-gutter: auto;
+}
+
+.docked :global(.manual-edit-scroll) {
+  scrollbar-width: auto;
+  scrollbar-color: var(--manual-edit-scrollbar-thumb) transparent;
+  scrollbar-gutter: stable;
+}
+
+.docked :global(.manual-edit-scroll::-webkit-scrollbar-thumb) {
+  background: var(--manual-edit-scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.docked :global(.manual-edit-scroll::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+.docked :global(.manual-edit-titlebar) {
+  min-height: 48px;
+  padding: 8px 12px;
+  cursor: default;
+}
+
+.docked :global(.manual-edit-footer) {
+  background: transparent;
+}
+
+.footerActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.footerActions :global(.manual-edit-footer-left),
+.footerActions :global(.manual-edit-footer-right) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.footerActions :global(.manual-edit-footer-btn) {
+  min-width: 0;
+  height: auto;
+  min-height: 36px;
+  padding: 8px 4px;
+  font-size: 13px;
+  white-space: normal;
+}
+
+/* Content fields use the navigation's 5% hover / 10% selected surfaces. */
+.docked :global(.manual-edit-content-inspector .manual-edit-field input:hover),
+.docked :global(.manual-edit-content-inspector .manual-edit-field textarea:hover) {
+  background: color-mix(in srgb, var(--text-strong) 5%, transparent);
+}
+
+.docked :global(.manual-edit-content-inspector .manual-edit-field input:focus),
+.docked :global(.manual-edit-content-inspector .manual-edit-field textarea:focus) {
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--selected);
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
+.docked :global(.manual-edit-field input),
+.docked :global(.manual-edit-content-inspector .manual-edit-field textarea),
+.docked :global(.manual-edit-field select),
+.docked :global(.manual-edit-modal .cc-row > .cc-value),
+.docked :global(.cc-quad-cell) {
+  border-radius: 12px;
+}
+
+.docked :global(.manual-edit-modal .cc-row > .cc-color:focus-within),
+.docked :global(.manual-edit-modal .cc-row > .cc-color[data-open]) {
+  background: var(--manual-edit-field-bg-hover);
+  border-color: transparent;
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Equal side tracks keep values centered independently of swatches and arrows. */
+.docked :global(.manual-edit-modal .cc-row > .cc-value) {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  position: relative;
+  align-items: center;
+}
+
+/* Paired color fields reserve only the swatch track so HEX values stay readable. */
+.docked :global(.manual-edit-modal .cc-pair > .cc-row > .cc-color) {
+  grid-template-columns: 20px minmax(0, 1fr);
+}
+
+.docked :global(.manual-edit-modal .cc-number-input),
+.docked :global(.manual-edit-modal .cc-number-input > input),
+.docked :global(.manual-edit-modal .cc-value > input),
+.docked :global(.manual-edit-modal .cc-value > select),
+.docked :global(.manual-edit-modal .cc-quad-cell > input) {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+
+/* Animated digits and the editable input share the same centered area. */
+.docked :global(.manual-edit-modal .cc-number-input > [aria-hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.docked :global(.cc-value > .cc-number-input),
+.docked :global(.cc-value > input) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.docked :global(.cc-value > select) {
+  grid-column: 1 / -1;
+  padding: 0 20px;
+  text-align-last: center;
+}
+
+.docked :global(.cc-unit) {
+  position: absolute;
+  right: 32px;
+}
+
+.docked :global(.cc-quad-cell) {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px 24px minmax(0, 1fr) 24px;
+}
+
+.docked :global(.cc-quad-axis) {
+  position: static;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.docked :global(.cc-quad-cell > .cc-number-input) {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.docked :global(.cc-quad-axis + .cc-step) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.docked :global(.cc-quad-cell > .cc-step:last-child) {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.docked :global(.manual-edit-modal .cc-value:has(> .cc-step)) {
+  padding-inline: 4px;
+  border-width: 0;
+}
+
+.docked :global(.manual-edit-modal .cc-quad-cell) {
+  padding-inline: 12px;
+  border-width: 0;
+}
+
+.docked :global(.cc-step) {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.docked :global(.cc-quad-cell > .cc-step) {
+  width: 24px;
+  min-width: 24px;
+}
+
+/* Match the navigation's selected ink for hovered and active values. */
+.docked :global(.cc-value:hover),
+.docked :global(.cc-value:focus-within),
+.docked :global(.cc-value[data-open]),
+.docked :global(.cc-quad-cell:hover),
+.docked :global(.cc-quad-cell:focus-within),
+.docked :global(.manual-edit-field:hover),
+.docked :global(.manual-edit-field:focus-within) {
+  --manual-edit-field-text: #121212;
+}
+.select {
+  width: 100%;
+  min-width: 0;
+}
+.select .selectTrigger {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--manual-edit-field-bg);
+  color: var(--manual-edit-field-text, var(--text));
+  font: inherit;
+  text-align: center;
+}
+.select .selectTrigger:hover:not(:disabled),
+.select .selectTrigger[aria-expanded='true'] {
+  background: var(--manual-edit-field-bg-hover);
+  border-color: transparent;
+}
+.select .selectTrigger:focus-visible,
+.select .selectTrigger[aria-expanded='true'] {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+.selectTrigger :global(.od-select-value) { flex: 1; }
+.selectMenu:global(.od-select-menu) {
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--bg-panel);
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--text);
+  z-index: 10001;
+}
+.selectMenu :global(.od-select-option) {
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+}
+.selectMenu :global(.od-select-option:hover:not(:disabled)),
+.selectMenu :global(.od-select-option.active:not(:disabled)),
+.selectMenu :global(.od-select-option.selected),
+.selectMenu :global(.od-select-option.selected:hover:not(:disabled)),
+.selectMenu :global(.od-select-option.selected.active:not(:disabled)) {
+  background: color-mix(in srgb, var(--text-strong) 10%, var(--bg-panel));
+  color: var(--text-strong);
+}
+.selectMenu :global(.od-select-option-check) { color: var(--text-strong); }

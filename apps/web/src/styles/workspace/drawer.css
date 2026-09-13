@@ -1397,7 +1397,13 @@
   overflow: hidden;
 }
 .ws-tabs-shell {
-  display: flex;
+  /* Reserve the larger action group's width on both sides so the middle
+     group stays centred on the full preview, not the remaining free space. */
+  display: grid;
+  grid-template-columns:
+    minmax(var(--ws-toolbar-side-width, min-content), 1fr)
+    minmax(0, auto)
+    minmax(var(--ws-toolbar-side-width, min-content), 1fr);
   align-items: center;
   gap: 8px;
   padding: 0 10px;
@@ -1420,8 +1426,66 @@
      scrolling directly beneath it. Same hairline other sticky toolbar rows
      in this file use (.page-creator-head, .ds-card-thumb) to read as a
      distinct strip instead of bleeding into the canvas. */
-  border-bottom: 1px solid var(--border);
+  /* Hairline removed (per product): this row and the preview toolbar under it
+     read as one header block. `.app .ws-tabs-shell` already dropped it in the
+     project shell; dropping it here too means no context keeps the line. */
+  border-bottom: none;
 }
+/* Every track in the strip is exactly one tab tall (`height: 100%` of a
+   content box the shell sizes to the tab), so a tab sits flush against the
+   strip's own padding and the inset a designer measures is the same number
+   wherever they measure it. */
+.ws-tabs-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  justify-self: start;
+}
+.ws-tabs-views {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 100%;
+}
+/* Portal host for the viewer's 代码 toggle. `display: contents` so an empty
+   slot occupies nothing and a filled one puts the button directly in the
+   switcher's flex flow — otherwise the inter-tab separator
+   (`.ws-tab + .ws-tab::before`) would not see 预览 and 代码 as siblings. */
+.ws-tabs-view-slot {
+  display: contents;
+}
+.ws-tabs-center {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  /* Let the filename yield to the expanding view tabs in narrow workspaces. */
+  max-width: 100%;
+  height: 100%;
+  justify-self: center;
+}
+/* Portal host for the viewer's viewport switcher (桌面端 / 平板 / 手机) and its
+   Reload, which sit immediately before the file tabs. `:empty` collapses it
+   entirely so a row with nothing open keeps the tab strip exactly where it
+   was; when filled it hugs its children and holds an 8px gap off the first
+   tab. The switcher's own popover needs a positioned, non-clipping ancestor,
+   so this slot is a plain flex item rather than `display: contents`. */
+.ws-tabs-lead-slot {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  /* One tab tall like every other box in the strip, and its content centred
+     inside that: whatever the viewer portals in here must not be able to
+     decide where the tabs sit. */
+  height: 100%;
+  max-height: 100%;
+  margin-right: 8px;
+}
+.ws-tabs-lead-slot:empty {
+  display: none;
+}
+
 .ws-tabs-shell:has(.entry-settings-menu__popover) {
   z-index: 1900;
 }
@@ -1511,9 +1575,23 @@
   border-color: transparent;
 }
 .app .ws-tabs-actions .chrome-action-icon.is-active,
-.app .ws-tabs-actions .chrome-action-icon[aria-expanded='true'] {
+.app .ws-tabs-actions .chrome-action-icon:not(:where(.chrome-action-dark))[aria-expanded='true'] {
   background: var(--bg-muted);
   border-color: transparent;
+}
+/* Share and Export retain their labels, including in the compact toolbar. */
+.app .ws-tabs-actions .chrome-action-with-label {
+  gap: 6px;
+  border-color: transparent;
+  background: var(--bg-subtle);
+}
+.app .ws-tabs-actions .chrome-action-with-label:hover:not(:disabled),
+.app .ws-tabs-actions .chrome-action-with-label:not(.chrome-action-dark)[aria-expanded='true'] {
+  background: var(--bg-muted);
+}
+.app .ws-tabs-actions .chrome-action-with-label > span {
+  display: inline;
+  white-space: nowrap;
 }
 .app .ws-tabs-actions .handoff-trigger {
   height: 28px;
@@ -1735,6 +1813,30 @@
   flex: none;
 }
 .ws-tab.active .tab-icon { color: var(--text); }
+/* The wrapper whose WIDTH the strip animates (see workspace/TabLabel). It
+   clips its own content so the label never spills while the box is still
+   opening, and it must not flex — motion writes an inline width and a
+   `flex: 1 1 auto` would fight it every frame. */
+.ws-tab-anim {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Everything inside is laid out at its FINAL size and simply clipped as the
+   box opens. A child that answered the animating width instead would re-run
+   its own ellipsis on every frame — that is the last character of a label
+   flickering between glyph and "…" while the tab expands. Their own
+   `max-width` still caps long names, so nothing here changes what a settled
+   tab looks like. */
+.ws-tab .ws-tab-anim > * {
+  flex: none;
+  width: max-content;
+}
+
 .ws-tab-text {
   flex: 1 1 auto;
   min-width: 0;
@@ -1751,6 +1853,28 @@
   text-overflow: ellipsis;
   max-width: 96px;
   line-height: 1;
+}
+/* File tabs only (the view switcher lives in `.ws-tabs-views` and stays
+   compact): 110px cut a name like "slow-design-system.html" down to
+   "slow-design-", which is not enough to tell two files apart. */
+.ws-tabs-bar .ws-tab {
+  max-width: 240px;
+}
+/* The ACTIVE tab carries controls a background tab does not — Reload ahead of
+   its name, the "⌄" after it — and every one of them is a fixed box that
+   cannot shrink (`.ws-tab-anim` cannot either: motion owns its width). So a
+   box still sized for "name + close" does not clamp the name, it pushes the
+   trailing control out through the pill's own rounded end. Give the tab that
+   carries them the room they need instead. */
+.ws-tabs-bar .ws-tab:has(.ws-pages-switcher) {
+  max-width: 300px;
+}
+/* Its fixed 110px has no room for either control. */
+.ws-tabs-bar .ws-tab.browser-tab:has(.ws-pages-switcher) {
+  width: auto;
+}
+.ws-tabs-bar .ws-tab-label {
+  max-width: 200px;
 }
 .ws-tab.has-meta {
   max-width: 320px;
@@ -1821,6 +1945,44 @@
   justify-content: center;
 }
 .ws-tab-close:hover { background: var(--border); color: var(--text); }
+
+/* Portal host for the active tab's Reload, in the glyph's place ahead of the
+   name (see APP_CHROME_TAB_ACTION_ID). `:empty` so a tab whose surface has
+   nothing to portal keeps exactly the box it had. */
+.ws-tab-action-slot {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+.ws-tab-action-slot:empty {
+  display: none;
+}
+/* `.icon-only`'s box and hover are scoped to `.viewer-toolbar` (viewer/core),
+   so a button portaled in here arrives with NO styling at all. Sized like
+   `.ws-tab-close` — the pill's other control — but a touch larger and in the
+   muted text colour, because this one is an action rather than a dismissal.
+   Hover fills with `--border`, not `--bg-subtle`: the pill it sits in is
+   already `--bg-subtle` while active. */
+.ws-tab-action-slot .ws-tab-reload {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.ws-tab-action-slot .ws-tab-reload:hover { background: var(--border); color: var(--text); }
+.ws-tab-action-slot .ws-tab-reload:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.ws-tab-action-slot .ws-tab-reload svg { display: block; flex: none; }
 
 /* The Design Files tab scrolls with the strip like any other tab. It was
    previously pinned with position: sticky (issue #775), but its transparent
@@ -2552,6 +2714,25 @@
   }
 }
 
+/* 设计文件 browses the project's files full-pane. The strip of OPEN file tabs
+   and the "+" launcher beside it belong to the other views: sitting over that
+   pane they offered a second, competing way to reach a file the grid below
+   already lists. `display: none` rather than a fade — they leave the tab order
+   and the accessibility tree with the pixels. The lead slot next to them stays
+   put: it is a portal host a retained viewer resolves by id, and it collapses
+   on its own when nothing is portaled into it. */
+.ws-tabs-center[data-hide-tabs='true'] > .ws-tabs-bar {
+  display: none;
+}
+/* The "+" goes invisible rather than away: the browser new-tab shortcut still
+   opens this launcher from 设计文件 (that is the view it creates INTO), and the
+   popover anchors to this button's box. `visibility` keeps that box — and its
+   width costs nothing, the row's centre column is empty here anyway — while
+   taking the control out of the tab order and the accessibility tree. */
+.ws-tabs-center[data-hide-tabs='true'] > .ws-add-tab {
+  visibility: hidden;
+}
+
 .ws-add-tab {
   position: relative;
   flex: 0 0 auto;
@@ -2560,6 +2741,9 @@
   z-index: 3;
   margin-left: 2px;
 }
+/* Whichever control abuts the scrolling strip carries the fade — that is the
+   "⌄" (all project files) when it is there, and "+" only when it is not. */
+.ws-tabs-bar.is-overflowing + .ws-pages-switcher,
 .ws-tabs-bar.is-overflowing + .ws-add-tab {
   padding-left: 4px;
   background: #fff;
@@ -2588,6 +2772,107 @@
 .ws-tab-add:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* "⌄" — every file in the project, between the tab strip and "+". The trigger
+   reuses `.ws-tab-add`'s box, so the strip's two icon-only controls match. */
+.ws-pages-switcher {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  z-index: 3;
+  margin-left: 2px;
+}
+/* Inside a tab it is one of the pill's own controls, not one of the row's:
+   `.ws-tab-add`'s 28px circle is sized against the 44px row and inside a 30px
+   pill it fills the whole height and collides with the rounded end. Match
+   Reload, its sibling at the other end of the name. */
+.ws-tab > .ws-pages-switcher .ws-pages-trigger {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-xs);
+}
+/* The pill it sits in is already `--bg-subtle` while active, so the row's
+   hover fill would be invisible here. Same `--border` Reload and Close use. */
+.ws-tab > .ws-pages-switcher .ws-pages-trigger:hover {
+  background: var(--border);
+  color: var(--text);
+}
+/* Anchored right, not left: in a tab the trigger sits at the pill's right end,
+   and a 200–320px panel opening rightward from there runs off the row. */
+.ws-tab > .ws-pages-switcher .ws-pages-menu {
+  left: auto;
+  right: 0;
+}
+/* Follows "+" out of the row on 设计文件: the pane below already lists every
+   file, so a second way to the same list is only noise. */
+.ws-tabs-center[data-hide-tabs='true'] > .ws-pages-switcher {
+  display: none;
+}
+/* Same panel as the viewport switcher's, with one difference that matters:
+   that menu holds three fixed rows, this one holds however many files the
+   project has, so it scrolls inside itself instead of growing past the row. */
+.ws-pages-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 80;
+  min-width: 200px;
+  max-width: 320px;
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2, 2px);
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+}
+.ws-pages-menu-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+}
+/* Match selection and override the shared button hover border. */
+.ws-pages-menu-item:hover:not(:disabled),
+.ws-pages-menu-item.active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent-tint) 82%, var(--bg-panel));
+  color: var(--accent-strong);
+}
+.ws-pages-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ws-pages-menu-label {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* A file name is as long as it is; the panel has a ceiling, so the name is
+   what gives. */
+.ws-pages-menu-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ws-tabs-actions { display: inline-flex; gap: 4px; align-items: center; }
@@ -2726,3 +3011,60 @@
 .designs-empty-cta:active {
   transform: scale(0.98);
 }
+
+/* A single current-file selector replaces the accumulating file tab strip. */
+.ws-tabs-bar:has(> .ws-file-selector) {
+  overflow: visible;
+  min-width: 0;
+}
+.ws-file-selector {
+  flex: 0 0 360px;
+  width: 360px;
+  min-width: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: 0;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-tint);
+}
+.ws-file-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.ws-file-selector-trigger:hover,
+.ws-file-selector-trigger[aria-expanded='true'] {
+  background: transparent;
+}
+.ws-file-selector-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.ws-file-selector > .ws-pages-menu {
+  left: 0;
+  right: 0;
+  min-width: min(280px, 100%);
+  max-width: min(420px, 80vw);
+}
+
+/* Keep sharing immediately beside the current file link. */
+.ws-tabs-share { flex: 0 0 auto; margin-left: 8px; }
+.ws-tabs-share:empty,
+.ws-tabs-center[data-hide-tabs='true'] > .ws-tabs-share { display: none; }
+.ws-tabs-share .chrome-unified-popover { right: 0; }

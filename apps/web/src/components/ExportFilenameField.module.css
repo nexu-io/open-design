@@ -1,0 +1,89 @@
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 32%);
+  align-items: end;
+  gap: 12px;
+  width: 100%;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.field .filename,
+.select .trigger {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.field .filename:hover:not(:disabled),
+.select .trigger:hover:not(:disabled),
+.select .trigger[aria-expanded='true'] {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--text-strong) 5%, var(--bg-panel));
+}
+
+.field .filename:focus,
+.select .trigger:focus-visible,
+.select .trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+
+.menu:global(.od-select-menu) {
+  z-index: 10001;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--bg-panel);
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.menu :global(.od-select-option) {
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+}
+
+.menu :global(.od-select-option:hover:not(:disabled)),
+.menu :global(.od-select-option.active:not(:disabled)),
+.menu :global(.od-select-option.selected),
+.menu :global(.od-select-option.selected:hover:not(:disabled)),
+.menu :global(.od-select-option.selected.active:not(:disabled)) {
+  background: color-mix(in srgb, var(--text-strong) 10%, var(--bg-panel));
+  color: var(--text-strong);
+}
+
+.menu :global(.od-select-option-check) {
+  color: var(--text-strong);
+}
+
+@media (max-width: 360px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) 88px;
+    gap: 8px;
+  }
+}

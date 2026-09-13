@@ -1,4 +1,4 @@
-import { forwardRef, type ComponentProps, type ElementType } from 'react';
+import { forwardRef, useRef, type ComponentProps, type ElementType } from 'react';
 
 function AnimatePresence({ children }: { children?: React.ReactNode }) {
   return <>{children}</>;
@@ -41,6 +41,7 @@ const motionHandler: ProxyHandler<object> = {
         transition: _transition,
         layout: _layout,
         layoutId: _layoutId,
+        onAnimationComplete: _onAnimationComplete,
         ...rest
       } = props as Record<string, unknown>;
       const Tag = prop as ElementType;
@@ -60,4 +61,18 @@ function useReducedMotion(): boolean {
   return false;
 }
 
-export { AnimatePresence, MotionConfig, motion, useReducedMotion };
+function useSpring(initial: number) {
+  const current = useRef(initial);
+  return useRef({
+    get: () => current.current,
+    set: (value: number) => { current.current = value; },
+    jump: (value: number) => { current.current = value; },
+    toString: () => String(current.current),
+  }).current;
+}
+
+function useTransform<T>(value: { get: () => number }, transform: (value: number) => T): T {
+  return transform(value.get());
+}
+
+export { AnimatePresence, MotionConfig, motion, useReducedMotion, useSpring, useTransform };

@@ -3,6 +3,12 @@ import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } f
 import { useT } from '../i18n';
 import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { Icon } from './Icon';
+import { RemixIcon } from './RemixIcon';
+import styles from './ManualEditPanel.module.css';
+import { CustomSelect } from './CustomSelect';
+import { AnimatedNumberInput } from './AnimatedNumberInput';
+import { formatPickerColor, formatPickerDisplay, parsePickerColor, pickerHex, type PickerFormat } from '../edit-mode/color-picker';
+import { ManualEditColorPopover } from './ManualEditColorPopover';
 
 export interface ManualEditDraft {
   text: string;
@@ -33,7 +39,10 @@ export function ManualEditPanel({
   onStyleChange,
   onInvalidStyle,
   onError,
-  onCancelDraft,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   onSaveDraft,
   onResetDraft,
   onExit,
@@ -44,6 +53,7 @@ export function ManualEditPanel({
   onApplyTokenSuggestion,
   onInspectValueSelect,
   pageStylesEnabled = true,
+  docked = false,
   floatingStyle,
   floatingClassName,
   onFloatingPositionChange,
@@ -60,6 +70,7 @@ export function ManualEditPanel({
   busy?: boolean;
   resetAvailable?: boolean;
   pageStylesEnabled?: boolean;
+  docked?: boolean;
   onSelectTarget: (target: ManualEditTarget) => void;
   onDraftChange: (draft: ManualEditDraft) => void;
   onStyleChange?: (id: string, styles: Partial<ManualEditStyles>, label: string) => void;
@@ -181,8 +192,9 @@ export function ManualEditPanel({
 
   return (
     <aside
-      className={`manual-edit-right${floatingStyle ? ' manual-edit-floating' : ''}${floatingClassName ? ` ${floatingClassName}` : ''}`}
+      className={`manual-edit-right${docked ? ` ${styles.docked}` : ''}${floatingStyle ? ' manual-edit-floating' : ''}${floatingClassName ? ` ${floatingClassName}` : ''}`}
       style={floatingStyle}
+      aria-label={t('manualEdit.title')}
     >
       <section
         className={`manual-edit-modal cc-panel${floatingStyle && !dragEnabled ? ' is-drag-locked' : ''}`}
@@ -225,12 +237,12 @@ export function ManualEditPanel({
         <div className="manual-edit-scroll">
           {targetForInspector ? (
             <>
-              <ContentInspector
-                target={targetForInspector}
-                draft={draft}
-                onDraftChange={onDraftChange}
-              />
               <StyleInspector
+                renderContent={(colorControl) => (
+                  <ContentInspector target={targetForInspector} draft={draft} onDraftChange={onDraftChange}>
+                    {colorControl}
+                  </ContentInspector>
+                )}
                 target={targetForInspector}
                 styles={draft.styles}
                 onChange={changeTargetStyle}
@@ -301,44 +313,23 @@ export function ManualEditPanel({
         </div>
 
         <div className="manual-edit-footer">
-          <div className="manual-edit-footer-actions">
+          <div className={`manual-edit-footer-actions ${styles.footerActions}`}>
             <div className="manual-edit-footer-left">
-              {targetForInspector ? (
-                <button
-                  type="button"
-                  className="manual-edit-delete-btn"
-                  aria-label={t('manualEdit.deleteElement')}
-                  title={t('manualEdit.deleteElement')}
-                  disabled={busy}
-                  onClick={() => {
-                    onApplyPatch(
-                      { id: targetForInspector.id, kind: 'remove-element' },
-                      t('manualEdit.deleteElement'),
-                    );
-                  }}
-                >
-                  <Icon name="trash" size={15} />
-                </button>
-              ) : null}
+              <button type="button" className="manual-edit-footer-btn subtle"
+                disabled={busy || !canUndo} onClick={onUndo} title={t('manualEdit.undo')}
+                aria-label={t('manualEdit.previousStep')}>
+                <RemixIcon name="arrow-go-back-line" size={18} />
+              </button>
+              <button type="button" className="manual-edit-footer-btn subtle"
+                disabled={busy || !canRedo} onClick={onRedo} title={t('manualEdit.redo')}
+                aria-label={t('manualEdit.nextStep')}>
+                <RemixIcon name="arrow-go-forward-line" size={18} />
+              </button>
             </div>
             <div className="manual-edit-footer-right">
-              {resetAvailable ? (
-                <button
-                  type="button"
-                  className="manual-edit-footer-btn subtle"
-                  disabled={busy}
-                  onClick={onResetDraft}
-                >
-                  {t('ds.reset')}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="manual-edit-footer-btn subtle"
-                disabled={busy}
-                onClick={onCancelDraft}
-              >
-                {t('common.cancel')}
+              <button type="button" className="manual-edit-footer-btn subtle"
+                disabled={busy || !resetAvailable} onClick={onResetDraft}>
+                {t('ds.reset')}
               </button>
               <button
                 type="button"
@@ -362,7 +353,9 @@ function ContentInspector({
   target,
   draft,
   onDraftChange,
+  children,
 }: {
+  children?: ReactNode;
   target: ManualEditTarget;
   draft: ManualEditDraft;
   onDraftChange: (draft: ManualEditDraft) => void;
@@ -381,6 +374,7 @@ function ContentInspector({
             <span>{t('manualEdit.altText')}</span>
             <input value={draft.alt} onChange={(event) => update({ alt: event.currentTarget.value })} />
           </label>
+          {children}
         </Section>
       </div>
     );
@@ -388,7 +382,7 @@ function ContentInspector({
   if (target.kind === 'link') {
     return (
       <div className="cc-inspector manual-edit-content-inspector">
-        <Section title={t('manualEdit.sectionContent')}>
+        <Section>
           <label className="manual-edit-field">
             <span>{t('manualEdit.text')}</span>
             <textarea value={draft.text} rows={3} onChange={(event) => update({ text: event.currentTarget.value })} />
@@ -397,6 +391,7 @@ function ContentInspector({
             <span>{t('manualEdit.href')}</span>
             <input value={draft.href} onChange={(event) => update({ href: event.currentTarget.value })} />
           </label>
+          {children}
         </Section>
       </div>
     );
@@ -404,11 +399,12 @@ function ContentInspector({
   if (target.kind === 'text' || target.kind === 'token') {
     return (
       <div className="cc-inspector manual-edit-content-inspector">
-        <Section title={t('manualEdit.sectionContent')}>
+        <Section>
           <label className="manual-edit-field">
             <span>{t('manualEdit.text')}</span>
             <textarea value={draft.text} rows={4} onChange={(event) => update({ text: event.currentTarget.value })} />
           </label>
+          {children}
         </Section>
       </div>
     );
@@ -417,14 +413,15 @@ function ContentInspector({
     <div className="cc-inspector manual-edit-content-inspector">
       <Section title={t('manualEdit.sectionContent')}>
         <label className="manual-edit-field">
-          <span>{t('manualEdit.selectedHtml')}</span>
           <textarea
+            aria-label={t('manualEdit.selectedHtml')}
             className="manual-edit-code"
             value={draft.outerHtml}
             onChange={(event) => update({ outerHtml: event.currentTarget.value })}
           />
         </label>
-      </Section>
+        {children}
+        </Section>
     </div>
   );
 }
@@ -583,20 +580,6 @@ const DIRECTION_OPTS = ['', 'row', 'column', 'row-reverse', 'column-reverse'];
 const JUSTIFY_OPTS = ['', 'flex-start', 'center', 'flex-end', 'space-between', 'space-around', 'space-evenly'];
 const ITEMS_OPTS = ['', 'stretch', 'flex-start', 'center', 'flex-end', 'baseline'];
 const BORDER_STYLE_OPTS = ['', 'solid', 'dashed', 'dotted', 'double', 'none'];
-const EDITOR_SWATCH_COLORS = [
-  '#000000',
-  '#ffffff',
-  '#374151',
-  '#ef4444',
-  '#f97316',
-  '#f59e0b',
-  '#84cc16',
-  '#22c55e',
-  '#06b6d4',
-  '#3b82f6',
-  '#8b5cf6',
-  '#ec4899',
-] as const;
 
 type NormalizeResult =
   | { ok: true; styles: Partial<ManualEditStyles> }
@@ -690,7 +673,7 @@ function normalizeLineHeightValue(value: string): string | null {
 
 function normalizeHexColor(value: string): string | null {
   const trimmed = value.trim();
-  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed.toLowerCase();
+  if (/^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) return trimmed.toLowerCase();
   if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
     const r = trimmed[1]!, g = trimmed[2]!, b = trimmed[3]!;
     return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
@@ -757,9 +740,10 @@ const COLOR_SUGGESTION_PROPS: ReadonlySet<ProjectDesignTokenSuggestionProp> = ne
 ]);
 
 function StyleInspector({
-  target, styles, onChange, onApply,
+  target, styles, onChange, onApply, renderContent,
   tokenSuggestions = [], tokenSuggestionsLoading = false, onApplyTokenSuggestion, onInspectValueSelect,
 }: {
+  renderContent: (colorControl: ReactNode) => ReactNode;
   target: ManualEditTarget;
   styles: ManualEditStyles;
   onChange: (key: keyof ManualEditStyles, value: string) => void;
@@ -795,35 +779,36 @@ function StyleInspector({
   const activeIsColor = activeProp ? COLOR_SUGGESTION_PROPS.has(activeProp) : false;
 
   return (
-    <div className="cc-inspector">
-      <Section title={t('manualEdit.parameters')}>
+    <>
+      {renderContent(
         <ColorRow label={t('manualEdit.textColor')} value={styles.color} placeholder={summary?.color} onChange={(v) => u('color', v)} onFocus={() => activate('color', t('manualEdit.textColor'))} />
-        <ColorRow label={t('manualEdit.background')} value={styles.backgroundColor} placeholder={summary?.backgroundColor} onChange={(v) => u('backgroundColor', v)} onFocus={() => activate('backgroundColor', t('manualEdit.background'))} />
-        <UnitRow label={t('manualEdit.opacity')} value={styles.opacity} placeholder="1" onChange={(v) => u('opacity', v)} unit="" onFocus={() => activate('opacity', t('manualEdit.opacity'))} />
+      )}
+    <div className="cc-inspector">
+      <Section>
+        <PairRow>
+          <ColorRow label={t('manualEdit.background')} value={styles.backgroundColor} placeholder={summary?.backgroundColor} onChange={(v) => u('backgroundColor', v)} onFocus={() => activate('backgroundColor', t('manualEdit.background'))} />
+          <UnitRow label={t('manualEdit.opacity')} value={styles.opacity} placeholder="1" onChange={(v) => u('opacity', v)} unit="" onFocus={() => activate('opacity', t('manualEdit.opacity'))} />
+        </PairRow>
         <FontRow label={t('manualEdit.fontFamily')} value={styles.fontFamily} placeholder={summary?.fontFamily} onChange={(v) => u('fontFamily', v)} onFocus={() => activate('fontFamily', t('manualEdit.fontFamily'))} />
         <PairRow>
-          <UnitRow label={t('manualEdit.fontSize')} value={styles.fontSize} placeholder={summary?.fontSize} onChange={(v) => u('fontSize', v)} unit="px" autoUnit onFocus={() => activate('fontSize', t('manualEdit.fontSize'))} />
+          <UnitRow label={t('manualEdit.fontSize')} precision={0} value={styles.fontSize} placeholder={summary?.fontSize} onChange={(v) => u('fontSize', v)} unit="px" autoUnit onFocus={() => activate('fontSize', t('manualEdit.fontSize'))} />
           <DropdownRow label={t('manualEdit.weight')} value={styles.fontWeight} onChange={(v) => u('fontWeight', v)} options={WEIGHT_OPTS} placeholder={summary?.fontWeight} onFocus={() => activate('fontWeight', t('manualEdit.weight'))} />
         </PairRow>
         {/* Line height + tracking stay in the parameters list: text-heavy
             artifacts need them, and the Style tab's raw JSON is a poor
             substitute for a typographic nudge. */}
         <PairRow>
-          <UnitRow label={t('manualEdit.lineHeight')} value={styles.lineHeight} placeholder={summary?.lineHeight} onChange={(v) => u('lineHeight', v)} unit="" onFocus={() => activate('lineHeight', t('manualEdit.lineHeight'))} />
+          <UnitRow label={t('manualEdit.lineHeight')} precision={1} hidePx value={styles.lineHeight} placeholder={summary?.lineHeight} onChange={(v) => u('lineHeight', v)} unit="" onFocus={() => activate('lineHeight', t('manualEdit.lineHeight'))} />
           <UnitRow label={t('manualEdit.letterSpacing')} value={styles.letterSpacing} placeholder={summary?.letterSpacing} onChange={(v) => u('letterSpacing', v)} unit="px" autoUnit onFocus={() => activate('letterSpacing', t('manualEdit.letterSpacing'))} />
         </PairRow>
         <UnitRow label={t('manualEdit.radius')} value={styles.borderRadius} placeholder={summary?.borderRadius} onChange={(v) => u('borderRadius', v)} unit="px" autoUnit onFocus={() => activate('borderRadius', t('manualEdit.radius'))} />
-        <PairRow>
-          <ColorRow label={t('manualEdit.borderColor')} value={styles.borderColor} placeholder={summary?.borderColor} onChange={(v) => u('borderColor', v)} onFocus={() => activate('borderColor', t('manualEdit.borderColor'))} />
-          <UnitRow label={t('manualEdit.borderWidth')} value={styles.borderTopWidth} onChange={(v) => onApply({
-            borderTopWidth: v,
-            borderRightWidth: v,
-            borderBottomWidth: v,
-            borderLeftWidth: v,
-          })} unit="px" autoUnit onFocus={() => activate('borderTopWidth', t('manualEdit.borderWidth'))} />
-        </PairRow>
-        {/* A border width with no style is invisible on most resets, so the
-            style selector rides along with the border pair. */}
+        <ColorRow label={t('manualEdit.borderColor')} value={styles.borderColor} placeholder={summary?.borderColor} onChange={(v) => u('borderColor', v)} onFocus={() => activate('borderColor', t('manualEdit.borderColor'))} />
+        <UnitRow label={t('manualEdit.borderWidth')} precision={1} stepSize={1} value={styles.borderTopWidth} onChange={(v) => onApply({
+          borderTopWidth: v,
+          borderRightWidth: v,
+          borderBottomWidth: v,
+          borderLeftWidth: v,
+        })} unit="px" autoUnit onFocus={() => activate('borderTopWidth', t('manualEdit.borderWidth'))} />
         <DropdownRow label={t('manualEdit.borderStyle')} value={styles.borderStyle} onChange={(v) => u('borderStyle', v)} options={borderStyleOptions(t)} />
         <PairRow>
           <UnitRow label={t('manualEdit.width')} value={styles.width} placeholder={widthPlaceholder} onChange={(v) => u('width', v)} unit="px" autoUnit onFocus={() => activate('width', t('manualEdit.width'))} />
@@ -892,6 +877,7 @@ function StyleInspector({
         </div>
       ) : null}
     </div>
+    </>
   );
 }
 
@@ -951,10 +937,10 @@ function borderStyleOptions(t: ManualEditTranslator): DropdownOption[] {
   ];
 }
 
-function Section({ title, children, inactive }: { title: string; children: ReactNode; inactive?: boolean }) {
+function Section({ title, children, inactive }: { title?: string; children: ReactNode; inactive?: boolean }) {
   return (
     <section className={`cc-section${inactive ? ' cc-section-inactive' : ''}`}>
-      <header className="cc-section-head">{title}</header>
+      {title ? <header className="cc-section-head">{title}</header> : null}
       <div className="cc-section-body">{children}</div>
     </section>
   );
@@ -964,16 +950,20 @@ function PairRow({ children }: { children: ReactNode }) {
   return <div className="cc-pair">{children}</div>;
 }
 
-function UnitRow({ label, value, onChange, unit, autoUnit, disabled, placeholder, onFocus }: {
+function UnitRow({ label, value, onChange, unit, autoUnit, disabled, placeholder, onFocus, precision, hidePx, stepSize }: {
   label: string; value: string; onChange: (v: string) => void;
   unit: string; autoUnit?: boolean; disabled?: boolean; placeholder?: string; onFocus?: () => void;
+  precision?: number; hidePx?: boolean; stepSize?: number;
 }) {
-  const display = unit === 'px' ? stripPxUnit(value) : value;
-  const step = unit === 'px' ? 1 : 0.1;
+  const [focused, setFocused] = useState(false);
+  const rawDisplay = unit === 'px' || hidePx ? stripPxUnit(value) : value;
+  const display = !focused && precision !== undefined && isNumericInput(rawDisplay)
+    ? Number(rawDisplay).toFixed(precision) : rawDisplay;
+  const step = stepSize ?? (unit === 'px' ? 1 : 0.1);
   const canStep = !disabled && isNumericInput(display);
   const valueFromDisplay = (raw: string) => {
     const trimmed = raw.trim();
-    if (autoUnit && trimmed && isNumericInput(trimmed)) return `${trimmed}px`;
+    if ((autoUnit || (hidePx && /px$/i.test(value || placeholder || ''))) && trimmed && isNumericInput(trimmed)) return `${trimmed}px`;
     if (autoUnit && /^-?\d+(\.\d+)?px$/i.test(trimmed)) return trimmed.toLowerCase();
     return raw;
   };
@@ -983,7 +973,8 @@ function UnitRow({ label, value, onChange, unit, autoUnit, disabled, placeholder
   };
   const stepBy = (direction: -1 | 1) => {
     if (!canStep) return;
-    const next = formatSteppedNumber(Number(display) + direction * step, display, step);
+    const base = precision === undefined ? Number(display) : Number(Number(display).toFixed(precision));
+    const next = formatSteppedNumber(base + direction * step, display, step);
     onChange(valueFromDisplay(next));
   };
   return (
@@ -991,7 +982,7 @@ function UnitRow({ label, value, onChange, unit, autoUnit, disabled, placeholder
       <span className="cc-label">{label}</span>
       <span className="cc-value">
         <button type="button" className="cc-step" disabled={!canStep} aria-label={`${label} decrease`} onClick={() => stepBy(-1)}>−</button>
-        <input value={display} placeholder={placeholder ? stripPxUnit(placeholder) : ''} disabled={disabled} onFocus={onFocus} onChange={(e) => onChange(valueFromDisplay(e.currentTarget.value))} onBlur={(e) => handle(e.currentTarget.value)} />
+        <AnimatedNumberInput value={display} placeholder={placeholder ? stripPxUnit(placeholder) : ''} disabled={disabled} onFocus={() => { setFocused(true); onFocus?.(); }} onChange={(e) => onChange(valueFromDisplay(e.currentTarget.value))} onBlur={(e) => { setFocused(false); handle(e.currentTarget.value); }} />
         <button type="button" className="cc-step" disabled={!canStep} aria-label={`${label} increase`} onClick={() => stepBy(1)}>+</button>
         {/* px is implied for length fields — the unit is stored internally but
             not shown as a trailing label. Any non-px unit still renders. */}
@@ -1005,21 +996,15 @@ function DropdownRow({ label, value, onChange, options, placeholder, disabled, o
   label: string; value: string; onChange: (v: string) => void;
   options: ReadonlyArray<DropdownOption>; placeholder?: string; disabled?: boolean; onFocus?: () => void;
 }) {
-  const optionValues = options.map(dropdownOptionValue);
+  const items = options.map((option) => ({ value: dropdownOptionValue(option), label: dropdownOptionLabel(option, placeholder) }));
+  if (value && !items.some((item) => item.value === value)) items.unshift({ value, label: value });
   return (
-    <label className="cc-row">
+    <div className="cc-row">
       <span className="cc-label">{label}</span>
-      <span className="cc-value cc-select">
-        <select value={value} disabled={disabled} onFocus={onFocus} onChange={(e) => onChange(e.currentTarget.value)}>
-          {!optionValues.includes(value) && value ? <option value={value}>{value}</option> : null}
-          {options.map((opt) => {
-            const optionValue = dropdownOptionValue(opt);
-            return <option key={optionValue || '__'} value={optionValue}>{dropdownOptionLabel(opt, placeholder)}</option>;
-          })}
-        </select>
-        <em className="cc-chevron">▾</em>
-      </span>
-    </label>
+      <CustomSelect value={value} options={items} onChange={onChange} ariaLabel={label}
+        disabled={disabled} onFocus={onFocus} className={styles.select}
+        triggerClassName={styles.selectTrigger} menuClassName={styles.selectMenu} />
+    </div>
   );
 }
 
@@ -1041,23 +1026,11 @@ function FontRow({ label, value, placeholder, onChange, onFocus }: {
 }) {
   const normalizedValue = normalizeFontFamilyForSelect(value);
   const customValue = normalizedValue === value ? value : '';
-  return (
-    <label className="cc-row">
-      <span className="cc-label">{label}</span>
-      <span className="cc-value cc-select">
-        <select value={normalizedValue} onFocus={onFocus} onChange={(event) => onChange(event.currentTarget.value)}>
-          {!normalizedValue && placeholder ? <option value="">{fontFamilyLabel(placeholder)}</option> : null}
-          {customValue && !FONT_OPTS.some((option) => option.value === customValue) ? (
-            <option value={customValue}>{fontFamilyLabel(customValue)}</option>
-          ) : null}
-          {FONT_OPTS.map((option) => (
-            <option key={option.label} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-        <em className="cc-chevron">▾</em>
-      </span>
-    </label>
-  );
+  const options: Array<{ value: string; label: string }> = FONT_OPTS.map((option) => ({ ...option, label: !option.value && !normalizedValue && placeholder ? fontFamilyLabel(placeholder) : option.label }));
+  if (customValue && !options.some((option) => option.value === customValue)) {
+    options.unshift({ value: customValue, label: fontFamilyLabel(customValue) });
+  }
+  return <DropdownRow label={label} value={normalizedValue} options={options} onChange={onChange} onFocus={onFocus} />;
 }
 
 function normalizeFontFamilyForSelect(value: string): string {
@@ -1090,39 +1063,30 @@ function ColorRow({ label, value, placeholder, onChange, compact, onFocus }: {
   label: string; value: string; placeholder?: string; onChange: (v: string) => void; compact?: boolean; onFocus?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [format, setFormat] = useState<PickerFormat>('hex');
+  const [inputDraft, setInputDraft] = useState<string | null>(null);
+  const parsed = parsePickerColor(value || placeholder || '');
+  const display = parsed ? formatPickerDisplay(parsed, format) : value;
   const ref = useRef<HTMLSpanElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (event: MouseEvent) => {
-      if (!ref.current) return;
-      if (ref.current.contains(event.target as Node)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
   return (
-    <label className="cc-row">
+    <div className="cc-row">
       {compact ? null : <span className="cc-label">{label}</span>}
-      <span className={`cc-value cc-color ${compact ? 'cc-color-compact' : ''}`} ref={ref}>
-        <button type="button" className="cc-swatch" style={{ background: value || 'transparent' }}
-          onClick={() => setOpen((v) => !v)} aria-label={`Pick ${label}`} />
-        <input value={value} placeholder={placeholder || '#000000'}
-          onChange={(e) => onChange(e.currentTarget.value)} onFocus={() => { setOpen(true); onFocus?.(); }} />
-        {open ? (
-          <div className="cc-color-popover">
-            <div className="cc-color-grid">
-              {EDITOR_SWATCH_COLORS.map((hex) => (
-                <button key={hex} type="button" className="cc-color-tile" style={{ background: hex }}
-                  onClick={() => { onChange(hex); setOpen(false); }} aria-label={hex} />
-              ))}
-            </div>
-            <input type="color" className="cc-color-native" value={normalizeColorForPicker(value)}
-              onChange={(e) => onChange(e.currentTarget.value)} />
-          </div>
-        ) : null}
+      <span className={`cc-value cc-color ${compact ? 'cc-color-compact' : ''}`} ref={ref} data-open={open || undefined}>
+        <button type="button" className="cc-swatch" style={{ background: parsed ? pickerHex(parsed) : value || placeholder || 'transparent' }}
+          onClick={() => { setOpen(v => !v); onFocus?.(); }} aria-expanded={open} aria-haspopup="dialog" aria-label={`Pick ${label}`} />
+        <input aria-label={label} value={inputDraft ?? display} placeholder={placeholder || '#000000'}
+          onChange={e => {
+            const raw = e.currentTarget.value;
+            setInputDraft(raw);
+            const next = parsePickerColor(raw);
+            if (next && parsed && /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(raw.trim())) next.a = parsed.a;
+            onChange(next ? formatPickerColor(next, 'hex') : raw);
+          }}
+          onBlur={() => setInputDraft(null)}
+          onFocus={() => { setInputDraft(display); setOpen(true); onFocus?.(); }} />
+        {open ? <ManualEditColorPopover format={format} onFormatChange={next => { setInputDraft(null); setFormat(next); }} value={value || placeholder || ''} anchor={ref} label={label} onChange={next => { setInputDraft(null); onChange(next); }} onClose={() => setOpen(false)} /> : null}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -1146,17 +1110,17 @@ function QuadRow({ label, axes, values, onChange, onFocus }: {
       </button>
       {open ? (
         <div className="cc-quad-grid">
-          <QuadCell axis={axes?.t ?? 'T'} value={values.t} onChange={(v) => onChange('t', v)} />
-          <QuadCell axis={axes?.r ?? 'R'} value={values.r} onChange={(v) => onChange('r', v)} />
-          <QuadCell axis={axes?.b ?? 'B'} value={values.b} onChange={(v) => onChange('b', v)} />
-          <QuadCell axis={axes?.l ?? 'L'} value={values.l} onChange={(v) => onChange('l', v)} />
+          <QuadCell icon="layout-top-line" axis={axes?.t ?? 'T'} value={values.t} onChange={(v) => onChange('t', v)} />
+          <QuadCell icon="layout-right-line" axis={axes?.r ?? 'R'} value={values.r} onChange={(v) => onChange('r', v)} />
+          <QuadCell icon="layout-bottom-line" axis={axes?.b ?? 'B'} value={values.b} onChange={(v) => onChange('b', v)} />
+          <QuadCell icon="layout-left-line" axis={axes?.l ?? 'L'} value={values.l} onChange={(v) => onChange('l', v)} />
         </div>
       ) : null}
     </div>
   );
 }
 
-function QuadCell({ axis, value, onChange }: { axis: string; value: string; onChange: (v: string) => void }) {
+function QuadCell({ axis, icon, value, onChange }: { axis: string; icon: string; value: string; onChange: (v: string) => void }) {
   const display = stripPxUnit(value);
   const canStep = isNumericInput(display);
   const stepBy = (direction: -1 | 1) => {
@@ -1165,9 +1129,9 @@ function QuadCell({ axis, value, onChange }: { axis: string; value: string; onCh
   };
   return (
     <span className="cc-quad-cell">
-      <em className="cc-quad-axis">{axis}</em>
+      <em className="cc-quad-axis" title={axis}><RemixIcon name={icon} size={16} /></em>
       <button type="button" className="cc-step cc-step-quad" disabled={!canStep} aria-label={`${axis} decrease`} onClick={() => stepBy(-1)}>−</button>
-      <input value={display} placeholder="0"
+      <AnimatedNumberInput aria-label={axis} value={display} placeholder="0"
         onChange={(e) => {
           const raw = e.currentTarget.value.trim();
           if (raw === '') onChange('');
@@ -1213,22 +1177,6 @@ function sideUpper(side: 't' | 'r' | 'b' | 'l'): 'Top' | 'Right' | 'Bottom' | 'L
   return side === 't' ? 'Top' : side === 'r' ? 'Right' : side === 'b' ? 'Bottom' : 'Left';
 }
 
-function normalizeColorForPicker(value: string): string {
-  const trimmed = value.trim();
-  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed)) {
-    if (trimmed.length === 4) {
-      const r = trimmed[1]!, g = trimmed[2]!, b = trimmed[3]!;
-      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
-    }
-    return trimmed.toLowerCase();
-  }
-  const match = trimmed.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-  if (match) {
-    const toHex = (n: string) => Math.max(0, Math.min(255, Number(n))).toString(16).padStart(2, '0');
-    return `#${toHex(match[1]!)}${toHex(match[2]!)}${toHex(match[3]!)}`;
-  }
-  return '#000000';
-}
 
 export function manualEditPatchSummary(patch: ManualEditPatch): string {
   if (patch.kind === 'set-full-source') return JSON.stringify({ kind: patch.kind, bytes: patch.source.length });
