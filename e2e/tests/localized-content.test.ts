@@ -19,6 +19,7 @@ type LocalizedContentModule = {
   ) => PromptTemplateResource;
   localizeSkillDescription: (locale: string, skill: SkillResource) => string;
   LOCALIZED_CONTENT_IDS: Record<string, { designSystems: string[] }>;
+  DIRECT_LOCALE_DESIGN_SYSTEM_IDS: Record<string, string[]>;
 };
 
 type SkillResource = { id: string; description: string };
@@ -37,6 +38,7 @@ if (localizedContentModule == null) {
 }
 
 const {
+  DIRECT_LOCALE_DESIGN_SYSTEM_IDS,
   LOCALIZED_CONTENT_IDS,
   localizeDesignSystemCategory,
   localizeDesignSystemSummary,
@@ -369,19 +371,21 @@ describe('localized display content coverage', () => {
       }
     }
   });
-  it('[P2] covers riso and terracotta in each direct designSystemSummaries dictionary', async () => {
+  it('[P2] covers riso and terracotta in every direct designSystemSummaries dictionary', async () => {
     // The requested regression coverage: the prior head passed the generic
     // fallback test while every localized picker showed English for these two
     // systems, because localizeDesignSystemSummary falls back to
-    // system.summary on a missing key. Pin the two new ids in each direct
-    // dictionary (all 17 bundles carry them) while the fallback test below
-    // keeps covering genuinely untranslated external systems.
+    // system.summary on a missing key. Assert through the all-locales id view
+    // (not the three-entry legacy LOCALIZED_CONTENT_IDS) while the fallback
+    // test below keeps covering genuinely untranslated external systems.
     const systems = await readDesignSystemResources();
     const ids = uniqueSorted(systems.map((system) => system.id));
     expect(ids).toContain('riso');
     expect(ids).toContain('terracotta');
-    for (const locale of COVERAGE_LOCALES) {
-      const dictionary = LOCALIZED_CONTENT_IDS[locale]?.designSystems ?? [];
+    const locales = uniqueSorted(Object.keys(DIRECT_LOCALE_DESIGN_SYSTEM_IDS));
+    expect(locales.length).toBeGreaterThanOrEqual(17);
+    for (const locale of locales) {
+      const dictionary = DIRECT_LOCALE_DESIGN_SYSTEM_IDS[locale] ?? [];
       expect(dictionary, `expected ${locale} designSystemSummaries to be readable`).not.toEqual([]);
       for (const id of ['riso', 'terracotta']) {
         expect(
