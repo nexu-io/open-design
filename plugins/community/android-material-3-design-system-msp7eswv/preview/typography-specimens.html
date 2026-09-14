@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material 3 typography specimens</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="preview.css">
+  <style>
+    .specimens { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 20px; background: var(--md-sys-color-outline-variant); }
+    .row { display: grid; grid-template-columns: 160px 1fr; gap: 24px; align-items: baseline; padding: 20px; background: var(--md-sys-color-surface-container-low); }
+    .token { color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-type-label-medium); }
+    .display { font: var(--md-sys-type-display-small); }
+    .headline { font: var(--md-sys-type-headline-medium); }
+    .title { font: var(--md-sys-type-title-large); }
+    .body { font: var(--md-sys-type-body-large); }
+    .label-sample { font: var(--md-sys-type-label-large); }
+    @media (max-width: 599px) { .row { grid-template-columns: 1fr; gap: 8px; } .display { font: var(--md-sys-type-headline-large); } }
+  </style>
+</head>
+<body>
+  <main class="preview-shell">
+    <p class="eyebrow">Typography / role hierarchy</p>
+    <h1>Choose roles by function, not visual size alone</h1>
+    <p class="lede">These specimens use the package's Roboto-compatible system fallback. Localized products must preserve hierarchy while allowing reflow and appropriate script-specific fallbacks.</p>
+    <section class="specimens" aria-label="Type role examples">
+      <div class="row"><span class="token">Display small</span><span class="display">Design for the available window</span></div>
+      <div class="row"><span class="token">Headline medium</span><span class="headline">Messages that need attention</span></div>
+      <div class="row"><span class="token">Title large</span><span class="title">Planning notes and decisions</span></div>
+      <div class="row"><span class="token">Body large</span><span class="body">Readable supporting copy explains context without competing with the task.</span></div>
+      <div class="row"><span class="token">Label large</span><span class="label-sample">Reply to message</span></div>
+    </section>
+  </main>
+</body>
+</html>
