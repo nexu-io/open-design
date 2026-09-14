@@ -20,9 +20,11 @@ function relativeLuminance(hex: string): number {
 }
 
 function contrastRatio(foreground: string, background: string): number {
-  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort(
+  const luminances = [relativeLuminance(foreground), relativeLuminance(background)].sort(
     (a, b) => b - a,
   );
+  const lighter = luminances[0] ?? 0;
+  const darker = luminances[1] ?? 0;
   return (lighter + 0.05) / (darker + 0.05);
 }
 
