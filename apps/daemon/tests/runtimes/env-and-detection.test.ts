@@ -1576,3 +1576,36 @@ test('spawnEnvForAgent preserves a configured MIMOCODE_DISABLE_PROJECT_CONFIG ov
   assert.equal(env.MIMOCODE_DISABLE_PROJECT_CONFIG, '0');
   assert.equal(env.PATH, '/usr/bin');
 });
+
+// #8093: persistence alone is half the contract — the saved key has to reach
+// the pi process, or an isolated config directory is still not isolated.
+test('spawnEnvForAgent carries a configured PI_CODING_AGENT_DIR through to pi', () => {
+  const env = spawnEnvForAgent(
+    'pi',
+    {
+      PATH: '/usr/bin',
+    },
+    {
+      PI_BIN: '/Users/test/bin/pi',
+      PI_CODING_AGENT_DIR: '/Users/test/.pi-isolated/agent',
+    },
+  );
+
+  assert.equal(env.PI_CODING_AGENT_DIR, '/Users/test/.pi-isolated/agent');
+  assert.equal(env.PI_BIN, '/Users/test/bin/pi');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent expands a ~-prefixed PI_CODING_AGENT_DIR like the other config-dir keys', () => {
+  const env = spawnEnvForAgent(
+    'pi',
+    {
+      PATH: '/usr/bin',
+    },
+    {
+      PI_CODING_AGENT_DIR: '~/.pi-isolated/agent',
+    },
+  );
+
+  assert.equal(env.PI_CODING_AGENT_DIR, join(homedir(), '.pi-isolated', 'agent'));
+});
