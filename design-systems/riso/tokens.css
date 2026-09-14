@@ -16,7 +16,7 @@
   --meta: #2c40a7;
   --border: #e8d9c8;
   --border-soft: #f1e4d6;
-  --accent: #f237a1;
+  --accent: #c2187b;
   --accent-on: #ffffff;
   --accent-hover: color-mix(in oklab, var(--accent), black 8%);
   --accent-active: color-mix(in oklab, var(--accent), black 14%);
@@ -54,7 +54,7 @@
   --radius-pill: 9999px;
   --elev-flat: none;
   --elev-ring: 0 0 0 1px var(--border);
-  --elev-raised: 0 16px 40px rgba(242, 55, 161, 0.12);
+  --elev-raised: 0 16px 40px rgba(194, 24, 123, 0.12);
   --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
   --motion-fast: 150ms;
   --motion-base: 200ms;

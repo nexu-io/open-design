@@ -420,7 +420,7 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   replicate: 'ML-Modelle per API ausführen. Saubere weiße Leinwand, code-orientiert.',
   resend: 'E-Mail-API. Minimalistisches dunkles Theme, Monospace-Akzente.',
   revolut: 'Digital Banking. Schlanke dunkle Oberfläche, Verlaufskarten, Fintech-Präzision.',
-  runwayml: 'AI-Videogenerierung. Filmische dunkle UI, medienreiches Layout.',
+  riso: 'Verspielte Risografie-Ästhetik. Warmes Papier, tiefer Rosa-Akzent, föderale blaue Struktur.',
   sanity: 'Headless CMS. Roter Akzent, content-first Editorial-Layout.',
   sentry: 'Fehler-Monitoring. Dunkles Dashboard, datenreich, pink-violetter Akzent.',
   shopify: 'E-Commerce-Plattform. Dark-first und filmisch, neongrüner Akzent, ultraleichte Type.',
@@ -431,7 +431,7 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   stripe: 'Payment-Infrastruktur. Signatur-violette Verläufe, Weight-300-Eleganz.',
   supabase: 'Open-Source-Firebase-Alternative. Dunkles Smaragd-Theme, code-first.',
   superhuman: 'Schneller E-Mail-Client. Premium-dunkle UI, keyboard-first, violetter Glow.',
-  tesla: 'Elektrisches Automobil. Radikale Reduktion, Full-Viewport-Fotografie, nahezu keine UI.',
+  terracotta: 'Sonnengebackenes Editorial in Ton. Warme Creme-Flächen, serifenbetonte Tinte, ein Terrakotta-Akzent.',
   theverge:
     'Tech-Editorial-Medium. Acid-Mint- und Ultraviolett-Akzente, Manuka-Display, Rave-Flyer-Story-Tiles.',
   'together-ai': 'Open-Source-AI-Infrastruktur. Technisch, blueprint-artiges Design.',
