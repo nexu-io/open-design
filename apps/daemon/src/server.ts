@@ -11446,21 +11446,30 @@ export async function startServer({
 
       const artifactBaseline = runArtifactBaselines.take(run.id);
       const fallbackOutcome = () => {
-        if (run?.sideEffectLedger?.artifactPaths) {
-          run.artifactPaths = Array.from(run.sideEffectLedger.artifactPaths)
-            .map((filePath) => filePath.replaceAll('\\', '/'))
-            .filter((filePath) =>
-              filePath.length > 0 &&
-              filePath !== '..' &&
-              !filePath.startsWith('../') &&
-              !path.isAbsolute(filePath),
-            );
+        const ledgerPaths = run?.sideEffectLedger?.artifactPaths
+          ? Array.from(run.sideEffectLedger.artifactPaths)
+              .map((filePath) => filePath.replaceAll('\\', '/'))
+              .filter((filePath) =>
+                filePath.length > 0 &&
+                filePath !== '..' &&
+                !filePath.startsWith('../') &&
+                !path.isAbsolute(filePath),
+              )
+          : [];
+        if (ledgerPaths.length > 0) {
+          run.artifactPaths = ledgerPaths;
         }
         return {
           artifactCount: runArtifactCountForRun(run),
           designSystemCreated: runDesignSystemCreatedForRun(run),
           previewModuleCount: runPreviewModuleCountForRun(run),
           filesWritten: runFilesWrittenForRun(run),
+          ...(ledgerPaths.length > 0 && artifactBaseline?.cwd
+            ? {
+                projectRoot: artifactBaseline.cwd,
+                diff: { touchedPaths: ledgerPaths, renderDependencyTouchedPaths: [] },
+              }
+            : {}),
         };
       };
       let outcome;

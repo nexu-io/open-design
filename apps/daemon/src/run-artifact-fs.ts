@@ -354,7 +354,7 @@ export function diffRunArtifacts(
       after.has(`${filePath.replace(/\//g, '\\')}.artifact.json`) ||
       after.has(`${filePath.replace(/\\/g, '/')}.artifact.json`)
     );
-    if (!isManifest && (isArtifactPath(classifyPath) || hasCompanionManifest)) {
+    if (!isManifest && (isArtifactPath(classifyPath) || (hasCompanionManifest && contentChanged))) {
       if (isNew) created += 1;
       else modified += 1;
       if (!touchedPaths.includes(filePath)) {
