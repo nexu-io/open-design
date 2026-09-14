@@ -15,8 +15,9 @@
  * AssistantMessage's render shape.
  */
 import { useId, useState } from 'react';
-import { VisuallyHidden } from '@open-design/components';
+import { Button, VisuallyHidden } from '@open-design/components';
 import { useT } from '../i18n';
+import styles from './FileOpsSummary.module.css';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
 import { useProjectCollabContext } from '../collab/collab-context';
@@ -520,10 +521,44 @@ export function ArtifactCards({
   onExport?: ((name: string, anchorId: string) => void) | undefined;
 }) {
   const anchorScope = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const galleryId = useId();
   if (items.length === 0) return null;
-  return (
-    <div className="artifact-cards" data-testid="artifact-cards">
-      {items.map((item) => (
+
+  // Reuse the existing four-result preview budget. Include each card type
+  // before filling remaining slots, so many images cannot hide a final HTML.
+  const isCollapsible = items.length > COLLAPSE_AFTER_ENTRY_COUNT;
+  const representativeNames = new Set<string>();
+  const counts = new Map<ArtifactCardKind, number>();
+  for (const item of items) {
+    if (!counts.has(item.kind)) representativeNames.add(item.name);
+    counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
+  }
+  for (const item of items) {
+    if (representativeNames.size >= COLLAPSE_AFTER_ENTRY_COUNT) break;
+    representativeNames.add(item.name);
+  }
+  const visibleItems = isCollapsible && !expanded
+    ? items.filter((item) => representativeNames.has(item.name))
+    : items;
+  const countKeys: Record<ArtifactCardKind, keyof Dict> = {
+    image: 'chat.record.imageCount',
+    html: 'chat.artifacts.htmlCount',
+    video: 'chat.record.videoCount',
+    doc: 'chat.artifacts.documentCount',
+  };
+  const summary = [...counts].map(([kind, count]) => t(countKeys[kind], { count })).join(' · ');
+  const cards = (
+    <div
+      id={galleryId}
+      className={`artifact-cards${isCollapsible && expanded ? ` ${styles.expanded}` : ''}`}
+      data-testid="artifact-cards"
+      role={isCollapsible && expanded ? 'region' : undefined}
+      aria-label={isCollapsible && expanded ? summary : undefined}
+      tabIndex={isCollapsible && expanded ? 0 : undefined}
+    >
+      {visibleItems.map((item) => (
         <ArtifactCard
           key={item.name}
           item={item}
@@ -534,6 +569,23 @@ export function ArtifactCards({
           anchorScope={anchorScope}
         />
       ))}
+    </div>
+  );
+  if (!isCollapsible) return cards;
+  return (
+    <div className={styles.gallery} role="group" aria-label={t('assistant.producedFiles')}>
+      <div className={styles.summary}>{summary}</div>
+      {cards}
+      <Button
+        variant="ghost"
+        size="sm"
+        className={styles.toggle}
+        aria-expanded={expanded}
+        aria-controls={galleryId}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {expanded ? t('chat.input.collapse') : `${t('chat.input.viewAll')} (${items.length})`}
+      </Button>
     </div>
   );
 }

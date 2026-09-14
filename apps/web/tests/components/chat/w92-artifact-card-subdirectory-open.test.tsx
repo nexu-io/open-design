@@ -171,7 +171,7 @@ function writeTurn(): ChatMessage {
 }
 
 function renderTurn(props: Record<string, unknown> = {}) {
-  return render(
+  const view = render(
     <CollabProvider value={projectCollabValue()}>
       <AssistantMessage
         message={writeTurn()}
@@ -184,6 +184,9 @@ function renderTurn(props: Record<string, unknown> = {}) {
       />
     </CollabProvider>,
   );
+  const expand = screen.queryByRole('button', { name: /^View all/ });
+  if (expand) fireEvent.click(expand);
+  return view;
 }
 
 const flush = async (hops = 12): Promise<void> => {

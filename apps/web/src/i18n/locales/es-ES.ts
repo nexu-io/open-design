@@ -3571,6 +3571,8 @@ export const esES: Dict = {
   "chat.input.expandFull": "Mostrar el mensaje completo",
   "chat.input.viewAll": "Ver todo",
   "chat.artifact.export": "Exportar",
+  'chat.artifacts.htmlCount': "{count} HTML",
+  'chat.artifacts.documentCount': "{count} documentos",
   "chat.artifact.pending": "Generando…",
   "chat.artifact.publish": "Compartir",
   "chat.edge.paused": "Tarea pausada manualmente",

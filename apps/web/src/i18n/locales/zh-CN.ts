@@ -3757,6 +3757,8 @@ export const zhCN: Dict = {
   "chat.input.expandFull": "展开全文",
   "chat.input.viewAll": "查看全部",
   "chat.artifact.export": "导出",
+  'chat.artifacts.htmlCount': "{count} 个 HTML",
+  'chat.artifacts.documentCount': "{count} 个文档",
   "chat.artifact.pending": "生成中…",
   "chat.artifact.publish": "分享",
   "chat.edge.paused": "已手动暂停任务",

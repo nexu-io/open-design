@@ -1,0 +1,27 @@
+.gallery {
+  display: grid;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+.summary {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Expanded batches share the viewport with the conversation. The collapsed
+   representative grid keeps the existing card geometry and never scrolls. */
+.expanded {
+  max-block-size: 50vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.toggle {
+  justify-self: start;
+  max-inline-size: 100%;
+  white-space: normal;
+}

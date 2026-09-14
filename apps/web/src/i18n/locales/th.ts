@@ -3571,6 +3571,8 @@ export const th: Dict = {
   "chat.input.expandFull": "แสดงข้อความทั้งหมด",
   "chat.input.viewAll": "ดูทั้งหมด",
   "chat.artifact.export": "ส่งออก",
+  'chat.artifacts.htmlCount': "HTML {count} รายการ",
+  'chat.artifacts.documentCount': "เอกสาร {count} รายการ",
   "chat.artifact.pending": "กำลังสร้าง…",
   "chat.artifact.publish": "แชร์",
   "chat.edge.paused": "หยุดงานด้วยตนเองแล้ว",

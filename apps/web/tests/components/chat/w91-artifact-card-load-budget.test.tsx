@@ -94,6 +94,7 @@ afterEach(() => {
 describe('产物卡的并发预算', () => {
   it('12 张卡同时进视口,同时在飞的 iframe 文档正好停在预算上', async () => {
     render(<FileOpsSummary entries={entries(12)} projectId="proj-budget" />);
+    fireEvent.click(screen.getByRole('button', { name: 'View all (12)' }));
     await waitFor(() => {
       expect(screen.getAllByTestId('artifact-card-deliverable-0.html')).toHaveLength(1);
     });
@@ -110,6 +111,7 @@ describe('产物卡的并发预算', () => {
 
   it('排队的那些最终全部加载,没有一张被丢掉', async () => {
     render(<FileOpsSummary entries={entries(12)} projectId="proj-drain" />);
+    fireEvent.click(screen.getByRole('button', { name: 'View all (12)' }));
     await waitFor(() => {
       expect(screen.getAllByTestId('artifact-card-deliverable-0.html')).toHaveLength(1);
     });
@@ -132,6 +134,7 @@ describe('产物卡的并发预算', () => {
   it('进项目路由把缩略图闸挂起时,产物卡照样拿得到槽位', async () => {
     suspendThumbnailLoads(); // App.tsx 进项目时做的事
     render(<FileOpsSummary entries={entries(12)} projectId="proj-suspended" />);
+    fireEvent.click(screen.getByRole('button', { name: 'View all (12)' }));
     await waitFor(() => {
       expect(screen.getAllByTestId('artifact-card-deliverable-0.html')).toHaveLength(1);
     });
@@ -212,6 +215,7 @@ describe('降级仍然是一张正常卡面', () => {
 
   it('排队等槽位时卡面是像素液体,不是灰块/占位文案', async () => {
     render(<FileOpsSummary entries={entries(12)} projectId="proj-liquid" />);
+    fireEvent.click(screen.getByRole('button', { name: 'View all (12)' }));
     await waitFor(() => {
       expect(screen.getAllByTestId('artifact-card-deliverable-0.html')).toHaveLength(1);
     });

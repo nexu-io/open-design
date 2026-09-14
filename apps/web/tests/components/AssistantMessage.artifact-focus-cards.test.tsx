@@ -25,7 +25,7 @@
  * `{"type":"tool_use","name":"Write","input":{"file_path":"/Users/…"}}`)。
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -143,7 +143,7 @@ function turn(overrides: Partial<ChatMessage> = {}): ChatMessage {
 }
 
 function renderTurn(message: ChatMessage) {
-  return render(
+  const view = render(
     <CollabProvider value={projectCollabValue()}>
       <AssistantMessage
         message={message}
@@ -154,6 +154,9 @@ function renderTurn(message: ChatMessage) {
       />
     </CollabProvider>,
   );
+  const expand = screen.queryByRole('button', { name: /^View all/ });
+  if (expand) fireEvent.click(expand);
+  return view;
 }
 
 /**

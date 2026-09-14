@@ -3767,6 +3767,8 @@ export const zhTW: Dict = {
   "chat.input.expandFull": "展開全文",
   "chat.input.viewAll": "查看全部",
   "chat.artifact.export": "匯出",
+  'chat.artifacts.htmlCount': "{count} 個 HTML",
+  'chat.artifacts.documentCount': "{count} 份文件",
   "chat.artifact.pending": "產生中…",
   "chat.artifact.publish": "分享",
   "chat.edge.paused": "已手動暫停任務",

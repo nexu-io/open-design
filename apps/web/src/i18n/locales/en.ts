@@ -3585,6 +3585,8 @@ export const en: Dict = {
   "chat.input.expandFull": "Show full message",
   "chat.input.viewAll": "View all",
   "chat.artifact.export": "Export",
+  'chat.artifacts.htmlCount': "{count} HTML",
+  'chat.artifacts.documentCount': "{count} documents",
   "chat.artifact.pending": "Generating…",
   "chat.artifact.publish": "Share",
   "chat.edge.paused": "Task paused manually",

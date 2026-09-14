@@ -4519,6 +4519,8 @@ export interface Dict {
   'chat.input.expandFull': string;
   'chat.input.viewAll': string;
   'chat.artifact.export': string;
+  'chat.artifacts.htmlCount': string;
+  'chat.artifacts.documentCount': string;
   'chat.artifact.pending': string;
   'chat.artifact.publish': string;
   'chat.edge.paused': string;

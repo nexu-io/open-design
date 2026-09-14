@@ -191,3 +191,43 @@ describe('真机几何:产物卡 Publish 菜单不许跑到视口外', () => {
     expect(shift, '完全没修正').toBeGreaterThan(60);
   });
 });
+
+describe('gallery clipping hides the anchor without constraining its body portal', () => {
+  it.each([
+    { name: 'short gallery', height: 126 },
+    { name: 'expanded scrolling gallery', height: 400 },
+  ])('$name keeps a visible anchor’s menu at its natural height', ({ height }) => {
+    let anchorTop = 200 + height - 120;
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.dataset.testid === 'gallery-boundary') return box(100, 200, 406, height);
+      if (this.getAttribute('data-artifact-anchor') === ANCHOR_ID) return box(300, anchorTop, 58, 28);
+      if (this.classList.contains('share-menu-popover')) {
+        const limit = Number.parseFloat(this.style.maxHeight);
+        const menuHeight = Number.isFinite(limit) ? Math.min(320, limit) : 320;
+        return box(200, anchorTop + 34, 248, menuHeight);
+      }
+      return originalRect.call(this);
+    };
+    render(
+      <>
+        <div data-testid="gallery-boundary" style={{ overflowY: 'auto' }}>
+          <button data-artifact-anchor={ANCHOR_ID}>Export</button>
+        </div>
+        <AnchoredMenuShell anchorId={ANCHOR_ID} wrapperClassName={WRAP_CLS} className={MENU_CLS} testId="gallery-menu">
+          <button type="button">Export file</button>
+        </AnchoredMenuShell>
+      </>,
+    );
+    const menu = screen.getByTestId('gallery-menu');
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(menu.style.visibility).not.toBe('hidden');
+    expect(menu.getBoundingClientRect().height).toBe(320);
+    expect(menu.style.maxHeight).toBe('');
+
+    // The anchor remains inside the viewport after scrolling outside the gallery.
+    anchorTop = 200 + height + 1;
+    act(() => { screen.getByTestId('gallery-boundary').dispatchEvent(new Event('scroll')); });
+    expect(menu.style.visibility).toBe('hidden');
+    expect(menu.style.pointerEvents).toBe('none');
+  });
+});
