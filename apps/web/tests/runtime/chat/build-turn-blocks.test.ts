@@ -802,10 +802,19 @@ describe('轮次结束后没有东西还在转', () => {
     expect(shell.segments.map((s) => s.status)).not.toContain('in_progress');
   });
 
-  it('没关掉的那条不谎报成功 —— 是「没跑完」不是「做完了」', () => {
+  it('普通终态只收停进行中的步骤,没有证据时保留尚未开始的步骤', () => {
     const shell = last(shells(buildTurnBlocks({ events: openList, ...done('succeeded') })));
     expect(nth(shell.segments, 0).status).toBe('stopped');
     expect(nth(shell.segments, 1).status).toBe('pending');
+  });
+
+  it('daemon 确认终态留下未完成工作时,保留已完成并收停所有未完成项', () => {
+    const shell = last(shells(buildTurnBlocks({
+      events: [...todo('p1', [['已完成', 'completed'], ['未开始', 'pending'], ['进行中', 'in_progress']])],
+      endedWithUnfinishedWork: true,
+      ...done('succeeded'),
+    })));
+    expect(shell.segments.map((s) => s.status)).toEqual(['completed', 'stopped', 'stopped']);
   });
 
   it('还在跑的时候当然照转', () => {

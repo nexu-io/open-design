@@ -300,6 +300,8 @@ export interface BuildTurnInput {
   mediaTasks?: ProjectMediaTask[];
   /** run 终止态;终止即收起,不依赖 agent 发 done(D18) */
   runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  /** daemon 已确认这个终态 run 留下了未完成工作;只在此时收停尚未开始的 todo */
+  endedWithUnfinishedWork?: boolean;
   /** 上一轮的清单,用于召回判定(D17) */
   previousTodos?: Pick<TodoSegment, 'content' | 'status'>[];
   /** 壳头「进行中 · 31s」的当前时刻;不传则运行中不显示秒数 */

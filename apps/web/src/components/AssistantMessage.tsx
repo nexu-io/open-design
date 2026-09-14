@@ -564,6 +564,7 @@ function AssistantMessageImpl({
       events: displayEvents,
       ...(mediaTasks.length ? { mediaTasks } : {}),
       runStatus: turnRunStatus,
+      ...(message.endedWithUnfinishedWork === true ? { endedWithUnfinishedWork: true } : {}),
       // 只在本轮清单里出现过的条目上取值(`build-turn-blocks` 的 `previous.has`),
       // 所以 agent 不重发时它是纯空转,不会凭空造出任何一行。
       ...(previousTodos?.length ? { previousTodos } : {}),
@@ -593,7 +594,17 @@ function AssistantMessageImpl({
     };
     // `message.endedAt` 从 undefined 变成时刻**就在轮次终止那一刻** —— 不进依赖的话
     // 兜底耗时会停在「还没有终点」的那一版,壳头刚收起时秒数是空的。
-  }, [displayEvents, turnRunStatus, nowMs, previousTodos, message.endedAt, streaming, lastEventAtMs, mediaTasks]);
+  }, [
+    displayEvents,
+    turnRunStatus,
+    nowMs,
+    previousTodos,
+    message.endedAt,
+    message.endedWithUnfinishedWork,
+    streaming,
+    lastEventAtMs,
+    mediaTasks,
+  ]);
   /**
    * 执行记录里**真的有东西**。
    *
