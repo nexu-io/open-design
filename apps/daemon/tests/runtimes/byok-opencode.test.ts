@@ -5,6 +5,7 @@ import {
   BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
+  isCustomByokBaseUrl,
   opencodeByokModelId,
 } from '../../src/runtimes/byok-opencode.js';
 import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
@@ -448,5 +449,58 @@ describe('byok-opencode runtime config', () => {
     const provider = (out?.config.provider as Record<string, { options?: Record<string, unknown> }> | undefined)
       ?.[BYOK_OPENCODE_PROVIDER_ID];
     expect(provider?.options).not.toHaveProperty('apiKey');
+  });
+
+  it('treats `default` as a sentinel only for the built-in protocol endpoints', () => {
+    expect(isCustomByokBaseUrl('openai', 'https://api.openai.com/v1')).toBe(false);
+    expect(isCustomByokBaseUrl('openai', 'https://api.openai.com')).toBe(false);
+    expect(isCustomByokBaseUrl('openai', 'https://gateway.internal/v1')).toBe(true);
+    expect(isCustomByokBaseUrl('openai', '')).toBe(false);
+    expect(opencodeByokModelId('default')).toBeNull();
+    expect(opencodeByokModelId('default', { allowDefaultModel: true }))
+      .toBe('open-design-byok/default');
+  });
+
+  it('builds provider config for a literal `default` model on a custom base URL', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'sk-gateway',
+        baseUrl: 'https://llm.example.internal/v1',
+      },
+      'default',
+    );
+
+    expect(out?.modelId).toBe('open-design-byok/default');
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          models: { default: { name: 'default' } },
+        },
+      },
+    });
+  });
+
+  it('still rejects `default` on the protocol default endpoint', () => {
+    expect(
+      buildOpenCodeByokProviderConfig(
+        {
+          protocol: 'openai',
+          apiKey: 'sk-openai',
+          baseUrl: 'https://api.openai.com/v1',
+        },
+        'default',
+      ),
+    ).toBeNull();
+    expect(
+      buildOpenCodeByokProviderConfig(
+        {
+          protocol: 'anthropic',
+          apiKey: 'sk-ant',
+          baseUrl: 'https://api.anthropic.com/v1',
+        },
+        'DEFAULT',
+      ),
+    ).toBeNull();
   });
 });

@@ -32,9 +32,42 @@ export interface OpenCodeByokProviderConfig {
   config: Record<string, unknown>;
 }
 
-export function opencodeByokModelId(model: string | null | undefined): string | null {
+export function isCustomByokBaseUrl(
+  protocol: ByokChatProviderConfig['protocol'],
+  baseUrl: string,
+): boolean {
+  const trimmed = baseUrl.trim().replace(/\/+$/, '');
+  if (!trimmed) return false;
+  const protocolDefault = (DEFAULT_BASE_URL_BY_PROTOCOL[protocol] ?? '').replace(/\/+$/, '');
+  if (!protocolDefault) return true;
+  try {
+    const custom = new URL(trimmed);
+    const fallback = new URL(protocolDefault);
+    const customPath = custom.pathname.replace(/\/+$/, '');
+    const fallbackPath = fallback.pathname.replace(/\/+$/, '');
+    // A bare origin counts as the built-in endpoint: normalizeProviderBaseUrl
+    // appends the protocol's versioned path before any request is built.
+    return (
+      custom.origin !== fallback.origin ||
+      !(customPath === '' || customPath === fallbackPath)
+    );
+  } catch {
+    return true;
+  }
+}
+
+export function opencodeByokModelId(
+  model: string | null | undefined,
+  options: { allowDefaultModel?: boolean } = {},
+): string | null {
   const trimmed = typeof model === 'string' ? model.trim() : '';
-  if (!trimmed || trimmed.toLowerCase() === 'default') return null;
+  if (!trimmed) return null;
+  // `default` is the id of the picker's "Default (CLI config)" sentinel, so
+  // an unset selection must not leak out as a literal model name -- for the
+  // built-in endpoints. A connection pinned to a custom base URL names its
+  // models explicitly (gateway routers such as LiteLLM route behind a stable
+  // `default` alias), so there the literal is intentional.
+  if (trimmed.toLowerCase() === 'default' && !options.allowDefaultModel) return null;
   if (trimmed.startsWith(`${BYOK_OPENCODE_PROVIDER_ID}/`)) return trimmed;
   return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
 }
@@ -59,10 +92,12 @@ export function buildOpenCodeByokProviderConfig(
   );
   const needsApiKey = requiresApiKey(provider, baseUrl);
   if (needsApiKey && !apiKey) return null;
-  if (!rawModel || rawModel.toLowerCase() === 'default') return null;
+  if (!rawModel) return null;
   if (!baseUrl) return null;
 
-  const modelId = opencodeByokModelId(rawModel);
+  const modelId = opencodeByokModelId(rawModel, {
+    allowDefaultModel: isCustomByokBaseUrl(protocol, baseUrl),
+  });
   if (!modelId) return null;
 
   const providerEntry = buildProviderEntry(

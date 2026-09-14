@@ -53,7 +53,12 @@ export function byokPreflightBlockReason(
       missingReasons.add('model_required');
     }
   }
-  if (config.model.trim().toLowerCase() === 'default') {
+  // `default` is the "Default (CLI config)" sentinel id -- but only for the
+  // built-in provider presets. A connection pinned to a custom base URL
+  // names its models deliberately, and gateway routers (e.g. LiteLLM)
+  // commonly route behind a stable `default` alias, so there the literal is
+  // a valid model choice. Mirrors `isCustomByokBaseUrl` on the daemon.
+  if (config.model.trim().toLowerCase() === 'default' && selectedProvider) {
     missingReasons.add('model_default');
   }
   // A missing activation field is the actionable run blocker even when a
