@@ -34,7 +34,7 @@ export interface ToastProps {
   /** ARIA role. Use "alert" for error messages (announced immediately),
    *  "status" (default) for non-urgent confirmations. */
   role?: 'status' | 'alert';
-  tone?: 'default' | 'success' | 'error' | 'loading';
+  tone?: 'default' | 'success' | 'error' | 'warning' | 'loading';
   placement?: 'bottom' | 'top';
 }
 
@@ -56,6 +56,7 @@ const TONE_ICON: Record<
   default: null,
   success: 'check',
   error: 'alert-triangle',
+  warning: 'alert-triangle',
   loading: 'spinner',
 };
 
