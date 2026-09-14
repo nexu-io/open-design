@@ -2,6 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import {
   fulfillAgentsRoute,
   routeSuccessfulRuns,
+  suppressWhatsNew,
 } from '@/playwright/mock-factory';
 import { mockAmrPersonalWorkspace } from '@/playwright/amr';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
@@ -13,6 +14,20 @@ const STORAGE_KEY = 'open-design:config';
 test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
+  /*
+   * 版本更新弹窗会**盖住整条顶部 chrome**,而这条用例要从那里点开新建项目。
+   *
+   * 它不是一直如此:共享 `Dialog` 的遮罩原来是 `z-index: 100`,压不过
+   * `.workspace-tabs-chrome`(120),于是弹窗开着也照样点得到侧栏开关 ——
+   * 这条用例一直在**借那个缺陷**过关。`8d0b542d0a`(产品裁决 2026-09-07「那都修掉」)
+   * 把 `packages/components/src/dialog.module.css` 的 `.backdrop` 抬到 1500,
+   * 遮罩终于兑现了「我后面的东西都失效」这句承诺,这条用例随之卡死在
+   * `ensureRailOpen` 的那次点击上(`timeout: 0`,一直等到整条用例超时)。
+   *
+   * 处置和其余 17 个走 `applyStandardMocks` 的 UI 文件一致:把这条**与本用例无关**
+   * 的发版公告挡在外面。本用例考的是「空流应当显示 No output 而不是 Done」。
+   */
+  await suppressWhatsNew(page);
   await page.route('**/api/integrations/vela/status*', async (route) => {
     await route.fulfill({
       json: {

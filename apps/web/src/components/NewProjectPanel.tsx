@@ -43,6 +43,7 @@ import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_VIDEO_MODEL,
   findProvider,
+  imageModelIdForPromptTemplate,
   IMAGE_MODELS,
   MEDIA_ASPECTS,
   type MediaModel,
@@ -565,8 +566,16 @@ export function NewProjectPanel({
   // stays on the default seedance — the agent then dispatches the wrong
   // model and the render path mismatches the prompt.
   function handleImagePromptTemplate(pick: PromptTemplatePick | null) {
-    setImagePromptTemplate(pick);
-    const m = pick?.summary.model;
+    const rawModel = pick?.summary.model;
+    const normalizedModel = rawModel
+      ? imageModelIdForPromptTemplate(rawModel)
+      : undefined;
+    const normalizedPick =
+      pick && normalizedModel && normalizedModel !== rawModel
+        ? { ...pick, summary: { ...pick.summary, model: normalizedModel } }
+        : pick;
+    setImagePromptTemplate(normalizedPick);
+    const m = normalizedModel;
     // Accept catalogued ids plus any live AIHubMix catalogue id (aihubmix-*),
     // which renders dynamically and won't appear in the static IMAGE_MODELS.
     if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) setImageModel(m);

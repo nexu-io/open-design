@@ -9,10 +9,6 @@ import {
   isDeepSeekV4FlashCampaignModel,
 } from '../../src/campaigns/deepseek-v4-flash';
 
-const entryLayoutStyles = readFileSync(
-  new URL('../../src/styles/home/entry-layout.css', import.meta.url),
-  'utf8',
-);
 const campaignDialogSource = readFileSync(
   new URL('../../src/components/DeepSeekV4FlashCampaign.tsx', import.meta.url),
   'utf8',
@@ -63,16 +59,6 @@ describe('DeepSeek V4 Flash campaign', () => {
     // Opens the instant the free week closes — the two windows abut exactly.
     expect(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt).toContain('2026-08-13T20:00:00');
     expect(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive).toContain('2026-08-27T20:00:00');
-  });
-
-  it('uses a neutral gray restricted badge for anti-abuse fallback', () => {
-    const restrictedBadgeRule = entryLayoutStyles.match(
-      /\.inline-switcher__campaign-badge\.is-restricted\s*\{([^}]*)\}/,
-    )?.[1];
-
-    expect(restrictedBadgeRule).toContain('color: #5f645d');
-    expect(restrictedBadgeRule).toContain('background: #e4e7e2');
-    expect(restrictedBadgeRule).not.toMatch(/#ffd79a|#713a00/);
   });
 
   it('keeps the campaign promise stable while routing actions by entitlement', () => {

@@ -297,7 +297,7 @@ corresponding planner behavior.
 ### Certain-exempt surface
 
 Rule `certain-exempt-surface` covers prefixes `docs/`,
-`apps/landing-page/`, `.vscode/`, `.idea/`, and
+`.vscode/`, `.idea/`, and
 `.github/ISSUE_TEMPLATE/`, plus exact paths `LICENSE` and
 `.github/CODEOWNERS`. The planner owns this classification directly; no
 downstream guard is treated as proof that these files are unconsumed.

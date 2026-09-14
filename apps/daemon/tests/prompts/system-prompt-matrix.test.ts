@@ -47,9 +47,7 @@ const SECTION_MARKERS = [
   ['slim-core-charter', '# OpenDesign Charter'],
   ['slim-platform-contracts', '## Platform delivery contracts'],
   ['personal-memory', '## Personal memory (auto-extracted from past chats)'],
-  ['memory-intent-gateway', '## Intent gateway — turn short asks into a brief'],
   ['memory-verify-scorecard', '## Self-verify against your verified rules'],
-  ['memory-rule-proposal', '## Propose new verified rules from corrections'],
   ['custom-instructions-user', '## Custom instructions (user-level)'],
   ['custom-instructions-project', '## Custom instructions (project-level)'],
   ['design-system-usage', '## How to use this design system'],
@@ -71,6 +69,7 @@ const SECTION_MARKERS = [
   ['critique-panel', '## Panelist role definitions'],
   ['active-ds-visual-direction-override', '## Active design system visual direction'],
   ['filesystem-handoff-override', '## Filesystem handoff'],
+  ['skill-write-boundary', '## Editing skills'],
   ['clarifying-questions', '## Structured clarification on any turn'],
   ['role-marker-guard', ROLE_MARKER_GUARD_SENTINEL],
 ] as const satisfies ReadonlyArray<readonly [string, string]>;
@@ -241,7 +240,7 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
   ['plan-mode', { metadata: { kind: 'prototype' }, sessionMode: 'plan', executionProfile: 'filesystem' }],
   // BYOK/plain adapters: API override pinned on top, no filesystem handoff.
   ['api-mode-byok', { metadata: { kind: 'prototype' }, streamFormat: 'plain' }],
-  // Two-loop memory hooks individually disabled; rule-proposal stays.
+  // Memory hooks disabled; the personal memory body stays.
   [
     'memory-hooks-off',
     { ...memoryInputs, memoryHooks: { rewrite: false, verify: false }, executionProfile: 'filesystem' },

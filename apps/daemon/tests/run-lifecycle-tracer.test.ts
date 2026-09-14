@@ -14,6 +14,73 @@ describe('runLifecycleMarkersForStreamEvent', () => {
     });
   });
 
+  /*
+   * Claude Code streams `thinking_delta` frames whose `thinking` is the empty
+   * string and whose only payload is `estimated_tokens` — measured directly off
+   * the CLI: 20 of 20 frames on a 26.5s extended-thinking turn carried zero
+   * characters (`{"type":"thinking_delta","thinking":"","estimated_tokens":50}`).
+   * Those frames render nothing, so stamping `first_visible_output` on one
+   * reports a first pixel that the user never saw. Run
+   * 1cc48454-e9a7-411a-981e-4325fcca95dd logged
+   * `time_to_first_visible_output_ms: 9926` for a turn whose first on-screen
+   * character landed at 46,729ms.
+   */
+  it('does not count a character-less thinking delta as visible output', () => {
+    expect(
+      runLifecycleMarkersForStreamEvent('agent', { type: 'thinking_delta', delta: '' }),
+    ).toEqual({
+      firstModelEventType: 'thinking_delta',
+      firstVisibleOutput: false,
+      firstArtifactWrite: false,
+    });
+  });
+
+  it('counts a thinking delta that carries characters as visible output', () => {
+    expect(
+      runLifecycleMarkersForStreamEvent('agent', { type: 'thinking_delta', delta: 'weighing' }),
+    ).toEqual({
+      firstModelEventType: 'thinking_delta',
+      firstVisibleOutput: true,
+      firstArtifactWrite: false,
+    });
+  });
+
+  it('does not count a character-less text delta as visible output', () => {
+    expect(
+      runLifecycleMarkersForStreamEvent('agent', { type: 'text_delta', delta: '' }),
+    ).toEqual({
+      firstModelEventType: 'text_delta',
+      firstVisibleOutput: false,
+      firstArtifactWrite: false,
+    });
+  });
+
+  it('counts a text delta that carries characters as visible output', () => {
+    expect(
+      runLifecycleMarkersForStreamEvent('agent', { type: 'text_delta', delta: 'ok' }),
+    ).toEqual({
+      firstModelEventType: 'text_delta',
+      firstVisibleOutput: true,
+      firstArtifactWrite: false,
+    });
+  });
+
+  // NOTE(sync/main): origin/main removed `artifact` from `firstModelEventType`
+  // on purpose — an agent `artifact` event is the daemon's own close-time
+  // persistence of plain-stream stdout, never a runtime relaying model output,
+  // so anchoring the "model started responding" boundary on it would drag every
+  // phase boundary to the END of the run. That ruling is kept. What this spec
+  // was actually pinning — an artifact counts as visible output and as an
+  // artifact write even though it carries no `delta` — is unaffected.
+  it('treats an artifact as visible output regardless of delta shape', () => {
+    expect(
+      runLifecycleMarkersForStreamEvent('agent', { type: 'artifact' }),
+    ).toEqual({
+      firstVisibleOutput: true,
+      firstArtifactWrite: true,
+    });
+  });
+
   it('keeps tool-first events out of visible output and artifact timing', () => {
     expect(
       runLifecycleMarkersForStreamEvent('agent', { type: 'tool_use' }),
@@ -205,5 +272,45 @@ describe('createRunLifecycleTracer keeps the legacy model-event mark intact', ()
     expect(run.analyticsTelemetry?.firstModelEventType).toBe('tool_use');
     // The phase anchor is a separate mark: when the model actually began.
     expect(run.analyticsTelemetry?.firstModelResponseAt).toBe(producerStartedAt);
+  });
+});
+
+describe('first visible output over a recorded empty-thinking turn', () => {
+  /*
+   * Replays the frame shape of run 1cc48454-e9a7-411a-981e-4325fcca95dd: 26
+   * empty `thinking_delta` frames spanning 9.9s -> 46.1s, then the first
+   * `text_delta` that actually put characters on screen at 46.8s.
+   */
+  it('stamps the first pixel at the first character-bearing delta', () => {
+    const run: { analyticsTelemetry?: Record<string, unknown> | null } = {};
+    const lifecycle = createRunLifecycleTracer(run);
+    const frames = [
+      ...Array.from({ length: 26 }, (_, i) => ({
+        data: { type: 'thinking_delta', delta: '' },
+        at: 9_939 + i * 1_400,
+      })),
+      { data: { type: 'text_delta', delta: '\n\n在动手排' }, at: 46_831 },
+      { data: { type: 'text_delta', delta: '版之前' }, at: 47_522 },
+    ];
+
+    for (const frame of frames) {
+      const markers = runLifecycleMarkersForStreamEvent('agent', frame.data);
+      if (markers.firstModelEventType) {
+        lifecycle.markFirstModelEvent(markers.firstModelEventType, frame.at);
+      }
+      if (markers.firstVisibleOutput) lifecycle.mark('first_visible_output', frame.at);
+    }
+
+    // NOTE(sync/main): origin/main (#7155) split this boundary in two.
+    // `firstModelEventAt` is now ARRIVAL on the daemon clock (first-write-wins),
+    // and the producer-supplied instant — the one this spec feeds in and the one
+    // phase boundaries anchor on — became `firstModelResponseAt` (earliest-wins,
+    // clamped to arrival). The 9.9s fact under test is unchanged; only the field
+    // that carries it moved, so the assertion follows it rather than relaxing.
+    // A frame really did arrive at 9.9s -- that boundary is unchanged.
+    expect(run.analyticsTelemetry?.firstModelResponseAt).toBe(9_939);
+    expect(run.analyticsTelemetry?.firstModelEventType).toBe('thinking_delta');
+    // ...but nothing was on screen until 46.8s.
+    expect(run.analyticsTelemetry?.firstVisibleOutputAt).toBe(46_831);
   });
 });

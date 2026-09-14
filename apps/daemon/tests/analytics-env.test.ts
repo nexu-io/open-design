@@ -70,7 +70,7 @@ describe('analytics telemetry environment', () => {
       },
     });
 
-    analytics.capture({
+    const delivery = await analytics.capture({
       eventName: 'unit_event',
       appVersion: '1.2.3',
       context: {
@@ -92,6 +92,11 @@ describe('analytics telemetry environment', () => {
       properties: {
         env: 'local_development',
       },
+    });
+    expect(delivery).toEqual({
+      status: 'queued',
+      acknowledgement: 'local_buffer',
+      errorType: null,
     });
   });
 
@@ -127,5 +132,63 @@ describe('analytics telemetry environment', () => {
       distinctId: 'device-1',
       properties: { member_count: 3, project_count: 8 },
     });
+  });
+
+  it('returns a bounded enqueue failure without exposing the thrown error', async () => {
+    posthogCapture.mockReset();
+    posthogCapture.mockImplementationOnce(() => {
+      throw new Error('network path and private details');
+    });
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-analytics-enqueue-failure-'));
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+      telemetry: { metrics: true },
+    }));
+    const { createAnalyticsService } = await import('../src/analytics.js');
+    const analytics = createAnalyticsService({
+      dataDir,
+      env: { POSTHOG_KEY: 'phc_test' },
+    });
+
+    await expect(analytics.capture({
+      eventName: 'run_finished',
+      appVersion: '1.2.3',
+      context: {
+        deviceId: 'device-1', sessionId: 'session-1', clientType: 'web',
+        locale: 'en', requestId: null,
+      },
+      insertId: 'insert-1',
+      properties: {},
+    })).resolves.toEqual({
+      status: 'failed', acknowledgement: 'none', errorType: 'enqueue_failed',
+    });
+  });
+
+  it('reports metrics opt-out as not expected rather than a delivery failure', async () => {
+    posthogCapture.mockReset();
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-analytics-consent-off-'));
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+      telemetry: { metrics: false },
+    }));
+    const { createAnalyticsService } = await import('../src/analytics.js');
+    const analytics = createAnalyticsService({
+      dataDir,
+      env: { POSTHOG_KEY: 'phc_test' },
+    });
+
+    await expect(analytics.capture({
+      eventName: 'run_finished',
+      appVersion: '1.2.3',
+      context: {
+        deviceId: 'device-1', sessionId: 'session-1', clientType: 'web',
+        locale: 'en', requestId: null,
+      },
+      insertId: 'insert-1',
+      properties: {},
+    })).resolves.toEqual({
+      status: 'not_expected',
+      acknowledgement: 'none',
+      errorType: 'metrics_consent_disabled',
+    });
+    expect(posthogCapture).not.toHaveBeenCalled();
   });
 });

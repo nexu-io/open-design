@@ -8,13 +8,11 @@ import { PackagedPathAccessError } from "./errors.js";
 
 export type PackagedNamespacePaths = {
   cacheRoot: string;
-  desktopIdentityPath: string;
   desktopLogPath: string;
   dataRoot: string;
   desktopLogsRoot: string;
   electronSessionDataRoot: string;
   electronUserDataRoot: string;
-  headlessIdentityPath: string;
   /**
    * Channel-root directory — one level above the `namespaces/` parent. The
    * daemon writes `installation.json` here so installationId survives any
@@ -29,7 +27,6 @@ export type PackagedNamespacePaths = {
   resourceRoot: string;
   runtimeRoot: string;
   updateRoot: string;
-  webIdentityPath: string;
 };
 
 const HOME_BARE_TOKENS = new Set(["~", "$HOME", "${HOME}"]);
@@ -114,13 +111,11 @@ export function resolvePackagedNamespacePaths(
 
   return {
     cacheRoot: join(namespaceRoot, "cache"),
-    desktopIdentityPath: join(namespaceRoot, "runtime", "desktop-root.json"),
     desktopLogPath: join(namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log"),
     dataRoot,
     desktopLogsRoot: join(namespaceRoot, "logs", APP_KEYS.DESKTOP),
     electronSessionDataRoot: join(namespaceRoot, "user-data", "session"),
     electronUserDataRoot: join(namespaceRoot, "user-data"),
-    headlessIdentityPath: join(namespaceRoot, "runtime", "headless-root.json"),
     installationRoot,
     installerObservationRoot: join(dataRoot, "observations", "installer"),
     logsRoot: join(namespaceRoot, "logs"),
@@ -128,6 +123,5 @@ export function resolvePackagedNamespacePaths(
     resourceRoot: config.resourceRoot,
     runtimeRoot: join(namespaceRoot, "runtime"),
     updateRoot: join(namespaceRoot, "updates"),
-    webIdentityPath: join(namespaceRoot, "runtime", "web-root.json"),
   };
 }

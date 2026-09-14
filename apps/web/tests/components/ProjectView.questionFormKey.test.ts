@@ -91,6 +91,66 @@ describe('mergeServerMessagesIntoConversation', () => {
     expect(merged.map((message) => message.id)).toEqual(['user-1', 'assistant-1', 'cta-1']);
     expect(merged[1]?.producedFiles).toEqual([producedFile]);
   });
+
+  it('keeps newer optimistic feedback when a server refresh races its save', () => {
+    const localMessages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Done',
+        runStatus: 'succeeded',
+        feedback: {
+          rating: 'negative',
+          reasonCodes: ['weak_visual'],
+          createdAt: 2_000,
+          updatedAt: 2_100,
+        },
+      },
+    ];
+    const serverMessages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Done',
+        runStatus: 'succeeded',
+      },
+    ];
+
+    const merged = mergeServerMessagesIntoConversation(localMessages, serverMessages);
+
+    expect(merged[0]?.feedback).toEqual(localMessages[0]?.feedback);
+  });
+
+  it('accepts feedback from the server when it is newer than the local copy', () => {
+    const localMessages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Done',
+        feedback: {
+          rating: 'positive',
+          createdAt: 1_000,
+          updatedAt: 1_100,
+        },
+      },
+    ];
+    const serverMessages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Done',
+        feedback: {
+          rating: 'negative',
+          createdAt: 1_000,
+          updatedAt: 1_200,
+        },
+      },
+    ];
+
+    const merged = mergeServerMessagesIntoConversation(localMessages, serverMessages);
+
+    expect(merged[0]?.feedback?.rating).toBe('negative');
+  });
 });
 
 describe('normalizeConversationMessageOrder', () => {

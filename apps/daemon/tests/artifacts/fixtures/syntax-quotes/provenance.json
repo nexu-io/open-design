@@ -1,0 +1,65 @@
+{
+  "sourceCase": "SYNTAX-ORDER-STRESS-R01",
+  "sourceProject": "eval-b529b848-ee2a-4849-8174-d735a909f04e",
+  "sourceArtifactScope": "Complete original and original reference are retained locally only and excluded by exact .gitignore entries.",
+  "originalSha256": "01ff51e01ff1f4970416cee81fb7884eb990f8e0b184c697bbc4caf99e2a312a",
+  "referenceSha256": "c29e45a9817b2711c274426f1a56bbf383c6a6c1a869e288fe7fb09b9c8cfa34",
+  "originalBytes": 1295581,
+  "referenceBytes": 1295587,
+  "sanitizedFile": "order-stress-r01.sanitized.html",
+  "sanitizedReferenceFile": "order-stress-r01.sanitized-reference.html",
+  "sanitizedSha256": "423637b44d6d900f9c0a7a0dd694619fc611fa4dfa5fc480d66dc37935ee8d7e",
+  "sanitizedReferenceSha256": "f442c0b5c6157ec1b09816bffbc3b5924ad422cba0dcd24784ee1f975c4977b2",
+  "sanitizedBytes": 120711,
+  "sanitizedReferenceBytes": 120717,
+  "sanitization": {
+    "embeddedPhotographsReplaced": 12,
+    "replacementImage": "Fixed transparent 1x1 GIF placeholder; no original photo bytes retained in the derivative.",
+    "contactSeedReplacement": "Explicit synthetic test name, all-zero phone and non-real test address.",
+    "linePositionsPreserved": true,
+    "completeJavaScriptRetainedExceptSyntheticContactSeed": true,
+    "sameSixQuoteErrorLocations": true,
+    "notByteIdenticalToOriginal": true
+  },
+  "referenceKind": "manually-inferred-minimal-quote-repair-not-an-original-correct-answer",
+  "validation": "All inline JavaScript strictly parsed without executing artifact code. No visual or behavioral correctness claim.",
+  "diagnosticLocations": 6,
+  "edits": [
+    {
+      "line": 1633,
+      "before": "</div></div>\" +",
+      "after": "</div></div>' +",
+      "rule": "normalize_mismatched_string_quote"
+    },
+    {
+      "line": 1807,
+      "before": "</button></div>\" :",
+      "after": "</button></div>' :",
+      "rule": "normalize_mismatched_string_quote"
+    },
+    {
+      "line": 2086,
+      "before": "</p>\" +",
+      "after": "</p>' +",
+      "rule": "normalize_mismatched_string_quote"
+    },
+    {
+      "line": 2115,
+      "before": "class=\"line-total od-nowrap\"",
+      "after": "class=\\\"line-total od-nowrap\\\"",
+      "rule": "normalize_html_attribute_quotes"
+    },
+    {
+      "line": 2145,
+      "before": "</div></div>\" +",
+      "after": "</div></div>' +",
+      "rule": "normalize_mismatched_string_quote"
+    },
+    {
+      "line": 2152,
+      "before": "class=\"od-truncate\" style=\"flex:1;text-align:right;\"",
+      "after": "class=\\\"od-truncate\\\" style=\\\"flex:1;text-align:right;\\\"",
+      "rule": "normalize_html_attribute_quotes"
+    }
+  ]
+}

@@ -9,6 +9,8 @@
 // is a thin spawn() wrapper with a 30s timeout.
 
 import { spawn } from 'node:child_process';
+import { createCommandInvocation, type CommandInvocation } from '@open-design/platform';
+import { resolveAgentBin } from './runtimes/resolution.js';
 
 export interface CodexRunnerResult {
   exitCode: number;
@@ -20,12 +22,36 @@ export interface CodexRunner {
   run(args: string[], opts?: { env?: Record<string, string> }): Promise<CodexRunnerResult>;
 }
 
+type CodexBinaryResolver = (
+  id: string,
+  configuredEnv?: Record<string, string>,
+) => string | null;
+
+// Resolve the same Codex executable used by the agent runtime before handing
+// it to the shared platform invocation builder. This is required on Windows:
+// npm installs Codex as `codex.cmd`, and Node's spawn() does not apply the
+// shell's PATH/PATHEXT shim handling to a bare `codex` command. Keeping the
+// fallback preserves the existing ENOENT signal when Codex is not installed.
+export function createCodexCliInvocation(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  configuredEnv: Record<string, string> = {},
+  resolveBin: CodexBinaryResolver = resolveAgentBin,
+): CommandInvocation {
+  const command = resolveBin('codex', configuredEnv) ?? 'codex';
+  return createCommandInvocation({ command, args, env });
+}
+
 const defaultCodexRunner: CodexRunner = {
   run(args, opts) {
     return new Promise<CodexRunnerResult>((resolve, reject) => {
-      const child = spawn('codex', args, {
-        env: { ...process.env, ...(opts?.env ?? {}) },
+      const configuredEnv = opts?.env ?? {};
+      const env = { ...process.env, ...configuredEnv };
+      const invocation = createCodexCliInvocation(args, env, configuredEnv);
+      const child = spawn(invocation.command, invocation.args, {
+        env,
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
       let stdout = '';
       let stderr = '';

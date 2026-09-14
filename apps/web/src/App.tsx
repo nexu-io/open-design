@@ -131,8 +131,9 @@ import {
   notifyWorkspaceContextRefresh,
   resolveBoundProjectWorkspaceContext,
   resolveCurrentWorkspaceContextReadWitness,
-  useWorkspaceBilling,
+  useWorkspaceBillingResponse,
   useWorkspaceContext,
+  workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
   workspaceResourceReadContext,
 } from './collab/useWorkspaceContext';
@@ -183,10 +184,21 @@ import {
 } from './runtime/amr-balance-gate';
 import {
   AMR_AUTH_RETRY_CONTINUATION_TTL_MS,
+  amrAuthRetryMatchesRouteContext,
   routeStillMatchesAmrAuthRetryContinuation,
   type AmrAuthRetryContinuation,
 } from './runtime/amr-auth-retry-continuation';
 import { installFontRecovery } from './runtime/font-recovery';
+import {
+  runWithConcurrency,
+  STAGED_UPLOAD_CONCURRENCY,
+} from './runtime/chat/staged-attachment';
+import {
+  beginHomeAttachmentUploads,
+  dismissedHomeAttachmentOrders,
+  endHomeAttachmentUploads,
+  settleHomeAttachmentUpload,
+} from './state/home-attachment-handoff';
 import {
   bootstrapFirstOpenTeamProjectRoute,
   bootstrapProjectRoute,
@@ -271,6 +283,12 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
 interface PendingProjectCreation {
   projectId: string;
   prompt: string;
+  /**
+   * The files the user staged on Home, still as local `File` objects. The
+   * preparing surface draws them from these bytes, so the first project frame
+   * shows the attachments without reading a project that is not persisted yet.
+   */
+  files: readonly File[];
 }
 
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
@@ -610,6 +628,7 @@ function isAbortError(err: unknown): boolean {
  * `pullLatest` resolves a non-null version).
  */
 type TeamSharedProjectPullOutcome = {
+  catalogAvailable: boolean;
   isTeamShared: boolean;
   pulled: boolean;
 };
@@ -642,9 +661,16 @@ async function pullTeamSharedProjectIfAvailable(
   projectId: string,
   workspaceContext: WorkspaceCollabContext | null,
 ): Promise<TeamSharedProjectPullOutcome> {
-  if (!workspaceContext) return { isTeamShared: false, pulled: false };
+  if (!workspaceContext) {
+    return { catalogAvailable: true, isTeamShared: false, pulled: false };
+  }
   const lookup = await fetchTeamProjectCatalogEntry(projectId, workspaceContext);
-  if (!lookup.ok || !lookup.project) return { isTeamShared: false, pulled: false };
+  if (!lookup.ok) {
+    return { catalogAvailable: false, isTeamShared: false, pulled: false };
+  }
+  if (!lookup.project) {
+    return { catalogAvailable: true, isTeamShared: false, pulled: false };
+  }
   try {
     const pullResponse = await fetch(`/api/projects/${encodeURIComponent(projectId)}/collab/pull`, {
       method: 'POST',
@@ -653,9 +679,9 @@ async function pullTeamSharedProjectIfAvailable(
     if (pullResponse.ok) {
       invalidateProjectFilesCache(projectId, workspaceContext);
     }
-    return { isTeamShared: true, pulled: pullResponse.ok };
+    return { catalogAvailable: true, isTeamShared: true, pulled: pullResponse.ok };
   } catch {
-    return { isTeamShared: false, pulled: false };
+    return { catalogAvailable: true, isTeamShared: true, pulled: false };
   }
 }
 
@@ -695,6 +721,10 @@ export type DeepLinkedProjectResolution =
   // the project exists and the caller has access. Local materialization is
   // still catching up — the caller must NOT treat this as "not found".
   | { kind: 'still-materializing' }
+  // The Team catalog could not answer. Retrying the same unavailable request
+  // for the whole first-materialization budget only makes bootstrap look hung;
+  // surface the existing explicit retry state immediately instead.
+  | { kind: 'unavailable' }
   // Never confirmed as team-shared within the retry window (or genuinely not
   // shared at all) — the caller's existing not-found handling applies.
   | { kind: 'not-found' };
@@ -764,8 +794,17 @@ export async function resolveDeepLinkedTeamSharedProject(
     const project = await deps.getProject(projectId).catch(() => null);
     if (isCancelled()) return { kind: 'still-materializing' };
     if (project) return { kind: 'found', project };
-    const { isTeamShared, pulled } = await deps.pullTeamSharedProjectIfAvailable(projectId);
+    const {
+      catalogAvailable,
+      isTeamShared,
+      pulled,
+    } = await deps.pullTeamSharedProjectIfAvailable(projectId);
     if (isCancelled()) return { kind: 'still-materializing' };
+    if (!catalogAvailable) {
+      return everConfirmedTeamShared
+        ? { kind: 'still-materializing' }
+        : { kind: 'unavailable' };
+    }
     if (isTeamShared) everConfirmedTeamShared = true;
     if (pulled) {
       const pulledProject = await deps.getProject(projectId).catch(() => null);
@@ -874,7 +913,6 @@ function AppInner() {
       ? ['pending-account', workspaceAccountGeneration]
       : ['workspace-account', workspaceAccountGeneration, currentWorkspaceIdentity],
   );
-  const workspaceBilling = useWorkspaceBilling();
   const workspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
   const workspaceContextStateRef = useRef(workspaceContextState);
   const projectRouteWorkspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
@@ -1665,21 +1703,6 @@ function AppInner() {
     }, remainingMs);
     return () => window.clearTimeout(timeout);
   }, [amrAuthRetryContinuation, clearAmrAuthRetryContinuation]);
-  // The plan that gates free-tier surfaces (today: the post-generation artifact
-  // upsell). vela's login status is ACCOUNT-scoped, so a member whose plan is
-  // held by the team workspace reads `free` there and used to be shown the
-  // free-user banner; the workspace context's plan id is authoritative and
-  // wins. See resolvePlanTier for the full precedence rule.
-  const resolvedAmrPlan = resolvePlanTier({
-    billing: workspaceBilling,
-    context: workspaceContext,
-    accountPlan:
-      workspaceContextLoading || workspaceContext?.workspaceType === 'team'
-        ? null
-        : amrLoginStatus?.account?.plan?.trim()
-          || amrLoginStatus?.user?.plan?.trim()
-          || null,
-  });
   // Child surfaces report status snapshots, not login events. Deduplicate the
   // signed-in transition here: restarting the model poll for every Settings
   // snapshot updates `agents`, which makes Settings fetch status again and
@@ -2938,6 +2961,9 @@ function AppInner() {
       let createWorkspaceContext: WorkspaceCollabContext | null = null;
       let optimisticProjectId: string | null = null;
       let result;
+      const stagedFiles = Array.isArray(input.pendingFiles)
+        ? input.pendingFiles.filter((file): file is File => file instanceof File)
+        : [];
       try {
         // PRODUCT INVARIANT: ordinary project creation is local. Reuse a
         // current in-memory Workspace snapshot for `personal` + `local_only`
@@ -2987,6 +3013,7 @@ function AppInner() {
             setPendingProjectCreation({
               projectId: optimisticProjectId!,
               prompt: derivedPendingPrompt ?? '',
+              files: stagedFiles,
             });
             setProjects((current) => [
               optimisticProject,
@@ -3100,9 +3127,7 @@ function AppInner() {
         });
       }
       try {
-        const pendingFiles = Array.isArray(input.pendingFiles)
-          ? input.pendingFiles.filter((file): file is File => file instanceof File)
-          : [];
+        const pendingFiles = stagedFiles;
         // Flip the project onto the user-picked working directory BEFORE
         // uploading staged Home attachments. `replaceProjectWorkingDir` changes
         // `metadata.baseDir`, so the project starts reading from the external
@@ -3138,6 +3163,18 @@ function AppInner() {
             );
           }
         }
+        // The project row exists and its working directory is final, so the
+        // real project frame is allowed to open — and it must open NOW, not
+        // when the last attachment finishes. Park the picked files first so
+        // ProjectView's very first render already has cards to draw for them,
+        // then drop the gate. Everything below this line happens behind an
+        // interactive project instead of behind a frozen hand-off screen.
+        if (!workingDirHandoffFailed) {
+          beginHomeAttachmentUploads(result.project.id, pendingFiles);
+        }
+        setPendingProjectCreation((current) =>
+          current?.projectId === optimisticProjectId ? null : current,
+        );
         let firstMessageAttachments: ChatAttachment[] = [];
         if (!workingDirHandoffFailed && pendingFiles.length > 0) {
           // Home composer attaches stay client-side until submit lands a
@@ -3146,16 +3183,41 @@ function AppInner() {
           // `area='chat_composer'` so it's distinguishable from the
           // file_manager Upload button and the chat_panel composer.
           const cohort = deriveUploadCohort(pendingFiles);
-          const uploadResult = await uploadProjectFiles(
-            result.project.id,
+          // One request per file at `STAGED_UPLOAD_CONCURRENCY`, the same shape
+          // the in-project composer has used since the staged-attachment work.
+          // The single 12-file batch this replaces made every attachment wait
+          // on the slowest one, and reported one failure as a failure for the
+          // whole batch plus every file queued behind it.
+          const outcomes = await runWithConcurrency(
             pendingFiles,
-            undefined,
-            createWorkspaceContext,
+            STAGED_UPLOAD_CONCURRENCY,
+            async (file, index) => {
+              try {
+                return await uploadProjectFiles(
+                  result.project.id,
+                  [file],
+                  undefined,
+                  createWorkspaceContext,
+                );
+              } finally {
+                // This file's card leaves the tray the moment it answers, so
+                // the batch drains in front of the user instead of vanishing
+                // all at once at the end. Also where its object URL is
+                // revoked — see `settleHomeAttachmentUpload`.
+                settleHomeAttachmentUpload(result.project.id, index);
+              }
+            },
           );
-          firstMessageAttachments = uploadResult.uploaded;
-          const partial = uploadResult.failed.length > 0;
+          // `runWithConcurrency` answers in input order, so the first message
+          // keeps the order the user picked, not the order the uploads landed.
+          const dismissedOrders = dismissedHomeAttachmentOrders(result.project.id);
+          firstMessageAttachments = outcomes.flatMap((outcome, index) =>
+            dismissedOrders.has(index) ? [] : outcome.uploaded);
+          const failedUploads = outcomes.flatMap((outcome) => outcome.failed);
+          const firstUploadError = outcomes.find((outcome) => outcome.error)?.error;
+          const partial = failedUploads.length > 0;
           if (partial) {
-            console.warn('Some Home attachments failed to upload', uploadResult.failed);
+            console.warn('Some Home attachments failed to upload', failedUploads);
           }
           trackFileUploadResult(analytics.track, {
             page_name: 'home',
@@ -3163,8 +3225,8 @@ function AppInner() {
             project_id: result.project.id,
             ...cohort,
             result: partial ? 'failed' : 'success',
-            ...(partial && uploadResult.error
-              ? { error_code: uploadResult.error }
+            ...(partial && firstUploadError
+              ? { error_code: firstUploadError }
               : {}),
           });
         }
@@ -3279,6 +3341,11 @@ function AppInner() {
         console.warn('Failed to finish setting up new project', project.id, err);
         setProjectCreateError(errorCode);
       } finally {
+        // Whatever happened to the uploads — answered, failed, or threw before
+        // they started — nothing may be left holding an object URL for the
+        // rest of the session, and no card may sit in the tray for a file that
+        // is never coming.
+        endHomeAttachmentUploads(project.id);
         setPendingProjectCreation((current) =>
           current?.projectId === optimisticProjectId ? null : current,
         );
@@ -4378,6 +4445,36 @@ function AppInner() {
     ? projectRouteWorkspaceContext.context
     : null;
   projectRouteWorkspaceContextRef.current = activeProjectWorkspaceContext;
+  // The post-generation upgrade gate belongs to the project that owns the
+  // conversation, not whichever Workspace the navigation shell currently
+  // selects. A bound project stays fail-closed until its exact membership and
+  // billing snapshot resolve; borrowing the ambient/account Free plan here is
+  // what interrupted paid Team members with the Free upsell.
+  const amrUpgradeWorkspaceContext = activeProject?.workspaceId
+    ? activeProjectWorkspaceContext
+    : workspaceContext;
+  const amrUpgradeWorkspaceContextLoading = activeProject?.workspaceId
+    ? activeProjectWorkspaceContext === null
+    : workspaceContextLoading;
+  const amrUpgradeBillingResponse = useWorkspaceBillingResponse({
+    context: amrUpgradeWorkspaceContext,
+    loading: amrUpgradeWorkspaceContextLoading,
+  });
+  const amrUpgradeBilling = workspaceBillingSummaryForContext(
+    amrUpgradeBillingResponse,
+    amrUpgradeWorkspaceContext,
+  );
+  const resolvedAmrPlan = resolvePlanTier({
+    billing: amrUpgradeBilling,
+    context: amrUpgradeWorkspaceContext,
+    accountPlan:
+      amrUpgradeWorkspaceContextLoading
+      || amrUpgradeWorkspaceContext?.workspaceType === 'team'
+        ? null
+        : amrLoginStatus?.account?.plan?.trim()
+          || amrLoginStatus?.user?.plan?.trim()
+          || null,
+  });
   useEffect(() => {
     const pending = amrAuthRetryContinuationRef.current;
     if (!pending) return;
@@ -4400,8 +4497,7 @@ function AppInner() {
     // fresh exact witness rather than borrowing or latching the old one.
     if (
       activeProjectWorkspaceContext
-      && workspaceIdentityCacheKey(activeProjectWorkspaceContext)
-        !== pending.workspaceIdentityKey
+      && !amrAuthRetryMatchesRouteContext(pending, activeProjectWorkspaceContext)
     ) {
       clearAmrAuthRetryContinuation(pending);
     }
@@ -4616,6 +4712,13 @@ function AppInner() {
       // alone instead of bouncing the member off a project they can see, but
       // stop the spinner and offer an explicit retry after the bounded window.
       if (resolution.kind === 'still-materializing') {
+        setDeepLinkResolutionFailure({
+          projectId,
+          failure: 'materialization-failed',
+        });
+        return;
+      }
+      if (resolution.kind === 'unavailable') {
         setDeepLinkResolutionFailure({
           projectId,
           failure: 'materialization-failed',
@@ -5134,8 +5237,8 @@ function AppInner() {
           <ProjectCreationPendingView
             project={activeProject}
             prompt={pendingCreation.prompt}
+            files={pendingCreation.files}
             agentId={config.agentId}
-            onBack={handleBack}
           />
         </div>
       );

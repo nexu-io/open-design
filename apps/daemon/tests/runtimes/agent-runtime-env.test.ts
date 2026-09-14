@@ -2,7 +2,6 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
-import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 
 import {
   createAgentRuntimeEnv,
@@ -16,6 +15,45 @@ import { spawnEnvForAgent } from '../../src/runtimes/env.js';
 import { withPlatform } from './helpers/test-helpers.js';
 
 describe('agent runtime tool environment', () => {
+  it('passes the pinned Workspace pair to dynamic Skill wrappers, clearing ambient identity for unbound runs', () => {
+    const scoped = createOpenDesignToolEnv({
+      daemonUrl: 'http://127.0.0.1:7456',
+      projectId: 'project-a',
+      workspaceScope: {
+        schemaVersion: 1,
+        projectId: 'project-a',
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+        source: 'persisted_project_binding',
+      },
+    });
+    expect(scoped).toMatchObject({
+      OD_WORKSPACE_ID: 'workspace-a',
+      OD_WORKSPACE_MEMBER_ID: 'member-a',
+    });
+    const unbound = {
+      ...scoped,
+      ...createOpenDesignToolEnv({
+        daemonUrl: 'http://127.0.0.1:7456',
+        projectId: 'unbound',
+      }),
+    };
+    expect(unbound.OD_WORKSPACE_ID).toBe('');
+    expect(unbound.OD_WORKSPACE_MEMBER_ID).toBe('');
+    const historical = createOpenDesignToolEnv({
+      daemonUrl: 'http://127.0.0.1:7456',
+      projectId: 'project-a',
+      workspaceScope: {
+        schemaVersion: 1,
+        projectId: 'project-a',
+        workspaceId: 'workspace-a',
+        source: 'persisted_project_binding',
+      },
+    });
+    expect(historical.OD_WORKSPACE_ID).toBe('workspace-a');
+    expect(historical.OD_WORKSPACE_MEMBER_ID).toBe('');
+  });
+
   it('prefers explicit OD_NODE_BIN over the process executable', () => {
     expect(resolveOpenDesignNodeBin({
       env: { OD_NODE_BIN: 'C:\\Open Design\\resources\\open-design\\bin\\node.exe' },
@@ -49,6 +87,21 @@ describe('agent runtime tool environment', () => {
       OD_NODE_BIN: '/opt/open-design/bin/node',
       OD_TOOL_TOKEN: 'fresh-token',
     });
+  });
+
+  it('merges an opaque environment supplied by the runtime integration seam', () => {
+    const inheritedEnvironment = vi.fn(() => ({ OD_OPAQUE_CLIENT_CAPABILITY: 'capability' }));
+    const baseEnv = { PATH: '/bin' };
+    const env = createAgentRuntimeEnv(
+      baseEnv,
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/open-design/bin/node',
+      inheritedEnvironment,
+    );
+
+    expect(inheritedEnvironment).toHaveBeenCalledWith(baseEnv);
+    expect(env.OD_OPAQUE_CLIENT_CAPABILITY).toBe('capability');
   });
 
   it('prepends node binary directory to PATH when not already present', () => {
@@ -255,33 +308,6 @@ describe('agent runtime tool environment', () => {
     expect(env.no_proxy).toBeUndefined();
   });
 
-  it('passes the daemon sidecar IPC path from the explicit base env into agent wrapper sessions', () => {
-    const env = createAgentRuntimeEnv(
-      { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/daemon.sock' },
-      'http://127.0.0.1:7456',
-      null,
-      '/opt/open-design/bin/node',
-    );
-
-    expect(env[SIDECAR_ENV.IPC_PATH]).toBe('/tmp/open-design/ipc/daemon.sock');
-  });
-
-  it('does not pull the daemon sidecar IPC path from ambient process state', () => {
-    vi.stubEnv(SIDECAR_ENV.IPC_PATH, '/tmp/open-design/ipc/stale.sock');
-    try {
-      const env = createAgentRuntimeEnv(
-        { PATH: '/bin' },
-        'http://127.0.0.1:7456',
-        null,
-        '/opt/open-design/bin/node',
-      );
-
-      expect(env[SIDECAR_ENV.IPC_PATH]).toBeUndefined();
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
   it('describes daemon URL and token availability without exposing the token', () => {
     const prompt = createAgentRuntimeToolPrompt('http://127.0.0.1:7456', {
       token: 'secret-run-token',
@@ -295,6 +321,8 @@ describe('agent runtime tool environment', () => {
     expect(prompt).toContain('& $env:OD_NODE_BIN $env:OD_BIN tools ...');
     expect(prompt).toContain('`OD_TOOL_TOKEN` is available');
     expect(prompt).toContain('do not print, persist, or override it');
+    expect(prompt).not.toContain('tools deliverable-syntax check --json');
+    expect(prompt).not.toContain('Only when this run creates or updates a final Web deliverable');
     expect(prompt).not.toContain('secret-run-token');
   });
 
@@ -344,5 +372,49 @@ describe('applyAgentLaunchEnv', () => {
     const base = { Path: existing };
     const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/bin'] }, '', []);
     expect(result.Path).toBe(existing);
+  });
+});
+
+describe('claude task-tool exposure', () => {
+  // Claude Code >= 2.1.x moved the plan/todo capability from `TodoWrite` to the
+  // `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` family, and gates that
+  // family behind `CLAUDE_CODE_ENABLE_TODO_TOOLS` for the current model
+  // generation. Measured on claude 2.1.247, `claude -p --output-format
+  // stream-json --verbose`, reading the init frame's `tools` array:
+  //
+  //   --model opus   (claude-opus-5)    → Task, TaskOutput, TaskStop
+  //   --model sonnet (claude-sonnet-5)  → Task, TaskOutput, TaskStop
+  //   … same two, with CLAUDE_CODE_ENABLE_TODO_TOOLS=1
+  //                                     → + TaskCreate, TaskGet, TaskList, TaskUpdate
+  //
+  // `TodoWrite` is exposed on NO model in that build. Without this variable the
+  // Task→TodoWrite reducer in claude-stream.ts is dead code on every model the
+  // picker offers by alias, and a Claude run can never draw the Todos card.
+  it('enables the Task tool family so Claude can emit a plan', () => {
+    const env = spawnEnvForAgent('claude', { PATH: '/bin' });
+    expect(env.CLAUDE_CODE_ENABLE_TODO_TOOLS).toBe('1');
+  });
+
+  // The flag is the user's to override: Settings → Local CLI → Advanced env is
+  // an explicit low-level CLI override and already wins over inherited env
+  // (see the precedence note above spawnEnvForAgent).
+  it('never overrides an explicit user value', () => {
+    expect(
+      spawnEnvForAgent('claude', { PATH: '/bin', CLAUDE_CODE_ENABLE_TODO_TOOLS: '0' })
+        .CLAUDE_CODE_ENABLE_TODO_TOOLS,
+    ).toBe('0');
+    expect(
+      spawnEnvForAgent('claude', { PATH: '/bin' }, { CLAUDE_CODE_ENABLE_TODO_TOOLS: '0' })
+        .CLAUDE_CODE_ENABLE_TODO_TOOLS,
+    ).toBe('0');
+  });
+
+  // Claude Code's flag, so only Claude Code's adapter. codebuddy/amp share the
+  // `claude-stream-json` parser but are different binaries.
+  it('does not leak the flag into other adapters', () => {
+    expect(spawnEnvForAgent('codex', { PATH: '/bin' }).CLAUDE_CODE_ENABLE_TODO_TOOLS)
+      .toBeUndefined();
+    expect(spawnEnvForAgent('codebuddy', { PATH: '/bin' }).CLAUDE_CODE_ENABLE_TODO_TOOLS)
+      .toBeUndefined();
   });
 });

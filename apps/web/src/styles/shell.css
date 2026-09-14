@@ -2422,6 +2422,18 @@ a.avatar-item:visited {
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
 }
+/* The floating comments card lives outside the workspace grid, so it does not
+   naturally reduce the preview's layout width. Reserve the card's 360px width,
+   its 16px viewport inset, and the same 12px breathing room as the local dock
+   while the portal is populated. Keeping the reservation on `.viewer-body`
+   makes the iframe, annotation overlays, and composer popover share one
+   unobstructed coordinate space; the toolbar may continue beneath the float.
+   Preserve a small usable canvas on narrow split layouts instead of allowing
+   padding to consume the whole viewer. */
+.split:has(> .comment-float-host:not(:empty)) .viewer-body {
+  box-sizing: border-box;
+  padding-right: max(0px, min(388px, calc(100% - 160px)));
+}
 /* The portal target is pre-mounted so opening comments never waits a frame
    for parent state. An empty host must be visually and interactively absent. */
 .comment-float-host:empty {

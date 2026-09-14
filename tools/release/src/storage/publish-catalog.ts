@@ -120,7 +120,9 @@ async function updateLatestPointer(
         `catalog latest pointer PUT failed with HTTP ${result.status}${result.body.length > 0 ? `: ${result.body}` : ""}`,
       );
     }
-    console.log(`catalog latest pointer CAS conflict on attempt ${attempt}; retrying`);
+    console.log(
+      `catalog latest pointer CAS conflict on attempt ${attempt} (etag=${headers["if-match"] ?? "none"}); retrying`,
+    );
   }
 
   throw new Error("failed to update catalog latest pointer after 5 CAS attempts");

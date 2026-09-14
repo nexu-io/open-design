@@ -663,7 +663,14 @@
 .plugin-marketplace__modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  /* 应用模态档。60 压不住 shell chrome —— `.workspace-tabs-chrome` 是 120,
+     右上角那簇真机量到 150,于是遮罩上漏着顶栏照常亮着。1000 是应用里既有的
+     那一档(`BrandPickerModal` / `FigmaImportModal` / `LibraryPreviewModal` /
+     `LibraryUploadModal` / `NewBrandModal` 五张 `.backdrop` 都在这个数上),
+     不是这次挑的:它的含义是「占住整屏的模态,同屏对手只有 chrome 和页面内
+     的局部抬升,不需要压过另一张模态」。
+     守护:`tests/styles/app-scrim-layer.test.ts`。 */
+  z-index: 1000;
   display: grid;
   place-items: center;
   padding: 28px;

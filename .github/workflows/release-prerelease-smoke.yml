@@ -1,0 +1,398 @@
+name: release-prerelease-smoke
+
+# Packaged smoke for one prerelease, run against the artifacts as PUBLISHED.
+#
+# This used to be a step at the end of each build job. Two problems with that.
+# It kept release-prerelease.yml — which holds a single repository-wide
+# concurrency group — open past `publish`, so the next prerelease could not
+# start. And it installed electron-builder's output directory, which is not what
+# anybody downloads.
+#
+# So the smoke moved here and now starts from the R2 object: it reads the
+# published version metadata, downloads the DMG / setup.exe a user would get,
+# drops it at the one path `tools-pack <platform> install` reads, and runs the
+# same spec. `.github/scripts/release/smoke-artifacts.ts` owns both halves and
+# verifies the sha256 sidecar on the way in.
+#
+# Dispatched by release-prerelease.yml's `dispatch_smoke` job once `publish`
+# succeeds. Advisory by construction: nothing consumes the result as a gate, and
+# by the time this runs the package is already downloadable. Results reach a
+# human through the progressive Feishu card (release-prerelease-card.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit the packages were built from. The specs and tools-pack come from this ref."
+        required: true
+        type: string
+      version:
+        description: "Prerelease version being smoked, e.g. 0.21.1-prerelease.3. Must match the packages, because tools-pack derives install identity from it."
+        required: true
+        type: string
+      version_metadata_url:
+        description: "Public R2 URL of this build's version metadata.json. The authoritative list of what actually published."
+        required: true
+        type: string
+      origin_run_id:
+        description: "Run id of the release-prerelease pipeline that produced these packages. Carried in the run name so the Feishu card and a human can walk between the two."
+        required: false
+        type: string
+        default: ""
+      win_x64_smoke_mode:
+        description: "Windows x64 smoke coverage. `full` also builds the updater payload fixture here, which costs a complete Windows package — the published artifact cannot supply it, because it is the version being updated FROM."
+        required: true
+        type: choice
+        options:
+          - skip
+          - core
+          - full
+        default: core
+      win_x64_update_metadata_url:
+        description: "Optional external updater metadata URL for full Windows x64 payload smoke."
+        required: false
+        type: string
+        default: ""
+      win_x64_update_target_version:
+        description: "Optional external updater target version expected by full Windows x64 payload smoke."
+        required: false
+        type: string
+        default: ""
+
+run-name: prerelease smoke · ${{ inputs.version }} · origin-run ${{ inputs.origin_run_id }}
+
+permissions:
+  contents: read
+
+concurrency:
+  # Scoped to the origin run. This workflow must never be able to queue behind
+  # anything that could delay a build.
+  group: release-prerelease-smoke-${{ inputs.origin_run_id || inputs.version }}
+  cancel-in-progress: false
+
+env:
+  # Only the Windows `full` lane packages anything here (the updater fixture),
+  # and a fixture that points at a different backend than the installed build
+  # would make the update look like a configuration change. Prerelease packages
+  # ship the prod profile, so the fixture does too.
+  OPEN_DESIGN_AMR_PROFILE: prod
+  OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}
+  OD_VELA_WEB_URL_FEATURE_TEST: ${{ secrets.VELA_WEB_URL_FEATURE_TEST }}
+  OD_VELA_WEB_URL_TEST: ${{ secrets.VELA_WEB_URL_TEST }}
+  OD_VELA_WEB_URL_PROD: ${{ secrets.VELA_WEB_URL_PROD }}
+  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+
+jobs:
+  plan:
+    name: Resolve published prerelease targets
+    runs-on: ubuntu-latest
+    outputs:
+      mac_arm64: ${{ steps.plan.outputs.mac_arm64 }}
+      mac_x64: ${{ steps.plan.outputs.mac_x64 }}
+      win_x64: ${{ steps.plan.outputs.win_x64 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          # This job reads published metadata over HTTP and touches no product
+          # code, so it runs the staging script that ships with this workflow
+          # rather than the one at the built commit.
+          fetch-depth: 1
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Read published version metadata
+        id: plan
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+          VERSION_METADATA_URL: ${{ inputs.version_metadata_url }}
+        # A platform that did not build is absent from the metadata, so the
+        # per-platform jobs below are gated on what actually shipped rather than
+        # on the flags the build was dispatched with.
+        run: node --experimental-strip-types .github/scripts/release/smoke-artifacts.ts plan
+
+  mac_arm64:
+    name: Smoke prerelease mac arm64
+    needs: plan
+    if: ${{ needs.plan.outputs.mac_arm64 == 'true' }}
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      RELEASE_NAMESPACE: release-prerelease
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      # tools-pack resolves electron and electron-builder on every subcommand,
+      # not just `build`, so the workspace install is required even though this
+      # job packages nothing.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Stage published mac arm64 dmg
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          RELEASE_TARGET: mac_arm64
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          VERSION_METADATA_URL: ${{ inputs.version_metadata_url }}
+        run: node --experimental-strip-types .github/scripts/release/smoke-artifacts.ts stage
+      - name: Smoke prerelease mac packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          OD_PACKAGED_E2E_MAC: "1"
+          # A literal, never an expression that can resolve to ''. mac.spec.ts
+          # reads this with `??`, so an empty string survives and selects the
+          # `full` updater path, which then dies for want of a fixture.
+          OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: core
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+      - name: Write mac_arm64 smoke report
+        if: ${{ always() }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_arm64/report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.md
+          RELEASE_SMOKE_MODE: core
+          RELEASE_TARGET: mac_arm64
+          RELEASE_VERSION: ${{ inputs.version }}
+          REPORT_TITLE: mac_arm64 prerelease packaged smoke
+        run: pnpm exec tools-release write-report
+      - name: Publish mac_arm64 smoke summary
+        if: ${{ always() }}
+        run: cat "${{ runner.temp }}/release-report/mac_arm64/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload mac arm64 smoke report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-mac-arm64-smoke-report
+          path: ${{ runner.temp }}/release-report/mac_arm64
+          if-no-files-found: warn
+          retention-days: 14
+
+  mac_x64:
+    name: Smoke prerelease mac intel x64
+    needs: plan
+    if: ${{ needs.plan.outputs.mac_x64 == 'true' }}
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    env:
+      RELEASE_NAMESPACE: release-prerelease-intel
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Stage published mac intel dmg
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          RELEASE_TARGET: mac_x64
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          VERSION_METADATA_URL: ${{ inputs.version_metadata_url }}
+        run: node --experimental-strip-types .github/scripts/release/smoke-artifacts.ts stage
+      - name: Smoke prerelease mac_x64 packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: core
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-intel
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+      - name: Write mac_x64 smoke report
+        if: ${{ always() }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease-intel
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_x64/report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_x64/summary.md
+          RELEASE_SMOKE_MODE: core
+          RELEASE_TARGET: mac_x64
+          RELEASE_VERSION: ${{ inputs.version }}
+          REPORT_TITLE: mac_x64 prerelease packaged smoke
+        run: pnpm exec tools-release write-report
+      - name: Publish mac_x64 smoke summary
+        if: ${{ always() }}
+        run: cat "${{ runner.temp }}/release-report/mac_x64/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload mac intel smoke report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-mac-x64-smoke-report
+          path: ${{ runner.temp }}/release-report/mac_x64
+          if-no-files-found: warn
+          retention-days: 14
+
+  win_x64:
+    name: Smoke prerelease win x64
+    needs: plan
+    # Windows smoke has to stay on a Windows runner: it drives the real NSIS
+    # installer, the uninstall registry keys, and the shell shortcuts.
+    if: ${{ needs.plan.outputs.win_x64 == 'true' && inputs.win_x64_smoke_mode != 'skip' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_NAMESPACE: release-prerelease-win
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Stage published windows installer
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          RELEASE_TARGET: win_x64
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          VERSION_METADATA_URL: ${{ inputs.version_metadata_url }}
+        run: node --experimental-strip-types .github/scripts/release/smoke-artifacts.ts stage
+      - name: Clear mark-of-the-web from the downloaded installer
+        shell: pwsh
+        # tools-pack launches the installer through CreateProcess, which does not
+        # consult the zone stream, but ASR and AppLocker policies on a hosted
+        # runner can. Stripping it keeps a policy change from looking like a
+        # product regression.
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = "${{ runner.temp }}\tools-pack\out\win\namespaces\release-prerelease-win\builder\Open Design-release-prerelease-win-setup.exe"
+          if (-not (Test-Path -LiteralPath $installer)) { throw "staged installer not found at $installer" }
+          Unblock-File -LiteralPath $installer
+      - name: Setup NSIS
+        # Only the `full` profile packages anything here — the updater payload
+        # fixture below. `core` installs the downloaded setup.exe and needs no
+        # NSIS toolchain at all.
+        if: ${{ inputs.win_x64_smoke_mode == 'full' }}
+        shell: pwsh
+        run: |
+          function Test-Makensis {
+            [bool]((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe"))
+          }
+          if (Test-Makensis) { Write-Host "makensis already present"; exit 0 }
+          foreach ($attempt in 1..4) {
+            Write-Host "choco install nsis (attempt $attempt)"
+            choco install nsis -y --no-progress
+            if (Test-Makensis) { break }
+            Start-Sleep -Seconds (15 * $attempt)
+          }
+          if (-not (Test-Makensis)) {
+            Write-Error "NSIS install failed after 4 attempts: makensis absent from PATH and C:\Program Files (x86)\NSIS"
+            exit 1
+          }
+          Write-Host "NSIS ready"
+      - name: Build prerelease win_x64 update fixture
+        # Only the `full` Windows smoke consumes this fixture. It is a second,
+        # complete Windows package built at version+1 so the updater has
+        # something real to apply — the published artifact cannot supply it,
+        # because it is the version being updated FROM.
+        if: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $match = [regex]::Match("${{ inputs.version }}", "^(?<base>\d+\.\d+\.\d+)-prerelease\.(?<number>\d+)$")
+          if (-not $match.Success) { throw "full Windows smoke requires a counted prerelease version; got ${{ inputs.version }}" }
+          $updateVersion = "{0}-prerelease.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--namespace", "release-prerelease-win", "--app-version", $updateVersion, "--to", "nsis", "--json")
+          $updateOutput = pnpm.cmd @buildArgs
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
+          $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
+          $updateBuild = $updateOutput | ConvertFrom-Json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
+      - name: Smoke prerelease windows packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-win
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.win_x64_smoke_mode }}
+          OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' && 'tools-serve' || '' }}
+          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
+          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+      - name: Write win_x64 smoke report
+        if: ${{ always() }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease-win
+          RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win_x64\report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.md
+          RELEASE_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
+          RELEASE_TARGET: win_x64
+          RELEASE_VERSION: ${{ inputs.version }}
+          REPORT_TITLE: win_x64 prerelease packaged smoke
+        run: pnpm exec tools-release write-report
+      - name: Publish win_x64 smoke summary
+        if: ${{ always() }}
+        shell: pwsh
+        run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
+      - name: Upload windows smoke report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-win-x64-smoke-report
+          path: ${{ runner.temp }}\release-report\win_x64
+          if-no-files-found: warn
+          retention-days: 14

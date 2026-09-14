@@ -811,7 +811,10 @@
 .automation-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  /* 应用模态档(1000,和既有的五张 `.backdrop` 同档)。80 压不住 shell chrome
+     —— `.workspace-tabs-chrome` 是 120、右上角那簇真机量到 150。
+     守护:`tests/styles/app-scrim-layer.test.ts`。 */
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;

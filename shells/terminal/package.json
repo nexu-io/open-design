@@ -3,27 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OpenDesign exact Terminal shell and official Node carrier.",
-  "bin": {"open-design-terminal": "./dist/cli.mjs"},
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "files": ["dist"],
-  "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.mjs"}},
+  "description": "Native POSIX sh and PowerShell carrier for Standalone exact distributions.",
+  "files": ["contract", "node-lock.json", "ps1", "runtime", "sh", "version"],
   "scripts": {
-    "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
-    "exact:pack": "pnpm run build && node ./dist/exact-pack.mjs",
-    "pretest": "pnpm --filter @open-design/standalone build",
+    "pretest": "pnpm --filter @open-design/platform build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/standalone build && pnpm --filter @open-design/closure build",
     "test": "vitest run",
     "pretypecheck": "pnpm --filter @open-design/standalone build",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "tsc -p tsconfig.tests.json --noEmit"
   },
-  "dependencies": {"@open-design/standalone": "workspace:*"},
   "devDependencies": {
+    "@open-design/platform": "workspace:*",
+    "@open-design/sidecar": "workspace:*",
+    "@open-design/standalone": "workspace:*",
     "@types/node": "24.12.2",
-    "esbuild": "0.28.0",
-    "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
   },
-  "engines": {"node": "24.18.0"}
+  "engines": {"node": "~24"}
 }

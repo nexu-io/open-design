@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -11,6 +11,7 @@ import {
   copyResourceTree,
   createMacElectronRebuildOptions,
   renderMacPackagedConfig,
+  toRelativeImportSpecifier,
   validateMacNativeRebuildOutput,
 } from "@/mac/app.js";
 import macBuilderSource from "@/mac/builder.ts?raw";
@@ -73,6 +74,26 @@ afterEach(() => {
   } else {
     process.env.OD_DATA_DIR = envState.odDataDir;
   }
+});
+
+describe("mac prebundle entrypoints", () => {
+  it("canonicalizes symlinked roots before rendering relative imports", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-mac-prebundle-path-"));
+    const physicalRoot = join(root, "physical");
+    const linkedRoot = join(root, "linked");
+    const fromDirectory = join(physicalRoot, "entrypoints");
+    const targetPath = join(physicalRoot, "dist", "entry.js");
+    await mkdir(fromDirectory, { recursive: true });
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, "export {};\n", "utf8");
+    await symlink(physicalRoot, linkedRoot, "dir");
+    try {
+      await expect(toRelativeImportSpecifier(join(linkedRoot, "entrypoints"), targetPath))
+        .resolves.toBe("../dist/entry.js");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("resolveSeededAppConfigPaths", () => {

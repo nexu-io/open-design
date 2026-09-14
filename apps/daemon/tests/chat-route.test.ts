@@ -69,6 +69,17 @@ async function withFakeAgent<T>(
   }
 }
 
+async function withCodexExecJson<T>(run: () => Promise<T>): Promise<T> {
+  const previous = process.env.OD_CODEX_TRANSPORT;
+  process.env.OD_CODEX_TRANSPORT = 'exec-json';
+  try {
+    return await run();
+  } finally {
+    if (previous == null) delete process.env.OD_CODEX_TRANSPORT;
+    else process.env.OD_CODEX_TRANSPORT = previous;
+  }
+}
+
 function killProcessesUsingPath(pathFragment: string): void {
   if (process.platform === 'win32') return;
   let output = '';
@@ -131,6 +142,88 @@ describe('/api/chat', () => {
         'x-od-workspace-role': 'owner',
       },
     };
+  }
+
+  async function runAmrModelRequest(model: string): Promise<{
+    body: string;
+    invocations: string[];
+    responseOk: boolean;
+  }> {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for AMR model capability tests');
+    }
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const previousInvocationLog = process.env.FAKE_VELA_INVOCATION_LOG;
+    const previousLogSetModel = process.env.FAKE_VELA_LOG_SET_MODEL;
+    const previousLogPrompt = process.env.FAKE_VELA_LOG_PROMPT;
+    const invocationLog = join(tmpdir(), `od-amr-model-request-${randomUUID()}.jsonl`);
+    try {
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      process.env.FAKE_VELA_INVOCATION_LOG = invocationLog;
+      process.env.FAKE_VELA_LOG_SET_MODEL = '1';
+      process.env.FAKE_VELA_LOG_PROMPT = '1';
+      const workspaceFixture = await createPersonalWorkspaceBoundProjectFixture(
+        `AMR model request ${randomUUID()}`,
+      );
+      let body = '';
+      let responseOk = false;
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const child = spawn(process.execPath, [fixture, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
+            body: JSON.stringify({
+              agentId: 'amr',
+              projectId: workspaceFixture.projectId,
+              message: 'Exercise the resolved AMR model.',
+              model,
+            }),
+          });
+          responseOk = response.ok;
+          body = await response.text();
+        },
+      );
+
+      const invocations = existsSync(invocationLog)
+        ? readFileSync(invocationLog, 'utf8')
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => (JSON.parse(line) as { method: string }).method)
+        : [];
+      return { body, invocations, responseOk };
+    } finally {
+      rmSync(invocationLog, { force: true });
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+      if (previousInvocationLog == null) delete process.env.FAKE_VELA_INVOCATION_LOG;
+      else process.env.FAKE_VELA_INVOCATION_LOG = previousInvocationLog;
+      if (previousLogSetModel == null) delete process.env.FAKE_VELA_LOG_SET_MODEL;
+      else process.env.FAKE_VELA_LOG_SET_MODEL = previousLogSetModel;
+      if (previousLogPrompt == null) delete process.env.FAKE_VELA_LOG_PROMPT;
+      else process.env.FAKE_VELA_LOG_PROMPT = previousLogPrompt;
+    }
   }
 
   async function createPluginFixture(args: {
@@ -372,6 +465,135 @@ process.exit(0);
           conversationId,
           status: 'failed',
           exitCode: 0,
+        });
+      },
+    );
+  });
+
+  /*
+   * 「问完就交棒」的一整条链路,从假 CLI 的字节一路到 run 的终态。
+   *
+   * 真机 run 441ff961-bd66-4c4a-91e7-812f1d489668(打包版 beta 0.21.1-beta.7):
+   * agent 先写下四条待办(1 条 in_progress + 3 条 pending),再发一个可渲染的
+   * `<question-form>` 交棒给用户,进程 exit 0、无 signal、无 error。
+   * 它被 stamp 成 endedWithUnfinishedWork,项目卡与 Pet 任务中心于是画成
+   * `incomplete`,聊天页脚说「已停止,仍有未完成任务」—— 而没有任何东西停过它。
+   *
+   * 这条用例走真实的 emitAgentEvent 收口(`captureRunWorkCompletenessSignals`
+   * 在那里把 text_delta 攒进 run.askUserScanText),所以它同时钉住了信号的采集
+   * 和 finish() 的判定;runs.test.ts 那几条只钉后者。
+   */
+  it('does not stamp unfinished work on a turn that ended by asking the user', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-ask-user-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-ask-user-session',
+  part: {
+    tool: 'todowrite',
+    callID: 'call-todo-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ todos: [
+        { content: 'Collect the brand brief', status: 'in_progress' },
+        { content: 'Decide the imagery strategy', status: 'pending' },
+        { content: 'Fill inputs.json', status: 'pending' },
+        { content: 'Render the landing page', status: 'pending' },
+      ] }),
+      output: 'ok',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'text', part: { text: '开始之前先确认几件事。\\n<question-form id="brand-brief" title="Brand brief">\\n{"questions":[{"id":"brand_name","label":"Brand name","type":"text"}]}\\n</question-form>' } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: '帮我做个落地页。',
+          }),
+        });
+        const body = await response.text();
+        expect(response.ok).toBe(true);
+        expect(body).toContain('<question-form');
+        expect(body).toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ status: string; endedWithUnfinishedWork: boolean }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          status: 'succeeded',
+          endedWithUnfinishedWork: false,
+        });
+      },
+    );
+  });
+
+  // 量法能看见缺陷:同一份待办、同一条链路,只把可渲染的表单换成被引用的裸标记,
+  // 这一轮就必须重新报「有未完成的活」。产物 HTML / 代码示例里出现这段文本的回合
+  // 不许因此被静音。
+  it('still stamps unfinished work when the form markup was only quoted', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-quoted-form-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-quoted-form-session',
+  part: {
+    tool: 'todowrite',
+    callID: 'call-todo-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ todos: [
+        { content: 'Collect the brand brief', status: 'in_progress' },
+        { content: 'Render the landing page', status: 'pending' },
+      ] }),
+      output: 'ok',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'text', part: { text: '顺带演示一下 <question-form> 这个标记怎么写,我先接着做。' } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: '帮我做个落地页。',
+          }),
+        });
+        expect((await response.text())).toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ status: string; endedWithUnfinishedWork: boolean }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          status: 'succeeded',
+          endedWithUnfinishedWork: true,
         });
       },
     );
@@ -903,6 +1125,34 @@ process.exit(1);
     );
   });
 
+  it('rejects a requested media-only model before AMR ACP launch', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest('nano-banana-2');
+
+    expect(responseOk).toBe(true);
+    expect(invocations).toEqual([]);
+    expect(body).toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('model_not_chat_capable');
+    expect(body).toContain('"status":"failed"');
+    expect(body).not.toContain('Hello from fake vela.');
+  });
+
+  it('forwards an unknown custom-provider chat slug when the AMR catalog is stale', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest(
+      'custom-provider/future-chat-2027',
+    );
+
+    expect(responseOk).toBe(true);
+    expect(invocations).toEqual([
+      'new',
+      'set_model:custom-provider/future-chat-2027',
+      'prompt',
+    ]);
+    expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
+    expect(body).toContain('"type":"text_delta","delta":"vela."');
+    expect(body).toContain('"status":"succeeded"');
+  });
+
   it('survives transient AMR Link catalog failures without aborting the run', async () => {
     // The run preflight resolves the AMR catalog through the shared
     // AmrModelLoadingCache, which degrades to the offline `vela model preset`
@@ -1071,6 +1321,111 @@ child.on('exit', (code, signal) => {
     }
   });
 
+  it('persists exact AMR prompt budget context across new and resumed sessions', async () => {
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const previousPreset = process.env.FAKE_VELA_MODEL_PRESET_JSON;
+    const previousList = process.env.FAKE_VELA_MODEL_LIST_JSON;
+    const model = 'claude-observability-5';
+    try {
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      process.env.FAKE_VELA_MODEL_PRESET_JSON = JSON.stringify({
+        source: 'preset',
+        data: [{
+          id: model,
+          enabled: true,
+          default: true,
+          metadata: { contextWindowTokens: 200_000 },
+        }],
+      });
+      process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+        source: 'remote',
+        data: [{
+          id: model,
+          enabled: true,
+          default: true,
+          metadata: { contextWindowTokens: 200_000 },
+        }],
+      });
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('AMR prompt budget fixture');
+      const conversationsResponse = await fetch(
+        `${baseUrl}/api/projects/${workspaceFixture.projectId}/conversations`,
+      );
+      const conversationsBody = await conversationsResponse.json() as {
+        conversations: Array<{ id: string }>;
+      };
+      const conversationId = conversationsBody.conversations[0]?.id;
+      expect(conversationId).toBeTruthy();
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const child = spawn(process.execPath, [fixture, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const runTurn = async (message: string) => {
+            const createResponse = await fetch(`${baseUrl}/api/runs`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...workspaceFixture.headers,
+              },
+              body: JSON.stringify({
+                agentId: 'amr',
+                projectId: workspaceFixture.projectId,
+                conversationId,
+                model,
+                message,
+                currentPrompt: message,
+              }),
+            });
+            expect(createResponse.status).toBe(202);
+            const { runId } = await createResponse.json() as { runId: string };
+            const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+            const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+            const statusBody = await waitForRunStatus(baseUrl, runId);
+            expect(statusBody.status).toBe('succeeded');
+            return eventsBody;
+          };
+
+          const first = await runTurn('first exact-frame turn');
+          expect(first).toContain('"name":"prompt_budget_v1"');
+          expect(first).toContain('"sessionMode":"new"');
+          expect(first).toContain('"contextWindowSource":"model_metadata"');
+          expect(first).toContain('"contextWindowTokens":200000');
+          expect(first).toContain('"priorSessionUsageSource":"unknown"');
+
+          const second = await runTurn('second resumed turn');
+          expect(second).toContain('"name":"prompt_budget_v1"');
+          expect(second).toContain('"sessionMode":"resume"');
+          expect(second).toContain('"contextWindowSource":"model_metadata"');
+          expect(second).toContain('"priorSessionUsageSource":"agent_session"');
+          expect(second).toContain('"priorSessionInputTokens":12');
+        },
+      );
+    } finally {
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+      if (previousPreset == null) delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
+      else process.env.FAKE_VELA_MODEL_PRESET_JSON = previousPreset;
+      if (previousList == null) delete process.env.FAKE_VELA_MODEL_LIST_JSON;
+      else process.env.FAKE_VELA_MODEL_LIST_JSON = previousList;
+    }
+  });
+
   it('keeps service tier overrides when /api/runs omits model but settings has one', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for service tier settings tests');
@@ -1081,7 +1436,7 @@ child.on('exit', (code, signal) => {
       await writeAppConfig(process.env.OD_DATA_DIR, {
         agentModels: { codex: { model: 'gpt-5.5' } },
       });
-      await withFakeAgent(
+      await withCodexExecJson(() => withFakeAgent(
         'codex',
         `
 const fs = require('node:fs');
@@ -1117,7 +1472,7 @@ process.exit(0);
           expect(args).toContain('gpt-5.5');
           expect(args).toContain('service_tier="priority"');
         },
-      );
+      ));
     } finally {
       rmSync(argsPath, { force: true });
       await writeAppConfig(process.env.OD_DATA_DIR, {
@@ -1134,7 +1489,7 @@ process.exit(0);
     const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
     try {
       await writeAppConfig(process.env.OD_DATA_DIR, { agentModels: null });
-      await withFakeAgent(
+      await withCodexExecJson(() => withFakeAgent(
         'codex',
         `
 const fs = require('node:fs');
@@ -1171,7 +1526,7 @@ process.exit(0);
           expect(args).toContain('gpt-5.5');
           expect(args).toContain('service_tier="priority"');
         },
-      );
+      ));
     } finally {
       rmSync(argsPath, { force: true });
       await writeAppConfig(process.env.OD_DATA_DIR, {

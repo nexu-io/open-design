@@ -155,6 +155,28 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
   });
 
+  it('shows immediate preparing feedback while an async send gate is pending', async () => {
+    let resolveSend!: () => void;
+    const onSend = vi.fn(() => new Promise<void>((resolve) => {
+      resolveSend = resolve;
+    }));
+    renderComposer({ onSend });
+    await flushMounts();
+
+    await typeAndSettle('wait for AMR admission');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('chat-send')).toBeNull();
+    expect(screen.getByTestId('chat-send-pending')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('button', { name: 'Preparing...' })).toBeDisabled();
+    expect(composerText()).toBe('wait for AMR admission');
+
+    await act(async () => resolveSend());
+    await waitFor(() => expect(screen.queryByTestId('chat-send-pending')).toBeNull());
+    await waitFor(() => expect(composerText().trim()).toBe(''));
+  });
+
   it('does not enter an infinite update loop on rapid plain-text typing', async () => {
     // #2097 surfaced as "Maximum update depth exceeded" from a feedback loop
     // between the input and a layout effect. The Lexical editor owns its own

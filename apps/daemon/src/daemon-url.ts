@@ -2,16 +2,16 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  SIDECAR_ENV,
-  SIDECAR_MESSAGES,
+  APP_KEYS,
   type DaemonStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import { requestJsonIpc } from "@open-design/sidecar";
+import { SidecarFactory } from "@open-design/sidecar";
 
 export const DEFAULT_DAEMON_URL = "http://127.0.0.1:7456";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 export interface ResolveDaemonUrlOptions {
+  connectInherited?: typeof SidecarFactory.connectInherited;
   /** Value passed via `--daemon-url`. Empty string is treated as unset. */
   flagUrl?: string | null;
   /** Defaults to `process.env`; injected for tests. */
@@ -24,8 +24,7 @@ export interface ResolveDaemonUrlOptions {
  * Resolve the daemon HTTP base URL for `od` client commands.
  *
  * Spawn order: explicit `--daemon-url` flag, `OD_DAEMON_URL` env, then
- * a STATUS roundtrip to the concrete sidecar IPC endpoint supplied by
- * the lifecycle owner in `OD_SIDECAR_IPC_PATH`, then the default
+ * inherited sidecar client status, then the default
  * `tools-dev status --json` runtime. Falls back to the legacy default
  * for direct `od` launches that do not run as a sidecar.
  */
@@ -37,25 +36,26 @@ export async function resolveDaemonUrl(
   if (flagUrl != null && flagUrl.length > 0) return flagUrl;
   const envUrl = env.OD_DAEMON_URL;
   if (envUrl != null && envUrl.length > 0) return envUrl;
-  const discovered = await discoverDaemonUrlFromIpc(env, options.timeoutMs ?? 800);
+  const discovered = await discoverDaemonUrlFromInheritedClient(
+    env,
+    options.timeoutMs ?? 800,
+    options.connectInherited ?? SidecarFactory.connectInherited,
+  );
   if (discovered != null) return discovered;
   const toolsDevUrl = await discoverDaemonUrlFromToolsDev(env, options.timeoutMs ?? 800);
   if (toolsDevUrl != null) return toolsDevUrl;
   return DEFAULT_DAEMON_URL;
 }
 
-async function discoverDaemonUrlFromIpc(
+async function discoverDaemonUrlFromInheritedClient(
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
+  connectInherited: typeof SidecarFactory.connectInherited,
 ): Promise<string | null> {
-  const socketPath = env[SIDECAR_ENV.IPC_PATH];
-  if (socketPath == null || socketPath.length === 0) return null;
+  const client = connectInherited(env);
+  if (client == null) return null;
   try {
-    const status = await requestJsonIpc<DaemonStatusSnapshot>(
-      socketPath,
-      { type: SIDECAR_MESSAGES.STATUS },
-      { timeoutMs },
-    );
+    const status = await client.status<DaemonStatusSnapshot>(APP_KEYS.DAEMON, { timeoutMs });
     return status?.url ?? null;
   } catch {
     return null;

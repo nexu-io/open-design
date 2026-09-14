@@ -89,6 +89,7 @@ describe('media task persistence', () => {
     insertMediaTask(db, {
       id: 'task_1',
       projectId: 'p1',
+      runId: 'run_1',
       status: 'queued',
       surface: 'video',
       model: 'seedance-2',
@@ -117,6 +118,7 @@ describe('media task persistence', () => {
     expect(row).toMatchObject({
       id: 'task_1',
       projectId: 'p1',
+      runId: 'run_1',
       status: 'done',
       surface: 'video',
       model: 'seedance-2',
@@ -129,6 +131,37 @@ describe('media task persistence', () => {
       startedAt: 100,
       endedAt: 200,
     });
+  });
+
+  it('adds and persists run ownership when upgrading the pre-run-id schema', () => {
+    const legacy = new Database(':memory:');
+    legacy.exec(`
+      CREATE TABLE projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO projects VALUES ('p1', 'p1', 0, 0);
+      CREATE TABLE media_tasks (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        surface TEXT,
+        model TEXT,
+        progress_json TEXT NOT NULL DEFAULT '[]',
+        file_json TEXT,
+        error_json TEXT,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+    migrateMediaTasks(legacy);
+    insertMediaTask(legacy, { id: 'task', projectId: 'p1', runId: 'run', startedAt: 1 });
+    expect(getMediaTask(legacy, 'task')?.runId).toBe('run');
+    legacy.close();
   });
 
   it('lists active tasks by default and includes terminal tasks on request', () => {

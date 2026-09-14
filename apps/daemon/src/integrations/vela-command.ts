@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
 import { isAbortedOperationError } from './aborted-error.js';
 
 import {
@@ -43,6 +44,16 @@ function withCommandStdout(error: unknown, stdout: string): unknown {
   return error;
 }
 
+function withCommandStderr(error: unknown, stderr: string): unknown {
+  if (!stderr || typeof error !== 'object' || error === null) return error;
+  try {
+    (error as { stderr?: string }).stderr = stderr;
+  } catch {
+    // See withCommandStdout: diagnostics must never replace the real failure.
+  }
+  return error;
+}
+
 /**
  * Read the stdout captured by `withCommandStdout` off a rejected Vela command.
  * Returns an empty string when the failure carried none (a crash before any
@@ -52,6 +63,13 @@ export function velaCommandStdout(error: unknown): string {
   if (typeof error !== 'object' || error === null) return '';
   const stdout = (error as { stdout?: unknown }).stdout;
   return typeof stdout === 'string' ? stdout : '';
+}
+
+/** Read the exact stderr produced by a rejected Vela command. */
+export function velaCommandStderr(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return '';
+  const stderr = (error as { stderr?: unknown }).stderr;
+  return typeof stderr === 'string' ? stderr : '';
 }
 
 export interface VelaCommandOptions {
@@ -231,8 +249,14 @@ export function runVelaCommand(
       if (settled) return;
       settled = true;
       clearTriggers();
-      if ('error' in outcome) reject(outcome.error);
-      else resolve(outcome.stdout);
+      if ('error' in outcome) {
+        if (args[0] === 'team-projects' && args[1] === 'list') {
+          recordDiagnosticFailure({ source: 'team-projects', error: outcome.error, env: childEnv, workspaceId: childEnv.VELA_WORKSPACE_ID });
+        } else if (args[0] === 'resource' && args[1] === 'shared') {
+          recordDiagnosticFailure({ source: 'shared-resources', error: outcome.error, env: childEnv, workspaceId: childEnv.VELA_WORKSPACE_ID });
+        }
+        reject(outcome.error);
+      } else resolve(outcome.stdout);
     };
 
     const terminate = (reason: VelaTerminationReason): void => {
@@ -312,8 +336,13 @@ export function runVelaCommand(
             // Diagnostics are observational and must never change transport.
           }
         }
-        if (error) settle({ error: withCommandStdout(error, stdout) });
-        else settle({ stdout });
+        if (error) {
+          settle({
+            error: withCommandStderr(withCommandStdout(error, stdout), stderr),
+          });
+        } else {
+          settle({ stdout });
+        }
       },
     );
     childPid = child.pid;

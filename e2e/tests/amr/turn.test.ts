@@ -49,7 +49,7 @@ type ProjectResponse = {
 //   `vela model preset --format json`   — print the fast preset catalog.
 //   `vela model list --format json`     — print the live link model catalog.
 //   `vela login`                        — write ~/.amr/config.json and exit 0.
-//   `vela agent run --runtime opencode` — ACP stdio runtime (initialize →
+//   `vela agent run` — ACP stdio runtime (initialize →
 //                                          session/new → session/set_model →
 //                                          session/prompt → session/update*).
 //
@@ -423,6 +423,9 @@ describe('AMR chat-run end-to-end', () => {
         );
         expect(anyAssistant).toBeTruthy();
       }
+    }, {
+      // This fixture tests ACP streaming, not the OD Next task protocol.
+      env: { OD_NEXT_STRATEGY_ROLLOUT: 'off' },
     });
   }, 180_000);
 
@@ -629,6 +632,8 @@ describe('AMR chat-run end-to-end', () => {
         },
         {
           env: {
+            // Keep wallet settlement on the fixture's generic ACP turn.
+            OD_NEXT_STRATEGY_ROLLOUT: 'off',
             FAKE_VELA_SPAWN_ENV_LOG: spawnEnvLog,
             FAKE_VELA_BALANCE_FILE: balanceStateFile,
             FAKE_VELA_SETTLED_TEAM_BALANCE_USD: '17.50',

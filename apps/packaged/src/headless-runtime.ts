@@ -2,37 +2,26 @@ import { mkdir } from "node:fs/promises";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
-  SIDECAR_MESSAGES,
-  SIDECAR_MODES,
   SIDECAR_SOURCES,
-  normalizeDesktopSidecarMessage,
-  type SidecarStamp,
 } from "@open-design/sidecar-proto";
-import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@open-design/sidecar";
-import type { JsonIpcServerHandle } from "@open-design/sidecar";
+import {
+  getSidecarStatus,
+  registerSidecarProcess,
+  readCurrentSidecarStamp,
+  SidecarFactory,
+  type SidecarClient,
+  type SidecarRuntimeContext,
+  type SidecarStamp,
+} from "@open-design/sidecar";
+import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
 import type { PackagedConfig } from "./config.js";
-import type { PackagedDesktopIdentityHandle } from "./identity.js";
-import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import type { PackagedSidecarHandle } from "./sidecars.js";
 import { startPackagedSidecars } from "./sidecars.js";
 
-function createHeadlessStamp(namespace: string): SidecarStamp {
-  return {
-    app: APP_KEYS.DESKTOP,
-    ipc: resolveAppIpcPath({
-      app: APP_KEYS.DESKTOP,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace,
-    }),
-    mode: SIDECAR_MODES.RUNTIME,
-    namespace,
-    source: SIDECAR_SOURCES.PACKAGED,
-  };
-}
+const PACKAGED_SIDECAR_SOURCES = [SIDECAR_SOURCES.TOOLS_PACK, SIDECAR_SOURCES.PACKAGED] as const;
 
 function colorize(text: string): string {
   if (process.stdout.isTTY !== true || process.env.NO_COLOR != null) return text;
@@ -53,17 +42,32 @@ export interface RunPackagedHeadlessOptions {
   mcpBootstrapLaunch?: PackagedMcpBootstrapLaunch;
 }
 
+export async function runPackagedMcpActionAgainstExistingDaemon(
+  request: PackagedHeadlessRequest,
+  stamp: SidecarStamp,
+  dependencies: {
+    getStatus?: typeof getSidecarStatus;
+    installMcp?: (daemonUrl: string | null) => Promise<void>;
+  } = {},
+): Promise<boolean> {
+  if (request.mcpInstallAgent == null) return false;
+  let status: { state?: unknown; url?: unknown } | null = null;
+  for (const source of [stamp.source, ...PACKAGED_SIDECAR_SOURCES.filter((candidate) => candidate !== stamp.source)]) {
+    status = await (dependencies.getStatus ?? getSidecarStatus)<{ state?: unknown; url?: unknown }>(
+      { ...stamp, app: APP_KEYS.DAEMON, mode: stamp.mode, source },
+      { timeoutMs: 350 },
+    ).catch(() => null);
+    if (status?.state === "running" && typeof status.url === "string" && status.url.length > 0) break;
+  }
+  if (status?.state !== "running" || typeof status.url !== "string" || status.url.length === 0) return false;
+  await (dependencies.installMcp ?? installCodexMcp)(status.url);
+  return true;
+}
+
 export interface PackagedHeadlessStartupDependencies {
   confirmRuntime(): Promise<void>;
-  createIpcServer(options: {
-    shutdown(): Promise<void>;
-    webUrl: string;
-  }): Promise<JsonIpcServerHandle>;
-  exit(code: number): void;
   installMcp(daemonUrl: string | null): Promise<void>;
   startSidecars(): Promise<PackagedSidecarHandle>;
-  writeIdentity(): Promise<PackagedDesktopIdentityHandle>;
-  writeWebIdentity(webUrl: string): Promise<void>;
 }
 
 export interface PackagedHeadlessStartupHandle {
@@ -74,25 +78,19 @@ export interface PackagedHeadlessStartupHandle {
 export async function acquirePackagedHeadlessStartup(
   dependencies: PackagedHeadlessStartupDependencies,
 ): Promise<PackagedHeadlessStartupHandle> {
-  let identity: PackagedDesktopIdentityHandle | null = null;
   let sidecars: PackagedSidecarHandle | null = null;
-  let ipcServer: JsonIpcServerHandle | null = null;
   let closed = false;
 
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
-    await ipcServer?.close().catch(() => undefined);
     await sidecars?.close().catch(() => undefined);
-    await identity?.close().catch(() => undefined);
   };
   const shutdown = async (): Promise<void> => {
     await close();
-    dependencies.exit(0);
   };
 
   try {
-    identity = await dependencies.writeIdentity();
     sidecars = await dependencies.startSidecars();
     const webUrl = sidecars.web.url;
     if (!webUrl) {
@@ -101,8 +99,6 @@ export async function acquirePackagedHeadlessStartup(
       );
     }
     await dependencies.installMcp(sidecars.daemon.url);
-    ipcServer = await dependencies.createIpcServer({ shutdown, webUrl });
-    await dependencies.writeWebIdentity(webUrl);
     await dependencies.confirmRuntime();
     return { shutdown, webUrl };
   } catch (error) {
@@ -174,7 +170,18 @@ export async function runPackagedHeadless(
   const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
-  const stamp = createHeadlessStamp(config.namespace);
+  const argvStamp = (() => {
+    try { return readCurrentSidecarStamp(); } catch { return null; }
+  })();
+  const stamp = {
+    app: APP_KEYS.DESKTOP,
+    channel: argvStamp?.channel ?? releaseChannelFromVersion(activeConfig.appVersion)
+      ?? releaseChannelFromNamespace(config.namespace, "default")
+      ?? "stable",
+    mode: "headless",
+    namespace: config.namespace,
+    source: argvStamp?.source ?? SIDECAR_SOURCES.PACKAGED,
+  };
   const mcpBootstrap =
     options.mcpBootstrapLaunch
     ?? resolvePackagedMcpBootstrapLaunch({
@@ -182,38 +189,27 @@ export async function runPackagedHeadless(
     });
 
   await mkdir(paths.runtimeRoot, { recursive: true });
-
-  const runtime = bootstrapSidecarRuntime(stamp, process.env, {
+  registerSidecarProcess(stamp, {
+    dataRoot: paths.dataRoot,
+    ownerPid: null,
+    port: 0,
+    runtimeRoot: paths.runtimeRoot,
+  });
+  const runtime: SidecarRuntimeContext<SidecarStamp> = {
     app: APP_KEYS.DESKTOP,
     base: paths.runtimeRoot,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-  });
+    mode: "headless",
+    namespace: config.namespace,
+    source: stamp.source,
+  };
 
-  const { shutdown, webUrl } = await acquirePackagedHeadlessStartup({
+  type HeadlessRuntime = PackagedHeadlessStartupHandle;
+  let client!: SidecarClient<HeadlessRuntime>;
+  client = SidecarFactory.create<HeadlessRuntime>({
+    lifecycle: {
+      async start() {
+        return await acquirePackagedHeadlessStartup({
     confirmRuntime: async () => await confirmPackagedLauncherRuntime(launcherRuntime),
-    createIpcServer: async ({ shutdown: stop, webUrl: activeWebUrl }) =>
-      await createJsonIpcServer({
-        socketPath: stamp.ipc,
-        handler: async (message: unknown) => {
-          const normalized = normalizeDesktopSidecarMessage(message);
-          switch (normalized.type) {
-            case SIDECAR_MESSAGES.STATUS:
-              return {
-                pid: process.pid,
-                state: "running",
-                updatedAt: new Date().toISOString(),
-                url: activeWebUrl,
-                windowVisible: false,
-              };
-            case SIDECAR_MESSAGES.SHUTDOWN:
-              setImmediate(() => {
-                void stop();
-              });
-              return { accepted: true };
-          }
-        },
-      }),
-    exit: (code) => process.exit(code),
     installMcp: async (daemonUrl) => {
       if (request.mcpInstallAgent === "codex") {
         await installCodexMcp(daemonUrl);
@@ -247,35 +243,27 @@ export async function runPackagedHeadless(
         webStandaloneRoot: activeConfig.webStandaloneRoot,
         webOutputMode: activeConfig.webOutputMode,
       }),
-    // Write a headless-specific identity marker so `tools-pack linux stop
-    // --headless` can find this process without confusing it for a
-    // menu-launched AppImage that owns desktop-root.json in the same namespace.
-    writeIdentity: async () =>
-      await writePackagedDesktopIdentity({
-        identityPath: paths.headlessIdentityPath,
-        paths,
-        stamp,
-      }),
-    writeWebIdentity: async (activeWebUrl) =>
-      await writePackagedWebIdentity({
-        paths,
+        });
+      },
+      status: (started) => ({
         pid: process.pid,
-        url: activeWebUrl,
+        state: "running",
+        updatedAt: new Date().toISOString(),
+        url: started.webUrl,
+        windowVisible: false,
       }),
+      async stop(started) {
+        await started.shutdown();
+      },
+    },
   });
+  await client.start();
+  const webUrl = (await client.status<{ url: string }>(APP_KEYS.DESKTOP)).url;
 
   process.stdout.write(`\n Open Design is running\n\n`);
   process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
   process.stdout.write(` Press Ctrl+C to stop\n\n`);
 
-  process.on("SIGINT", () => {
-    process.stdout.write("\n Shutting down Open Design...\n");
-    void shutdown();
-  });
-  process.on("SIGTERM", () => {
-    process.stdout.write("\n Shutting down Open Design...\n");
-    void shutdown();
-  });
 }
 
 async function installCodexMcp(daemonUrl: string | null): Promise<void> {

@@ -1,41 +1,67 @@
 import {
+  assertShellCompatibility,
   canonicalJson,
   sha256Hex,
   verifyStandaloneChannelHead,
   verifyStandaloneMetadata,
   type SignedStandaloneChannelHead,
   type SignedStandaloneMetadata,
+  type StandaloneShellIdentity,
+  type StandaloneShellRequirement,
   type StandaloneTrustedKeyRing,
 } from "./protocol.js";
-import { type ArtifactReader, type GenerationRecord, StandaloneStore } from "./store.js";
-import { VersionedLauncher, type LifecycleStatus } from "./launcher.js";
+import { type GenerationRecord, type StandalonePrepareOptions, StandaloneStore } from "./store.js";
+import { FossilBootloader, type LifecycleStatus, type VersionedLauncher } from "./launcher.js";
+import type { StandaloneFeedbackHandler } from "./feedback.js";
+import type { StandaloneLifecycleOccupant } from "./shell-update.js";
+import { activationPolicyCommand, StandaloneStateConflictError, type GenerationState, type UpdateActivationPolicy } from "./state-machine.js";
 
 export type StandaloneUpdateSource = {
   readChannelHead(channel: string): Promise<SignedStandaloneChannelHead>;
-  readArtifact: ArtifactReader;
+  readDocument(url: string): Promise<Uint8Array>;
+  prepare?: Omit<StandalonePrepareOptions, "feedback">;
 };
-
-export type InstalledShellIdentity = {
-  shell: string;
-  target: string;
-  shellVersion: string;
-  runtime: { name: string; version: string };
-};
-
-export function supportsInstalledShell(envelope: SignedStandaloneMetadata, shell: InstalledShellIdentity): boolean {
-  return envelope.metadata.shellCompatibility.some((candidate) =>
-    candidate.shell === shell.shell
-    && candidate.target === shell.target
-    && candidate.shellVersion === shell.shellVersion
-    && candidate.runtime.name === shell.runtime.name
-    && candidate.runtime.version === shell.runtime.version
-  );
-}
 
 export type UpdatePreparation =
-  | { status: "prepared"; generation: GenerationRecord }
-  | { status: "current"; generationId: string; applyRequired: boolean }
-  | { status: "shell-reinstall-required"; releaseVersion: string };
+  | { status: "prepared"; generation: GenerationRecord; authorized: boolean }
+  | { status: "current"; generationId: string }
+  | {
+      status: "shell-reinstall-required";
+      releaseVersion: string;
+      minimumVersion: string | null;
+      requirement: StandaloneShellRequirement | null;
+    };
+
+export type UpdateApplication =
+  | Readonly<{ status: "applied"; lifecycle: LifecycleStatus }>
+  | Readonly<{
+      status: "blocked";
+      reason: "occupied" | "transition-active" | "unavailable";
+      occupants: readonly StandaloneLifecycleOccupant[];
+    }>;
+
+async function applyActivationPolicy(
+  store: StandaloneStore,
+  generationId: string,
+  policy: UpdateActivationPolicy,
+): Promise<GenerationState> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const state = await store.readState();
+    if (state.prepared !== generationId) throw new Error("prepared generation changed concurrently");
+    const command = activationPolicyCommand(state, generationId, policy);
+    if (command == null) return state;
+    try {
+      if (command.type === "revoke-silent") return await store.revokeSilentAuthorization(generationId, state.revision);
+      await store.authorizePrepared(generationId, command.authority, command.cause, state.revision);
+      const updated = await store.readState();
+      if (updated.prepared !== generationId) throw new Error("prepared generation changed concurrently");
+      return updated;
+    } catch (error) {
+      if (!(error instanceof StandaloneStateConflictError) || error.code !== "revision-conflict") throw error;
+    }
+  }
+  throw new Error("activation policy did not converge");
+}
 
 function parseEnvelope(bytes: Uint8Array): SignedStandaloneMetadata {
   return JSON.parse(Buffer.from(bytes).toString("utf8")) as SignedStandaloneMetadata;
@@ -47,7 +73,7 @@ function versionOrder(value: string, channel: string): number[] {
   return match.slice(1).map(Number);
 }
 
-function compareVersions(left: string, right: string, channel: string): number {
+function compareReleaseVersions(left: string, right: string, channel: string): number {
   const a = versionOrder(left, channel);
   const b = versionOrder(right, channel);
   for (let index = 0; index < a.length; index += 1) {
@@ -60,54 +86,69 @@ export class StandaloneUpdater {
   constructor(
     private readonly channel: string,
     private readonly contentLane: string,
-    private readonly shell: InstalledShellIdentity,
+    private readonly shell: StandaloneShellIdentity,
     private readonly trustedKeys: StandaloneTrustedKeyRing,
     private readonly store: StandaloneStore,
     private readonly source: StandaloneUpdateSource,
+    private readonly feedback?: StandaloneFeedbackHandler,
   ) {}
 
-  /** Download and verify in the background; activation is intentionally deferred. */
-  async prepareLatest(): Promise<UpdatePreparation> {
+  async prepareLatest(activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation> {
     const signedHead = await this.source.readChannelHead(this.channel);
     verifyStandaloneChannelHead(signedHead, this.trustedKeys);
     const head = signedHead.head;
     if (head.channel !== this.channel) throw new Error("channel head escaped updater namespace");
     const lane = head.lanes[this.contentLane];
     if (lane == null) throw new Error(`channel head lacks content lane: ${this.contentLane}`);
-    const bytes = await this.source.readArtifact(lane.url);
+    const bytes = await this.source.readDocument(lane.url);
     if (bytes.byteLength !== lane.size || sha256Hex(bytes) !== lane.sha256) throw new Error(`${this.contentLane} lane metadata failed binding verification`);
     const envelope = parseEnvelope(bytes);
     verifyStandaloneMetadata(envelope, this.trustedKeys);
-    if (envelope.metadata.channel !== this.channel || envelope.metadata.releaseVersion !== lane.releaseVersion) {
-      throw new Error(`${this.contentLane} lane metadata identity mismatch`);
+    if (envelope.metadata.channel !== this.channel || envelope.metadata.releaseVersion !== lane.releaseVersion) throw new Error(`${this.contentLane} lane metadata identity mismatch`);
+    try {
+      assertShellCompatibility(envelope.metadata, this.shell);
+    } catch (error) {
+      if (!(error instanceof Error) || (error as { code?: unknown }).code !== "installer-required") throw error;
+      const requirement = envelope.metadata.shellRequirements.find(({ type }) => type === this.shell.type) ?? null;
+      return { status: "shell-reinstall-required", releaseVersion: lane.releaseVersion, minimumVersion: requirement?.minVersion ?? null, requirement };
     }
     const id = sha256Hex(canonicalJson(envelope.metadata));
     const state = await this.store.readState();
-    if (state.attempt === id) return { status: "current", generationId: id, applyRequired: state.attempt !== state.active };
-    if (state.active === id) return { status: "current", generationId: id, applyRequired: false };
-    for (const existingId of new Set([state.active, state.attempt])) {
-      if (existingId === null) continue;
-      const existing = await this.store.generation(existingId);
-      const order = compareVersions(existing.releaseVersion, lane.releaseVersion, this.channel);
-      if (order > 0) throw new Error(`channel head would downgrade ${existing.releaseVersion} to ${lane.releaseVersion}`);
-      if (order === 0) throw new Error(`release version ${lane.releaseVersion} has conflicting metadata generations ${existing.id} and ${id}`);
+    if (state.prepared === id) {
+      const generation = await this.store.readGeneration(id);
+      const updated = await applyActivationPolicy(this.store, id, activationPolicy);
+      return { status: "prepared", generation, authorized: updated.activationIntent?.generationId === id };
     }
-    if (!supportsInstalledShell(envelope, this.shell)) return { status: "shell-reinstall-required", releaseVersion: lane.releaseVersion };
-    const generation = await this.store.prepare(envelope, this.trustedKeys, (url) => this.source.readArtifact(url));
-    return { status: "prepared", generation };
+    const retainedIds = new Set([state.active, state.prepared].filter((value): value is string => value != null));
+    for (const retainedId of retainedIds) {
+      const retained = await this.store.readGeneration(retainedId);
+      const order = compareReleaseVersions(retained.releaseVersion, lane.releaseVersion, this.channel);
+      if (order > 0) throw new Error(`channel head would downgrade ${retained.releaseVersion} to ${lane.releaseVersion}`);
+      if (order === 0) {
+        if (retained.id !== id) throw new Error(`immutable release metadata collision: ${lane.releaseVersion}`);
+        if (state.active === id) return { status: "current", generationId: id };
+      }
+    }
+    const generation = await this.store.prepare(envelope, this.trustedKeys, { ...this.source.prepare, feedback: this.feedback });
+    const updated = await applyActivationPolicy(this.store, generation.id, activationPolicy);
+    return { status: "prepared", generation, authorized: updated.activationIntent?.generationId === generation.id };
   }
 
-  /** Called by the fossil boot path before loading the versioned launcher. */
-  activateOnColdStart(): Promise<GenerationRecord | null> {
-    return this.store.activatePrepared();
-  }
+  activateOnColdStart(bootloader: FossilBootloader): Promise<LifecycleStatus> { return bootloader.start(); }
 
-  async applyNow(launcher: VersionedLauncher): Promise<LifecycleStatus> {
+  async applyNow(launcher: VersionedLauncher, options: Readonly<{ force?: boolean }> = {}): Promise<UpdateApplication> {
     const state = await this.store.readState();
-    if (state.attempt === null || state.attempt === state.active) throw new Error("no prepared generation to apply");
-    await launcher.stop();
-    const activated = await this.store.activatePrepared();
-    if (activated === null) throw new Error("no prepared generation to apply");
-    return launcher.start();
+    if (state.prepared == null) throw new Error("no prepared generation to apply");
+    const targetGenerationId = state.prepared;
+    await applyActivationPolicy(this.store, targetGenerationId, "authorize-user");
+    const transition = await launcher.beginTransition("content-restart", options);
+    if (transition.state === "blocked") return { status: "blocked", reason: transition.reason, occupants: transition.occupants };
+    await transition.transition.renew();
+    await transition.transition.forceStop();
+    await this.store.recoverInterruptedAttempt();
+    const prepared = await this.store.readState();
+    if (prepared.prepared !== targetGenerationId) throw new Error("prepared generation changed before activation");
+    await this.store.activatePrepared(targetGenerationId, this.shell, prepared.revision);
+    return { status: "applied", lifecycle: await launcher.startDuringTransition(transition.transition) };
   }
 }

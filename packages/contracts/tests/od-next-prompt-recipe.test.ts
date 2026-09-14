@@ -49,6 +49,22 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
 };
 
 describe('OD Next V2 prompt recipe', () => {
+  // OPEND-2589. The strategy admits a turn on the project's task type, not on
+  // what this turn said, so a greeting or a stray keystroke enters the same
+  // Full Plan route as a real brief. The prompt taught only three outcomes —
+  // ask once, freeze a plan, deliver — and never named `blocked`, so an agent
+  // left with nothing to design had no taught way to say so and invented a
+  // subject instead ("111" became a prototype about 111). Teach the refusal.
+  it('tells the agent to answer and block instead of inventing a subject', () => {
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe);
+
+    expect(prompt).toContain('outcome: blocked');
+    expect(prompt.toLowerCase()).toContain('do not invent');
+    // The outcome has to be spelled out where the contract shapes are, not
+    // only in prose: the agent copies its Runtime State from those examples.
+    expect(prompt).toMatch(/blocked[\s\S]{0,400}canceled|canceled[\s\S]{0,400}blocked/);
+  });
+
   it('pins the canonical Deck Protocol v1 framework into PPT requests only', () => {
     const pptRecipe: OdNextStrategyRequestRecipeV2 = {
       ...recipe,
@@ -603,13 +619,39 @@ describe('OD Next V2 prompt recipe', () => {
     expect(composeOdNextStrategyRequestPromptV2(recipe)).toBe(core);
   });
 
+  it('keeps memory without introducing retired cards into the OD Next prompt path', () => {
+    const context = { memoryBody: 'Remember the operator audience.' };
+    const core = composeOdNextStrategyCorePromptV2(recipe);
+    const stableContext = composeOdNextStrategyStableRequestContextV2(context);
+    const request = composeOdNextStrategyRequestPromptV2(recipe, context);
+    const bundle = composeOdNextStrategyBundleHeadV2(recipe);
+    const production = composeOdNextStrategyContinuationV2({
+      stage: 'production',
+      nativeSessionResume: true,
+      taskExecutionId: 'task-1',
+      taskRunIndex: 1,
+      planContractHash: A,
+      hostProtocolKey: '0123456789abcdef',
+    });
+
+    expect(stableContext).toContain(context.memoryBody);
+    expect(request).toContain(stableContext);
+    expect(core).toContain(recipe.coreStrategy);
+    expect(request).toContain(recipe.coreStrategy);
+    expect(production).toContain('<od-done key="0123456789abcdef"/>');
+    for (const prompt of [core, stableContext, request, JSON.stringify(bundle), production]) {
+      expect(prompt).not.toContain('task-brief');
+      expect(prompt).not.toContain('rule-proposal');
+    }
+  });
+
   it('changes cache identity for either package or selected profile content', () => {
     const baseline = odNextPromptCacheIdentityV2(recipe);
     expect(odNextPromptCacheIdentityV2({ ...recipe, packageHash: B })).not.toBe(baseline);
     expect(odNextPromptCacheIdentityV2({ ...recipe, taskProfileDigest: A })).not.toBe(baseline);
   });
 
-  it('emits native-session-only deltas and gives Production only a Plan Contract hash', () => {
+  it('emits native-session-only deltas and gives Production the frozen plan plus terminal state shape', () => {
     const clarification = composeOdNextStrategyContinuationV2({
       stage: 'clarification',
       nativeSessionResume: true,
@@ -630,6 +672,7 @@ describe('OD Next V2 prompt recipe', () => {
       taskExecutionId: 'task-1',
       taskRunIndex: 1,
       planContractHash: A,
+      hostProtocolKey: '0123456789abcdef',
     });
 
     expect(clarification).toContain('Clarification answer');
@@ -638,10 +681,27 @@ describe('OD Next V2 prompt recipe', () => {
     expect(production).toMatch(/^<open_design_request_turn/);
     expect(production).toContain('task_execution_id="task-1"');
     expect(production).toContain('stage="production" task_run_index="1"');
+    expect(production).toContain('## Closing Runtime State');
+    expect(production).toContain('exactly one open-design-runtime-state block');
+    expect(production).toContain('schema open-design.strategy-state/v2');
+    expect(production).toContain('route full_plan');
+    expect(production).toContain('inputStage production');
+    expect(production).toContain('executionMode equal to the mode locked');
+    expect(production).toContain('outcome completed');
+    expect(production).toContain('reasonCodes []');
+    expect(production).toContain('no Plan Contract block');
     expect(production).not.toContain(recipe.coreStrategy);
     expect(production).not.toContain(recipe.generalOrchestration);
     expect(production).not.toContain(recipe.taskSkill);
     expect(production).not.toContain(B);
+    expect(production).toContain('inputStage=production');
+    expect(production).toContain('<od-done key="0123456789abcdef"/>');
+    expect(production).toContain('<od-next key="0123456789abcdef" value="Add an orders list page"/>');
+    expect(production).toContain('<od-focus key="0123456789abcdef"');
+    expect(production).toContain('Place the Closing Runtime State before any final follow-up markers');
+    expect(production).not.toContain('End this response with exactly one');
+    expect(clarification).not.toContain('<od-done');
+    expect(contractRepair).not.toContain('<od-done');
     const complexProduction = composeOdNextStrategyContinuationV2({
       stage: 'production',
       nativeSessionResume: true,
@@ -659,6 +719,9 @@ describe('OD Next V2 prompt recipe', () => {
       }],
     });
     expect(complexProduction).toContain('structured `subagent_type` handle');
+    expect(complexProduction).toContain('## Closing Runtime State');
+    expect(complexProduction).not.toContain('<od-done');
+    expect(complexProduction).not.toContain('Place the Closing Runtime State before any final follow-up markers');
     expect(complexProduction).toContain('od-build-1-0123456789abcdef');
     expect(complexProduction).toContain('"dependsOn":["shell"]');
     expect(() => composeOdNextStrategyContinuationV2({
@@ -729,5 +792,82 @@ describe('layout primitives in the stable request context', () => {
     expect(prompt).toContain(css);
     expect(prompt).not.toContain('kind="instruction" name="layout-primitives"');
     expect(composeOdNextStrategyStableRequestContextV2({ memoryBody: 'x' })).not.toContain('layout-primitives');
+  });
+});
+
+/**
+ * The runtime's own plan-tool name has to survive the OD Next prompt fork.
+ *
+ * ── The defect ────────────────────────────────────────────────────────────
+ *
+ * On 2026-09-03 a codex run answered an explicit 「先用 todo 进行一轮规划」 by
+ * writing a seven-item plan into its reply body and calling no plan tool. The
+ * charter offers "Otherwise, provide a numbered plan in your response" as a
+ * sanctioned branch, and codex had never been told the name of the tool it
+ * actually has (`update_plan`), so prose WAS the compliant reading. The daemon
+ * fix names each runtime's real tool through `planToolNoteForRuntime`
+ * (`apps/daemon/src/prompts/system.ts`) — but only on the slim-charter path.
+ *
+ * OD Next runs never reach that path: `composeSystemPrompt` forks before it,
+ * and the shipping request prompt is assembled from the Bundle head plus this
+ * stable request context. Neither carried the note, so every OD Next run was
+ * still in the pre-fix state.
+ *
+ * ── Why the note enters HERE and not in the Bundle head ───────────────────
+ *
+ * The head is the cache-stable prefix — byte-identical across every task that
+ * shares a strategy version, task type, and execution profile. Which runtime
+ * is driving is not one of those dimensions, so a per-runtime sentence in the
+ * head would split that prefix. This block is already per-run (it carries
+ * `runtime-selection`, project metadata, memory), so the note is cache-neutral
+ * here and sits beside the `selectedAgentId` it is derived from.
+ *
+ * ── What this suite proves, and what it does not ──────────────────────────
+ *
+ * It proves the sentence travels: given the note the host resolved, the OD
+ * Next request prompt contains it, and given no note it costs nothing. It does
+ * NOT re-prove which name belongs to which runtime — that table lives in the
+ * daemon and is owned by `apps/daemon/tests/prompts/plan-tool-note.test.ts`.
+ * Duplicating the table here would create the second source of truth whose
+ * drift is the exact failure the Claude Code 2.1 rename caused.
+ */
+describe('runtime plan tool in the stable request context', () => {
+  // Verbatim from CODEX_PLAN_TOOL_NOTE — quoted as INPUT, the way the daemon
+  // supplies it. This suite never asserts the wording is right for codex.
+  const CODEX_NOTE = 'Your plan tool is `update_plan` — use it for the plan step above; the host renders it as a live Todos card. Mark each item `in_progress` when started and `completed` as it lands.';
+
+  it('carries the host-resolved note into the block the shipping Bundle reads', () => {
+    const stable = composeOdNextStrategyStableRequestContextV2({
+      agentId: 'codex',
+      planToolNote: CODEX_NOTE,
+    });
+    expect(stable).toContain('<od-next-context kind="instruction" name="runtime-plan-tool">');
+    expect(stable).toContain('Your plan tool is `update_plan`');
+    // Beside the runtime identity it is derived from, not adrift in project data.
+    expect(stable.indexOf('name="runtime-selection"'))
+      .toBeLessThan(stable.indexOf('name="runtime-plan-tool"'));
+  });
+
+  it('reaches the composed OD Next request prompt through both composers', () => {
+    const context = { agentId: 'codex', planToolNote: CODEX_NOTE };
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe, context);
+    expect(prompt).toContain('Your plan tool is `update_plan`');
+    // `composeSystemPrompt` forks to the same composer; it must forward the
+    // note rather than drop it on the floor.
+    expect(composeSystemPrompt({ odNextStrategyRecipe: recipe, ...context }))
+      .toContain('Your plan tool is `update_plan`');
+  });
+
+  it('costs nothing for a runtime the host has no verified tool name for', () => {
+    // mimo and the ACP family are deliberately absent from the daemon table:
+    // no verified tool name, and guessing from family resemblance is what the
+    // Claude Code 2.1 rename punished. They resolve to no note, and no note
+    // must mean no bytes.
+    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'mimo' }))
+      .not.toContain('runtime-plan-tool');
+    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'vela', planToolNote: null }))
+      .not.toContain('runtime-plan-tool');
+    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'kimi', planToolNote: '' }))
+      .not.toContain('runtime-plan-tool');
   });
 });

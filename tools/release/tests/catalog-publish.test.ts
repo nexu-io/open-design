@@ -10,7 +10,7 @@ import { exportCatalog } from "../src/catalog/export.ts";
 import { packCatalogSnapshot, writeCatalogJson } from "../src/catalog/pack.ts";
 import { createStubPreviewRenderer, renderCatalogPreviews } from "../src/catalog/render-previews.ts";
 import { publishCatalogSnapshot } from "../src/storage/publish-catalog.ts";
-import type { StorageConfig } from "../src/storage/s3-upload.ts";
+import { strongQuotedEtag, type StorageConfig } from "../src/storage/s3-upload.ts";
 
 const FIXTURE_ROOT = resolve(import.meta.dirname, "fixtures/catalog");
 const SOURCE_COMMIT = "cccccccccccccccccccccccccccccccccccccccc";
@@ -19,12 +19,20 @@ const SAME_TIME_NEWER_COMMIT = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 const BUCKET = "open-design-release-fixture";
 
 type StoredObject = { body: Buffer; etag: string };
+type EtagHeaderStyle = "quoted" | "unquoted" | "weak";
 
 function etag(body: Buffer): string {
   return `"${createHash("sha256").update(body).digest("hex")}"`;
 }
 
-async function startFixtureServer(options: { putDelayMs?: number } = {}): Promise<{
+function etagResponseHeader(stored: string, style: EtagHeaderStyle): string {
+  const unquoted = stored.replaceAll('"', "");
+  if (style === "unquoted") return unquoted;
+  if (style === "weak") return `W/"${unquoted}"`;
+  return `"${unquoted}"`;
+}
+
+async function startFixtureServer(options: { etagHeaderStyle?: EtagHeaderStyle; putDelayMs?: number } = {}): Promise<{
   close(): Promise<void>;
   getObject(key: string): Buffer | null;
   listObjectKeys(): string[];
@@ -106,7 +114,7 @@ async function startFixtureServer(options: { putDelayMs?: number } = {}): Promis
           return;
         }
         response.statusCode = 200;
-        response.setHeader("etag", current.etag);
+        response.setHeader("etag", etagResponseHeader(current.etag, options.etagHeaderStyle ?? "quoted"));
         response.end(current.body);
         return;
       }
@@ -182,6 +190,20 @@ async function stagePackedCatalog(
   });
   return stagingDir;
 }
+
+describe("strongQuotedEtag", () => {
+  it("quotes a bare validator", () => {
+    expect(strongQuotedEtag("abc")).toBe('"abc"');
+  });
+
+  it("keeps an already quoted validator", () => {
+    expect(strongQuotedEtag('"abc"')).toBe('"abc"');
+  });
+
+  it("rejects a weak validator", () => {
+    expect(() => strongQuotedEtag('W/"abc"')).toThrow(/weak/);
+  });
+});
 
 describe("catalog publish", () => {
   it("reuses immutable snapshot objects with bounded concurrency on a workflow rerun", async () => {
@@ -360,8 +382,50 @@ describe("catalog publish", () => {
     }
   });
 
-  it("advances to a newer commit generation when committer timestamps tie", async () => {
-    const server = await startFixtureServer();
+  it.each(["quoted", "unquoted"] as const)(
+    "advances to a newer commit generation when GET ETag is %s",
+    async (etagHeaderStyle) => {
+      const server = await startFixtureServer({ etagHeaderStyle });
+      const firstDir = await stagePackedCatalog(SOURCE_COMMIT, "2026-08-29T00:00:00.000Z");
+      const nextDir = await stagePackedCatalog(SAME_TIME_NEWER_COMMIT, "2026-08-29T00:00:00.000Z");
+      try {
+        await publishCatalogSnapshot({
+          stagingDir: firstDir,
+          sourceCommit: SOURCE_COMMIT,
+          sourceCommitGeneration: 42,
+          publicOrigin: "https://releases.example.test",
+          storage: server.storage,
+        });
+
+        const next = await publishCatalogSnapshot({
+          stagingDir: nextDir,
+          sourceCommit: SAME_TIME_NEWER_COMMIT,
+          sourceCommitGeneration: 43,
+          publicOrigin: "https://releases.example.test",
+          storage: server.storage,
+        });
+        const latest = JSON.parse(server.getObject("catalog/v1/latest.json")?.toString("utf8") ?? "{}") as {
+          sourceCommit?: string;
+          sourceCommitGeneration?: number;
+        };
+
+        expect(next.latestUpdated).toBe(true);
+        expect(latest).toMatchObject({
+          sourceCommit: SAME_TIME_NEWER_COMMIT,
+          sourceCommitGeneration: 43,
+        });
+      } finally {
+        await server.close();
+        await Promise.all([
+          rm(firstDir, { force: true, recursive: true }),
+          rm(nextDir, { force: true, recursive: true }),
+        ]);
+      }
+    },
+  );
+
+  it("refuses a weak GET ETag and leaves latest alone", async () => {
+    const server = await startFixtureServer({ etagHeaderStyle: "weak" });
     const firstDir = await stagePackedCatalog(SOURCE_COMMIT, "2026-08-29T00:00:00.000Z");
     const nextDir = await stagePackedCatalog(SAME_TIME_NEWER_COMMIT, "2026-08-29T00:00:00.000Z");
     try {
@@ -372,24 +436,19 @@ describe("catalog publish", () => {
         publicOrigin: "https://releases.example.test",
         storage: server.storage,
       });
+      const latestBefore = server.getObject("catalog/v1/latest.json")?.toString("utf8");
 
-      const next = await publishCatalogSnapshot({
-        stagingDir: nextDir,
-        sourceCommit: SAME_TIME_NEWER_COMMIT,
-        sourceCommitGeneration: 43,
-        publicOrigin: "https://releases.example.test",
-        storage: server.storage,
-      });
-      const latest = JSON.parse(server.getObject("catalog/v1/latest.json")?.toString("utf8") ?? "{}") as {
-        sourceCommit?: string;
-        sourceCommitGeneration?: number;
-      };
+      await expect(
+        publishCatalogSnapshot({
+          stagingDir: nextDir,
+          sourceCommit: SAME_TIME_NEWER_COMMIT,
+          sourceCommitGeneration: 43,
+          publicOrigin: "https://releases.example.test",
+          storage: server.storage,
+        }),
+      ).rejects.toThrow(/weak/);
 
-      expect(next.latestUpdated).toBe(true);
-      expect(latest).toMatchObject({
-        sourceCommit: SAME_TIME_NEWER_COMMIT,
-        sourceCommitGeneration: 43,
-      });
+      expect(server.getObject("catalog/v1/latest.json")?.toString("utf8")).toBe(latestBefore);
     } finally {
       await server.close();
       await Promise.all([
@@ -398,6 +457,7 @@ describe("catalog publish", () => {
       ]);
     }
   });
+
 
   it("fails when different content targets the same commit prefix and leaves latest alone", async () => {
     const server = await startFixtureServer();

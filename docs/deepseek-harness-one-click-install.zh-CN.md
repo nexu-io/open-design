@@ -2,10 +2,7 @@
 
 > 运营发布状态：文案已可评审，安装脚本尚未发布到正式下载地址。正式对外发送前，请确认下方三个 `open-design.ai/install-dsh.*` 地址均可访问，并分别完成一次 macOS、Windows PowerShell 和 Windows CMD 验证。
 
-正式发布不采用开发机手动上传。脚本合并到 `main` 后，由 `landing-page-production` 生产发布 workflow 自动完成两件事：
-
-1. 将脚本和 `SHA256SUMS` 以不可覆盖的版本保存到 `https://releases.open-design.ai/bootstrap/dsh/<version>/`。
-2. 将相同脚本发布为下方 `open-design.ai/install-dsh.*` 用户短链接。
+正式发布不采用开发机手动上传。脚本合并到 `main` 后，由 `dsh-bootstrap-publish` workflow 将脚本和 `SHA256SUMS` 以不可覆盖的版本保存到 `https://releases.open-design.ai/bootstrap/dsh/<version>/`。`open-design.ai/install-dsh.*` 短链接由独立的 marketing site 仓库提供。
 
 版本号由脚本内容决定，不需要人工维护：脚本没变就复用已发布的那一版，脚本改了就自动开下一版（`v1` → `v2` → …）。每个已发布版本都保持逐字节不可覆盖，历史版本永久留存，`https://releases.open-design.ai/bootstrap/dsh/latest.json` 指向当前版本并附带各文件的 sha256 与发布来源。
 

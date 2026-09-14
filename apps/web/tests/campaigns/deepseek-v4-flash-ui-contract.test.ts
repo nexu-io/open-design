@@ -160,9 +160,8 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
       expect(source).not.toContain('URLSearchParams');
       expect(source).not.toContain('location.search');
     }
-    // The reserved presentation branches stay, but without any trigger that
-    // could be driven from a URL.
-    expect(modelSwitcherSource).toContain('const campaignRestricted = false;');
+    // The remaining reserved presentation branch stays, but without any
+    // trigger that could be driven from a URL.
     expect(modelSwitcherSource).toContain('const campaignNeedsUpgrade = false;');
   });
 

@@ -60,6 +60,28 @@ export interface RunLifecycleStreamEventMarkers {
   firstArtifactWrite: boolean;
 }
 
+/**
+ * Whether a streamed delta frame actually put characters on the user's screen.
+ *
+ * `text_delta` / `thinking_delta` frames are not self-evidently visible: Claude
+ * Code streams `thinking_delta` whose `thinking` is the empty string, carrying
+ * only an `estimated_tokens` count (measured off the CLI directly: 20 of 20
+ * frames on a 26.5s extended-thinking turn, and 1508 of 1707 across the 32
+ * runs recorded in `claude-stream.ts`). Those frames arrive, and the daemon
+ * forwards them, but they render nothing.
+ *
+ * `first_visible_output` is the boundary that answers "when did the user stop
+ * staring at an empty message?", so it must be stamped by pixels, not by frame
+ * arrival. Frame arrival is already covered by `first_model_event`.
+ */
+function deltaCarriesCharacters(data: unknown): boolean {
+  const delta =
+    data && typeof data === 'object' && 'delta' in data
+      ? (data as { delta?: unknown }).delta
+      : undefined;
+  return typeof delta === 'string' && delta.length > 0;
+}
+
 export function runLifecycleMarkersForStreamEvent(
   event: string,
   data: unknown,
@@ -94,9 +116,9 @@ export function runLifecycleMarkersForStreamEvent(
         ? { firstModelEventAt }
         : {}),
       firstVisibleOutput:
-        type === 'text_delta' ||
-        type === 'thinking_delta' ||
-        type === 'artifact',
+        type === 'artifact' ||
+        ((type === 'text_delta' || type === 'thinking_delta') &&
+          deltaCarriesCharacters(data)),
       firstArtifactWrite: type === 'artifact' || type === 'live_artifact',
     };
   }

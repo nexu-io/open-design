@@ -10,6 +10,7 @@ import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { CritiqueAction } from './reducer';
 import { workspaceResourceUrl } from '../../../collab/workspace-identity';
 import { BackoffController } from '../../../lib/backoff';
+import { bindStreamVisibility } from '../../../lib/stream-visibility';
 
 export interface CritiqueEventsConnection {
   close(): void;
@@ -130,6 +131,8 @@ export function createCritiqueEventsConnection(
   let cancelled = false;
   let source: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // Set while the socket is deliberately given back to a parked tab.
+  let releasedWhileHidden = false;
 
   const handleCritiqueFrame = (eventName: CritiqueSseEventName) => (raw: Event) => {
     try {
@@ -149,6 +152,7 @@ export function createCritiqueEventsConnection(
 
   const connect = (): void => {
     if (cancelled) return;
+    if (source) return;
     const es = new Ctor(critiqueEventsUrl(projectId, options.workspaceContext));
     source = es;
     es.addEventListener('ready', () => {
@@ -161,15 +165,44 @@ export function createCritiqueEventsConnection(
       if (cancelled) return;
       es.close();
       if (source === es) source = null;
+      // Same guard as `providers/project-events.ts`: a socket handed back to a
+      // parked tab must not reconnect itself while nobody is looking.
+      if (releasedWhileHidden) return;
       reconnectTimer = setT(connect, backoff.nextDelay()) as ReturnType<typeof setTimeout>;
     });
   };
+
+  // A theater left open in a parked tab must not keep one of the origin's six
+  // sockets — see `lib/stream-visibility.ts`.
+  const visibility = bindStreamVisibility({
+    onHidden: () => {
+      if (cancelled) return;
+      releasedWhileHidden = true;
+      if (reconnectTimer) {
+        clearT(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (source) {
+        source.close();
+        source = null;
+      }
+    },
+    onVisible: () => {
+      if (cancelled) return;
+      releasedWhileHidden = false;
+      backoff.reset();
+      connect();
+    },
+    ...(options.setTimeoutFn ? { setTimeoutFn: options.setTimeoutFn } : {}),
+    ...(options.clearTimeoutFn ? { clearTimeoutFn: options.clearTimeoutFn } : {}),
+  });
 
   connect();
 
   return {
     close(): void {
       cancelled = true;
+      visibility.dispose();
       if (reconnectTimer) clearT(reconnectTimer);
       if (source) source.close();
     },

@@ -2944,20 +2944,26 @@ export function SettingsDialog({
       const baseMessage = kindForSuccess === 'api'
         ? t('settings.testSuccessApi', { ms, sample })
         : t('settings.testSuccessCli', { agentName, ms, sample });
+      const successMessage =
+        kindForSuccess === 'cli' &&
+        result.resolvedModel &&
+        result.resolvedModel !== testedModel
+          ? `${baseMessage} ${t('settings.model')}: ${result.resolvedModel}`
+          : baseMessage;
       if (kindForSuccess === 'cli' && cfg.agentId === 'codex') {
         const codexStrings = codexPathStrings(locale);
         if (
           result.usedExecutableSource === 'configured' &&
           result.configuredExecutablePath
         ) {
-          return `${baseMessage} ${codexStrings.configuredSuccess(result.configuredExecutablePath)}`;
+          return `${successMessage} ${codexStrings.configuredSuccess(result.configuredExecutablePath)}`;
         }
         if (
           result.usedExecutableSource === 'fallback_invalid' &&
           result.configuredExecutablePath &&
           result.detectedExecutablePath
         ) {
-          return `${baseMessage} ${codexStrings.invalidFallback(
+          return `${successMessage} ${codexStrings.invalidFallback(
             result.configuredExecutablePath,
             result.detectedExecutablePath,
           )}`;
@@ -2967,13 +2973,13 @@ export function SettingsDialog({
           result.configuredExecutablePath &&
           result.detectedExecutablePath
         ) {
-          return `${baseMessage} ${codexStrings.failedFallback(
+          return `${successMessage} ${codexStrings.failedFallback(
             result.configuredExecutablePath,
             result.detectedExecutablePath,
           )}`;
         }
       }
-      return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+      return result.detail ? `${successMessage} ${result.detail}` : successMessage;
     }
     switch (result.kind) {
       case 'auth_failed':

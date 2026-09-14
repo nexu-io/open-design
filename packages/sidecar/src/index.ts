@@ -1,34 +1,23 @@
 /**
  * @module @open-design/sidecar
  *
- * Public barrel for the generic sidecar runtime package. Re-exports the exact
- * prior public surface — the data types, IPC-path validators, namespace/runtime
- * path resolvers, launch-env + bootstrap, port allocation, JSON file helpers, and
- * the JSON-IPC server/client. This file contains no logic; every implementation
- * lives in a concern module beside it.
+ * Public boundary for sidecar clients and server-side process atomics. Transport,
+ * endpoint derivation, and OS-visible identity are deliberately private package
+ * details; callers share only the five-field resource identity and these operations.
  */
 
 export type {
-  AppIpcPathRequest,
   AppRuntimePathRequest,
   BaseResolutionOptions,
-  BootstrapSidecarRuntimeOptions,
-  JsonIpcHandler,
-  JsonIpcServerHandle,
   NamespaceResolutionOptions,
   PortAllocation,
   PortRequest,
   ProjectRuntimePathRequest,
   RuntimePathRequest,
   RuntimeRootRequest,
-  SidecarContractDescriptor,
-  SidecarLaunchEnvRequest,
   SidecarRuntimeContext,
-  SidecarStampShape,
 } from "./types.js";
-export { isWindowsNamedPipePath, normalizeIpcPath } from "./ipc-path.js";
 export {
-  resolveAppIpcPath,
   resolveAppRuntimeDir,
   resolveAppRuntimePath,
   resolveLogFilePath,
@@ -44,7 +33,52 @@ export {
   resolveSidecarBase,
   resolveSourceRuntimeRoot,
 } from "./paths.js";
-export { bootstrapSidecarRuntime, createSidecarLaunchEnv } from "./bootstrap.js";
 export { allocatePort } from "./port.js";
-export { readJsonFile, removeFile, removePointerIfCurrent, writeJsonFile } from "./json-file.js";
-export { createJsonIpcServer, requestJsonIpc } from "./json-ipc.js";
+export type {
+  SidecarClientOptions,
+  SidecarConnection,
+  SidecarHandler,
+  SidecarHandlers,
+  SidecarGenerationHandoffRequest,
+  SidecarLifecycle,
+  SidecarResources,
+} from "./client.js";
+export { handoffCurrentSidecarGeneration, SidecarClient, SidecarFactory } from "./client.js";
+export type { SidecarLifecycleLockOptions } from "./lifecycle-lock.js";
+export { withSidecarLifecycleLock } from "./lifecycle-lock.js";
+export type { SidecarStamp, SidecarStampField } from "./stamp.js";
+export {
+  normalizeSidecarStamp,
+  isCurrentSidecarLauncher,
+  readCurrentSidecarStamp,
+  SIDECAR_STAMP_FIELDS,
+  SIDECAR_STAMP_FLAGS,
+} from "./stamp.js";
+export type {
+  SidecarLaunchRequest,
+  SidecarLaunchConvergenceOptions,
+  SidecarLaunchConvergenceResult,
+  SidecarRestartOptions,
+  SidecarRestartResult,
+  SidecarStopOptions,
+  SidecarStopResult,
+  SidecarStopRequest,
+  SidecarStopSetResult,
+  SpawnedSidecar,
+} from "./operations.js";
+export {
+  bootstrapSidecarProcess,
+  convergeSidecarLaunch,
+  findSidecarProcesses,
+  getSidecarStatus,
+  invokeSidecar,
+  launchSidecar,
+  registerSidecarProcess,
+  restartSidecar,
+  resolveSidecarLauncherExitCode,
+  SidecarLaunchConvergenceError,
+  spawnSidecarLauncher,
+  spawnSidecar,
+  stopSidecar,
+  stopSidecars,
+} from "./operations.js";

@@ -6,6 +6,7 @@ import {
   buildLauncherAfterQuitArgs,
   buildLauncherDelegatedArgs,
 } from "@open-design/launcher-proto";
+import { SidecarFactory } from "@open-design/sidecar";
 
 import { HELPERS_DIR, ensureOwnedSubdir } from "./store.js";
 
@@ -23,7 +24,7 @@ export type DetachedProcess = Pick<ReturnType<typeof spawn>, "once" | "unref">;
 export type SpawnInstallerHelper = (
   command: string,
   args: string[],
-  options: { cwd?: string; detached?: true; stdio: "ignore"; windowsHide: true },
+  options: { cwd?: string; detached?: true; env?: NodeJS.ProcessEnv; stdio: "ignore"; windowsHide: true },
 ) => DetachedProcess;
 
 export type DeferredInstallerLaunchInput = {
@@ -276,7 +277,13 @@ export async function launchPayloadAppAfterQuit(
         ...buildLauncherAfterQuitArgs({ targetPid: input.appPid, timeoutMs: input.timeoutMs }),
         ...(input.delegated == null ? [] : buildLauncherDelegatedArgs(input.delegated)),
       ],
-      { cwd: input.cwd, detached: true, stdio: "ignore", windowsHide: true },
+      {
+        cwd: input.cwd,
+        detached: true,
+        env: SidecarFactory.newGenerationEnvironment(),
+        stdio: "ignore",
+        windowsHide: true,
+      },
     );
     await new Promise<void>((resolveSpawn, rejectSpawn) => {
       child.once("spawn", () => resolveSpawn());

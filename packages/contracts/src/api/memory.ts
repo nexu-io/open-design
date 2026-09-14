@@ -97,7 +97,7 @@ export interface MemorySuggestion {
 // hooks while memory stays on:
 //   - chatExtractionEnabled — sediment new facts from chat turns (existing).
 //   - profileEnabled        — inject the structured profile into the prompt.
-//   - rewriteEnabled        — PRE: expand a short query into a task-brief card.
+//   - rewriteEnabled        — gate the applied-memory chip in the prompt.
 //   - verifyEnabled         — POST: self-verify against rules + emit scorecard.
 export interface MemoryHookFlags {
   profileEnabled: boolean;
@@ -519,19 +519,17 @@ export interface DeleteMemoryExtractionResponse {
 // updates collapses into a single visible row.
 export interface MemoryExtractionEvent extends MemoryExtractionRecord {}
 
-// ----- Annotation → rule-proposal distillation ----------------------------
+// ----- Annotation → rule draft distillation -------------------------------
 //
 // THREAD 1. The in-canvas/in-deck annotation surfaces (comments, highlights,
 // inspect-selection marks, visual marks) feed a distillation pipeline that
 // turns a batch of annotations + their target context into candidate
-// `rule` memories. The output is a list of `RuleProposalDraft`s — the SAME
-// payload shape as the `<od-card type="rule-proposal">` the agent already
-// emits — surfaced through the existing Keep gate before anything is written.
-// Distillation NEVER writes a rule on its own; the user must Keep a proposal,
-// which routes through the existing `POST /api/memory` (`type: 'rule'`) path.
+// `rule` memories. The output is a list of `RuleProposalDraft`s, compatible
+// with historical rule-proposal payloads. Distillation NEVER writes a rule
+// on its own; saving requires a separate explicit `POST /api/memory`
+// (`type: 'rule'`) request.
 
-/** A proposed verified rule. Mirrors the `OdCardRuleProposal` payload so the
- *  same RuleProposalCard can render distilled proposals and agent-emitted ones. */
+/** A proposed verified rule, compatible with historical `OdCardRuleProposal` payloads. */
 export interface RuleProposalDraft {
   /** Short display name for the rule. */
   name: string;

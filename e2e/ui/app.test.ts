@@ -1,5 +1,8 @@
 import { expect, test } from '@/playwright/suite';
-import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
+import {
+  ACTIVE_ARTIFACT_PREVIEW_SELECTOR,
+  settledActiveArtifactPreview,
+} from '@/playwright/artifact-preview';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import {
   applyStandardMocks,
@@ -7,7 +10,12 @@ import {
   routeSuccessfulRuns,
   successfulRunEventBody,
 } from '@/playwright/mock-factory';
-import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
+import {
+  clickDeckNextSlide,
+  clickDeckPreviousSlide,
+  clickPreviewToolbarAction,
+  openAllProjectFiles,
+} from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -336,8 +344,7 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await waitForLoadingToClear(page);
   await expect(artifactPreview(page)).toBeVisible();
 
-  await page.getByTestId('board-mode-toggle').click();
-  await page.getByTestId('comment-panel-toggle').click();
+  await enterPreviewCommentMode(page);
   await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
@@ -605,9 +612,15 @@ async function sendPrompt(page: Page, prompt: string) {
 }
 
 async function startNewConversation(page: Page) {
+  // The history dropdown is opened first on purpose: creating a conversation
+  // must also dismiss it, and the `toHaveCount(0)` below is only meaningful if
+  // the list was on screen to begin with.
   await page.getByTestId('conversation-history-trigger').click();
   await expect(page.getByTestId('conversation-list')).toBeVisible();
-  await page.getByTestId('conversation-history-new').click();
+  // The "new conversation" control lives in the panel header, not in the
+  // dropdown — the dropdown's duplicate was removed (product ruling
+  // 2026-09-03: one entry point only).
+  await page.getByTestId('chat-new-conversation').click();
   await expect(page.getByTestId('conversation-list')).toHaveCount(0);
 }
 
@@ -863,21 +876,25 @@ async function runQuestionFormSingleSelectionFlow(
 ) {
   await seedQuestionFormMessage(page);
 
-  const toneQuestion = page.locator('.qf-field', { has: page.getByText('Visual tone') });
+  const toneQuestion = page.locator(
+    '[data-testid="question-form-visual-picker"][data-question-id="tone"]',
+  );
   await expect(toneQuestion).toBeVisible();
 
-  const editorial = toneQuestion.getByRole('radio', { name: 'Content-led product' });
-  const modern = toneQuestion.getByRole('radio', { name: 'Quiet SaaS' });
-  const editorialCard = toneQuestion.locator('label.qf-visual-card[title="Content-led product"]');
-  const modernCard = toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]');
+  // 视觉方向按新稿改成了「一沓叠放的预览图」(D45):默认只有最上面那张露在外面,
+  // 底下几张被盖住点不到。先切成网格再逐张点 —— 比 force:true 干净,也更像真人的操作。
+  await toneQuestion.locator('[data-action="toggle-view"]').click();
 
-  await editorialCard.click();
+  const editorial = toneQuestion.getByRole('radio', { name: /Content-led product$/ });
+  const modern = toneQuestion.getByRole('radio', { name: /Quiet SaaS$/ });
+
+  await editorial.click();
   await expect(editorial).toBeChecked();
-  await modernCard.click();
+  await modern.click();
 
   await expect(editorial).not.toBeChecked();
   await expect(modern).toBeChecked();
-  await expect(toneQuestion.locator('input[type="radio"]:checked')).toHaveCount(1);
+  await expect(toneQuestion.getByRole('radio', { checked: true })).toHaveCount(1);
 }
 
 async function runQuestionFormSubmitPersistenceFlow(
@@ -891,16 +908,19 @@ async function runQuestionFormSubmitPersistenceFlow(
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
 
-  const toneQuestion = form.locator('.qf-field', { has: page.getByText('Visual tone') });
-  const modern = toneQuestion.getByRole('radio', { name: 'Quiet SaaS' });
-  await toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]').click();
+  const toneQuestion = form.locator(
+    '[data-testid="question-form-visual-picker"][data-question-id="tone"]',
+  );
+  // 同上:叠放态下被盖住的那几张点不到,先切网格(D45)
+  await toneQuestion.locator('[data-action="toggle-view"]').click();
+  const modern = toneQuestion.getByRole('radio', { name: /Quiet SaaS$/ });
+  await modern.click();
   await expect(modern).toBeChecked();
 
-  await form.getByRole('button', { name: 'Send answers' }).click();
+  await form.getByRole('button', { name: 'Next' }).click();
 
   const summary = page.getByTestId('question-form-summary');
   await expect(summary).toBeVisible();
-  await expect(summary.getByText('Questions answered')).toBeVisible();
   await expect(summary.getByText('Visual tone')).toBeVisible();
   // The summary echoes the picked visual-style card (its title), not the
   // underlying option label.
@@ -972,12 +992,15 @@ async function runQuestionFormSingleAnswerFlow(
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
-  const toneQuestion = form.locator('.qf-field', { has: page.getByText('Visual tone') });
-  await toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]').click();
+  const toneQuestion = form.locator(
+    '[data-testid="question-form-visual-picker"][data-question-id="tone"]',
+  );
+  await toneQuestion.locator('[data-action="toggle-view"]').click();
+  await toneQuestion.getByRole('radio', { name: /Quiet SaaS$/ }).click();
 
   // A rapid double submit: the second click lands before the first send has
   // settled, which is the window the component-local lock was built for.
-  const send = form.getByRole('button', { name: 'Send answers' });
+  const send = form.getByRole('button', { name: 'Next' });
   await send.click();
   await send.click({ force: true, timeout: T.short }).catch(() => {});
 
@@ -1049,20 +1072,33 @@ async function runGenerationDoesNotCreateExtraFileFlow(
 }
 
 async function clickCommentTargetInPreview(page: Page, selector: string) {
-  const target = artifactPreviewFrame(page).locator(selector);
+  const { frame } = await settledActiveArtifactPreview(page, T.medium);
+  // Comment mode swaps the visible transport from the URL iframe to the
+  // retained srcDoc iframe. Visibility/load alone is not enough: the bridge
+  // marks the document only after it has consumed the Host mode replay. A
+  // click before that witness is a valid DOM click but cannot publish an
+  // `od:comment-target`, so it is silently lost.
+  await expect(frame.locator('html[data-od-comment-mode]')).toHaveCount(1, {
+    timeout: T.medium,
+  });
+  const target = frame.locator(selector);
   await expect(target).toBeVisible();
-  // Auto-fit zoom + comment-bridge injection can keep the iframe target
-  // moving for long enough that Playwright's stability check never settles
-  // (CI: "element is not stable" until test timeout). Force once visible.
-  await target.click({ force: true });
+  // Keep Playwright's hit testing enabled. The host layout must make the
+  // target's natural center clickable while the floating comments card is
+  // open; a forced or edge-biased click would conceal a product regression.
+  await target.click();
+}
+
+async function enterPreviewCommentMode(page: Page) {
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
+  await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
 }
 
 async function runCommentAttachmentFlow(
   page: Page,
   entry: UiScenario,
 ) {
-  await page.getByTestId('board-mode-toggle').click();
-  await page.getByTestId('comment-panel-toggle').click();
+  await enterPreviewCommentMode(page);
   await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');

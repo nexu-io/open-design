@@ -8,7 +8,32 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /*
+   * 模态档。原来是 100,压不住同屏的任何一层 —— shell 的
+   * `.workspace-tabs-chrome` 是 120,右上角那簇 `.entry-top-right-cluster`
+   * 真机 `elementFromPoint` 探到是 150。于是每一张吃这个原语的弹窗,遮罩上
+   * 都漏着顶栏和右上角照常亮着的那一块。
+   *
+   * 为什么是 1500,而不是「比应用模态档 1000 高一点」的随手数字:
+   *
+   *  · 这个原语**没有自己的屏**。它既从 `EntryShell` 渲染,也从 `ProjectView`
+   *    (聊天输入框那一屏)渲染,还会**嵌在别的模态里** —— `NewProjectPanel`
+   *    的删除确认长在 `.new-project-modal-backdrop`(920)之内,在原来的 100 上
+   *    它压在自己父模态的遮罩底下。通用原语的地板必须覆盖这些的并集,所以它
+   *    不属于那五张 `.backdrop` 定义的「应用模态档 1000」。
+   *  · 1500 这个数取自**余额闸门的另一条腿**:`AmrBalanceDialog`(有账单权限)
+   *    和 `AmrOwnerTopUpDialog`(没有账单权限)是同一个闸门的两个分支,在
+   *    `EntryShell.tsx` / `ProjectView.tsx` 里是同一个三元表达式的两条腿。后者
+   *    已经落在 1500(`components/chat/AmrOwnerTopUpDialog.module.css`),前者
+   *    不带 `backdropClassName`,吃的就是这里。同一个闸门的两条腿不能差两档。
+   *
+   * 需要压过另一张模态的消费者仍然在自己的 `backdropClassName` 上往上走
+   * (`AmrArtifactUpgradeDialog` 1700 / `DeepSeekV4FlashCampaign` 1700 /
+   * `GoPlanSunsetDialog` 1800),那条升级通道不受影响。
+   *
+   * 守护:`apps/web/tests/styles/app-scrim-layer.test.ts`。
+   */
+  z-index: 1500;
   animation: dialog-backdrop-fade-in var(--duration-fast, 150ms) var(--curve-decelerate-mid, ease-out);
 }
 

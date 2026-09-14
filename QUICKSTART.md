@@ -79,7 +79,7 @@ docker compose up -d
 Open the app in your browser:
 
 ```text
-http://localhost:7456
+http://127.0.0.1:7456
 ```
 
 The first startup may take a few seconds while Docker pulls the latest image.
@@ -241,7 +241,7 @@ ls -la "$OD_BIN"
 
 `OD_DAEMON_URL` must be a real daemon port such as `http://127.0.0.1:7457`, not `http://127.0.0.1:0`. The `:0` value is only an internal "pick a free port" launch hint and should not leak into agent sessions.
 
-For the daemon-only production mode, the daemon serves the static Next.js export itself at `http://localhost:7456`, so no reverse proxy is involved.
+For the daemon-only production mode, the daemon serves the static Next.js export itself at `http://127.0.0.1:7456`, so no reverse proxy is involved.
 
 If you place nginx in front of the daemon, keep SSE routes unbuffered and uncompressed. A common failure is the browser console showing `net::ERR_INCOMPLETE_CHUNKED_ENCODING 200 (OK)` after 80-90 seconds because nginx `gzip on` buffers chunked SSE responses even when the daemon sends `X-Accel-Buffering: no`.
 
@@ -345,7 +345,7 @@ open-design/
 - **media generation says `OD_BIN` is missing or daemon URL is `:0`** — run the media dispatcher checks above. Do not resume the old CLI session; reopen the project from the OpenDesign app so the daemon can inject fresh `OD_*` variables.
 - **Codex loads too much plugin context** — start OpenDesign with `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` to make daemon-spawned Codex processes run with `--disable plugins`.
 - **artifact never renders** — first identify the run's handoff profile. For a filesystem-capable local runtime, confirm the agent created a previewable project file and that file-write events reached the daemon; it should not emit source in `<artifact>`. For a plain/text-only or BYOK run, confirm the response contains one complete `<artifact>` block. Check daemon logs for the first failed boundary instead of asking a filesystem runtime to fall back to inline source.
-- **`Authorization: Bearer <OD_API_TOKEN>` required on macOS** — Docker Desktop bridge networking makes the daemon see requests as non-loopback. Enable host networking in Docker Desktop and use `network_mode: host`. See [`deploy/README.md` — Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos).
+- **Browser authentication prompt on macOS** — keep Docker Desktop's default bridge networking. Sign in with username `open-design` and the `OD_API_TOKEN` value from `deploy/.env` as the password. Host networking is not required. See [`deploy/README.md` — Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos).
 
 ## Mapping back to the vision
 

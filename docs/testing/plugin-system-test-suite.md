@@ -93,10 +93,6 @@ pnpm --dir apps/web exec vitest run -c vitest.config.ts \
   tests/runtime/plugin-source.test.ts
 ```
 
-```bash
-pnpm --filter @open-design/landing-page build
-```
-
 验收标准：
 
 - 聚焦文件请使用 `pnpm --dir <package> exec vitest ... <files>`；不要用
@@ -195,7 +191,7 @@ pnpm tools-dev run web --daemon-port 17456 --web-port 17573
 | PS-E05 | Provenance | marketplace install 保留 sourceMarketplaceId、entry name/version、resolved ref、integrity | `apps/daemon/tests/plugins-installer.test.ts` |
 | PS-E06 | Lockfile replay | daemon-managed plugin lockfile 可以重放 exact install；测试文档不得定义 daemon 数据路径，必须阅读 root `AGENTS.md` → **Daemon data directory contract** | `apps/daemon/tests/plugins-lockfile.test.ts` |
 | PS-E07 | Marketplace doctor | invalid name/source/capability/license/yank reason 被报告 | `apps/daemon/tests/plugins-marketplace-doctor.test.ts` |
-| PS-E08 | Public site renderer | `/plugins`、detail route、`/plugins/search.json` build 通过 | `pnpm --filter @open-design/landing-page build` |
+| PS-E08 | Public site renderer | `/plugins`、detail route、`/plugins/search.json` build 通过 | external marketing-site repository (renderer check runs there) |
 
 ### F. Pipeline, GenUI, Atoms
 
@@ -271,7 +267,7 @@ pnpm tools-dev run web --daemon-port 17456 --web-port 17573
 
 | ID | 步骤 | 期望 |
 | --- | --- | --- |
-| MAN-016 | `pnpm --filter @open-design/landing-page build` | 静态 `/plugins` 和 `search.json` 生成成功 |
+| MAN-016 | Build the extracted marketing site | 静态 `/plugins` 和 `search.json` 生成成功 |
 | MAN-017 | 复制 `plugins/registry/community/open-design-marketplace.json` 到临时 URL 或本地 fixture server | daemon 能 add/search/install |
 | MAN-018 | 按 `docs/self-hosting-a-registry.md` 新建第三方 catalog | 只需替换 catalog name/url/source 两类配置，不改 daemon/web 代码 |
 | MAN-019 | 用 `od plugin publish --to marketplace-json --catalog <path>` | catalog 稳定 upsert，source 可复现 |
@@ -282,7 +278,7 @@ pnpm tools-dev run web --daemon-port 17456 --web-port 17573
 
 1. `plugins-implementation.md` §8 的 8 个 e2e gate 都通过。
 2. `pnpm guard` 和 `pnpm typecheck` 通过。
-3. contract/runtime/registry-protocol/daemon/web/landing-page 的推荐命令通过。
+3. contract/runtime/registry-protocol/daemon/web 的推荐命令通过。
 4. 至少跑过一次 `plugin-create-import` Playwright smoke。
 5. 手工确认 P2.5/P2.6/P2.7 的状态：完成则更新 plan 勾选；未完成则在发布说明里列为 deferred。
 
@@ -303,7 +299,7 @@ Registry v1 只有在以下额外条件满足后才能标为“fully done”：
 | pipeline 事件缺失 | `firePipelineForRun()` 是否在 `POST /api/runs` 路径触发 |
 | connector token 绕过 | `connector-gate.ts`、`tool-tokens.ts`、`/api/tools/connectors/execute` 二次校验 |
 | UI 装完 plugin 后找不到 | `PluginsView` tab/test id、`buildAvailablePlugins()` name matching |
-| public registry 页面缺条目 | `plugins/registry/*/open-design-marketplace.json`、`apps/landing-page/app/plugin-registry.ts` |
+| public registry 页面缺条目 | `plugins/registry/*/open-design-marketplace.json`；public renderer lives in the extracted marketing site |
 
 ## 7. 维护规则
 

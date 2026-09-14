@@ -130,6 +130,29 @@ vi.mock('../../src/collab/useProjectWorkspaceScope', async (importOriginal) => (
   ),
 }));
 
+// ProjectView also mounts `useDesignMdState` (the Continue-in-CLI staleness
+// chip), which reads the same project file list through `fetchProjectFiles` so
+// the two share ONE request in the browser instead of opening two (W82). These
+// cases measure ProjectView's own file reads through the mocked reader, above
+// the layer where that sharing happens, so the hook is stubbed out here to keep
+// the mocked call sequence describing ProjectView alone. The hook's own
+// behaviour is covered by tests/hooks/useDesignMdState.test.tsx.
+vi.mock('../../src/hooks/useDesignMdState', () => ({
+  useDesignMdState: () => ({
+    exists: false,
+    generatedAt: null,
+    transcriptMessageCount: null,
+    designSystemId: null,
+    currentArtifact: null,
+    isStale: false,
+    staleReason: null,
+    loading: false,
+    error: null,
+    refresh: async () => {},
+  }),
+  computeStale: () => ({ isStale: false, staleReason: null }),
+}));
+
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
     '../../src/providers/registry',
@@ -1108,6 +1131,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       sharedProject.id,
       conversation.id,
       workspace,
+      expect.any(AbortSignal),
     );
   });
 
@@ -1144,6 +1168,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       sharedProject.id,
       conversation.id,
       workspace,
+      expect.any(AbortSignal),
     );
   });
 
@@ -1309,6 +1334,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       sharedProjectA.id,
       conversation.id,
       workspaceA,
+      expect.any(AbortSignal),
     );
     await act(async () => {
       resolveOldWorkspaceARecovery?.([conversation]);

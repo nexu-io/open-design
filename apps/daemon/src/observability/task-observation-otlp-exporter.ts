@@ -25,6 +25,8 @@ import {
   safeTaskObservationToolName,
   safeTaskObservationUsageValueSources,
   safeTaskObservationUsageValues,
+  deliverableSyntaxFlatMetadata,
+  taskDeliverableSyntaxTelemetry,
   safeTaskObservationRuntimeVersions,
   safeTaskObservationQualityProjection,
   strategyTaskRootObservationId,
@@ -194,6 +196,9 @@ function taskTraceAttributes(
   context?: TaskObservationExportContextV1,
 ): OtlpAttribute[] {
   const limitations = safeTaskObservationLimitationCodes(aggregate.limitations);
+  const deliverableSyntax = deliverableSyntaxFlatMetadata(
+    taskDeliverableSyntaxTelemetry(aggregate),
+  );
   return attributes([
     ['langfuse.trace.name', 'open-design-strategy-task'],
     ['langfuse.session.id', aggregate.root.conversationId],
@@ -241,6 +246,9 @@ function taskTraceAttributes(
     ['langfuse.trace.metadata.coverage', jsonString(aggregate.coverage)],
     ['langfuse.trace.metadata.stage_totals', jsonString(aggregate.stageTotals)],
     ['langfuse.trace.metadata.limitations', jsonString(limitations)],
+    ...Object.entries(deliverableSyntax).map(([key, value]) => (
+      [`langfuse.trace.metadata.${key}`, value] as const
+    )),
   ]);
 }
 

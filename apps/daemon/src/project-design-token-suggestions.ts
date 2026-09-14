@@ -291,7 +291,7 @@ function normalizeComparableValue(value: string): string {
   const hex = clean.match(/#[0-9a-f]{3,8}\b/u)?.[0];
   if (hex) return expandShortHex(hex);
   const num = clean.match(/-?\d+(?:\.\d+)?(?:px|rem|em|%)?/u)?.[0];
-  if (num) return num.endsWith('px') ? num : num;
+  if (num) return num;
   return clean.replace(/\s+/gu, ' ');
 }
 

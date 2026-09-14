@@ -16,6 +16,7 @@ import {
 import {
   DESIGN_FILES_TAB,
   FileWorkspace,
+  measureWorkspaceTabBarAfterResize,
   settleManualEditFiles,
   scrollWorkspaceTabsWithWheel,
   settleManualEditExit,
@@ -23,7 +24,11 @@ import {
 import { ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT } from '../../src/components/workspace/tab-launcher';
 import { I18nProvider } from '../../src/i18n';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
-import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
+import {
+  defaultChatPanelWidthForSplit,
+  projectSplitClassName,
+  projectSplitStyle,
+} from '../../src/components/ProjectView';
 import {
   fetchProjectFileText,
   uploadProjectFiles,
@@ -674,11 +679,16 @@ describe('FileWorkspace quick switcher visual isolation', () => {
     });
     expect(getComputedStyle(composerControl).pointerEvents).toBe('auto');
     expect(getComputedStyle(composerLayer).opacity).not.toBe('0.58');
-    // Once the quick switcher closes, the composer input returns to its resting
-    // background (no longer the dimmed --bg-fill-tertiary isolation wash). The
-    // #5517 restyle makes that resting fill a subtle color-mix tint of
-    // --bg-panel/--bg-subtle, which resolves to white in the test theme.
-    expect(getComputedStyle(composerInputWrap).background).toBe('rgb(255, 255, 255)');
+    /*
+     * 关掉快速切换之后,输入框要退回它自己的底色 —— 判据是「**不再是**那层
+     * `--bg-fill-tertiary` 隔离罩」,而不是某个具体颜色值。
+     *
+     * 原来这里钉的是 `rgb(255, 255, 255)`,依据是 #5517 那次改版把静息底色做成
+     * `--bg-panel`/`--bg-subtle` 的 `color-mix` 微调、"在测试主题里解析成白"。
+     * 可 jsdom 解析不了 `color-mix`,那一格现在返回 `rgba(0, 0, 0, 0)` ——
+     * 钉具体颜色等于钉住了 jsdom 的解析能力,不是钉住产品行为。
+     */
+    expect(getComputedStyle(composerInputWrap).background).not.toBe('var(--bg-fill-tertiary)');
   });
 });
 
@@ -3374,6 +3384,18 @@ describe('projectSplitClassName', () => {
     });
     expect(projectSplitStyle(true, 512, 'minmax(420px, 1fr)')).toBeUndefined();
   });
+
+  it('starts an uncustomized wide project at an equal chat/preview split', () => {
+    // 1600 total − the 8px handle = two 796px content columns. This must not
+    // regress to the old fixed 460px default or its former 720px ceiling.
+    expect(defaultChatPanelWidthForSplit(1600)).toBe(796);
+  });
+
+  it('keeps the workspace minimum when the viewport is too narrow for 1:1', () => {
+    // At this width an exact half would leave the preview below its existing
+    // 400px minimum, so the established drag boundary wins.
+    expect(defaultChatPanelWidthForSplit(760)).toBe(352);
+  });
 });
 
 describe('scrollWorkspaceTabsWithWheel', () => {
@@ -3529,6 +3551,43 @@ describe('scrollWorkspaceTabsWithWheel', () => {
 
     expect(currentTarget.scrollLeft).toBe(200);
     expect(preventDefault).not.toHaveBeenCalled();
+  });
+});
+
+describe('measureWorkspaceTabBarAfterResize', () => {
+  it('scrolls the complete active file tab back into view after the workspace narrows', () => {
+    const activeTab = {
+      getBoundingClientRect: () => ({ left: 248, right: 358 }),
+    } as HTMLElement;
+    const tabBar = {
+      clientWidth: 260,
+      scrollLeft: 0,
+      scrollWidth: 520,
+      getBoundingClientRect: () => ({ left: 0, right: 260 }),
+      querySelector: (selector: string) => selector === '.ws-tab.active' ? activeTab : null,
+    } as unknown as HTMLDivElement;
+
+    expect(measureWorkspaceTabBarAfterResize(tabBar)).toBe(true);
+    // Only 12px of the active tab was visible after the drag. Preserve the
+    // tab's ellipsis protection, but reveal the whole 110px tab viewport so
+    // its filename can show the longest prefix that actually fits.
+    expect(tabBar.scrollLeft).toBe(98);
+  });
+
+  it('does not move the strip when the active tab already fits after widening', () => {
+    const activeTab = {
+      getBoundingClientRect: () => ({ left: 82, right: 192 }),
+    } as HTMLElement;
+    const tabBar = {
+      clientWidth: 360,
+      scrollLeft: 40,
+      scrollWidth: 520,
+      getBoundingClientRect: () => ({ left: 0, right: 360 }),
+      querySelector: () => activeTab,
+    } as unknown as HTMLDivElement;
+
+    expect(measureWorkspaceTabBarAfterResize(tabBar)).toBe(true);
+    expect(tabBar.scrollLeft).toBe(40);
   });
 });
 
@@ -4347,6 +4406,115 @@ describe('FileWorkspace empty-project generation contract', () => {
 
     expect(screen.getByTestId('design-files-syncing')).toBeTruthy();
     expect(screen.queryByTestId('design-files-empty')).toBeNull();
+  });
+
+  // OPEND-2283. An empty list and a list that has not arrived read identically
+  // here, and the CTAs below ("新建草图" / "上传") actively mislead someone whose
+  // project does have files. The panel already draws this distinction for a
+  // team mirror that is still downloading; a local list that has not returned
+  // yet deserves the same treatment.
+  it('does not offer the empty-project CTAs before an authoritative file list arrives', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative={false}
+      />,
+    );
+
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+  });
+
+  // Suppressing the empty-state CTAs removed a false claim but left the panel
+  // blank, which reads as "stuck" rather than "loading" -- a worse first
+  // impression than the wrong copy it replaced. Say we are working instead.
+  it('shows a loading placeholder while the file list is still unknown', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative={false}
+      />,
+    );
+
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+    expect(screen.getByTestId('design-files-loading')).toBeTruthy();
+  });
+
+  it('offers them once the list is known to be empty', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+  });
+
+  // OPEND-2283. Read-only is fail-closed while ownership is still unproven, and
+  // that is correct — but the banner states a FACT ("this is a shared project"),
+  // and during that window the fact is unknown. Entering your own personal
+  // project cold showed it for seconds before the workspace context resolved.
+  // Disable the controls, do not assert the reason.
+  it('does not claim a project is shared while ownership is still unproven', () => {
+    const file = workspaceFile('artifact.html');
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [file.name], active: file.name }}
+        onTabsStateChange={vi.fn()}
+        viewerOnly
+      />,
+    );
+
+    expect(document.querySelector('.workspace-readonly-notice')).toBeNull();
+  });
+
+  it('states the reason once the project is confirmed shared', () => {
+    const file = workspaceFile('artifact.html');
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [file.name], active: file.name }}
+        onTabsStateChange={vi.fn()}
+        viewerOnly
+        readonlyNotice="这是 麻薯 创建的共享项目。"
+      />,
+    );
+
+    const notice = document.querySelector('.workspace-readonly-notice');
+    expect(notice).not.toBeNull();
+    expect(notice?.textContent).toContain('麻薯');
   });
 
   it('keeps an already-materialized viewer and header actions mounted during route revalidation', () => {

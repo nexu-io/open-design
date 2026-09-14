@@ -108,6 +108,27 @@ describe('listMessages', () => {
       message: 'workspace context is required',
     });
   });
+
+  it('cancels a transcript HTTP read without dropping its workspace identity', async () => {
+    const controller = new AbortController();
+    const context = personalWorkspaceContext();
+    let requestSignal: AbortSignal | null | undefined;
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) => {
+      requestSignal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = listMessages('project-1', 'conversation-1', context, controller.signal);
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'x-od-workspace-id': context.workspaceId,
+      'x-od-workspace-member-id': context.workspaceMemberId,
+    });
+    expect(requestSignal).toBe(controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'ProjectMessageListError' });
+  });
 });
 
 describe('createProject local plugin identity', () => {

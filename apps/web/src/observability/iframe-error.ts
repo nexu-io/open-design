@@ -20,6 +20,17 @@ import { scrubFilePath } from '../analytics/scrub';
 
 const LOAD_TIMEOUT_MS = 15000;
 
+const PREVIEW_RESOURCE_TAGS = new Set([
+  'script',
+  'link',
+  'img',
+  'iframe',
+  'audio',
+  'video',
+  'source',
+  'track',
+]);
+
 interface TrackIframeOptions {
   iframe: HTMLIFrameElement;
   artifactId?: string;
@@ -191,6 +202,7 @@ export function reportPreviewIframeMessage(
   if (message.event === 'white_screen') {
     reportSafetyEvent('client_preview_white_screen', {
       ...common,
+      monitoring_kind: 'no_visible_paint_after_timeout',
       reason: 'no_visible_paint_after_timeout',
       ready_state: boundedText(message.ready_state, 32),
       visibility_state: boundedText(message.visibility_state, 32),
@@ -207,6 +219,7 @@ export function reportPreviewIframeMessage(
   if (message.event === 'deck_stage_unscaled') {
     const measurement = {
       ...common,
+      monitoring_kind: 'stage_scale_collapsed',
       reason: 'stage_scale_collapsed',
       // Which authored shape collapsed: the canonical `.deck-stage`, a
       // `<deck-stage>` shadow canvas, or a template `.stage`. Frequency alone
@@ -234,6 +247,7 @@ export function reportPreviewIframeMessage(
   if (message.event === 'resource_error') {
     reportSafetyEvent('client_preview_resource_error', {
       ...common,
+      monitoring_kind: previewResourceMonitoringKind(message.resource_tag),
       resource_tag: boundedText(message.resource_tag, 32),
       resource_url: sanitizedResourceUrl,
     });
@@ -242,6 +256,7 @@ export function reportPreviewIframeMessage(
 
   reportSafetyEvent('client_preview_runtime_error', {
     ...common,
+    monitoring_kind: message.event,
     error_origin: message.event,
     error_name: boundedText(message.name, 120),
     error_message: sanitizedMessage,
@@ -290,6 +305,7 @@ export function reportPreviewTransportRecovery(
     artifact_id: options.artifactId,
     artifact_kind: options.artifactKind,
     project_id: options.projectId,
+    monitoring_kind: 'srcdoc_transport_unverified',
     reason: 'srcdoc_transport_unverified',
     transport_signal: options.signal,
     transport_stage: transportStage,
@@ -309,6 +325,11 @@ export function reportPreviewTransportRecovery(
     viewport_height: boundedNumber(options.viewportHeight),
     timeout_ms: boundedNumber(options.timeoutMs),
   });
+}
+
+function previewResourceMonitoringKind(value: unknown): string {
+  const tag = boundedText(value, 32)?.toLowerCase();
+  return `resource_tag:${tag && PREVIEW_RESOURCE_TAGS.has(tag) ? tag : 'other'}`;
 }
 
 function boundedText(value: unknown, limit: number): string | undefined {

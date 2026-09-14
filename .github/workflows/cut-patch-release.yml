@@ -1,18 +1,18 @@
 name: cut-patch-release
 # Every Thursday 09:00 Asia/Shanghai, cut the next PATCH release — but only once
-# this week's minor (the branch cut-release created on Tuesday) has actually
-# shipped stable.
+# the release it would stack on has actually shipped stable.
 #
 # This is the Tuesday cut-release flow with three deltas:
 #   1. It bumps the PATCH, not the minor: highest release/vX.Y.Z -> X.Y.(Z+1)
 #      (e.g. 0.14.0 -> 0.14.1). Like cut-release, the branch is cut from main HEAD.
-#   2. A pre-flight guard: the current line's minor base X.Y.0 must be a PUBLISHED
-#      stable GitHub Release (tag open-design-vX.Y.0, isDraft=false, isPrerelease=false
-#      — i.e. release-stable ran `gh release edit --draft=false --latest`). If it is
-#      not published yet, do NOT cut a branch or launch a prerelease publication;
-#      instead post a Feishu notice that the patch cut was skipped, and stop. The
-#      independent scheduled Windows canary remains an advisory product-smoke
-#      signal and does not block this branch cut or its prerelease package.
+#   2. A pre-flight guard, the same one cut-release applies to the Tuesday minor:
+#      the PREVIOUS release branch must be a PUBLISHED stable GitHub Release
+#      (isDraft=false, isPrerelease=false — i.e. release-stable ran
+#      `gh release edit --draft=false --latest`). If it is not published yet, do
+#      NOT cut a branch or launch a prerelease publication; instead post a Feishu
+#      notice that the patch cut was skipped, and stop. The independent scheduled
+#      Windows canary remains an advisory product-smoke signal and does not block
+#      this branch cut or its prerelease package.
 #   3. On the happy path it is otherwise identical to cut-release: create
 #      release/vX.Y.(Z+1), bump apps/packaged/package.json, push with the App token
 #      (which triggers notify-release-feishu -> prerelease build + Feishu card), and
@@ -35,7 +35,7 @@ on:
         required: false
         default: ''
       force:
-        description: 'Skip the "Tuesday minor is published" guard and cut anyway'
+        description: 'Skip the "previous release is published" guard and cut anyway'
         required: false
         type: boolean
         default: false
@@ -72,74 +72,23 @@ jobs:
       - name: Compute next patch version
         id: ver
         env:
-          # Never interpolate the raw input into the shell; pass via env and validate.
+          # Never interpolate the raw input into the script; pass via env and validate.
           INPUT_VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          # Decide the final version V FIRST: a validated manual override wins,
-          # otherwise bump the patch of the highest release branch.
-          if [ -n "$INPUT_VERSION" ]; then
-            # Strict x.y.z, digits only — rejects shell metacharacters, newlines, etc.
-            if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "::error::Invalid version '$INPUT_VERSION' (expected x.y.z, digits only)"
-              exit 1
-            fi
-            V="$INPUT_VERSION"
-          else
-            latest=$(git ls-remote --heads origin 'release/v*' \
-              | sed -E 's#.*/release/v##' \
-              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
-              | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
-            if [ -z "$latest" ]; then
-              echo "::error::No release/vX.Y.Z branch found to base a patch on."
-              exit 1
-            fi
-            major=${latest%%.*}; rest=${latest#*.}; minor=${rest%%.*}; patch=${rest#*.}
-            V="${major}.${minor}.$((patch+1))"
-          fi
-          # V is now guaranteed to match ^[0-9]+\.[0-9]+\.[0-9]+$.
-          # Gate on the minor base of the FINAL V — never the highest branch — so a
-          # manual `version=` on a different line is checked against ITS own minor
-          # (e.g. version=0.15.1 gates open-design-v0.15.0, not the latest 0.14.0).
-          vmajor=${V%%.*}; vrest=${V#*.}; vminor=${vrest%%.*}
-          MINOR_BASE="${vmajor}.${vminor}.0"
-          {
-            echo "version=$V"
-            echo "branch=release/v$V"
-            echo "minor_base=$MINOR_BASE"
-            echo "minor_tag=open-design-v$MINOR_BASE"
-          } >> "$GITHUB_OUTPUT"
-          echo "Cutting patch v$V (branch release/v$V); gating on stable v$MINOR_BASE"
+        run: node --experimental-strip-types .github/scripts/release/resolve-patch-cut.ts resolve
 
-      # Guard: the minor this patch sits on (the Tuesday cut) must already be a
-      # PUBLISHED stable GitHub Release. release-stable publishes with
+      # Guard: the release this patch stacks on must already be a PUBLISHED stable
+      # GitHub Release. release-stable publishes with
       # `gh release edit --draft=false --latest` and rolls the tag back on failure,
       # so a non-draft, non-prerelease release is the ground-truth "shipped" signal.
-      - name: Check the Tuesday minor is published
+      - name: Check the previous release is published
         id: guard
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          MINOR_TAG: ${{ steps.ver.outputs.minor_tag }}
+          GATE_TAG: ${{ steps.ver.outputs.gate_tag }}
           FORCE: ${{ inputs.force }}
-        run: |
-          set -euo pipefail
-          if [ "${FORCE:-false}" = "true" ]; then
-            echo "force=true: skipping the publish guard"
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # "published" = the release exists AND is neither a draft nor a prerelease.
-          # gh's --jq evaluates `(.isDraft or .isPrerelease) | not` to true only when
-          # both are false. A missing release makes `gh release view` exit non-zero,
-          # so the `|| published=false` fallback treats "not found" as "not published".
-          published=$(gh release view "$MINOR_TAG" \
-            --repo nexu-io/open-design \
-            --json isDraft,isPrerelease \
-            --jq '(.isDraft or .isPrerelease) | not' 2>/dev/null) || published=false
-          echo "release $MINOR_TAG -> published=$published"
-          echo "published=$published" >> "$GITHUB_OUTPUT"
+        run: node --experimental-strip-types .github/scripts/release/resolve-patch-cut.ts gate
 
-      # ---- Skip path: minor not published yet -> no branch/release build; notify and stop ----
+      # ---- Skip path: previous release not published yet -> no branch/release build; notify and stop ----
       # feishu-notice.ts imports only node:crypto (no workspace deps), so the
       # setup-node above is all it needs — no pnpm install, same as feishu.ts.
       - name: Notify Feishu that the patch cut was skipped
@@ -150,19 +99,19 @@ jobs:
           NOTICE_TITLE: "⏭️ 周四小版本已跳过"
           NOTICE_TEMPLATE: "orange"
           NOTICE_BODY: |
-            本周周二的 release **v${{ steps.ver.outputs.minor_base }}** 还没发布成功（stable GitHub Release 尚未 published），本次周四小版本 **v${{ steps.ver.outputs.version }}** 的自动切分支与构建已跳过。
+            上一个 release **v${{ steps.ver.outputs.gate_version }}** 还没发布成功（stable GitHub Release 尚未 published），本次周四小版本 **v${{ steps.ver.outputs.version }}** 的自动切分支与构建已跳过。
 
-            待 v${{ steps.ver.outputs.minor_base }} promote 到 stable 后，可手动重新触发本工作流（或用 `force` 强制切分支）。
+            待 v${{ steps.ver.outputs.gate_version }} promote 到 stable 后，可手动重新触发本工作流（或用 `force` 强制切分支）。
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
 
       - name: Stop here when skipping
         if: steps.guard.outputs.published != 'true'
         run: |
-          echo "::notice::Tuesday minor v${{ steps.ver.outputs.minor_base }} is not published; patch cut skipped."
+          echo "::notice::Previous release v${{ steps.ver.outputs.gate_version }} is not published; patch cut skipped."
           exit 0
 
-      # ---- Happy path: minor published -> cut the patch, same as cut-release ----
+      # ---- Happy path: previous release published -> cut the patch, same as cut-release ----
       - name: Bail out if the branch already exists
         if: steps.guard.outputs.published == 'true'
         env:

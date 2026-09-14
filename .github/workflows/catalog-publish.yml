@@ -43,12 +43,18 @@ jobs:
       options: --ipc=host
     timeout-minutes: 60
     outputs:
-      source_commit: ${{ steps.meta.outputs.source_commit }}
+      source_commit: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
+
+      # Container uid/gid differs from the runner-owned workspace. Checkout's
+      # set-safe-directory did not cover later git calls; Meta then wrote an
+      # empty source_commit because `sh -e` does not fail command substitution.
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Enable Corepack
         run: corepack enable
@@ -59,19 +65,15 @@ jobs:
       - name: Build tools-release
         run: pnpm --filter @open-design/tools-release build
 
-      - name: Meta
-        id: meta
-        run: echo "source_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: Export catalog
         env:
-          CATALOG_SOURCE_COMMIT: ${{ steps.meta.outputs.source_commit }}
+          CATALOG_SOURCE_COMMIT: ${{ github.sha }}
           CATALOG_STAGING_DIR: .tmp/catalog-snapshot
         run: pnpm exec tools-release export-catalog
 
       - name: Render previews
         env:
-          CATALOG_SOURCE_COMMIT: ${{ steps.meta.outputs.source_commit }}
+          CATALOG_SOURCE_COMMIT: ${{ github.sha }}
           CATALOG_STAGING_DIR: .tmp/catalog-snapshot
         run: pnpm exec tools-release render-catalog-previews
 
@@ -80,7 +82,7 @@ jobs:
 
       - name: Pack catalog
         env:
-          CATALOG_SOURCE_COMMIT: ${{ steps.meta.outputs.source_commit }}
+          CATALOG_SOURCE_COMMIT: ${{ github.sha }}
           CATALOG_STAGING_DIR: .tmp/catalog-snapshot
         run: pnpm exec tools-release pack-catalog
 

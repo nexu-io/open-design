@@ -42,7 +42,7 @@ on `/api/agents` for the AMR model list.
 - Do not remove `/api/agents` AMR model fields in this change.
 - Do not add new glossary terms to `CONTEXT.md`.
 - Do not implement a broader generic runtime model endpoint.
-- Do not change AMR execution away from `vela agent run --runtime opencode`.
+- Do not change AMR execution away from `vela agent run`.
 
 ### Success Criteria
 
@@ -65,7 +65,7 @@ on `/api/agents` for the AMR model list.
   filters media model prefixes, deduplicates, and orders preferred chat
   models. Source: `apps/daemon/src/runtimes/defs/amr.ts:39-117,120-132`.
 - AMR declares `fallbackModels: []`, disables custom model ids, and keeps
-  execution on `vela agent run --runtime opencode`. Source:
+  execution on `vela agent run`. Source:
   `apps/daemon/src/runtimes/defs/amr.ts:188-208`.
 - Generic runtime probing calls each runtime's `fetchModels` during
   `detectAgents`, maps successful results to `modelsSource: "live"`, and

@@ -19,6 +19,25 @@ This directory owns OpenDesign plugin content and plugin authoring material.
 - Prefer TypeScript for project-owned scripts. Avoid adding new `.js`, `.mjs`, or `.cjs` files unless they are generated, vendored, or explicitly allowlisted by `scripts/guard.ts`.
 - Keep example plugins concise and agent-readable. Move long reference material to `references/` and tell the agent when to load it.
 
+### HTML-backed preview contract
+
+- When a bundled example's `template.json` declares `format: "html"` or carries
+  `referenceHtml`, commit the real rendered sample as `example.html`. Do not use
+  a screenshot or placeholder image as the canonical preview for an HTML
+  artifact.
+- Point `od.preview` at that source with `type: "html"` and
+  `entry: "./example.html"`. Use `motion: "scroll"` for documents,
+  `motion: "deck"` for slide navigation, and `motion: "static"` only for a
+  fixed, non-scrolling surface.
+- Keep `od.useCase.exampleOutputs` and `od.context.assets` aligned with
+  `./example.html`. A poster such as `example.webp` may remain as a secondary or
+  derived asset, but it must not replace the HTML preview source.
+- When `referenceHtml` is present, materialize `example.html` from it (or from
+  the same deterministic generator) and keep their rendered source in sync.
+- Before submitting, verify `/api/plugins/<id>/preview` returns `200` with an
+  HTML content type. In preview-baker output, the plugin must render as
+  `+ <id>`, not `skip (status 404)`.
+
 ## Validation
 
 For plugin content changes, run:

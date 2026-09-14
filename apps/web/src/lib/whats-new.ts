@@ -68,11 +68,12 @@ export function whatsNewNotesFromBody(body: string): string[] {
 export function localizedWhatsNewContent(
   content: WhatsNewContent,
   locale: string,
-): { title: string; body: string; linkUrl: string | null } {
+): { title: string; body: string; linkUrl: string | null; ctaLabel: string | null } {
   const override = content.locales?.[locale] ?? content.locales?.[locale.split('-')[0] ?? ''] ?? null;
   return {
     title: override?.title ?? content.title,
     body: override?.body ?? content.body,
     linkUrl: override?.linkUrl ?? content.linkUrl ?? null,
+    ctaLabel: override?.ctaLabel ?? content.ctaLabel ?? null,
   };
 }

@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { dirname, join, sep } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import type { PackagedConfig } from "../src/config.js";
 import {
   confirmPackagedLauncherRuntime,
+  sameExecutablePath,
   type PackagedLauncherRuntime,
   resolvePackagedLauncherRuntime,
 } from "../src/launcher-runtime.js";
@@ -100,6 +101,25 @@ async function writeActiveMacPayloadFixture(
 }
 
 describe("resolvePackagedLauncherRuntime", () => {
+  it("recognizes the same executable through a symlinked root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-packaged-executable-identity-"));
+    try {
+      const physicalRoot = join(root, "physical");
+      const aliasRoot = join(root, "alias");
+      const executable = join(physicalRoot, "Open Design.app", "Contents", "MacOS", "Open Design");
+      await mkdir(dirname(executable), { recursive: true });
+      await writeFile(executable, "");
+      await symlink(physicalRoot, aliasRoot, "dir");
+
+      await expect(sameExecutablePath(
+        join(aliasRoot, "Open Design.app", "Contents", "MacOS", "Open Design"),
+        executable,
+      )).resolves.toBe(true);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it.each([
     {
       expected: "https://relay.payload.example/v1",

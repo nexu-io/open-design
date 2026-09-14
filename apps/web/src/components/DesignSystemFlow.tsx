@@ -2840,7 +2840,12 @@ export function DesignSystemDetailView({
           <strong>{system.title}</strong>
           <span>{published ? t('ds.published') : t('dsManager.statusDraft')}</span>
         </div>
-        <div className="ds-project-chat__pane">
+        {/* `chat-skin` opts this pane into the shared chat skin in
+            styles/viewer/routines.css. Without it the ChatPane below renders
+            outside `.app` (ProjectView's shell) and silently loses the whole
+            chat override layer — header chrome, transcript ground, bubble
+            widths, assistant prose metrics. */}
+        <div className="ds-project-chat__pane chat-skin">
           <ChatPane
             key={`${activeConversationId ?? 'design-system-chat'}:${chatSeed?.id ?? 'ready'}`}
             messages={chatMessages}

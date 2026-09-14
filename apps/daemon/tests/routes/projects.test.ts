@@ -272,9 +272,107 @@ describe('GET /api/projects/:id resolvedDir', () => {
       role: 'assistant',
       content: 'first answer',
     });
+    // 指针不继承(它们指向源会话那次 run),结论继承 —— 见
+    // `settledForkVerdict` 和 `tests/routes/conversation-fork-run-verdict.test.ts`。
     expect(forkMessagesBody.messages[1]?.runId).toBeUndefined();
-    expect(forkMessagesBody.messages[1]?.runStatus).toBeUndefined();
+    expect(forkMessagesBody.messages[1]?.runStatus).toBe('succeeded');
     expect(forkMessagesBody.messages[1]?.lastRunEventId).toBeUndefined();
+
+    /*
+     * 分叉分界线落在**新会话**里(2026-08-26 用户真机指认两次:
+     * 「为什么点了 fork 按钮,这个分界没出现??」「要在新的 fork 里出现,
+     * 而不是旧会话里出现啊」)。
+     *
+     * 点完分叉页面就跳到新会话,人此刻站在这里;那行脚注「上文已带过来,接着说就行」
+     * 也只有对着这一截复制过来的上下文才说得通。盖在源会话上等于对着原地没动的人
+     * 说「已经带过来了」。标题用**源会话**的标题 —— 这条线回答的是「上面这些从哪来」。
+     * 只盖最后一条:线是那一截的下边界,中间每条都盖就成了一堆线。
+     */
+    const forkedMarkers = forkMessagesBody.messages.map(
+      (message) => (message as { forkedInto?: { title: string } }).forkedInto,
+    );
+    expect(forkedMarkers.at(-1)).toMatchObject({ title: 'Source' });
+    expect(forkedMarkers.slice(0, -1).every((marker) => marker == null)).toBe(true);
+
+    // 源会话一条都不许盖
+    const sourceAfterResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${sourceId}/messages`,
+    );
+    const sourceAfterBody = (await sourceAfterResp.json()) as {
+      messages: Array<{ forkedInto?: unknown }>;
+    };
+    expect(sourceAfterBody.messages.every((message) => message.forkedInto == null)).toBe(true);
+  });
+
+  it('round-trips forkedInto on an assistant message so the fork divider survives a reload', async () => {
+    // 设计稿第 38 格:分叉之后在原会话那条助手消息上**原地**落一条分界。
+    // 分界只有落库才「刷新之后还在」—— 契约上的 `ChatMessage.forkedInto`
+    // 之前没有对应的存储列,PUT 上来的值在 upsert 里被整个丢掉。
+    const projectId = `fork-divider-${Date.now()}`;
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Fork divider fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResp.status).toBe(200);
+
+    const convResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Source', sessionMode: 'chat' }),
+    });
+    expect(convResp.status).toBe(200);
+    const convId = ((await convResp.json()) as { conversation: { id: string } }).conversation.id;
+
+    const messageId = 'fork-divider-assistant-1';
+    const forkedInto = { title: 'Source', conversationId: 'conv-fork-target' };
+    const saveResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${convId}/messages/${messageId}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: messageId,
+          role: 'assistant',
+          content: 'answer',
+          forkedInto,
+        }),
+      },
+    );
+    expect(saveResp.status).toBe(200);
+    const savedBody = (await saveResp.json()) as {
+      message: { forkedInto?: { title: string; conversationId?: string } };
+    };
+    expect(savedBody.message.forkedInto).toEqual(forkedInto);
+
+    const listResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${convId}/messages`,
+    );
+    expect(listResp.status).toBe(200);
+    const listBody = (await listResp.json()) as {
+      messages: Array<{ id: string; forkedInto?: { title: string; conversationId?: string } }>;
+    };
+    expect(listBody.messages.find((m) => m.id === messageId)?.forkedInto).toEqual(forkedInto);
+
+    // A later snapshot that carries no fork marker must clear it, otherwise an
+    // undone fork would leave a permanent divider.
+    const clearResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${convId}/messages/${messageId}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: messageId, role: 'assistant', content: 'answer' }),
+      },
+    );
+    expect(clearResp.status).toBe(200);
+    expect(
+      ((await clearResp.json()) as { message: { forkedInto?: unknown } }).message.forkedInto,
+    ).toBeUndefined();
   });
 
   it('forks from a client-supplied snapshot when the fork point was never persisted', async () => {
@@ -370,11 +468,12 @@ describe('GET /api/projects/:id resolvedDir', () => {
       'enrich it',
       'partial answer before reset',
     ]);
-    // Fresh ids, and the dead run pointers are not inherited.
+    // Fresh ids, and the dead run pointers are not inherited. The verdict is:
+    // that turn really did fail, and the copy must keep saying so.
     expect(forkMessages.map((m) => m.id)).not.toContain('ghost-assistant-1');
     expect(forkMessages[1]).toMatchObject({ role: 'assistant', content: 'partial answer before reset' });
     expect(forkMessages[1]?.runId).toBeUndefined();
-    expect(forkMessages[1]?.runStatus).toBeUndefined();
+    expect(forkMessages[1]?.runStatus).toBe('failed');
     expect(forkMessages[1]?.lastRunEventId).toBeUndefined();
   });
 

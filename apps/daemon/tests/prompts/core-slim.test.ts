@@ -36,7 +36,41 @@ const repoRoot = path.resolve(__dirname, '../../../..');
 // geometry, provenance check) is load-bearing product behavior that could not
 // be delegated to the web-prototype skill, because it must hold for every
 // skill and for skill-less runs.
-const SLIM_CORE_BYTE_BUDGET = 29_696;
+//
+// 29_696 → 30_720: five option-authoring rules (option cap, radio-vs-select by
+// option count, the `group`/`trailingLabel` fields, plain-language labels, and
+// a 40-character label ceiling). Cost after compressing them from prose to
+// short imperatives: 644B, down from 1_315B in the first draft.
+//
+// Why they have to live here, at per-turn cost:
+//   - `### <question-form> Writing Guidelines` is unconditional in this charter,
+//     so every slim run already pays ~4.8KB for it. These rules govern the forms
+//     that section authorizes; splitting them out would leave the authorization
+//     without its quality bar.
+//   - There is no "this turn will emit a form" signal at compose time. The 51
+//     conditional sections in `composeSystemPrompt` key on session mode, design
+//     system, and project shape — none of them predicts a clarification turn.
+//     The one gate that touches this (`isSlimCharterHead`, system.ts:1432) runs
+//     the other way: it *suppresses* the duplicate block precisely because the
+//     charter already carries it.
+//   - The `discovery-question-form` atom is on-demand, but OD Next only. Moving
+//     the rules there would lose them for every skill-less slim run — the same
+//     reason the imagery contract above could not be delegated.
+//
+// Sized to the next 1KiB step rather than to fit: the previous raise left only
+// 44B of slack, so the next person to add a sentence hit this wall. 30_720
+// restores ~424B of headroom.
+//
+// 30_720 → 31_744: +318B for the render-check reply rule (W81). The model was
+// telling users 「桌面渲染服务暂不可用，本轮未能生成截图预览」 because this
+// section used to say "state that clearly" — see
+// `render-check-user-copy.test.ts`. Saying where a failed render goes instead
+// (tool output and daemon logs, never the visible reply) costs prose that
+// "state that clearly" did not, and it has to live here: the render check is
+// in the always-on charter, so a skill-less slim run must carry the rule too.
+// Sized to the next 1KiB step again rather than to fit — landing at 104B of
+// slack would just rebuild the wall this comment was written about.
+const SLIM_CORE_BYTE_BUDGET = 31_744;
 
 describe('renderSlimCoreCharter — byte budget', () => {
   it('stays under the byte budget in both execution profiles', () => {
@@ -74,14 +108,49 @@ describe('renderSlimCoreCharter — frozen protocol markers', () => {
     for (const value of ['pick_direction', 'brand_spec', 'reference_match']) {
       expect(charter).toContain(`\`${value}\``);
     }
-    for (const control of ['direction-cards', 'datetime-local', 'switch']) {
+    for (const control of ['datetime-local', 'switch']) {
       expect(charter).toContain(control);
     }
     expect(charter).toContain('allowCustom');
   });
 
-  it('requires a recommended default prefill on every form question', () => {
-    expect(charter).toContain('provide a sensible default for each question');
+  /**
+   * T69(2026-09-07):设计风格选择题从提示词整题下线,产品逐字「**不问了**」。
+   * 原用例断言的是这份 charter **教** `direction-cards` 怎么用,现在反过来守它不再教。
+   * 渲染器那一路仍然认得这个类型(休眠件的安全网),两边**故意不相等** ——
+   * 判据写在 `e2e/tests/question-form-type-parity.test.ts` 的 `DORMANT_TYPES`。
+   */
+  it('不再向模型提供设计风格选择题', () => {
+    expect(charter).not.toContain('direction-cards');
+    expect(charter).not.toContain('visual-style catalog');
+  });
+
+  /**
+   * OPEND-2707(2026-09-08 裁决:「改彻底,提示词也改」)。
+   *
+   * 澄清卡的每题副标题(`help`)已经从渲染层撤掉 —— `QuestionForm.tsx` 不再画它,
+   * `composio.css` 的 `.qf-help` 规则一并删了。但表单契约这一句还在**指路**:
+   * 「put necessary context in the title or the individual question labels/help
+   * instead」。留着它,模型就会继续往 `help` 里写上下文,而那段文字写完直接丢掉 ——
+   * 比不写更糟,因为模型以为自己已经交代过了。
+   *
+   * 上下文的去处现在只有两个:表单标题,或那道题自己的 label。
+   *
+   * 这里断言的是**组装后的 charter**,不是源码字节:`renderSlimCoreCharter`
+   * 已经把模板字符串求过值,所以 /`help`/ 这种带反引号的判据在这里是可靠的
+   * (源码上直接搜会因为 \\` 转义恒绿 —— 见
+   * `e2e/tests/question-form-visual-style-retired.test.ts` 抬头那段事故记录)。
+   */
+  it('不再把每题副标题列成上下文的去处', () => {
+    expect(charter).toContain(
+      'put necessary context in the title or the individual question labels instead',
+    );
+    expect(charter).not.toContain('labels/help');
+    expect(charter).not.toContain('`help`');
+  });
+
+  it('requires recommended defaults', () => {
+    expect(charter).toContain('provide a sensible default for each non-visual question');
     expect(charter).toContain('Use `defaultValue` to preselect an answer');
     expect(charter).toContain("`defaultValue` must match an option's `value`");
   });
@@ -331,7 +400,18 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     }
   });
 
-  it('keeps the injected direction-picker atom explicitly opt-in', () => {
+  /**
+   * T69(2026-09-07):`direction-picker` atom 不再提供选择器,改成**自己定方向**。
+   *
+   * 这个 atom 是这次下线里最容易漏的一处 —— 它不在
+   * `e2e/tests/question-form-type-parity.test.ts` 那份六条路清单里,却被
+   * `od-default`(默认设计路由)等五个官方场景挂在 `plan` 阶段整段拼进系统提示词,
+   * 正是本用例在证明的那件事。只改那六条、留着它,默认路由照旧会教模型出方向卡。
+   *
+   * 原用例守的是「这个 atom 只在用户明确要求时才弹选择器」;产品裁决之后
+   * **连"明确要求"这一档也没有了**,所以断言换成:它教的是怎么定方向,不是怎么问。
+   */
+  it('注入的 direction-picker atom 自己定方向,不再问用户', () => {
     const directionAtom = readFileSync(
       path.join(repoRoot, 'plugins/_official/atoms/direction-picker/SKILL.md'),
       'utf8',
@@ -349,14 +429,26 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
       activeStageBlocks: [stageBlock],
     });
 
+    // 防真空:atom 的正文确实拼进来了,否则底下那几条 `not.toContain` 会因为
+    // 「整段根本没出现」而集体假绿
+    expect(out).toContain('# Direction picker');
+    expect(out).toContain('**Do not ask the user to choose a visual direction.**');
     expect(out).toContain(
-      'The presence of this atom or the `plan` stage does not trigger a picker',
+      'Asking the user to pick, compare, or confirm a visual direction.',
     );
-    expect(out).toContain('Do not\nemit direction cards proactively');
-    expect(out).toContain(
-      'When the user has not explicitly requested\noptions, infer a fitting direction',
-    );
-    expect(out).not.toContain(
+    // 三条解析顺序还在:设计系统 → 用户给的品牌源 → 自己推断
+    expect(out).toContain('An active design system');
+    expect(out).toContain('infer the best-matching direction yourself');
+
+    /* 否定断言只对着 **atom 正文**,不是整份系统提示词 —— 后者当然还会讲
+       `question-form`(那是别的题型的合法用法),对着 `out` 断言会永远红。
+
+       只钉 `direction-cards` 这一个名字。atom 里那句「不要用 question-form 问方向」
+       **是要留的**:`<question-form>` 本来就是模型在别处学过的通用能力,
+       这里点它的名是在**划范围**,不是在泄露一个本该藏起来的能力 ——
+       和 `direction-cards` 不同,后者除了问设计风格没有第二种用途。 */
+    expect(directionAtom).not.toContain('direction-cards');
+    expect(directionAtom).not.toContain(
       'The direction-picker atom asks the agent to draft',
     );
   });
@@ -418,7 +510,7 @@ describe('composeSystemPrompt — slim payload gates (metadata facts / memory / 
     expect(slim).toContain('- **aspectRatio**: 1:1');
   });
 
-  it('compresses the memory scaffolding under slim while keeping headings and card shapes', () => {
+  it('compresses the memory scaffolding under slim while keeping supported card shapes', () => {
     const memoryInput = {
       ...base,
       memoryBody: '### Profile\n\nDense layouts.\n\n### Verified rules\n\n- No pure black.',
@@ -427,13 +519,9 @@ describe('composeSystemPrompt — slim payload gates (metadata facts / memory / 
     const classic = composeSystemPrompt({ ...memoryInput, promptCoreVariant: undefined });
     for (const marker of [
       '## Personal memory (auto-extracted from past chats)',
-      '## Intent gateway — turn short asks into a brief',
       '## Self-verify against your verified rules',
-      '## Propose new verified rules from corrections',
-      '<od-card type="task-brief">',
       '<od-card type="memory-applied">',
       '<od-card type="verify-scorecard">',
-      '<od-card type="rule-proposal">',
       '"status": "pass|partial|fail"',
     ]) {
       expect(slim, `slim memory must keep ${marker}`).toContain(marker);
@@ -487,6 +575,7 @@ describe('slim core — direction library becomes a pull layer', () => {
     expect(slim).toContain('tools directions --id <id>');
     expect(slim).toContain('do not probe CLI help or alternate paths first');
     expect(slim).toContain('retry only after materially changing the fix or input');
+    expect(slim).toContain('resolve the `foundation` id with this command, never the Host `value`');
     expect(slim).toContain('- `editorial-monocle` — Editorial — Monocle / FT magazine');
     // No inline palette data under slim — that's the pull payload.
     expect(slim).not.toContain('**Palette (drop into `:root`):**');
@@ -494,6 +583,7 @@ describe('slim core — direction library becomes a pull layer', () => {
     expect(classic).toContain('## Direction library — infer and bind by default');
     expect(classic).toContain('Infer the best match from the brief and known context');
     expect(classic).toContain('If the user explicitly requested direction comparison');
+    expect(classic).toContain('the Host value is catalogue identity and must not be passed to `od tools directions`');
     expect(classic).toContain('**Palette (drop into `:root`):**');
     expect(classic).not.toContain('## Direction library — index');
     // An active design system suppresses both variants.
@@ -599,24 +689,52 @@ describe('slim core — regression-audit fixes vs classic', () => {
 
   it('keeps the plan step agent-agnostic — no hardcoded TodoWrite in the charter', () => {
     // OpenDesign drives many code agents (codex, opencode, Qwen CLI, ACP
-    // family) that have no TodoWrite tool. The charter must NOT hardcode it,
-    // or the plan step is dead for ~2/3 of production traffic. Freeze the
-    // generic wording and the anti-hallucination guard.
+    // family) and none of them has a tool literally called TodoWrite — the
+    // ones that can plan spell it `update_plan` / `todowrite`, and some
+    // cannot plan at all. The charter is prepended to every slim run, so it
+    // must NOT hardcode one family's name. The concrete per-runtime name is
+    // added outside the charter (`planToolNoteForRuntime`, covered by
+    // `plan-tool-note.test.ts`). Freeze the generic wording and the
+    // anti-hallucination guard.
     const charter = renderSlimCoreCharter('filesystem');
     expect(charter).not.toContain('TodoWrite');
     expect(charter).toContain('If the runtime supports task lists, use one');
     expect(charter).toContain('Do not simulate tool calls that the current runtime does not support');
   });
 
-  it('injects the concrete TodoWrite note only for Claude-family runs', () => {
+  it('injects the concrete TodoWrite note for Claude-family runs', () => {
     const base = { metadata: { kind: 'other' as const },
       executionProfile: 'filesystem' as const, promptCoreVariant: 'slim' as const };
     // Claude family (claude/codebuddy/amp) → named tool + live-card benefit.
+    // The whole family shares one stream format, so it is identified by
+    // `streamFormat` alone and needs no agent id.
     expect(composeSystemPrompt({ ...base, streamFormat: 'claude-stream-json' }))
       .toContain('Your plan tool is `TodoWrite`');
-    // codex / opencode (json-event-stream) → generic charter only, no note.
+    // `json-event-stream` is shared by codex, opencode and cursor-agent, so
+    // the format alone identifies no runtime and names no tool. Which agents
+    // DO get a note, and which tool each is told to call, is
+    // `plan-tool-note.test.ts`.
     expect(composeSystemPrompt({ ...base, streamFormat: 'json-event-stream' }))
       .not.toContain('Your plan tool is');
+  });
+
+  /*
+   * Claude Code >= 2.1.x renamed the capability: `TodoWrite` is gone and the
+   * plan lives in `TaskCreate` / `TaskUpdate` (measured on 2.1.247 — the init
+   * frame's `tools` array carries no `TodoWrite` on any model). The daemon
+   * reduces either dialect into the same Todos card, so the note has to name
+   * both or it points half the installed base at a tool that does not exist.
+   */
+  it('names both plan-tool dialects so the note survives the Claude Code rename', () => {
+    const note = composeSystemPrompt({
+      metadata: { kind: 'other' as const },
+      executionProfile: 'filesystem' as const,
+      promptCoreVariant: 'slim' as const,
+      streamFormat: 'claude-stream-json',
+    });
+    expect(note).toContain('`TodoWrite`');
+    expect(note).toContain('`TaskCreate`');
+    expect(note).toContain('`TaskUpdate`');
   });
 
   it('carries the multi-turn edit-adherence invariants (DS binding + locked constraints)', () => {

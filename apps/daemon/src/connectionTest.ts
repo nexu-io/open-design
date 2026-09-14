@@ -1887,6 +1887,7 @@ interface AgentSink {
   appendRawStdout: (chunk: string) => void;
   getRawStdout: () => string;
   getRawStdoutTail: () => string;
+  getResolvedModel: () => string | null;
   sawTerminalCompletion: () => boolean;
   dispose: () => void;
 }
@@ -1934,6 +1935,7 @@ export function createAgentSink(): AgentSink {
   let stderrTail = '';
   let rawStdout = '';
   let rawStdoutTail = '';
+  let resolvedModel: string | null = null;
   let terminalCompletionSeen = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let resolveResult!: (value: AgentSinkResult) => void;
@@ -2006,6 +2008,14 @@ export function createAgentSink(): AgentSink {
         publishStreamError(new Error(message));
         return;
       }
+      if (
+        type === 'status' &&
+        data.label === 'initializing' &&
+        typeof data.model === 'string' &&
+        data.model.trim()
+      ) {
+        resolvedModel = data.model.trim();
+      }
       const delta = data.delta;
       const text = data.text;
       if (type === 'text_delta' && typeof delta === 'string') {
@@ -2048,6 +2058,7 @@ export function createAgentSink(): AgentSink {
     appendRawStdout,
     getRawStdout: () => rawStdout,
     getRawStdoutTail: () => rawStdoutTail,
+    getResolvedModel: () => resolvedModel,
     sawTerminalCompletion: () => terminalCompletionSeen,
     dispose: () => {
       if (debounceTimer) {
@@ -2426,6 +2437,7 @@ async function testAgentConnectionInternal(
     const latencyMs = Date.now() - start;
     const rawSample = truncateSample(text);
     const sample = redactSecrets(rawSample);
+    const resolvedModel = sink.getResolvedModel();
     if (rawSample && isLikelyModelErrorText(rawSample)) {
       const detail = redactSecrets(smokeFailureDetail(rawSample));
       console.warn(
@@ -2463,6 +2475,7 @@ async function testAgentConnectionInternal(
       kind: 'success',
       latencyMs,
       model,
+      ...(resolvedModel ? { resolvedModel } : {}),
       agentName: def.name,
       sample,
       diagnostics: buildDiagnostics(

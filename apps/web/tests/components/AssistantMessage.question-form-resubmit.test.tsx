@@ -50,6 +50,7 @@ beforeEach(() => {
 const FORM = [
   '<question-form id="travel_app_brief" title="Quick brief">',
   JSON.stringify({
+    submitLabel: 'Send answers',
     questions: [{ id: 'audience', label: 'Audience', type: 'text' }],
   }),
   '</question-form>',

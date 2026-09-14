@@ -175,8 +175,14 @@ describe('i18n locales', () => {
       'chat.amrError.balanceMessage',
       'chat.amrBalanceGate.message',
       'chat.amrBalanceGate.watchingWallet',
-      'chat.amrLowBalance.title',
-      'chat.amrLowBalance.message',
+      // `chat.amrLowBalance.title` / `.message` 曾经也在这张表里 —— 那两条属于
+      // 首页的软提醒弹窗 `AmrLowBalanceDialog`,产品 2026-09-06 裁决删掉整张弹窗
+      // (规格 T53),key 随之清掉。
+      //
+      // 软那一档现在只剩项目页流水里的升级卡,而它的 `chat.upgrade.balance`
+      // **不能**加进这张表:zh-CN「剩余额度」/ zh-TW「剩餘額度」里天然含有
+      // 「余额」/「餘額」这两个子串,会被下面那条反向断言判红。术语一致性对
+      // 那一族另说,不在这条用例的范围里。
       'chat.runError.title.balance',
       'entry.creditsAria',
       'entry.creditsAriaWithBalance',
@@ -444,6 +450,67 @@ describe('i18n locales', () => {
       const dict = await loadDict(locale);
       for (const { key, value } of verbatim) {
         expect(dict[key], `${locale}.${String(key)}`).toBe(value);
+      }
+    }
+  });
+
+  /*
+   * `assistant.waitingFirstOutput` briefly had a reader (2026-09-03 → 2026-09-07):
+   * an ACP turn silent for 60s swapped the in-shell row's copy to it. Product
+   * reverted that copy on 2026-09-07 — the row reads 「思考中」 again — so the key
+   * is back to being a dead key. See
+   * `tests/components/chat/waiting-first-output.test.tsx` for the revert, and
+   * `ExecutionShell.tsx` for why the *detection* behind it stayed.
+   *
+   * ⚠️ **The key and its 19 translations stay.** Product removed a rendering,
+   * not the situation it describes; the plan of record is to bring it back in a
+   * different form (same call product made for S12 on 2026-08-27). Deleting the
+   * key now means re-translating it into 19 locales later — and it is exactly
+   * the dead-key period that let the bug below slip in unnoticed the first time.
+   *
+   * That dead period had already hidden a mistranslation: `tr` read
+   * 「İlk girdi için bekleniyor」— *waiting for first **input***, the exact
+   * inverse of what the line reports. This test is what keeps the next dead
+   * period from hiding another one.
+   *
+   * ⚠️ **What this test can and cannot prove.** Asserting a translated string
+   * against the file that defines it is a tautology — it can never tell you
+   * whether the Turkish is *good*, only that it is not the specific broken
+   * string we already found. So the two halves below claim exactly that much:
+   *
+   *  · the key resolves to non-empty text in all 19 locales (a real
+   *    completeness check — `types.ts` forces the key to exist, not to be
+   *    filled in with something), and
+   *  · no locale's value carries its own language's word for **input**, which
+   *    is a lint pinning one known regression shut, not evidence of quality.
+   *
+   * The `input`-word list stays SHORT and evidence-backed: only languages
+   * where a wrong-direction word was actually observed, or where the
+   * input/output pair is close enough to swap by accident. Guessing an
+   * "input" word for a language nobody here reads would make this test lie in
+   * the other direction.
+   */
+  it('never says "waiting for first INPUT" in any locale (assistant.waitingFirstOutput)', async () => {
+    const inputWords: Partial<Record<Locale, RegExp>> = {
+      tr: /girdi/i,
+      de: /Eingabe/i,
+      it: /\binput\b/i,
+      'es-ES': /\bentrada\b/i,
+      fr: /\bentrée\b/i,
+      'pt-BR': /\bentrada\b/i,
+      en: /\binput\b/i,
+    };
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      const value = dict['assistant.waitingFirstOutput'];
+      expect(typeof value, `${locale} must define assistant.waitingFirstOutput`).toBe('string');
+      expect(value.trim(), `${locale}.assistant.waitingFirstOutput must not be blank`).not.toBe('');
+      const wrongDirection = inputWords[locale];
+      if (wrongDirection) {
+        expect(
+          value,
+          `${locale}.assistant.waitingFirstOutput reports the model's first OUTPUT, not its input`,
+        ).not.toMatch(wrongDirection);
       }
     }
   });

@@ -21,6 +21,7 @@ import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { localizePluginTitle } from './plugins-home/localization';
 import { resolveFlyoutSide } from './composer-flyout-placement';
 import { Icon, type IconName } from './Icon';
+import { ChatPlusIcon } from './chat/primitives/icons';
 
 const PLUS_MENU_MARGIN = 12;
 const PLUS_MENU_GAP = 8;
@@ -250,6 +251,29 @@ export interface ComposerPlusMenuProps {
 
   /** Test id for the trigger button. */
   triggerTestId?: string;
+  /**
+   * 这颗触发键用聊天面板那一族的**描边**加号(稿
+   * `729fa43ce7:docs/design/chat-panel/src/body-scene.html:42`),而不是共享
+   * `Icon` 的实心 remix `add-line`。
+   *
+   * 为什么要一个开关而不是直接换掉:产品裁决 2026-09-03 是「**只让聊天面板走
+   * 描边版**」,明确不动全站。而这个组件是 home hero(`HomeHero.tsx`)和聊天
+   * 面板(`ChatComposer.tsx`)**共用**的同一个调用点 —— 直接换会连 home 一起
+   * 改掉,正是被否掉的那个范围。所以由调用方点名,只有 `ChatComposer` 传 true。
+   */
+  strokeGlyph?: boolean;
+
+  /**
+   * Optional visible label beside the trigger glyph. Given one, the trigger
+   * stops being a lone disc and renders as a text control; left off, it stays
+   * the bare icon button both composers use today.
+   *
+   * 目前没有调用方传它:唯一传过的是 #7635 的首页改版,而 main 已在 #7843 把
+   * 那期整个 revert 掉,等 `feat/home-entry-refresh` 回来。属性留着而不是跟着
+   * 删,是因为触发键的 hover 气泡分支挂在它身上 —— 「不带标签才挂 od-tooltip」
+   * 是本组件自己的契约,判据在 `w73-composer-and-plan-ink.test.tsx`。
+   */
+  triggerLabel?: string;
 
   /**
    * Notified when the menu opens. The project composer uses this to latch its
@@ -338,6 +362,8 @@ export function ComposerPlusMenu({
   renderToolbox,
   toolboxLabel,
   triggerTestId,
+  strokeGlyph = false,
+  triggerLabel,
   onOpen,
   onSubmenuOpen,
   onSearchUsed,
@@ -573,7 +599,7 @@ export function ComposerPlusMenu({
       <button
         ref={triggerRef}
         type="button"
-        className={`icon-btn plus-menu__trigger od-tooltip${open ? ' is-active' : ''}`}
+        className={`icon-btn plus-menu__trigger${triggerLabel ? ' plus-menu__trigger--labeled' : ' od-tooltip'}${open ? ' is-active' : ''}`}
         data-testid={triggerTestId}
         onClick={() => {
           if (open) {
@@ -583,16 +609,38 @@ export function ComposerPlusMenu({
           onOpen?.();
           setOpen(true);
         }}
-        title={t('homeHero.addMenu')}
-        data-tooltip={t('homeHero.addMenu')}
-        aria-label={t('homeHero.addMenu')}
+        // The hover bubble is the unlabeled trigger's only affordance; once the
+        // label is on screen it would just repeat (and contradict) it.
+        {...(triggerLabel
+          ? {}
+          : { title: t('homeHero.addMenu'), 'data-tooltip': t('homeHero.addMenu') })}
+        aria-label={triggerLabel ?? t('homeHero.addMenu')}
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {/* `od-icon` is what `.plus-menu__trigger.is-active .od-icon` keys the
-            45° pivot off — the glyph reads as a close × while the menu is
-            open. */}
-        <Icon name="plus" size={16} className="od-icon" />
+        {/* 两条面向不同界面的分支,各归各的:
+            · 聊天面板(`strokeGlyph`)是稿子那枚**描边加号**;`od-icon` 是
+              `.plus-menu__trigger.is-active .od-icon` 挂 45° 旋转的钩子,
+              菜单打开时它读作一个关闭的 ×。
+            · 首页(不传 `strokeGlyph`)用共享 `Icon` 的实心加号。
+
+            这半边 2026-09-05 那次合并曾跟着 main 的 `2e4c1a753b`(#7635)改成
+            **回形针**;2026-09-07 main 把 #7635 整个 revert 掉了(#7843,等
+            `feat/home-entry-refresh` 整期回来),首页这一格随之回到实心加号 ——
+            首页归 main,本分支不在这里替它做决定。`triggerLabel` 仍然留着:它
+            是可选的,首页现在不传,但触发键「带标签就不挂 hover 气泡」这条分支
+            是本组件自己的契约(判据 `w73-composer-and-plan-ink.test.tsx`)。
+            聊天面板那一格不受影响,始终是描边加号。 */}
+        {strokeGlyph ? (
+          <ChatPlusIcon size={16} className="od-icon" />
+        ) : (
+          <>
+            <Icon name="plus" size={16} className="od-icon" />
+            {triggerLabel ? (
+              <span className="plus-menu__trigger-label">{triggerLabel}</span>
+            ) : null}
+          </>
+        )}
       </button>
       {open && typeof document !== 'undefined' ? createPortal(
         <div
@@ -612,8 +660,13 @@ export function ComposerPlusMenu({
               onAttachFiles();
             }}
           >
+            {/* 菜单**条目**上的这枚是共享 `Icon` 的实心加号,不是触发键那枚。
+                2026-09-07 合并 main 时 #7843 的 revert 想把它换回回形针
+                (`attach`);这里保留加号 —— 这个「+」菜单是聊天面板底栏那颗键
+                打开的同一份,判据 `w126-chat-stroke-icons.test.tsx` 点名钉住了
+                它,属于本次合并「聊天面板不许回退」的范围。 */}
             <Icon
-              name={attachLoading ? 'spinner' : 'attach'}
+              name={attachLoading ? 'spinner' : 'plus'}
               size={15}
               className="plus-menu__item-icon"
             />
