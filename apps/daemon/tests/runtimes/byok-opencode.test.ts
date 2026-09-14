@@ -460,7 +460,12 @@ describe('byok-opencode runtime config', () => {
     // Ollama Cloud normalizes to /v1, so both spellings stay built-in.
     expect(isCustomByokBaseUrl('ollama', 'https://ollama.com')).toBe(false);
     expect(isCustomByokBaseUrl('ollama', 'https://ollama.com/v1')).toBe(false);
+    expect(isCustomByokBaseUrl('ollama', 'https://ollama.com/api')).toBe(false);
     expect(isCustomByokBaseUrl('ollama', '')).toBe(false);
+    // Deeper same-origin paths are preserved verbatim by the daemon, so
+    // they stay distinct custom endpoints rather than collapsing to root.
+    expect(isCustomByokBaseUrl('anthropic', 'https://api.anthropic.com/api/v1')).toBe(true);
+    expect(isCustomByokBaseUrl('ollama', 'https://ollama.com/api/v1')).toBe(true);
     // Local Ollama/vLLM endpoints are custom gateways by definition.
     expect(isCustomByokBaseUrl('ollama', 'http://127.0.0.1:11434/v1')).toBe(true);
     expect(opencodeByokModelId('default')).toBeNull();

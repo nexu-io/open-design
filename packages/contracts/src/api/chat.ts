@@ -120,17 +120,15 @@ export const DEFAULT_BYOK_BASE_URL_BY_PROTOCOL: Record<ByokChatProtocol, string>
 const BYOK_VERSION_PATH_SEGMENT = /^\/(?:v1beta|v1|api)$/;
 
 // Providers accept their endpoints with or without the versioned path
-// (`ollama.com` == `ollama.com/v1`), so strip trailing version segments on
-// both sides before comparing.
+// (`ollama.com` == `ollama.com/v1`). Only ONE trailing version segment is
+// stripped on each side: deeper paths (e.g. a same-origin `/api/v1` proxy)
+// are distinct endpoints the daemon preserves verbatim, so they must not
+// collapse into the built-in root.
 function canonicalizeByokPath(path: string): string {
-  let out = path.replace(/\/+$/, '');
-  for (;;) {
-    const cut = out.lastIndexOf('/');
-    const segment = cut < 0 ? '' : out.slice(cut);
-    if (!segment || !BYOK_VERSION_PATH_SEGMENT.test(segment)) break;
-    out = out.slice(0, cut);
-  }
-  return out;
+  const trimmed = path.replace(/\/+$/, '');
+  const cut = trimmed.lastIndexOf('/');
+  const segment = cut < 0 ? '' : trimmed.slice(cut);
+  return segment && BYOK_VERSION_PATH_SEGMENT.test(segment) ? trimmed.slice(0, cut) : trimmed;
 }
 
 /**
