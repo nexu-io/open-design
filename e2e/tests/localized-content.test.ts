@@ -18,6 +18,7 @@ type LocalizedContentModule = {
     template: PromptTemplateResource,
   ) => PromptTemplateResource;
   localizeSkillDescription: (locale: string, skill: SkillResource) => string;
+  LOCALIZED_CONTENT_IDS: Record<string, { designSystems: string[] }>;
 };
 
 type SkillResource = { id: string; description: string };
@@ -36,6 +37,7 @@ if (localizedContentModule == null) {
 }
 
 const {
+  LOCALIZED_CONTENT_IDS,
   localizeDesignSystemCategory,
   localizeDesignSystemSummary,
   localizePromptTemplateSummary,
@@ -364,6 +366,28 @@ describe('localized display content coverage', () => {
           normalizeText(localized.summary),
           `${locale} should display a prompt-template summary for ${template.id}`,
         ).not.toEqual('');
+      }
+    }
+  });
+  it('[P2] covers riso and terracotta in each direct designSystemSummaries dictionary', async () => {
+    // The requested regression coverage: the prior head passed the generic
+    // fallback test while every localized picker showed English for these two
+    // systems, because localizeDesignSystemSummary falls back to
+    // system.summary on a missing key. Pin the two new ids in each direct
+    // dictionary (all 17 bundles carry them) while the fallback test below
+    // keeps covering genuinely untranslated external systems.
+    const systems = await readDesignSystemResources();
+    const ids = uniqueSorted(systems.map((system) => system.id));
+    expect(ids).toContain('riso');
+    expect(ids).toContain('terracotta');
+    for (const locale of COVERAGE_LOCALES) {
+      const dictionary = LOCALIZED_CONTENT_IDS[locale]?.designSystems ?? [];
+      expect(dictionary, `expected ${locale} designSystemSummaries to be readable`).not.toEqual([]);
+      for (const id of ['riso', 'terracotta']) {
+        expect(
+          dictionary,
+          `${locale} designSystemSummaries is missing bundled design system ${id} (picker would show English fallback)`,
+        ).toContain(id);
       }
     }
   });
