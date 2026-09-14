@@ -1,0 +1,66 @@
+/* design-systems/riso/tokens.css
+ * Structured token bindings for Riso.
+ * Playful two-color risograph aesthetic: warm paper canvas, fluorescent pink
+ * interaction accent, federal-blue structure. Derived from
+ * https://github.com/bergside/awesome-design-skills/tree/main/skills/riso
+ * (MIT, (c) 2026 Bergside).
+ */
+
+:root {
+  --bg: #fdf6ec;
+  --surface: #ffffff;
+  --surface-warm: #fce7f3;
+  --fg: #111827;
+  --fg-2: #374151;
+  --muted: #6b7280;
+  --meta: #2c40a7;
+  --border: #e8d9c8;
+  --border-soft: #f1e4d6;
+  --accent: #f237a1;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #d97706;
+  --danger: #dc2626;
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "Overpass Mono", ui-monospace, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 40px;
+  --text-4xl: 56px;
+  --leading-body: 1.6;
+  --leading-tight: 1.05;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 16px 40px rgba(242, 55, 161, 0.12);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1160px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}
