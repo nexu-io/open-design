@@ -1,11 +1,11 @@
 # Riso Design
 
 > Category: Creative & Artistic
-> Playful two-color risograph aesthetic: warm paper canvas, fluorescent pink interaction accent, federal-blue structure. Two inks, one surface — every section prints on the same warm sheet.
+> Playful two-color risograph aesthetic: warm paper canvas, deep rose interaction accent, federal-blue structure. Two inks, one surface — every section prints on the same warm sheet.
 
 ## 1. Visual Theme & Atmosphere
 
-Riso is a playful, joyful two-color risograph print aesthetic built on a single warm off-white paper surface (`#fdf6ec`) running through every section. A fluorescent brand pink (`#f237a1`) is reserved as the sole interaction driver — CTAs, links, focus, active states. A deep federal blue (`#2c40a7`) carries headings, metadata, and the signature offset print-shadow.
+Riso is a playful, joyful two-color risograph print aesthetic built on a single warm off-white paper surface (`#fdf6ec`) running through every section. A deep rose accent (`#c2187b`, 5.66:1 white-on-accent and 5.27:1 accent-on-paper) is reserved as the sole interaction driver — CTAs, links, focus, active states. A deep federal blue (`#2c40a7`) carries headings, metadata, and the signature offset print-shadow.
 
 The mood is print-shop exuberance: high contrast, generous whitespace, visible grain. Space Grotesk everywhere; Overpass Mono for eyebrows, labels, and technical notes. Corners stay friendly (8–16px radii). Shadows are soft pink glows, never hard offsets.
 
@@ -28,7 +28,7 @@ The mood is print-shop exuberance: high contrast, generous whitespace, visible g
 
 | Token | Hex | Role |
 |---|---|---|
-| `--accent` | `#f237a1` | Sole interaction driver — CTAs, links, active states, focus rings |
+| `--accent` | `#c2187b` | Sole interaction driver — CTAs, links, active states, focus rings (white text 5.66:1) |
 | `--meta` | `#2c40a7` | Structural blue — headings support, eyebrows, print-shadows, badges |
 
 ### Surfaces
@@ -199,7 +199,7 @@ Tint:        #fce7f3 (pink-tinted bands)
 Text:        #111827 (near-black)
 Secondary:   #374151
 Muted:       #6b7280
-Accent:      #f237a1 (fluorescent pink — actions only)
+Accent:      #c2187b (deep rose — actions only, white text 5.66:1)
 Structure:   #2c40a7 (federal blue — headings, shadows)
 Border:      #e8d9c8
 Border-muted: #f1e4d6
@@ -212,7 +212,7 @@ Create a landing page in Riso style:
 
 - Background: #fdf6ec warm paper on every section
 - Typography: Space Grotesk for display + body, Overpass Mono for labels
-- Colors: #111827 text, #f237a1 pink accent, #2c40a7 blue structure
+- Colors: #111827 text, #c2187b rose accent, #2c40a7 blue structure
 - Corners: 8/12/16px radii, pills for badges only
 - Shadows: soft pink glow default, one blue 4px offset feature card
 - Layout: split hero, 2-col feature grid, pink-tinted highlight band
@@ -257,4 +257,4 @@ Create a landing page in Riso style:
 
 ## Source
 
-Derived from [bergside/awesome-design-skills `skills/riso`](https://github.com/bergside/awesome-design-skills/tree/main/skills/riso) (MIT, © 2026 Bergside). Style foundations (palette `#F237A1` / `#2C40A7`, Space Grotesk + Overpass Mono, 12/14/16/20/24/32 scale) preserved; package prose, tokens, and fixtures authored for OpenDesign.
+Derived from [bergside/awesome-design-skills `skills/riso`](https://github.com/bergside/awesome-design-skills/tree/main/skills/riso) (MIT, © 2026 Bergside). Style foundations (federal blue `#2C40A7`, Space Grotesk + Overpass Mono, 12/14/16/20/24/32 scale) preserved; the interaction accent is deepened to `#c2187b` for WCAG AA text contrast; package prose, tokens, and fixtures authored for OpenDesign.

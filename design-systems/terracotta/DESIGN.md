@@ -5,7 +5,7 @@
 
 ## 1. Visual Theme & Atmosphere
 
-Terracotta is a sun-baked, clay-toned editorial interface built on warm cream surfaces (`#faf5eb`), ink-brown headlines (`#2a1e17`) set in DM Serif Display, and a single terracotta accent (`#c56a3c`). Earthy, human, and content-first — tuned for long-form reading, blogs, storytelling, and editorial layouts where readability and visual rhythm matter.
+Terracotta is a sun-baked, clay-toned editorial interface built on warm cream surfaces (`#faf5eb`), ink-brown headlines (`#2a1e17`) set in DM Serif Display, and a single deepened terracotta accent (`#9a4f2b`, 5.95:1 white-on-accent and 5.48:1 accent-on-cream). Earthy, human, and content-first — tuned for long-form reading, blogs, storytelling, and editorial layouts where readability and visual rhythm matter.
 
 The mood is artisan print: generous leading (1.7 body), warm hairline rules instead of boxes, small radii (4–12px) that stay quiet. DM Serif Display carries headlines and pull-quotes; body reads in the same serif at comfortable measure; JetBrains Mono handles eyebrows, captions, and data.
 
@@ -28,7 +28,7 @@ The mood is artisan print: generous leading (1.7 body), warm hairline rules inst
 
 | Token | Hex | Role |
 |---|---|---|
-| `--accent` | `#c56a3c` | Sole accent — CTAs, links, drop-caps, pull-quote rules, active states |
+| `--accent` | `#9a4f2b` | Sole accent — CTAs, links, drop-caps, pull-quote rules, active states (white text 5.95:1) |
 
 ### Surfaces
 
@@ -44,7 +44,7 @@ The mood is artisan print: generous leading (1.7 body), warm hairline rules inst
 |---|---|---|
 | `--fg` | `#2a1e17` | Primary text — ink-brown headlines, body |
 | `--fg-2` | `#5c4a3c` | Secondary text — descriptions, ledes |
-| `--muted` | `#857060` | Muted text — captions, labels, metadata |
+| `--muted` | `#75604f` | Muted text — captions, labels, metadata (5.46:1 on cream) |
 
 ### Borders
 
@@ -198,8 +198,8 @@ Surface:     #ffffff (sparingly)
 Sand:        #f3e9d8 (quote panels, bands)
 Text:        #2a1e17 (ink-brown)
 Secondary:   #5c4a3c
-Muted:       #857060
-Accent:      #c56a3c (terracotta — actions only)
+Muted:       #75604f (5.46:1 on cream)
+Accent:      #9a4f2b (deepened terracotta — actions only, white text 5.95:1)
 Border:      #e0d2bd
 Border-muted: #ece0cd
 ```
@@ -211,7 +211,7 @@ Create a page in Terracotta style:
 
 - Background: #faf5eb warm cream on every section
 - Typography: DM Serif Display for headlines + body, JetBrains Mono for labels
-- Colors: #2a1e17 ink text, #c56a3c terracotta accent
+- Colors: #2a1e17 ink text, #9a4f2b terracotta accent
 - Corners: 4/8/12px radii, quiet elevation
 - Layout: centered masthead hero, 68ch reading column, hairline rules
 - Buttons: terracotta fill primary, outlined secondary
@@ -255,4 +255,4 @@ Create a page in Terracotta style:
 
 ## Source
 
-Derived from [bergside/awesome-design-skills `skills/terracotta`](https://github.com/bergside/awesome-design-skills/tree/main/skills/terracotta) (MIT, © 2026 Bergside). Style foundations (palette `#C56A3C` / `#F3E9D8`, DM Serif Display + JetBrains Mono, 14/16/18/24/32/40 scale) preserved; package prose, tokens, and fixtures authored for OpenDesign.
+Derived from [bergside/awesome-design-skills `skills/terracotta`](https://github.com/bergside/awesome-design-skills/tree/main/skills/terracotta) (MIT, © 2026 Bergside). Style foundations (warm sand `#F3E9D8`, DM Serif Display + JetBrains Mono, 14/16/18/24/32/40 scale) preserved; the interaction accent is deepened to `#9a4f2b` and muted/meta tiers to `#75604f`/`#6f5d4d` for WCAG AA text contrast; package prose, tokens, and fixtures authored for OpenDesign.
