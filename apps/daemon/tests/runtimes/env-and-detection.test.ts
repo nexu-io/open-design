@@ -1074,6 +1074,46 @@ test('detectAgents reuses the opencode configured env for byok-opencode availabi
   }
 });
 
+test('detectAgents records the new OpenCode permission capability for native and BYOK runtimes', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-opencode-capability-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const bin = join(dir, 'opencode');
+      writeFileSync(
+        bin,
+        '#!/bin/sh\n' +
+          'if [ "$1" = "--version" ]; then echo opencode-capability-test; exit 0; fi\n' +
+          'if [ "$1" = "run" ] && [ "$2" = "--help" ]; then echo "--auto" >&2; exit 0; fi\n' +
+          'if [ "$1" = "models" ]; then echo openai/gpt-5; exit 0; fi\n' +
+          'exit 0\n',
+      );
+      chmodSync(bin, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = dir;
+      agentCapabilities.delete('opencode');
+      agentCapabilities.delete('byok-opencode');
+
+      const agents = await detectAgents({ opencode: { OPENCODE_BIN: bin } });
+
+      assert.equal(agents.find((agent) => agent.id === 'opencode')?.available, true);
+      assert.equal(agents.find((agent) => agent.id === 'byok-opencode')?.available, true);
+      assert.deepEqual(agentCapabilities.get('opencode'), {
+        autoPermissionBypass: true,
+        skipPermissions: false,
+      });
+      assert.deepEqual(agentCapabilities.get('byok-opencode'), {
+        autoPermissionBypass: true,
+        skipPermissions: false,
+      });
+      assert.ok(opencode.buildArgs('', [], [], {}).includes('--auto'));
+    });
+  } finally {
+    agentCapabilities.delete('opencode');
+    agentCapabilities.delete('byok-opencode');
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('detectAgents marks Cursor Agent auth ok when cursor-agent status succeeds', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-cursor-auth-ok-'));
   try {

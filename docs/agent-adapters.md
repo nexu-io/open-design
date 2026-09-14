@@ -264,9 +264,10 @@ the active-run staging implementation is in
 ### 5.6 OpenCode
 
 - OpenCode runs as `opencode run --format json` with the prompt on stdin.
-  Newer builds that advertise `--dangerously-skip-permissions` from
-  `opencode run --help` receive that flag; older builds keep the compatible
-  argv without it.
+  Builds that advertise `--auto` from `opencode run --help` receive that
+  current permission-bypass flag; older builds that advertise
+  `--dangerously-skip-permissions` receive the legacy flag. Builds that
+  advertise neither keep the compatible argv without a bypass flag.
 - The adapter discovers models with `opencode models`, parses structured JSON
   events, and captures OpenCode's `sessionID`. Follow-up turns continue the
   native session with `-s <session-id>`.
@@ -516,9 +517,10 @@ external-directory flags can widen a CLI's reach.
   Qoder and Trae use `--yolo`; Copilot uses `--allow-all-tools`; DeepSeek uses
   `--auto`. Other definitions have their own explicit headless posture (for
   example Amp's `--dangerously-allow-all`).
-- OpenCode receives `--dangerously-skip-permissions` only when its help probe
-  advertises that flag, so older compatible builds are not given an unknown
-  option.
+- OpenCode receives `--auto` when its help probe advertises the current
+  permission-bypass flag, and falls back to `--dangerously-skip-permissions`
+  for older compatible builds. If neither flag is advertised, no bypass flag
+  is added, so the CLI is not given an unknown option.
 - Codex defaults to `workspace-write` with network access on supported macOS
   and Linux hosts. Windows, WSL, or an explicit
   `OD_CODEX_SANDBOX=danger-full-access` operator override uses
