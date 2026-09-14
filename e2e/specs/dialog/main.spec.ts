@@ -201,6 +201,9 @@ describe('dialog main spec', () => {
         },
         status,
       });
+    }, {
+      // This fixture emits generic artifact output, not OD Next protocol blocks.
+      env: { OD_NEXT_STRATEGY_ROLLOUT: 'off' },
     });
   }, 180_000);
 });

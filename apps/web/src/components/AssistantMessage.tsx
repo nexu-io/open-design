@@ -70,6 +70,7 @@ import {
 import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import { computeSkipRanges, rangeContains } from "../artifacts/markdown-context";
 import { splitShellCards } from "../runtime/chat/split-shell-cards";
+import { orderArtifactCards } from "../runtime/chat/artifact-card-order";
 import {
   AnsweredValue,
   isShortValueAnswer,
@@ -205,8 +206,8 @@ interface Props {
   isLast?: boolean;
   // True only for the most recent assistant message that actually ran a turn —
   // i.e. `isLast` with host-authored cards (the memory card, the brand assist
-  // card) skipped over. Only the next-step affordance reads it; see
-  // `ownsTrailingNextStep` below for why it is additive and not a replacement.
+  // card) skipped over. Recovery belongs to that real turn; next-step actions
+  // have their own ownership rule in `ownsTrailingNextStep` below.
   isLastTurn?: boolean;
   // Assistant message id whose run-failure error is rendered as ChatPane's
   // top-level error card; that message's per-message error pill is suppressed
@@ -548,6 +549,8 @@ function AssistantMessageImpl({
    */
   /** 壳头那颗秒表的「现在」+ S12 的静默起点,每秒同刻取一次(见 `useTickingNow`)。 */
   const { nowMs, lastEventAtMs } = useTickingNow(streaming, message.runId);
+  // A retried message keeps its creation date but carries the new run's start.
+  const runStartedAt = message.startedAt ?? message.createdAt;
 
   /**
    * 执行记录里的文件名要判归属才决定做不做链接(产品 2026-08-27:
@@ -571,7 +574,7 @@ function AssistantMessageImpl({
       // 「一件事都还没发生」那一格(S12)靠它算静默时长;它同时也是壳头耗时的
       // 兜底起点 —— 不发工具事件的那批 agent(plain-stream / qoder)整轮没有一个
       // 带时刻的事件,没有这一对起止,壳头就只有一句光秃秃的「已完成」。
-      ...(message.createdAt != null ? { startedAtMs: message.createdAt } : {}),
+      ...(runStartedAt != null ? { startedAtMs: runStartedAt } : {}),
       ...(message.endedAt != null ? { endedAtMs: message.endedAt } : {}),
       // 取不到就**不传** —— 让 `shellQuiet` 退回轮次开头,而不是拿一个假的
       // 「刚刚」把 S12 悄悄关掉(「卡在首个 token」那一档每月 5,547 次)。
@@ -593,7 +596,7 @@ function AssistantMessageImpl({
     };
     // `message.endedAt` 从 undefined 变成时刻**就在轮次终止那一刻** —— 不进依赖的话
     // 兜底耗时会停在「还没有终点」的那一版,壳头刚收起时秒数是空的。
-  }, [displayEvents, turnRunStatus, nowMs, previousTodos, message.endedAt, streaming, lastEventAtMs, mediaTasks]);
+  }, [displayEvents, turnRunStatus, nowMs, previousTodos, runStartedAt, message.endedAt, streaming, lastEventAtMs, mediaTasks]);
   /**
    * 执行记录里**真的有东西**。
    *
@@ -859,10 +862,10 @@ function AssistantMessageImpl({
      * 没有 `show` 就只保留 daemon 权威归属的 `producedFiles`。所以这里不能再回到
      * raw fileOps / `displayedProduced` —— 后两者还混着裸工具行与正文 / mtime 推断。
      */
-    if (summaryArtifactOps.length > 0) return summaryArtifactOps;
+    if (summaryArtifactOps.length > 0) return orderArtifactCards(summaryArtifactOps, artifactFocus);
     if (streaming) return [];
-    return producedFilesAsFileOps(declaredArtifactFiles);
-  }, [declaredArtifactFiles, streaming, summaryArtifactOps]);
+    return orderArtifactCards(producedFilesAsFileOps(declaredArtifactFiles), artifactFocus);
+  }, [artifactFocus, declaredArtifactFiles, streaming, summaryArtifactOps]);
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
   // message) fall back to the most recently modified HTML in the project so
@@ -995,10 +998,10 @@ function AssistantMessageImpl({
    * 取**最后一条**:一轮里理应只有一条,但重试会在同一条消息上再来一轮,
    * 那时新的一条才是当前这一轮的。
    *
-   * 旧会话没有这个事件 —— 于是这里是空数组,下一步引导整块不出。这是产品
-   * 明确要的兼容口径:不退回工具箱、不出空壳。
+   * 无事件通常不出建议。OPEND-2776 为成功交付图片的回合增加了下方的
+   * 媒体兜底;它只使用本轮权威产物,不从附件或项目旧文件猜测。
    */
-  const nextStepSuggestions = useMemo(() => {
+  const agentNextStepSuggestions = useMemo(() => {
     for (let i = events.length - 1; i >= 0; i -= 1) {
       const event = events[i];
       if (event?.kind !== 'next_steps') continue;
@@ -1010,6 +1013,26 @@ function AssistantMessageImpl({
     }
     return [];
   }, [events]);
+  const fallbackImagePaths = useMemo(() => {
+    if (!runSucceeded || message.runStatus !== 'succeeded' || message.strategyTaskBlocked || effectiveNextStepVariant !== 'default') return [];
+    const files = artifactFocus.show
+      ? declaredArtifactCards(message.producedFiles ?? [], artifactFocus.show)
+      : message.producedFiles ?? [];
+    // A website's supporting images must not turn a non-image delivery into
+    // an image-generation workflow. Explicit focus may select its image output.
+    if (!files.length || !files.every(file => file.size > 0 &&
+      (file.kind === 'image' || file.mime?.startsWith('image/')))) return [];
+    return [...new Set(files.map(file => file.path || file.name).filter(Boolean))];
+  }, [artifactFocus.show, effectiveNextStepVariant, message.producedFiles, message.runStatus, message.strategyTaskBlocked, runSucceeded]);
+  const useImageNextStepFallback = agentNextStepSuggestions.length === 0 && fallbackImagePaths.length > 0;
+  const nextStepSuggestions = useImageNextStepFallback
+    ? [t('nextStep.imageContinue'), t('nextStep.imageVariants'), t('nextStep.imageStyle')]
+    : agentNextStepSuggestions;
+  const handleNextStepSuggestion = useCallback((text: string) => {
+    onNextStepSuggestion?.(useImageNextStepFallback
+      ? `${text}\n\n${fallbackImagePaths.join('\n')}`
+      : text);
+  }, [fallbackImagePaths, onNextStepSuggestion, useImageNextStepFallback]);
   const hasNextStepPrimary =
     effectiveNextStepVariant === 'brand-extraction'
       ? !!onNextStepAiOptimize || !!onNextStepCreateDesign || !!onNextStepContinueExtraction
@@ -1052,11 +1075,15 @@ function AssistantMessageImpl({
         hasPendingCompleteQuestionForm || hasUnterminatedQuestionForm(message.content),
     };
   }, [message.content, nextUserContent, suppressDirectionForms]);
-  // Continuing unfinished work belongs to the current turn, and must wait
-  // for a complete pending form, including when the Todo snapshot was inherited.
-  // A terminal truncated form has no answer control; keep its recovery action.
+  // Host notifications cannot own a run recovery action. When one follows a
+  // stopped turn, keep the action on that turn instead of hiding it altogether.
+  // Direct callers without a conversation-level owner retain their isLast gate.
+  const ownsContinuableTurn = (isLastTurn ?? isLast) && !assistantMessageNeverHadARun(message);
+  // A complete pending form must be answered first; terminal truncated forms
+  // have no answer control and retain recovery. Streaming turns already contribute
+  // no continuableTodos, including when their Todo snapshot was inherited.
   const continueRemaining =
-    isLast && !hasPendingCompleteQuestionForm && onContinueRemainingTasks && continuableTodos.length > 0
+    ownsContinuableTurn && !hasPendingCompleteQuestionForm && onContinueRemainingTasks && continuableTodos.length > 0
       ? () => onContinueRemainingTasks(continuableTodos)
       : undefined;
   /**
@@ -1353,6 +1380,7 @@ function AssistantMessageImpl({
           <FileOpsSummary
             entries={turnArtifactPanelEntries}
             projectFileNames={projectFileNames}
+            projectFiles={projectFiles}
             onRequestOpenFile={onRequestOpenFile}
             projectId={projectId ?? undefined}
             onPublish={onArtifactShare}
@@ -1458,7 +1486,7 @@ function AssistantMessageImpl({
             createDesignSystemBusy={Boolean(ownsTrailingNextStep && nextStepCreateDesignSystemBusy)}
             onPickSkill={ownsTrailingNextStep ? onPickSkill : undefined}
             suggestions={ownsTrailingNextStep ? nextStepSuggestions : undefined}
-            onSuggestion={ownsTrailingNextStep ? onNextStepSuggestion : undefined}
+            onSuggestion={ownsTrailingNextStep && onNextStepSuggestion ? handleNextStepSuggestion : undefined}
             onDownload={
               ownsTrailingNextStep && nextStepFileName ? onArtifactDownload : undefined
             }
@@ -2083,8 +2111,8 @@ interface AssistantFooterProps {
   forking?: boolean;
   feedbackControls?: ReactNode;
   forceVisible?: boolean;
-  // Identifies the latest reply for UI/analytics hooks. Completed controls are
-  // hover/focus-gated on pointer devices and remain visible without hover.
+  // Marks the latest reply for footer visibility. The CSS data-last flag also
+  // keeps an actual continuation action visible without hover or focus.
   isLast?: boolean;
   // When the turn has an execution disclosure, its run state lives at the top
   // of the answer. The footer keeps only actions so run state is not repeated.
@@ -2137,7 +2165,9 @@ export function AssistantFooter({
       data-streaming={streaming ? "true" : "false"}
       // 中断的那一轮不能戴完成勾:它并没有跑完(稿子 15-6「绿点转灰」)
       data-canceled={canceled ? "true" : "false"}
-      data-last={isLast ? "true" : "false"}
+      // A real current turn may precede a host card. Its recovery action must
+      // stay visible without hover; ordinary historical controls keep isLast.
+      data-last={isLast || onContinueRemaining ? "true" : "false"}
     >
       {/* 稿子这一行的头是**一个**元素:`<span class="fin"><svg class="tick"/>已完成</span>` ——
           勾在字里面,不是它旁边的兄弟。原来 dot 和文字是平级的两个 span,

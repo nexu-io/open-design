@@ -1139,7 +1139,10 @@ macDescribe('packaged mac runtime smoke', () => {
       // Self-heal: real recovery releases ship as version+1 (versioned
       // artifacts are immutable), so the next update arrives under a bumped
       // version with a healthy payload and converges.
-      const healedVersion = bumpCountedVersion(targetVersion);
+      const healedVersion = resolvePackagedUpdateScenario({
+        releaseChannel: updateScenario.channel,
+        releaseVersion: targetVersion,
+      }).fixtureVersion;
       const healedPayloadPath = await buildVersionBumpedMacPayloadFixture(
         localPayload.payloadPath,
         corruptWorkDir,
@@ -2648,13 +2651,6 @@ async function buildVersionBumpedMacPayloadFixture(
   });
 }
 
-function bumpCountedVersion(version: string): string {
-  const match = /^(.*[.-](?:beta|betas|prerelease|preview))\.(\d+)$/.exec(version);
-  if (match?.[1] == null || match[2] == null) {
-    throw new Error(`rollback acceptance requires a counted version to bump: ${version}`);
-  }
-  return `${match[1]}.${Number(match[2]) + 1}`;
-}
 
 /**
  * Reset the namespace to a pristine pre-install state. `uninstall` removes the

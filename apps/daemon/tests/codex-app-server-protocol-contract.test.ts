@@ -41,6 +41,8 @@ const CLIENT_REQUESTS = [
   'initialize',
   'thread/start',
   'thread/resume',
+  'thread/archive',
+  'thread/unarchive',
   'turn/start',
   'turn/interrupt',
 ] as const;
@@ -66,15 +68,18 @@ const SERVER_NOTIFICATIONS = [
 const TYPE_SURFACE: Record<string, string[]> = {
   'InitializeCapabilities.ts': ['experimentalApi', 'requestAttestation'],
   'ClientInfo.ts': ['name', 'title', 'version'],
-  'v2/ThreadStartParams.ts': ['cwd', 'sandbox', 'approvalPolicy'],
+  'v2/ThreadStartParams.ts': ['cwd', 'sandbox', 'approvalPolicy', 'historyMode'],
   'v2/ThreadResumeParams.ts': ['threadId', 'cwd', 'sandbox', 'approvalPolicy'],
+  'v2/ThreadArchiveParams.ts': ['threadId'],
+  'v2/ThreadUnarchiveParams.ts': ['threadId'],
   'v2/TurnStartParams.ts': ['threadId', 'input', 'model', 'effort', 'summary', 'serviceTier'],
   'v2/TurnInterruptParams.ts': ['threadId'],
   'v2/SandboxMode.ts': ['"workspace-write"', '"danger-full-access"'],
   'ReasoningSummary.ts': ['"detailed"'],
   'v2/UserInput.ts': ['"text"', 'text_elements', '"localImage"', 'path'],
   'v2/ThreadStartedNotification.ts': ['thread'],
-  'v2/Thread.ts': ['id', 'path'],
+  'v2/Thread.ts': ['id', 'path', 'historyMode'],
+  'v2/ThreadHistoryMode.ts': ['"legacy"', '"paginated"'],
   'v2/TurnCompletedNotification.ts': ['turn'],
   'v2/Turn.ts': ['id', 'status', 'error'],
   'v2/TurnStatus.ts': ['"completed"', '"failed"', '"interrupted"'],
@@ -132,7 +137,7 @@ describeWithCodex('codex app-server protocol contract', () => {
     codexVersion = String(
       execFileSync('codex', ['--version'], { encoding: 'utf8', timeout: 10_000 }),
     ).trim();
-    execFileSync('codex', ['app-server', 'generate-ts', '--out', outDir], {
+    execFileSync('codex', ['app-server', 'generate-ts', '--experimental', '--out', outDir], {
       stdio: 'ignore',
       timeout: 120_000,
     });

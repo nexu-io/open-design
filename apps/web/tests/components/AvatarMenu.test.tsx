@@ -768,7 +768,7 @@ describe('AvatarMenu', () => {
     // so without it the plan dialog would open against whichever workspace
     // vela's account-level "active workspace" happens to be.
     expect(target.origin + target.pathname).toBe(
-      'https://open-design.ai/amr/dashboard',
+      'https://open-design.ai/cloud/dashboard',
     );
     expect(target.searchParams.get('workspaceId')).toBe('workspace-a');
     expect(target.searchParams.get('billing')).toBe('plan');
@@ -1040,7 +1040,7 @@ describe('AvatarMenu', () => {
 
     expect(onAgentModelChange).not.toHaveBeenCalled();
     const target = new URL(openExternalUrlMock.mock.calls[0]![0]);
-    expect(target.origin + target.pathname).toBe('https://open-design.ai/amr/dashboard');
+    expect(target.origin + target.pathname).toBe('https://open-design.ai/cloud/dashboard');
     expect(target.searchParams.get('workspaceId')).toBe('workspace-a');
     expect(target.searchParams.get('billing')).toBe('plan');
 

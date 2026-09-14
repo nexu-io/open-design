@@ -4435,6 +4435,9 @@ export interface Dict {
   'assistant.producedFiles': string;
   'assistant.openFile': string;
   'assistant.downloadFile': string;
+  'nextStep.imageContinue': string;
+  'nextStep.imageVariants': string;
+  'nextStep.imageStyle': string;
   'nextStep.title': string;
   // Accessible name for the three agent-written follow-up rows under a
   // delivered turn. The suggestions themselves are model-written in the

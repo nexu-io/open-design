@@ -29,6 +29,7 @@ import {
 import { errorMessage, asObject, extractAcpUpdateText, extractAcpStatusDetail } from './json.js';
 import {
   sendRpc,
+  sendRpcNotification,
   sendRpcResult,
   isJsonRpcId,
   rpcErrorMessage,
@@ -41,7 +42,7 @@ import {
 } from './rpc.js';
 import {
   acpRawEventShape,
-  isAcpTerminalFailureStatus,
+  isAcpToolUpdateError,
   acpToolCallId,
   isAcpArtifactWriteLabel,
   isAcpArtifactWriteUpdate,
@@ -316,6 +317,8 @@ export function attachAcpSession({
     path: string | null;
     pathRank: number;
     resultContent: string;
+    /** Explicit failure evidence survives partial and status-only updates. */
+    failed: boolean;
     /** Sticky: once true, never cleared by later status-only frames. */
     thinkOnly: boolean;
     firstSeenAt: number;
@@ -401,7 +404,7 @@ export function attachAcpSession({
   const emitTerminalToolPair = (
     toolCallId: string,
     st: AcpToolRunState,
-    isError: boolean,
+    isError = false,
     origin: AcpTerminalToolOrigin = 'agent_frame',
   ) => {
     if (st.emitted) return;
@@ -441,14 +444,14 @@ export function attachAcpSession({
       // Bash/execute stdout can dump private files (cat .env). Langfuse only
       // lexically masks Bash, so redact before the canonical transcript ships.
       content: acpSafeToolResultContent(st.name, st.resultContent),
-      isError,
+      isError: isError || st.failed,
     }, meta), meta);
     // Concrete only on terminal tool_result for a real (non-think) tool.
     emittedConcreteToolEvent = true;
   };
 
   // Flush tools that never received a terminal `tool_call_update`. Clean
-  // completion uses isError=false (best-effort close); fail paths use
+  // completion preserves accumulated tool failures; fail paths use
   // isError=true so Langfuse/PostHog and the persisted transcript keep the
   // open tool as an errored result instead of dropping it entirely.
   //
@@ -916,6 +919,17 @@ export function attachAcpSession({
     });
   };
 
+  let completionText: string | null = null;
+  const prepareCompletionText = (checkVisibleOutput = false): string => {
+    if (completionText === null) {
+      const flushedToolText = checkVisibleOutput
+        ? toolCallTextSuppressor.flushForVisibleOutputCheck()
+        : toolCallTextSuppressor.flush();
+      completionText = flushedToolText ? (dsmlArtifactSuppressor?.strip(flushedToolText) ?? flushedToolText) : '';
+    }
+    return completionText;
+  };
+
   const finishCleanPrompt = (usageSource?: unknown) => {
     if (finished) return;
     // Mark the prompt finished before notifying observers so duplicate results
@@ -925,9 +939,8 @@ export function attachAcpSession({
     // Flush any tools still open when the prompt completes so traces stay
     // complete (one tool_use + tool_result per id).
     flushOpenAcpTools();
-    const flushedToolText = toolCallTextSuppressor.flush();
+    const flushedText = prepareCompletionText();
     noteToolCallTextSuppression('tool_call_xml_flush');
-    const flushedText = flushedToolText ? (dsmlArtifactSuppressor?.strip(flushedToolText) ?? flushedToolText) : '';
     if (flushedText) {
       emitVisibleTextDelta(flushedText);
     }
@@ -1222,6 +1235,7 @@ export function attachAcpSession({
               path: nextPath?.path ?? null,
               pathRank: nextPath?.rank ?? 0,
               resultContent: nextResult,
+              failed: isAcpToolUpdateError(update),
               thinkOnly: nextThinkOnly,
               firstSeenAt: Date.now(),
               emitted: false,
@@ -1249,14 +1263,14 @@ export function attachAcpSession({
             }
             // Keep last non-empty result payload (terminal may be status-only).
             if (nextResult) st.resultContent = nextResult;
+            st.failed ||= isAcpToolUpdateError(update);
             // Sticky think-only: once classified, never clear on later frames
             // (terminal status-only frames have no title and would otherwise
             // flip thinkOnly false and emit a fake concrete tool).
             if (nextThinkOnly) st.thinkOnly = true;
           }
           if (isAcpTerminalToolStatus(update)) {
-            const failed = isAcpTerminalFailureStatus(update);
-            emitTerminalToolPair(toolCallId, st, failed);
+            emitTerminalToolPair(toolCallId, st);
             // Keep the entry (emitted=true) so a repeated terminal cannot re-emit.
           } else {
             // Not terminal: the call is running, so say so now rather than after
@@ -1272,7 +1286,7 @@ export function attachAcpSession({
           dsmlArtifactSuppressorArmedAfterText = emittedTextBuffer.length > 0;
           dsmlArtifactSuppressorSawIncrementalProse = false;
           if (toolCallId) acpArtifactWriteToolCallIds.delete(toolCallId);
-        } else if (toolCallId && isAcpTerminalFailureStatus(update)) {
+        } else if (toolCallId && isAcpToolUpdateError(update)) {
           const ownsPendingWriteSuppression = toolCallId === dsmlArtifactSuppressorToolCallId;
           const ownsPendingWriteCall = acpArtifactWriteToolCallIds.has(toolCallId);
           acpArtifactWriteToolCallIds.delete(toolCallId);
@@ -1390,7 +1404,10 @@ export function attachAcpSession({
       // them as isError via fail()). Think-only open tools do not flip the flag.
       flushOpenAcpTools();
       const usage = formatUsage(result.usage);
-      if (!emittedVisibleTextChunk && !emittedConcreteToolEvent && modelUnavailableErrorCode) {
+      // Prepare buffered text without notifying observers. Publish it only
+      // inside finishCleanPrompt's existing finished/re-entry protection.
+      if (!emittedVisibleTextChunk && !emittedConcreteToolEvent && modelUnavailableErrorCode &&
+          !prepareCompletionText(true)) {
         const outputTokens = usage?.output_tokens;
         const hadCompletionTokens = typeof outputTokens === 'number' && outputTokens > 0;
         // Emit usage before fail so analytics still sees provider tokens.
@@ -1535,8 +1552,7 @@ export function attachAcpSession({
       // is no sessionId to cancel, but we must still close stdin below.
       if (sessionId) {
         try {
-          sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
-          nextId += 1;
+          sendRpcNotification(child.stdin, 'session/cancel', { sessionId });
         } catch {
           // The caller owns process-signal fallback if the ACP transport is gone.
         }

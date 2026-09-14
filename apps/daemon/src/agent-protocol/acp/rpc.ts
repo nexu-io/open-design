@@ -56,6 +56,16 @@ export function sendRpc(
 export function sendRpcResult(writable: RpcWritable, id: JsonRpcId, result: unknown): void {
   writable.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);
 }
+
+/** Writes an ACP notification without a request id or an expected response. */
+export function sendRpcNotification(
+  writable: RpcWritable,
+  method: string,
+  params: unknown,
+): void {
+  writable.write(`${JSON.stringify({ jsonrpc: '2.0', method, params })}\n`);
+}
+
 /**
  * Type guard that returns `true` when `value` is a valid JSON-RPC id
  * (a `number` or `string`). Used before replying to incoming requests.

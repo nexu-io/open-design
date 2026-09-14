@@ -183,7 +183,7 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
       expect(openSpy).toHaveBeenCalledTimes(1);
       const target = new URL(String(openSpy.mock.calls[0]![0]));
       expect(`${target.origin}${target.pathname}`).toBe(
-        'https://open-design.ai/amr/dashboard',
+        'https://open-design.ai/cloud/dashboard',
       );
       expect(target.searchParams.get('billing')).toBe('plan');
     },

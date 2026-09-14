@@ -935,7 +935,7 @@ export interface QuestionsFormClickProps {
 }
 
 // Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
-// `go_amr` is the link that opens https://open-design.ai/amr.
+// `go_amr` is the link that opens https://open-design.ai/cloud/dashboard.
 export interface RunFailedToastClickProps {
   page_name: 'chat_panel';
   area: 'chat_panel';

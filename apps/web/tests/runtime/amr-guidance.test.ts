@@ -29,7 +29,7 @@ describe('amrRechargeUrlForProfile', () => {
   // entry this module builds therefore targets `/dashboard`, not `/wallet`.
   it('targets the console dashboard on every AMR profile', () => {
     expect(DEFAULT_AMR_RECHARGE_URL).toBe(
-      'https://open-design.ai/amr/dashboard?source=open_design',
+      'https://open-design.ai/cloud/dashboard?source=open_design',
     );
     expect(amrRechargeUrlForProfile('prod')).toBe(DEFAULT_AMR_RECHARGE_URL);
     expect(amrRechargeUrlForProfile('test')).toBe(

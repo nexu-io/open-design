@@ -59,10 +59,12 @@ const LIVE: ChatMessage[] = RELOAD.map((m) => {
 const RUNS = LIVE.filter((m) => m.role === 'assistant');
 
 function blocksOf(message: ChatMessage): TurnBlock[] {
+  // Match AssistantMessage's run clock, including rebound message rows.
+  const startedAt = message.startedAt ?? message.createdAt;
   return buildTurnBlocks({
     events: (message.events ?? []) as PersistedAgentEvent[],
     runStatus: message.runStatus ?? 'succeeded',
-    ...(message.createdAt != null ? { startedAtMs: message.createdAt } : {}),
+    ...(startedAt != null ? { startedAtMs: startedAt } : {}),
     ...(message.endedAt != null ? { endedAtMs: message.endedAt } : {}),
   });
 }
@@ -94,10 +96,20 @@ describe('OPEND-2823 · 折叠轮次里每张壳都要报得出耗时', () => {
    * 先证「量法看得见」:live 那三条各自都报得出耗时,而且就是库里那三个真实跨度。
    * 这一条绿是下面那条断言不空转的前提 —— 没见过绿的对照组,红读数说明不了问题。
    */
-  it('对照组 · live 三个 run 各自报得出真实跨度', () => {
-    const live = RUNS.map((run) => shellsOf(blocksOf(run)));
+  it('legacy 对照组 · 没有 startedAt 时保留原创建时间跨度', () => {
+    const live = RUNS.map((run) => shellsOf(blocksOf({ ...run, startedAt: undefined })));
     expect(live.map((shells) => shells.length)).toEqual([1, 1, 1]);
     expect(live.map(([shell]) => shell!.elapsedMs)).toEqual([79_779, 159_066, 282_314]);
+    expect(live.map(([shell]) => headText(shell!))).toEqual(['1m 20s', '2m 39s', '4m 42s']);
+  });
+
+  it('真实 DTO 对照组 · live 使用每个 run 的 startedAt 精确跨度', () => {
+    // The original recorded JSON is unchanged. Its physical starts precede
+    // row creation by 22/21/32ms; legacy rounding must not erase that fact.
+    const live = RUNS.map((run) => shellsOf(blocksOf(run)));
+    expect(live.map((shells) => shells.length)).toEqual([1, 1, 1]);
+    expect(RUNS.map(run => run.startedAt)).not.toContain(undefined);
+    expect(live.map(([shell]) => shell!.elapsedMs)).toEqual(RUNS.map(run => run.endedAt! - run.startedAt!));
     expect(live.map(([shell]) => headText(shell!))).toEqual(['1m 20s', '2m 39s', '4m 42s']);
   });
 
@@ -158,7 +170,7 @@ describe('OPEND-2824 · 卡头的总耗时不得小于卡里的阶段耗时', ()
     const shells = shellsOf(buildTurnBlocks({
       events: (folded.events ?? []) as PersistedAgentEvent[],
       runStatus: 'running',
-      startedAtMs: folded.createdAt,
+      startedAtMs: folded.startedAt ?? folded.createdAt,
       nowMs: folded.endedAt! + 60_000,
     }));
     for (const shell of shells) {

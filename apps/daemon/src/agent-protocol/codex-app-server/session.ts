@@ -32,22 +32,30 @@
  *      including a JSON-RPC error response, is emitted as an `error` AGENT
  *      event so it flows through `sendAgentEvent`'s classifier.
  *
- * On `experimentalApi`: NOT enabled. Measured on codex-cli 0.149.1 across four
- * configurations × two repetitions of one fixed prompt, `item/agentMessage/
- * delta` arrived on every run regardless of the flag (52/54 vs 45/42 frames),
- * and `item/reasoning/summaryTextDelta` was gated purely by the reasoning
- * summary setting, not by the flag. The capability's own doc comment is "opt
- * into receiving experimental API methods and fields" — declaring it would buy
- * nothing measurable and widen the surface most likely to change.
+ * OD-owned threads opt into experimentalApi for persistent paginated history.
+ * Codex 0.146.0 only locks paginated histories across processes when archiving;
+ * its default legacy history can be archived while another process writes it.
+ * Streaming itself does not require the experimental capability.
  */
 import { createCodexAppServerNormalizer } from './normalize.js';
+import { codexHistoryCapabilities } from './thread-cleanup.js';
 
 type JsonObject = Record<string, unknown>;
 
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
 
+const closedThreadProof = Symbol('closed owned Codex thread');
+
+/** Issued only by this session after its child closes; never reconstructed from a user ID. */
+export interface CodexClosedThreadCleanup {
+  readonly threadId: string;
+  readonly historyMode: 'paginated' | 'legacy';
+  readonly [closedThreadProof]: true;
+}
+
 export interface CodexAppServerSessionOptions {
   child: {
+    once?(event: 'close', listener: () => void): unknown;
     stdout: { on(event: 'data', listener: (chunk: unknown) => void): unknown };
     stdin: {
       write(chunk: string, cb?: (err?: Error | null) => void): unknown;
@@ -63,6 +71,10 @@ export interface CodexAppServerSessionOptions {
   serviceTier?: string | null;
   sandboxMode: CodexSandboxMode;
   resumeSessionId?: string | null;
+  /** Internal daemon policy; never infer ownership from a thread title. */
+  manageThreadVisibility?: boolean;
+  /** The daemon validated this resume handle against its captured session record. */
+  resumeSessionOwned?: boolean;
   imagePaths?: string[];
   clientVersion?: string;
   onAgentEvent: (event: JsonObject) => void;
@@ -83,6 +95,8 @@ export interface CodexAppServerSession {
   completedSuccessfully(): boolean;
   getDurableSessionId(): string | null;
   getLastSessionPath(): string | null;
+  /** Once-only cleanup authority, unavailable until this exact child has closed. */
+  takeClosedThreadCleanup(): CodexClosedThreadCleanup | null;
   stats(): { unknownNotifications: number; unknownItems: number };
 }
 
@@ -143,6 +157,14 @@ export function attachCodexAppServerSession(
   let turnEnded = false;
   let turnSucceeded = false;
   let handleReported = false;
+  let terminalReceived = false;
+  let childClosed = false;
+  let cleanupThread: CodexClosedThreadCleanup | null = null;
+  let canArchiveSafely = false;
+  let supportsPaginatedHistory = false;
+  let protectsLegacyHistory = false;
+  let archiveTimer: ReturnType<typeof setTimeout> | undefined;
+  const ownsThread = !resumeSessionId || opts.resumeSessionOwned === true;
 
   function write(frame: JsonObject, onWritten?: () => void): void {
     const stdin = child.stdin;
@@ -160,11 +182,13 @@ export function attachCodexAppServerSession(
     params: JsonObject,
     onResult: (result: JsonObject) => void,
     onWritten?: () => void,
+    onError?: (error: unknown) => void,
   ): void {
     const id = nextId++;
     pending.set(id, (frame) => {
       if (frame.error !== undefined) {
-        reportFatal(rpcErrorText(method, frame.error));
+        if (onError) onError(frame.error);
+        else reportFatal(rpcErrorText(method, frame.error));
         return;
       }
       onResult(isRecord(frame.result) ? frame.result : {});
@@ -240,6 +264,14 @@ export function attachCodexAppServerSession(
       const id = typeof thread?.id === 'string' ? thread.id : null;
       if (id) {
         threadId = id;
+        canArchiveSafely = opts.manageThreadVisibility === true
+          && (protectsLegacyHistory || (supportsPaginatedHistory && thread?.historyMode === 'paginated'));
+        if (canArchiveSafely && ownsThread && id.trim()
+          && (!resumeSessionId || id === resumeSessionId)) {
+          cleanupThread = Object.freeze({ threadId: id,
+            historyMode: thread?.historyMode === 'paginated' ? 'paginated' : 'legacy',
+            [closedThreadProof]: true as const });
+        }
         const path = typeof thread?.path === 'string' ? thread.path : '';
         if (path) rolloutPath = path;
         // `thread/start` is followed by a `thread/started` notification, but
@@ -255,10 +287,36 @@ export function attachCodexAppServerSession(
       reportFatal('codex app-server returned no thread id');
     };
     if (resumeSessionId) {
-      request('thread/resume', { ...shared, threadId: resumeSessionId }, onThread);
+      request(
+        'thread/resume', { ...shared, threadId: resumeSessionId }, onThread,
+        undefined,
+        (error) => {
+          const message = rpcErrorText('thread/resume', error);
+          if (opts.manageThreadVisibility !== true || !ownsThread || !/\bis archived\b/u.test(message)) {
+            reportFatal(message);
+            return;
+          }
+          archiveTimer = setTimeout(() => {
+            reportFatal('codex app-server thread/unarchive timed out');
+            shutdown();
+          }, 1_500);
+          request('thread/unarchive', { threadId: resumeSessionId }, () => {
+            clearTimeout(archiveTimer);
+            archiveTimer = undefined;
+            request('thread/resume', { ...shared, threadId: resumeSessionId }, onThread);
+          }, undefined, (unarchiveError) => {
+            onAgentEvent({ type: 'diagnostic', name: 'codex_thread_unarchive_failed',
+              message: rpcErrorText('thread/unarchive', unarchiveError) });
+            // Do not feed a cleanup error's "no rollout" wording into the
+            // daemon's stale-resume detector, which would clear the cursor.
+            reportFatal('codex app-server thread/unarchive failed');
+            shutdown();
+          });
+        },
+      );
       return;
     }
-    request('thread/start', shared, onThread);
+    request('thread/start', supportsPaginatedHistory ? { ...shared, historyMode: 'paginated' } : shared, onThread);
   }
 
   /** Emit the thread id on the session-capture channel, at most once. */
@@ -269,6 +327,8 @@ export function attachCodexAppServerSession(
   }
 
   function handleFrame(frame: JsonObject): void {
+    if (turnEnded || childClosed) return;
+    if (aborted && !terminalReceived && frame.method !== 'turn/completed') return;
     if (!cliReadySeen) {
       cliReadySeen = true;
       onCliReady?.();
@@ -303,13 +363,25 @@ export function attachCodexAppServerSession(
       reportSessionHandle(startedId);
       return;
     }
+    if (frame.method === 'turn/completed' && terminalReceived) return;
     normalizer.handleNotification(frame.method, frame.params);
     if (frame.method === 'turn/completed') {
+      terminalReceived = true;
       const params = isRecord(frame.params) ? frame.params : {};
       const turn = isRecord(params.turn) ? params.turn : null;
       turnSucceeded = turn?.status !== 'failed';
       onTurnComplete?.();
-      shutdown();
+      if (canArchiveSafely && ownsThread && threadId
+        && (!resumeSessionId || threadId === resumeSessionId)) {
+        // The upstream archive operation checks its cross-process writer lock.
+        // A competing resume therefore refuses cleanup instead of losing history.
+        archiveTimer = setTimeout(shutdown, 1_500);
+        request('thread/archive', { threadId }, shutdown, undefined, (error) => {
+          onAgentEvent({ type: 'diagnostic', name: 'codex_thread_archive_failed',
+            message: rpcErrorText('thread/archive', error) });
+          shutdown();
+        });
+      } else shutdown();
     }
   }
 
@@ -327,6 +399,7 @@ export function attachCodexAppServerSession(
   function shutdown(): void {
     if (turnEnded) return;
     turnEnded = true;
+    if (archiveTimer) clearTimeout(archiveTimer);
     const stdin = child.stdin;
     if (!stdin || stdin.destroyed) return;
     try {
@@ -356,6 +429,12 @@ export function attachCodexAppServerSession(
     }
   });
 
+  child.once?.('close', () => {
+    childClosed = true;
+    if (archiveTimer) clearTimeout(archiveTimer);
+    pending.clear();
+  });
+
   request(
     'initialize',
     {
@@ -364,9 +443,16 @@ export function attachCodexAppServerSession(
         title: 'Open Design',
         version: opts.clientVersion ?? '0.0.0',
       },
-      capabilities: { experimentalApi: false, requestAttestation: false },
+      capabilities: { experimentalApi: opts.manageThreadVisibility === true, requestAttestation: false },
     },
-    () => {
+    (result) => {
+      // Verified with the official 0.146.0 and 0.153.4 binaries: paginated
+      // history has cross-process archive locks in both; legacy only in the
+      // latter. Never convert an existing legacy history or archive it on an
+      // older server. Unknown servers retain the existing resumable behavior.
+      const capabilities = codexHistoryCapabilities(result.userAgent);
+      supportsPaginatedHistory = opts.manageThreadVisibility === true && capabilities.paginated;
+      protectsLegacyHistory = opts.manageThreadVisibility === true && capabilities.legacy;
       notify('initialized', {});
       openThread();
     },
@@ -389,6 +475,12 @@ export function attachCodexAppServerSession(
     },
     getLastSessionPath(): string | null {
       return rolloutPath;
+    },
+    takeClosedThreadCleanup(): CodexClosedThreadCleanup | null {
+      if (!childClosed || terminalReceived) return null;
+      const receipt = cleanupThread;
+      cleanupThread = null;
+      return receipt;
     },
     stats() {
       return normalizer.stats();

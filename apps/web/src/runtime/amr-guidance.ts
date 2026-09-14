@@ -22,7 +22,7 @@ import { byokApiKeyIsEditableInSettings } from '../utils/byokProvider';
 // (vela #1055), so sending a user to /wallet would drop them on a surface the
 // product no longer navigates to.
 export const AMR_CONSOLE_URL =
-  'https://open-design.ai/amr/dashboard?source=open_design';
+  'https://open-design.ai/cloud/dashboard?source=open_design';
 export const DEFAULT_AMR_RECHARGE_URL = AMR_CONSOLE_URL;
 export const AMR_RECHARGE_URL = DEFAULT_AMR_RECHARGE_URL;
 

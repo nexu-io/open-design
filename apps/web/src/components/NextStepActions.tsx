@@ -227,7 +227,8 @@ interface Props {
    * built and parsed out of its `<od-next key="…">` marker by the daemon.
    *
    * The `default` variant renders ONLY these — the fixed toolbox directory it
-   * used to render is gone. An empty list therefore means "render nothing":
+   * used to render is gone. AssistantMessage may supply the OPEND-2776 image
+   * actions for a successful image delivery. An empty list means "render nothing":
    * there is deliberately no fallback to a catalogue, because a turn recorded
    * before this existed has no suggestions and a generic row under it would be
    * a worse answer than silence.
@@ -366,9 +367,8 @@ export function NextStepActions({
    * (plan / project-incomplete / design-system / brand-*)是各自的恢复流程,
    * 不在这次裁决范围内,原样保留。
    *
-   * **旧会话兼容**是硬要求:历史消息里没有这一轮的建议,这一行就干脆不出。
-   * 不退回工具箱、不出空壳 —— 建议是关于「这一轮到底做了什么」的,事后
-   * 无从重建,给一句放之四海而皆准的话比不给更糟。
+   * 调用方负责选择 agent 建议或 OPEND-2776 的成功生图动作。
+   * 没有可用建议时不退回工具箱、不出空壳。
    */
   const visibleSuggestions = useMemo(
     () =>
@@ -714,7 +714,7 @@ export function NextStepActions({
   const keepOpen = { onMouseEnter: cancelClose, onMouseLeave: scheduleClose };
 
   /*
-   * 旧会话 / 模型没给建议 / 给了但一条都用不了 —— 这一行整块不出。
+   * 调用方没给建议 / 给了但一条都用不了 —— 这一行整块不出。
    * 返回 `null` 而不是空 `<div>`:空容器仍然占版面上的一格,而这一块的分寸
    * 恰恰是「你想继续时才被看见」。
    */

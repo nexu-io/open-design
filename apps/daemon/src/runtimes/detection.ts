@@ -453,6 +453,7 @@ function unavailableAgent(
   def: RuntimeAgentDef,
   diagnostics: AgentDiagnostic[] = [],
   detected?: { path?: string; version?: string | null },
+  configuredEnv: Record<string, string> = {},
 ): DetectedAgent {
   return {
     ...stripFns(def),
@@ -462,7 +463,7 @@ function unavailableAgent(
     ...(detected?.path ? { path: detected.path } : {}),
     ...(detected && 'version' in detected ? { version: detected.version ?? null } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
-    ...installMetaForAgent(def.id),
+    ...installMetaForAgent(def.id, configuredEnv),
   };
 }
 
@@ -569,7 +570,7 @@ async function probe(
   // hand even though the real launch path is healthy.
   const initialLaunch = resolveAgentLaunch(def, configuredEnv);
   if (!initialLaunch.selectedPath || !initialLaunch.launchPath) {
-    return unavailableAgent(def, [buildExecutableDiagnostic(def, configuredEnv)]);
+    return unavailableAgent(def, [buildExecutableDiagnostic(def, configuredEnv)], undefined, configuredEnv);
   }
   // Carry the narrowed pair explicitly: the candidate walk below reassigns
   // this binding, which would otherwise discard the null-check above and
@@ -662,13 +663,14 @@ async function probe(
       def,
       [buildNotInvocableDiagnostic(def, launch, outcome.cause)],
       { path: launch.selectedPath },
+      configuredEnv,
     );
   }
   if (def.versionPolicy?.requireVersion && !outcome.version) {
     return unavailableAgent(def, [buildVersionDiagnostic(def, outcome.version)], {
       path: launch.selectedPath,
       version: outcome.version,
-    });
+    }, configuredEnv);
   }
   let runtimeCompanionVersion: string | undefined;
   if (def.compatibilityProbe) {
@@ -677,7 +679,7 @@ async function probe(
         return unavailableAgent(def, [buildCompatibilityDiagnostic(def)], {
           path: launch.selectedPath,
           version: outcome.version,
-        });
+        }, configuredEnv);
       }
       const { stdout } = await execAgentFile(
         launch.launchPath,
@@ -693,7 +695,7 @@ async function probe(
       return unavailableAgent(def, [buildCompatibilityDiagnostic(def)], {
         path: launch.selectedPath,
         version: outcome.version,
-      });
+      }, configuredEnv);
     }
   }
   const versionDiagnostic =
@@ -772,7 +774,7 @@ async function probe(
           ),
         }
       : {}),
-    ...installMetaForAgent(def.id),
+    ...installMetaForAgent(def.id, configuredEnv),
   };
 }
 
@@ -823,7 +825,7 @@ export async function detectAgent(
     // Without this guard the bare `Promise.all` rejected and the
     // `/api/agents` catch arm returned `[]`, so the UI silently lost
     // every CLI option and fell back to BYOK / Cloud only.
-    return unavailableAgent(def);
+    return unavailableAgent(def, [], undefined, configuredEnv);
   }
 }
 

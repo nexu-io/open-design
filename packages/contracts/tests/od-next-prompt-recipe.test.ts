@@ -676,6 +676,13 @@ describe('OD Next V2 prompt recipe', () => {
     });
 
     expect(clarification).toContain('Clarification answer');
+    // OPEND-2954: every Runtime State example in the protocol reference shows
+    // `inputStage: "request"`, and this was the one continuation that never
+    // named its own stage — so a clarification turn copied the example and was
+    // refused for it. The continuation now says which stage it runs at.
+    expect(clarification).toContain('stage="clarification" task_run_index="1"');
+    expect(clarification).toContain('inputStage clarification');
+    expect(clarification).toContain('outcome plan_ready');
     expect(contractRepair).toContain('serialization-only');
     expect(production).toContain(`planContractHash=${A}`);
     expect(production).toMatch(/^<open_design_request_turn/);

@@ -125,6 +125,8 @@ export interface SayTextProps {
 export interface FileButtonProps {
   path: string;
   label: string;
+  /** Optional file detail; absent preserves the existing elided-name tooltip. */
+  title?: string;
   /** 不传 = 打不开 = 不渲染成按钮 */
   onOpen?: (path: string) => void;
   /** 是否按文件名规则省略(保后缀、中间省略)。命令 / 模式串**不要**开 */
