@@ -1,4 +1,8 @@
-import type { ByokChatProviderConfig } from '@open-design/contracts';
+import {
+  DEFAULT_BYOK_BASE_URL_BY_PROTOCOL as DEFAULT_BASE_URL_BY_PROTOCOL,
+  isCustomByokBaseUrl,
+  type ByokChatProviderConfig,
+} from '@open-design/contracts';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
@@ -7,16 +11,6 @@ export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
 const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
-
-const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], string> = {
-  anthropic: 'https://api.anthropic.com/v1',
-  openai: 'https://api.openai.com/v1',
-  azure: '',
-  google: 'https://generativelanguage.googleapis.com/v1beta',
-  ollama: 'https://ollama.com',
-  senseaudio: 'https://api.senseaudio.cn',
-  aihubmix: 'https://aihubmix.com/v1',
-};
 
 type ProviderPackage =
   | '@ai-sdk/anthropic'
@@ -30,30 +24,6 @@ export interface OpenCodeByokProviderConfig {
   modelId: string;
   env: Record<string, string>;
   config: Record<string, unknown>;
-}
-
-export function isCustomByokBaseUrl(
-  protocol: ByokChatProviderConfig['protocol'],
-  baseUrl: string,
-): boolean {
-  const trimmed = baseUrl.trim().replace(/\/+$/, '');
-  if (!trimmed) return false;
-  const protocolDefault = (DEFAULT_BASE_URL_BY_PROTOCOL[protocol] ?? '').replace(/\/+$/, '');
-  if (!protocolDefault) return true;
-  try {
-    const custom = new URL(trimmed);
-    const fallback = new URL(protocolDefault);
-    const customPath = custom.pathname.replace(/\/+$/, '');
-    const fallbackPath = fallback.pathname.replace(/\/+$/, '');
-    // A bare origin counts as the built-in endpoint: normalizeProviderBaseUrl
-    // appends the protocol's versioned path before any request is built.
-    return (
-      custom.origin !== fallback.origin ||
-      !(customPath === '' || customPath === fallbackPath)
-    );
-  } catch {
-    return true;
-  }
 }
 
 export function opencodeByokModelId(

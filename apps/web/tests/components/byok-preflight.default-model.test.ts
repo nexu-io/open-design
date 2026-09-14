@@ -27,6 +27,20 @@ describe('byokPreflightBlockReason default-model sentinel', () => {
     ).toBeNull();
   });
 
+  it('accepts a literal `default` model on a listed custom gateway preset', () => {
+    // OpenRouter ships as a KNOWN_PROVIDERS preset but is not the protocol's
+    // built-in endpoint, so gateways that route behind a `default` alias
+    // must not be blocked just because the URL is recognized.
+    expect(
+      byokPreflightBlockReason({
+        ...anthropicPreset,
+        apiProtocol: 'openai',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'default',
+      }),
+    ).toBeNull();
+  });
+
   it('still blocks a missing model on a custom base URL', () => {
     expect(
       byokPreflightBlockReason({

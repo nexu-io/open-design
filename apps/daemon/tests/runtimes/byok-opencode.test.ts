@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { isCustomByokBaseUrl } from '@open-design/contracts';
+
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
   BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
-  isCustomByokBaseUrl,
   opencodeByokModelId,
 } from '../../src/runtimes/byok-opencode.js';
 import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
@@ -456,9 +457,30 @@ describe('byok-opencode runtime config', () => {
     expect(isCustomByokBaseUrl('openai', 'https://api.openai.com')).toBe(false);
     expect(isCustomByokBaseUrl('openai', 'https://gateway.internal/v1')).toBe(true);
     expect(isCustomByokBaseUrl('openai', '')).toBe(false);
+    // Ollama Cloud normalizes to /v1, so both spellings stay built-in.
+    expect(isCustomByokBaseUrl('ollama', 'https://ollama.com')).toBe(false);
+    expect(isCustomByokBaseUrl('ollama', 'https://ollama.com/v1')).toBe(false);
+    expect(isCustomByokBaseUrl('ollama', '')).toBe(false);
+    // Local Ollama/vLLM endpoints are custom gateways by definition.
+    expect(isCustomByokBaseUrl('ollama', 'http://127.0.0.1:11434/v1')).toBe(true);
     expect(opencodeByokModelId('default')).toBeNull();
     expect(opencodeByokModelId('default', { allowDefaultModel: true }))
       .toBe('open-design-byok/default');
+  });
+
+  it('keeps the sentinel guard on Ollama Cloud but lifts it for local endpoints', () => {
+    expect(
+      buildOpenCodeByokProviderConfig(
+        { protocol: 'ollama', apiKey: 'dummy', baseUrl: 'https://ollama.com' },
+        'default',
+      ),
+    ).toBeNull();
+    expect(
+      buildOpenCodeByokProviderConfig(
+        { protocol: 'ollama', apiKey: '', baseUrl: 'http://127.0.0.1:11434' },
+        'default',
+      )?.modelId,
+    ).toBe('open-design-byok/default');
   });
 
   it('builds provider config for a literal `default` model on a custom base URL', () => {
