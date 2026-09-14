@@ -2483,11 +2483,12 @@ export async function deleteLiveArtifact(
 
 async function readApiErrorBody(resp: Response): Promise<{ message: string; code?: string }> {
   try {
-    const json = (await resp.json()) as { error?: { code?: string; message?: string } | string; message?: string };
+    const json = (await resp.json()) as { error?: { code?: string; message?: string } | string; code?: string; message?: string };
     const message = typeof json.error === 'string' ? json.error : json.error?.message ?? json.message;
+    const code = typeof json.error === 'object' ? json.error?.code : json.code;
     return {
       message: typeof message === 'string' && message.length > 0 ? message : `Request failed (${resp.status}).`,
-      ...(typeof json.error === 'object' && typeof json.error?.code === 'string' ? { code: json.error.code } : {}),
+      ...(typeof code === 'string' ? { code } : {}),
     };
   } catch {
     return { message: `Request failed (${resp.status}).` };
@@ -3340,23 +3341,39 @@ export async function renameProjectFile(
   return (await resp.json()) as RenameProjectFileResponse;
 }
 
-export async function openFolderDialog(options: { throwOnError?: boolean } = {}): Promise<string | null> {
+export type FolderDialogResult =
+  | { status: 'selected'; path: string }
+  | { status: 'cancelled' }
+  | { status: 'fallback' }
+  | { status: 'error'; message: string };
+
+export async function openFolderDialog(options: { detailed: true; throwOnError?: boolean }): Promise<FolderDialogResult>;
+export async function openFolderDialog(options?: { detailed?: false; throwOnError?: boolean }): Promise<string | null>;
+export async function openFolderDialog(options: { detailed?: boolean; throwOnError?: boolean } = {}): Promise<string | null | FolderDialogResult> {
+  const detailed = options.detailed === true;
+  const complete = (result: FolderDialogResult): string | null | FolderDialogResult => (
+    detailed ? result : result.status === 'selected' ? result.path : null
+  );
   try {
     const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
     if (!resp.ok) {
-      if (options.throwOnError) {
-        const errorBody = await readApiErrorBody(resp);
-        throw new Error(errorBody.message);
-      }
-      return null;
+      const fallbackBody = await resp.clone().json().catch(() => null) as { code?: string; fallback?: string } | null;
+      const errorBody = await readApiErrorBody(resp);
+      const fallback = fallbackBody?.fallback === 'server-directory-picker' && (
+        (resp.status === 403 && fallbackBody.code === 'NATIVE_FOLDER_DIALOG_REMOTE')
+        || (resp.status === 503 && fallbackBody.code === 'NATIVE_FOLDER_DIALOG_UNAVAILABLE')
+      );
+      if (fallback && detailed) return complete({ status: 'fallback' });
+      if (options.throwOnError) throw new Error(errorBody.message);
+      return complete({ status: 'error', message: errorBody.message });
     }
     const data = await resp.json();
-    return typeof data.path === 'string' && data.path.length > 0 ? data.path : null;
+    if (typeof data.path === 'string' && data.path.length > 0) return complete({ status: 'selected', path: data.path });
+    if (data.path === null) return complete({ status: 'cancelled' });
+    return complete({ status: 'error', message: 'Could not open folder picker' });
   } catch (err) {
-    if (options.throwOnError) {
-      throw err instanceof Error ? err : new Error('Could not open folder picker');
-    }
-    return null;
+    if (options.throwOnError) throw err instanceof Error ? err : new Error('Could not open folder picker');
+    return complete({ status: 'error', message: err instanceof Error ? err.message : 'Could not open folder picker' });
   }
 }
 

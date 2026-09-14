@@ -67,6 +67,7 @@ import { Icon, type IconName } from "./Icon";
 import { ChatCloseIcon, ChatFileIcon, ChatSendArrowIcon } from "./chat/primitives/icons";
 import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND, type PlusMenuSubmenu } from './ComposerPlusMenu';
 import { LibraryPicker } from './LibraryPicker';
+import { ServerDirectoryPicker } from './ServerDirectoryPicker';
 import { FigmaImportModal } from './FigmaImportModal';
 import { FigmaHelpModal } from './FigmaHelpModal';
 import {
@@ -672,6 +673,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [manualEditorHeight, setManualEditorHeight] = useState<number | null>(null);
     const nextAttachmentOrderRef = useRef(nextChatAttachmentOrder(restoredExtrasRef.current.attachments));
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+    const [serverFolderPickerOpen, setServerFolderPickerOpen] = useState(false);
     const [figmaModalOpen, setFigmaModalOpen] = useState(false);
     const [figmaHelpOpen, setFigmaHelpOpen] = useState(false);
     const [projectReferenceOpen, setProjectReferenceOpen] = useState(false);
@@ -1868,18 +1870,26 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
-    async function handleLinkLocalCodeContext() {
-      const selected = await openFolderDialog();
-      if (!selected) {
+    async function handleLinkLocalCodeContext(selectedPath?: string) {
+      const result = selectedPath
+        ? { status: 'selected' as const, path: selectedPath }
+        : await openFolderDialog({ detailed: true });
+      if (result.status === 'fallback') {
+        setServerFolderPickerOpen(true);
+        return;
+      }
+      if (result.status !== 'selected') {
+        if (result.status === 'error') setUploadError(result.message);
         trackContextLinkResult(analytics.track, {
           page_name: 'chat_panel',
           area: 'chat_composer',
           context_kind: 'local_code',
-          result: 'cancelled',
+          result: result.status === 'cancelled' ? 'cancelled' : 'failed',
           ...(projectId ? { project_id: projectId } : {}),
         });
         return;
       }
+      const selected = result.path;
       const trackedLinkedDir = await addLinkedDir(selected);
       if (trackedLinkedDir === false) {
         trackContextLinkResult(analytics.track, {
@@ -3970,6 +3980,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             onConfirm={(assets) => addAssetsFromLibrary(assets)}
           />
         ) : null}
+        <ServerDirectoryPicker
+          open={serverFolderPickerOpen}
+          onClose={() => setServerFolderPickerOpen(false)}
+          onSelect={(directory) => {
+            setServerFolderPickerOpen(false);
+            void handleLinkLocalCodeContext(directory);
+          }}
+        />
         {figmaModalOpen && projectId ? (
           <FigmaImportModal
             onClose={() => setFigmaModalOpen(false)}
