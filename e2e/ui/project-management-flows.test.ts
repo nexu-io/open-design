@@ -1194,6 +1194,66 @@ test('[P1] project detail keeps local-code context when linkedDirs PATCH removal
   );
 });
 
+test('[P1] new-chat Link local code opens the server picker after the native picker falls back', async ({ page }, testInfo) => {
+  await routeComposerPlusFixtures(page);
+  await page.route('**/api/dialog/open-folder', async (route) => {
+    await route.fulfill({
+      status: 403,
+      json: { code: 'NATIVE_FOLDER_DIALOG_REMOTE', message: 'remote', fallback: 'server-directory-picker' },
+    });
+  });
+  await page.route('**/api/fs-browser/roots', async (route) => {
+    await route.fulfill({ json: { roots: [{ label: 'Workspace', path: '/srv', kind: 'configured' }] } });
+  });
+  await page.route('**/api/fs-browser/list?**', async (route) => {
+    const path = new URL(route.request().url()).searchParams.get('path') ?? '/srv';
+    await route.fulfill({
+      json: {
+        path,
+        parent: null,
+        entries: path === '/srv' ? [{ name: 'local-code', path: '/srv/local-code', type: 'directory', hidden: false }] : [],
+        truncated: false,
+      },
+    });
+  });
+  await page.route('**/api/projects/*', async (route) => {
+    if (route.request().method() !== 'PATCH') return route.continue();
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      json: {
+        project: {
+          id: route.request().url().split('/api/projects/')[1]?.split(/[/?#]/)[0] ?? 'project',
+          name: 'Folder picker proof',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          metadata: body.metadata ?? { kind: 'prototype' },
+        },
+      },
+    });
+  });
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await createProject(page, 'Folder picker proof');
+  await expectWorkspaceReady(page);
+  const composer = page.getByTestId('chat-composer');
+
+  await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
+  await page.getByRole('menuitem', { name: /Link local code/i }).click();
+
+  const picker = page.getByRole('dialog', { name: 'Project locations' });
+  await expect(picker).toBeVisible();
+  await picker.getByRole('button', { name: 'local-code' }).click();
+  await expect(picker.getByText('/srv/local-code')).toBeVisible();
+  await picker.getByRole('button', { name: /Add folder/ }).click();
+
+  await expect(composer.getByLabel('Remove local-code')).toHaveCount(1);
+  await testInfo.attach('folder-picker-fallback', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+});
+
 test('[P1] project detail composer context actions emit analytics event fields', async ({ page }) => {
   test.fail(true, 'Inline workspace mention deletion does not yet emit context_remove analytics');
   const analyticsBodies: string[] = [];

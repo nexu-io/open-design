@@ -129,6 +129,7 @@ let plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
 let skills = [SKILL];
 let servers = [MCP_SERVER];
 let openFolderPaths: string[];
+let nativeFolderDialogResponse: { status: number; body: unknown } | null;
 let deferNextProjectPatch = false;
 let rejectNextProjectPatch = false;
 let resolveDeferredProjectPatch: (() => void) | null = null;
@@ -202,6 +203,7 @@ beforeEach(() => {
   skills = [SKILL];
   servers = [MCP_SERVER];
   openFolderPaths = ['/Users/me/reference-dir'];
+  nativeFolderDialogResponse = null;
   deferNextProjectPatch = false;
   rejectNextProjectPatch = false;
   resolveDeferredProjectPatch = null;
@@ -242,6 +244,12 @@ beforeEach(() => {
       });
     }
     if (url === '/api/dialog/open-folder' && init?.method === 'POST') {
+      if (nativeFolderDialogResponse) {
+        return new Response(JSON.stringify(nativeFolderDialogResponse.body), {
+          status: nativeFolderDialogResponse.status,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       return new Response(
         JSON.stringify({ path: openFolderPaths.shift() ?? '/Users/me/reference-dir' }),
         {
@@ -249,6 +257,24 @@ beforeEach(() => {
           headers: { 'content-type': 'application/json' },
         },
       );
+    }
+    if (url === '/api/fs-browser/roots') {
+      return new Response(JSON.stringify({ roots: [{ label: 'Workspace', path: '/srv', kind: 'configured' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.startsWith('/api/fs-browser/list')) {
+      const path = new URL(url, 'http://localhost').searchParams.get('path');
+      return new Response(JSON.stringify({
+        path: path ?? '/srv',
+        parent: null,
+        entries: path === '/srv' ? [{ name: 'local-code', path: '/srv/local-code', type: 'directory', hidden: false }] : [],
+        truncated: false,
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     }
     if (url.startsWith('/api/skills/')) {
       const id = decodeURIComponent(url.split('/').pop() ?? '');
@@ -521,6 +547,28 @@ describe('ChatComposer context pickers', () => {
   // absolutePath. If a file context were ever counted as a directory owner,
   // `workspaceContextDirStillReferenced` would treat the dir as still in use and
   // swallow the unlink — the second PATCH below would never happen.
+  it('links local code in a new chat through the server picker when native selection falls back', async () => {
+    nativeFolderDialogResponse = {
+      status: 403,
+      body: { code: 'NATIVE_FOLDER_DIALOG_REMOTE', message: 'remote', fallback: 'server-directory-picker' },
+    };
+    renderComposer({ projectMetadata: { kind: 'prototype' } });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await screen.findByRole('dialog', { name: 'Project locations' });
+    fireEvent.click(screen.getByText('local-code'));
+    await screen.findByText('/srv/local-code');
+    fireEvent.click(screen.getByRole('button', { name: /Add folder/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('staged-contexts').textContent).toContain('local-code');
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/srv/local-code']);
+  });
+
   it('never counts an active file context path as a linked dir', async () => {
     openFolderPaths = ['/Users/me/new-work-dir'];
     const onProjectMetadataChange = vi.fn();
