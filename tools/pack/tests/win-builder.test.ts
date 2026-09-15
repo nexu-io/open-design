@@ -9,9 +9,15 @@ import { describe, expect, it } from "vitest";
 
 import winBuildSource from "@/win/build.ts?raw";
 import winBuilderSource from "@/win/builder.ts?raw";
-import { materializeCachedUnpackedForInstaller } from "@/win/builder.js";
+import {
+  createWinOdCmdScript,
+  materializeCachedUnpackedForInstaller,
+  writeWinOdCmdShim,
+} from "@/win/builder.js";
+import { PRODUCT_NAME } from "@/win/constants.js";
 import winCustomInstallerSource from "@/win/custom-installer.ts?raw";
 import { createLauncherRuntimeSyncPowerShellScript } from "@/win/custom-installer.js";
+import { WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH } from "@/win/prebundle.js";
 import winPayloadSource from "@/win/payload.ts?raw";
 import type { WinPaths } from "@/win/types.js";
 import { readWinExecutableVersionSnapshot } from "@/win/version-resource.js";
@@ -176,7 +182,7 @@ describe("Windows pack artifact boundaries", () => {
   });
 
   it("invalidates Windows payload caches when the archive method changes", () => {
-    expect(winBuilderSource).toContain("const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2");
+    expect(winBuilderSource).toContain("const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 3");
     expect(winPayloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_BASE_CACHE_VERSION = 2");
     expect(winPayloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_ARCHIVE_CACHE_VERSION = 2");
   });
@@ -284,3 +290,34 @@ async function createVersionedExecutable(packagedVersion: string): Promise<Buffe
   resource.outputResource(executable);
   return Buffer.from(executable.generate());
 }
+
+describe("win od.cmd shim staging", () => {
+  it("routes the daemon CLI through the bundled Electron runtime", () => {
+    const script = createWinOdCmdScript();
+    const daemonCli = WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH.split("/").join("\\");
+    expect(script.split("\r\n")).toEqual([
+      "@echo off",
+      "setlocal",
+      'set "ELECTRON_RUN_AS_NODE=1"',
+      `"%~dp0${PRODUCT_NAME}.exe" "%~dp0resources\\${daemonCli}" %*`,
+      "",
+    ]);
+  });
+
+  it("stages the shim beside the executable and verifies the bytes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-od-cmd-"));
+    try {
+      await writeWinOdCmdShim(root);
+      await expect(readFile(join(root, "od.cmd"), "utf8")).resolves.toBe(createWinOdCmdScript());
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("folds the shim into every cache key whose artifact embeds it", () => {
+    expect(winBuilderSource).toContain("odCmdScript: createWinOdCmdScript()");
+    expect(winBuilderSource).toContain("await writeWinOdCmdShim(paths.unpackedRoot)");
+    expect(winBuilderSource).toMatch(/WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 3;/);
+    expect(winBuilderSource).toContain("version: WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION");
+  });
+});
