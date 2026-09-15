@@ -68,8 +68,9 @@ const SERVER_NOTIFICATIONS = [
 const TYPE_SURFACE: Record<string, string[]> = {
   'InitializeCapabilities.ts': ['experimentalApi', 'requestAttestation'],
   'ClientInfo.ts': ['name', 'title', 'version'],
-  'v2/ThreadStartParams.ts': ['cwd', 'sandbox', 'approvalPolicy', 'historyMode'],
-  'v2/ThreadResumeParams.ts': ['threadId', 'cwd', 'sandbox', 'approvalPolicy'],
+  'InitializeResponse.ts': ['userAgent'],
+  'v2/ThreadStartParams.ts': ['cwd', 'sandbox', 'approvalPolicy', 'historyMode', 'config'],
+  'v2/ThreadResumeParams.ts': ['threadId', 'cwd', 'sandbox', 'approvalPolicy', 'config'],
   'v2/ThreadArchiveParams.ts': ['threadId'],
   'v2/ThreadUnarchiveParams.ts': ['threadId'],
   'v2/TurnStartParams.ts': ['threadId', 'input', 'model', 'effort', 'summary', 'serviceTier'],
@@ -183,6 +184,14 @@ describeWithCodex('codex app-server protocol contract', () => {
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it('declares the optional patch preview API on releases that enable it', () => {
+    const version = /codex-cli (\d+)\.(\d+)\.(\d+)(?:\s|$)/u.exec(codexVersion);
+    if (!version || (Number(version[1]) === 0 && Number(version[2]) < 123)) return;
+    expect(read('ServerNotification.ts')).toContain('"item/fileChange/patchUpdated"');
+    const source = read('v2/FileChangePatchUpdatedNotification.ts');
+    for (const field of ['threadId', 'turnId', 'itemId', 'changes']) expect(source).toContain(field);
   });
 
   it('cleans up the generated tree', () => {

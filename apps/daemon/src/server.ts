@@ -529,6 +529,7 @@ import {
   normalizeDeepSeekHarnessFailure,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
+import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -597,6 +598,8 @@ import {
 } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
+  createRunPerRequestUsageLedger,
+  foldEventIntoPerRequestUsageLedger,
   scanRunEventsForUsageAnalytics,
 } from './run-analytics-observability.js';
 import {
@@ -7775,6 +7778,8 @@ export async function startServer({
       onEventEmitted: (run, record) => {
         if (!run.sideEffectLedger) run.sideEffectLedger = createRunSideEffectLedger();
         foldEventIntoRunSideEffectLedger(run.sideEffectLedger, record);
+        if (!run.perRequestUsageLedger) run.perRequestUsageLedger = createRunPerRequestUsageLedger();
+        foldEventIntoPerRequestUsageLedger(run.perRequestUsageLedger, record);
         const data = record.data && typeof record.data === 'object' && !Array.isArray(record.data)
           ? record.data
           : null;
@@ -14237,6 +14242,26 @@ export async function startServer({
           ? { OD_TASK_INPUT_DIR: odNextTaskInputSnapshot.projectionDir }
           : {}),
       }, agentLaunch);
+      if (def.id === 'opencode' || def.id === 'byok-opencode') {
+        try {
+          const versions = await ensureDetectedRuntimeVersions('opencode', configuredAgentEnv);
+          if (!versions?.agentCliVersion) {
+            console.info('[opencode] optional tool previews disabled: CLI version unavailable; later launches retry detection after the short cache expires');
+          }
+          await applyOpenCodeEventPlugin(env, RUNTIME_DATA_DIR, versions?.agentCliVersion, agentSpawnEnv.OPENCODE_CONFIG_CONTENT);
+        } catch (error) {
+          console.warn('[opencode] optional tool previews unavailable:', error instanceof Error ? error.message : String(error));
+        }
+      }
+      // Version detection and plugin staging above can yield while a cancel
+      // request arrives. Never spawn a child after that cancellation.
+      if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+        cleanupPromptFile();
+        revokeToolToken('child_exit');
+        unregisterChatAgentEventSink();
+        cleanupOdNextRunInputProjection();
+        return;
+      }
       spawnedAgentEnv = env;
       const invocation = createCommandInvocation({
         command: agentLaunch.launchPath,
