@@ -2048,6 +2048,205 @@ describe('run event log persistence', () => {
     expect(after - before).toBeLessThan(15);
     expect(kept.length).toBe(ITER);
   });
+
+  it('recovers a run event that was lost to a transient log-stream failure', async () => {
+    // Regression for #5292: a write to a destroyed fs.WriteStream does not
+    // throw synchronously — it returns false and surfaces the failure as an
+    // async 'error'. The on('error') handler (runs.ts) destroys + nulls the
+    // stream, so EVERY record emitted while the stream is broken is silently
+    // dropped from events.jsonl even though the run later reaches a terminal
+    // status with its `end` record persisted on a freshly-reopened stream.
+    // The run's in-memory ring retains the lost records; the fix reconciles the
+    // file from the ring on the next emit so "end present on disk" implies
+    // every earlier record is present too. We drop TWO records in one burst
+    // (a second 'start' plus the retry telemetry that follows it) to pin the
+    // id-diff reconcile: a fix that only replays the single most-recent record
+    // would restore the retry telemetry but leave the second 'start' missing.
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+
+    runs.emit(run, 'start', { model: 'x' }); // lazily opens the write stream
+    expect(run.eventsLogStream).toBeDefined();
+    // Wait until the underlying fd is actually open so the destroy below is a
+    // clean destroy of an OPEN stream (deterministic 'error' emission) rather
+    // than a race with the stream's async open().
+    await new Promise<void>((resolve) => run.eventsLogStream.once('open', resolve));
+
+    // Simulate a transient fs failure: destroy the stream with an error.
+    // write() on the destroyed stream returns false + surfaces an async error
+    // instead of throwing, so every record emitted while it is broken is
+    // silently lost from the file (but stays in run.events).
+    const broken = run.eventsLogStream;
+    broken.destroy(new Error('simulated io failure'));
+
+    runs.emit(run, 'start', { model: 'y' }); // on the buggy code this write is LOST
+    runs.emit(run, 'run_retry_attempted', { retry_attempt_index: 1 }); // …and this one too
+    // Wait for destroy()'s async fs.close to complete so the run's on('error')
+    // handler has nulled the broken stream (and, on the fix, set
+    // eventsLogReplayNeeded) before the next emit re-opens a fresh stream.
+    await new Promise<void>((resolve) => broken.once('close', resolve));
+    runs.finish(run, 'succeeded', 0, null);
+
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    let lines: string[] = [];
+    for (let i = 0; i < 150; i++) {
+      if (fs.existsSync(logPath)) {
+        const text = fs.readFileSync(logPath, 'utf8').trim();
+        lines = text ? text.split('\n') : [];
+        if (lines.some((line) => {
+          try { return JSON.parse(line).event === 'end'; } catch { return false; }
+        })) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    const events = lines.map((line) => JSON.parse(line));
+    const starts = events.filter((event) => event.event === 'start');
+    const retries = events.filter((event) => event.event === 'run_retry_attempted');
+    const ends = events.filter((event) => event.event === 'end');
+    expect(ends).toHaveLength(1);
+    expect(ends[0]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
+    expect(retries).toHaveLength(1);
+    expect(retries[0]).toMatchObject({
+      event: 'run_retry_attempted',
+      data: { retry_attempt_index: 1 },
+    });
+    expect(starts).toHaveLength(2);
+    expect(new Set(starts.map((event) => event.id)).size).toBe(2);
+  });
+
+  async function waitForLogLines(logPath: string, count: number) {
+    for (let i = 0; i < 150; i++) {
+      if (fs.existsSync(logPath)) {
+        const lines = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean);
+        if (lines.length >= count) return lines;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return [];
+  }
+
+  // Every line must stay parseable and every in-memory record must be on disk;
+  // a log that only *looks* complete (malformed first line, no matching ids)
+  // returns empty so the caller's assertion fails instead of silently passing.
+  async function waitForCompleteLog(logPath: string, ids: number[]) {
+    for (let i = 0; i < 150; i++) {
+      if (fs.existsSync(logPath)) {
+        const lines = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean);
+        const parsed: any[] = [];
+        let valid = true;
+        for (const line of lines) {
+          try { parsed.push(JSON.parse(line)); } catch { valid = false; break; }
+        }
+        if (valid && ids.every((id) => parsed.some((event) => event.id === id))) {
+          return lines;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return [];
+  }
+
+  it('retries the reconciliation when the first repair append fails', async () => {
+    // Regression for the #6726 review: the replay flag used to be cleared in a
+    // finally, so an append that failed while the stream was broken consumed
+    // the only recovery attempt and the dropped records were never written
+    // back, letting a later `end` land on a log that was still incomplete.
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+
+    runs.emit(run, 'start', { model: 'x' });
+    await new Promise<void>((resolve) => run.eventsLogStream.once('open', resolve));
+
+    const broken = run.eventsLogStream;
+    broken.destroy(new Error('simulated io failure'));
+    runs.emit(run, 'start', { model: 'y' }); // dropped from events.jsonl
+    await new Promise<void>((resolve) => broken.once('close', resolve));
+    expect(run.eventsLogReplayNeeded).toBe(true);
+
+    // Clear what the reopened stream flushed (same inode, so its fd stays
+    // valid) so the next reconciliation has a record to append and the
+    // injected failure is actually exercised.
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    fs.writeFileSync(logPath, '', 'utf8');
+
+    const append = vi.spyOn(fs, 'appendFileSync').mockImplementationOnce(() => {
+      throw new Error('simulated disk failure');
+    });
+    runs.emit(run, 'run_retry_attempted', { retry_attempt_index: 1 });
+    append.mockRestore();
+    // The failed repair stays pending instead of being dropped with the flag.
+    expect(run.eventsLogReplayNeeded).toBe(true);
+
+    // Let the record the reopened stream just took land before the next
+    // reconciliation reads the file back, so it repairs instead of re-appends.
+    const streamedId = run.events[run.events.length - 1].id;
+    expect((await waitForCompleteLog(logPath, [streamedId])).length).toBeGreaterThan(0);
+
+    runs.emit(run, 'heartbeat', {});
+    expect(run.eventsLogReplayNeeded).toBe(false);
+    runs.finish(run, 'succeeded', 0, null);
+
+    const lines = await waitForCompleteLog(logPath, run.events.map((event: any) => event.id));
+    expect(lines.length).toBeGreaterThan(0);
+    const events = lines.map((line) => JSON.parse(line));
+    const starts = events.filter((event) => event.event === 'start');
+    expect(starts).toHaveLength(2);
+    expect(new Set(starts.map((event) => event.id)).size).toBe(2);
+    expect(events.filter((event) => event.event === 'run_retry_attempted')).toHaveLength(1);
+    expect(events.filter((event) => event.event === 'heartbeat')).toHaveLength(1);
+    expect(events.filter((event) => event.event === 'end')).toHaveLength(1);
+  });
+
+  it('truncates a torn first record before replaying the recovered log', async () => {
+    // Regression for the #6726 review: a fragment with no newline anywhere
+    // leaves lastNewline at -1, so the old truncation skipped it and replayed
+    // the recovered records after the fragment, keeping the first line
+    // unparseable and its event unreadable.
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+
+    runs.emit(run, 'start', { model: 'x' });
+    runs.emit(run, 'start', { model: 'y' });
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    expect((await waitForLogLines(logPath, 2)).length).toBe(2);
+
+    fs.writeFileSync(logPath, '{"id":0,"event":"sta', 'utf8');
+
+    run.eventsLogReplayNeeded = true;
+    runs.emit(run, 'heartbeat', {});
+    expect(run.eventsLogReplayNeeded).toBe(false);
+
+    const lines = await waitForCompleteLog(logPath, run.events.map((event: any) => event.id));
+    expect(lines.length).toBeGreaterThan(0);
+    const events = lines.map((line) => JSON.parse(line));
+    expect(events.filter((event) => event.event === 'start')).toHaveLength(2);
+    expect(events.filter((event) => event.event === 'heartbeat')).toHaveLength(1);
+    runs.finish(run, 'succeeded', 0, null);
+  });
+
+  it('truncates a torn trailing record before replaying the recovered log', async () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+
+    runs.emit(run, 'start', { model: 'x' });
+    runs.emit(run, 'start', { model: 'y' });
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    expect((await waitForLogLines(logPath, 2)).length).toBe(2);
+
+    fs.appendFileSync(logPath, '{"id":99,"event":"hear', 'utf8');
+
+    run.eventsLogReplayNeeded = true;
+    runs.emit(run, 'heartbeat', {});
+    expect(run.eventsLogReplayNeeded).toBe(false);
+
+    const lines = await waitForCompleteLog(logPath, run.events.map((event: any) => event.id));
+    expect(lines.length).toBeGreaterThan(0);
+    const events = lines.map((line) => JSON.parse(line));
+    expect(events.some((event) => event.id === 99)).toBe(false);
+    expect(events.filter((event) => event.event === 'heartbeat')).toHaveLength(1);
+    runs.finish(run, 'succeeded', 0, null);
+  });
 });
 
 describe('work completeness vs a settled OD Next verdict', () => {
