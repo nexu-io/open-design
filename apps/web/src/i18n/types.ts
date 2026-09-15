@@ -536,6 +536,15 @@ export interface Dict {
   'settings.azureDeploymentModelHint': string;
   'settings.azureModelFetchHint': string;
   'settings.apiVersion': string;
+  'settings.bedrockRegionLabel': string;
+  'settings.bedrockAuthMode': string;
+  'settings.bedrockAuthApiKey': string;
+  'settings.bedrockAuthProfile': string;
+  'settings.bedrockProfile': string;
+  'settings.bedrockProfileHint': string;
+  'settings.bedrockSsoSignIn': string;
+  'settings.bedrockRegionHint': string;
+  'settings.bedrockRegionUnknownHint': string;
   'settings.byokImageModel': string;
   'settings.byokVideoModel': string;
   'settings.byokVideoI2vHint': string;
@@ -2858,6 +2867,7 @@ export interface Dict {
    * 是产品文档里的两行,不是一句话的两种说法 —— 一个说「用不了」,一个说「做不了」。
    */
   'chat.runError.title.modelCapabilityUnsupported': string;
+  'chat.runError.title.modelDocumentUnsupported': string;
   'chat.runError.title.upstreamUnavailable': string;
   'chat.runError.title.toolLoop': string;
   'chat.runError.title.outputInvalid': string;
@@ -2897,6 +2907,7 @@ export interface Dict {
   'chat.runError.promptTooLargeMessage': string;
   'chat.runError.modelUnavailableMessage': string;
   'chat.runError.modelCapabilityUnsupportedMessage': string;
+  'chat.runError.modelDocumentUnsupportedMessage': string;
   /** S23 · 以前这一格没有正文,报错卡因此落到兜底句上。 */
   'chat.runError.artifactMissingMessage': string;
   'chat.runError.rateLimitedMessage': string;
