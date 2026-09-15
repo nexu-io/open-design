@@ -95,6 +95,27 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("rejects restoring a miss instead of manufacturing successful output", () => {
+    const fixture = createRepository();
+    runPlan(fixture);
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "restore", "--pending", fixture.pendingPath, "--workload", "a",
+      "--output-dir", path.join(fixture.root, "restored"),
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("restore requires a selected reusable-result hit");
+  });
+
+  test("checks complete product restoration and failed-set isolation without network", () => {
+    const fixture = createRepository();
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath, "validate",
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("convergence configuration is valid");
+  });
+
   test("keeps shadow coverage while calculating stable workload identities", () => {
     const fixture = createRepository();
     const first = runPlan(fixture);

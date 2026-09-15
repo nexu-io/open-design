@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import http.client
+import io
 import json
 import os
 import re
@@ -32,6 +33,7 @@ from lib.github import (
     unique_run_artifact,
 )
 from lib.r2 import R2Client, R2Credentials, R2Error, R2PreconditionFailed, self_check as r2_self_check
+from lib.workload_products import materialize_products
 
 
 PROTOCOL = "nexu-workload-result-v1"
@@ -566,6 +568,39 @@ def execution_decisions(
     would_run = {identity: bool(enabled[identity]) and not hit for identity, hit in hits.items()}
     run = dict(would_run) if mode == "enforce" else {identity: bool(enabled[identity]) for identity in hits}
     return run, would_run
+
+
+def restore_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
+    pending = object_value(load_json(args.pending), "pending convergence")
+    workflow = contract.workflow(require_identity(pending.get("workflow"), "pending workflow"))
+    if pending.get("protocol") != PROTOCOL or pending.get("schemaVersion") != 1 or pending.get("policy") != workflow.policy:
+        raise ConfigError("pending convergence contract differs")
+    if args.workload not in workflow.workloads:
+        raise ConfigError("unknown restore workload")
+    expected = object_value(pending.get("workloads"), "pending workloads").get(args.workload)
+    expected = object_value(expected, "pending workload")
+    if not expected.get("scopeEnabled") or not expected.get("reusable") or not expected.get("resultHit"):
+        raise ConfigError("restore requires a selected reusable-result hit")
+    if args.output_dir.exists() or args.output_dir.is_symlink():
+        raise ConfigError("product destination must not already exist")
+    try:
+        result = validate_result(
+            expected.get("result"), repository_id=pending["repositoryId"],
+            workflow=workflow, identity=args.workload, expected=expected,
+        )
+        sizes = materialize_products(
+            result["products"], args.output_dir,
+            lambda url: public_read_request(url, accept="*/*"), timeout=args.timeout,
+        )
+    except (ConfigError, OSError, http.client.HTTPException, urllib.error.URLError) as error:
+        # This output permits an explicit executor fallback; it never turns a
+        # failed restoration into a successful build or validation receipt.
+        report = {"restored": False, "reason": f"restore-unavailable:{type(error).__name__}"}
+    else:
+        report = {"restored": True, "bytes": sum(sizes.values()), "products": sizes}
+    append_outputs({"restored": str(report["restored"]).lower()})
+    print(json.dumps(report, sort_keys=True))
+    return 0 if report["restored"] or args.allow_miss else 2
 
 
 def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: Path) -> int:
@@ -1118,6 +1153,32 @@ def self_check() -> None:
         raise ConfigError("convergence self-check accepted a nondeterministic repeated result")
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
+        body = b"real restored bytes"
+        class ProductResponse(io.BytesIO):
+            status = 200
+        product = {"type": "url", "source": "https://results.example/product",
+                   "data": {"sha256": hashlib.sha256(body).hexdigest()}}
+        request = lambda url: public_read_request(url, accept="*/*")
+        with patch("urllib.request.urlopen", side_effect=lambda *_a, **_kw: ProductResponse(body)):
+            sizes = materialize_products({"bundle": product}, root / "restored", request, timeout=0.1)
+            if sizes != {"bundle": len(body)} or (root / "restored/bundle").read_bytes() != body:
+                raise ConfigError("product restoration did not preserve verified bytes")
+            bad = {**product, "data": {"sha256": "0" * 64}}
+            for invalid in ({"bundle": product, "second": bad}, {"bundle": {**product, "data": {}}}):
+                try:
+                    materialize_products(invalid, root / "failed", request, timeout=0.1)
+                except ConfigError:
+                    pass
+                else:
+                    raise ConfigError("product restoration accepted invalid integrity metadata")
+                if (root / "failed").exists():
+                    raise ConfigError("product restoration exposed a partial set")
+            try:
+                materialize_products({"bundle": product}, root / "restored", request, timeout=0.1)
+            except ConfigError:
+                pass
+            else:
+                raise ConfigError("product restoration overwrote an existing destination")
         first = root / "first.zip"
         second = root / "second.zip"
         with zipfile.ZipFile(first, "w") as archive:
@@ -1239,6 +1300,12 @@ def parse_args() -> argparse.Namespace:
     handoff.add_argument("--products-root", type=Path, required=True)
     handoff.add_argument("--handoff-root", type=Path, required=True)
     handoff.add_argument("--id", default="ci-results")
+    restore = sub.add_parser("restore")
+    restore.add_argument("--pending", type=Path, required=True)
+    restore.add_argument("--workload", required=True)
+    restore.add_argument("--output-dir", type=Path, required=True)
+    restore.add_argument("--timeout", type=float, default=60.0)
+    restore.add_argument("--allow-miss", action="store_true", help="caller explicitly handles restored=false by executing the workload")
     admit = sub.add_parser("admit")
     admit.add_argument("--handoff-root", type=Path, required=True)
     publication = sub.add_parser("prepare-publication")
@@ -1289,6 +1356,8 @@ def main() -> int:
         return plan_command(args, contract, root)
     if args.command == "handoff":
         return handoff_command(args, contract)
+    if args.command == "restore":
+        return restore_command(args, contract)
     return admit_command(args, contract)
 
 
