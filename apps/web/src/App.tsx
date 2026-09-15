@@ -2777,6 +2777,30 @@ function AppInner() {
     [],
   );
 
+  // OPEND-3205: this action changes the runtime in the current project. Do not
+  // optimistically acknowledge a daemon write or arm a Settings-return retry.
+  const handleSwitchToCloud = useCallback(async () => {
+    const previous = latestPersistedConfigRef.current;
+    const issuedAccount = currentWorkspaceAccountGeneration();
+    const issuedIdentity = workspaceIdentityCacheKey(workspaceContextRef.current);
+    const issuedRoute = JSON.stringify(routeRef.current);
+    const next: AppConfig = { ...previous, mode: 'daemon', agentId: 'amr' };
+    await syncConfigToDaemon(next, { throwOnError: true });
+    if (
+      latestPersistedConfigRef.current !== previous
+      || currentWorkspaceAccountGeneration() !== issuedAccount
+      || workspaceIdentityCacheKey(workspaceContextRef.current) !== issuedIdentity
+      || JSON.stringify(routeRef.current) !== issuedRoute
+    ) {
+      // The PUT already completed; this only refuses to overwrite a newer
+      // local selection or acknowledge the action in another route/identity.
+      throw new Error('Cloud configuration acknowledgement no longer owns the active selection');
+    }
+    latestPersistedConfigRef.current = next;
+    saveConfig(next);
+    setConfig(next);
+  }, []);
+
   const handleAgentModelChange = useCallback(
     (agentId: string, choice: { model?: string; reasoning?: string; serviceTier?: string }) => {
       const current = latestPersistedConfigRef.current;
@@ -5358,6 +5382,7 @@ function AppInner() {
           daemonLive={daemonLive}
           onModeChange={handleModeChange}
           onAgentChange={handleAgentChange}
+          onSwitchToCloud={handleSwitchToCloud}
           onAgentModelChange={handleAgentModelChange}
           onApiModelChange={handleApiModelChange}
           onRefreshAgents={refreshAgents}

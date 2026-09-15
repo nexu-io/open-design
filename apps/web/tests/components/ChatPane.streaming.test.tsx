@@ -727,8 +727,9 @@ describe('ChatPane streaming state', () => {
     expect(text.closest('.msg.user')).not.toBeNull();
   });
 
-  it('offers a Local CLI recovery action on BYOK error states', () => {
+  it('offers Cloud switching on BYOK error states without the former Local CLI action', () => {
     const onSwitchToLocalCli = vi.fn();
+    const onSwitchToAmrAndRetry = vi.fn();
     const messages: ChatMessage[] = [
       {
         id: 'user-1',
@@ -768,14 +769,18 @@ describe('ChatPane streaming state', () => {
         onDeleteConversation={vi.fn()}
         showByokRecoveryAction
         onSwitchToLocalCli={onSwitchToLocalCli}
+        onSwitchToAmrAndRetry={onSwitchToAmrAndRetry}
         projectMetadata={projectMetadata}
       />,
     );
 
-    const action = screen.getByRole('button', { name: 'Use Local CLI' });
+    const action = screen.getByRole('button', { name: 'chat.amrCard.switchCta' });
     fireEvent.click(action);
 
-    expect(onSwitchToLocalCli).toHaveBeenCalledTimes(1);
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledExactlyOnceWith(messages[1]);
+    expect(screen.queryByRole('button', { name: 'Use Local CLI' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
+    expect(onSwitchToLocalCli).not.toHaveBeenCalled();
   });
 
   it('keeps workspace/plugin context off the transcript while preserving the user turn', () => {

@@ -19,86 +19,116 @@
  * CSS Module 的类名带哈希,jsdom 也不解析 `var()`,量像素只会得到空值。
  * 同一个原语 ⇒ 同一套 radius/padding,这是共享组件的全部意义。
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { forwardRef } from 'react';
 import { Button } from '@open-design/components';
 
-afterEach(cleanup);
+import { ChatPane } from '../../../src/components/ChatPane';
+import type { AppConfig, ChatMessage } from '../../../src/types';
 
-/** 共享 Button 在 `size="sm"` 下渲染出来的类名指纹 */
-function buttonFingerprint(): string[] {
-  render(<Button variant="primary" size="sm">probe</Button>);
-  const el = screen.getByText('probe').closest('button')!;
-  return String(el.className).trim().split(/\s+/);
+vi.mock('../../../src/i18n', () => ({
+  useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: (key: string) => key }),
+  useT: () => (key: string) => key,
+}));
+
+vi.mock('../../../src/components/AssistantMessage', () => ({
+  AssistantMessage: ({ message }: { message: ChatMessage }) => <div>{message.content}</div>,
+}));
+
+vi.mock('../../../src/components/ChatComposer', () => ({
+  ChatComposer: forwardRef((_props, _ref) => <div data-testid="composer" />),
+}));
+
+vi.mock('../../../src/analytics/events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/analytics/events')>();
+  return {
+    ...actual,
+    trackChatPanelClick: vi.fn(),
+    trackRunFailedToastSurfaceView: vi.fn(),
+    trackRunFailedToastGoAmrClick: vi.fn(),
+    trackRunRecoveryActionClick: vi.fn(),
+    trackRunRecoveryActionSurfaceView: vi.fn(),
+  };
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+/** Compare actual rendered Button contracts, not ChatPane variable names or JSX text. */
+function buttonFingerprint(variant: 'primary' | 'secondary' = 'primary'): string[] {
+  render(<Button data-testid={`probe-${variant}`} variant={variant} size="sm">probe</Button>);
+  return Array.from(screen.getByTestId(`probe-${variant}`).classList);
+}
+
+function renderFailure(agentId: 'amr' | 'claude') {
+  const message: ChatMessage = {
+    id: 'failed-parity', role: 'assistant', content: 'Partial work.', createdAt: 1,
+    agentId, runId: 'run-parity', runStatus: 'failed',
+    events: [{ kind: 'status', label: 'error', code: 'AGENT_EXECUTION_FAILED', detail: 'failed' }],
+  };
+  const onRetry = vi.fn();
+  const onSwitchToAmrAndRetry = vi.fn();
+  render(
+    <ChatPane
+      messages={[message]} streaming={false} error={null}
+      projectId="project-1" projectFiles={[]}
+      onEnsureProject={async () => 'project-1'} onSend={vi.fn()} onStop={vi.fn()}
+      onRetry={onRetry} onSwitchToAmrAndRetry={onSwitchToAmrAndRetry}
+      conversations={[{ projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 }]}
+      activeConversationId="conv-1" onSelectConversation={vi.fn()} onDeleteConversation={vi.fn()}
+      config={{ agentId, agentCliEnv: {} } as AppConfig}
+    />,
+  );
+  return { message, onRetry, onSwitchToAmrAndRetry };
+}
+
+function expectSharedSmallButton(element: HTMLElement, fingerprint: string[]): void {
+  expect(element.tagName).toBe('BUTTON');
+  expect(Array.from(element.classList)).toEqual(expect.arrayContaining(fingerprint));
 }
 
 describe('失败卡三颗按钮同壳', () => {
-  it('共享 Button 的类名指纹里有可辨认的前缀 —— 后面几条靠它比对', () => {
+  it('共享 Button 的实际小尺寸类名指纹可用于比较', () => {
     const fp = buttonFingerprint();
     expect(fp.length).toBeGreaterThan(0);
-    expect(fp.some((c) => /button/i.test(c))).toBe(true);
+    expect(fp.some((className) => /button/i.test(className))).toBe(true);
   });
 
-  it('源码里那颗重试**不能**是裸 button', () => {
-    const src = readChatPane();
-    // 裸 button + 手写类名 = 自成一套壳,正是这次的病灶
-    expect(src).not.toMatch(/className="chat-error-action chat-error-retry"/);
+  it('Cloud 重试使用共享小尺寸主按钮并调用原失败轮次', () => {
+    const fingerprint = buttonFingerprint();
+    const { message, onRetry, onSwitchToAmrAndRetry } = renderFailure('amr');
+    const retry = screen.getByTestId('chat-error-retry');
+    expectSharedSmallButton(retry, fingerprint);
+    expect(retry.dataset.runErrorAction).toBe('primary');
+    expect(retry.classList.contains('chat-error-action')).toBe(false);
+    fireEvent.click(retry);
+    expect(onRetry).toHaveBeenCalledExactlyOnceWith(message, 'manual_retry');
+    expect(onSwitchToAmrAndRetry).not.toHaveBeenCalled();
   });
 
-  /*
-   * ⚠️ OPEND-2772(T68)之后重试**不再写死 primary**:主按钮位归那颗
-   * 〔切换到 Cloud〕,阶梯自己那一档(重试也在内)统一让位
-   * 到次级。让位是由**同一个** `errorActionVariant` 决定的,所以这条判据从
-   * 「它是不是 primary」改成「它的分量是不是跟旁边那几颗同源」—— 这才是这份
-   * 文件真正要守的东西(同一副壳、同一套 radius/padding)。
-   *
-   * 「一张卡只有一颗主按钮」由 `opend-2772-one-card-one-cta.test.tsx` 钉。
-   */
-  it('重试要走报错卡动作组件,分量跟旁边几颗同一个出口', () => {
-    const src = readChatPane();
-    /*
-     * 锚点用这颗按钮**自己的** `data-testid`,不用它的文案 key。
-     *
-     * 文案 key 是个会跑的锚:OPEND-2758 之后这颗按钮在飞的时候要换成
-     * 「正在重试」,于是 `promptTemplates.retry` 搬进了一个具名常量,
-     * `indexOf` 头一个命中的是那行声明 —— 判据就悄悄跑去量了一段和按钮
-     * 无关的源码。`data-testid` 在这份文件里唯一,而且指的正是这颗按钮。
-     * 换锚点之后窗口反而更紧(往回 ~220 字符就够到开标签),旁边那颗
-     * 〔续跑〕的 `<RunErrorCardAction` 落在 700 字符之外,不会替它蒙混过关。
-     */
-    const near = sliceAround(src, 'data-testid="chat-error-retry"');
-    expect(near).toMatch(/<RunErrorCardAction/);
-    expect(near).toMatch(/variant=\{errorActionVariant\}/);
-    // 没有 Cloud CTA 的那一档(已经跑在 Cloud 上)重试仍然是主按钮
-    expect(src).toMatch(
-      /errorActionVariant: 'primary' \| 'secondary' =\s*\n?\s*showCloudSwitchCta \? 'secondary' : 'primary';/,
-    );
+  it('CLI 的 Cloud 动作使用同一小尺寸主按钮，不附加旧重试', () => {
+    const fingerprint = buttonFingerprint();
+    const { message, onRetry, onSwitchToAmrAndRetry } = renderFailure('claude');
+    const cloud = screen.getByTestId('chat-error-switch-to-cloud');
+    expectSharedSmallButton(cloud, fingerprint);
+    expect(cloud.dataset.runErrorAction).toBe('primary');
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    fireEvent.click(cloud);
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledExactlyOnceWith(message);
+    expect(onRetry).not.toHaveBeenCalled();
   });
 
-  it('旁边两颗同样走报错卡动作组件 —— 尺寸不再由调用方各写一份', () => {
-    const src = readChatPane();
-    const near = sliceAround(src, 'chat-error-contact-support');
-    expect(near).toMatch(/<RunErrorCardAction/);
-
-    const actionSrc = readRunErrorCard();
-    expect(actionSrc).toMatch(/<Button[\s\S]*size="sm"/);
+  it('常驻两颗实际使用共享小尺寸次级按钮', () => {
+    const fingerprint = buttonFingerprint('secondary');
+    renderFailure('amr');
+    for (const testId of ['chat-error-contact-support', 'chat-error-export-logs']) {
+      const action = screen.getByTestId(testId);
+      expectSharedSmallButton(action, fingerprint);
+      expect(action.dataset.runErrorAction).toBe('secondary');
+    }
+    expect(screen.getByTestId('chat-run-error-card').querySelectorAll('button')).toHaveLength(3);
   });
 });
-
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-
-function readChatPane(): string {
-  return readFileSync(resolve(__dirname, '../../../src/components/ChatPane.tsx'), 'utf8');
-}
-
-function readRunErrorCard(): string {
-  return readFileSync(resolve(__dirname, '../../../src/components/chat/RunErrorCard.tsx'), 'utf8');
-}
-
-/** 取某个锚点前后各 700 字符 —— 断言只看那一颗按钮,不被全文件干扰 */
-function sliceAround(src: string, anchor: string): string {
-  const i = src.indexOf(anchor);
-  if (i < 0) throw new Error(`anchor not found: ${anchor}`);
-  return src.slice(Math.max(0, i - 700), i + 200);
-}

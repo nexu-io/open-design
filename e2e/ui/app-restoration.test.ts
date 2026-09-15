@@ -17,11 +17,15 @@ import { T } from '@/timeouts';
 import { expectStableCount } from '../lib/playwright/assertions.js';
 import {
   AMR_PERSONAL_WORKSPACE_HEADERS,
+  createProjectViaApi,
+  gotoProject,
   mockAmrPersonalWorkspace,
+  mockAmrWalletSnapshot,
 } from '@/playwright/amr';
 import {
   applyStandardMocks,
   failedRunEventBody,
+  routeAgents,
   routeMockAgents,
   routeRunSequence,
   routeSuccessfulRuns,
@@ -49,7 +53,10 @@ function stagedAttachmentName(page: Page, name: string): Locator {
 
 async function expectFriendlyGenericRunFailure(page: Page): Promise<void> {
   const card = runErrorCard(page);
-  await expect(card).toContainText("This one didn't get through");
+  await expect(card).toContainText('The task could not be completed');
+  await expect(card.getByTestId('chat-run-error-description')).toHaveText(
+    'This task failed to run. Please retry. If it fails again, please contact support.',
+  );
   // Raw daemon/provider details belong in exported logs, not on the recovery
   // card. The surrounding cases still prove the friendly failure survives.
   await expect(card).not.toContainText('connection refused');
@@ -1291,9 +1298,33 @@ test('[P0] a successful retry after a failed send restores the workspace to a fr
 });
 
 test('[P0] retrying a failed run does not duplicate the original user message', async ({ page }) => {
-  await routeMockAgents(page);
+  // G16 keeps Retry on Cloud failures; CLI failures switch runtime instead.
+  // Keep this scenario about retry deduplication with an explicit Cloud owner.
+  await routeAgents(page, [{
+    id: 'amr', name: 'OpenDesign AMR', bin: 'vela', available: true,
+    version: 'test', models: [{ id: 'glm-5', label: 'glm-5' }],
+  }]);
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ json: { config: {
+      onboardingCompleted: true, agentId: 'amr', skillId: null,
+      designSystemId: null, agentModels: { amr: { model: 'glm-5', reasoning: 'default' } },
+      privacyDecisionAt: 1,
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+    } } });
+  });
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    await route.fulfill({ json: {
+      loggedIn: true, profile: 'local',
+      user: { id: 'retry-dedup-user', email: 'retry-dedup@example.com', plan: 'plus' },
+    } });
+  });
+  await mockAmrWalletSnapshot(page, { balanceUsd: '20.00' });
 
-  await routeRunSequence(page, {
+  const runs = await routeRunSequence(page, {
     runIdPrefix: 'retry-run',
     eventBodies: [
       failedRunEventBody('connection refused'),
@@ -1305,12 +1336,21 @@ test('[P0] retrying a failed run does not duplicate the original user message', 
     ],
   });
 
-  await createEmptyProject(page, 'Retry dedup restore');
-  await expectWorkspaceReady(page);
+  const projectId = `retry-dedup-${crypto.randomUUID()}`;
+  await createProjectViaApi(page, projectId, 'Retry dedup restore', {
+    accountBalanceUsd: '20.00', accountCredits: 2_000, accountPlan: 'plus',
+  });
+  await gotoProject(page, projectId);
+  await expect.poll(async () => page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw).agentId : null;
+  }, STORAGE_KEY)).toBe('amr');
 
   const prompt = 'retry dedup prompt';
   await sendPrompt(page, prompt);
   await expectFriendlyGenericRunFailure(page);
+  await runs.expectCount(1);
+  expect(runs.bodies[0]).toMatchObject({ agentId: 'amr', projectId });
   const retryButton = runErrorCard(page).getByRole('button', { name: /^Retry$/i });
   await expect(retryButton).toBeVisible();
   await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
@@ -1324,6 +1364,8 @@ test('[P0] retrying a failed run does not duplicate the original user message', 
     'aria-selected',
     'true',
   );
+  await runs.expectCount(2);
+  expect(runs.bodies[1]).toMatchObject({ agentId: 'amr', projectId });
   await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
 });
 

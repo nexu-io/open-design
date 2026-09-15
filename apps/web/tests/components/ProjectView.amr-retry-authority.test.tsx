@@ -5,12 +5,13 @@
 // scope. This suite targets Cloud intent and actual outbound retry behavior;
 // keeping historical rows visible during refresh belongs to a separate fix.
 
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { buildWorkspacePermissions, type WorkspaceCollabContext } from '@open-design/contracts';
 import { forwardRef, useImperativeHandle, useState, type ComponentProps, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
+import { SideChatTab, type ActiveConversationChatState } from '../../src/components/workspace/SideChatTab';
 import { workspaceIdentityCacheKey } from '../../src/collab/workspace-identity';
 import type { AmrAuthRetryContinuation } from '../../src/runtime/amr-auth-retry-continuation';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
@@ -25,6 +26,7 @@ import type { AgentInfo, AppConfig, ChatMessage, Conversation, Project } from '.
 const workspace = vi.hoisted(() => ({
   caller: null as WorkspaceCollabContext | null,
   scope: { loading: false, scope: null } as ProjectWorkspaceScopeState,
+  sideConversationId: null as string | null,
 }));
 
 vi.mock('../../src/i18n', () => ({
@@ -91,7 +93,34 @@ vi.mock('../../src/components/AppChromeHeader', () => ({
 }));
 vi.mock('../../src/components/AvatarMenu', () => ({ AvatarMenu: () => null }));
 vi.mock('../../src/components/FileWorkspace', () => ({
-  DESIGN_SYSTEM_TAB: '__design_system__', FileWorkspace: () => <div />,
+  DESIGN_SYSTEM_TAB: '__design_system__',
+  // Keep the editor outside this run-authority suite, but render the actual
+  // side-chat host with the real ProjectView-owned recovery callback. The
+  // FileWorkspace forwarding itself is covered separately at its boundary.
+  FileWorkspace: (props: {
+    projectId: string;
+    chatConfig: AppConfig;
+    chatAgentsById: Map<string, AgentInfo>;
+    chatLocale: string;
+    conversations: Conversation[];
+    activeConversationId?: string | null;
+    activeConversationChat?: ActiveConversationChatState;
+    onSelectConversation: (id: string) => void;
+    onDeleteConversation: (id: string) => void;
+    onSwitchConversationToCloud?: (conversationId: string, message: ChatMessage) => void;
+  }) => workspace.sideConversationId ? (
+    <div data-testid="side-chat-recovery-host" data-primary-conversation={props.activeConversationId}>
+      <SideChatTab
+        projectId={props.projectId} conversationId={workspace.sideConversationId}
+        config={props.chatConfig} agentsById={props.chatAgentsById} locale={props.chatLocale}
+        projectFiles={[]} conversations={props.conversations}
+        activeConversationChat={props.activeConversationChat}
+        onSelectConversation={props.onSelectConversation}
+        onDeleteConversation={props.onDeleteConversation}
+        {...{ onSwitchConversationToCloud: props.onSwitchConversationToCloud }}
+      />
+    </div>
+  ) : <div />,
 }));
 // Keep the real ProjectView retry guard and ChatPane continuation effects.
 // The editor and assistant Markdown are outside this authority-lifetime test.
@@ -190,6 +219,7 @@ describe('ProjectView Cloud retry across authority confirmation', () => {
     window.localStorage.clear();
     workspace.caller = OWNER;
     workspace.scope = readableScope();
+    workspace.sideConversationId = null;
     vi.mocked(listConversations).mockReset().mockResolvedValue([conversation]);
     vi.mocked(createConversation).mockReset().mockResolvedValue(conversation);
     vi.mocked(listMessages).mockReset().mockResolvedValue([history]);
@@ -308,6 +338,55 @@ describe('ProjectView Cloud retry across authority confirmation', () => {
       login.resolve(null);
       await Promise.all([initialRead.promise, refresh.promise, login.promise]);
     }
+  });
+
+  it('switches the clicked side conversation to Cloud without a Settings retry continuation', async () => {
+    const sideConversation: Conversation = {
+      ...conversation, id: 'inactive-side-conversation', sessionMode: 'chat',
+    };
+    const sidePrompt: ChatMessage = {
+      id: 'side-prompt', role: 'user', content: 'Retry only this side conversation', createdAt: 1,
+    };
+    const sideFailure: ChatMessage = {
+      id: 'side-failed-codex', role: 'assistant', content: 'Side failure retained', createdAt: 2,
+      agentId: 'codex', runId: 'side-old-run', runStatus: 'failed',
+      events: [{ kind: 'status', label: 'error', code: 'AGENT_EXECUTION_FAILED',
+        failureDetail: 'process_crashed', detail: 'Controlled side failure' }],
+    };
+    const sideTranscript = [sidePrompt, sideFailure];
+    const originalSideTranscript = structuredClone(sideTranscript);
+    workspace.sideConversationId = sideConversation.id;
+    vi.mocked(listConversations).mockResolvedValue([conversation, sideConversation]);
+    vi.mocked(listMessages).mockImplementation(async (_projectId, conversationId) =>
+      conversationId === sideConversation.id ? sideTranscript : [history]);
+    const arm = vi.fn();
+    const settings = vi.fn();
+    const persistCloud = vi.fn().mockResolvedValue(undefined);
+    const origin = render(projectView({
+      routeConversationId: conversation.id,
+      config: { ...config, agentId: 'codex' },
+      onArmAmrAuthRetryContinuation: arm,
+      onOpenAmrSettings: settings,
+      onSwitchToCloud: persistCloud,
+    }));
+    const sideHost = await origin.findByTestId('side-chat-recovery-host');
+    await within(sideHost).findByText(sideFailure.content);
+    expect(sideHost.getAttribute('data-primary-conversation')).toBe(conversation.id);
+    const card = within(sideHost).getByTestId('chat-run-error-card');
+    await act(async () => {
+      fireEvent.click(within(card).getByRole('button', { name: 'chat.amrCard.switchCta' }));
+    });
+    expect(persistCloud).toHaveBeenCalledOnce();
+    expect(arm).not.toHaveBeenCalled();
+    expect(settings).not.toHaveBeenCalled();
+    expect(await origin.findByText('chat.amrCard.switchedResend')).toBeVisible();
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    expect(sideTranscript).toEqual(originalSideTranscript);
+    expect(sideHost.getAttribute('data-primary-conversation')).toBe(conversation.id);
+    // Current native main/side send-after-switch behavior is covered by
+    // ProjectView.switch-cloud-in-place; the five independent existing
+    // authorization-continuation lifetime cases above remain unchanged.
+
   });
 
 });

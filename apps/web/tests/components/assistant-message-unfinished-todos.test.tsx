@@ -76,7 +76,7 @@ describe('AssistantMessage unfinished todo state', () => {
     expect(screen.queryByText('Modern minimal')).toBeNull();
   });
 
-  it('shows a soft no-output state instead of Done for empty API responses', () => {
+  it('shows the approved failure status instead of Done for empty API responses', () => {
     render(
       <AssistantMessage
         projectKind="prototype"
@@ -94,10 +94,10 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText('No output')).toBeTruthy();
+    expect(screen.getByText('The task could not be completed')).toBeTruthy();
     expect(screen.getByText(/provider ended the request/i)).toBeTruthy();
-    // 「Done」现在是执行记录壳头的状态词(D10:壳永远出现),但回合状态行仍然只说「没有输出」
-    expect(document.querySelector('[data-testid="assistant-label"]')?.textContent).toBe('No output');
+    // 「Done」现在是执行记录壳头的状态词(D10:壳永远出现),但空回复的回合状态行使用产品批准的失败标题
+    expect(document.querySelector('[data-testid="assistant-label"]')?.textContent).toBe('The task could not be completed');
     expect(screen.queryByText('empty_response')).toBeNull();
   });
 

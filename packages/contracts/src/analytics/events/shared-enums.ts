@@ -323,6 +323,7 @@ export type TrackingRunFailureDetail =
   | 'provider_resource_not_found'
   | 'upstream_5xx'
   | 'upstream_client_error'
+  | 'region_not_supported'
   | 'stream_disconnected'
   | 'network_error'
   | 'provider_high_demand'

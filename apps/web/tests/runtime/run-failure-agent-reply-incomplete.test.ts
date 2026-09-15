@@ -1,46 +1,10 @@
 /**
- * 「答案交上去了、计划也写出来了,然后被告知失败」这一格的卡面文案。
+ * Runtime State 缺失或格式错误仍保留自己的错误映射与原有恢复动作。
+ * 卡面标题/正文按产品 2026-09-14 的补充场景文案对齐：
+ * L7ukd6xcqoWpo2xJzKdcDPctnvh revision 96，「回复已收到，但没能记录下来」。
  *
- * ── 这是哪一种失败 ──────────────────────────────────────────────────────
- * OD Next 策略要求智能体每一轮回复里带一段机器可读的 Runtime State。**那一轮
- * 它忘了写**,澄清阶段的契约只认 `plan_ready` / `blocked` / `canceled` 三种
- * 结论,而 `plan_ready` 需要一份这一轮没有的 Plan Contract,于是这一轮落成
- * 终态 `blocked`。
- *
- * 判定本身是对的(fail-closed),这条规格**不碰判定**。它只钉卡面那句话。
- *
- * ── 事实链(每一步都在代码里可查) ────────────────────────────────────
- *
- *  1. daemon 发现回复里没有 Runtime State:
- *     `apps/daemon/src/strategies/od-next/coordinator.ts:378-391` 用
- *     `['od_next_protocol_runtime_state_missing']` 调 `blockTask`。
- *  2. `blockTask`(同文件 :931-956)把它写进
- *     `blockedContext.reasonCodes`,**排在数组第一位**
- *     (`uniqueReasonCodes([...reasonCodes, ...questionFormMarkerReasonCodes])`)。
- *  3. web `createStrategyTaskBlockedError`
- *     (`apps/web/src/providers/daemon.ts`)取 `reasonCodes[0]` 挂到
- *     `error.code`。
- *  4. `ChatPane.tsx:1783` 把这个 code 交给 `resolveRunFailureUi`。
- *
- * ── 今天为什么是错的 ────────────────────────────────────────────────────
- * 第 4 步在三张表里都查不到这个 code,于是掉进兜底
- * (`amr-guidance.ts` 结尾的 `failureCard({transient:true},'…title.generic',null)`)。
- * `messageKey` 是 `null`,卡面因此渲染
- * `RUN_FAILURE_FALLBACK_MESSAGE_KEY` 那句通用的「任务失败了」——
- * 用户眼前明明是一整份计划,卡上却什么都没解释,更没有说他提交的答案还在。
- * 那句真正描述了这次失败的英文原句只留在诊断区,一个字都没翻译。
- *
- * 这正是报错体验设计第 5 条原则的反面
- * (`docs/design/run-errors/error-ux-design.md` §1.5:
- * 「文案说人话,说清不怪用户,给下一步」)。
- *
- * ⚠️ 设计稿里**没有这一格**。最接近的 S21 是「模型输出不正常(空、伪造对话、
- * 死循环)」,不适用 —— 这次的回复是完整、可读、已经显示在屏幕上的。
- * 下面钉的文案是 **W41 拟稿**,等产品在上面改字,不是定稿。
- *
- * ── 按钮不动 ────────────────────────────────────────────────────────────
- * 兜底今天给的就是〔重试〕,新的一格必须还是〔重试〕:偶发漏写,同一段提示词
- * 重跑经常就对了 —— 阶梯第 2 级。所以下面既断言文案变了,也断言按钮没变。
+ * 旧 W41 拟稿要求文案承诺「答案没有丢失」，不是本次批准原文。
+ * 本文件以明确的批准文案验证呈现，不改变失败分类、重试或持久化行为。
  */
 import { describe, expect, it } from 'vitest';
 
@@ -131,24 +95,25 @@ describe('这两句话 19 个语言都要有', () => {
   });
 });
 
-describe('文案本身要满足第 5 条原则', () => {
-  it('英文:不怪用户、说清答案没白费、给下一步', async () => {
+describe('批准文案与恢复指引', () => {
+  it('英文:逐字对齐批准文案，不怪用户并给出重试下一步', async () => {
     const dict = await loadDict('en');
     const message = dict[MESSAGE_KEY].toLowerCase();
 
+    expect(dict[TITLE_KEY]).toBe('The task could not be completed');
+    expect(dict[MESSAGE_KEY]).toBe('This task failed to run. Please retry. If it fails again, please contact support.');
     // ① 不怪用户 —— 不许出现指着用户说的祈使式指责。
     expect(message).not.toMatch(/\byou (?:must|should|need to) (?:fix|correct|rewrite)\b/);
-    // ② 说清「你做的事没白费」。
-    expect(message).toMatch(/\bnothing you (?:sent|wrote|entered)\b|\bwas(?:n't| not) lost\b|\bnothing .* lost\b/);
-    // ③ 给下一步 —— 明确说重试。
+    // ② 给下一步 —— 明确说重试。
     expect(message).toMatch(/\bretry|\btry(?:ing)? again\b/);
   });
 
-  it('中文:同样三条', async () => {
+  it('中文:逐字对齐批准标题正文并保留重试指引', async () => {
     const dict = await loadDict('zh-CN');
     const message = dict[MESSAGE_KEY];
 
-    expect(message).toMatch(/没有丢失|没丢|仍然保留|不会丢失/);
+    expect(dict[TITLE_KEY]).toBe('任务未能完成');
+    expect(message).toBe('本次任务运行失败，请重试。如果再次失败，请联系支持。');
     expect(message).toMatch(/重试|再试/);
   });
 

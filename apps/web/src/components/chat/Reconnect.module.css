@@ -48,15 +48,24 @@
   margin-inline: -3px;
 }
 
-.name {
+.copy {
   flex: 1;
   min-width: 0;
+}
+
+.name {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 扫光要挂在**收缩到文字宽**的 inline 盒上。.name 是 flex:1 的撑满盒(靠它把 ⌄
+.description {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+/* 扫光要挂在**收缩到文字宽**的 inline 盒上。.name 随 .copy 撑满剩余宽度(靠它把 ⌄
    顶到行尾),而渐变按元素盒宽算 —— 挂在撑满盒上,亮带大半程都在文字右边的空白里扫,
    看着就是「隔一会儿闪一下」。这里给它的唯一子元素补上收缩盒。 */
 .name > * {

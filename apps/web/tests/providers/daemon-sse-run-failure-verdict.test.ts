@@ -154,4 +154,23 @@ describe('SSE end frame carries the daemon failure verdict', () => {
     expect('retryable' in err!).toBe(false);
     expect('failureAction' in err!).toBe(false);
   });
+
+  it.each(['region_not_supported', 'upstream_client_error'])(
+    'preserves the daemon-owned %s detail without guessing from upstream prose',
+    async (failureDetail) => {
+      const err = await failedRunEndingWith({
+        failureCategory: 'upstream_unavailable',
+        failureDetail,
+        retryable: false,
+        failureAction: 'none',
+      });
+      expect(err).toMatchObject({
+        failureCategory: 'upstream_unavailable',
+        failureDetail,
+        retryable: false,
+        failureAction: 'none',
+      });
+    },
+  );
+
 });

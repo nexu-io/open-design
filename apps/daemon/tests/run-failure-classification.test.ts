@@ -1396,7 +1396,7 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       ),
     ).toMatchObject({
       failure_category: 'upstream_unavailable',
-      failure_detail: 'upstream_client_error',
+      failure_detail: 'region_not_supported',
       retryable: false,
       user_action: 'none',
     });
@@ -2724,5 +2724,36 @@ describe('被硬杀掉的进程不许被文本蒙混成别的原因', () => {
     for (const signal of ['SIGTERM', 'SIGINT']) {
       expect(killedWithProfileNoise(signal)?.failure_category).toBe('auth');
     }
+  });
+});
+
+// OPEND-2849 S30: the region row does not authorize relabeling other 403s or
+// the five client-environment causes. The positive sample above is retained
+// from this file's existing high-confidence classification corpus.
+describe('S30 region rejection stays separate from client and host failures', () => {
+  it('keeps an explicit region denial non-retryable under a coarse upstream error code', () => {
+    const message = '403 Forbidden: Country, region, or territory not supported';
+    expect(classify('UPSTREAM_UNAVAILABLE', message, [errorEvent('UPSTREAM_UNAVAILABLE', message, true)]))
+      .toMatchObject({
+        failure_category: 'upstream_unavailable',
+        failure_detail: 'region_not_supported',
+        retryable: false,
+        user_action: 'none',
+      });
+  });
+
+  it.each([
+    ['ordinary 403', '403 Forbidden', 'upstream_client_error'],
+    ['gateway rejection', 'Forbidden: request was blocked by a gateway or proxy. You may not have permission to access this resource.', 'upstream_client_error'],
+    ['proxy configuration', 'unsupported proxy protocol', 'proxy_configuration'],
+    ['certificate', 'certificate verification failed', 'certificate_failure'],
+    ['DNS before reaching provider', 'getaddrinfo ENOTFOUND api.example.invalid', 'network_configuration'],
+    ['host policy', 'Windows Application Control blocked execution', 'host_policy_block'],
+    ['local storage', 'SQLite I/O error: database write failed', 'local_storage_failure'],
+  ])('preserves %s without a region diagnosis', (_label, message, detail) => {
+    expect(classify('AGENT_EXECUTION_FAILED', message)).toMatchObject({
+      failure_detail: detail,
+      retryable: false,
+    });
   });
 });

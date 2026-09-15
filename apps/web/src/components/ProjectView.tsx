@@ -1,3 +1,4 @@
+import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
 import {
   startTransition,
   useCallback,
@@ -327,7 +328,8 @@ import { persistCommentAnchors } from '../collab/comment-anchor-client';
 import type { AnchorWriteBack } from '../comments';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
-import { ChatPane } from './ChatPane';
+import { ChatPane, foldStrategyTaskTurns } from './ChatPane';
+import { trailingMessageIgnoringHostCards } from '../runtime/chat/host-authored-message';
 import type { ChatSendMeta, ChatSendOutcome } from './ChatComposer';
 import {
   CritiqueTheaterMount,
@@ -844,6 +846,8 @@ interface Props {
   daemonLive: boolean;
   onModeChange: (mode: AppConfig['mode']) => void;
   onAgentChange: (id: string) => void;
+  /** Resolves only after the App configuration owner has persisted Cloud. */
+  onSwitchToCloud?: () => Promise<void>;
   onAgentModelChange: (
     id: string,
     choice: { model?: string; reasoning?: string; serviceTier?: string },
@@ -2147,6 +2151,7 @@ export function ProjectView({
   onRefreshAgents,
   onOpenSettings,
   onOpenAmrSettings,
+  onSwitchToCloud,
   onOpenMcpSettings,
   onBrowsePlugins,
   onOpenConnectors,
@@ -2642,7 +2647,11 @@ export function ProjectView({
   const activeSessionMode = activeConversation?.sessionMode ?? 'design';
   const [messagesConversationId, setMessagesConversationId] = useState<string | null>(null);
   const [failedMessagesConversationId, setFailedMessagesConversationId] = useState<string | null>(null);
-  const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
+  const [conversationLoadFailure, setConversationLoadFailure] = useState<{
+    message: string;
+    source: 'read' | 'create';
+  } | null>(null);
+  const conversationLoadError = conversationLoadFailure?.message ?? null;
   const conversationMaterializationRecoveryRef =
     useRef<ConversationMaterializationRecovery | null>(null);
   const conversationMaterializationGenerationControllerRef =
@@ -3202,7 +3211,7 @@ export function ProjectView({
   /**
    * 正在等服务端确认的那一次重试(OPEND-2758)。
    *
-   * `failedAssistantId` 是报错卡的主,重试期间卡钉在它身上;
+   * `failedAssistantId` 只识别被接管的旧失败，错误卡不再固定在它身上;
    * `replacementAssistantId` 是这一发新画出去的助手消息 —— 它拿到 `runId`
    * (也就是 `POST /api/runs` 回来了)才算「服务端确认」,宣告到那一刻才撤。
    */
@@ -3211,6 +3220,27 @@ export function ProjectView({
     failedAssistantId: string;
     replacementAssistantId: string;
   } | null>(null);
+  // A ref closes the same-render double-click window before React paints busy.
+  const retryLocksRef = useRef(new Map<string, string>());
+  const [retriedErrorSurfaces, setRetriedErrorSurfaces] = useState<Record<string, readonly string[]>>({});
+  const retriedErrorKey = activeConversationId
+    ? retriedErrorSurfaceKey(project.id, activeConversationId)
+    : null;
+  const supersededErrorAssistantIds = retriedErrorKey
+    ? retriedErrorSurfaces[retriedErrorKey] ?? readRetriedErrorSurface(retriedErrorKey) ?? []
+    : [];
+  const supersedeRetriedError = useCallback((
+    conversationId: string,
+    displayedAssistantId: string,
+    physicalAssistantId: string,
+  ) => {
+    const key = retriedErrorSurfaceKey(project.id, conversationId);
+    // A folded strategy turn displays its request ID but owns the final run's
+    // diagnostic. Both identities belong to this one validated retry target.
+    const assistantIds = [...new Set([displayedAssistantId, physicalAssistantId])];
+    writeRetriedErrorSurface(key, assistantIds);
+    setRetriedErrorSurfaces((current) => ({ ...current, [key]: assistantIds }));
+  }, [project.id]);
   /** 这次重试的替补助手消息**曾经**上过屏 —— 见下面那个 effect 的第三条出路。 */
   const retryPendingPaintedRef = useRef<string | null>(null);
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
@@ -3600,6 +3630,19 @@ export function ProjectView({
     ),
   });
   const currentConversationActionDisabled = currentConversationActionBlockReason !== null;
+  // Keep the broad mutation gate above: pending authority/materialization also
+  // forbids sending, but only a settled denial can claim view-only permission.
+  let currentConversationAccessError: 'messages-unavailable' | 'read-only' | null = null;
+  if (
+    conversationLoadFailure?.source === 'read'
+    || (activeConversationId && failedMessagesConversationId === activeConversationId)
+  ) {
+    currentConversationAccessError = 'messages-unavailable';
+  } else if (projectCollab.writerAuthority === 'denied') {
+    currentConversationAccessError = 'read-only';
+  }
+  const currentConversationActionDisabledRef = useRef(currentConversationActionDisabled);
+  currentConversationActionDisabledRef.current = currentConversationActionDisabled;
   // Directory and project scope may project different roles for the same
   // principal. Only defer comparison while that scope is still unresolved.
   const amrAuthRetryAuthorityPending = Boolean(
@@ -3648,7 +3691,7 @@ export function ProjectView({
     const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
     conversationMaterializationRecoveryRef.current = null;
     setPendingEmptyConversationSeed(null);
-    setConversationLoadError(null);
+    setConversationLoadFailure(null);
     setError(null);
     if (!revalidatingCurrentProject) {
       setConversations([]);
@@ -3727,7 +3770,7 @@ export function ProjectView({
           setConversations([]);
           setActiveConversationId(null);
         }
-        setConversationLoadError(message);
+        setConversationLoadFailure({ message, source: 'read' });
         setError(message);
       }
     })();
@@ -3775,7 +3818,7 @@ export function ProjectView({
       if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
 
       conversationMaterializationRecoveryRef.current = null;
-      setConversationLoadError(null);
+      setConversationLoadFailure(null);
       setError((current) => (
         current === recovery.errorMessage ? null : current
       ));
@@ -3813,7 +3856,7 @@ export function ProjectView({
       const message = err instanceof Error
         ? err.message
         : 'Could not load conversations for this project.';
-      setConversationLoadError(message);
+      setConversationLoadFailure({ message, source: 'read' });
       setError((current) => reconcileConversationRecoveryGlobalError(
         current,
         recovery.errorMessage,
@@ -3870,7 +3913,7 @@ export function ProjectView({
             ? err.message
             : 'Could not create a conversation for this project.';
         setPendingEmptyConversationSeed(null);
-        setConversationLoadError(message);
+        setConversationLoadFailure({ message, source: 'create' });
         setError(message);
       }
     })();
@@ -6120,8 +6163,8 @@ export function ProjectView({
       const commentConversationId = activeConversationId ?? routeConversationId;
       if (!commentConversationId) {
         setProjectActionsToast({
-          message: t('project.previewCommentSaveFailed'),
-          details: null,
+          message: t('project.previewCommentSaveFailedTitle'),
+          details: t('project.previewCommentSaveFailedDescription'),
           tone: 'error',
           ttlMs: 5000,
         });
@@ -6141,8 +6184,8 @@ export function ProjectView({
         );
         if (result.uploaded.length !== images.length) {
           setProjectActionsToast({
-            message: t('project.previewCommentSaveFailed'),
-            details: null,
+            message: t('project.previewCommentSaveFailedTitle'),
+            details: t('project.previewCommentSaveFailedDescription'),
             tone: 'error',
             ttlMs: 5000,
           });
@@ -6170,8 +6213,8 @@ export function ProjectView({
         // workspace context 401s here with zero prior UI feedback, and the
         // popover otherwise just closes as if the comment had saved.
         setProjectActionsToast({
-          message: t('project.previewCommentSaveFailed'),
-          details: null,
+          message: t('project.previewCommentSaveFailedTitle'),
+          details: t('project.previewCommentSaveFailedDescription'),
           tone: 'error',
           ttlMs: 5000,
         });
@@ -8369,6 +8412,11 @@ export function ProjectView({
         return meta?.acceptDurableQueue === true;
       }
       const runConversationId = activeConversationId;
+      // This is the accepted retry boundary: all synchronous refusal paths are
+      // above it. A later preflight/POST failure supplies its own current surface.
+      if (retryTarget && meta?.retryOfAssistantId) {
+        supersedeRetriedError(runConversationId, meta.retryOfAssistantId, retryTarget.failedAssistant.id);
+      }
       setError(null);
       /*
        * 【和上屏同一批】`chatSeed?.id` 是 `ChatPane` 的 `key` 的一部分 —— 清它会把
@@ -8673,6 +8721,21 @@ export function ProjectView({
             // 只对「余额耗尽」出卡。被登出也走这条硬拦截,但那张卡说的是钱的事,
             // 摆一个 $0.00 去解释一次登录过期是在误导 —— 那一档交给弹窗。
             if (gate.reason === 'insufficient') {
+              // This rejected composer Send has its own visible answer (the
+              // quota card). Restoring its pre-send transcript must not revive
+              // the previous failure's actions. Keep both history identities,
+              // including a folded task's displayed head and physical tail.
+              if (meta?.composerOwnedDraft && !retryTarget) {
+                const physicalFailure = trailingMessageIgnoringHostCards(historyBase);
+                const displayedFailure = trailingMessageIgnoringHostCards(foldStrategyTaskTurns(historyBase));
+                if (
+                  physicalFailure && displayedFailure
+                  && isRetryableAssistantTerminalFailure(physicalFailure)
+                  && isRetryableAssistantTerminalFailure(displayedFailure)
+                ) {
+                  supersedeRetriedError(runConversationId, displayedFailure.id, physicalFailure.id);
+                }
+              }
               // **没有轮次可锚。** 这一档下面紧跟着 `rejectBlockedSend()`,而它会
               // `retractPaintedTurn()` 把刚画出去的那一轮收回 —— 没有 run,也就
               // 没有「那一轮」可挂。锚点给 `null`,读数照旧落在流水末尾(T61)。
@@ -10355,6 +10418,7 @@ export function ProjectView({
     },
     [
       attachedComments,
+      supersedeRetriedError,
       activeConversationId,
       activeSessionMode,
       currentConversationBusy,
@@ -10750,101 +10814,76 @@ export function ProjectView({
     setModelPickerOpenSignal((n) => n + 1);
   }, []);
 
-  /**
-   * 〔重试〕。
-   *
-   * ⚠️ 这里**不只是**转发给 `handleSend`。`handleSend` 为了不让用户对着 1–2 秒
-   * 没反应的界面(OPEND-2614)会先把新一轮画出去,而画出去的那一刻队尾就换了人:
-   * `retryableAssistantMessage` 立刻返回 null,报错卡在**服务端还没确认这一发**
-   * 的时候当场消失。用户既判断不出重试有没有被接收,也读不到原来的失败原因和
-   * 别的出路 —— OPEND-2758 说的就是这一段。
-   *
-   * 所以按下去先立一份「这一轮正在重试」的宣告:卡靠它钉在原来那条失败消息上,
-   * 按钮靠它进加载态并锁住。宣告只在两种情况下撤:新 run 拿到了 id(下面那个
-   * effect),或者这一发压根没起来(`handleSend` 回 false —— 只读、空转录、
-   * 预检拒绝都走这条)。
-   *
-   * `assistantMessageId` 是**先定后发**的:新那条助手消息的 id 由这里生成,
-   * 否则宣告没法认出「哪条消息拿到 runId 才算这一次重试确认了」。
-   */
+  /** A retry consumes the current error surface, but never the failed history. */
   const handleRetry = useCallback(
     (
       assistantMessage: ChatMessage,
       recoveryActionType: TrackingRunRecoveryActionType = 'manual_retry',
     ) => {
-      if (currentConversationActionDisabled) return;
       const retryConversationId = activeConversationId;
-      if (!retryConversationId) return;
+      if (
+        currentConversationActionDisabledRef.current
+        || !retryConversationId
+        || activeConversationIdRef.current !== retryConversationId
+        || retryLocksRef.current.has(retryConversationId)
+        || !resolveRetryTarget(messages, assistantMessage.id)
+      ) return;
       const replacementAssistantId = randomUUID();
+      retryLocksRef.current.set(retryConversationId, replacementAssistantId);
       setRetryPending({
         conversationId: retryConversationId,
         failedAssistantId: assistantMessage.id,
         replacementAssistantId,
       });
       void (async () => {
-        const started = await handleSend('', [], [], {
-          retryOfAssistantId: assistantMessage.id,
-          assistantMessageId: replacementAssistantId,
-          taskAnalytics: buildRecoveryTaskAnalytics(
-            messages,
-            assistantMessage,
-            recoveryActionType,
-          ),
-        });
-        if (started) return;
-        // 这一发没有起来:把宣告收回,原失败卡和它那一排动作跟着回来。
-        setRetryPending((current) =>
-          current?.replacementAssistantId === replacementAssistantId ? null : current,
-        );
+        let started = false;
+        try {
+          started = await handleSend('', [], [], {
+            retryOfAssistantId: assistantMessage.id,
+            assistantMessageId: replacementAssistantId,
+            taskAnalytics: buildRecoveryTaskAnalytics(messages, assistantMessage, recoveryActionType),
+          });
+        } finally {
+          if (!started) {
+            if (retryLocksRef.current.get(retryConversationId) === replacementAssistantId) {
+              retryLocksRef.current.delete(retryConversationId);
+            }
+            setRetryPending((current) =>
+              current?.replacementAssistantId === replacementAssistantId ? null : current,
+            );
+          }
+        }
       })();
     },
-    [activeConversationId, currentConversationActionDisabled, handleSend, messages],
+    [activeConversationId, handleSend, messages],
   );
 
-  /**
-   * 宣告的另一半:**服务端确认了就撤**(OPEND-2758 ②)。
-   *
-   * 判据是那条新助手消息拿到了 `runId` —— 它由 `onRunCreated` 写进来,而
-   * `onRunCreated` 正是 `POST /api/runs` 带着 run id 回来的那一刻。用它而不是
-   * 「流式开始了」:后者在提前上屏之后立刻为真,等于没等。
-   *
-   * 另外两条出路:那条消息已经不在活跃态了(run 没建成就报错,或者被停掉),
-   * 以及会话被切走。两者都说明这一次重试不再有人等着确认。
-   *
-   * ⚠️ API / BYOK 模式没有 daemon run 可确认(`runStatus` 一直是 undefined),
-   * 于是这条 effect 会在上屏的同一批里撤掉宣告 —— 那一档保持原有行为,
-   * 本来也没有「服务端确认」这个环节。
-   */
+  // Release only the request we witnessed. Old responses must not unlock a
+  // later attempt; accepting or rejecting it must not revive its old error card.
   useEffect(() => {
     if (!retryPending) {
       retryPendingPaintedRef.current = null;
       return;
     }
+    const release = () => {
+      if (retryLocksRef.current.get(retryPending.conversationId) === retryPending.replacementAssistantId) {
+        retryLocksRef.current.delete(retryPending.conversationId);
+      }
+      setRetryPending((current) =>
+        current?.replacementAssistantId === retryPending.replacementAssistantId ? null : current,
+      );
+    };
     if (retryPending.conversationId !== activeConversationId) {
-      setRetryPending(null);
+      release();
       return;
     }
-    const replacement = messages.find(
-      (message) => message.id === retryPending.replacementAssistantId,
-    );
+    const replacement = messages.find((message) => message.id === retryPending.replacementAssistantId);
     if (replacement) {
       retryPendingPaintedRef.current = retryPending.replacementAssistantId;
-      if (replacement.runId || !isActiveRunStatus(replacement.runStatus)) {
-        setRetryPending(null);
-      }
+      if (replacement.runId || !isActiveRunStatus(replacement.runStatus)) release();
       return;
     }
-    /*
-     * 画出去过、现在又不见了 = 这一发被收回了。`POST /api/runs` 自己失败时
-     * `onError` 会把这条占位助手消息整条删掉、把失败记回用户那一行
-     * (「没有 run 存在过」),于是上面那两条判据一条都够不着。
-     *
-     * 「画出去过」这个记号是必须的:预检那一路在画之前先 await,那一段里
-     * 这条消息本来就还不存在 —— 不区分的话宣告会在刚立起来的下一帧就被撤掉。
-     */
-    if (retryPendingPaintedRef.current === retryPending.replacementAssistantId) {
-      setRetryPending(null);
-    }
+    if (retryPendingPaintedRef.current === retryPending.replacementAssistantId) release();
   }, [activeConversationId, messages, retryPending]);
 
   // "Continue" on a resumable failed run: send a fresh turn in the same
@@ -10870,49 +10909,54 @@ export function ProjectView({
     [currentConversationActionDisabled, handleSend, messages],
   );
 
-  // "Switch to AMR & retry" crosses the Settings route, which intentionally
-  // unmounts this ProjectView. Arm the exact failed turn in App before any
-  // config or navigation write; a fresh ProjectView may consume it only after
-  // re-proving the same project, conversation and Workspace authority.
-  const handleSwitchToAmrAndRetry = useCallback(
-    (failedAssistant: ChatMessage) => {
-      if (currentConversationActionDisabled) return;
-      if (
-        activeConversationId
-        && amrAuthRetryMountIdRef.current
-        && onArmAmrAuthRetryContinuation
-      ) {
-        onArmAmrAuthRetryContinuation({
-          projectId: project.id,
-          conversationId: activeConversationId,
-          assistantId: failedAssistant.id,
-          workspaceIdentityKey: projectRunAuthorityKey,
-          workspacePrincipal: projectRunWorkspaceContext
-            ? {
-                workspaceId: projectRunWorkspaceContext.workspaceId,
-                workspaceType: projectRunWorkspaceContext.workspaceType,
-                workspaceMemberId: projectRunWorkspaceContext.workspaceMemberId,
-              }
-            : null,
-          originMountId: amrAuthRetryMountIdRef.current,
-        });
-      }
-      onModeChange('daemon');
-      onAgentChange('amr');
-      onOpenAmrSettings?.();
-    },
-    [
-      activeConversationId,
-      currentConversationActionDisabled,
-      onAgentChange,
-      onArmAmrAuthRetryContinuation,
-      onModeChange,
-      onOpenAmrSettings,
-      project.id,
-      projectRunAuthorityKey,
-      projectRunWorkspaceContext,
-    ],
-  );
+  // OPEND-3205 supersedes the Settings-return automatic retry for this action.
+  // Preserve the failed turn; selecting Cloud does not submit another task.
+  const cloudSwitchInFlightRef = useRef(false);
+  const handleSwitchConversationToCloud = useCallback(async (
+    conversationId: string,
+    failedAssistant: ChatMessage,
+  ) => {
+    if (
+      cloudSwitchInFlightRef.current
+      || !onSwitchToCloud
+      || projectMutationReadOnly
+      || !projectRunHasBillableAmrPrincipal
+      || !conversations.some((conversation) =>
+        conversation.id === conversationId && conversation.projectId === project.id)
+      || !isRetryableAssistantTerminalFailure(failedAssistant)
+      || (conversationId === activeConversationId && currentConversationActionDisabled)
+    ) return;
+    const sourceProjectId = project.id;
+    const sourceAuthority = projectRunAuthorityKey;
+    const sourcePrimaryConversationId = activeConversationId;
+    const stillOwnsView = () => mountedRef.current
+      && projectIdRef.current === sourceProjectId
+      && projectRunAuthorityKeyRef.current === sourceAuthority
+      && activeConversationIdRef.current === sourcePrimaryConversationId;
+    cloudSwitchInFlightRef.current = true;
+    try {
+      await onSwitchToCloud();
+      if (!stillOwnsView()) return;
+      setProjectActionsToast({
+        message: t('chat.amrCard.switchedResend'), details: null, tone: 'success',
+      });
+    } catch {
+      if (!stillOwnsView()) return;
+      setProjectActionsToast({
+        message: t('settings.autosaveError'), details: null, tone: 'error',
+      });
+    } finally {
+      cloudSwitchInFlightRef.current = false;
+    }
+  }, [
+    activeConversationId, conversations, currentConversationActionDisabled,
+    onSwitchToCloud, project.id, projectMutationReadOnly, projectRunAuthorityKey,
+    projectRunHasBillableAmrPrincipal, t,
+  ]);
+  const handleSwitchToAmrAndRetry = useCallback((failedAssistant: ChatMessage) => {
+    if (!activeConversationId) return;
+    void handleSwitchConversationToCloud(activeConversationId, failedAssistant);
+  }, [activeConversationId, handleSwitchConversationToCloud]);
   // PR #3157: Antigravity's `agy -p` cannot complete OAuth on its own,
   // so the auth banner offers a one-click "Sign in via terminal"
   // button that POSTs to the daemon. The daemon opens a system
@@ -11467,7 +11511,7 @@ export function ProjectView({
     }
     creatingConversationRef.current = true;
     setCreatingConversation(true);
-    setConversationLoadError(null);
+    setConversationLoadFailure(null);
     try {
       const fresh = await createConversation(project.id, undefined, {
         workspaceContext: projectRunWorkspaceContext,
@@ -11505,7 +11549,7 @@ export function ProjectView({
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not create a conversation for this project.';
-      setConversationLoadError(message);
+      setConversationLoadFailure({ message, source: 'create' });
       setError(message);
     } finally {
       creatingConversationRef.current = false;
@@ -11534,7 +11578,7 @@ export function ProjectView({
     setStreamingConversationId(null);
     setMessagesConversationId(null);
     setFailedMessagesConversationId(null);
-    setConversationLoadError(null);
+    setConversationLoadFailure(null);
     messagesConversationIdRef.current = null;
     messagesAuthorityKeyRef.current = null;
     setActiveConversationId(id);
@@ -11709,7 +11753,7 @@ export function ProjectView({
       };
       trackConversationForkClick(analytics.track, forkContext, { requestId });
       setForkingMessageId(assistantMessage.id);
-      setConversationLoadError(null);
+      setConversationLoadFailure(null);
       let emptyResponse = false;
       try {
         const forkFallbackPredecessorMessageId = forkIndex < 0
@@ -11807,7 +11851,7 @@ export function ProjectView({
           { requestId },
         );
         const message = err instanceof Error ? err.message : t('chat.forkConversationFailed');
-        setConversationLoadError(message);
+        setConversationLoadFailure({ message, source: 'create' });
         setError(message);
       } finally {
         setForkingMessageId(null);
@@ -11969,6 +12013,10 @@ export function ProjectView({
               conversationLoadError ? null : errorSourceAssistantId,
             onSend: handleComposerSend,
             onRetry: handleRetry,
+            recoveryActionsBlockedReason: currentConversationActionBlockReason,
+            retryPendingAssistantId: retryPending?.conversationId === activeConversationId
+              ? retryPending.failedAssistantId : null,
+            supersededErrorAssistantIds,
             onStop: handleStop,
             onRemoveQueuedSend: removeQueuedChatSend,
             onUpdateQueuedSend: updateQueuedChatSend,
@@ -11984,6 +12032,9 @@ export function ProjectView({
       activeConversationId,
       conversationLoadError,
       currentConversationActionDisabled,
+      currentConversationActionBlockReason,
+      retryPending,
+      supersededErrorAssistantIds,
 	      currentConversationQueuedItems,
 	      currentConversationSendDisabled,
 	      currentConversationLoading,
@@ -12348,6 +12399,7 @@ export function ProjectView({
     Boolean(activeConversationId || conversationLoadError);
   const projectActionsToastNode = projectActionsToast ? (
     <Toast
+      portalToBody={!projectActionsToastInChatPane}
       message={projectActionsToast.message}
       details={projectActionsToast.details}
       code={projectActionsToast.code}
@@ -13574,6 +13626,8 @@ export function ProjectView({
               onRetry={handleRetry}
               // 这一刻接不接得住恢复动作,以及接不住时该说哪句话(OPEND-2821)。
               recoveryActionsBlockedReason={currentConversationActionBlockReason}
+              accessError={currentConversationAccessError}
+              supersededErrorAssistantIds={supersededErrorAssistantIds}
               // 哪一轮的重试还在等服务端确认(OPEND-2758)。会话对不上就不算 ——
               // 宣告是按会话认领的,别的会话的卡不该被它钉住。
               retryPendingAssistantId={
@@ -13958,6 +14012,15 @@ export function ProjectView({
           onConversationSessionModeChange={handleConversationSessionModeChange}
           onNewConversation={handleNewConversation}
           activeConversationChat={activeConversationChatState}
+          onSwitchConversationToCloud={
+            onSwitchToCloud ? handleSwitchConversationToCloud : undefined
+          }
+          chatRecoveryActionsBlockedReason={resolveRecoveryActionBlockReason({
+            readOnly: Boolean(projectMutationReadOnly),
+            messagesUnavailable: false,
+            billingPrincipalResolved: Boolean(projectRunHasBillableAmrPrincipal),
+            conversationBusy: false,
+          })}
           onActiveContextChange={handleActiveWorkspaceContextChange}
           onWorkspaceContextsChange={handleWorkspaceContextsChange}
           messages={messages}

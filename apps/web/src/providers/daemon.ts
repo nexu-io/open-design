@@ -1991,7 +1991,12 @@ async function consumeDaemonPhysicalRun({
           }
           if (parsed.kind !== 'event') continue;
           sawStreamProgress = true;
-          sawRunEvent = true;
+          if (!sawRunEvent) {
+            sawRunEvent = true;
+            // A resumed run event proves transport recovery while the reader
+            // may stay open. Keepalive comments above do not clear the UI.
+            clearReconnect();
+          }
           trackRunProgress(runId);
           /*
            * S12 的静默计时就认这一刻 —— **上游给过我们东西**的唯一如实证据。

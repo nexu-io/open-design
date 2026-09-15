@@ -348,7 +348,7 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => {
       expect(screen.getByText('empty_response:deepseek-chat')).toBeTruthy();
     });
-    expect(screen.getByText(/provider ended the request/i)).toBeTruthy();
+    expect(screen.getByText('This task failed to run. Please retry. If it fails again, please contact support.')).toBeTruthy();
     expect(screen.queryByText('succeeded')).toBeNull();
 
     await waitFor(() => {
@@ -726,7 +726,7 @@ describe('ProjectView API empty response handling', () => {
     });
     await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('success-sound'));
     expect(mockedPlaySound).not.toHaveBeenCalledWith('failure-sound');
-    expect(screen.queryByText(/provider ended the request/i)).toBeNull();
+    expect(screen.queryByText('This task failed to run. Please retry. If it fails again, please contact support.')).toBeNull();
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
   });
 
