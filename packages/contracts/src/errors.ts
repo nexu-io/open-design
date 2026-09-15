@@ -123,6 +123,13 @@ export const API_ERROR_CODES = [
   'OUTPUT_TOO_LARGE',
   'TEMPLATE_BINDING_INVALID',
   'REDACTION_REQUIRED',
+  // Plugin apply failures use a closed shared contract so browser clients can
+  // render useful diagnoses without accepting daemon paths, stacks, or raw
+  // transport text.
+  'PLUGIN_INPUTS_MISSING',
+  'PLUGIN_CONFIGURATION_INVALID',
+  'PLUGIN_RESOURCE_UNAVAILABLE',
+  'PLUGIN_APPLY_FAILED',
   // Connector catalog, connection, safety, and execution failures.
   'CONNECTOR_NOT_FOUND',
   'CONNECTOR_AUTH_CONFIG_REQUIRED',
