@@ -25,11 +25,12 @@ describe('modelMaxTokensDefault', () => {
     expect(modelMaxTokensDefault('mimo-v2.5-pro')).toBe(32768);
   });
 
-  it('returns DeepSeek v4 output caps from OVERRIDES (not in LiteLLM upstream)', () => {
-    // DeepSeek v4 models are not tracked by LiteLLM as of 2026-05-07,
-    // so OVERRIDES must supply 384K to avoid falling back to 8192.
-    expect((litellmData.models as Record<string, number>)['deepseek-v4-pro']).toBeUndefined();
-    expect((litellmData.models as Record<string, number>)['deepseek-v4-flash']).toBeUndefined();
+  it('keeps DeepSeek v4 output caps on the OVERRIDES values', () => {
+    // LiteLLM caught up and now tracks v4 (393216 = 384K input-window-
+    // derived values), but the spec caps stay at 384000; OVERRIDES must
+    // keep winning over catalog data so re-syncing can't drift the cap.
+    expect((litellmData.models as Record<string, number>)['deepseek-v4-pro']).toBe(393216);
+    expect((litellmData.models as Record<string, number>)['deepseek-v4-flash']).toBe(393216);
     expect(modelMaxTokensDefault('deepseek-v4-pro')).toBe(384000);
     expect(modelMaxTokensDefault('deepseek-v4-flash')).toBe(384000);
   });

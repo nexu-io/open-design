@@ -426,6 +426,14 @@ interface Props {
   // here when a mid-chat design-system switch lands (or fails) so the user
   // has explicit confirmation without re-opening the picker.
   onShowToast?: (message: string) => void;
+  /**
+   * 手动上下文压缩(#5991)。`true` 表示当前会话具备压缩资格(API/BYOK 会话),
+   * 斜杠菜单露出 `/compact`。宿主(ChatPane)持有压缩编排与 checkpoint 状态,
+   * 输入框只负责把命令拦截下来并调用它;返回 `{ok:false,message}` 时文案落
+   * composer-hint 状态行。压缩进行中会暂时拦住 send。
+   */
+  compactAvailable?: boolean;
+  onCompactConversation?: () => Promise<{ ok: boolean; message?: string }>;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -611,6 +619,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       quotes,
       onClearQuotes,
       onRestoreQuotes,
+      compactAvailable = false,
+      onCompactConversation,
     },
     ref
   ) {
@@ -649,6 +659,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // into an immediate, non-interactive "Preparing..." pill instead of
     // looking like the click was lost.
     const [composedSendPending, setComposedSendPending] = useState(false);
+    // #5991 手动压缩的进程态。busy 时 submit 直接吞掉,composer-hint 状态行
+    // 显示进度/失败原因;成功清空 note 并走 onShowToast 报一句。
+    const [compactPending, setCompactPending] = useState(false);
+    const [compactNote, setCompactNote] = useState<string | null>(null);
     const previousSessionModeRef = useRef(sessionMode);
 
     useEffect(() => {
@@ -1292,8 +1306,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           argHint: t('pet.slashSearchArg'),
         });
       }
+      // #5991: API/BYOK 会话的手动上下文压缩。`insert` 不带尾随空格 ——
+      // 选中即提交,命令没有参数。
+      if (compactAvailable) {
+        list.push({
+          id: 'compact',
+          label: '/compact',
+          insert: '/compact',
+          descKey: 'chat.compactSlash',
+          icon: 'sparkles',
+        });
+      }
       return list;
-    }, [researchAvailable, t, enabledMcpServers, onOpenMcpSettings]);
+    }, [researchAvailable, t, enabledMcpServers, onOpenMcpSettings, compactAvailable]);
 
     const filteredSlash = useMemo(() => {
       if (!slash) return [] as SlashCommand[];
@@ -1415,6 +1440,39 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
       setDraft('');
       editorRef.current?.clear();
+      return true;
+    }
+
+    // #5991 `/compact`:把当前 API/BYOK 会话的旧转录压成 checkpoint,由
+    // 宿主(ChatPane)跑 `compactConversation` 并持有结果。命令永远不进
+    // agent;不可用/失败都落 composer-hint 状态行,成功走 toast。
+    function tryHandleCompactSlash(): boolean {
+      const trimmed = draft.trim();
+      if (!/^\/compact$/i.test(trimmed)) return false;
+      setDraft('');
+      editorRef.current?.clear();
+      if (!onCompactConversation || !compactAvailable) {
+        setCompactNote(t('chat.compactUnavailableReason'));
+        return true;
+      }
+      if (compactPending) return true;
+      setCompactPending(true);
+      setCompactNote(t('chat.compactProgress'));
+      void onCompactConversation().then(
+        (outcome) => {
+          setCompactPending(false);
+          if (outcome.ok) {
+            setCompactNote(null);
+            onShowToast?.(t('chat.compactDone'));
+          } else {
+            setCompactNote(outcome.message || t('chat.compactFailed'));
+          }
+        },
+        () => {
+          setCompactPending(false);
+          setCompactNote(t('chat.compactFailed'));
+        },
+      );
       return true;
     }
 
@@ -3079,10 +3137,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // 位置在最前面是有意的:下面的 `/hatch`、`/search` 两条支路会绕过后续流程,
       // 判据留在它们后面的话,那两条支路等于又多了一套自己的答案。
       if (!canSend) return;
+      // #5991: 压缩进行中先把发送吞掉 —— 压缩有自己的忙碌状态行,不该让
+      // 新一轮消息插进正在被总结的转录里。
+      if (compactPending) return;
       // Intercept `/pet …` and `/mcp` before sending so the slash command
       // never hits the agent — these are local UX hooks, not model prompts.
       if (tryHandlePetSlash()) return;
       if (tryHandleMcpSlash()) return;
+      // `/compact` is a local UX hook too: the compaction run happens in the
+      // host, the command never reaches the agent.
+      if (tryHandleCompactSlash()) return;
+      // 真正的发送开始,压缩状态行(成功/失败/不可用提示)不再适用。
+      if (compactNote) setCompactNote(null);
       // `/hatch <concept>` expands into the canonical hatch-pet skill
       // prompt and *is* sent to the agent — the agent runs the skill,
       // packages a Codex pet under `~/.codex/pets/`, and the user
@@ -3943,6 +4009,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             alignment (2026-07-21) over keeping this as the only mid-project
             re-bind entry. Home still picks a working directory for NEW projects. */}
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
+        {!uploadError && compactNote ? <span className="composer-hint">{compactNote}</span> : null}
         {detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}

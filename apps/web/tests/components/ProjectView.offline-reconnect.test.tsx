@@ -61,6 +61,10 @@ vi.mock('../../src/i18n', () => ({
 vi.mock('../../src/providers/anthropic', () => ({ streamMessage: vi.fn() }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  COMPACTION_ELIGIBLE_AGENT_IDS: new Set(['anthropic-api','openai-api','azure-openai-api','google-gemini-api','ollama-cloud-api','senseaudio-api','aihubmix-api','bedrock-api','antigravity','byok-opencode']),
+  fetchConversationCompaction: vi.fn().mockResolvedValue(null),
+
+
   GENERIC_DAEMON_DISCONNECT_CODE: 'GENERIC_DAEMON_DISCONNECT',
   GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
