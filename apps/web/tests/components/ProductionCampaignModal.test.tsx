@@ -27,7 +27,6 @@ vi.mock("../../src/providers/registry", () => ({
 }));
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import { internalActionNavigationUrl } from "../../src/components/touchpoint-navigation";
-import { ProductionCampaignBadge } from "../../src/components/ProductionCampaignBadge";
 import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
 import { I18nProvider, useI18n } from "../../src/i18n";
@@ -1431,75 +1430,6 @@ describe("ProductionCampaignModal device impressions", () => {
 		fireEvent(document, new Event("visibilitychange"));
 		await screen.findByRole("dialog");
 		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
-	});
-	it("keeps the existing badge and its manual static action usable after automatic suppression", async () => {
-		localStorage.setItem(marker(), "1");
-		const placementKey = "opend.home.account-badge";
-		const badgeManifest = {
-			...manifest,
-			placements: [
-				{
-					...manifest.placements[0]!,
-					key: placementKey,
-					requiredCapabilities: ["static-action"],
-				},
-			],
-		};
-		const badgeDecision = decision({
-			placementKey,
-			requiredCapabilities: ["static-action"],
-			content: {
-				...content,
-				placementKey,
-				manifest: badgeManifest,
-				manifestHash: digest(JSON.stringify(badgeManifest)),
-			},
-		});
-		let click!: (id: string) => Promise<void>;
-		vi
-			.spyOn(OpenDesignTouchpointElement.prototype, "mount")
-			.mockImplementation(async function (
-				this: OpenDesignTouchpointElement,
-				_entry,
-				_digest,
-				_context,
-				_urls,
-				_actions,
-				options,
-			) {
-				click = options!.dispatchAction!;
-				this.shadowRoot?.replaceChildren(document.createTextNode("Open campaign"));
-			});
-		vi
-			.mocked(fetch)
-			.mockImplementation(
-				async (input, init) =>
-					new Response(
-						JSON.stringify(
-							init?.method === "POST"
-								? { ok: true }
-								: String(input).includes(placementKey)
-									? badgeDecision
-									: decision(),
-						),
-						{ status: 200 },
-					),
-			);
-		Object.defineProperty(navigator, "userActivation", {
-			configurable: true,
-			value: { isActive: true },
-		});
-		render(
-			<>
-				<ProductionCampaignModal authenticated sessionSubject="user-a" />
-				<ProductionCampaignBadge authenticated sessionSubject="user-a" />
-			</>,
-		);
-		await waitFor(() => expect(click).toBeTypeOf("function"));
-		expect(screen.queryByRole("dialog")).toBeNull();
-		expect(screen.getByTestId("production-campaign-badge")).toBeTruthy();
-		await click("learn");
-		expect(openExternalUrlMock).toHaveBeenCalledWith("https://example.com");
 	});
 	it("does not record a verified mount with no visible geometry", async () => {
 		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({

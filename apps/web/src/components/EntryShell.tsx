@@ -167,7 +167,6 @@ import { resolvePlanLabelTier } from '../collab/team-plan';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
-import { canRenderProductionCampaignBadge, ProductionCampaignBadge } from './ProductionCampaignBadge';
 import { ProductionCampaignHover } from './ProductionCampaignHover';
 import {
   beginWorkspaceScopedRead,
@@ -1710,9 +1709,8 @@ export function EntryShell({
                   loggedIn={amrLoggedIn}
                 />
               ) : null}
-              {canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? <ProductionCampaignBadge authenticated sessionSubject={amrAccountId} /> : null}
-              {/* The requirements-specific hover entry is its own authorized
-                  touchpoint, beside—not renamed from—the account badge. */}
+              {/* The requirements-specific hover entry is its own
+                  independently authorized touchpoint. */}
               <ProductionCampaignHover
                 authenticated={amrLoggedIn === true}
                 sessionSubject={amrAccountId}

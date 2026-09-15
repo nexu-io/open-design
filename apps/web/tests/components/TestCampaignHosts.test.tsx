@@ -16,7 +16,6 @@ vi.mock("@open-design/host", () => ({
 	getOpenDesignHost: () => (globalThis as HostGlobal).__cmsTestHost,
 }));
 
-import { ProductionCampaignBadge } from "../../src/components/ProductionCampaignBadge";
 import { ProductionCampaignHover } from "../../src/components/ProductionCampaignHover";
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import {
@@ -30,7 +29,6 @@ import * as touchpointComponent from "../../src/components/touchpoint-component"
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
 
 const placements = [
-	"opend.home.account-badge",
 	"opend.home.campaign-modal",
 	"opend.home.hover-entry",
 	"opend.home.hover-layer",
@@ -55,9 +53,7 @@ const manifest = {
 		requiredCapabilities:
 			key === "opend.home.campaign-modal"
 				? ["close", "static-action"]
-				: key === "opend.home.account-badge"
-					? ["static-action"]
-					: ["hover", "static-action"],
+				: ["hover", "static-action"],
 		staticActions: [],
 	})),
 	resources: placements.map((key) => `${key.split(".").at(-1)}.js`),
@@ -75,9 +71,7 @@ function decision(placementKey: (typeof placements)[number]): TestDecision {
 		requiredCapabilities:
 			placementKey === "opend.home.campaign-modal"
 				? ["close", "static-action"]
-				: placementKey === "opend.home.account-badge"
-					? ["static-action"]
-					: ["hover", "static-action"],
+				: ["hover", "static-action"],
 		staticActions: [],
 		serverTime: "2030-01-01T00:00:00.000Z",
 		authorizationExpiresAt: "2030-01-01T00:01:00.000Z",
@@ -221,7 +215,6 @@ describe("Test decisions at the existing host touchpoints", () => {
 					<I18nProvider initial="zh-CN">
 						<TestCampaignModal authenticated sessionSubject="account-a" />
 						<ProductionCampaignModal authenticated sessionSubject="account-a" />
-						<ProductionCampaignBadge authenticated sessionSubject="account-a" />
 						<ProductionCampaignHover authenticated sessionSubject="account-a" />
 					</I18nProvider>,
 				);
@@ -229,13 +222,13 @@ describe("Test decisions at the existing host touchpoints", () => {
 			expect(nodes()).toHaveLength(0);
 			catalog = ["deployment-a"];
 			await tick();
-			expect(nodes()).toHaveLength(4);
+			expect(nodes()).toHaveLength(3);
 			expect(requested).toContain("deployment-a");
 			const originals = nodes();
 			const mounts = vi.mocked(OpenDesignTouchpointElement.prototype.mount).mock
 				.calls.length;
 			await tick();
-			expect(nodes()).toHaveLength(4);
+			expect(nodes()).toHaveLength(3);
 			for (const [index, node] of nodes().entries())
 				expect(node).toBe(originals[index]);
 			expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(
@@ -244,7 +237,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 			catalog = ["deployment-b"];
 			await tick();
 			expect(requested).toContain("deployment-b");
-			expect(nodes()).toHaveLength(4);
+			expect(nodes()).toHaveLength(3);
 			catalog = [];
 			await tick();
 			expect(nodes()).toHaveLength(0);
@@ -258,11 +251,11 @@ describe("Test decisions at the existing host touchpoints", () => {
 			catalog = ["deployment-c"];
 			await tick();
 			expect(requested).toContain("deployment-c");
-			expect(nodes()).toHaveLength(4);
-			fireEvent.keyDown(document, { key: "Escape" });
 			expect(nodes()).toHaveLength(3);
+			fireEvent.keyDown(document, { key: "Escape" });
+			expect(nodes()).toHaveLength(2);
 			await tick();
-			expect(nodes()).toHaveLength(3); // An unchanged directory cannot undo dismissal.
+			expect(nodes()).toHaveLength(2); // An unchanged directory cannot undo dismissal.
 			catalog = ["deployment-future"];
 			startsAt = Date.now() + 45_000;
 			await tick();
@@ -274,7 +267,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 			await act(async () => {
 				await vi.advanceTimersByTimeAsync(1);
 			});
-			expect(nodes()).toHaveLength(4);
+			expect(nodes()).toHaveLength(3);
 		} finally {
 			cleanup();
 			vi.useRealTimers();
@@ -363,7 +356,6 @@ describe("Test decisions at the existing host touchpoints", () => {
 				<Controls />
 				<TestCampaignModal authenticated sessionSubject="account-a" />
 				<ProductionCampaignModal authenticated sessionSubject="account-a" />
-				<ProductionCampaignBadge authenticated sessionSubject="account-a" />
 				<ProductionCampaignHover authenticated sessionSubject="account-a" />
 			</I18nProvider>,
 		);
@@ -388,7 +380,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 		// A late previous-language response must not restore any stale placement.
 		holdJapanese = true;
 		fireEvent.click(screen.getByText("Japanese"));
-		await waitFor(() => expect(pending).toHaveLength(4));
+		await waitFor(() => expect(pending).toHaveLength(3));
 		fireEvent.click(screen.getByText("English"));
 		await waitFor(() => expect(mountedTexts()).toEqual(expected("en")));
 		await act(async () => {
@@ -562,7 +554,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 		expect(screen.getByRole("dialog", { name: "Test campaign" })).toBeVisible();
 	});
 
-	it("uses the selected Test session at modal, badge, and paired hover hosts without production reads", async () => {
+	it("uses the selected Test session at the modal and paired hover hosts without production reads", async () => {
 		const decisions = new Map(
 			placements.map((placementKey) => [placementKey, decision(placementKey)]),
 		);
@@ -597,17 +589,15 @@ describe("Test decisions at the existing host touchpoints", () => {
 		render(
 			<>
 				<ProductionCampaignModal authenticated sessionSubject="account-a" />
-				<ProductionCampaignBadge authenticated sessionSubject="account-a" />
 				<ProductionCampaignHover authenticated sessionSubject="account-a" />
 			</>,
 		);
 		await screen.findByTestId("campaign-custom-element");
-		await screen.findByTestId("production-campaign-badge");
 		await screen.findByTestId("cms-hover-overlay-root");
 		await waitFor(() =>
 			expect(
 				fetchMock.mock.calls.filter(([url]) => url.includes("acceptances")).length,
-			).toBe(3),
+			).toBe(2),
 		);
 		const entry = screen
 			.getByTestId("cms-hover-overlay-root")
@@ -618,7 +608,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 		await waitFor(() =>
 			expect(
 				fetchMock.mock.calls.filter(([url]) => url.includes("acceptances")).length,
-			).toBe(4),
+			).toBe(3),
 		);
 		const reports = fetchMock.mock.calls
 			.filter(([url]) => url.includes("acceptances"))
@@ -650,11 +640,6 @@ describe("Test decisions at the existing host touchpoints", () => {
 		expect(
 			screen
 				.getByTestId("campaign-custom-element")
-				.querySelector("opend-touchpoint"),
-		).not.toBeNull();
-		expect(
-			screen
-				.getByTestId("production-campaign-badge")
 				.querySelector("opend-touchpoint"),
 		).not.toBeNull();
 	});
