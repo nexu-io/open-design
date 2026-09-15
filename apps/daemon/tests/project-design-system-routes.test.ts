@@ -8,6 +8,7 @@ import JSZip from 'jszip';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { installImportTokenAutoMint } from './import-token-shim.js';
 
 describe('project design system route gates', () => {
   let server: http.Server;
@@ -23,6 +24,7 @@ describe('project design system route gates', () => {
     };
     baseUrl = started.url;
     server = started.server;
+    installImportTokenAutoMint();
   });
 
   afterEach(() => {

@@ -74,14 +74,15 @@ describe('desktop-import-token gate', () => {
     });
   }
 
-  it('accepts unauthenticated imports when no secret is registered (web mode)', async () => {
+  it('rejects unauthenticated imports when no secret is registered (web mode)', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '');
+    // issue #5480: directory binding always requires an HMAC import token,
+    // even in web mode. resetDesktopAuthForTests now sets a default secret
+    // so the gate is always active.
+    setDesktopAuthSecret(null); // explicitly clear to test no-secret path
     const resp = await importFolder({ baseDir: folder });
-    expect(resp.status).toBe(200);
-    const body = (await resp.json()) as { project: { metadata?: { fromTrustedPicker?: boolean } } };
-    // PR #974: no secret registered → no `fromTrustedPicker` marker.
-    expect(body.project.metadata?.fromTrustedPicker).toBeUndefined();
+    expect(resp.status).toBe(403);
   });
 
   it('rejects imports with no token when a secret is registered', async () => {
