@@ -69,6 +69,7 @@ vi.mock('../../src/router', () => ({ navigate: vi.fn() }));
 vi.mock('../../src/providers/anthropic', () => ({ streamMessage: vi.fn() }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  fetchByokHostDefaults: vi.fn(async () => ({ configured: false })),
   GENERIC_DAEMON_DISCONNECT_CODE: 'DAEMON_STREAM_DISCONNECTED',
   GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
   fetchChatRunStatus: vi.fn(),
