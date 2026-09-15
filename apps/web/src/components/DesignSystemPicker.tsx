@@ -36,6 +36,14 @@ function isTeamSystem(system: DesignSystemSummary): boolean {
   return system.teamShared === true || system.teamSynced === true;
 }
 
+const BUNDLED_SUMMARY_PATTERN =
+  /^Bundled Open Design package for .+, derived from curated DESIGN\.md, tokens\.css, and components\.html fixtures\.$/i;
+
+function searchableSummary(summary: string): string {
+  const normalized = summary.trim();
+  return BUNDLED_SUMMARY_PATTERN.test(normalized) ? '' : normalized;
+}
+
 interface PopoverAnchor {
   left: number;
   width: number;
@@ -201,7 +209,15 @@ export function DesignSystemPicker({
     return designSystems.filter((d) => {
       const localizedSummary = localizeDesignSystemSummary(locale, d);
       const localizedCategory = localizeDesignSystemCategory(locale, d.category);
-      const haystack = `${d.title} ${d.category} ${d.summary} ${localizedCategory} ${localizedSummary}`.toLowerCase();
+      const haystack = [
+        d.title,
+        d.category,
+        localizedCategory,
+        searchableSummary(d.summary),
+        searchableSummary(localizedSummary),
+      ]
+        .join(' ')
+        .toLowerCase();
       return haystack.includes(q);
     });
   }, [query, designSystems, locale]);
@@ -270,6 +286,15 @@ export function DesignSystemPicker({
     );
   };
 
+  // A hovered row wins the preview (see previewSystem above), and hover is only
+  // cleared when the popover closes. Once the user moves to the search input the
+  // hover target is stale, so drop it and let the preview fall back to the
+  // selected system (or the "不指定" blurb) instead of sticking on it.
+  const clearHoverPreview = () => {
+    setHovered(null);
+    setHoveredNone(false);
+  };
+
   // Clear: reset the search query and deselect any chosen system (back to "No
   // design system") without closing, so the user can keep browsing. Create:
   // jump to the standalone design-system creation page, closing the popover.
@@ -311,13 +336,17 @@ export function DesignSystemPicker({
               maxHeight: anchor.maxHeight,
             }}
           >
-            <div className="project-ds-picker-search">
+            <div className="project-ds-picker-search" onMouseEnter={clearHoverPreview}>
               <Icon name="search" size={12} />
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onFocus={clearHoverPreview}
+                onChange={(e) => {
+                  clearHoverPreview();
+                  setQuery(e.target.value);
+                }}
                 placeholder={t('designSystemPicker.searchCompactPlaceholder')}
                 data-testid="project-ds-picker-search"
               />
