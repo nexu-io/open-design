@@ -58,6 +58,7 @@ import {
 import { readVelaControlApiContext } from '../integrations/vela.js';
 import { isAbortedOperationError } from '../integrations/aborted-error.js';
 import { readProjectManifest } from '../project-locations.js';
+import { extractRelativeRefs, referenceMimeForPath } from '../artifacts/relative-refs.js';
 import { redactSecrets } from '../redact.js';
 import { findRealElementRange, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
@@ -383,6 +384,8 @@ const SYNC_INTENT_EVENTS: ReadonlySet<ProjectSyncIntentEvent> = new Set([
 const PULLED_PROJECT_PLACEHOLDER_NAME = '共享项目';
 const PUBLIC_FILE_RESOURCE_KIND = 'project';
 const PUBLIC_FILE_REF = 'published';
+const PUBLIC_FILE_BUNDLE_MAX_DEPTH = 3;
+const PUBLIC_FILE_BUNDLE_MAX_FILES = 200;
 
 const MAX_ERROR_LOG_FIELD_LENGTH = 2_048;
 
@@ -533,6 +536,82 @@ async function resolvePublicSourceFile(projectDir: string, filePath: string): Pr
   const error = new Error('public file path escapes project root') as NodeJS.ErrnoException;
   error.code = 'EACCES';
   throw error;
+}
+
+async function writePublicBundleFile(
+  tempDir: string,
+  filePath: string,
+  data: Buffer,
+): Promise<void> {
+  const targetFile = path.join(tempDir, filePath);
+  await mkdir(path.dirname(targetFile), { recursive: true });
+  await writeFile(targetFile, data);
+}
+
+/**
+ * Stage the requested public entry plus its transitive project-local runtime
+ * dependencies. Unrelated project files remain private.
+ *
+ * Every dependency is passed through resolvePublicSourceFile(), so symlinks
+ * cannot escape the project root. Missing/broken dependencies are skipped just
+ * as a browser would fail those individual resource requests; the entry file
+ * itself has already been validated by the route.
+ */
+async function stagePublicFileBundle(
+  projectDir: string,
+  entryPath: string,
+  entryData: Buffer,
+  tempDir: string,
+): Promise<void> {
+  await writePublicBundleFile(tempDir, entryPath, entryData);
+
+  const entryMime = referenceMimeForPath(entryPath);
+  if (!entryMime) return;
+
+  const visited = new Set<string>([entryPath]);
+  let frontier = extractRelativeRefs(
+    entryData.toString('utf8'),
+    entryPath,
+    entryMime,
+  ).filter((ref) => !visited.has(ref));
+
+  for (
+    let depth = 1;
+    depth < PUBLIC_FILE_BUNDLE_MAX_DEPTH && frontier.length > 0;
+    depth += 1
+  ) {
+    const next: string[] = [];
+
+    for (const refPath of frontier) {
+      if (visited.has(refPath)) continue;
+      if (visited.size >= PUBLIC_FILE_BUNDLE_MAX_FILES) return;
+
+      visited.add(refPath);
+
+      let data: Buffer;
+      try {
+        const sourceFile = await resolvePublicSourceFile(projectDir, refPath);
+        data = await readFile(sourceFile);
+      } catch {
+        // A missing, unreadable or escaping dependency must never widen the
+        // publication. Keep the entry publishable and leave that reference
+        // unresolved in the public snapshot.
+        continue;
+      }
+
+      await writePublicBundleFile(tempDir, refPath, data);
+
+      const mime = referenceMimeForPath(refPath);
+      if (!mime) continue;
+
+      const refs = extractRelativeRefs(data.toString('utf8'), refPath, mime);
+      for (const ref of refs) {
+        if (!visited.has(ref)) next.push(ref);
+      }
+    }
+
+    frontier = next;
+  }
 }
 
 function publicFileResourceIdFor(
@@ -1289,9 +1368,7 @@ export function registerCollabSyncRoutes(
     const resourceId = publicFileResourceIdFor(projectId, filePath, principal);
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-public-file-'));
     try {
-      const targetFile = path.join(tempDir, filePath);
-      await mkdir(path.dirname(targetFile), { recursive: true });
-      await writeFile(targetFile, data);
+      await stagePublicFileBundle(projectDir, filePath, data, tempDir);
       const metadata = {
         source: 'open-design',
         projectId,
