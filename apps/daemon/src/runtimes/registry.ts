@@ -14,6 +14,7 @@ import { qoderAgentDef } from './defs/qoder.js';
 import { copilotAgentDef } from './defs/copilot.js';
 import { ampAgentDef } from './defs/amp.js';
 import { piAgentDef } from './defs/pi.js';
+import { ompAgentDef } from './defs/omp.js';
 import { kiroAgentDef } from './defs/kiro.js';
 import { kiloAgentDef } from './defs/kilo.js';
 import { vibeAgentDef } from './defs/vibe.js';
@@ -54,6 +55,7 @@ export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   copilotAgentDef,
   ampAgentDef,
   piAgentDef,
+  ompAgentDef,
   kiroAgentDef,
   kiloAgentDef,
   vibeAgentDef,

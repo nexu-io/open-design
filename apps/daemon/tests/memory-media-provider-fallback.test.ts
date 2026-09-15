@@ -183,4 +183,23 @@ describe('memory extraction media-provider fallback', () => {
       reason: 'no-provider',
     });
   });
+
+  it('does not fall through to an Anthropic key when OMP is the chat agent', async () => {
+    process.env.ANTHROPIC_API_KEY = 'anthropic-test-key';
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const suggestions = await extractWithLLM(
+      dataDir,
+      { userMessage: 'Remember that I use OMP.', assistantMessage: 'Noted.' },
+      { projectRoot, chatAgentId: 'omp' },
+    );
+
+    expect(suggestions).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(listExtractions()[0]).toMatchObject({
+      phase: 'skipped',
+      reason: 'no-provider',
+    });
+  });
 });

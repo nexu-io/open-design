@@ -143,7 +143,7 @@ definitions currently group by transport as follows:
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
 | `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
-| `pi-rpc` | `pi` |
+| `pi-rpc` | `pi`, `omp` |
 | `dsh-profile-jsonl` | `deepseek-harness` |
 | `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `grok-build`, `qwen` |
 
@@ -332,6 +332,70 @@ the active-run staging implementation is in
   with the conversation.
 - Extension UI: auto-resolved. pi's RPC protocol can request user dialogs (`select`, `confirm`, `input`, `editor`) and fire-and-forget notifications (`setStatus`, `setWidget`, `notify`, `setTitle`, `set_editor_text`). Dialog methods are auto-approved (confirm → true, select → first option) and fire-and-forget methods are silently consumed because the web UI has no surface for them.
 - **Gotcha:** pi's RPC `prompt` response is asynchronous — `success: true` only means the prompt was accepted, not that the agent finished. Agent failures after acceptance surface through the normal event stream (`extension_error`, `auto_retry_end` with `success: false`) and the empty-output guard.
+
+### 5.10.1 Oh My Pi (omp)
+
+- Oh My Pi is a downstream fork of pi. It shares pi's RPC wire protocol, so it
+  reuses the `pi-rpc` transport and event mapper unchanged — but it is a
+  separate adapter (`omp`, binary `omp`) because it diverges on three points
+  that the def declares as data rather than branching on id.
+- Invocation: `omp --mode rpc --auto-approve --session-dir <resolved-session-base>/.omp/sessions
+  [--model <selector>] [--thinking <level>] [--add-dir <abs> …]`, with the
+  composed prompt delivered over stdin as an RPC `prompt` command. See
+  **Session directory** below for how `<resolved-session-base>` is chosen.
+- Permission: `--auto-approve` (omp's alias for `--yolo`) matches the catalog's
+  headless posture — the daemon spawns every CLI without a TTY, so an
+  interactive approval prompt would hang the run.
+- **Resume — the load-bearing difference.** omp narrowed `new_session`'s
+  `parentSession` to a lineage-only session-header field: it records provenance
+  and seeds the provider prompt-cache key, but it does NOT replay the parent's
+  entries. Resuming through it silently produces an empty context. omp's
+  equivalent is `switch_session { sessionPath }`, which reopens the transcript
+  in place and keeps appending to the same `.jsonl`. The adapter selects it via
+  `piRpcResumeCommand: 'switch-session'`; pi keeps the default
+  `new-session-parent`.
+  - `switch_session` answers `success: true` even for a path that no longer
+    exists (it just opens an empty transcript). Because a resumed turn's prompt
+    is trimmed to the latest user message, the transport proves the file exists
+    before handing it over, and treats a `cancelled` switch as a resume failure.
+    Both raise `PI_PARENT_SESSION_FAILED`, which clears the stale row so the
+    next turn starts cold with the full transcript.
+- **Session directory.** omp's own upstream default is a global
+  `~/.omp/agent/sessions/<encoded-cwd>/` tree whose naming carries several
+  generations of migration logic; the adapter doesn't re-derive that scheme.
+  Per the daemon data directory contract, agent runtime state must stay under
+  the resolved data root rather than the project cwd — an imported-folder
+  project's cwd is the user's own external repository, not daemon-owned
+  storage. When the daemon resolves a data root, the adapter pins
+  `--session-dir` to `<RUNTIME_DATA_DIR>/agent-sessions/omp/<hash-of-cwd>/.omp/sessions`
+  (`ompSessionsBaseDir` in `omp.ts`, keyed by a SHA-256 hash of the absolute
+  cwd so distinct projects sharing one data root never collide) and declares
+  `piRpcSessionScanBase` so the transport scans the identical directory —
+  the two are computed by the same pure function and can never diverge. Only
+  when no data root is resolved (an isolated smoke/connection-test
+  invocation) does the adapter fall back to `<project-cwd>/.omp/sessions`,
+  matching pi's project-cwd-relative default. `piRpcSessionDirName: '.omp'`
+  keeps the two adapters' directory names distinct in either case, so pi and
+  Oh My Pi runs against one project never mistake each other's transcripts
+  for their own.
+- Models: dynamic via `omp models --json` — `{ models: [{ provider, id,
+  selector, name, thinking, … }] }` — which lists the catalog for the providers
+  the user has actually linked. `selector` is the exact `provider/model` string
+  `--model` accepts and becomes the option id. omp has no `--list-models`; that
+  flag belongs to upstream pi. Because model availability is entirely
+  account-dependent, the adapter ships only the `default` sentinel as a
+  fallback rather than guessing ids; `--model` also fuzzy-matches, so the
+  Settings custom-model input accepts patterns like `opus`.
+- Thinking: each model's `thinking` array becomes that model's own
+  `reasoningOptions` (plus `default` and `off`); non-reasoning models fall back
+  to the adapter-level list.
+- External roots: `--add-dir` is omp's first-class flag for widening the
+  workspace past the working directory, so skill seeds and design-system roots
+  are forwarded through it rather than pi's `--append-system-prompt` hint.
+- Binary override: `OMP_BIN`.
+- **Gotcha:** detection only proves `omp --version` and `omp models --json` can
+  run. omp owns provider login and account scope through its own auth-broker;
+  the daemon does not run login flows or edit omp configuration.
 
 ### 5.11 DeepSeek TUI
 
@@ -551,7 +615,7 @@ apps/daemon/src/
 │   │   ├── cursor-agent.ts
 │   │   ├── devin.ts
 │   │   ├── …               # ~two dozen defs (opencode, hermes, qoder, copilot,
-│   │   │                   #   amp, pi, kiro, kilo, vibe, deepseek, aider, antigravity, qwen,
+│   │   │                   #   amp, pi, omp, kiro, kilo, vibe, deepseek, aider, antigravity, qwen,
 │   │   │                   #   grok-build, kimi, reasonix, codebuddy, trae-cli, …)
 │   │   └── shared.ts       # helpers reused across defs (not a registered agent)
 │   ├── detection.ts        # resolved-launch/version/help/model/auth probes (detectAgents / …Stream)
@@ -570,7 +634,7 @@ apps/daemon/src/
 ├── agent-protocol/         # JSON-RPC transports, dispatched via agent-protocol/index.ts (attachAcpSession / attachPiRpcSession)
 │   ├── index.ts            # barrel: attachAcpSession / attachPiRpcSession / mapPiRpcEvent
 │   ├── acp/                # streamFormat="acp-json-rpc": shared transport for AMR, Devin, Hermes, Kimi, Kiro, Kilo, Reasonix, Trae CLI, and Vibe
-│   ├── pi-rpc/             # streamFormat="pi-rpc": pi's JSON-RPC-over-stdio transport
+│   ├── pi-rpc/             # streamFormat="pi-rpc": the pi family's JSON-RPC-over-stdio transport (pi, omp)
 │   └── core/               # shared JSON-line stream helpers
 └── server.ts               # spawn pipeline + stream dispatch: routes def.streamFormat/eventParser to a parser
 ```
