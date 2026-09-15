@@ -33,7 +33,8 @@
     "pngjs": "7.0.0",
     "tsx": "4.22.3",
     "typescript": "5.9.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.6",
+    "yaml": "2.9.0"
   },
   "engines": {
     "node": "~24"
