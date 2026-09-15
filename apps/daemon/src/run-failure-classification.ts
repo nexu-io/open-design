@@ -446,6 +446,12 @@ function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
   if (/\bdoesn'?t support the image content block\b/i.test(text)) {
     return 'model_not_supported';
   }
+  // OpenCode always streams. Bedrock's Llama models refuse tools on the
+  // streaming API ("This model doesn't support tool use in streaming mode"),
+  // so an agent run cannot proceed on them at all: switch model.
+  if (/\bdoesn'?t support tool use in streaming mode\b/i.test(text)) {
+    return 'model_not_supported';
+  }
   if (/\brequires a newer version of codex\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
     return 'cli_version_incompatible';
   }
