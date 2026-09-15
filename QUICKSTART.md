@@ -269,7 +269,7 @@ location /api/ {
 | Mode | Picker value | How a request flows |
 |---|---|---|
 | **Local CLI** (default when daemon detects an agent) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → structured tool/file events over SSE → project files → preview. Plain-stream CLIs use the text-artifact path instead. |
-| **API mode** (fallback / no CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → provider SSE normalized to `delta/end/error` → `<artifact>` parser → preview |
+| **API mode** (fallback / no CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Ofox" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → provider SSE normalized to `delta/end/error` → `<artifact>` parser → preview |
 
 Both modes end in the same file workspace and sandboxed preview, but their handoff contracts differ. Filesystem-capable runtimes write the canonical files and must not echo their source in `<artifact>`; plain/text-only and BYOK runs have no file tools, so their canonical deliverable is the complete HTML inside `<artifact>`. The execution profile is selected from the runtime transport, and local CLIs receive the composed prompt through the invocation shape declared by their runtime definition.
 
