@@ -64,6 +64,11 @@ import {
 } from './memory-extractions.js';
 import { resolveProviderConfig } from './media/config.js';
 import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
+import {
+  AIMLAPI_DEFAULT_BASE_URL,
+  aimlapiAttributionHeaders,
+  isAimlapiApiHost,
+} from './integrations/aimlapi.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -194,6 +199,17 @@ const PROVIDER_DEFAULTS = {
     model: 'gpt-4o-mini',
     baseUrl: 'https://aihubmix.com/v1',
   },
+  // aimlapi.com is OpenAI-wire-compatible, so the extractor falls through to
+  // callOpenAI with this base URL and the user's aimlapi.com key (plus the
+  // attribution pair callOpenAI injects). Without this entry the BYOK
+  // "same as chat" branch in pickProvider() rejects an aimlapi.com chat
+  // snapshot and extraction silently falls back to unrelated ANTHROPIC/OPENAI
+  // credentials — the exact vendor surprise that branch exists to prevent.
+  // The default model matches FAST_MODEL_BY_PROTOCOL.aimlapi in the web app.
+  aimlapi: {
+    model: 'google/gemini-3.6-flash',
+    baseUrl: AIMLAPI_DEFAULT_BASE_URL,
+  },
 };
 
 // Some Settings -> Media providers credentials are usable for text
@@ -262,6 +278,13 @@ function envKeyFor(provider) {
     return (
       process.env.OD_AIHUBMIX_API_KEY?.trim()
       || process.env.AIHUBMIX_API_KEY?.trim()
+      || ''
+    );
+  }
+  if (provider === 'aimlapi') {
+    return (
+      process.env.OD_AIMLAPI_API_KEY?.trim()
+      || process.env.AIMLAPI_API_KEY?.trim()
       || ''
     );
   }
@@ -827,6 +850,15 @@ async function callOpenAI(provider, system, user) {
           // the fixed APP-Code attribution header on every request.
           ...(provider.kind === 'aihubmix' && AIHUBMIX_APP_CODE
             ? { 'APP-Code': AIHUBMIX_APP_CODE }
+            : {}),
+          // aimlapi.com routes through this same OpenAI-compatible path and
+          // expects the attribution pair on EVERY request it serves, the
+          // extractor's included — a missing pair serves fine but untagged.
+          // Also covers pre-integration configs that stayed kind: 'openai'
+          // with a hand-typed api.aimlapi.com base URL (backward-compat
+          // promise: saved configs load unchanged) — see isAimlapiApiHost().
+          ...(provider.kind === 'aimlapi' || isAimlapiApiHost(provider.baseUrl)
+            ? aimlapiAttributionHeaders()
             : {}),
         },
         body: JSON.stringify({

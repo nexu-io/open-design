@@ -13,6 +13,7 @@ import type http from 'node:http';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { MEMORY_EXTRACTION_PROVIDERS } from '@open-design/contracts';
 import {
   memoryDir,
   readMemoryConfig,
@@ -288,4 +289,23 @@ describe('PATCH /api/memory/config apiKey three-state handling', () => {
     });
     expect(json.extraction && 'apiKey' in json.extraction).toBe(false);
   });
+
+  // The route's provider guard (isExtractionProvider) used to be a hand-
+  // maintained union that drifted behind MEMORY_EXTRACTION_PROVIDERS —
+  // `senseaudio`/`aihubmix`/`aimlapi` were accepted by the guard's literal
+  // checks but not by the file-local MemoryExtractionProvider alias the
+  // guard claimed to narrow to (#7461 review finding). Looping over the
+  // contract's own list keeps this test honest as new providers are added.
+  it.each(MEMORY_EXTRACTION_PROVIDERS)(
+    "accepts every MEMORY_EXTRACTION_PROVIDERS entry as a valid extraction override provider ('%s')",
+    async (provider) => {
+      const res = await patchConfig({
+        extraction: { provider, model: 'test-model', apiKey: 'test-key' },
+      });
+      expect(res.status).toBe(200);
+
+      const extraction = await readStoredExtraction();
+      expect(extraction?.provider).toBe(provider);
+    },
+  );
 });

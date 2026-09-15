@@ -23,7 +23,12 @@
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { MEMORY_TYPES, PROFILE_MEMORY_ID, parseFormAnswers } from '@open-design/contracts';
+import {
+  MEMORY_EXTRACTION_PROVIDERS,
+  MEMORY_TYPES,
+  PROFILE_MEMORY_ID,
+  parseFormAnswers,
+} from '@open-design/contracts';
 import { parseFrontmatter } from './design-systems/frontmatter.js';
 // Imported lazily through the memory-extractions module by the call
 // sites below so a future test-only build of memory.ts that stubs the
@@ -167,13 +172,13 @@ function configPath(dataDir) {
 // in the patch is dropped to keep `.config.json` from accumulating
 // arbitrary user-supplied keys (e.g. a typo'd field that quietly breaks
 // the extractor on the next restart).
-const VALID_EXTRACTION_PROVIDERS = new Set([
-  'anthropic',
-  'openai',
-  'azure',
-  'google',
-  'ollama',
-]);
+// Sourced from the shared contract, not a hand-maintained list — a provider
+// added there (senseaudio, aihubmix, aimlapi) used to silently drop the
+// whole extraction override back to null here even after the route-level
+// guard (routes/memory.ts's isExtractionProvider) accepted it, because this
+// file kept its own narrower copy of the same allowlist (#7461 review
+// finding).
+const VALID_EXTRACTION_PROVIDERS = new Set(MEMORY_EXTRACTION_PROVIDERS);
 
 function normalizeExtractionPatch(input) {
   if (!input || typeof input !== 'object') return null;
