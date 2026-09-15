@@ -116,6 +116,7 @@ describe('decideSafeRunRetry', () => {
       'agent_protocol_error',
       'qoder_stop_sequence',
       'session_resume_expired',
+      'credential_refresh_contention',
       'stream_error',
       'fatal_rpc_error',
     ] as const) {
@@ -133,6 +134,40 @@ describe('decideSafeRunRetry', () => {
         retryReason: 'transient_failure',
       });
     }
+  });
+
+  // A lost credential-refresh lock is raised before any request is sent, so
+  // `session_init` is the only stage it can carry. `agent_protocol_error` is
+  // suppressed at exactly that stage, so pin the distinction: were the entry to
+  // inherit that stage rule it would be dead on arrival and never retry once.
+  it('retries a credential refresh contention at session_init', () => {
+    expect(
+      decide({
+        failure: {
+          failure_category: 'process_exit',
+          failure_detail: 'credential_refresh_contention',
+          failure_stage: 'session_init',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: true,
+      retryReason: 'transient_failure',
+    });
+
+    expect(
+      decide({
+        failure: {
+          failure_category: 'process_exit',
+          failure_detail: 'agent_protocol_error',
+          failure_stage: 'session_init',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'unsafe_failure_stage',
+    });
   });
 
   it('keeps upstream client errors out of the transient retry allowlist', () => {

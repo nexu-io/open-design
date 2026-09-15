@@ -211,6 +211,12 @@ function transientSuppressedReason(
     }
     return detail === 'qoder_stop_sequence' ||
       detail === 'session_resume_expired' ||
+      // A lost credential-refresh lock resolves as soon as the contending
+      // holder finishes, so the replay is the fix. Like `session_resume_expired`
+      // it is admitted at any stage, `session_init` included: it is raised
+      // before a request is sent, so that stage is the only one it can occur at
+      // and excluding it would make the entry dead on arrival.
+      detail === 'credential_refresh_contention' ||
       detail === 'stream_error' ||
       detail === 'fatal_rpc_error'
       ? null
