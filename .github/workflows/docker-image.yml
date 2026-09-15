@@ -118,14 +118,15 @@ jobs:
           push: ${{ steps.mode.outputs.publish == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # The in-tree Dockerfile uses node:24-alpine + apk for build
-          # tooling; we keep that default so the workflow doesn't drift
-          # from local builds. Spec §15.1 nominates bookworm-slim as
-          # the canonical base; switching is a follow-up that needs
-          # the Dockerfile's apk lines re-cast for apt.
+          # Mirrors the Dockerfile's pinned default (see the comment there
+          # for why the Node minor is pinned rather than floating) so the
+          # workflow doesn't drift from local builds. Bump both together.
+          # Spec §15.1 nominates bookworm-slim as the canonical base;
+          # switching is a follow-up that needs the Dockerfile's apk lines
+          # re-cast for apt.
           build-args: |
-            NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
-            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            NODE_IMAGE=public.ecr.aws/docker/library/node:24.18.0-alpine
+            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24.18.0-alpine
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
