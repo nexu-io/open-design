@@ -23,23 +23,25 @@ only for the runs that take that side.
 
 ## Which runs take which path
 
-OD Next is opt-in and gated. `evaluateOdNextRollout`
-(`apps/daemon/src/strategies/od-next/rollout.ts:138`) is a nine-way AND, and
-three of its inputs vary run to run on one machine — which is why a divergence
-between the two sides surfaces as an **intermittent** bug rather than a
-reproducible one:
+OD Next is on by default and gated. `evaluateOdNextRollout`
+(`apps/daemon/src/strategies/od-next/rollout.ts:151`) is an AND over the policy
+and one run's facts, and some of its inputs vary run to run on one machine —
+which is why a divergence between the two sides surfaces as an **intermittent**
+bug rather than a reproducible one:
 
-- **The stop latch** (`rollout.ts:469`, `stopModeForOdNextSignal`). One
-  `threshold_exceeded` (a slow run) drops the installation to `observe`;
-  `machine_contract_leak` drops it to `off`. The decision persists in SQLite
-  while the Labs switch still reads "on".
-- **Scenario provenance** (`rollout.ts:121`,
+- **Scenario provenance** (`rollout.ts:134`,
   `odNextTaskTypeForProjectScenarioBinding`) requires
   `provenance === 'automatic_default'`. A project where the user explicitly
   picked a scenario resolves `taskType` to null and takes the legacy path.
 - `agentId` must be one of `codex` / `claude` / `opencode` / `amr`,
   `sourceKind` must be `bundled`, and the runtime capability preflight must
   have passed.
+
+Nothing outside one run's own inputs takes part. There used to be a stop latch —
+a row a failing run wrote that disabled OD Next for the whole daemon instance,
+outranked the saved mode, and survived restart while the Labs switch still read
+"on". It is gone, so a divergence you are chasing cannot be a leftover from an
+earlier run on the same machine.
 
 User-facing switch: Settings → Labs → Design Harness
 (`apps/web/src/components/LabsSection.tsx`, reading

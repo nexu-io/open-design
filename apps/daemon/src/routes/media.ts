@@ -322,6 +322,43 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return sendApiError(res, 403, denial.code, denial.message);
     }
 
+    /**
+     * The dual of `attachLateOutputToRunMessage` below: hand the FAILURE back to
+     * the turn that asked for it.
+     *
+     * Every failure path here already knew which run this was — `runId` is right
+     * there in `options.grant`, printed in the `[media]` diagnostic and shipped
+     * to analytics — and none of them wrote it anywhere the run could see. So
+     * the run's terminal verdict came from the agent's exit code alone: the
+     * agent apologises in prose and exits 0, and the turn published
+     * `status: "succeeded"`, `endedWithUnfinishedWork: false`, a green check and
+     * an empty artifact rail while the daemon's own log said the only
+     * deliverable had failed 55s earlier.
+     *
+     * Declared outside the try so BOTH failure paths reach it: the async
+     * provider rejection AND the synchronous dispatch throw below, which marks
+     * the same task failed and would otherwise stay silent for the same reason.
+     *
+     * Best-effort by construction: the task is already marked failed and its
+     * waiters already told, so this must never turn a recorded failure into an
+     * unhandled rejection.
+     */
+    const reportFailureToRun = (taskId: string, error: unknown): void => {
+      const runId = options.grant?.runId;
+      if (!runId || !taskId) return;
+      try {
+        design.runs.noteMediaTaskFailure(runId, {
+          taskId,
+          surface,
+          model,
+          failedAt: Date.now(),
+          error,
+        });
+      } catch (err) {
+        console.warn('[media] run failure association failed', err);
+      }
+    };
+
     let task: ReturnType<typeof createMediaTask> | null = null;
     try {
       const taskId = randomUUID();
@@ -521,6 +558,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             elapsedMs: task.endedAt - task.startedAt,
             error: task.error.message,
           }));
+          // Last, and only after the waiters have been told: the run that asked
+          // for this generation must not be able to report itself complete when
+          // the host just watched its deliverable fail.
+          reportFailureToRun(taskId, task.error);
         })
         .finally(() => proxyDispatcher.close());
 
@@ -549,6 +590,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           elapsedMs: task.endedAt - task.startedAt,
           error: task.error.message,
         }));
+        // Same invariant as the async rejection above: a dispatch that threw
+        // before the provider was ever reached is still a generation this run
+        // asked for and did not get.
+        reportFailureToRun(task.id, task.error);
       }
       throw err;
     }
@@ -1110,9 +1155,20 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const authorizationHeader = req.get('authorization');
-    // Once a caller chooses the tool-token lane, invalid, expired, or
-    // under-scoped credentials must not downgrade to project authorization.
-    const toolGrant = typeof authorizationHeader === 'string'
+    // Only a Bearer credential chooses the tool-token lane: that is the sole
+    // shape `bearerTokenFromRequest` parses. A reverse proxy that
+    // authenticates browsers itself forwards its own `Authorization: Basic
+    // ...`, which can never satisfy the lane, so claiming it here failed
+    // every proxied wait with TOOL_TOKEN_MISSING. Once a Bearer caller does
+    // choose the lane, invalid, expired, or under-scoped credentials must not
+    // downgrade to project authorization.
+    // Classify the scheme independently of whether a token follows it: a bare
+    // `Bearer` (or `Bearer ` trimmed to it) is still a caller reaching for the
+    // tool-token lane and must keep failing closed with TOOL_TOKEN_MISSING
+    // rather than downgrading to browser project authority.
+    const usesToolTokenLane = typeof authorizationHeader === 'string'
+      && /^Bearer(?:\s|$)/i.test(authorizationHeader.trim());
+    const toolGrant = usesToolTokenLane
       ? authorizeToolRequest(
           req,
           res,
@@ -1120,7 +1176,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           { endpoint: MEDIA_TASK_WAIT_TOOL_ENDPOINT },
         )
       : null;
-    if (typeof authorizationHeader === 'string' && !toolGrant) return;
+    if (usesToolTokenLane && !toolGrant) return;
     if (
       toolGrant
       && !await ctx.authorizeProjectToolRequest(

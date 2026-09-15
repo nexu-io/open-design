@@ -205,11 +205,13 @@ describe('langfuse-bridge deliverable syntax telemetry', () => {
       repairOutcome: 'repaired',
       recoveredDeliveryCount: 1,
       blockedBrokenDeliveryCount: 0,
+      deliveredWithSyntaxWarningCount: 0,
     });
   });
 
   it('recognizes a finalizer repairable result at the attempt cap as exhausted', () => {
     expect(projectDeliverableSyntaxTelemetry(makeRun({
+      status: 'failed',
       deliverableSyntaxRepair: {
         schema: 'open-design.deliverable-syntax-repair/v1',
         attempt: 3,
@@ -257,6 +259,120 @@ describe('langfuse-bridge deliverable syntax telemetry', () => {
       checkCount: 2, checkerDurationMs: 10, repairableCheckCount: 1,
       initialDiagnosticCount: 1, latestDiagnosticCount: 0, repairExecutor: 'host_safe_fixer' as const,
     },
+  });
+
+  const warningEvidence = () => {
+    const evidence = terminalEvidence();
+    return {
+      ...evidence,
+      status: 'repairable' as const,
+      finalization: {
+        ...evidence.finalization,
+        action: 'warn' as const,
+        reason: 'no_safe_fix' as const,
+        refusal: 'unsupported_syntax_error' as const,
+        committedPatchCount: 0,
+        committedRepairRules: [],
+      },
+    };
+  };
+
+  it.each(['repairable', 'pass'] as const)(
+    'counts a completed warning without claiming recovery or blocking for %s', (status) => {
+      const result = projectDeliverableSyntaxTelemetry({
+        status: 'succeeded', deliverableSyntaxValidation: { ...warningEvidence(), status },
+      });
+      expect(result).toMatchObject({
+        status, terminalRunStatus: 'succeeded', repairOutcome: 'unresolved',
+        deliveredWithSyntaxWarningCount: 1, recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0,
+        finalization: { action: 'warn', reason: 'no_safe_fix', refusal: 'unsupported_syntax_error' },
+      });
+      expect(JSON.stringify(result)).not.toMatch(/private|candidateHash|checkedFiles/);
+    },
+  );
+
+  it('keeps a warning for an incomplete checker distinct from a syntax error or repair', () => {
+    const { refusal: _unusedRefusal, ...finalization } = warningEvidence().finalization;
+    const result = projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        schema: 'open-design.deliverable-syntax-tool/v1', status: 'incomplete',
+        reason: 'checker_error', source: 'run_finalizer', checkedAt: 123,
+        finalization: {
+          ...finalization, initialStatus: 'incomplete',
+          stagedPatchCount: 0, reason: 'check_incomplete',
+        },
+      },
+    });
+    expect(result).toMatchObject({
+      status: 'incomplete', checkCount: 0, checker: null, repairTriggered: false,
+      repairOutcome: 'unresolved', deliveredWithSyntaxWarningCount: 1,
+      recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0,
+      finalization: { action: 'warn', initialStatus: 'incomplete', reason: 'check_incomplete' },
+    });
+  });
+
+  it.each(['failed', 'canceled'] as const)('does not count a warning as delivered on %s', (status) => {
+    expect(projectDeliverableSyntaxTelemetry({
+      status, deliverableSyntaxValidation: warningEvidence(),
+    })).toMatchObject({
+      deliveredWithSyntaxWarningCount: 0, recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0,
+    });
+  });
+
+  it('keeps warning delivery unknown without a physical terminal', () => {
+    expect(projectDeliverableSyntaxTelemetry({ deliverableSyntaxValidation: warningEvidence() }))
+      .not.toHaveProperty('deliveredWithSyntaxWarningCount');
+  });
+
+  it.each([
+    { summaryVersion: undefined }, { summaryVersion: 2 }, { repairEngine: undefined },
+    { initialStatus: undefined }, { stagedPatchCount: undefined }, { stagedPatchCount: 9 },
+    { committedPatchCount: undefined }, { committedPatchCount: 2 },
+    { committedRepairRules: undefined }, { committedRepairRules: ['private-unknown-rule'] },
+  ])('keeps partial/invalid warning evidence unknown: %j', (partial) => {
+    const evidence = warningEvidence();
+    const result = projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        ...evidence,
+        finalization: { ...evidence.finalization, ...partial } as unknown as typeof evidence.finalization,
+      },
+    });
+    expect(result).not.toHaveProperty('deliveredWithSyntaxWarningCount');
+    expect(result).toMatchObject({ recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0 });
+    expect(JSON.stringify(result)).not.toContain('private-unknown-rule');
+  });
+
+  it('does not reinterpret an unversioned warning as legacy Agent recovery', () => {
+    const evidence = terminalEvidence();
+    const result = projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        ...evidence, source: 'agent_tool', repair: { action: 'none', attempt: 1, maxAttempts: 3 },
+        metrics: { ...evidence.metrics, repairExecutor: 'agent' },
+        finalization: { action: 'warn', reason: 'no_safe_fix' },
+      },
+    });
+    expect(result).toMatchObject({ repairOutcome: 'unresolved', recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0 });
+    expect(result).not.toHaveProperty('deliveredWithSyntaxWarningCount');
+  });
+
+  it('does not classify a warning as a clean check even when the staged parser verdict passed', () => {
+    const evidence = warningEvidence();
+    expect(projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        ...evidence, status: 'pass', finalization: {
+          ...evidence.finalization, initialStatus: 'pass', stagedPatchCount: 0,
+        },
+      },
+    })).toMatchObject({ repairOutcome: 'unresolved', deliveredWithSyntaxWarningCount: 1, recoveredDeliveryCount: 0 });
+  });
+
+  it('does not claim a legacy fail decision blocked a succeeded physical Run', () => {
+    const evidence = warningEvidence();
+    expect(projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        ...evidence, finalization: { action: 'fail', reason: 'no_safe_fix' },
+      },
+    })).toMatchObject({ recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0 });
   });
 
   it.each(['commit_conflict', 'commit_failed', 'repair_budget_exceeded'] as const)(

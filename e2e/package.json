@@ -1,6 +1,6 @@
 {
   "name": "@open-design/e2e",
-  "version": "0.21.6",
+  "version": "0.22.1",
   "private": true,
   "type": "module",
   "scripts": {

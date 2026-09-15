@@ -86,6 +86,8 @@
  *                                   session/set_model (legacy behaviour)
  *   FAKE_VELA_LOG_SET_MODEL      – when set to '1', include session/set_model
  *                                   entries in FAKE_VELA_INVOCATION_LOG
+ *   FAKE_VELA_LOG_PROMPT         – when set to '1', include session/prompt
+ *                                   entries in FAKE_VELA_INVOCATION_LOG
  */
 
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -338,6 +340,9 @@ function handleMessage(msg) {
       return;
     }
     case 'session/prompt': {
+      if (env.FAKE_VELA_LOG_PROMPT === '1') {
+        logInvocation('prompt');
+      }
       if (RESUME_FAILED && didLoad) {
         // Structured resume-miss: the resumed session is gone. Mirrors vela's
         // pre-prompt probe emitting resume_failed BEFORE any model call. Gated on

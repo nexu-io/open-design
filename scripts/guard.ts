@@ -35,6 +35,8 @@ const allowedE2eScripts = new Set([
   // Explicit opt-in local daemon acceptance; not part of hermetic CI test discovery.
   "e2e/scripts/syntax-acceptance.ts",
   "e2e/scripts/visual-report.ts",
+  // Cross-version real Vela / synthetic OpenCode protocol acceptance.
+  "e2e/scripts/vela-contract.ts",
 ]);
 
 function toRepositoryPath(filePath: string): string {

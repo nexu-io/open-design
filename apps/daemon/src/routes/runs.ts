@@ -118,7 +118,6 @@ import {
   evaluateOdNextRollout,
   odNextTaskTypeForProjectScenarioBinding,
   readOdNextRolloutPolicy,
-  readOdNextRolloutStop,
   type OdNextRolloutDecision,
 } from '../strategies/od-next/rollout.js';
 import { odNextRolloutAnalyticsProperties } from '../strategies/od-next/rollout-analytics.js';
@@ -164,6 +163,7 @@ import {
   type RunArtifactBaseline,
 } from '../run-artifact-fs.js';
 import {
+  projectDeliverableValidation,
   validateRunDeliverable,
   type RunDeliverableValidationResult,
 } from '../run-deliverable-validation.js';
@@ -212,6 +212,7 @@ import {
 import { createRunAnalyticsLifecycle } from '../services/run-analytics-lifecycle.js';
 import {
   runTouchedArtifactPaths,
+  validateChatProjectDeliverable,
   toJsonRecord,
   toProjectRecord,
   validateChatRunDeliverable,
@@ -288,7 +289,20 @@ function withSeededSlideIndex(
  * path strings; persisted messages store `{ path, name, kind, order }` so the
  * UI can reload chips and annotation context after a headless omit-pin seed.
  */
-function seededUserMessageAttachmentFields(meta: JsonRecord): {
+function seededAttachmentSize(projectRoot: string | null | undefined, attachmentPath: string): number | undefined {
+  if (!projectRoot) return undefined;
+  try {
+    const absolute = path.resolve(projectRoot, attachmentPath);
+    const relative = path.relative(path.resolve(projectRoot), absolute);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) return undefined;
+    const stat = fs.statSync(absolute);
+    return stat.isFile() ? stat.size : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function seededUserMessageAttachmentFields(meta: JsonRecord, projectRoot?: string | null): {
   attachments?: Array<{ path: string; name: string; kind: 'image' | 'file'; order: number }>;
   commentAttachments?: SeededCommentAttachment[];
 } {
@@ -298,10 +312,12 @@ function seededUserMessageAttachmentFields(meta: JsonRecord): {
         .map((attachmentPath, index) => {
           const name = path.basename(attachmentPath) || attachmentPath;
           const ext = path.extname(name).toLowerCase();
+          const size = seededAttachmentSize(projectRoot, attachmentPath);
           return {
             path: attachmentPath,
             name,
             kind: SEEDED_USER_IMAGE_EXTS.has(ext) ? ('image' as const) : ('file' as const),
+            ...(size === undefined ? {} : { size }),
             order: index,
           };
         })
@@ -1016,6 +1032,59 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     return design.runs.statusBody(run);
   };
 
+  /**
+   * The presentation-side deliverable answer, resolved only when a strategy
+   * task settled `blocked`.
+   *
+   * A blocked verdict says the protocol could not record the step. It does NOT
+   * say the user lost anything, and those two got conflated because one
+   * predicate answered both: `deliverableValid` asks "did THIS run write it",
+   * which is `false` for the most ordinary shape of the failure — a turn that
+   * checks already-finished work and correctly changes nothing. The client
+   * needs the other answer to decide whether a refusal is worth a red card.
+   *
+   * Fails open to `{}` rather than throwing: a project scan that cannot run
+   * must not take the whole status read down with it, and an absent field
+   * leaves the client on its previous behaviour.
+   */
+  const projectDeliverableForBlockedStrategyTask = async (
+    run: ChatRun,
+    status: ChatRunStatusResponse,
+  ): Promise<Partial<ChatRunStatusResponse>> => {
+    if (status.strategyTask?.terminal !== true) return {};
+    if (status.strategyTask.outcome !== 'blocked') return {};
+    try {
+      const resolved = await validateChatProjectDeliverable({
+        db,
+        projectsRoot: PROJECTS_DIR,
+        run,
+      });
+      const validation = projectDeliverableValidation(resolved.validation);
+      // The moment a red card is about to be withheld over a finished
+      // deliverable. Logged server-side so it lands in the daemon log and the
+      // diagnostics export: suppressing a failure the user cannot act on is
+      // right, suppressing it invisibly is not.
+      console.info('[od-next-task] blocked task deliverable probe', {
+        runId: run.id,
+        projectId: run.projectId ?? null,
+        reasonCodes: status.strategyTask?.blockedContext?.reasonCodes ?? [],
+        projectDeliverableValid: resolved.valid,
+        projectDeliverableValidation: resolved.validation,
+        ...(resolved.entryFile ? { entryFile: resolved.entryFile } : {}),
+      });
+      return {
+        projectDeliverableValid: resolved.valid,
+        ...(validation ? { projectDeliverableValidation: validation } : {}),
+      };
+    } catch (error) {
+      console.warn('[od-next-task] project deliverable probe failed', {
+        runId: run.id,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  };
+
   type ClarificationContinuation = {
     task: StrategyTaskExecutionRecord;
     sourceRunId: string;
@@ -1029,6 +1098,32 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     | { kind: 'ordinary' }
     | { kind: 'error'; status: number; code: string; message: string }
     | { kind: 'continuation'; value: ClarificationContinuation };
+
+  /**
+   * A source Run restored from durable state may miss its applied snapshot
+   * id: `durableRunState` historically never serialized the field, so any
+   * daemon restart dropped it while the task record kept its locked snapshot.
+   * The `applied_plugin_snapshots` row keeps `run_id` FK-linked to the source
+   * Run across restarts; that link is the ownership witness authorizing this
+   * one-time backfill. A Run whose field is set must never be touched — the
+   * caller treats it as a genuine mismatch.
+   */
+  function recoverSourceRunSnapshotId(
+    task: StrategyTaskExecutionRecord,
+    sourceRun: ChatRun,
+  ): boolean {
+    if (sourceRun.appliedPluginSnapshotId) return false;
+    const linkedSnapshot = db
+      .prepare(
+        `SELECT id FROM applied_plugin_snapshots
+          WHERE id = ? AND run_id = ? AND project_id = ?`,
+      )
+      .get(task.snapshotId, sourceRun.id, task.projectId);
+    if (!linkedSnapshot) return false;
+    sourceRun.appliedPluginSnapshotId = task.snapshotId;
+    design.runs.persistState(sourceRun);
+    return true;
+  }
 
   /**
    * Resolve only an explicit daemon-issued task handle. Conversation order is
@@ -1199,7 +1294,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       || sourceRun.projectId !== task.projectId
       || sourceRun.conversationId !== task.conversationId
       || sourceRun.agentId !== task.selectedAgentId
-      || sourceRun.appliedPluginSnapshotId !== task.snapshotId
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_SOURCE_RUN_INVALID',
+        message: 'strategy clarification source Run is unavailable or does not match the locked task',
+      };
+    }
+    if (
+      sourceRun.appliedPluginSnapshotId !== task.snapshotId
+      && !recoverSourceRunSnapshotId(task, sourceRun)
     ) {
       return {
         kind: 'error',
@@ -1824,8 +1929,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         || suppliedContextPluginWasNamed
       );
       // Read per request, not at boot: `odNextStrategyMode` is how a user opts
-      // this installation into OD Next, and "configure it and it takes effect"
-      // has to mean the next run, not the next daemon restart.
+      // this installation out of OD Next, and "configure it and it takes
+      // effect" has to mean the next run, not the next daemon restart.
       //
       // Deliberately uncaught. `readAppConfig` already answers `{}` for the
       // states that mean "nothing configured" — no file, unparseable file — and
@@ -1936,7 +2041,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         runtimeCapabilityReason: advertisedCapabilityReason
           ?? rolloutCapability?.reason
           ?? 'runtime_out_of_scope',
-        stoppedMode: readOdNextRolloutStop(db)?.mode ?? null,
         routeApplicability,
       });
       if (
@@ -2465,7 +2569,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // message is still seedable when attachment metadata is present so
       // chips/annotations survive reload for omit-pin clients that leave
       // currentPrompt unset.
-      const seededAttachments = seededUserMessageAttachmentFields(meta);
+      const projectRoot = runProject && meta.projectId
+        ? resolveProjectDir(PROJECTS_DIR, meta.projectId, runProject.metadata)
+        : null;
+      const seededAttachments = seededUserMessageAttachmentFields(meta, projectRoot);
       const hasSeedableAttachmentMetadata =
         (seededAttachments.attachments?.length ?? 0) > 0 ||
         (seededAttachments.commentAttachments?.length ?? 0) > 0;
@@ -3315,11 +3422,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       res.json(status);
       return;
     }
+    // A blocked strategy verdict is the one place the client has to know
+    // whether the USER still has the deliverable, which is a different question
+    // from whether THIS run produced it (`deliverableValid`). A "继续" turn that
+    // verifies finished work and correctly rewrites nothing answers `false` to
+    // the second and `true` to the first, and the second answer is the one that
+    // used to decide whether a red failure card appeared over a finished deck.
+    // Computed only for that case so an ordinary status read costs no extra
+    // project scan.
+    const projectDeliverable = await projectDeliverableForBlockedStrategyTask(
+      run,
+      status,
+    );
     if (
       typeof status.deliverableValid === 'boolean'
       && typeof status.deliverableValidation === 'string'
     ) {
-      res.json(status);
+      res.json({ ...status, ...projectDeliverable });
       return;
     }
     const touchedArtifactPaths = runTouchedArtifactPaths(run);
@@ -3337,6 +3456,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     design.runs.setDeliverableValidation?.(run, deliverable);
     res.json({
       ...status,
+      ...projectDeliverable,
       deliverableValid: deliverable.valid,
       deliverableValidation: deliverable.validation,
       ...(deliverable.entryFile

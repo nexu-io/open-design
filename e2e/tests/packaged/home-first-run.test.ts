@@ -1,6 +1,6 @@
 import { runInNewContext } from 'node:vm';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   PACKAGED_HOME_FIRST_RUN_PROMPT,
@@ -113,6 +113,10 @@ async function evaluateExpression(
 }
 
 describe('packaged Home first-run readiness', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('returns quickly until a later inspection can instrument the ready composer', async () => {
     const fixture = renderFixture({ composerAfterQueries: 2, loadingVisible: true });
 
@@ -218,6 +222,48 @@ describe('packaged Home first-run readiness', () => {
   });
 
   it('times out with the final readiness snapshot when no inspection can instrument', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const initialFixture = renderFixture({ composerAfterQueries: 1, loadingVisible: true });
+    const finalFixture = renderFixture({
+      composerContentEditable: false,
+      composerVisible: false,
+      loadingVisible: true,
+      onboardingVisible: true,
+    });
+    let inspectionCount = 0;
+    let settled = false;
+
+    const setup = waitForPackagedHomeFirstRunSetup(async () => {
+      inspectionCount += 1;
+      return await evaluateExpression(
+        packagedHomeFirstRunExpression(),
+        inspectionCount === 1 ? initialFixture : finalFixture,
+        inspectionCount === 1 ? '/' : '/onboarding',
+      );
+    }, { pollIntervalMs: 1, timeoutMs: 10 });
+    // Attach the rejection handler before advancing the deadline.
+    const failure = setup.catch((error: unknown) => {
+      settled = true;
+      return error;
+    });
+
+    await vi.advanceTimersByTimeAsync(9);
+    expect(settled).toBe(false);
+    expect(inspectionCount).toBe(10);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(failure).resolves.toMatchObject({
+      message: expect.stringMatching(
+        /pathname.*\/onboarding.*loadingVisible.*true.*onboardingVisible.*true.*composerFound.*true.*composerVisible.*false.*composerContentEditable.*false/s,
+      ),
+    });
+    expect(inspectionCount).toBe(10);
+  });
+
+  it('reports the sole snapshot when the first inspection exhausts the budget', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
     const fixture = renderFixture({
       composerContentEditable: false,
       composerVisible: false,
@@ -228,6 +274,8 @@ describe('packaged Home first-run readiness', () => {
 
     const setup = waitForPackagedHomeFirstRunSetup(async () => {
       inspectionCount += 1;
+      // A slow inspection can consume the full budget before a retry is due.
+      vi.setSystemTime(10);
       return await evaluateExpression(
         packagedHomeFirstRunExpression(),
         fixture,
@@ -238,6 +286,6 @@ describe('packaged Home first-run readiness', () => {
     await expect(setup).rejects.toThrow(
       /pathname.*\/onboarding.*loadingVisible.*true.*onboardingVisible.*true.*composerFound.*true.*composerVisible.*false.*composerContentEditable.*false/s,
     );
-    expect(inspectionCount).toBeGreaterThan(1);
+    expect(inspectionCount).toBe(1);
   });
 });

@@ -15,7 +15,7 @@ export type OdNextRolloutModeSource = 'env' | 'app_config' | 'default';
 /**
  * Immutable evaluation captured once when a logical Run is claimed. The same
  * envelope drives status diagnostics and created/finished/reconcile telemetry;
- * callers must not recompute it from later environment or latch state.
+ * callers must not recompute it from later environment state.
  */
 export interface OdNextRolloutDecision {
   schemaVersion: 1;
@@ -30,48 +30,27 @@ export interface OdNextRolloutDecision {
   primaryReasonCode: string;
 }
 
-export type OdNextRolloutStopReasonCode =
-  | 'machine_contract_leak'
-  | 'default_critique_skipped'
-  | 'native_resume_failed'
-  | 'route_mode_drift'
-  | 'complex_child_unverified'
-  | 'threshold_exceeded'
-  | 'quality_regression';
-
-export type OdNextRolloutClearReasonCode =
-  | 'operator_reset'
-  | 'internal_test_reset';
-
-export type OdNextRolloutControlReasonCode =
-  | OdNextRolloutStopReasonCode
-  | OdNextRolloutClearReasonCode;
-
-export interface OdNextRolloutLatchStatus {
-  mode: 'off' | 'observe';
-  reasonCode: OdNextRolloutStopReasonCode;
-  latchedAt: number;
-}
-
+/**
+ * What decides OD Next for this daemon, and what that decision came out as.
+ *
+ * Read-only, and deliberately without a way to change it from here. This status
+ * used to carry a stop latch: an automatic, daemon-wide disable that outranked
+ * the saved mode, survived restart, and could only be lifted by an operator
+ * running `od strategy rollout reset`. It is gone. Nothing turns OD Next off
+ * for an installation except that installation asking for it, so `effectiveMode`
+ * is now derived entirely from `requestedMode` and the content/behavior flags —
+ * there is no state behind this endpoint for a caller to reconcile against.
+ *
+ * `requestedModeSource` is why this is still worth an endpoint: it names the
+ * authority, which the saved mode alone cannot. `default` and a saved `off`
+ * resolve to opposite routes.
+ */
 export interface OdNextRolloutControlStatus {
   strategyId: 'od-next-strategy';
   scope: 'daemon_instance';
   requestedMode: OdNextRolloutMode;
   requestedModeSource: OdNextRolloutModeSource;
   effectiveMode: OdNextRolloutMode;
-  latch: OdNextRolloutLatchStatus | null;
-  revision: number;
-  updatedAt: number | null;
-  lastEvent: null | {
-    action: 'latched' | 'cleared';
-    reasonCode: OdNextRolloutControlReasonCode;
-    at: number;
-  };
-  resetAllowed: boolean;
-}
-
-export interface ResetOdNextRolloutControlRequest {
-  expectedRevision: number;
 }
 
 export interface OdNextRolloutControlResponse {

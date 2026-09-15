@@ -118,6 +118,22 @@
   }
 }
 
+/* 挡住的时候按钮要**看起来**也动不了 —— 单 OPEND-2821 说的正是「看起来可点、
+   点了没反应」。`:not(:disabled)` 已经把 hover 让开了,这里补上静止态的分量。 */
+.action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 「为什么现在动不了」那一句。接在说明之后、动作之前,走和说明同一档字号,
+   不抢标题那一行的红。 */
+.blockedNote {
+  margin-top: 8px;
+  font-size: var(--chat-t-mini);
+  line-height: var(--chat-lh-body);
+  color: var(--chat-text-muted);
+}
+
 .secondaryAction {
   border-color: var(--chat-border);
   background: var(--chat-bg);

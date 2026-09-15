@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: "0 23 * * *" # 07:00 Asia/Shanghai, before the 09:00 release cuts
   workflow_dispatch:
+    inputs:
+      smoke_profile:
+        description: "Native coverage; full also builds a local updater fixture. No release is published."
+        type: choice
+        options: [core, full]
+        default: core
   workflow_call:
     outputs:
       commit:
@@ -18,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: main-prerelease-win-smoke
+  group: main-prerelease-win-smoke-${{ github.event_name == 'workflow_dispatch' && github.ref || 'main' }}
   cancel-in-progress: false
 
 env:
@@ -38,10 +44,11 @@ jobs:
     outputs:
       commit: ${{ steps.commit.outputs.commit }}
     steps:
-      - name: Checkout main canary ref
+      - name: Checkout canary ref
         uses: actions/checkout@v6.0.2
         with:
-          ref: main
+          # Manual runs test the exact dispatched revision; scheduled canaries keep following main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || 'main' }}
           fetch-depth: 0
 
       - name: Resolve canary commit
@@ -175,6 +182,28 @@ jobs:
           $build = $buildOutput | ConvertFrom-Json
           pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-canary-win --payload-path $build.payloadPath --expected-version "${{ steps.version.outputs.version }}" --json
 
+      - name: Verify MCP runtime packaging contracts
+        run: pnpm --filter @open-design/tools-pack exec vitest run tests/resources/runtime-manifest.test.ts tests/launcher/shared/packaged-entry.test.ts tests/workspace-build.test.ts
+
+      - name: Build local Windows update fixture
+        if: ${{ inputs.smoke_profile == 'full' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $match = [regex]::Match("${{ steps.version.outputs.version }}", "^(?<base>\d+\.\d+\.\d+)-prerelease\.(?<number>\d+)$")
+          if (-not $match.Success) { throw "Expected a counted prerelease fixture version" }
+          $updateVersion = "{0}-prerelease.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
+          $updateOutput = pnpm.cmd exec tools-pack win build `
+            --dir "${{ runner.temp }}/tools-pack-update-fixture" `
+            --cache-dir "${{ runner.temp }}/tools-pack-cache" `
+            --namespace release-prerelease-canary-win `
+            --portable --app-version $updateVersion --to nsis --json
+          if ($LASTEXITCODE -ne 0) { throw "Windows update fixture build failed: $LASTEXITCODE" }
+          $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
+          $updateBuild = $updateOutput | ConvertFrom-Json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-canary-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
+          if ($LASTEXITCODE -ne 0) { throw "Windows update fixture validation failed: $LASTEXITCODE" }
+
       - name: Smoke prerelease Windows packaged runtime
         working-directory: e2e
         env:
@@ -185,7 +214,8 @@ jobs:
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
           OD_PACKAGED_E2E_WIN: "1"
-          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core
+          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.smoke_profile || 'core' }}
+          OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: tools-serve
         run: pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
 
       - name: Write prerelease Windows canary report
@@ -198,7 +228,7 @@ jobs:
           RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
           RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win_x64\report.json
           RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.md
-          RELEASE_SMOKE_MODE: core
+          RELEASE_SMOKE_MODE: ${{ inputs.smoke_profile || 'core' }}
           RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           REPORT_TITLE: main prerelease win_x64 canary
@@ -235,7 +265,7 @@ jobs:
   notify_failure:
     name: Notify Feishu on canary failure
     needs: smoke
-    if: ${{ always() && needs.smoke.result == 'failure' }}
+    if: ${{ always() && github.event_name != 'workflow_dispatch' && needs.smoke.result == 'failure' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout notifier

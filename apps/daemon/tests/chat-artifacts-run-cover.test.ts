@@ -470,10 +470,10 @@ describe('run terminal HTML cover wiring', () => {
     }
   });
 
-  it('does not capture a cover or successful HTML version when Host syntax repair is refused', async () => {
+  it('delivers the original artifact and version when Host syntax repair is refused', async () => {
     exporterCalls = [];
     renderGate = Promise.resolve();
-    exporterResult = async () => ({ ok: false, code: 'capture_blank', error: 'must not render a refused delivery' });
+    exporterResult = async () => ({ ok: false, code: 'capture_blank', error: 'rendering is not under test' });
     const original = '<!doctype html><html><body><script>const value = ;</script></body></html>';
     const turn = await runTurnThatWritesHtml({
       html: original,
@@ -482,20 +482,28 @@ describe('run terminal HTML cover wiring', () => {
     const runResponse = await fetch(`${baseUrl}/api/runs/${turn.runId}`);
     expect(runResponse.ok).toBe(true);
     expect(await runResponse.json()).toMatchObject({
-      status: 'failed',
+      status: 'succeeded',
       deliverableSyntaxValidation: {
         status: 'repairable',
-        finalization: { initialStatus: 'repairable', committedPatchCount: 0, action: 'fail' },
+        finalization: { initialStatus: 'repairable', committedPatchCount: 0, action: 'warn' },
       },
     });
     expect(await fsp.readFile(join(turn.cwd, 'index.html'), 'utf8')).toBe(original);
+    // Cover preparation rejects invalid JS before the renderer. That must not
+    // suppress the openable artifact ref or the delivered HTML version.
     expect(exporterCalls).toHaveLength(0);
+    const versions = await listProjectFileVersions(dirname(turn.cwd), turn.projectId, 'index.html');
+    expect(versions).toHaveLength(1);
+    expect((await readProjectFileVersion(dirname(turn.cwd), turn.projectId, 'index.html', versions[0]!.id)).content)
+      .toBe(original);
+    const refs = await waitFor(
+      () => refsFor(turn.projectId, turn.messageId),
+      (list) => list.some((ref) => ref.label === 'index.html' && ref.snapshotState === 'failed'),
+    );
+    expect(refs.some((ref) => ref.label === 'index.html' && ref.workspaceArtifactId)).toBe(true);
     expect(withDb((db) => db.prepare(
-      'SELECT id FROM message_artifacts WHERE message_id = ?',
-    ).all(turn.messageId))).toEqual([]);
-    // Unlike the HTTP list route, this read-only helper cannot create an
-    // initial manual version and accidentally change what this test observes.
-    expect(await listProjectFileVersions(dirname(turn.cwd), turn.projectId, 'index.html')).toEqual([]);
+      'SELECT html_version_id AS versionId FROM message_artifacts WHERE message_id = ? AND label_at_capture = ?',
+    ).all(turn.messageId, 'index.html'))).toEqual([{ versionId: versions[0]!.id }]);
   });
 
   it('records the HTML version this turn wrote as the ref\'s lineage', async () => {

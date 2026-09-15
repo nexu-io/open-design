@@ -36,6 +36,8 @@ export interface ToolRow {
   /** title 是原始命令 → 界面用等宽显示 */
   rawTitle: boolean;
   file: { path: string; label: string } | null;
+  /** Requested Read parameters, not a count or range of lines actually returned. */
+  readRange?: { offset?: number; limit?: number };
   /** 搜索行的「搜了什么」与「N 处」(D23) */
   pattern: string | null;
   hits: number | null;

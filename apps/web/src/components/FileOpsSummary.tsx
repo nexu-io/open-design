@@ -28,6 +28,7 @@ import {
 } from '../runtime/file-ops';
 import { artifactExportNeedsFormatChoice } from '../runtime/chat/artifact-export';
 import { indexArtifactRefs } from '../runtime/chat/artifact-refs';
+import type { ProjectFile } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PixelLiquid } from './PixelLiquid';
 import { RemixIcon } from './RemixIcon';
@@ -71,6 +72,8 @@ interface Props {
   onExport?: ((name: string, anchorId: string) => void) | undefined;
   /** 这一轮还在跑吗 —— 决定产物卡能不能是「还在写」的 loading 态(见 cardItems) */
   turnIsLive?: boolean;
+  /** Current project files, used to invalidate live HTML previews after an overwrite. */
+  projectFiles?: readonly ProjectFile[];
   /**
    * 这条消息的产物**版本身份**(daemon 投影的 `ChatMessage.artifactRefs`)。
    *
@@ -126,6 +129,7 @@ export function FileOpsSummary({
   onPublish,
   onExport,
   turnIsLive = false,
+  projectFiles,
   artifactRefs,
 }: Props) {
   const t = useT();
@@ -169,6 +173,7 @@ export function FileOpsSummary({
             name: entry.path,
             kind,
             pending: turnIsLive && entry.status === 'running',
+            revision: projectFiles?.find((file) => file.name === entry.path)?.mtime,
             ...(refTargets.get(entry.path) ?? {}),
           },
         ];
@@ -454,6 +459,13 @@ export interface ArtifactCardItem {
    * 拿不到就读工作区当前同名文件 —— 旧会话就是这条,不出占位、不写「不可用」。
    */
   snapshotUrl?: string;
+  /** Current file revision for the live HTML fallback. */
+  revision?: string | number;
+}
+
+export function artifactCardLiveUrl(src: string, revision?: string | number): string {
+  if (revision === undefined || revision === null) return src;
+  return `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(revision))}`;
 }
 
 /*
@@ -555,6 +567,12 @@ function ArtifactCard({
 }) {
   const t = useT();
   const { workspaceContext } = useProjectCollabContext();
+  // A static snapshot is an optimization, not the only representation of the
+  // artifact. If it disappears or cannot be decoded, let the normal kind
+  // specific rendering below take over (HTML uses the existing live-cover
+  // iframe fallback) instead of leaving the browser's broken-image shell in
+  // the card.
+  const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null);
   const src = projectFileUrl(projectId, item.name, workspaceContext);
   const pending = item.pending === true;
   /*
@@ -586,7 +604,7 @@ function ArtifactCard({
           <span className="artifact-card-mini is-loading">
             <PixelLiquid />
           </span>
-        ) : item.coverUrl && item.kind !== 'video' ? (
+        ) : item.coverUrl && item.kind !== 'video' && failedCoverUrl !== item.coverUrl ? (
           /*
            * **当轮的静态首屏截图**(HTML / 原型 / slide / 文档)。
            *
@@ -607,6 +625,7 @@ function ArtifactCard({
             src={item.coverUrl}
             alt=""
             loading="lazy"
+            onError={() => setFailedCoverUrl(item.coverUrl ?? null)}
           />
         ) : item.kind === 'html' ? (
           /*
@@ -619,7 +638,7 @@ function ArtifactCard({
            * 文案显示在上面了?这感觉更奇怪呢」)。
            */
           <HtmlProjectCoverFrame
-            src={src}
+            src={artifactCardLiveUrl(src, item.revision)}
             initial=""
             iframeClassName="artifact-card-frame"
             glyphClassName="artifact-card-mini"

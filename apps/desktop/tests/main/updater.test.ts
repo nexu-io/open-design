@@ -2566,6 +2566,10 @@ describe("desktop updater", () => {
       const installed = await updater.installUpdate();
       const flowIds = await readdir(observationRoot);
       const summary = JSON.parse(await readFile(join(observationRoot, flowIds[0] ?? "", "summary.json"), "utf8")) as Record<string, unknown>;
+      const lifecycleRoot = join(observationRoot, flowIds[0] ?? "", "lifecycle");
+      expect(JSON.parse(await readFile(join(lifecycleRoot, "install_requested.json"), "utf8"))).toMatchObject({ stage: "install_requested", outcome: "started", flow_id: flowIds[0] });
+      await updater.recordLifecycle?.({ stage: "shutdown_started", outcome: "started" });
+      expect(JSON.parse(await readFile(join(lifecycleRoot, "shutdown_started.json"), "utf8"))).toMatchObject({ stage: "shutdown_started", flow_id: flowIds[0] });
       const updateRoot = await realpath(join(root, "updates"));
 
       expect(installed.installResult?.path).toBe(checked.downloadPath);

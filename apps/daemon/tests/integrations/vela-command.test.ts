@@ -20,6 +20,7 @@ vi.mock('@open-design/platform', async (importOriginal) => ({
   stopProcesses: stopProcessesMock,
 }));
 
+import * as diagnosticEvidence from '../../src/services/diagnostics-evidence.js';
 import { runVelaCommand } from '../../src/integrations/vela-command.js';
 import {
   runVelaResourceBatchCommand,
@@ -48,6 +49,21 @@ function deferred<T>() {
 }
 
 describe('runVelaCommand', () => {
+  it('records team-list failures with the actual child proxy environment without changing the rejection', async () => {
+    const record = vi.spyOn(diagnosticEvidence, 'recordDiagnosticFailure').mockImplementation(() => undefined);
+    const failure = Object.assign(new Error('upstream failed'), { code: 'ETIMEDOUT' });
+    execFileMock.mockImplementation((_command: string, _args: string[], _options: unknown, callback: (error: Error) => void) => {
+      callback(failure);
+      return { pid: 4321 };
+    });
+    await expect(runVelaCommand(['team-projects', 'list'], { env: {
+      VELA_BIN: process.execPath, OD_DATA_DIR: '', VELA_WORKSPACE_ID: 'team-1', HTTPS_PROXY: 'http://localhost:7890',
+    } })).rejects.toBe(failure);
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'team-projects', error: failure, workspaceId: 'team-1', env: expect.objectContaining({ HTTPS_PROXY: 'http://localhost:7890' }),
+    }));
+  });
+
   beforeEach(() => {
     execFileMock.mockReset();
     listProcessSnapshotsMock.mockReset();

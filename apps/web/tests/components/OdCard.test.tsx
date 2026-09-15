@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OdCardRuleProposal, OdCardBrandBrowserAssist, OdCardVerifyScorecard } from '@open-design/contracts';
@@ -52,49 +52,21 @@ function renderScorecard(card: OdCardVerifyScorecard) {
   );
 }
 
-function memoryListResponse(entries: Array<{ id: string; name: string; type: string }> = []) {
-  return new Response(JSON.stringify({ entries }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function savedRuleResponse(id = 'rule_palette_only') {
-  return new Response(JSON.stringify({
-    entry: {
-      id,
-      name: 'Palette only',
-      description: 'Only use the brand palette.',
-      type: 'rule',
-      body: 'Assertion: Every CSS color must match a brand token.',
-      updatedAt: 1,
-    },
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function memoryFailureResponse() {
-  return new Response(JSON.stringify({ error: 'memory list failed' }), {
-    status: 500,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
 beforeEach(() => {
   window.localStorage.clear();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
-describe('OdCard verification scorecard disclosure', () => {
-  it('keeps a passing scorecard collapsed to one summary line', () => {
+describe('retired verification scorecard presentation', () => {
+  it('hides a passing scorecard including its summary and all checks', () => {
     const { container } = renderScorecard({
       kind: 'verify-scorecard',
       status: 'pass',
@@ -106,17 +78,12 @@ describe('OdCard verification scorecard disclosure', () => {
       ],
     });
 
-    const head = container.querySelector<HTMLButtonElement>('[data-od-card="verify-scorecard"] > button');
-    const disclosure = container.querySelector('[data-od-card="verify-scorecard"] .accordion-collapsible');
-    expect(head?.getAttribute('aria-expanded')).toBe('false');
-    expect(disclosure?.classList.contains('open')).toBe(false);
-
-    fireEvent.click(head as HTMLButtonElement);
-    expect(head?.getAttribute('aria-expanded')).toBe('true');
-    expect(disclosure?.classList.contains('open')).toBe(true);
+    expect(container.querySelector('[data-od-card="verify-scorecard"]')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.textContent).toBe('');
   });
 
-  it('opens partial verification and promotes only failed checks', () => {
+  it('hides partial verification including failed and fixed check details', () => {
     const { container } = renderScorecard({
       kind: 'verify-scorecard',
       status: 'partial',
@@ -128,230 +95,51 @@ describe('OdCard verification scorecard disclosure', () => {
       ],
     });
 
-    const head = container.querySelector<HTMLButtonElement>('[data-od-card="verify-scorecard"] > button');
-    const disclosure = container.querySelector('[data-od-card="verify-scorecard"] .accordion-collapsible');
-    expect(head?.getAttribute('aria-expanded')).toBe('true');
-    expect(disclosure?.classList.contains('open')).toBe(true);
-    expect(screen.getByText('Has accessible labels')).toBeTruthy();
-    expect(screen.getByText('Missing the export label.')).toBeTruthy();
-    expect(screen.queryByText('Uses brand colors')).toBeNull();
-    expect(screen.queryByText('Fits the viewport')).toBeNull();
+    expect(container.querySelector('[data-od-card="verify-scorecard"]')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.textContent).toBe('');
   });
 });
 
-describe('OdCard brand browser assist', () => {
-  it('shows one problem and its primary action before the details are opened', () => {
-    const { container } = renderAssistCard(vi.fn().mockResolvedValue({ ok: true }));
-
-    expect(container.querySelector('[data-user-action-card="browser-assist"]')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-    const toggle = screen.getByRole('button', { name: 'View details' });
-    const disclosure = container.querySelector('[data-od-card="brand-browser-assist"] .accordion-collapsible');
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(disclosure?.classList.contains('open')).toBe(false);
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(disclosure?.classList.contains('open')).toBe(true);
-  });
-
-  it('marks browser assist done only when the confirm handler succeeds', async () => {
-    const onConfirm = vi.fn().mockResolvedValue({ ok: true });
-
-    renderAssistCard(onConfirm);
-    fireEvent.click(screen.getByRole('button', { name: 'Open browser assist' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Browser opened')).toBeTruthy();
-    });
-    expect(onConfirm).toHaveBeenCalledWith(ASSIST_CARD);
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-    expect(window.localStorage.getItem('od:brand-browser-assist-decision:brand-123')).toBe('done');
-  });
-
-  it('marks browser assist done when the handler opens or focuses the browser tab', async () => {
+describe('retired brand browser assist presentation', () => {
+  it.each([null, 'done'])('does not reopen a card or consume callbacks/storage for cached state %s', (cached) => {
+    const storageKey = 'od:brand-browser-assist-decision:brand-123';
+    if (cached !== null) window.localStorage.setItem(storageKey, cached);
+    const before = { ...window.localStorage };
     const onConfirm = vi.fn().mockResolvedValue({ ok: true, action: 'opened' });
-
-    renderAssistCard(onConfirm);
-    fireEvent.click(screen.getByRole('button', { name: 'Open browser assist' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Browser opened')).toBeTruthy();
-    });
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-    expect(screen.getByText(/Open Browser and clear any human check/)).toBeTruthy();
-    expect(window.localStorage.getItem('od:brand-browser-assist-decision:brand-123')).toBe('done');
-  });
-
-  it('keeps browser assist available after a saved opened state remounts', () => {
-    window.localStorage.setItem('od:brand-browser-assist-decision:brand-123', 'done');
-
-    renderAssistCard(vi.fn().mockResolvedValue({ ok: true }));
-
-    expect(screen.getByText('Browser opened')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-  });
-
-  it('keeps browser assist retryable when the confirm handler reports failure', async () => {
-    const onConfirm = vi.fn().mockResolvedValue({ ok: false, message: 'Open this in the desktop app.' });
-
-    renderAssistCard(onConfirm);
-    fireEvent.click(screen.getByRole('button', { name: 'Open browser assist' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('desktop app');
-    });
-    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
-    expect(screen.queryByText('Browser opened')).toBeNull();
+    const first = renderAssistCard(onConfirm);
+    expect(first.container.textContent).toBe('');
+    expect(first.container.querySelector('[data-od-card]')).toBeNull();
+    expect(first.container.querySelector('button')).toBeNull();
+    first.unmount();
+    const second = renderAssistCard(onConfirm);
+    expect(second.container.textContent).toBe('');
+    expect(second.container.querySelector('button')).toBeNull();
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect({ ...window.localStorage }).toEqual(before);
   });
 });
 
-describe('OdCard rule proposal decisions', () => {
-  it('keeps rule rationale and secondary choices in details', () => {
-    const { container } = renderRuleCard();
-
-    expect(container.querySelector('[data-user-action-card="rule-proposal"]')).toBeTruthy();
-    expect(container.textContent).toContain('Proposed rule · Palette only');
-    expect(screen.getByRole('button', { name: 'Keep' })).toBeTruthy();
-    const toggle = screen.getByRole('button', { name: 'View details' });
-    const disclosure = container.querySelector('[data-od-card="rule-proposal"] .accordion-collapsible');
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(disclosure?.classList.contains('open')).toBe(false);
-
-    fireEvent.click(toggle);
-    expect(disclosure?.classList.contains('open')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Discard' })).toBeTruthy();
-  });
-
-  it('keeps the saved state after the card remounts', async () => {
-    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
-      if (url === '/api/memory' && init?.method === 'POST') return Promise.resolve(savedRuleResponse());
-      if (url === '/api/memory') {
-        return Promise.resolve(memoryListResponse([
-          { id: 'rule_palette_only', name: 'Palette only', type: 'rule' },
-        ]));
-      }
-      return Promise.resolve(new Response(null, { status: 404 }));
-    }));
-
-    const first = renderRuleCard();
-    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Saved “Palette only” as a rule')).toBeTruthy();
-    });
-    first.unmount();
-
-    renderRuleCard();
-
-    expect(screen.getByText('Saved “Palette only” as a rule')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
-  });
-
-  it('reverts stale saved decisions when the memory entry is absent', async () => {
-    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-      if (url === '/api/memory' && init?.method === 'POST') return Promise.resolve(savedRuleResponse());
-      if (url === '/api/memory') return Promise.resolve(memoryListResponse([]));
-      return Promise.resolve(new Response(null, { status: 404 }));
-    });
+describe('retired rule proposal presentation', () => {
+  it.each([
+    null,
+    JSON.stringify({ status: 'saved', name: RULE_CARD.name, id: 'existing-rule' }),
+    JSON.stringify({ status: 'discarded' }),
+  ])('does not reopen an action or touch memory/storage for cached decision %s', (cached) => {
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-
+    const storageKey = 'od:rule-proposal-decision:existing';
+    if (cached !== null) window.localStorage.setItem(storageKey, cached);
+    const before = { ...window.localStorage };
     const first = renderRuleCard();
-    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Saved “Palette only” as a rule')).toBeTruthy();
-    });
+    expect(first.container.textContent).toBe('');
+    expect(first.container.querySelector('[data-od-card]')).toBeNull();
+    expect(first.container.querySelector('button')).toBeNull();
     first.unmount();
-
-    renderRuleCard();
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Keep' })).toBeTruthy();
-    });
-    expect(screen.getByText('Palette only')).toBeTruthy();
-    expect(screen.queryByText('Saved “Palette only” as a rule')).toBeNull();
-    expect(window.localStorage.length).toBe(0);
-  });
-
-  it('keeps saved decisions when memory validation fails', async () => {
-    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-      if (url === '/api/memory' && init?.method === 'POST') return Promise.resolve(savedRuleResponse());
-      if (url === '/api/memory') return Promise.resolve(memoryFailureResponse());
-      return Promise.resolve(new Response(null, { status: 404 }));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const first = renderRuleCard();
-    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Saved “Palette only” as a rule')).toBeTruthy();
-    });
-    first.unmount();
-
-    renderRuleCard();
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/memory');
-    });
-    expect(screen.getByText('Saved “Palette only” as a rule')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
-    expect(window.localStorage.length).toBe(1);
-  });
-
-  it('keeps the discarded state after the card remounts', () => {
-    vi.stubGlobal('fetch', vi.fn((url: string) => {
-      if (url === '/api/memory') return Promise.resolve(memoryListResponse([]));
-      return Promise.resolve(new Response(null, { status: 404 }));
-    }));
-
-    const first = renderRuleCard();
-    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
-
-    expect(screen.queryByText('Palette only')).toBeNull();
-    first.unmount();
-
-    renderRuleCard();
-
-    expect(screen.queryByText('Palette only')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
-  });
-
-  it('keeps discarded decisions when memory validation fails', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(memoryFailureResponse());
-    vi.stubGlobal('fetch', fetchMock);
-
-    const first = renderRuleCard();
-    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
-
-    expect(screen.queryByText('Palette only')).toBeNull();
-    first.unmount();
-
-    renderRuleCard();
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/memory');
-    });
-    expect(screen.queryByText('Palette only')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
-    expect(window.localStorage.length).toBe(1);
-  });
-
-  it('does not reuse discarded decisions across scoped card instances', () => {
-    const first = renderRuleCard(RULE_CARD, 'project-a:conversation-a:message-a:card-a');
-    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
-
-    expect(screen.queryByText('Palette only')).toBeNull();
-    first.unmount();
-
-    renderRuleCard(RULE_CARD, 'project-b:conversation-b:message-b:card-a');
-
-    expect(screen.getByText('Palette only')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Keep' })).toBeTruthy();
+    const second = renderRuleCard(RULE_CARD, 'another-project:conversation:message');
+    expect(second.container.textContent).toBe('');
+    expect(second.container.querySelector('button')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect({ ...window.localStorage }).toEqual(before);
   });
 });

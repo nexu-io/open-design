@@ -94,6 +94,36 @@ export interface ProjectMediaTaskError {
   nextStep?: MediaFailureNextStep;
 }
 
+/**
+ * A media generation the HOST itself watched fail, attributed to the run that
+ * asked for it.
+ *
+ * The daemon has always known this: `routes/media.ts` writes a `[media]`
+ * `event: "failed"` diagnostic carrying the very `run_id` that dispatched the
+ * task. It just never handed the fact back to the run, so the run's terminal
+ * frame was decided by the agent's exit code alone — the agent exits 0 after
+ * apologising in prose, and the turn published `status: "succeeded"`,
+ * `endedWithUnfinishedWork: false`, a green check, and an empty artifact rail.
+ *
+ * This is host-observed evidence, never a reading of the model's own words.
+ * The apology sentence the media contract asks the model to copy verbatim
+ * (`prompts/media-contract.ts`, design S22) is COPY: it can be rewritten in any
+ * release, and no completeness verdict may depend on what it says.
+ */
+export interface RunMediaTaskFailure {
+  /** The media task's id, so a consumer can fetch its full record. */
+  taskId: string;
+  /** `image` | `video` | `audio`, as requested. Absent if the request never named one. */
+  surface?: string;
+  /** The requested media model id. */
+  model?: string;
+  /** When the host recorded the failure. */
+  failedAt: number;
+  /** The task's own classified error, verbatim — same shape the media task
+   *  endpoints publish, so an error card needs no second vocabulary. */
+  error: ProjectMediaTaskError;
+}
+
 /** Everything a media failure can be classified from. All fields optional. */
 export interface MediaFailureSignal {
   /**

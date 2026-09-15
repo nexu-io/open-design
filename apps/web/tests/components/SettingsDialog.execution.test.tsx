@@ -1301,11 +1301,6 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
             requestedMode: 'off',
             requestedModeSource: 'default',
             effectiveMode: 'off',
-            latch: null,
-            revision: 0,
-            updatedAt: null,
-            lastEvent: null,
-            resetAllowed: false,
           },
         }), {
           status: 200,
@@ -5840,7 +5835,7 @@ describe('SettingsDialog about interactions', () => {
     expect(screen.getByText('Architecture')).toBeTruthy();
     expect(screen.getByText('arm64')).toBeTruthy();
     // OD Next routing is product-owned and invisible to end users. About must
-    // not expose the daemon's internal rollout latch/reset control.
+    // not expose the daemon's internal rollout control.
     expect(screen.queryByTestId('od-next-rollout-control')).toBeNull();
     expect(fetchMock.mock.calls.some(([input]) => (
       String(input).includes('/api/strategies/od-next/rollout')

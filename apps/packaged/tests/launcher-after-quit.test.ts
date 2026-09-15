@@ -35,11 +35,13 @@ function sidecarStop(pid = 1234): SidecarStopResult {
 describe("waitForLauncherAfterQuit", () => {
   it("logs a completed updater wait", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-after-quit-"));
+    const observed = vi.fn(async () => { throw new Error("observation unavailable"); });
     try {
       const result = await waitForLauncherAfterQuit({ targetPid: 999999, timeoutMs: 1000 }, fakePaths(root), console, {
         waitForExit: (async () => true) as typeof waitForProcessExit,
-      });
+      }, observed);
       expect(result).toBe(true);
+      expect(observed).toHaveBeenCalledWith(expect.objectContaining({ stage: "predecessor_wait_completed", outcome: "completed" }));
       expect(await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8")).toContain("observed-exit targetPid=999999");
     } finally {
       await rm(root, { force: true, recursive: true });
@@ -48,11 +50,13 @@ describe("waitForLauncherAfterQuit", () => {
 
   it("force-stops a pid after the updater grace expires", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-timeout-"));
+    const observed = vi.fn(async () => undefined);
     const stop = vi.fn(async () => processStop(4242)) as unknown as typeof stopProcesses;
     try {
       await expect(waitForLauncherAfterQuit({ targetPid: 4242, timeoutMs: 1 }, fakePaths(root), console, {
         stopProcesses: stop, waitForExit: (async () => false) as typeof waitForProcessExit,
-      })).resolves.toBe(true);
+      }, observed)).resolves.toBe(true);
+      expect(observed).toHaveBeenCalledWith(expect.objectContaining({ stage: "predecessor_wait_completed", outcome: "forced" }));
       expect(stop).toHaveBeenCalledWith([4242]);
     } finally {
       await rm(root, { force: true, recursive: true });

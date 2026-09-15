@@ -83,6 +83,42 @@ function completeHandshake(child: FakeChild, threadId = 'th-1') {
 
 describe('codex app-server session', () => {
   describe('handshake', () => {
+    it.each([
+      ['open-design/0.122.0 (macOS 26.0; arm64) open-design/9.9.9', false],
+      ['open-design/0.123.0 (macOS 26.0; arm64)', true],
+      ['codex/0.149.1', true],
+      ['open-design/0.153.4', true],
+      ['codex/1.0.0', true],
+      ['codex/0.123.0-alpha.1', false],
+      ['codex/unknown client/9.9.9', false],
+      ['', false],
+      [undefined, false],
+    ])('gates patch preview using the running server version %s', (userAgent, enabled) => {
+      for (const resumeSessionId of [null, 'existing-thread']) {
+        const { child, agentEvents } = harness({ resumeSessionId });
+        child.say({ id: child.sent('initialize')?.id, result: { userAgent } });
+        const thread = child.sent('thread/start') ?? child.sent('thread/resume');
+        expect(thread?.params.config).toEqual(enabled ? { 'features.apply_patch_streaming_events': true } : undefined);
+        child.say({ id: thread?.id, result: { thread: { id: 'existing-thread' } } });
+        expect(child.sent('turn/start')).toBeDefined();
+        expect(agentEvents.some(e => e.type === 'error')).toBe(false);
+      }
+    });
+
+    it('does not start a turn when cancellation races the handshake', () => {
+      const { child, session } = harness();
+      session.abort();
+      child.say({ id: child.sent('initialize')?.id, result: { userAgent: 'codex/0.153.4' } });
+      expect(child.sent('thread/start')).toBeUndefined();
+    });
+
+    it('drops buffered patch previews after cancellation', () => {
+      const { child, session, agentEvents } = harness();
+      completeHandshake(child);
+      session.abort();
+      child.say({ method: 'item/fileChange/patchUpdated', params: { itemId: 'p', changes: [{path:'/w/late.html',kind:{type:'add'},diff:'late'}] } });
+      expect(agentEvents.some(e => e.type === 'tool_in_flight')).toBe(false);
+    });
     it('opens with initialize before anything else', () => {
       const { child } = harness();
       const frames = child.frames();
@@ -221,7 +257,7 @@ describe('codex app-server session', () => {
     // which is the cleanest available shutdown — no signal, no null exit code,
     // and no special-casing in the run's close classifier.
     it('closes stdin once the turn completes so the server exits', () => {
-      const { child } = harness();
+      const { child, marks } = harness();
       completeHandshake(child);
       expect(child.stdinEnded).toBe(0);
       child.say({
@@ -233,6 +269,9 @@ describe('codex app-server session', () => {
         },
       });
       expect(child.stdinEnded).toBe(1);
+      child.say({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+      expect(child.stdinEnded).toBe(1);
+      expect(marks.filter(mark => mark === 'turn-complete')).toHaveLength(1);
     });
 
     it('keeps stdin open while the turn is still running', () => {
@@ -514,5 +553,224 @@ describe('codex app-server session', () => {
         { type: 'localImage', path: '/tmp/a.png' },
       ]);
     });
+  });
+});
+
+describe('OD-owned Codex thread visibility', () => {
+  function ready(overrides: Record<string, unknown> = {}, version = '0.153.4') {
+    const h = harness({ manageThreadVisibility: true, ...overrides });
+    const init = h.child.sent('initialize')!;
+    h.child.say({ id: init.id, result: { userAgent: `open-design/${version}` } });
+    const open = h.child.sent('thread/start') ?? h.child.sent('thread/resume');
+    return { ...h, open: open! };
+  }
+  function opened(h: ReturnType<typeof ready>) {
+    h.child.say({ id: h.open.id, result: { thread: { id: 'owned-1' } } });
+  }
+  function completed(child: FakeChild, status = 'completed') {
+    child.say({ method: 'turn/completed', params: { threadId: 'owned-1', turn: { status } } });
+  }
+
+  it.each(['completed', 'failed', 'interrupted'])('archives only its owned thread after %s', (status) => {
+    const h = ready();
+    opened(h);
+    if (status === 'interrupted') h.session.abort();
+    completed(h.child, status);
+    expect(h.child.sent('thread/archive')?.params).toEqual({ threadId: 'owned-1' });
+    expect(h.child.stdinEnded).toBe(0);
+    h.child.say({ id: h.child.sent('thread/archive')!.id, result: {} });
+    expect(h.child.stdinEnded).toBe(1);
+    expect(h.session.completedSuccessfully()).toBe(status !== 'failed');
+    expect(h.session.getDurableSessionId()).toBe('owned-1');
+  });
+
+  it('does not overwrite a successful result when another process owns the writer lock', () => {
+    const h = ready(); opened(h); completed(h.child);
+    h.child.say({ id: h.child.sent('thread/archive')!.id,
+      error: { code: -32600, message: 'thread owned-1 already has an active writer' } });
+    expect(h.session.completedSuccessfully()).toBe(true);
+    expect(h.child.stdinEnded).toBe(1);
+    expect(h.agentEvents.filter(e => e.type === 'error')).toEqual([]);
+    expect(h.agentEvents).toContainEqual(expect.objectContaining({ name: 'codex_thread_archive_failed' }));
+  });
+
+  it('keeps unknown resume handles outside its archive/unarchive policy', () => {
+    const h = ready({ resumeSessionId: 'owned-1' }); opened(h); completed(h.child);
+    expect(h.child.sent('thread/archive')).toBeUndefined();
+    expect(h.child.sent('thread/unarchive')).toBeUndefined();
+    expect(h.child.stdinEnded).toBe(1);
+  });
+
+  it('restores a positively owned archived handle before continuing the same thread', () => {
+    const h = ready({ resumeSessionId: 'owned-1', resumeSessionOwned: true });
+    h.child.say({ id: h.open.id, error: { code: -32600, message: 'session owned-1 is archived' } });
+    expect(h.child.sent('turn/start')).toBeUndefined();
+    const unarchive = h.child.sent('thread/unarchive')!;
+    expect(unarchive.params).toEqual({ threadId: 'owned-1' });
+    h.child.say({ id: unarchive.id, result: { thread: { id: 'owned-1' } } });
+    const resumes = h.child.frames().filter(f => f.method === 'thread/resume');
+    expect(resumes).toHaveLength(2);
+    h.child.say({ id: resumes[1]!.id, result: { thread: { id: 'owned-1' } } });
+    expect(h.child.sent('turn/start')?.params.threadId).toBe('owned-1');
+    completed(h.child);
+    h.child.say({ id: h.child.sent('thread/archive')!.id, result: {} });
+    expect(h.session.getDurableSessionId()).toBe('owned-1');
+  });
+
+  it('can resume an already archived owned thread after a CLI downgrade', () => {
+    const h = ready({ resumeSessionId: 'owned-1', resumeSessionOwned: true }, '0.146.0');
+    h.child.say({ id: h.open.id, error: { message: 'session owned-1 is archived' } });
+    const restore = h.child.sent('thread/unarchive')!;
+    h.child.say({ id: restore.id, result: {} });
+    const resume = h.child.frames().filter(f => f.method === 'thread/resume').at(-1)!;
+    h.child.say({ id: resume.id, result: { thread: { id: 'owned-1' } } });
+    expect(h.child.sent('turn/start')?.params.threadId).toBe('owned-1');
+    completed(h.child);
+    expect(h.child.sent('thread/archive')).toBeUndefined();
+  });
+
+  it('does not archive a different id returned by an owned resume request', () => {
+    const h = ready({ resumeSessionId: 'previous-id', resumeSessionOwned: true });
+    opened(h); completed(h.child);
+    expect(h.child.sent('thread/archive')).toBeUndefined();
+  });
+
+  it('keeps unarchive failure retryable without forwarding a stale-session signal', () => {
+    const h = ready({ resumeSessionId: 'owned-1', resumeSessionOwned: true });
+    h.child.say({ id: h.open.id, error: { message: 'session owned-1 is archived' } });
+    h.child.say({ id: h.child.sent('thread/unarchive')!.id,
+      error: { message: 'no rollout found while restoring archived session' } });
+    expect(h.child.sent('turn/start')).toBeUndefined();
+    expect(h.child.sent('thread/start')).toBeUndefined();
+    expect(h.child.stdinEnded).toBe(1);
+    expect(h.agentEvents.filter(e => e.type === 'error')).toEqual([
+      { type: 'error', message: 'codex app-server thread/unarchive failed' },
+    ]);
+  });
+
+  it('archives once even when a completion notification is duplicated', () => {
+    const h = ready(); opened(h); completed(h.child); completed(h.child);
+    expect(h.child.frames().filter(f => f.method === 'thread/archive')).toHaveLength(1);
+    h.child.say({ id: h.child.sent('thread/archive')!.id, result: {} });
+    completed(h.child);
+    expect(h.child.stdinEnded).toBe(1);
+  });
+
+  it('bounds archive cleanup without changing the result', () => {
+    vi.useFakeTimers();
+    try {
+      const h = ready(); opened(h); completed(h.child);
+      vi.advanceTimersByTime(1499);
+      expect(h.child.stdinEnded).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(h.child.stdinEnded).toBe(1);
+      expect(h.session.completedSuccessfully()).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('bounds unarchive and ignores its late response after cancellation', () => {
+    vi.useFakeTimers();
+    try {
+      const h = ready({ resumeSessionId: 'owned-1', resumeSessionOwned: true });
+      h.child.say({ id: h.open.id, error: { message: 'session owned-1 is archived' } });
+      const restore = h.child.sent('thread/unarchive')!;
+      h.session.abort();
+      vi.advanceTimersByTime(1500);
+      h.child.say({ id: restore.id, result: {} });
+      expect(h.child.sent('turn/start')).toBeUndefined();
+      expect(h.child.stdinEnded).toBe(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each(['completed', 'failed', 'interrupted'])('uses protected persistent history on the reported 0.146.0 version after %s', (status) => {
+    const h = ready({}, '0.146.0');
+    expect(h.child.sent('initialize')?.params.capabilities.experimentalApi).toBe(true);
+    expect(h.open.params.historyMode).toBe('paginated');
+    h.child.say({ id: h.open.id, result: { thread: { id: 'owned-1', historyMode: 'paginated' } } });
+    h.child.say({ method: 'item/agentMessage/delta', params: { itemId: 'm1', delta: 'visible progress' } });
+    expect(h.agentEvents).toContainEqual({ type: 'text_delta', delta: 'visible progress' });
+    if (status === 'interrupted') h.session.abort();
+    completed(h.child, status);
+    expect(h.child.sent('thread/archive')?.params).toEqual({ threadId: 'owned-1' });
+    h.child.say({ id: h.child.sent('thread/archive')!.id, result: {} });
+    expect(h.child.stdinEnded).toBe(1);
+    expect(h.session.completedSuccessfully()).toBe(status !== 'failed');
+  });
+
+  it.each([0, 1])('offers an owned interrupted thread for cleanup only after actual close (exit %s)', (code) => {
+    const h = ready(); opened(h);
+    // Optional lookup keeps the baseline executable: no receipt means the
+    // close owner cannot initiate cleanup, rather than a missing-module error.
+    const takeReceipt = () => (h.session as typeof h.session & {
+      takeClosedThreadCleanup?: () => { threadId: string; historyMode: string } | null;
+    }).takeClosedThreadCleanup?.() ?? null;
+    expect(takeReceipt()).toBeNull();
+    h.session.abort();
+    h.child.killed = true;
+    expect(takeReceipt()).toBeNull();
+    h.child.emit('close', code, null);
+    expect(takeReceipt()).toMatchObject({ threadId: 'owned-1', historyMode: 'legacy' });
+    expect(takeReceipt()).toBeNull();
+    expect(h.child.sent('thread/archive')).toBeUndefined();
+    expect(h.session.completedSuccessfully()).toBe(false);
+  });
+
+  it.each([
+    { label: 'user resume', options: { resumeSessionId: 'owned-1' }, version: '0.153.4' },
+    { label: 'mismatched owned resume', options: { resumeSessionId: 'other', resumeSessionOwned: true }, version: '0.153.4' },
+    { label: 'unmanaged', options: { manageThreadVisibility: false }, version: '0.153.4' },
+    { label: 'unknown protocol', options: {}, version: 'unknown' },
+    { label: 'unprotected legacy', options: {}, version: '0.146.0' },
+  ])('does not offer cleanup for $label', ({ options, version }) => {
+    const h = ready(options, version); opened(h); h.child.emit('close', 1, null);
+    expect(h.session.takeClosedThreadCleanup()).toBeNull();
+  });
+
+  it('requires a matching request response, not a thread/started notification alone', () => {
+    const h = ready();
+    h.child.say({ method: 'thread/started', params: { thread: { id: 'notification-only', historyMode: 'paginated' } } });
+    h.child.emit('close', 1, null);
+    h.child.say({ id: h.open.id, result: { thread: { id: 'late-response', historyMode: 'paginated' } } });
+    expect(h.session.takeClosedThreadCleanup()).toBeNull();
+  });
+
+  it.each(['completed', 'failed', 'interrupted'])('leaves terminal %s cleanup with the existing live session', (status) => {
+    const h = ready(); opened(h); completed(h.child, status);
+    h.child.say({ id: h.child.sent('thread/archive')!.id, error: { message: 'active writer' } });
+    h.child.emit('close', 0, null);
+    expect(h.session.takeClosedThreadCleanup()).toBeNull();
+    expect(h.child.frames().filter(f => f.method === 'thread/archive')).toHaveLength(1);
+  });
+
+  it('retains paginated proof for an interrupted owned resume on 0.146.0', () => {
+    const h = ready({ resumeSessionId: 'owned-1', resumeSessionOwned: true }, '0.146.0');
+    h.child.say({ id: h.open.id, result: { thread: { id: 'owned-1', historyMode: 'paginated' } } });
+    h.child.emit('close', null, 'SIGKILL');
+    expect(h.session.takeClosedThreadCleanup()).toMatchObject({ threadId: 'owned-1', historyMode: 'paginated' });
+  });
+
+  it('resumes and archives the same protected 0.146.0 history without converting it', () => {
+    const h = ready({ resumeSessionId: 'owned-1', resumeSessionOwned: true }, '0.146.0');
+    expect(h.open.params.historyMode).toBeUndefined();
+    h.child.say({ id: h.open.id, result: { thread: { id: 'owned-1', historyMode: 'paginated' } } });
+    completed(h.child);
+    expect(h.child.sent('thread/archive')?.params).toEqual({ threadId: 'owned-1' });
+    h.child.say({ id: h.child.sent('thread/archive')!.id, result: {} });
+    expect(h.session.getDurableSessionId()).toBe('owned-1');
+  });
+
+  it.each(['legacy', undefined])('does not trust an unprotected 0.146.0 returned history mode: %s', (historyMode) => {
+    const h = ready({ resumeSessionId: 'owned-1', resumeSessionOwned: true }, '0.146.0');
+    h.child.say({ id: h.open.id, result: { thread: { id: 'owned-1', historyMode } } });
+    completed(h.child);
+    expect(h.child.sent('thread/archive')).toBeUndefined();
+    expect(h.session.getDurableSessionId()).toBe('owned-1');
+    expect(h.child.stdinEnded).toBe(1);
+  });
+
+  it.each(['0.145.0', 'unknown'])('retains existing history on unverified writer-lock version %s', (version) => {
+    const h = ready({}, version); opened(h); completed(h.child);
+    expect(h.child.sent('thread/archive')).toBeUndefined();
+    expect(h.session.completedSuccessfully()).toBe(true);
   });
 });

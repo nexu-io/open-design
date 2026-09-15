@@ -239,7 +239,7 @@ describe('AssistantMessage unfinished todo state', () => {
     expect(document.querySelector('[data-testid="assistant-continue-remaining"]')).toBeNull();
   });
 
-  it('surfaces generated plugin next actions in the latest assistant turn', async () => {
+  it('does not surface retired plugin actions in the latest assistant turn', () => {
     const onOpen = vi.fn();
     const onPluginFolderAgentAction = vi.fn(async () => {});
     render(
@@ -274,18 +274,12 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText('Plugin ready')).toBeTruthy();
-    expect(screen.getByTestId('assistant-plugin-install-generated-plugin')).toBeTruthy();
-    expect(screen.getByTestId('assistant-plugin-publish-generated-plugin')).toBeTruthy();
-    expect(screen.getByTestId('assistant-plugin-contribute-generated-plugin')).toBeTruthy();
+    expect(screen.queryByText('Plugin ready')).toBeNull();
+    for (const action of ['install', 'publish', 'contribute', 'open-manifest']) {
+      expect(screen.queryByTestId(`assistant-plugin-${action}-generated-plugin`)).toBeNull();
+    }
+    expect(onPluginFolderAgentAction).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByTestId('assistant-plugin-contribute-generated-plugin'));
-    expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'contribute');
-    expect(
-      screen.queryByText('Sent to the agent. The CLI run will continue in chat.'),
-    ).toBeNull();
-
-    fireEvent.click(screen.getByTestId('assistant-plugin-open-manifest-generated-plugin'));
-    expect(onOpen).toHaveBeenCalledWith('generated-plugin/open-design.json');
   });
 });

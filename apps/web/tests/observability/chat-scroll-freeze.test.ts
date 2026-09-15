@@ -246,6 +246,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'chat-scroll-freeze-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   // A synchronous rAF makes the probe deterministic: one wheel event in,
   // one geometry sample out, no frame scheduling to await. It is a spy as

@@ -53,6 +53,20 @@ export function RunErrorCardActionGroup({ children }: PropsWithChildren): ReactE
   return <div className={styles.actionGroup}>{children}</div>;
 }
 
+/**
+ * 卡面上那一句「为什么这一排现在动不了」(OPEND-2821)。
+ *
+ * 单独一枚而不是让调用方自己拼 div:这一句和说明同属卡的**文字层**,
+ * 排版归这个 Module 管;调用方只决定「说不说、说哪一句」。
+ */
+export function RunErrorCardBlockedNote({ children }: PropsWithChildren): ReactElement {
+  return (
+    <div className={styles.blockedNote} data-testid="chat-error-actions-blocked">
+      {children}
+    </div>
+  );
+}
+
 export interface RunErrorCardProps {
   title: string;
   /** 一句人话:出了什么事、影响到哪 —— 稿子这一行走 `--text-muted`,不跟着标题变红 */

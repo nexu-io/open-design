@@ -225,10 +225,12 @@ describe('AssistantMessage feedback gate', () => {
     expect(onRequestOpenFile).toHaveBeenCalledWith('poster.png');
   });
 
-  it('renders plugin suggestions as compact user decisions with secondary actions in details', () => {
+  it('hides retired plugin suggestions and their actions while preserving normal message text', () => {
+    const text = 'The repository review is complete.';
     const message = baseMessage({
-      content: '',
+      content: text,
       events: [
+        { kind: 'text', text },
         {
           kind: 'plugin_candidate',
           candidateId: 'candidate-1',
@@ -246,18 +248,14 @@ describe('AssistantMessage feedback gate', () => {
       />,
     );
 
-    expect(container.querySelector('[data-user-action-card="plugin-suggestion"]')).toBeTruthy();
-    const contribute = screen.getByRole('button', { name: 'Contribute to open-design' });
-    expect(contribute).toBeTruthy();
-    expect(contribute.classList.contains('plugin-action-button--primary')).toBe(false);
-    const toggle = screen.getByRole('button', { name: 'View details' });
-    const disclosure = container.querySelector('[data-user-action-card="plugin-suggestion"] .accordion-collapsible');
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(disclosure?.classList.contains('open')).toBe(false);
-
-    fireEvent.click(toggle);
-    expect(disclosure?.classList.contains('open')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Create plugin/template' })).toBeTruthy();
+    expect(screen.getByText(text)).toBeTruthy();
+    expect(container.querySelector('[data-user-action-card="plugin-suggestion"]')).toBeNull();
+    expect(screen.queryByText('Design review helper')).toBeNull();
+    expect(screen.queryByText('Turn this repository workflow into a reusable helper.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Contribute to open-design' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View details' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create plugin/template' })).toBeNull();
+    expect(container.textContent).not.toContain('candidate-1');
   });
 
   it('omits the repeated identity header for a consecutive assistant reply', () => {

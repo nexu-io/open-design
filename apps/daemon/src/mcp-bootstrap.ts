@@ -74,6 +74,7 @@ interface EnsureMcpDaemonUrlOptions {
   flagUrl?: string | null;
   probeDaemon?: (url: string) => Promise<boolean>;
   resolveDaemonUrl?: (options: {
+    allowLegacyDefault?: boolean;
     env: NodeJS.ProcessEnv;
     flagUrl?: string | null;
     timeoutMs?: number;
@@ -102,17 +103,16 @@ export async function ensureMcpDaemonUrl(
   const explicitDaemonUrl =
     (flagUrl != null && flagUrl.length > 0)
     || (env.OD_DAEMON_URL != null && env.OD_DAEMON_URL.length > 0);
-  const registeredBootstrapTarget =
-    !explicitDaemonUrl
-    && connectInherited(env) != null
-    && env.OD_MCP_BOOTSTRAP_COMMAND != null
-    && env.OD_MCP_BOOTSTRAP_COMMAND.length > 0
-    && env.OD_MCP_BOOTSTRAP_ARGS != null
-    && env.OD_MCP_BOOTSTRAP_ARGS.length > 0;
+  const registeredBootstrapTarget = !explicitDaemonUrl && connectInherited(env) != null;
+  if (!explicitDaemonUrl && !registeredBootstrapTarget
+    && (env.OD_MCP_BOOTSTRAP_COMMAND || env.OD_MCP_BOOTSTRAP_ARGS)) {
+    throw new Error("The Open Design MCP registration is missing its runtime connection. Open the app and refresh the MCP registration, then restart this MCP session.");
+  }
 
   let daemonUrl: string | null = registeredBootstrapTarget
     ? await discoverTargetDaemonUrl(env, 800)
     : await resolveDaemonUrl({
+        allowLegacyDefault: false,
         env,
         flagUrl,
         timeoutMs: 800,
@@ -125,7 +125,7 @@ export async function ensureMcpDaemonUrl(
     explicitDaemonUrl,
   });
   if (plan.action === "none") {
-    if (daemonUrl != null) return daemonUrl;
+    if (daemonUrl != null && (daemonReachable || explicitDaemonUrl)) return daemonUrl;
     throw new Error(
       `The registered OpenDesign runtime is unavailable and cannot be launched (${plan.reason}).`,
     );
@@ -138,6 +138,7 @@ export async function ensureMcpDaemonUrl(
     daemonUrl = registeredBootstrapTarget
       ? await discoverTargetDaemonUrl(env, 300)
       : await resolveDaemonUrl({
+          allowLegacyDefault: false,
           env,
           flagUrl: null,
           timeoutMs: 300,

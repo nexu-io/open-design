@@ -283,7 +283,7 @@ function safeRepairRules(value: readonly DeliverableSyntaxSafeFixRule[]): Delive
 
 /** Never spread persisted objects into safe telemetry: no paths or diagnostic text. */
 function projectSyntaxFinalization(value: DeliverableSyntaxFinalization): DeliverableSyntaxFinalization | undefined {
-  if (value.action !== 'allow' && value.action !== 'fail') return undefined;
+  if (value.action !== 'allow' && value.action !== 'warn' && value.action !== 'fail') return undefined;
   return {
     action: value.action,
     ...(value.reason && DELIVERABLE_SYNTAX_FINALIZATION_REASONS.includes(value.reason) ? { reason: value.reason } : {}),
@@ -362,19 +362,20 @@ export function projectDeliverableSyntaxTelemetry(
     );
   const hostEvidence = versionedSummary || validation.source === 'run_finalizer'
     || metrics?.repairExecutor === 'host_safe_fixer' || repairState?.mode === 'host_safe_fixer';
+  const syntaxWarning = finalization?.action === 'warn';
   const recoveredDelivery = hostSummary
     ? completeHostSummary && finalization.initialStatus === 'repairable'
       && (finalization.committedPatchCount ?? 0) > 0
       && validation.status === 'pass' && finalization.action === 'allow'
       && terminalRunStatus === 'succeeded'
     : !hostEvidence && validation.status === 'pass' && repairTriggered
-      && finalization?.action !== 'fail' && terminalRunStatus === 'succeeded';
+      && !syntaxWarning && finalization?.action !== 'fail' && terminalRunStatus === 'succeeded';
   const repairOutcome: DeliverableSyntaxTelemetry['repairOutcome'] =
     validation.status === 'skipped'
       ? 'not_applicable'
       : recoveredDelivery
         ? 'repaired'
-        : validation.status === 'pass' && !repairTriggered && finalization?.action !== 'fail'
+        : validation.status === 'pass' && !repairTriggered && !syntaxWarning && finalization?.action !== 'fail'
           && (!versionedSummary || completeHostSummary)
           ? 'not_needed'
           : exhausted
@@ -440,7 +441,11 @@ export function projectDeliverableSyntaxTelemetry(
     maxRepairAttempts,
     repairOutcome,
     recoveredDeliveryCount: recoveredDelivery ? 1 : 0,
-    blockedBrokenDeliveryCount: finalization?.action === 'fail' && observedSyntaxError ? 1 : 0,
+    blockedBrokenDeliveryCount: finalization?.action === 'fail' && observedSyntaxError
+      && terminalRunStatus !== 'succeeded' ? 1 : 0,
+    ...(completeHostSummary && terminalRunStatus
+      ? { deliveredWithSyntaxWarningCount: syntaxWarning && terminalRunStatus === 'succeeded' ? 1 : 0 }
+      : {}),
   };
 }
 

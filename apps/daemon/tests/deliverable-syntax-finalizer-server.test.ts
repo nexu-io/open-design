@@ -117,7 +117,7 @@ describe('successful run deliverable syntax finalizer (HTTP)', () => {
     expect(await artifact.text()).toContain('const items = [1, 2];');
   }, 60_000);
 
-  it('blocks an unsafe syntax error and preserves the original bytes', async () => {
+  it('delivers an unsafe syntax error with warning evidence and preserves the original bytes', async () => {
     if (!started || !binDir) throw new Error('server fixture not started');
     const original = '<!doctype html><script>const value = ;</script>';
     const fakeClaude = await writeHtmlClaude(binDir, original, 'claude-unsafe-syntax');
@@ -126,17 +126,68 @@ describe('successful run deliverable syntax finalizer (HTTP)', () => {
     const { projectId, conversationId } = await createProject(started.url);
     const run = await createAndWaitForRun(started.url, projectId, conversationId);
 
-    expect(run.status).toBe('failed');
+    expect(run.status).toBe('succeeded');
     expect(run.deliverableSyntaxValidation).toMatchObject({
       source: 'run_finalizer',
       status: 'repairable',
+      finalization: { action: 'warn', reason: 'no_safe_fix', committedPatchCount: 0 },
     });
 
     const artifact = await fetch(
       `${started.url}/api/projects/${encodeURIComponent(projectId)}/raw/index.html`,
     );
     expect(artifact.status).toBe(200);
-    expect(await artifact.text()).toContain(original);
+    expect(await artifact.text()).toBe(original);
+  }, 60_000);
+
+  it('persists an injected invariant failure as internal_error while delivering the unchanged artifact', async () => {
+    if (!started || !binDir) throw new Error('server fixture not started');
+    const decision = await import('../src/artifacts/deliverable-syntax-repair.js');
+    const spy = vi.spyOn(decision, 'decideDeliverableSyntaxRepair').mockReturnValue({ action: 'accept', next: undefined });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const original = '<!doctype html><script>const items = [1, 2;</script>';
+      await putConfig(started.url, await writeHtmlClaude(binDir, original, 'claude-internal-error'));
+      const { projectId, conversationId } = await createProject(started.url);
+      const run = await createAndWaitForRun(started.url, projectId, conversationId);
+      expect(run.status).toBe('succeeded');
+      expect(run.deliverableSyntaxValidation).toMatchObject({ status: 'incomplete', reason: 'internal_error',
+        finalization: { action: 'warn', reason: 'internal_error', committedPatchCount: 0 } });
+      expect(log).toHaveBeenCalledWith('[deliverable-syntax] internal_error');
+      const artifact = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/raw/index.html`);
+      expect(artifact.status).toBe(200);
+      expect(await artifact.text()).toBe(original);
+    } finally {
+      spy.mockRestore();
+      log.mockRestore();
+    }
+  }, 60_000);
+
+  it('delivers oversized output with incomplete-check evidence, not a fabricated pass', async () => {
+    if (!started || !binDir) throw new Error('server fixture not started');
+    const original = `<!doctype html><script>${' '.repeat(2 * 1024 * 1024)}</script>`;
+    await putConfig(started.url, await writeHtmlClaude(binDir, original, 'claude-oversized-syntax'));
+    const { projectId, conversationId } = await createProject(started.url);
+    const run = await createAndWaitForRun(started.url, projectId, conversationId);
+    expect(run.status).toBe('succeeded');
+    expect(run.deliverableSyntaxValidation).toMatchObject({
+      status: 'incomplete', reason: 'limit_exceeded',
+      finalization: { action: 'warn', reason: 'check_incomplete', committedPatchCount: 0 },
+    });
+    const artifact = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/raw/index.html`);
+    expect(artifact.status).toBe(200);
+    expect(await artifact.text()).toBe(original);
+  }, 60_000);
+
+  it('does not turn an Agent execution failure into success just because a file exists', async () => {
+    if (!started || !binDir) throw new Error('server fixture not started');
+    await putConfig(started.url, await writeHtmlClaude(
+      binDir, '<!doctype html><title>Partial output</title>', 'claude-execution-failed', 1,
+    ));
+    const { projectId, conversationId } = await createProject(started.url);
+    const run = await createAndWaitForRun(started.url, projectId, conversationId);
+    expect(run.status).toBe('failed');
+    expect(run.deliverableSyntaxValidation).toBeUndefined();
   }, 60_000);
 });
 
@@ -148,7 +199,7 @@ async function writeBrokenHtmlClaude(dir: string): Promise<string> {
   );
 }
 
-async function writeHtmlClaude(dir: string, content: string, name: string): Promise<string> {
+async function writeHtmlClaude(dir: string, content: string, name: string, exitCode = 0): Promise<string> {
   const bin = path.join(dir, name);
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
@@ -161,13 +212,16 @@ const W = (value) => fs.writeSync(1, JSON.stringify(value) + '\\n');
 W({ type: 'system', subtype: 'init', model: 'syntax-finalizer-test', session_id: 'syntax-finalizer-session' });
 W({ type: 'assistant', message: { id: 'write', content: [{
   type: 'tool_use', id: 'write-index', name: 'Write',
-  input: { file_path: 'index.html', content },
+    // File bytes are supplied above. Keep the fake tool transcript bounded so
+    // the oversized-file test exercises the checker limit, not log ingestion.
+    input: { file_path: 'index.html', content: content.length > 4096 ? '[fixed fixture written]' : content },
 }], stop_reason: 'tool_use' } });
 W({ type: 'user', message: { content: [{
   type: 'tool_result', tool_use_id: 'write-index', content: 'File written', is_error: false,
 }] } });
 W({ type: 'assistant', message: { id: 'final', content: [{ type: 'text', text: 'Done' }], stop_reason: 'end_turn' } });
-W({ type: 'result', subtype: 'success', is_error: false, session_id: 'syntax-finalizer-session', stop_reason: 'end_turn', usage: { input_tokens: 2, output_tokens: 1 }, duration_ms: 10 });
+W({ type: 'result', subtype: ${JSON.stringify(exitCode ? 'error_during_execution' : 'success')}, is_error: ${exitCode !== 0}, session_id: 'syntax-finalizer-session', stop_reason: 'end_turn', usage: { input_tokens: 2, output_tokens: 1 }, duration_ms: 10 });
+process.exitCode = ${exitCode};
 `, 'utf8');
   await chmod(bin, 0o755);
   return bin;

@@ -40,7 +40,7 @@ export type DeliverableSyntaxFinalizationOutcome =
       validation: DeliverableSyntaxValidationEvidence;
     }
   | {
-      action: 'fail';
+      action: 'warn';
       validation: DeliverableSyntaxValidationEvidence;
       location: string;
       reason: DeliverableSyntaxFinalizationReason;
@@ -48,7 +48,7 @@ export type DeliverableSyntaxFinalizationOutcome =
     };
 
 /**
- * Host-owned terminal syntax gate. It never executes the artifact or starts a
+ * Host-owned best-effort syntax finalizer. It never executes the artifact or starts a
  * model turn. Patches stay in memory until the complete candidate parses, then
  * a guarded atomic replacement publishes the verified bytes.
  */
@@ -65,7 +65,7 @@ async function finalizeCandidate(input: {
   monotonicNow?: () => number;
   /** Test seam for repair-window wall-clock timestamps. */
   wallNow?: () => number;
-}, summary: HostSummary): Promise<DeliverableSyntaxFinalizationOutcome> {
+}, summary: HostSummary, progress: { validation?: DeliverableSyntaxValidationEvidence }): Promise<DeliverableSyntaxFinalizationOutcome> {
   if (input.artifactKind !== 'html' || !input.entryFile) {
     return { action: 'skip' };
   }
@@ -73,7 +73,7 @@ async function finalizeCandidate(input: {
   const checkedAt = input.checkedAt ?? input.wallNow?.() ?? Date.now();
   if (!input.processTreeQuiescent) {
     return {
-      action: 'fail',
+      action: 'warn',
       reason: 'check_incomplete',
       location: input.entryFile,
       validation: {
@@ -127,22 +127,23 @@ async function finalizeCandidate(input: {
       ...(repairState ? { repairState } : {}),
       metrics,
     };
+    progress.validation = validation;
 
     // Cooperative stop points, not preemption of synchronous parsers or fsync.
     // Normal checks without repair do not acquire this repair-only deadline.
     if (repairBudgetStartedAt !== undefined
       && checkerFinishedAt - repairBudgetStartedAt >= HOST_SYNTAX_REPAIR_BUDGET_MS) {
-      return { action: 'fail', validation, location: input.entryFile, reason: 'repair_budget_exceeded' };
+      return { action: 'warn', validation, location: input.entryFile, reason: 'repair_budget_exceeded' };
     }
 
     if (syntax.status !== 'repairable') {
       if (syntax.status === 'incomplete') {
-        return { action: 'fail', validation, location: input.entryFile, reason: 'check_incomplete' };
+        return { action: 'warn', validation, location: input.entryFile, reason: 'check_incomplete' };
       }
       if (!stagedPatch) return { action: 'allow', validation };
       if (syntax.status !== 'pass') {
         return {
-          action: 'fail',
+          action: 'warn',
           validation,
           location: stagedPatch.file,
           reason: 'verification_failed',
@@ -160,13 +161,14 @@ async function finalizeCandidate(input: {
         rule: stagedPatch.rule,
       });
       validation = { ...validation, metrics };
+      progress.validation = validation;
       if (committed.action === 'committed') {
         summary.committedPatchCount = summary.stagedPatchCount;
         summary.committedRepairRules = [...stagedRules];
         return { action: 'allow', validation };
       }
       return {
-        action: 'fail',
+        action: 'warn',
         validation,
         location: stagedPatch.file,
         reason: committed.reason === 'concurrent_modification'
@@ -186,7 +188,7 @@ async function finalizeCandidate(input: {
       maxAttempts: HOST_SYNTAX_MAX_PATCHES,
     });
     if (decision.action === 'block') {
-      return { action: 'fail', validation, location, reason: decision.reason };
+      return { action: 'warn', validation, location, reason: decision.reason };
     }
     if (decision.action !== 'retry') {
       throw new TypeError('Repairable syntax result produced an invalid accept decision.');
@@ -209,18 +211,19 @@ async function finalizeCandidate(input: {
       safeFixProposalDurationMs: (metrics.safeFixProposalDurationMs ?? 0) + repairDurationMs,
     };
     validation = { ...validation, metrics };
+    progress.validation = validation;
     if ((input.monotonicNow?.() ?? performance.now()) - repairBudgetStartedAt >= HOST_SYNTAX_REPAIR_BUDGET_MS) {
-      return { action: 'fail', validation, location, reason: 'repair_budget_exceeded' };
+      return { action: 'warn', validation, location, reason: 'repair_budget_exceeded' };
     }
     if (proposal.action !== 'proposed') {
-      return { action: 'fail', validation, location, reason: 'no_safe_fix', refusal: proposal.reason };
+      return { action: 'warn', validation, location, reason: 'no_safe_fix', refusal: proposal.reason };
     }
     if (stagedPatch && stagedPatch.file !== proposal.patch.file) {
-      return { action: 'fail', validation, location, reason: 'no_safe_fix', refusal: 'multiple_files' };
+      return { action: 'warn', validation, location, reason: 'no_safe_fix', refusal: 'multiple_files' };
     }
     editedCharacters += proposal.patch.editCount;
     if (editedCharacters > HOST_SYNTAX_MAX_EDITED_CHARACTERS) {
-      return { action: 'fail', validation, location, reason: 'repair_budget_exceeded' };
+      return { action: 'warn', validation, location, reason: 'repair_budget_exceeded' };
     }
     stagedPatch = {
       ...proposal.patch,
@@ -242,6 +245,21 @@ async function finalizeCandidate(input: {
   }
 }
 
+/** Only the delivery owner may recover from an internal finalizer failure. */
+export class DeliverableSyntaxInternalError extends Error {
+  constructor(readonly outcome: Extract<DeliverableSyntaxFinalizationOutcome, { action: 'warn' }>, cause: unknown) {
+    super('Syntax finalizer internal error', { cause });
+    this.name = 'DeliverableSyntaxInternalError';
+  }
+}
+
+function isExpectedOperationalError(error: unknown): boolean {
+  return error instanceof Error && !(error instanceof TypeError)
+    && !(error instanceof RangeError) && !(error instanceof ReferenceError)
+    && 'code' in error && ['EIO', 'ENOENT', 'EACCES', 'EPERM', 'ENOSPC', 'EROFS', 'EBUSY', 'EMFILE', 'ENFILE']
+      .includes(String(error.code));
+}
+
 export async function finalizeDeliverableSyntax(
   input: Parameters<typeof finalizeCandidate>[0],
 ): Promise<DeliverableSyntaxFinalizationOutcome> {
@@ -249,14 +267,36 @@ export async function finalizeDeliverableSyntax(
     summaryVersion: 1, initialStatus: 'incomplete', repairEngine: 'host-safe-fixer@2',
     stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [],
   };
-  const result = await finalizeCandidate(input, summary);
+  const progress: { validation?: DeliverableSyntaxValidationEvidence } = {};
+  let result: DeliverableSyntaxFinalizationOutcome;
+  try {
+    result = await finalizeCandidate(input, summary, progress);
+  } catch (error) {
+    const operational = isExpectedOperationalError(error);
+    result = {
+      action: 'warn', reason: operational ? 'check_incomplete' : 'internal_error', location: input.entryFile ?? '',
+      validation: {
+        schema: DELIVERABLE_SYNTAX_TOOL_SCHEMA,
+        source: 'run_finalizer', status: 'incomplete', reason: operational ? 'checker_error' : 'internal_error',
+        checkedAt: input.checkedAt ?? input.wallNow?.() ?? Date.now(),
+        ...(progress.validation?.metrics || input.previousMetrics
+          ? { metrics: progress.validation?.metrics ?? input.previousMetrics } : {}),
+      },
+    };
+    if (!operational) {
+      throw new DeliverableSyntaxInternalError({
+        ...result,
+        validation: { ...result.validation, finalization: { ...summary, action: 'warn', reason: 'internal_error' } },
+      }, error);
+    }
+  }
   if (result.action === 'skip') return result;
   return {
     ...result,
     validation: {
       ...result.validation,
-      finalization: result.action === 'fail'
-        ? { ...summary, action: 'fail', reason: result.reason, ...(result.refusal ? { refusal: result.refusal } : {}) }
+      finalization: result.action === 'warn'
+        ? { ...summary, action: 'warn', reason: result.reason, ...(result.refusal ? { refusal: result.refusal } : {}) }
         : { ...summary, action: 'allow' },
     },
   };

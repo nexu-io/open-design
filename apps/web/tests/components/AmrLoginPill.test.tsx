@@ -309,7 +309,7 @@ describe('AmrLoginPill', () => {
 
     expect(screen.queryByText('PROD')).toBeNull();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'https://open-design.ai/amr/dashboard?source=open_design',
+      'https://open-design.ai/cloud/dashboard?source=open_design',
     );
   });
 

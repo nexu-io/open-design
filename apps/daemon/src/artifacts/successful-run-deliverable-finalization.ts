@@ -11,6 +11,7 @@ import {
 } from '../run-deliverable-validation.js';
 import {
   finalizeDeliverableSyntax,
+  DeliverableSyntaxInternalError,
   type DeliverableSyntaxFinalizationOutcome,
 } from './deliverable-syntax-finalization.js';
 
@@ -41,6 +42,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
   relatedPaths?: readonly string[];
   repairState?: DeliverableSyntaxRepairState;
   touchedPaths?: string[];
+  baselineEntryFile?: string;
   syntaxFinalizerEnabled?: boolean;
 }): Promise<SuccessfulRunDeliverableFinalizationResult> {
   const deliverable = await validateRunDeliverable({
@@ -52,6 +54,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     runStatus: 'succeeded',
     artifactCount: input.artifactCount,
     ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
+    ...(input.baselineEntryFile ? { baselineEntryFile: input.baselineEntryFile } : {}),
   });
   if (
     !deliverable.valid
@@ -61,18 +64,28 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     return { deliverable, syntax: { action: 'skip' } };
   }
 
-  const syntax = await finalizeDeliverableSyntax({
+  const syntaxInput = {
     artifactKind: deliverable.artifactKind,
     projectRoot: resolveProjectDir(
       input.projectsRoot,
       input.projectId,
       input.projectMetadata,
     ),
-    entryFile: deliverable.entryFile,
+    entryFile: deliverable.linkedPage ?? deliverable.entryFile,
     relatedPaths: input.relatedPaths ?? [],
     processTreeQuiescent: input.processTreeQuiescent,
     ...(input.repairState ? { repairState: input.repairState } : {}),
     ...(input.previousMetrics ? { previousMetrics: input.previousMetrics } : {}),
-  });
+  };
+  let syntax: DeliverableSyntaxFinalizationOutcome;
+  try {
+    syntax = await finalizeDeliverableSyntax(syntaxInput);
+  } catch (error) {
+    if (!(error instanceof DeliverableSyntaxInternalError)) throw error;
+    // The product's non-blocking delivery policy must not hide an engine defect.
+    // Never log the cause: it may contain generated source or local paths.
+    console.error('[deliverable-syntax] internal_error');
+    syntax = error.outcome;
+  }
   return { deliverable, syntax };
 }

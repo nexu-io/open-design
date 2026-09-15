@@ -186,6 +186,12 @@ export type OdNextStrategyContinuationV2 =
       planContractHash: string;
       /** Per-run nonce; omitted for non-completing continuation stages. */
       hostProtocolKey?: string;
+      /**
+       * Run UI locale, for the host protocols the production stage closes with
+       * (OPEND-2765). Only the follow-up-suggestion rule reads it; the rest of
+       * this payload is machine structure and stays English.
+       */
+      locale?: string;
       nativeBuildPackageBindings?: readonly {
         buildPackageId: string;
         nativeAgentHandle: string;
@@ -997,7 +1003,7 @@ export function composeOdNextStrategyContinuationV2(
   }
   let payload: string;
   if (input.stage === 'clarification') {
-    payload = `# OD Next native continuation — clarification\n\nMerge the user's answer below into the existing Full Plan context. Preserve the locked route, ask no second question round, rerun only affected resolution and Preflight work, and emit the updated V2 machine structures.\n\n## Clarification answer\n\n${requireText(input.answer, 'answer')}`;
+    payload = `# OD Next native continuation — clarification\n\nMerge the user's answer below into the existing Full Plan context. Preserve the locked route, ask no second question round, rerun only affected resolution and Preflight work, and emit the updated V2 machine structures. This turn runs at the clarification stage: the Runtime State reports inputStage clarification (not request) with outcome plan_ready once the Full Plan is frozen, otherwise blocked or canceled.\n\n## Clarification answer\n\n${requireText(input.answer, 'answer')}`;
   } else if (input.stage === 'contract_repair') {
     payload = `# OD Next native continuation — contract_repair\n\nThe semantic plan in this native session is frozen. Make one serialization-only attempt that addresses the issue below. Use no tools, do not re-plan, and preserve the locked route, execution mode, Design Spec, steps, and Build Packages.\n\n## Serialization issue\n\n${requireText(input.serializationIssue, 'serializationIssue')}`;
   } else {
@@ -1029,6 +1035,7 @@ export function composeOdNextStrategyContinuationV2(
     const hostProtocol = renderChatTurnHostProtocolInstructions(
       input.hostProtocolKey ?? '',
       'od_next_production',
+      input.locale,
     ).text;
     payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Lay the deliverable out so exactly one of those resolves.${bindingBlock}\n\n## Closing Runtime State\n\nFinish the delivery response with exactly one ${OD_NEXT_RUNTIME_STATE_BLOCK} block written as plain text between its tags, and no Plan Contract block: schema ${OD_NEXT_RUNTIME_STATE_SCHEMA}, route full_plan, inputStage production, executionMode equal to the mode locked by the accepted Plan Contract, outcome completed once every required deliverable is written (otherwise blocked or canceled), reasonCodes [], and no other fields.${hostProtocol ? `\n\nPlace the Closing Runtime State before any final follow-up markers required by the host protocols below.\n\n${hostProtocol}` : ''}`;
   }

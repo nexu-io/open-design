@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_AMR_RECHARGE_URL,
@@ -17,8 +17,30 @@ describe('AMR account failure classification', () => {
   // navigates to.
   it('points the recharge link at the console dashboard, not a wallet page', () => {
     expect(DEFAULT_AMR_RECHARGE_URL).toBe(
-      'https://open-design.ai/amr/dashboard?source=open_design',
+      'https://open-design.ai/cloud/dashboard?source=open_design',
     );
+  });
+
+  it('uses the selected profile origin for recharge failures', () => {
+    expect(classifyAmrAccountFailure('insufficient_balance', {
+      OPEN_DESIGN_AMR_PROFILE: 'test',
+    })?.actionUrl).toBe(
+      'https://open-design.powerformer.net/cloud/dashboard?source=open_design',
+    );
+
+    vi.stubEnv('OD_VELA_WEB_URLS', JSON.stringify({
+      prod: 'https://prod.example.invalid/cloud',
+      'feature-test': 'https://feature.example.invalid/cloud',
+    }));
+    try {
+      expect(classifyAmrAccountFailure('insufficient_balance', {
+        OPEN_DESIGN_AMR_PROFILE: 'feature-test',
+      })?.actionUrl).toBe(
+        'https://feature.example.invalid/cloud/dashboard?source=open_design',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('classifies insufficient_balance JSON-RPC failures as rechargeable AMR balance errors', () => {

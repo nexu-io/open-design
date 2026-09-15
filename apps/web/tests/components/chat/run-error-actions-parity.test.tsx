@@ -56,7 +56,17 @@ describe('失败卡三颗按钮同壳', () => {
    */
   it('重试要走报错卡动作组件,分量跟旁边几颗同一个出口', () => {
     const src = readChatPane();
-    const near = sliceAround(src, "promptTemplates.retry");
+    /*
+     * 锚点用这颗按钮**自己的** `data-testid`,不用它的文案 key。
+     *
+     * 文案 key 是个会跑的锚:OPEND-2758 之后这颗按钮在飞的时候要换成
+     * 「正在重试」,于是 `promptTemplates.retry` 搬进了一个具名常量,
+     * `indexOf` 头一个命中的是那行声明 —— 判据就悄悄跑去量了一段和按钮
+     * 无关的源码。`data-testid` 在这份文件里唯一,而且指的正是这颗按钮。
+     * 换锚点之后窗口反而更紧(往回 ~220 字符就够到开标签),旁边那颗
+     * 〔续跑〕的 `<RunErrorCardAction` 落在 700 字符之外,不会替它蒙混过关。
+     */
+    const near = sliceAround(src, 'data-testid="chat-error-retry"');
     expect(near).toMatch(/<RunErrorCardAction/);
     expect(near).toMatch(/variant=\{errorActionVariant\}/);
     // 没有 Cloud CTA 的那一档(已经跑在 Cloud 上)重试仍然是主按钮

@@ -32,6 +32,7 @@ export type AnalyticsEventName =
   | 'update_install_result'
   | 'update_check_result'
   | 'update_apply_observed'
+  | 'update_lifecycle_observed'
   // Packaged startup failure — emitted by the packaged MAIN process (not the
   // daemon) when daemon/web sidecars die before reporting status, i.e. the
   // pre-daemon crash class that produces zero telemetry today (issue #4638).

@@ -202,7 +202,7 @@ describe('ChatPane connect-repo CTA', () => {
     expect(screen.queryByText('Assistant')).toBeNull();
   });
 
-  it('renders persisted content-only browser assist cards for brand extraction projects', () => {
+  it('hides persisted browser assist cards while retaining brand extraction next steps', () => {
     renderPane({
       projectMetadata: {
         kind: 'brand',
@@ -223,8 +223,8 @@ describe('ChatPane connect-repo CTA', () => {
       ],
     });
 
-    expect(screen.getByText('artifact.odCardBrandAssistBody')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'artifact.odCardBrandAssistConfirm' })).toBeTruthy();
+    expect(screen.queryByText('artifact.odCardBrandAssistBody')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'artifact.odCardBrandAssistConfirm' })).toBeNull();
     expect(screen.getByTestId('next-step-brand-action-brand-continue-extraction')).toBeTruthy();
     expect(screen.getByTestId('next-step-brand-action-brand-continue-ai-extraction').textContent)
       .toContain('nextStep.brandContinueAiExtractionTitle');
@@ -232,7 +232,7 @@ describe('ChatPane connect-repo CTA', () => {
     expect(screen.queryByText('Create with this design system')).toBeNull();
   });
 
-  it('renders a fallback browser assist card when the transcript references one without od-card markup', () => {
+  it('keeps brand prose without synthesizing a browser assist card', () => {
     renderPane({
       projectMetadata: {
         kind: 'brand',
@@ -257,8 +257,9 @@ describe('ChatPane connect-repo CTA', () => {
       ],
     });
 
-    expect(screen.getByText('artifact.odCardBrandAssistBody')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'artifact.odCardBrandAssistConfirm' })).toBeTruthy();
+    expect(screen.getByText(/Use the browser assist card below/)).toBeTruthy();
+    expect(screen.queryByText('artifact.odCardBrandAssistBody')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'artifact.odCardBrandAssistConfirm' })).toBeNull();
   });
 
   it('renders only agent continuation after an incomplete AI brand extraction turn', () => {

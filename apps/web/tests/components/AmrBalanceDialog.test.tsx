@@ -101,7 +101,7 @@ describe('AmrBalanceDialog', () => {
       expect(open).toHaveBeenCalled();
       const target = new URL(String(open.mock.calls.at(-1)?.[0]));
       expect(`${target.origin}${target.pathname}`).toBe(
-        'https://open-design.ai/amr/dashboard',
+        'https://open-design.ai/cloud/dashboard',
       );
       expect(target.searchParams.get('billing')).toBe('plan');
     });
@@ -153,7 +153,7 @@ describe('AmrBalanceDialog', () => {
       expect(open).toHaveBeenCalled();
       const target = new URL(String(open.mock.calls.at(-1)?.[0]));
       expect(`${target.origin}${target.pathname}`).toBe(
-        'https://open-design.ai/amr/dashboard',
+        'https://open-design.ai/cloud/dashboard',
       );
       expect(target.searchParams.get('billing')).toBe('plan');
     });
@@ -205,7 +205,7 @@ describe('AmrBalanceDialog', () => {
       expect(open).toHaveBeenCalled();
       const target = new URL(String(open.mock.calls.at(-1)?.[0]));
       expect(`${target.origin}${target.pathname}`).toBe(
-        'https://open-design.ai/amr/dashboard',
+        'https://open-design.ai/cloud/dashboard',
       );
       expect(target.searchParams.get('billing')).toBe('plan');
     });
@@ -271,7 +271,7 @@ describe('AmrBalanceDialog', () => {
     expect(open).toHaveBeenCalled();
     const target = new URL(String(open.mock.calls.at(-1)?.[0]));
     expect(`${target.origin}${target.pathname}`).toBe(
-      'https://open-design.ai/amr/dashboard',
+      'https://open-design.ai/cloud/dashboard',
     );
     expect(target.searchParams.get('billing')).toBe('plan');
   });
@@ -352,7 +352,7 @@ describe('AmrBalanceDialog', () => {
 
     const target = new URL(String(open.mock.calls.at(-1)?.[0]));
     expect(`${target.origin}${target.pathname}`).toBe(
-      'https://open-design.ai/amr/dashboard',
+      'https://open-design.ai/cloud/dashboard',
     );
     expect(target.searchParams.get('billing')).toBe('plan');
   });

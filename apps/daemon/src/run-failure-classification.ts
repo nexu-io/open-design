@@ -974,6 +974,19 @@ function classifyRunFailureBase(
   }
 
   const errorCode = normalizeCode(input.errorCode ?? input.status.errorCode);
+  if (errorCode === 'OD_NEXT_TASK_BLOCKED') {
+    // The host rejected completion, but this does not establish why the model
+    // failed to satisfy the task contract. Do not infer a provider fault or a
+    // child crash from the blocked reason text (the process may exit zero).
+    return {
+      ...classification('process_exit', 'execution_failed', 'finalize', false, 'none', {
+        evidenceLevel: 'structured_code',
+      }),
+      failure_mechanism: 'unknown',
+      failure_domain: 'unknown',
+      repair_owner: 'unknown',
+    };
+  }
   const text = collectFailureText({ ...input, events });
   const retryableHint = latestRetryable(events);
   // Compute once; used both for the early empty_output guard below and for the

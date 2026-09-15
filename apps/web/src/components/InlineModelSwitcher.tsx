@@ -80,6 +80,7 @@ import {
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
+import { anchorSelectionInView } from './pickerSelectionAnchor';
 import {
   agentModelIsSelectable,
   defaultAgentModelId,
@@ -204,6 +205,8 @@ export function InlineModelSwitcher({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const compactModelListRef = useRef<HTMLDivElement | null>(null);
+  const compactSelectionAnchoredRef = useRef(false);
   const campaignBenefitTrackedForOpenRef = useRef(false);
   // Viewport clamp for the popover (issue #99): the anchor chip can sit
   // anywhere on screen (home hero mid-page, chat composer at the bottom), so
@@ -783,6 +786,23 @@ export function InlineModelSwitcher({
       })),
     [currentAgent, inlineAgentModelOptions],
   );
+
+  // The compact list caps at six visible rows and scrolls, so a longer catalog
+  // used to open on row one with the model actually in effect below the fold —
+  // the hunting OPEND-2812 reports. Anchor the list on the row it already marks
+  // `aria-checked`; nothing new is remembered here, the selection is read back
+  // out of the rendered list. Once per open, so a later re-render (the catalog
+  // arriving, the popover re-measuring) cannot yank the list back under a user
+  // who has started browsing it.
+  useLayoutEffect(() => {
+    if (!open) {
+      compactSelectionAnchoredRef.current = false;
+      return;
+    }
+    if (compactSelectionAnchoredRef.current || !compactModelListRef.current) return;
+    compactSelectionAnchoredRef.current = true;
+    anchorSelectionInView(compactModelListRef.current, '[aria-checked="true"]');
+  }, [compactModelRows, open]);
 
   useEffect(() => {
     if (!open) {
@@ -1382,7 +1402,11 @@ export function InlineModelSwitcher({
             // the execution settings entry below.
             <div className="inline-switcher__row">
               {currentAgent && compactModelRows.length > 0 ? (
-                <div className="inline-switcher__agent-grid" role="radiogroup">
+                <div
+                  className="inline-switcher__agent-grid"
+                  role="radiogroup"
+                  ref={compactModelListRef}
+                >
                   {compactModelRows.map(({ model: m, selectable }) => {
                     const active = currentModelId === m.id;
                     // A model above the caller's plan is shown, but honestly:

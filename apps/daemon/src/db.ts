@@ -48,7 +48,6 @@ import { migrateLibrary } from './library-store.js';
 import { migratePlugins } from './plugins/persistence.js';
 import { migrateProjectScenarioBindings } from './plugins/scenario-binding.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
-import { migrateOdNextRolloutStore } from './strategies/od-next/rollout.js';
 import { migrateStrategyTaskStore } from './strategies/task-store.js';
 
 type SqliteDb = Database.Database;
@@ -606,7 +605,6 @@ function migrate(db: SqliteDb): void {
   migratePlugins(db);
   migrateProjectScenarioBindings(db);
   migrateStrategyTaskStore(db);
-  migrateOdNextRolloutStore(db);
   migrateChatArtifacts(db);
   migrateCollabSyncSnapshots(db);
   migrateCommentRelayOutbox(db);

@@ -50,10 +50,12 @@ export interface DetectedRuntimeVersions {
 }
 
 // Detection already pays the bounded `--version` probe cost used by Settings.
-// Keep the result as daemon-lifetime provenance so run telemetry can name the
-// exact executable family without spawning another process on every turn.
+// Keep known versions as daemon-lifetime provenance. Missing versions expire
+// so a transient probe failure cannot permanently disable version-gated features.
 const detectedRuntimeVersions = new Map<string, DetectedRuntimeVersions>();
 const detectedRuntimeVersionScopes = new Map<string, string>();
+const missingRuntimeVersionRetryAt = new Map<string, number>();
+const MISSING_RUNTIME_VERSION_TTL_MS = 5_000;
 const detectedRuntimeVersionProbes = new Map<
   string,
   Promise<DetectedRuntimeVersions | null>
@@ -69,6 +71,13 @@ const detectedRuntimeCapabilityProbes = new Map<
 // case stops at the first candidate, so this only bounds the pathological
 // shape: the same CLI name shadowed in many search directories at once.
 const MAX_EXECUTABLE_ATTEMPTS = 8;
+
+function rememberRuntimeVersions(agentId: string, scope: string, versions: DetectedRuntimeVersions): void {
+  detectedRuntimeVersions.set(agentId, versions);
+  detectedRuntimeVersionScopes.set(agentId, scope);
+  if (versions.agentCliVersion) missingRuntimeVersionRetryAt.delete(agentId);
+  else missingRuntimeVersionRetryAt.set(agentId, Date.now() + MISSING_RUNTIME_VERSION_TTL_MS);
+}
 
 export function getDetectedRuntimeVersions(
   agentId: string | null | undefined,
@@ -101,6 +110,7 @@ export async function ensureDetectedRuntimeVersions(
   if (
     remembered
     && detectedRuntimeVersionScopes.get(agentId) === context.scope
+    && (remembered.agentCliVersion || Date.now() < (missingRuntimeVersionRetryAt.get(agentId) ?? 0))
   ) {
     return remembered;
   }
@@ -444,8 +454,7 @@ async function probeRuntimeVersionsOnly(
         }
       : {}),
   };
-  detectedRuntimeVersions.set(def.id, versions);
-  detectedRuntimeVersionScopes.set(def.id, context.scope);
+  rememberRuntimeVersions(def.id, context.scope, versions);
   return { ...versions };
 }
 
@@ -453,6 +462,7 @@ function unavailableAgent(
   def: RuntimeAgentDef,
   diagnostics: AgentDiagnostic[] = [],
   detected?: { path?: string; version?: string | null },
+  configuredEnv: Record<string, string> = {},
 ): DetectedAgent {
   return {
     ...stripFns(def),
@@ -462,7 +472,7 @@ function unavailableAgent(
     ...(detected?.path ? { path: detected.path } : {}),
     ...(detected && 'version' in detected ? { version: detected.version ?? null } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
-    ...installMetaForAgent(def.id),
+    ...installMetaForAgent(def.id, configuredEnv),
   };
 }
 
@@ -556,6 +566,7 @@ async function probe(
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
   detectedRuntimeVersions.delete(def.id);
+  missingRuntimeVersionRetryAt.delete(def.id);
   // Forget what a previous pass proved unusable before re-probing: a rescan
   // after the user repairs or reinstalls a CLI must not keep skipping it.
   forgetUnusableExecutables(def.id);
@@ -569,7 +580,7 @@ async function probe(
   // hand even though the real launch path is healthy.
   const initialLaunch = resolveAgentLaunch(def, configuredEnv);
   if (!initialLaunch.selectedPath || !initialLaunch.launchPath) {
-    return unavailableAgent(def, [buildExecutableDiagnostic(def, configuredEnv)]);
+    return unavailableAgent(def, [buildExecutableDiagnostic(def, configuredEnv)], undefined, configuredEnv);
   }
   // Carry the narrowed pair explicitly: the candidate walk below reassigns
   // this binding, which would otherwise discard the null-check above and
@@ -662,13 +673,14 @@ async function probe(
       def,
       [buildNotInvocableDiagnostic(def, launch, outcome.cause)],
       { path: launch.selectedPath },
+      configuredEnv,
     );
   }
   if (def.versionPolicy?.requireVersion && !outcome.version) {
     return unavailableAgent(def, [buildVersionDiagnostic(def, outcome.version)], {
       path: launch.selectedPath,
       version: outcome.version,
-    });
+    }, configuredEnv);
   }
   let runtimeCompanionVersion: string | undefined;
   if (def.compatibilityProbe) {
@@ -677,7 +689,7 @@ async function probe(
         return unavailableAgent(def, [buildCompatibilityDiagnostic(def)], {
           path: launch.selectedPath,
           version: outcome.version,
-        });
+        }, configuredEnv);
       }
       const { stdout } = await execAgentFile(
         launch.launchPath,
@@ -693,7 +705,7 @@ async function probe(
       return unavailableAgent(def, [buildCompatibilityDiagnostic(def)], {
         path: launch.selectedPath,
         version: outcome.version,
-      });
+      }, configuredEnv);
     }
   }
   const versionDiagnostic =
@@ -746,10 +758,10 @@ async function probe(
       : {}),
   };
   if (Object.keys(runtimeVersions).length > 0) {
-    detectedRuntimeVersions.set(def.id, runtimeVersions);
-    detectedRuntimeVersionScopes.set(
+    rememberRuntimeVersions(
       def.id,
       runtimeVersionProbeContext(def, configuredEnv)?.scope ?? '',
+      runtimeVersions,
     );
   }
   return {
@@ -772,7 +784,7 @@ async function probe(
           ),
         }
       : {}),
-    ...installMetaForAgent(def.id),
+    ...installMetaForAgent(def.id, configuredEnv),
   };
 }
 
@@ -823,7 +835,7 @@ export async function detectAgent(
     // Without this guard the bare `Promise.all` rejected and the
     // `/api/agents` catch arm returned `[]`, so the UI silently lost
     // every CLI option and fell back to BYOK / Cloud only.
-    return unavailableAgent(def);
+    return unavailableAgent(def, [], undefined, configuredEnv);
   }
 }
 

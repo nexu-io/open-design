@@ -1,10 +1,11 @@
 // Pure rendering for the progressive prerelease Feishu card.
 //
-// One card tracks one prerelease from "the first platform finished uploading"
-// to "every lane has reported". Because a Feishu PATCH replaces the whole card,
-// rendering has to be a total function of the state — no incremental edits, no
-// memory of what the previous card said. Everything in this module is pure so
-// the state machine can be tested without a network.
+// One card tracks one prerelease from "the pipeline started" to "every lane has
+// reported". Because a Feishu PATCH replaces the whole card, rendering has to be
+// a total function of the state — no incremental edits, no memory of what the
+// previous card said. Everything in this module is pure so the state machine can
+// be tested without a network, `now` included: the card carries live durations,
+// and a module that read the clock itself could not be asserted on.
 //
 // The single-writer rule lives at the workflow layer: exactly one job
 // (release-prerelease-card.yml) owns the message. Three build jobs racing to
@@ -28,6 +29,19 @@ export type LaneStatus =
 
 export type PlatformKey = "mac_arm64" | "mac_x64" | "win_x64" | "linux_x64";
 
+/**
+ * When a lane's job started and stopped, in epoch milliseconds.
+ *
+ * Straight off the GitHub jobs API the watcher already polls, so the card pays
+ * nothing extra for it. Both fields are nullable and neither may be trusted on
+ * its own — see `laneDurationText` for why the lane's STATUS, not the presence
+ * of a timestamp, decides whether a duration is shown.
+ */
+export type LaneTiming = {
+  startedAt: number | null;
+  completedAt: number | null;
+};
+
 export type PlatformLane = {
   key: PlatformKey;
   label: string;
@@ -37,6 +51,8 @@ export type PlatformLane = {
   downloadUrl: string;
   /** Packaged smoke outcome for this platform. `skipped` when not requested. */
   smoke: LaneStatus;
+  /** Wall clock of this platform's build job. */
+  timing: LaneTiming;
 };
 
 export type TestLane = {
@@ -70,6 +86,12 @@ export type PrereleaseCardState = {
   finished: boolean;
   /** The watcher hit its wall clock before everything reported. */
   timedOut: boolean;
+  /** The moment this render describes, in epoch milliseconds. */
+  now: number;
+  /** When the origin run was created; null while the watcher has not read it. */
+  runCreatedAt: number | null;
+  /** When the publish job stopped; null while the pipeline is still going. */
+  publishCompletedAt: number | null;
 };
 
 export type FeishuCard = Record<string, unknown>;
@@ -165,16 +187,20 @@ export function isBadNews(status: LaneStatus): boolean {
 }
 
 /**
- * Whether the very first card may be posted yet.
+ * Every platform this release owed a result on has reported, and not one of
+ * them produced a package.
  *
- * Deliberately NOT "the run started". A card posted at dispatch time leaves a
- * permanent "构建中…" in the channel whenever a build dies, which is worse than
- * silence because it looks like something is still coming. So the card appears
- * on the first real artifact — or, if every expected platform has failed, on
- * the failure, which is the one case where silence would hide an incident.
+ * This is the card's only "the release is dead" verdict, and it has to be the
+ * strong form. The card is posted the moment the watcher starts, so "nothing
+ * has shipped" is now the NORMAL opening state — the weaker "some platform has
+ * reported and none of them shipped" was only ever equivalent because no card
+ * existed before total failure, and it reads as 全部平台构建失败 while the other
+ * platforms are still compiling.
+ *
+ * `skipped` lanes are excluded on both sides: a platform nobody asked for is a
+ * decision, so it neither delays the verdict nor, on its own, constitutes one.
  */
-export function shouldPostFirstCard(state: PrereleaseCardState): boolean {
-  if (state.platforms.some((platform) => platform.build === "success")) return true;
+export function allPlatformsFailed(state: PrereleaseCardState): boolean {
   const expected = state.platforms.filter((platform) => platform.build !== "skipped");
   if (expected.length === 0) return false;
   return expected.every((platform) => isTerminal(platform.build) && platform.build !== "success");
@@ -182,6 +208,79 @@ export function shouldPostFirstCard(state: PrereleaseCardState): boolean {
 
 export function anyPackagePublished(state: PrereleaseCardState): boolean {
   return state.platforms.some((platform) => platform.build === "success");
+}
+
+function pad(value: number): string {
+  return value < 10 ? `0${value}` : String(value);
+}
+
+/**
+ * An exact duration: `42s`, `11m42s`, `1h04m05s`.
+ *
+ * Zero-padded so two rows line up and a reader can compare them without doing
+ * arithmetic — which is the whole reason the card carries seconds rather than
+ * `702s`. Used only for durations that will never change again.
+ */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total / 60) % 60;
+  const seconds = total % 60;
+  if (hours > 0) return `${hours}h${pad(minutes)}m${pad(seconds)}s`;
+  if (minutes > 0) return `${minutes}m${pad(seconds)}s`;
+  return `${seconds}s`;
+}
+
+/**
+ * The same duration for something still running, quantized to the minute.
+ *
+ * Not cosmetic. The watcher re-renders every 30 seconds and PATCHes whenever
+ * the rendered card differs from the last one it delivered, so a live
+ * second-by-second number would rewrite the message on every single poll for
+ * the whole watch. At minute resolution the card changes only when a reader
+ * would notice.
+ */
+export function formatElapsed(ms: number): string {
+  const minutes = Math.floor(Math.max(0, ms) / 60_000);
+  if (minutes < 1) return "<1m";
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h${pad(minutes % 60)}m`;
+}
+
+/**
+ * The time suffix for one lane, or "" when the lane has no honest number.
+ *
+ * The lane's STATUS decides, never the presence of a timestamp. Two reasons,
+ * both of which produce a wrong number rather than a missing one:
+ *   * GitHub stamps `started_at` on a job the moment it is QUEUED, so every
+ *     pending lane carries one and rendering it would report the queue as build
+ *     time.
+ *   * A job that did no work — skipped, or a lane never dispatched at all —
+ *     comes back with `started_at == completed_at`, and `用时 0s` next to
+ *     "本次未构建" is noise at best and a fabrication at worst.
+ */
+export function laneDurationText(status: LaneStatus, timing: LaneTiming, now: number): string {
+  if (status === "pending" || status === "unknown") return "";
+  if (status === "skipped" || status === "never_started") return "";
+  if (timing.startedAt == null) return "";
+  if (status === "running") return `已用 ${formatElapsed(now - timing.startedAt)}`;
+  if (timing.completedAt == null) return "";
+  return `用时 ${formatDuration(timing.completedAt - timing.startedAt)}`;
+}
+
+/**
+ * How long the whole round has taken: origin run created → publish stopped.
+ *
+ * The number the person cutting the release actually watches, and the one no
+ * single lane can answer — the queue before the first build starts and the
+ * upload after the last one finishes both live outside every platform row.
+ */
+export function totalElapsedText(state: PrereleaseCardState): string {
+  if (state.runCreatedAt == null) return "";
+  if (state.publishCompletedAt != null) {
+    return `本轮总耗时 ${formatDuration(state.publishCompletedAt - state.runCreatedAt)}`;
+  }
+  return `本轮已用 ${formatElapsed(state.now - state.runCreatedAt)}`;
 }
 
 export function failureCount(state: PrereleaseCardState): number {
@@ -218,9 +317,10 @@ export function neverStartedCount(state: PrereleaseCardState): number {
 
 export function headerTemplate(state: PrereleaseCardState): string {
   if (!anyPackagePublished(state)) {
-    // Nothing shipped. Red whether the builds failed or the watcher gave up
-    // waiting — either way there is no package and someone has to look.
-    return state.platforms.every((platform) => !isTerminal(platform.build)) && !state.timedOut ? "blue" : "red";
+    // "No package yet" is where every release starts, so it is blue until one
+    // of two things makes it an incident: every expected platform reported and
+    // none shipped, or the watcher gave up waiting.
+    return allPlatformsFailed(state) || state.timedOut ? "red" : "blue";
   }
   if (failureCount(state) > 0 || neverStartedCount(state) > 0) return "orange";
   return state.finished && !state.timedOut ? "green" : "blue";
@@ -229,10 +329,12 @@ export function headerTemplate(state: PrereleaseCardState): string {
 export function headerTitle(state: PrereleaseCardState): string {
   const name = `Open Design ${state.channelLabel} ${state.version}`;
   if (!anyPackagePublished(state)) {
+    // Order matters: a run whose platforms all failed has a verdict, and saying
+    // "等待产物超时" about it would report the watcher's clock instead of the
+    // thing that actually went wrong.
+    if (allPlatformsFailed(state)) return `🚨 ${name} · 全部平台构建失败`;
     if (state.timedOut) return `🚨 ${name} · 等待产物超时`;
-    return state.platforms.some((platform) => isTerminal(platform.build))
-      ? `🚨 ${name} · 全部平台构建失败`
-      : `🚀 ${name} · 构建中`;
+    return `🚀 ${name} · 构建中`;
   }
   const failures = failureCount(state);
   const neverStarted = neverStartedCount(state);
@@ -245,8 +347,10 @@ export function headerTitle(state: PrereleaseCardState): string {
   return `🚀 ${name}`;
 }
 
-function platformLine(platform: PlatformLane): string {
-  return `${STATUS_GLYPH[platform.build]} ${platform.label} · ${BUILD_STATUS_TEXT[platform.build]}`;
+function platformLine(platform: PlatformLane, now: number): string {
+  const line = `${STATUS_GLYPH[platform.build]} ${platform.label} · ${BUILD_STATUS_TEXT[platform.build]}`;
+  const duration = laneDurationText(platform.build, platform.timing, now);
+  return duration.length > 0 ? `${line} · ${duration}` : line;
 }
 
 function checkLine(label: string, status: LaneStatus): string {
@@ -301,7 +405,7 @@ export function renderPrereleaseCard(state: PrereleaseCardState): FeishuCard {
   const elements: FeishuElement[] = [];
   if (fields.length > 0) elements.push({ tag: "div", fields });
 
-  const platformLines = state.platforms.map(platformLine).join("\n");
+  const platformLines = state.platforms.map((platform) => platformLine(platform, state.now)).join("\n");
   elements.push({ tag: "div", text: { tag: "lark_md", content: `**平台产物**\n${platformLines}` } });
 
   const checks: string[] = [];
@@ -345,12 +449,16 @@ export function renderPrereleaseCard(state: PrereleaseCardState): FeishuCard {
     elements.push({ tag: "action", actions: buttons });
   }
 
-  const noteLinks: string[] = [];
-  if (state.originRunUrl.length > 0) noteLinks.push(`[打包运行](${state.originRunUrl})`);
-  if (state.testsRunUrl.length > 0) noteLinks.push(`[代码测试](${state.testsRunUrl})`);
-  if (state.smokeRunUrl.length > 0) noteLinks.push(`[包 smoke](${state.smokeRunUrl})`);
-  if (noteLinks.length > 0) {
-    elements.push({ tag: "note", elements: [{ tag: "lark_md", content: noteLinks.join(" · ") }] });
+  // Footer: the round's own clock first, then where to look. Both are metadata
+  // about the release rather than about any one lane, so they share a line.
+  const noteParts: string[] = [];
+  const total = totalElapsedText(state);
+  if (total.length > 0) noteParts.push(total);
+  if (state.originRunUrl.length > 0) noteParts.push(`[打包运行](${state.originRunUrl})`);
+  if (state.testsRunUrl.length > 0) noteParts.push(`[代码测试](${state.testsRunUrl})`);
+  if (state.smokeRunUrl.length > 0) noteParts.push(`[包 smoke](${state.smokeRunUrl})`);
+  if (noteParts.length > 0) {
+    elements.push({ tag: "note", elements: [{ tag: "lark_md", content: noteParts.join(" · ") }] });
   }
 
   return {

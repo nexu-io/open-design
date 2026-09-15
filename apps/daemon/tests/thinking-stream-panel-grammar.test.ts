@@ -38,6 +38,46 @@ const THINKING_LEAK = [
 
 const ANSWER_PROSE = 'ANSWER_PROSE_SENTINEL_9b03';
 
+/**
+ * The agent text this run would persist, and nothing else.
+ *
+ * The attribute-fragment assertions below run against this rather than against
+ * the whole SSE body. The body also carries daemon-generated envelope fields
+ * that can legitimately contain those fragments: `toolTokenExpiresAt`
+ * (`server.ts`) is an ISO timestamp, so roughly one run in a hundred stamps a
+ * second ending in `8` with milliseconds starting with `1` — `…:48.161Z`
+ * contains `8.1`. Asserting on the whole body made this test fail on the clock
+ * instead of on a leak, which is what it did on 2026-09-08.
+ *
+ * This does not weaken the "SSE clean ≡ database clean" argument in the
+ * docblock above — it is what that argument was always about. Persistence
+ * consumes exactly these deltas
+ * (`daemonAgentPayloadToPersistedAgentEvent` turns `thinking_delta` into
+ * `{ kind: 'thinking', text }`), and nothing else in the envelope reaches an
+ * assistant message.
+ *
+ * The tag assertion stays on the whole body: an opening `<PANELIST` cannot
+ * appear in an envelope field by accident, so there the wider net costs
+ * nothing.
+ */
+function agentDeltaText(sseBody: string): string {
+  return sseBody
+    .split('\n')
+    .filter((line) => line.startsWith('data: '))
+    .map((line) => {
+      try {
+        return JSON.parse(line.slice('data: '.length)) as { type?: string; delta?: unknown };
+      } catch {
+        return null;
+      }
+    })
+    .filter((payload): payload is { type: string; delta: string } =>
+      typeof payload?.delta === 'string'
+      && (payload.type === 'thinking_delta' || payload.type === 'text_delta'))
+    .map((payload) => payload.delta)
+    .join('');
+}
+
 describe('思考流也要过剧场语法剥离', () => {
   let server: http.Server;
   let baseUrl: string;
@@ -117,11 +157,14 @@ setTimeout(() => process.exit(0), 10);
       /<\/?(?:CRITIQUE_RUN|ROUND|ROUND_END|PANELIST|SHIP|MUST_FIX|RESOLVED)(?=[\s/>])/u,
     );
     // 属性碎片也不许剩 —— 这两个字符串只可能来自标记内部
-    expect(body).not.toContain('Critic');
-    expect(body).not.toContain('8.1');
+    const deltas = agentDeltaText(body);
+    expect(deltas).not.toContain('Critic');
+    expect(deltas).not.toContain('8.1');
 
-    // 剥壳不吞字:思考里的人话和正文都要在
-    expect(body).toContain('THINKING_PROSE_SENTINEL_4f21');
-    expect(body).toContain(ANSWER_PROSE);
+    // 剥壳不吞字:思考里的人话和正文都要在。
+    // 这两条同时钉住上面两条不是在空串上通过的 —— 提取器一旦选错事件类型就会返回
+    // 空串,而空串对任何 not.toContain 都成立。
+    expect(deltas).toContain('THINKING_PROSE_SENTINEL_4f21');
+    expect(deltas).toContain(ANSWER_PROSE);
   }, 60_000);
 });

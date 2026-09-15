@@ -510,7 +510,7 @@ describe('composeSystemPrompt — slim payload gates (metadata facts / memory / 
     expect(slim).toContain('- **aspectRatio**: 1:1');
   });
 
-  it('compresses the memory scaffolding under slim while keeping headings and card shapes', () => {
+  it('compresses the memory scaffolding under slim while keeping supported card shapes', () => {
     const memoryInput = {
       ...base,
       memoryBody: '### Profile\n\nDense layouts.\n\n### Verified rules\n\n- No pure black.',
@@ -519,13 +519,9 @@ describe('composeSystemPrompt — slim payload gates (metadata facts / memory / 
     const classic = composeSystemPrompt({ ...memoryInput, promptCoreVariant: undefined });
     for (const marker of [
       '## Personal memory (auto-extracted from past chats)',
-      '## Intent gateway — turn short asks into a brief',
       '## Self-verify against your verified rules',
-      '## Propose new verified rules from corrections',
-      '<od-card type="task-brief">',
       '<od-card type="memory-applied">',
       '<od-card type="verify-scorecard">',
-      '<od-card type="rule-proposal">',
       '"status": "pass|partial|fail"',
     ]) {
       expect(slim, `slim memory must keep ${marker}`).toContain(marker);

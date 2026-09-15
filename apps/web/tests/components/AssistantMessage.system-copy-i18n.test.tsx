@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render as rtlRender, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { ReactElement } from 'react';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -10,7 +10,6 @@ import type { ChatMessage } from '../../src/types';
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
 });
 
 function renderZh(ui: ReactElement) {
@@ -29,8 +28,9 @@ function assistantMessage(events: ChatMessage['events']): ChatMessage {
   };
 }
 
-function pluginCandidateMessage(): ChatMessage {
+function pluginCandidateMessage(text: string): ChatMessage {
   return assistantMessage([
+    { kind: 'text', text },
     {
       kind: 'plugin_candidate',
       candidateId: 'candidate-1',
@@ -98,36 +98,41 @@ describe('AssistantMessage client-provided system copy', () => {
     expect(screen.getByText('custom_runtime_phase')).toBeTruthy();
   });
 
-  it('localizes the plugin contribution busy label', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
+  it('keeps Chinese prose without the retired plugin contribution action or busy label', () => {
+    const text = '仓库检查已经完成。';
     renderZh(
       <AssistantMessage
-        message={pluginCandidateMessage()}
+        message={pluginCandidateMessage(text)}
         streaming={false}
         projectId="project-1"
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '贡献到 open-design' }));
-
-    expect(await screen.findByText('正在启动…')).toBeTruthy();
+    expect(screen.getByText(text)).toBeTruthy();
+    expect(screen.queryByText('Design review helper')).toBeNull();
+    expect(screen.queryByRole('button', { name: '贡献到 open-design' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Contribute to open-design' })).toBeNull();
+    expect(screen.queryByText('正在启动…')).toBeNull();
     expect(screen.queryByText('Starting...')).toBeNull();
   });
 
-  it('localizes the plugin draft busy label', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
-    renderZh(
+  it('keeps literal code without the retired plugin draft controls or busy label', () => {
+    const example = '查看详情';
+    const { container } = renderZh(
       <AssistantMessage
-        message={pluginCandidateMessage()}
+        message={pluginCandidateMessage(`保留代码示例：\`${example}\`。`)}
         streaming={false}
         projectId="project-1"
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '查看详情' }));
-    fireEvent.click(screen.getByRole('button', { name: '创建插件/模板' }));
-
-    expect(await screen.findByText('创建中…')).toBeTruthy();
+    expect(container.querySelector('code')?.textContent).toBe(example);
+    expect(container.textContent).toContain('保留代码示例：');
+    expect(screen.queryByRole('button', { name: '查看详情' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '创建插件/模板' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View details' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create plugin/template' })).toBeNull();
+    expect(screen.queryByText('创建中…')).toBeNull();
     expect(screen.queryByText('Creating...')).toBeNull();
   });
 });

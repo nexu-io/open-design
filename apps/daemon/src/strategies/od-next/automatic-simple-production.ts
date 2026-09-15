@@ -219,6 +219,8 @@ export function prepareAutomaticSimpleProductionRun<
   service: InternalRunCreationService<TMeta, TRun>;
   task: StrategyTaskExecutionRecord;
   createMeta: (instruction: string, taskRunIndex: number) => TMeta;
+  /** Run UI locale; see `prepareAutomaticStrategyContinuation` (OPEND-2765). */
+  locale?: string | undefined;
   updatedAt?: number;
 }): {
   prepared: PreparedInternalRunResult<TRun>;
@@ -240,6 +242,7 @@ export function prepareAutomaticSimpleProductionRun<
     taskRunIndex: task.runs.length,
     planContractHash: task.planContractHash,
     hostProtocolKey,
+    ...(input.locale ? { locale: input.locale } : {}),
   });
   let claimed: StrategyTaskExecutionRecord | null = null;
   const meta = input.createMeta(instruction, task.runs.length);
@@ -303,6 +306,13 @@ export function prepareAutomaticStrategyContinuation<
     deliverableValid: boolean;
   };
   complexRuntimeEvidence?: OdNextComplexRuntimeEvidence;
+  /**
+   * Run UI locale (OPEND-2765). The production stage closes with the keyed
+   * host protocols, and their follow-up-suggestion rule is the only part of
+   * this payload that is user-visible prose. Omitting it made a zh-CN run's
+   * three suggestions come back in English.
+   */
+  locale?: string | undefined;
   updatedAt?: number;
 }): PreparedAutomaticStrategyContinuation<TRun> {
   const complexPlanningReasonCodes = (() => {
@@ -422,6 +432,7 @@ export function prepareAutomaticStrategyContinuation<
           taskRunIndex: input.task.runs.length,
           planContractHash: strategyPlanContractHash(input.parsed.planContract!),
           hostProtocolKey: hostProtocolKey!,
+          ...(input.locale ? { locale: input.locale } : {}),
           ...(nativeBuildPackageBindings.length > 0
             ? { nativeBuildPackageBindings }
             : {}),

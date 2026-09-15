@@ -1,21 +1,27 @@
-import type Database from 'better-sqlite3';
 import type { Express, RequestHandler } from 'express';
-import type {
-  OdNextRolloutControlResponse,
-  ResetOdNextRolloutControlRequest,
-} from '@open-design/contracts';
+import type { OdNextRolloutControlResponse } from '@open-design/contracts';
 
-import { newInsertId, readAnalyticsContext, type AnalyticsService } from '../analytics.js';
 import {
   readOdNextRolloutControlStatus,
-  resetOdNextRolloutStop,
   type OdNextRolloutAppConfig,
 } from '../strategies/od-next/rollout.js';
 
+/**
+ * Report which authority decides OD Next for this daemon.
+ *
+ * Read-only, and there is nothing here to write. This route used to expose a
+ * reset for the stop latch — an automatic, daemon-wide disable a run could
+ * raise, which then outranked the saved mode and survived restart. The latch is
+ * gone, so the only thing that turns OD Next off for an installation is that
+ * installation saving `off`, and `PUT /api/app-config` already owns that.
+ *
+ * Status stays because the mode alone does not say who chose it. The Labs
+ * switch needs `requestedModeSource` to know whether the environment has taken
+ * the decision away from the user, and an operator needs it to tell a daemon
+ * that is on OD Next because nobody touched it from one that is off it because
+ * somebody asked.
+ */
 export function registerStrategyRolloutRoutes(app: Express, deps: {
-  db: Database.Database;
-  analytics: AnalyticsService;
-  getAppVersion: () => string;
   requireLocalDaemonRequest: RequestHandler;
   /**
    * The installation's saved OD Next preference. Injected rather than read
@@ -30,73 +36,11 @@ export function registerStrategyRolloutRoutes(app: Express, deps: {
     async (_req, res) => {
       const body: OdNextRolloutControlResponse = {
         status: readOdNextRolloutControlStatus(
-          deps.db,
           process.env,
           await deps.readOdNextPreference(),
         ),
       };
       res.json(body);
-    },
-  );
-
-  app.post(
-    '/api/strategies/od-next/rollout/reset',
-    deps.requireLocalDaemonRequest,
-    async (req, res) => {
-      const body = req.body as Partial<ResetOdNextRolloutControlRequest> | null;
-      if (
-        !body
-        || typeof body.expectedRevision !== 'number'
-        || !Number.isInteger(body.expectedRevision)
-        || body.expectedRevision < 0
-      ) {
-        res.status(400).json({
-          error: {
-            code: 'BAD_REQUEST',
-            message: 'expectedRevision must be a non-negative integer',
-          },
-        });
-        return;
-      }
-
-      const preference = await deps.readOdNextPreference();
-      const before = readOdNextRolloutControlStatus(deps.db, process.env, preference);
-      const result = resetOdNextRolloutStop(deps.db, {
-        expectedRevision: body.expectedRevision,
-        reasonCode: 'operator_reset',
-      });
-      const status = readOdNextRolloutControlStatus(deps.db, process.env, preference);
-      if (!result.ok) {
-        res.status(409).json({
-          error: {
-            code: 'ROLLOUT_REVISION_CONFLICT',
-            message: 'OD Next rollout control changed; refresh status before resetting.',
-            data: { expectedRevision: body.expectedRevision, currentRevision: result.currentRevision },
-          },
-          status,
-        });
-        return;
-      }
-
-      const analyticsContext = readAnalyticsContext(req);
-      if (analyticsContext) {
-        void deps.analytics.capture({
-          eventName: 'strategy_rollout_control_changed',
-          context: analyticsContext,
-          appVersion: deps.getAppVersion(),
-          insertId: newInsertId(),
-          properties: {
-            strategy_id: 'od-next-strategy',
-            action: 'reset',
-            scope: 'daemon_instance',
-            changed: result.changed,
-            previous_latch_mode: before.latch?.mode ?? 'none',
-            effective_mode: status.effectiveMode,
-          },
-        });
-      }
-      const response: OdNextRolloutControlResponse = { status };
-      res.json(response);
     },
   );
 }

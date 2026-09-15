@@ -496,6 +496,21 @@ export interface RunCreatedProps extends RunTaskLineageProps {
    * and when the user never opted in (there is nothing to explain).
    */
   harness_fallback_reason?: string;
+  /**
+   * The gate that refused an OD Next turn, when its logical task settled
+   * `blocked`.
+   *
+   * `result` is derived from the PHYSICAL run status, and a refused turn
+   * usually exits 0 with a complete reply on screen — so this whole class of
+   * failure reported `result: 'success'` and left no trace anywhere queryable.
+   * The user saw a red card; the data said the run was fine. Carrying the
+   * primary reason code (the same `reasonCodes[0]` the failure card keys on)
+   * makes the class countable without changing what `result` means.
+   *
+   * Omitted for every run whose strategy task did not block, which is the
+   * common case.
+   */
+  od_next_blocked_reason_code?: string;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {

@@ -86,8 +86,38 @@ import {
   type PersistedArtifactFileRef,
 } from '../artifacts/strip';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
+import { setChatCorrelation } from '../observability/chat-context';
+import { chatSurfaceRunEnded, chatSurfaceRunStarted } from '../observability/chat-health';
 import { markUpstreamActivity } from '../runtime/chat/upstream-activity';
 import { IN_FLIGHT_TOOL_INPUT_MARKER, IN_FLIGHT_TOOL_OUTPUT_KEY } from '../runtime/tool-events';
+
+/**
+ * A run is streaming into the chat panel exactly between these two calls.
+ *
+ * Every `client_chat_*` event spreads `chatCorrelation()`, and
+ * `chat-interaction.ts` derives its whole `streaming` breakdown from whether
+ * that block carries a `run_id` — it maintains no second flag precisely so
+ * the two can never disagree. That makes this pair load-bearing rather than
+ * decorative: with no opener, `streaming` is false for the entire life of the
+ * page and `client_chat_interaction_latency` reports every stall as happening
+ * at rest; with no closer it would stay true forever and report the mirror
+ * image. Neither call may be added without the other.
+ *
+ * `agent_id` rides along on the opener because it is the one dimension the
+ * run-creation sites actually hold. `model_id` is deliberately absent: it is
+ * not in scope at either call, and stamping a guess would be worse than the
+ * gap. An absent `agentId` CLEARS the field rather than leaving the previous
+ * run's agent standing (see `setChatCorrelation`'s merge rule) — a reattach
+ * whose message never persisted a runtime must not inherit an identity.
+ */
+function openChatRunCorrelation(runId: string, agentId: string | undefined): void {
+  setChatCorrelation({ run_id: runId, agent_id: agentId });
+}
+
+/** Closes the window opened by `openChatRunCorrelation`. */
+function closeChatRunCorrelation(): void {
+  setChatCorrelation({ run_id: undefined });
+}
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
@@ -1135,6 +1165,17 @@ export async function streamViaDaemon({
       conversation_id: conversationId ?? undefined,
       client_type: detectClientType(),
     });
+    // Chat-health first, correlation second — the same rule as the terminal
+    // path below. `runStarted` flushes any window a previous run left open
+    // (its terminal event never arrived), and that flush belongs to the OLD
+    // run, so it has to happen before the block is repointed at this one.
+    //
+    // Opening the window is what makes `client_chat_stream_health` possible at
+    // all: it only counts long tasks that landed inside one, and idle-time
+    // jank belongs to `client_long_task`. No-ops when no chat surface is
+    // mounted.
+    chatSurfaceRunStarted(runId);
+    openChatRunCorrelation(runId, agentId);
     notifyRunsChanged();
     emitRunStatus('queued');
     await consumeDaemonRun({
@@ -1163,6 +1204,14 @@ export async function streamViaDaemon({
 }
 
 export async function reattachDaemonRun(options: DaemonReattachOptions): Promise<void> {
+  // Reattach is a run start as far as the chat panel is concerned — it is the
+  // path a page refresh takes back onto a run that is still in flight, and the
+  // jank it is about to stream in is exactly the jank worth correlating. This
+  // path has never had a run-start signal of its own (no `trackRunStart`
+  // either); only the correlation is being closed here, deliberately, so this
+  // change adds no new event.
+  chatSurfaceRunStarted(options.runId);
+  openChatRunCorrelation(options.runId, options.agentId);
   await consumeDaemonRun({
     ...options,
     onRunStatus: (status) => {
@@ -1673,6 +1722,14 @@ async function consumeDaemonRun(options: DaemonReattachOptions): Promise<void> {
       conversation_id: options.conversationId ?? undefined,
       client_type: detectClientType(),
     });
+    // The next physical run of a strategy-task chain is a run start like any
+    // other. Skipping it here would leave the correlation block pointing at
+    // the run that just ended, so every stall in the rest of the chain would
+    // be filed under the wrong run id.
+    // Miss this one and every long task in the rest of the chain is billed to
+    // the run that already ended.
+    chatSurfaceRunStarted(runId);
+    openChatRunCorrelation(runId, options.agentId);
     options.onRunCreated?.(runId, result.strategyTask);
   }
 }
@@ -2202,11 +2259,39 @@ async function consumeDaemonPhysicalRun({
         // The strategy contract is explicit that a post-claim failure keeps the
         // current Run's own result rather than inventing a new one, so only a
         // Run that did NOT succeed-and-deliver falls through to the failure
-        // branch. `deliverableValid` is filesystem-backed (entry resolved, this
-        // Run touched it, kind matches) — never the agent's own assertion — and
-        // an unreachable daemon fails closed to the previous behaviour.
-        const deliveredDespiteBlock = endStatus === 'succeeded'
-          && (await fetchChatRunStatus(runId, workspaceContext))?.deliverableValid === true;
+        // branch. Both fields are filesystem-backed — never the agent's own
+        // assertion — and an unreachable daemon fails closed to the previous
+        // behaviour.
+        //
+        // `projectDeliverableValid` is the one that answers the question this
+        // branch is actually asking. `deliverableValid` asks "did THIS run
+        // write the entry", which the strategy contract needs for accepting a
+        // completion claim but which is `false` for the most ordinary shape of
+        // this failure: the user says "继续", the agent re-checks work an
+        // earlier turn already finished, correctly rewrites nothing, and the
+        // turn is refused over a machine-block defect. That put a red card over
+        // a finished 16-page deck the user could see rendered beside it. The
+        // OR keeps the stricter field meaningful on its own — a run that did
+        // deliver has obviously delivered.
+        //
+        // The looser field additionally requires that this turn actually SAID
+        // something. It credits a file an EARLIER turn wrote, and that only
+        // means "nothing was lost here" if the user got a reply to go with it.
+        // Without the guard, a turn that returned a bare newline into a project
+        // that already holds a prototype would go silent too — which is the
+        // false-success half of this same conflation (#7564), and swapping one
+        // wrong answer for the other is not a fix. The stricter field keeps its
+        // existing behaviour: a run that wrote the entry delivered, prose or no
+        // prose.
+        const blockedRunStatus = endStatus === 'succeeded'
+          ? await fetchChatRunStatus(runId, workspaceContext)
+          : null;
+        const deliveredDespiteBlock = blockedRunStatus !== null
+          && (
+            (blockedRunStatus.projectDeliverableValid === true
+              && acc.trim().length > 0)
+            || blockedRunStatus.deliverableValid === true
+          );
         // A block the agent declared on itself is not a failure to report.
         // Asked for a prototype with nothing to build on, the agent answers in
         // the chat — "the requirement was skipped, so there is no runnable plan
@@ -2330,6 +2415,22 @@ async function consumeDaemonPhysicalRun({
     // hit the daemon for an already-finished run), trackRunTerminal
     // is a no-op for unknown runIds.
     trackRunTerminal(runId, endStatus ?? (canceled ? 'canceled' : 'unknown'));
+    /*
+     * ORDER IS THE POINT, and it is the same defect this whole change exists
+     * to remove.
+     *
+     * `chatSurfaceRunEnded` does not merely bookkeep — it FLUSHES the jank
+     * window, and `client_chat_stream_health` spreads `chatCorrelation()` on
+     * its way out. Clear the correlation first and that event ships with an
+     * empty `run_id`: a chat event that cannot name the run it measured.
+     *
+     * One rule covers both ends of a run: the chat-health call goes FIRST,
+     * because it is the one that can emit; the correlation mutation goes
+     * second. `trackRunTerminal` is unaffected either way — it carries its own
+     * context object and never reads the chat correlation block.
+     */
+    chatSurfaceRunEnded(runId);
+    closeChatRunCorrelation();
   }
 }
 

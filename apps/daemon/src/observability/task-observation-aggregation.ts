@@ -909,6 +909,16 @@ export function deliverableSyntaxFlatMetadata(
     deliverable_syntax_recovered_delivery_count: syntax.recoveredDeliveryCount,
     deliverable_syntax_blocked_broken_delivery_count:
       syntax.blockedBrokenDeliveryCount,
+    ...(syntax.deliveredWithSyntaxWarningCount !== undefined
+      ? { deliverable_syntax_delivered_with_syntax_warning_count: syntax.deliveredWithSyntaxWarningCount }
+      : {}),
+    ...(syntax.finalization
+      ? {
+          deliverable_syntax_finalization_action: syntax.finalization.action,
+          ...(syntax.finalization.reason ? { deliverable_syntax_finalization_reason: syntax.finalization.reason } : {}),
+          ...(syntax.finalization.refusal ? { deliverable_syntax_finalization_refusal: syntax.finalization.refusal } : {}),
+        }
+      : {}),
   };
 }
 
@@ -923,6 +933,13 @@ export function taskDeliverableSyntaxTelemetry(
   ));
   const latest = syntaxes.at(-1);
   if (!latest) return undefined;
+  // Unlike historical any-Run counters, a warning delivery describes the
+  // latest physical Run only. Missing later evidence must not revive an older warning.
+  const latestRun = aggregate.observations.filter((observation) => observation.kind === 'task_run').at(-1);
+  const warningCount = aggregate.coverage.runs.availability === 'complete'
+    ? latestRun?.quality?.deliverableSyntax?.deliveredWithSyntaxWarningCount
+    : undefined;
+  const { deliveredWithSyntaxWarningCount: _priorWarningCount, ...latestWithoutWarningCount } = latest;
   const durations = syntaxes.flatMap((syntax) => (
     syntax.checkerDurationMs === null ? [] : [syntax.checkerDurationMs]
   ));
@@ -940,14 +957,18 @@ export function taskDeliverableSyntaxTelemetry(
   const initialDiagnostics = syntaxes.flatMap((syntax) => (
     syntax.initialDiagnosticCount === null ? [] : [syntax.initialDiagnosticCount]
   ));
-  const recoveredDeliveryCount = syntaxes.some(
+  // A later warning vetoes Task-level recovery, without erasing the earlier
+  // physical Run's repair evidence or other historical counters.
+  const latestRunWarned = latestRun?.quality?.deliverableSyntax?.finalization?.action === 'warn';
+  const recoveredDeliveryCount = !latestRunWarned && syntaxes.some(
     (syntax) => syntax.recoveredDeliveryCount === 1,
   ) ? 1 : 0;
   const blockedBrokenDeliveryCount = syntaxes.some(
     (syntax) => syntax.blockedBrokenDeliveryCount === 1,
   ) ? 1 : 0;
   return {
-    ...latest,
+    ...latestWithoutWarningCount,
+    ...(warningCount !== undefined ? { deliveredWithSyntaxWarningCount: warningCount } : {}),
     checkCount: syntaxes.reduce((sum, syntax) => sum + syntax.checkCount, 0),
     checkerDurationMs: durations.length > 0
       ? durations.reduce((sum, duration) => sum + duration, 0)

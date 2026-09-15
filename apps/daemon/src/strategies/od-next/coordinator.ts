@@ -6,6 +6,7 @@ import {
   AppliedStrategyBindingV2Schema,
   OD_NEXT_AGENT_DECLARED_BLOCK_REASON,
   OD_NEXT_RUNTIME_STATE_SCHEMA,
+  StrategyRuntimeStateV2Schema,
   composeOdNextStrategyContinuationV2,
 } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
@@ -435,7 +436,12 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       const repair = tryBeginSerializationRepair(db, current, input, parsed, protocolCodes);
       if (repair) return repair;
       const blockedCodes = [
-        ...reattributeUndeclaredTurn(current, parsed, protocolCodes),
+        ...reattributeUndeclaredTurn(
+          current,
+          parsed,
+          protocolCodes,
+          input.completionEvidence,
+        ),
         ...bindingCodes,
       ];
       logOdNextMachineContractGap(current, input.runId, parsed, blockedCodes);
@@ -463,6 +469,17 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       input.updatedAt,
     );
   }
+  const adopted = adoptHostInputStage(current, state);
+  if (adopted.normalized) {
+    console.info('[od-next-task] protocol normalized', {
+      taskExecutionId: current.taskExecutionId,
+      runId: input.runId,
+      normalizations: ['od_next_protocol_input_stage_normalized'],
+      declaredInputStage: state.inputStage,
+      inputStage: current.inputStage,
+    });
+  }
+  state = adopted.state;
   const reasonCodes = validateAcceptedTurn(db, current, state, parsed.planContract, parsed.visibleText, {
     toolUseCount: input.toolUseCount ?? 0,
     ...(input.executionPreflight ? { executionPreflight: input.executionPreflight } : {}),
@@ -630,13 +647,46 @@ function reattributeUndeclaredTurn(
   task: StrategyTaskExecutionRecord,
   parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
   protocolCodes: string[],
+  completionEvidence?: {
+    physicalStatus: 'succeeded' | 'failed' | 'canceled';
+    deliverableValid: boolean;
+  },
 ): string[] {
   if (!turnEmittedNoMachineBlock(parsed)) return protocolCodes;
-  if (countRenderableQuestionForms(parsed.visibleText) === 0) return protocolCodes;
-  if (task.clarificationCount === 0 && task.inputStage !== 'clarification') {
+  if (countRenderableQuestionForms(parsed.visibleText) > 0) {
+    if (task.clarificationCount === 0 && task.inputStage !== 'clarification') {
+      return protocolCodes;
+    }
+    return ['od_next_clarification_repeated'];
+  }
+  // The turn was SHAPED like a completion the host may infer, and the
+  // inference above still declined it. Both inference helpers gate on exactly
+  // two things — the shape, which just held, and the evidence — so the
+  // evidence is what refused, and it is a host fact the user can act on
+  // ("nothing was produced this round") while the parser's own code is not
+  // ("a marker is missing"). Naming it first puts the acting cause in
+  // `reasonCodes[0]`, the slot the failure card and the analytics bucket read.
+  //
+  // The parser's code is kept behind it: `blocked_reason_codes_json` is the
+  // durable record of what the turn actually wrote, and a later triage that
+  // cannot tell "declared badly" from "declared nothing" has lost the one
+  // distinction that decides whether a serialization repair was ever possible.
+  if (
+    !odNextTurnMayInferDirectEditCompletion(task, parsed)
+    && !odNextTurnMayInferProductionCompletion(task, parsed)
+  ) {
     return protocolCodes;
   }
-  return ['od_next_clarification_repeated'];
+  const evidenceCodes = [
+    ...(completionEvidence?.physicalStatus !== 'succeeded'
+      ? ['od_next_physical_run_not_succeeded']
+      : []),
+    ...(completionEvidence?.deliverableValid !== true
+      ? ['od_next_canonical_deliverable_invalid']
+      : []),
+  ];
+  if (evidenceCodes.length === 0) return protocolCodes;
+  return [...evidenceCodes, ...protocolCodes];
 }
 
 export function odNextTurnMayInferDirectEditCompletion(
@@ -686,7 +736,7 @@ export function odNextTurnMayInferProductionCompletion(
  * Recover a Direct Edit completion the agent performed but failed to declare.
  *
  * Observed on real runs: the agent writes the canonical deliverable correctly —
- * `validateRunDeliverable` resolves a root `index.html` that this Run touched —
+ * `validateRunDeliverable` verifies this Run changed the entry or a linked page —
  * then answers in prose without emitting a single machine block. The turn is
  * refused, the logical task lands terminal-`blocked`, and the user is shown a
  * generic failure even though the artifact they asked for is sitting in their
@@ -806,6 +856,47 @@ function questionFormMarkerReasonCodes(
   return codes;
 }
 
+/**
+ * Give a Runtime State the input stage the daemon itself issued the turn at,
+ * when the agent's declaration disagrees with it and the corrected state is a
+ * valid declaration for that stage.
+ *
+ * The stage is host-owned truth: the daemon chose it, wrote it into the
+ * continuation wrapper (`stage="clarification"`), and holds it on the task. An
+ * agent that writes a different value has told the host nothing it did not
+ * already know — the same footing as the execution mode a clarification turn
+ * predicts, which the parser already discards as authority-free
+ * (`OdNextMachineProtocolStream.normalizeMachineValue`).
+ *
+ * The case that made this necessary (OPEND-2954): the user answered the one
+ * clarification round, the agent returned a complete, correctly bound Full Plan,
+ * and its Runtime State said `inputStage: "request"` — the value every example
+ * in the protocol reference shows. `validateAcceptedTurn` refused the turn on
+ * that field alone, `blockTask` made the task terminal, and a plan that passed
+ * every other gate never reached production. Nothing could rescue it: the
+ * serialization repair only anchors on parser issues, and this was not one.
+ *
+ * Fail-closed where the field DOES carry meaning. The contract keys its
+ * stage/outcome/mode rules on `inputStage`, so the corrected state is re-run
+ * through the schema; a state the host's stage cannot admit (a second
+ * `clarification_required`, a `plan_ready` at production) keeps the agent's own
+ * value, and the mismatch is reported as before. The decision is recorded as a
+ * normalization, never as a reason code: a reason code would displace the
+ * agent's own attribution on a declared `blocked`.
+ */
+function adoptHostInputStage(
+  task: StrategyTaskExecutionRecord,
+  state: StrategyRuntimeStateV2,
+): { state: StrategyRuntimeStateV2; normalized: boolean } {
+  if (state.inputStage === task.inputStage) return { state, normalized: false };
+  const corrected = StrategyRuntimeStateV2Schema.safeParse({
+    ...state,
+    inputStage: task.inputStage,
+  });
+  if (!corrected.success) return { state, normalized: false };
+  return { state: corrected.data, normalized: true };
+}
+
 function validateAcceptedTurn(
   db: SqliteDb,
   task: StrategyTaskExecutionRecord,
@@ -828,6 +919,8 @@ function validateAcceptedTurn(
   if (task.route !== null && state.route !== task.route) {
     reasonCodes.push('od_next_protocol_route_mismatch');
   }
+  // Reached only when `adoptHostInputStage` declined: the agent's stage
+  // disagrees with the host's AND the host's stage cannot admit this outcome.
   if (state.inputStage !== task.inputStage) reasonCodes.push('od_next_protocol_stage_mismatch');
   if (task.executionMode && state.executionMode !== task.executionMode) {
     reasonCodes.push('od_next_protocol_execution_mode_mismatch');
@@ -969,7 +1062,13 @@ function tryBeginSerializationRepair(
   ) return null;
   const recoveredState = parsed.runtimeState ?? parsed.repairRuntimeState;
   if (recoveredState) {
-    const stateCodes = validateRepairAnchorState(current, recoveredState, plan);
+    // The anchor is the same declaration the strict path validates, so it gets
+    // the same host-owned stage before its stage is compared.
+    const stateCodes = validateRepairAnchorState(
+      current,
+      adoptHostInputStage(current, recoveredState).state,
+      plan,
+    );
     if (stateCodes.length > 0) return null;
   }
   const repairRun = input.repairRun;
@@ -1093,9 +1192,8 @@ function blockTask(
   const route = current.route ?? 'full_plan';
   // A turn blocked for another reason still gets its marker violation recorded:
   // `blocked_reason_codes_json` is the only durable attribution channel the task
-  // store has, and these codes raise no rollout stop signal
-  // (`rolloutStopSignalForBlockedContinuation` matches route/execution-mode
-  // drift and machine-block boundary failures only).
+  // store has, and blocking is where the consequence stops — a blocked task no
+  // longer disables OD Next for anything but itself.
   const blockedReasonCodes = blockedReasonCodesFor(visibleText, reasonCodes);
   logStrategyTaskBlocked(current, current.latestRunId, blockedReasonCodes);
   const task = compareAndTransitionStrategyTaskExecution(db, {

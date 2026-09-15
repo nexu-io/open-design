@@ -25,6 +25,7 @@ import {
 import {
   createSnapshot,
   linkSnapshotToProject,
+  linkSnapshotToRun,
 } from '../src/plugins/snapshots.js';
 import { createAuthorizeProjectRequest } from '../src/collab/project-request-authority.js';
 import { resolveOptionalLocalWorkspaceRequestAuthority } from '../src/collab/workspace-resource-mutation.js';
@@ -306,6 +307,7 @@ function createRunsServiceStub() {
           || run.projectId === filters.projectId,
       ),
     statusBody: (run: any) => ({ ...run }),
+    persistState: () => {},
     stream: (run: any, req: any, res: any) => {
       res.status(req.method === 'GET' ? 200 : 202).json({
         runId: run.id,
@@ -834,6 +836,153 @@ describe('POST /api/runs — workspace mutation gate', () => {
       expect(response.status).toBe(409);
       await expect(response.json()).resolves.toMatchObject({
         error: { code: 'STRATEGY_TASK_AGENT_MISMATCH' },
+      });
+      expect(createdRunCount).toBe(0);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'recovers a restart-cleared source Run snapshot via the linked snapshot row through %s',
+    async (route) => {
+      // See recoverSourceRunSnapshotId: `durableRunState()` never serialized
+      // `appliedPluginSnapshotId`, so a daemon restart restored the source Run
+      // without the field while the task record kept its locked snapshot.
+      const baseUrl = await startServer();
+      const snapshot = seedAwaitingClarificationTask();
+      linkSnapshotToRun(
+        openDatabase(tempDir!),
+        snapshot.snapshotId,
+        'run-strategy-request',
+      );
+      // Simulate a source Run restored from a pre-fix durable state.json.
+      runsServiceStub?.seed({
+        id: 'run-strategy-request',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        assistantMessageId: 'assistant-strategy-request',
+        agentId: 'codex',
+        pluginId: 'od-next-strategy',
+        odNextTaskInputSnapshot: {
+          taskExecutionId: 'task-strategy-clarification',
+          snapshotDir: path.join(tempDir!, 'strategy-input-fixture'),
+          manifestSha256: 'd'.repeat(64),
+        },
+        status: 'succeeded',
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          userMessageId: 'user-strategy-answer',
+          assistantMessageId: 'assistant-strategy-answer',
+          clientRequestId: 'client-strategy-answer',
+          message: 'Desktop workspace',
+          currentPrompt: 'Desktop workspace',
+        }),
+      });
+      const responseText = await response.text();
+      expect(response.status, responseText).toBe(202);
+      expect(lastCreatedRun.appliedPluginSnapshotId).toBe(snapshot.snapshotId);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'rejects a snapshot-less source Run whose snapshot row is not linked to it through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      seedAwaitingClarificationTask();
+      // No `linkSnapshotToRun`: the snapshot row keeps `run_id = null`, so the
+      // ownership witness fails.
+      runsServiceStub?.seed({
+        id: 'run-strategy-request',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        assistantMessageId: 'assistant-strategy-request',
+        agentId: 'codex',
+        pluginId: 'od-next-strategy',
+        status: 'succeeded',
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          userMessageId: 'user-strategy-answer',
+          assistantMessageId: 'assistant-strategy-answer',
+          clientRequestId: 'client-strategy-answer',
+          message: 'Desktop workspace',
+          currentPrompt: 'Desktop workspace',
+        }),
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'STRATEGY_TASK_SOURCE_RUN_INVALID' },
+      });
+      expect(createdRunCount).toBe(0);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'rejects a source Run locked to a different snapshot through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      const snapshot = seedAwaitingClarificationTask();
+      const driftedSnapshot = createSnapshot(openDatabase(tempDir!), {
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        runId: null,
+        pluginId: 'od-next-strategy',
+        pluginVersion: '2.0.0',
+        manifestSourceDigest: 'strategy-manifest',
+        strategy: snapshot.strategy,
+        taskKind: 'new-generation',
+        inputs: {},
+        resolvedContext: { items: [] },
+        capabilitiesGranted: ['prompt:inject'],
+        capabilitiesRequired: ['prompt:inject'],
+        assetsStaged: [],
+        connectorsRequired: [],
+        connectorsResolved: [],
+        mcpServers: [],
+      });
+      runsServiceStub?.seed({
+        id: 'run-strategy-request',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        assistantMessageId: 'assistant-strategy-request',
+        agentId: 'codex',
+        pluginId: 'od-next-strategy',
+        appliedPluginSnapshotId: driftedSnapshot.snapshotId,
+        status: 'succeeded',
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          userMessageId: 'user-strategy-answer',
+          assistantMessageId: 'assistant-strategy-answer',
+          clientRequestId: 'client-strategy-answer',
+          message: 'Desktop workspace',
+          currentPrompt: 'Desktop workspace',
+        }),
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'STRATEGY_TASK_SOURCE_RUN_INVALID' },
       });
       expect(createdRunCount).toBe(0);
     },

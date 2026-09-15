@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import { createFakeAgentRuntimes } from '@/fake-agents';
+import { createFakeAgentRuntimes, type FakeAgentRuntime } from '@/fake-agents';
 import { T } from '@/timeouts';
 import {
   capturePackagedFailureEvidence,
@@ -16,6 +16,7 @@ import {
 } from '@/vitest/packaged-failure-evidence';
 import {
   assertPackagedHomeFirstRunResult,
+  codexAppServerInvocationsCompleted,
   describePackagedHomeFirstRunStall,
   PACKAGED_HOME_FIRST_RUN_OUTPUT,
   PACKAGED_HOME_FIRST_RUN_PROMPT,
@@ -440,12 +441,15 @@ macDescribe('packaged mac runtime smoke', () => {
     let firstRunStarted = false;
     let firstRunDesktopLogPath: string | null = null;
     let firstRunFailure: unknown = null;
+    let invocation: FakeAgentRuntime['invocation'];
     try {
       await resetPackagedRuntimeState();
       const fakeAgents = await createFakeAgentRuntimes({
         root: fakeAgentRoot,
         runtimeIds: ['codex'],
+        recordInvocations: true,
       });
+      invocation = fakeAgents.codex.invocation;
       const install = await runToolsPackJson<MacInstallResult>('install');
       firstRunInstalledAppPath = install.installedAppPath;
       await seedPackagedHomeFirstRunConfig(fakeAgents.codex.env);
@@ -479,6 +483,16 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(runFinished.terminalRunStatus).toBe('succeeded');
 
       const firstRun = await waitForPackagedHomeFirstRunStage('assistant-output');
+      const { report } = await createPackagedSmokeReport('mac');
+      await report.json('first-run/result.json', firstRun);
+      // Preserve the actual default/fallback decision; do not force a transport
+      // or bypass OD Next admission just to make the deterministic fake pass.
+      expect(firstRun.runId).not.toBe('');
+      expect(firstRun.strategyRolloutDecision).not.toBeNull();
+      expect(invocation).toBeDefined();
+      const receipts = (await readFile(invocation!.path, 'utf8')).trim().split('\n')
+        .map((line) => JSON.parse(line));
+      expect(codexAppServerInvocationsCompleted(receipts, invocation!.nonce)).toBe(true);
       expect(firstRun.submitClicked).toBe(true);
       expect(firstRun.projectId).toEqual(expect.any(String));
       expect(firstRun.hrefBefore).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/$)/);
@@ -506,6 +520,16 @@ macDescribe('packaged mac runtime smoke', () => {
       firstRunFailure = error;
       throw error;
     } finally {
+      if (invocation) {
+        try {
+          const { report } = await createPackagedSmokeReport('mac');
+          await capturePackagedFailureEvidence(report, 'first-run', [
+            { name: 'fixture-invocations.jsonl', read: () => readFile(invocation!.path) },
+          ]);
+        } catch (error) {
+          console.error('failed to preserve packaged fixture receipt', error);
+        }
+      }
       // Capture before uninstall: cleanup removes the installed app and the next
       // case's reset deletes the runtime namespace, so evidence not copied out
       // here no longer exists by the time anyone reads the report.
@@ -1115,7 +1139,10 @@ macDescribe('packaged mac runtime smoke', () => {
       // Self-heal: real recovery releases ship as version+1 (versioned
       // artifacts are immutable), so the next update arrives under a bumped
       // version with a healthy payload and converges.
-      const healedVersion = bumpCountedVersion(targetVersion);
+      const healedVersion = resolvePackagedUpdateScenario({
+        releaseChannel: updateScenario.channel,
+        releaseVersion: targetVersion,
+      }).fixtureVersion;
       const healedPayloadPath = await buildVersionBumpedMacPayloadFixture(
         localPayload.payloadPath,
         corruptWorkDir,
@@ -2624,13 +2651,6 @@ async function buildVersionBumpedMacPayloadFixture(
   });
 }
 
-function bumpCountedVersion(version: string): string {
-  const match = /^(.*[.-](?:beta|betas|prerelease|preview))\.(\d+)$/.exec(version);
-  if (match?.[1] == null || match[2] == null) {
-    throw new Error(`rollback acceptance requires a counted version to bump: ${version}`);
-  }
-  return `${match[1]}.${Number(match[2]) + 1}`;
-}
 
 /**
  * Reset the namespace to a pristine pre-install state. `uninstall` removes the

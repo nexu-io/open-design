@@ -12,23 +12,18 @@ import {
   packagedHomeFirstRunInPageAwaitMs,
   packagedHomeFirstRunSnapshotExpression,
   packagedHomeFirstRunStageSatisfied,
+  selectPackagedHomeRun,
   type PackagedHomeFirstRunResult,
 } from '@/vitest/packaged-home-first-run';
 
-type FakeResponse = {
-  json: () => Promise<unknown>;
-  ok: boolean;
-  status: number;
-  text: () => Promise<string>;
-};
+type FakeResponse = Response;
 
 function jsonResponse(value: unknown): FakeResponse {
-  const body = JSON.stringify(value);
-  return { json: async () => JSON.parse(body), ok: true, status: 200, text: async () => body };
+  return new Response(JSON.stringify(value), { status: 200 });
 }
 
 function textResponse(body: string): FakeResponse {
-  return { json: async () => JSON.parse(body), ok: true, status: 200, text: async () => body };
+  return new Response(body, { status: 200 });
 }
 
 type SnapshotFixtureOptions = {
@@ -44,6 +39,7 @@ function createSnapshotFixture(options: SnapshotFixtureOptions) {
   let runsCalls = 0;
 
   const sandbox: Record<string, unknown> = {
+    __odPackagedHomeFirstRun: { createdRuns: [{ runId: 'run-1', conversationId: 'c1' }] },
     document: {
       querySelectorAll: (selector: string) =>
         selector === '[data-assistant-message-id]' && options.assistantText != null
@@ -58,7 +54,7 @@ function createSnapshotFixture(options: SnapshotFixtureOptions) {
         const index = Math.min(runsCalls, options.runStatuses.length - 1);
         runsCalls += 1;
         const status = options.runStatuses[index];
-        return jsonResponse({ runs: status == null ? [] : [{ id: 'run-1', status }] });
+        return jsonResponse({ runs: status == null ? [] : [{ id: 'run-1', conversationId: 'c1', status }] });
       }
       if (requestPath.endsWith('/events')) return textResponse(options.eventsText ?? '');
       if (requestPath.endsWith('/messages')) {
@@ -102,6 +98,9 @@ function snapshotFor(overrides: Partial<PackagedHomeFirstRunResult>): PackagedHo
     performanceTimeOriginAfter: 1,
     performanceTimeOriginBefore: 1,
     projectId: 'p1',
+    runId: 'run-1',
+    strategyRolloutDecision: null,
+    strategyTask: null,
     runEventRequestCount: 1,
     runEventResponseStatuses: [200],
     runEventsContainExpectedOutput: false,
@@ -113,6 +112,33 @@ function snapshotFor(overrides: Partial<PackagedHomeFirstRunResult>): PackagedHo
     ...overrides,
   };
 }
+
+describe('packaged Home run identity', () => {
+  const created = [{ runId: 'home', conversationId: 'c1' }];
+
+  it('ignores another completed run while this submit is still running', () => {
+    const other = { id: 'other', conversationId: 'c1', status: 'succeeded' };
+    const home = { id: 'home', conversationId: 'c1', status: 'running' };
+    expect(selectPackagedHomeRun([other, home], created, 'c1')).toMatchObject({ run: home, terminalStatus: '' });
+    expect(selectPackagedHomeRun([other], [], 'c1').run).toBeUndefined();
+    expect(selectPackagedHomeRun([home], created, 'other-conversation').run).toBeUndefined();
+  });
+
+  it('waits for the bound OD Next task and follows only its active Run', () => {
+    const task = { taskExecutionId: 'task-1', activeRunId: 'production', terminal: false, outcome: 'running' };
+    const root = { id: 'home', conversationId: 'c1', status: 'succeeded', strategyTask: task };
+    const production = { id: 'production', conversationId: 'c1', status: 'running', strategyTask: task };
+    expect(selectPackagedHomeRun([root, production], created, 'c1').terminalStatus).toBe('');
+    task.terminal = true;
+    task.outcome = 'completed';
+    production.status = 'succeeded';
+    expect(selectPackagedHomeRun([root, production], created, 'c1')).toMatchObject({ run: production, terminalStatus: 'succeeded' });
+    task.outcome = 'blocked';
+    expect(selectPackagedHomeRun([root, production], created, 'c1').terminalStatus).toBe('failed');
+    const unrelated = { ...production, strategyTask: { ...task, taskExecutionId: 'unrelated' } };
+    expect(selectPackagedHomeRun([root, unrelated], created, 'c1').run).toBeUndefined();
+  });
+});
 
 describe('packaged Home first-run budget', () => {
   it('sizes each stage for its own chain instead of sharing one budget', () => {
@@ -315,7 +341,7 @@ describe('packaged Home first-run instrumentation', () => {
       },
       fetch: async (url: string, init?: { method?: string }) => {
         upstream.push({ method: init?.method ?? 'GET', url: String(url) });
-        return jsonResponse({ runId: 'run-1' });
+        return jsonResponse({ runId: 'run-1', conversationId: 'c1' });
       },
       location: { href: 'od://app/', pathname: '/' },
       performance: { getEntriesByType: () => [{}], timeOrigin: 7 },
@@ -328,11 +354,14 @@ describe('packaged Home first-run instrumentation', () => {
     const state = sandbox.__odPackagedHomeFirstRun as {
       createRunRequestCount: number;
       createRunResponseStatuses: number[];
+      createdRuns: unknown[];
     };
 
     expect(response.status).toBe(200);
     expect(upstream).toEqual([{ method: 'POST', url: '/api/runs' }]);
     expect(state.createRunRequestCount).toBe(1);
     expect(state.createRunResponseStatuses).toEqual([200]);
+    expect(state.createdRuns).toEqual([{ runId: 'run-1', conversationId: 'c1' }]);
+    expect(await response.json()).toEqual({ runId: 'run-1', conversationId: 'c1' });
   });
 });

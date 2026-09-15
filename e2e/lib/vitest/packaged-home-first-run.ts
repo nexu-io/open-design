@@ -4,6 +4,63 @@ export const PACKAGED_HOME_FIRST_RUN_PROMPT =
 export const PACKAGED_HOME_FIRST_RUN_OUTPUT =
   'I recovered the delayed reasoning path and will persist the artifact now.';
 
+type CodexInvocationReceipt = {
+  nonce: string; pid: number; mode: string; event: string; method?: string; failed?: boolean;
+};
+
+export function codexAppServerInvocationsCompleted(receipts: CodexInvocationReceipt[], nonce: string): boolean {
+  if (receipts.length === 0 || receipts.some((entry) => entry.nonce !== nonce)) return false;
+  // Capability/login probes also invoke the fixture. Keep their provenance,
+  // but verify the protocol independently for each actual app-server process.
+  const appServer = receipts.filter((entry) => entry.mode === 'app-server');
+  const pids = [...new Set(appServer.map((entry) => entry.pid))];
+  return pids.length > 0 && pids.every((pid) => {
+    const processReceipts = appServer.filter((entry) => entry.pid === pid);
+    const methods = processReceipts.filter((entry) => entry.event === 'request').map((entry) => entry.method);
+    return methods[0] === 'initialize' && methods[1] === 'initialized'
+      && ['thread/start', 'thread/resume'].includes(methods[2] ?? '')
+      && methods[3] === 'turn/start'
+      && processReceipts.some((entry) => entry.event === 'completed' && entry.failed === false);
+  });
+}
+
+type CreatedHomeRun = { runId: string; conversationId: string | null };
+type ObservedHomeRun = {
+  id: string;
+  conversationId?: string | null;
+  status: string;
+  strategyRolloutDecision?: unknown;
+  strategyTask?: {
+    taskExecutionId: string;
+    activeRunId: string;
+    terminal: boolean;
+    outcome: string;
+  } | null;
+};
+
+/** Follow only this submit's Run, or its daemon-owned OD Next continuation. */
+export function selectPackagedHomeRun(
+  runs: ObservedHomeRun[], created: CreatedHomeRun[], conversationId: string,
+) {
+  const identity = [...created].reverse().find((entry) => entry.conversationId === conversationId);
+  const rootRun = identity && runs.find((run) =>
+    run.id === identity.runId && run.conversationId === conversationId,
+  );
+  const task = rootRun?.strategyTask;
+  const run = task ? runs.find((candidate) =>
+    candidate.id === task.activeRunId
+    && candidate.conversationId === conversationId
+    && candidate.strategyTask?.taskExecutionId === task.taskExecutionId,
+  ) : rootRun;
+  let terminalStatus = '';
+  if (run && ['failed', 'canceled'].includes(run.status)) terminalStatus = run.status;
+  else if (run?.status === 'succeeded' && (!task || task.terminal)) {
+    terminalStatus = !task || task.outcome === 'completed' ? 'succeeded'
+      : task.outcome === 'canceled' ? 'canceled' : 'failed';
+  }
+  return { run, rootRun, terminalStatus };
+}
+
 export type PackagedHomeFirstRunResult = {
   assistantText: string;
   conversationId: string;
@@ -20,6 +77,9 @@ export type PackagedHomeFirstRunResult = {
   performanceTimeOriginAfter: number;
   performanceTimeOriginBefore: number;
   projectId: string;
+  runId: string;
+  strategyRolloutDecision: unknown;
+  strategyTask: unknown;
   runEventRequestCount: number;
   runEventResponseStatuses: number[];
   runEventsContainExpectedOutput: boolean;
@@ -265,6 +325,8 @@ export function packagedHomeFirstRunExpression(): string {
         readiness,
         createRunRequestCount: 0,
         createRunResponseStatuses: [],
+        createdRuns: [],
+        createRunCaptureErrors: [],
         runEventRequestCount: 0,
         runEventResponseStatuses: [],
         submitClicked: false,
@@ -301,7 +363,20 @@ export function packagedHomeFirstRunExpression(): string {
         }
         if (isRunEvents) state.runEventRequestCount += 1;
         const response = await originalFetch(...args);
-        if (isCreateRun) state.createRunResponseStatuses.push(response.status);
+        if (isCreateRun) {
+          state.createRunResponseStatuses.push(response.status);
+          if (response.ok) {
+            try {
+              const body = await response.clone().json();
+              if (typeof body.runId !== 'string' || typeof body.conversationId !== 'string') {
+                throw new Error('accepted Home run response has no run/conversation identity');
+              }
+              state.createdRuns.push({ runId: body.runId, conversationId: body.conversationId });
+            } catch (error) {
+              state.createRunCaptureErrors.push(String(error));
+            }
+          }
+        }
         if (isRunEvents) state.runEventResponseStatuses.push(response.status);
         return response;
       };
@@ -373,6 +448,7 @@ export function packagedHomeFirstRunSnapshotExpression(
       const awaitMs = ${awaitMs};
       const pollIntervalMs = ${pollIntervalMs};
       const state = globalThis.__odPackagedHomeFirstRun;
+      const selectRun = ${selectPackagedHomeRun.toString()};
       const diagnosticFetch = typeof state?.originalFetch === 'function'
         ? state.originalFetch
         : globalThis.fetch.bind(globalThis);
@@ -399,9 +475,8 @@ export function packagedHomeFirstRunSnapshotExpression(
         const runsBody = runsResponse?.ok ? await runsResponse.json() : { runs: [] };
         const runs = Array.isArray(runsBody?.runs) ? runsBody.runs : [];
         const runStatuses = runs.map((run) => String(run?.status ?? ''));
-        const terminalRun = runs.find((run) =>
-          ['succeeded', 'failed', 'canceled'].includes(String(run?.status)),
-        );
+        const selection = selectRun(runs, state?.createdRuns ?? [], conversationId);
+        const terminalRun = selection.terminalStatus ? selection.run : null;
         // Messages and events only become interesting once the daemon owns a
         // finished run, so a still-running first stage stays a single cheap
         // request instead of three.
@@ -449,13 +524,16 @@ export function packagedHomeFirstRunSnapshotExpression(
           performanceTimeOriginAfter: performance.timeOrigin,
           performanceTimeOriginBefore: state?.performanceTimeOriginBefore ?? -1,
           projectId,
+          runId: selection.run?.id ?? '',
+          strategyRolloutDecision: selection.rootRun?.strategyRolloutDecision ?? null,
+          strategyTask: selection.rootRun?.strategyTask ?? null,
           runEventRequestCount: state?.runEventRequestCount ?? -1,
           runEventResponseStatuses: state?.runEventResponseStatuses ?? [],
           runEventsContainExpectedOutput,
           runReachedTerminal: terminalRun != null,
           runStatuses,
           submitClicked: state?.submitClicked === true,
-          terminalRunStatus: terminalRun ? String(terminalRun.status ?? '') : '',
+          terminalRunStatus: selection.terminalStatus,
           workspaceTabClicksBeforeOutput: state?.workspaceTabClicksBeforeOutput ?? -1,
         };
       }
@@ -491,6 +569,7 @@ export function packagedHomeFirstRunDiagnosticsExpression(maxTextChars = 64_000)
     (async () => {
       const limit = ${limit};
       const state = globalThis.__odPackagedHomeFirstRun;
+      const selectRun = ${selectPackagedHomeRun.toString()};
       const diagnosticFetch = typeof state?.originalFetch === 'function'
         ? state.originalFetch
         : globalThis.fetch.bind(globalThis);
@@ -530,9 +609,8 @@ export function packagedHomeFirstRunDiagnosticsExpression(maxTextChars = 64_000)
         const parsed = JSON.parse(runs.body);
         parsedRuns = Array.isArray(parsed?.runs) ? parsed.runs : [];
       } catch {}
-      const terminalRun = parsedRuns.find((run) =>
-        ['succeeded', 'failed', 'canceled'].includes(String(run?.status)),
-      );
+      const selection = selectRun(parsedRuns, state?.createdRuns ?? [], conversationId);
+      const terminalRun = selection.run;
       const events = terminalRun?.id
         ? await read('/api/runs/' + encodeURIComponent(terminalRun.id) + '/events')
         : null;
@@ -548,6 +626,11 @@ export function packagedHomeFirstRunDiagnosticsExpression(maxTextChars = 64_000)
         conversationId,
         createRunRequestCount: state?.createRunRequestCount ?? -1,
         createRunResponseStatuses: state?.createRunResponseStatuses ?? [],
+        createdRuns: state?.createdRuns ?? [],
+        createRunCaptureErrors: state?.createRunCaptureErrors ?? [],
+        runId: selection.run?.id ?? '',
+        strategyRolloutDecision: selection.rootRun?.strategyRolloutDecision ?? null,
+        strategyTask: selection.rootRun?.strategyTask ?? null,
         events,
         href: location.href,
         instrumented: state?.instrumented === true,
@@ -587,6 +670,7 @@ export function assertPackagedHomeFirstRunResult(
     || typeof candidate.performanceTimeOriginAfter !== 'number'
     || typeof candidate.performanceTimeOriginBefore !== 'number'
     || typeof candidate.projectId !== 'string'
+    || typeof candidate.runId !== 'string'
     || typeof candidate.runEventRequestCount !== 'number'
     || !Array.isArray(candidate.runEventResponseStatuses)
     || typeof candidate.runEventsContainExpectedOutput !== 'boolean'
@@ -650,6 +734,9 @@ export function describePackagedHomeFirstRunStall(
     }
     if (snapshot.runStatuses.length === 0) {
       return `POST /api/runs was sent ${snapshot.createRunRequestCount} time(s) (statuses ${formatStatuses(snapshot.createRunResponseStatuses)}) but the daemon has no run row for this project`;
+    }
+    if (snapshot.runId === '') {
+      return 'the submitted Home run could not be bound to its conversation/task; inspect createdRuns and createRunCaptureErrors';
     }
     return `the run is still ${snapshot.runStatuses.join(', ')} and never reached a terminal status`;
   }

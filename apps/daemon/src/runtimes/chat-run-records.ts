@@ -33,6 +33,7 @@ import type { RunTerminalLifecycleV1 } from '../observability/run-terminal-lifec
 
 import { getProject } from '../db.js';
 import {
+  validateProjectDeliverable,
   validateRunDeliverable,
   type RunDeliverableValidationResult,
 } from '../run-deliverable-validation.js';
@@ -90,6 +91,29 @@ export async function validateChatRunDeliverable(input: {
     runStatus: input.runStatus,
     artifactCount: input.artifactCount,
     ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
+  });
+}
+
+/**
+ * Does the project this run belongs to hold a usable canonical deliverable?
+ *
+ * The presentation-side question, resolved through the same project record
+ * lookup as `validateChatRunDeliverable` so both answers describe one project.
+ * Never feed it to a completion gate — see `DeliverableValidationScope`.
+ */
+export async function validateChatProjectDeliverable(input: {
+  db: Parameters<typeof getProject>[0];
+  projectsRoot: string;
+  run: RunForDeliverableValidation;
+}): Promise<RunDeliverableValidationResult> {
+  const project = input.run.projectId
+    ? toProjectRecord(getProject(input.db, input.run.projectId))
+    : null;
+  return validateProjectDeliverable({
+    projectsRoot: input.projectsRoot,
+    projectId: input.run.projectId,
+    projectMetadata:
+      project?.metadata ?? input.run.projectMetadata ?? null,
   });
 }
 

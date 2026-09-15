@@ -50,6 +50,8 @@ beforeEach(() => {
     apiKey: 'phc_preview_test',
     host: 'https://posthog.test',
     distinctId: 'preview-test-user',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
 });
 

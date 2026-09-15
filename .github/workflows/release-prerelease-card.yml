@@ -6,8 +6,10 @@ name: release-prerelease-card
 # one immutable message, delivered only once everything had finished, and blind
 # to whether the packages had actually shipped. This replaces it with a Feishu
 # *application* bot, which can PATCH a message it sent — so one card is created
-# when the first platform's package lands in R2 and is edited in place as the
-# rest of the platforms, the code tests, and the packaged smoke report in.
+# on this job's first poll, while every platform is still queued, and is edited
+# in place as the platforms, the code tests, and the packaged smoke report in.
+# Each platform row carries its own build time and the footer carries the whole
+# round's, both read from the same jobs API this job already polls.
 #
 # Exactly one job writes that card, on purpose. A PATCH replaces the whole card,
 # so three build jobs updating "their own" row would each erase the other two.
