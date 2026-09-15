@@ -268,9 +268,19 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
+        "--border",
+        "--ease-standard",
         "--fg",
-        "--surface"
+        "--fg-2",
+        "--focus-ring",
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--text-sm"
       ]
     },
     {
@@ -298,10 +308,18 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--border",
+        "--ease-standard",
+        "--fg",
         "--focus-ring",
         "--font-mono",
         "--meta",
+        "--motion-fast",
         "--muted",
+        "--radius-md",
+        "--space-2",
+        "--surface",
+        "--text-sm",
         "--text-xs"
       ]
     },
@@ -316,7 +334,12 @@
         "card"
       ],
       "elements": [],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--radius-md",
+        "--space-3",
+        "--surface"
+      ]
     },
     {
       "id": "badges",
@@ -345,7 +368,9 @@
         "--font-mono",
         "--radius-sm",
         "--space-2",
-        "--text-xs"
+        "--success",
+        "--text-xs",
+        "--warn"
       ]
     },
     {
@@ -425,10 +450,16 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg-2",
         "--font-display",
         "--font-mono",
+        "--leading-body",
         "--muted",
         "--text-2xl",
+        "--text-3xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
         "--text-xs"
       ]
     },
@@ -461,7 +492,11 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
+        "--space-4",
         "--space-6"
       ]
     }
