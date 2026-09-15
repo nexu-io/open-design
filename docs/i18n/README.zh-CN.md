@@ -129,6 +129,7 @@ OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent
 | [Trae](https://www.trae.ai/) | ✅ 支持 | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 支持 | `od mcp install kimi` |
 | [Kiro](https://kiro.dev) | ✅ 支持 | `od mcp install kiro` |
+| [Kilo Code CLI](https://kilo.ai/docs/code-with-ai/platforms/cli) | ✅ 原生运行时 | `npm install -g @kilocode/cli` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 支持 | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 支持 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 支持 | `od mcp install hermes` |
