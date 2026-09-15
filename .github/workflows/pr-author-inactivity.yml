@@ -71,12 +71,8 @@ jobs:
               'looper:worker-ready',
               'needs-design-review',
               'needs-maintainer-check',
-              'needs-maintainer-merge',
-              'needs-qa',
-              'needs-qa-validation',
               'needs-product-direction',
               'needs-validation',
-              'ready-to-merge',
               'stale-pr/blocked',
               'stale-pr/maintainer-assisted',
             ]);
