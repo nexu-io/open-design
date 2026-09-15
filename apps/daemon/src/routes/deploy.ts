@@ -12,7 +12,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
-  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, NETLIFY_PROVIDER_ID, RENDER_PROVIDER_ID, RAILWAY_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, deployToNetlify, deployToRender, deployToRailway, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
 
   /**
    * A DeployError now carries a specific `code` (MISSING_REFERENCES,
@@ -163,11 +163,38 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             priorMetadata: prior?.providerMetadata,
             target,
           })
-        : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
+        : providerId === NETLIFY_PROVIDER_ID
+          ? await deployToNetlify({
+              config: await readDeployConfig(NETLIFY_PROVIDER_ID),
+              files,
+              projectId: req.params.id,
+              projectsRoot: PROJECTS_DIR,
+              projectMetadata: deployProject?.metadata,
+              priorMetadata: prior?.providerMetadata,
+            })
+          : providerId === RENDER_PROVIDER_ID
+            ? await deployToRender({
+                config: await readDeployConfig(RENDER_PROVIDER_ID),
+                files,
+                projectId: req.params.id,
+                projectsRoot: PROJECTS_DIR,
+                projectMetadata: deployProject?.metadata,
+                priorMetadata: prior?.providerMetadata,
+              })
+            : providerId === RAILWAY_PROVIDER_ID
+              ? await deployToRailway({
+                  config: await readDeployConfig(RAILWAY_PROVIDER_ID),
+                  files,
+                  projectId: req.params.id,
+                  projectsRoot: PROJECTS_DIR,
+                  projectMetadata: deployProject?.metadata,
+                  priorMetadata: prior?.providerMetadata,
+                })
+              : await deployToVercel({
+                  config: await readDeployConfig(VERCEL_PROVIDER_ID),
+                  files,
+                  projectId: req.params.id,
+                });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -186,7 +213,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         providerMetadata:
           providerId === CLOUDFLARE_PAGES_PROVIDER_ID
             ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
-            : prior?.providerMetadata,
+            : (providerId === NETLIFY_PROVIDER_ID || providerId === RENDER_PROVIDER_ID || providerId === RAILWAY_PROVIDER_ID)
+              ? result.providerMetadata
+              : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
@@ -259,7 +288,21 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { getProject } = ctx.projectStore;
-  const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, upsertDeployment, publicDeployment } = ctx.deploy;
+  const {
+    getDeploymentById,
+    CLOUDFLARE_PAGES_PROVIDER_ID,
+    cloudflarePagesProjectNameFromDeployment,
+    checkCloudflarePagesDeploymentLinks,
+    checkDeploymentUrl,
+    upsertDeployment,
+    publicDeployment,
+    RAILWAY_PROVIDER_ID,
+    checkRailwayDeploymentLinks,
+    NETLIFY_PROVIDER_ID,
+    checkNetlifyDeploymentLinks,
+    RENDER_PROVIDER_ID,
+    checkRenderDeploymentLinks,
+  } = ctx.deploy;
 
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
@@ -286,6 +329,39 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
             'FILE_NOT_FOUND',
             'deployment not found',
           );
+        }
+        if (existing.providerId === RAILWAY_PROVIDER_ID) {
+          const checked = await checkRailwayDeploymentLinks(existing);
+          const now = Date.now();
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
+        }
+        if (existing.providerId === NETLIFY_PROVIDER_ID) {
+          const checked = await checkNetlifyDeploymentLinks(existing);
+          const now = Date.now();
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
+        }
+        if (existing.providerId === RENDER_PROVIDER_ID) {
+          const checked = await checkRenderDeploymentLinks(existing);
+          const now = Date.now();
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
         }
         const stableCloudflareProjectName =
           existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
@@ -316,7 +392,7 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
           statusMessage: result.reachable
             ? 'Public link is ready.'
             : result.statusMessage ||
-              'Vercel is still preparing the public link.',
+              'Provider is still preparing the public link.',
           reachableAt: result.reachable ? now : existing.reachableAt,
           updatedAt: now,
         });
