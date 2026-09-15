@@ -22,6 +22,7 @@ export const kimiAgentDef = {
       }),
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
+    proxyEnvCompatibility: 'httpx',
     mcpDiscovery: 'mature-acp',
     externalMcpInjection: 'acp-merge',
     // 0.37.0 replaced the stdio branch of Kimi's `session/new` MCP handler with
