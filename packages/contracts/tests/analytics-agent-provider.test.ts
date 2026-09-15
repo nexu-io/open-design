@@ -14,6 +14,10 @@ describe('agentIdToTracking', () => {
     expect(agentIdToTracking('amr')).toBe('amr');
   });
 
+  it('maps the ZCode runtime to its own provider id', () => {
+    expect(agentIdToTracking('zcode')).toBe('zcode');
+  });
+
   it('keeps mapping known CLI agents and falls back to other for unknowns', () => {
     expect(agentIdToTracking('claude')).toBe('claude_code');
     expect(agentIdToTracking('opencode')).toBe('opencode');
