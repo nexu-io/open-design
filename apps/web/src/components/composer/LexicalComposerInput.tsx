@@ -775,6 +775,7 @@ export const LexicalComposerInput = forwardRef<
           const active = $getSelection();
           if ($isRangeSelection(active)) {
             active.insertNodes([node]);
+            selectAfterMention(node);
             const after = $getSelection();
             if ($isRangeSelection(after)) after.insertText(' ');
           }

@@ -449,4 +449,149 @@ describe('LexicalComposerInput', () => {
 
     await waitFor(() => expect(onEnterSend).not.toHaveBeenCalled());
   });
+
+  // ─── Issue #2638 regression suite ────────────────────────────────────────
+  // After insertMention the caret must sit AFTER the inserted pill+trailing
+  // space, not inside the non-editable mention span. The selection anchor must
+  // be in the trailing-space text node at offset 1 so typing continues from
+  // the correct logical position.
+
+  it('#2638: caret lands in the trailing-space node after the pill, not inside the mention', async () => {
+    const { ref, getByTestId } = setup();
+    await waitFor(() => expect(ref.current).not.toBeNull());
+    const host = getByTestId('chat-composer-input');
+    const editor = liveEditor(host);
+
+    act(() => {
+      ref.current?.insertMention({
+        token: '@Deck Builder',
+        entity: { id: 'deck-builder', kind: 'skill', label: 'Deck Builder' },
+      });
+    });
+    await waitFor(() =>
+      expect(host.querySelector('.composer-inline-mention--skill')).not.toBeNull(),
+    );
+
+    const anchor = selectionAnchor(editor);
+    expect(anchor.text).not.toBe('@Deck Builder');
+    expect(anchor.text).toBe(' ');
+    expect(anchor.offset).toBe(1);
+  });
+
+  it('#2638: text typed immediately after insertMention appears after the pill', async () => {
+    const { ref, getByTestId } = setup();
+    await waitFor(() => expect(ref.current).not.toBeNull());
+    const host = getByTestId('chat-composer-input');
+
+    act(() => {
+      ref.current?.insertMention({
+        token: '@Deck Builder',
+        entity: { id: 'deck-builder', kind: 'skill', label: 'Deck Builder' },
+      });
+    });
+    await waitFor(() =>
+      expect(host.querySelector('.composer-inline-mention--skill')).not.toBeNull(),
+    );
+
+    act(() => {
+      ref.current?.insertText('please');
+    });
+    await waitFor(() =>
+      expect(ref.current?.getText()).toBe('@Deck Builder please'),
+    );
+    expect(host.querySelectorAll('.composer-inline-mention')).toHaveLength(1);
+  });
+
+  it('#2638: insertMention into non-empty composer leaves caret after pill+space', async () => {
+    const { ref, getByTestId } = setup();
+    await waitFor(() => expect(ref.current).not.toBeNull());
+    const host = getByTestId('chat-composer-input');
+    const editor = liveEditor(host);
+
+    act(() => { ref.current?.insertText('Use '); });
+    act(() => {
+      ref.current?.insertMention({
+        token: '@Deck Builder',
+        entity: { id: 'deck-builder', kind: 'skill', label: 'Deck Builder' },
+      });
+    });
+    await waitFor(() =>
+      expect(host.querySelector('.composer-inline-mention--skill')).not.toBeNull(),
+    );
+
+    const anchor = selectionAnchor(editor);
+    expect(anchor.text).not.toBe('@Deck Builder');
+
+    act(() => { ref.current?.insertText('for this'); });
+    await waitFor(() =>
+      expect(ref.current?.getText()).toBe('Use @Deck Builder for this'),
+    );
+  });
+
+  it('#2638: second insertMention also leaves caret after pill, not inside it', async () => {
+    const { ref, getByTestId } = setup();
+    await waitFor(() => expect(ref.current).not.toBeNull());
+    const host = getByTestId('chat-composer-input');
+    const editor = liveEditor(host);
+
+    act(() => {
+      ref.current?.insertMention({
+        token: '@Deck Builder',
+        entity: { id: 'deck-builder', kind: 'skill', label: 'Deck Builder' },
+      });
+    });
+    await waitFor(() =>
+      expect(host.querySelectorAll('.composer-inline-mention')).toHaveLength(1),
+    );
+
+    act(() => {
+      ref.current?.insertText('and ');
+      ref.current?.insertMention({
+        token: '@designs/landing.html',
+        entity: { id: 'designs/landing.html', kind: 'file', label: 'designs/landing.html' },
+      });
+    });
+    await waitFor(() =>
+      expect(host.querySelectorAll('.composer-inline-mention')).toHaveLength(2),
+    );
+
+    const anchor = selectionAnchor(editor);
+    expect(anchor.text).not.toBe('@designs/landing.html');
+    expect(ref.current?.getText()).toBe('@Deck Builder and @designs/landing.html ');
+  });
+
+  it('#2638: deleting the inserted mention pill removes it from the serialized text', async () => {
+    const { ref, onChange, getByTestId } = setup();
+    await waitFor(() => expect(ref.current).not.toBeNull());
+    const host = getByTestId('chat-composer-input');
+    const editor = liveEditor(host);
+
+    act(() => {
+      ref.current?.insertMention({
+        token: '@Deck Builder',
+        entity: { id: 'deck-builder', kind: 'skill', label: 'Deck Builder' },
+      });
+    });
+    await waitFor(() =>
+      expect(host.querySelector('.composer-inline-mention')).not.toBeNull(),
+    );
+
+    act(() => {
+      editor.update(
+        () => {
+          const mention = findMention($getRoot().getFirstChild());
+          mention?.remove();
+        },
+        { discrete: true },
+      );
+    });
+    await waitFor(() =>
+      expect(host.querySelector('.composer-inline-mention')).toBeNull(),
+    );
+
+    const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1]!;
+    const presentEntities: InlineMentionEntity[] = lastCall[1];
+    expect(presentEntities.some((e) => e.id === 'deck-builder')).toBe(false);
+    expect(ref.current?.getText()).not.toContain('@Deck Builder');
+  });
 });
