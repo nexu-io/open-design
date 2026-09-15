@@ -700,6 +700,80 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('keeps a daemon watchdog verdict ahead of unrelated MCP auth stderr', () => {
+    // Reproduces run 3f89d164 (gpt-6-astra, 2026-09-13): the inactivity
+    // watchdog killed a stalled turn while an expired wisprFlow MCP refresh
+    // token sat in the stderr tail. The agent CLI's own login was valid, so
+    // the `login` action told the user to fix something that was not broken.
+    const timeoutMessage = 'Agent stalled without emitting any new output for 600s. The model or CLI likely hung while generating. Phase details: spawned agent codex; stdout arrived: yes; last agent event: status:Reconnecting... 1/5; largest tool result observed: 0 chars. Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
+    const mcpAuthStderr = 'failed to refresh OAuth tokens for server wisprFlow: OAuth refresh token was rejected: Server returned error response: invalid_grant';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        agentId: 'codex',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: null,
+          exitCode: 1,
+          errorCode: 'AGENT_EXECUTION_FAILED',
+        },
+        errorCode: 'AGENT_EXECUTION_FAILED',
+        terminalTrigger: 'inactivity_watchdog',
+        events: [
+          { event: 'stderr', data: { chunk: mcpAuthStderr } },
+          {
+            event: 'error',
+            data: {
+              message: timeoutMessage,
+              error: {
+                code: 'AGENT_EXECUTION_FAILED',
+                message: timeoutMessage,
+                retryable: true,
+              },
+              stderrTail: mcpAuthStderr,
+            },
+          },
+        ],
+      }),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      terminal_trigger: 'inactivity_watchdog',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('still reports auth when the agent itself needs a login and the watchdog fired', () => {
+    // The counterpart of the case above: the timeout guard must not swallow a
+    // real credential failure just because the watchdog was the thing that
+    // ended the run.
+    const timeoutMessage = 'Agent stalled without emitting any new output for 600s.';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        agentId: 'codex',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: null,
+          exitCode: 1,
+          errorCode: 'AGENT_AUTH_REQUIRED',
+        },
+        errorCode: 'AGENT_AUTH_REQUIRED',
+        terminalTrigger: 'inactivity_watchdog',
+        events: [errorEvent('AGENT_AUTH_REQUIRED', 'not authenticated', false)],
+      }),
+    ).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'auth_required',
+      user_action: 'login',
+    });
+  });
+
   it('keeps an explicit watchdog trigger when a provider error supplies the failure bucket', () => {
     expect(
       classifyRunFailure({

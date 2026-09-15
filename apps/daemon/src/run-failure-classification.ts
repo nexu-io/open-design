@@ -988,6 +988,7 @@ function classifyRunFailureBase(
     };
   }
   const text = collectFailureText({ ...input, events });
+  const statusErrorText = readString(input.status.error) ?? '';
   const retryableHint = latestRetryable(events);
   // Compute once; used both for the early empty_output guard below and for the
   // fatal_rpc_error promotion later in this function.
@@ -997,6 +998,18 @@ function classifyRunFailureBase(
   // signal guard below (a watchdog kill IS a signal, and the reason it was
   // killed outranks the bare signal) and the timeout branch itself.
   const daemonTimeoutVerdict = hasDaemonTimeoutVerdict(events);
+  // The daemon's structured terminal verdict and its own status message outrank
+  // incidental stderr from tools or MCP servers. Without this guard, an expired
+  // MCP refresh token can turn a genuine inactivity watchdog failure into a
+  // false "log in to Codex" instruction.
+  const daemonReportedTimeout =
+    (
+      input.terminalTrigger === 'inactivity_watchdog'
+      || input.terminalTrigger === 'first_output_deadline'
+      || input.terminalTrigger === 'acp_stage_timeout'
+      || daemonTimeoutVerdict
+    )
+    && isTimeoutText(statusErrorText);
   const amrFailure = classifyAmrAccountFailure(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
@@ -1316,7 +1329,7 @@ function classifyRunFailureBase(
   // `'none'` because a missing credential does not fix itself on retry, and the
   // generic card hands the tool's own line — the one that names what to fix —
   // back to the user.
-  if (reportsToolPrincipalAuthFailure(text)) {
+  if (!daemonReportedTimeout && reportsToolPrincipalAuthFailure(text)) {
     return classification(
       'tool_error',
       'tool_error',
@@ -1326,7 +1339,13 @@ function classifyRunFailureBase(
     );
   }
 
-  if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(text)) {
+  if (
+    errorCode === 'AGENT_AUTH_REQUIRED'
+    || (!daemonReportedTimeout && (
+      serviceFailure === 'AGENT_AUTH_REQUIRED'
+      || isAuthDetailText(text)
+    ))
+  ) {
     return classification(
       'auth',
       authDetail(text),
