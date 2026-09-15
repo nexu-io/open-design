@@ -61,6 +61,7 @@ import {
 import {
   attachPackagedDesktopProcessLogging,
   createPackagedDesktopLogger,
+  installStdioErrorGuard,
   type PackagedDesktopLogger,
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
@@ -71,6 +72,15 @@ import { startPackagedSidecars } from "./sidecars.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
+
+// The launcher inspection below runs with the raw `console` before
+// `createPackagedDesktopLogger` exists. On the normal first launch the desktop
+// IPC socket is absent, `requestJsonIpc` rejects, and
+// `inspectExistingDesktopForLauncher` echoes `inspect-unavailable` to a
+// detached stdout — the same EPIPE this guard exists to swallow. Install it
+// here, before `main()` can emit any pre-logger diagnostic, rather than
+// waiting for the structured logger. Safe to install again later.
+installStdioErrorGuard([process.stdout, process.stderr]);
 
 let packagedLogger: PackagedDesktopLogger | null = null;
 const secondInstanceHandoff = createPackagedSecondInstanceHandoff();
