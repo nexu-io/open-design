@@ -87,6 +87,14 @@ export const grokBuildAgentDef = {
       '--no-plan',
       '--always-approve',
     ];
+    // Same daemon-specified UUID path as Claude: first spawn mints
+    // newSessionId; follow-ups pass --resume and skip the flattened transcript.
+    // `--prompt-file` is valid with both flags.
+    if (typeof runtimeContext.resumeSessionId === 'string' && runtimeContext.resumeSessionId) {
+      args.push('--resume', runtimeContext.resumeSessionId);
+    } else if (typeof runtimeContext.newSessionId === 'string' && runtimeContext.newSessionId) {
+      args.push('--session-id', runtimeContext.newSessionId);
+    }
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
       args.push('--model', options.model);
     }
@@ -105,6 +113,7 @@ export const grokBuildAgentDef = {
   promptViaFile: true,
   promptViaStdin: false,
   streamFormat: 'plain',
+  resumesSessionViaCli: true,
   installUrl: 'https://x.ai/cli',
   docsUrl: 'https://x.ai/cli',
 } satisfies RuntimeAgentDef;

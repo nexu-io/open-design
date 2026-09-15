@@ -436,6 +436,21 @@ At run completion, the daemon scans the captured plain stdout for `<artifact>` b
 
 The identifier is slugged before use, collisions receive `-2`, `-3`, etc., and outputs without a supported `<artifact>` block are left unchanged. This daemon-side extraction keeps headless runs and web-attached runs aligned: the project file exists even when no browser is present to parse the chat stream.
 
+### 5.14 Grok Build
+
+- Invocation is `grok --prompt-file <path> --no-plan --always-approve`. Model
+  and reasoning (`--effort`) flags are appended when applicable. The composed
+  prompt is staged to a temp file because recent Grok CLI builds require
+  `-p/--single` as an argv value and OD prompts exceed safe argv limits.
+- Native session resume uses the same daemon-specified UUID path as Claude:
+  the first spawn passes `--session-id <uuid>`; follow-ups pass
+  `--resume <uuid>` and skip the flattened transcript. `resumesSessionViaCli`
+  is set so the shared engine can do that skip. `--prompt-file` is valid with
+  both session flags.
+- Streaming stays `plain` until a daemon-side parser exists for Grok's
+  `streaming-json` schema. Auth is the user's `grok login` / `~/.grok/auth.json`;
+  OD does not inject credentials.
+
 ## 6. Runtime metadata and UI
 
 There is no public `agents.capabilities()` method and no generalized
