@@ -2312,6 +2312,10 @@
   box-shadow: none;
 }
 .home-hero__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   color: var(--red);
   font-size: 13px;
   background: var(--red-bg);
@@ -2320,6 +2324,27 @@
   border-radius: var(--radius-sm);
   max-width: 720px;
   width: 100%;
+}
+
+.home-hero__error-message {
+  min-width: 0;
+}
+
+.home-hero__error-action {
+  flex: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.home-hero__error-action:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .home-hero-confirm__backdrop {

@@ -20,6 +20,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import type { PromptTemplateSummary } from '../../src/types';
 
 // Regression coverage for 飞书 recvqg21bqVuvE (P0): the selected creation-type
 // chip and its bound example-prompt plugin were lost whenever the user
@@ -133,6 +134,45 @@ const WEB_PROTOTYPE_APPLY_RESULT = {
   },
 };
 
+const MEDIA_PLUGIN = {
+  ...DEFAULT_PLUGIN,
+  id: 'od-media-generation',
+  title: 'Media generation',
+  source: '/tmp/media-generation',
+  fsPath: '/tmp/media-generation',
+  manifest: {
+    ...DEFAULT_PLUGIN.manifest,
+    name: 'od-media-generation',
+    title: 'Media generation',
+    description: 'Generate media artifacts.',
+    od: {
+      kind: 'scenario',
+      taskKind: 'media-generation',
+      useCase: { query: 'Generate media.' },
+      inputs: [],
+    },
+  },
+};
+
+const PORTRAIT_TEMPLATE: PromptTemplateSummary = {
+  id: 'image-product',
+  surface: 'image',
+  title: 'Image product concept',
+  summary: 'A polished product image prompt.',
+  category: 'product',
+  model: 'gpt-image-2',
+  aspect: '3:4',
+  source: { repo: 'open-design/image-prompts', license: 'MIT' },
+};
+
+const LANDSCAPE_TEMPLATE: PromptTemplateSummary = {
+  ...PORTRAIT_TEMPLATE,
+  id: 'image-landscape',
+  title: 'Image landscape concept',
+  model: 'gpt-image-1',
+  aspect: '16:9',
+};
+
 function stubAnimationFrame() {
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     const id = window.setTimeout(() => cb(window.performance.now()), 0);
@@ -157,7 +197,7 @@ async function pickHomeTemplate(id: string) {
 }
 
 function fetchMockFor(plugins: unknown[]) {
-  return vi.fn<typeof fetch>(async (url) => {
+  return vi.fn<typeof fetch>(async (url, init) => {
     if (typeof url === 'string' && url === '/api/plugins') {
       return new Response(JSON.stringify({ plugins }), {
         status: 200,
@@ -166,6 +206,41 @@ function fetchMockFor(plugins: unknown[]) {
     }
     if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
       return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (typeof url === 'string' && url.includes('/api/plugins/od-media-generation/apply')) {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        inputs?: Record<string, unknown>;
+      };
+      return new Response(JSON.stringify({
+        query: 'Generate media.',
+        contextItems: [],
+        inputs: [],
+        assets: [],
+        mcpServers: [],
+        trust: 'trusted',
+        capabilitiesGranted: ['prompt:inject'],
+        capabilitiesRequired: ['prompt:inject'],
+        appliedPlugin: {
+          snapshotId: 'snap-media',
+          pluginId: 'od-media-generation',
+          pluginVersion: '0.1.0',
+          manifestSourceDigest: 'b'.repeat(64),
+          inputs: body.inputs ?? {},
+          resolvedContext: { items: [] },
+          capabilitiesGranted: ['prompt:inject'],
+          capabilitiesRequired: ['prompt:inject'],
+          assetsStaged: [],
+          taskKind: 'media-generation',
+          appliedAt: 0,
+          connectorsRequired: [],
+          connectorsResolved: [],
+          mcpServers: [],
+          status: 'fresh',
+        },
+      }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -235,6 +310,139 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
         ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),
       ),
     ).toBe(false);
+  });
+
+  it('waits for template hydration before restoring a rejected image create', async () => {
+    const fetchMock = fetchMockFor([MEDIA_PLUGIN]);
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    window.localStorage.setItem(
+      'open-design:home-composer:prompt',
+      'Create a retryable portrait image.',
+    );
+    let unmountFirst = () => {};
+    const rejectedSubmit = vi.fn<React.ComponentProps<typeof HomeView>['onSubmit']>(
+      async () => {
+        // App optimistically leaves Home while project creation is in flight,
+        // then mounts a fresh Home after a typed rejection.
+        unmountFirst();
+        return false;
+      },
+    );
+    const first = render(
+      <HomeView
+        projects={[]}
+        onSubmit={rejectedSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptTemplates={[PORTRAIT_TEMPLATE]}
+      />,
+    );
+    unmountFirst = first.unmount;
+
+    await screen.findByTestId('home-hero-input');
+    await pickHomeTemplate('image');
+    await waitFor(() => {
+      expect(JSON.parse(
+        window.localStorage.getItem('open-design:home-composer:chip') ?? '{}',
+      )).toMatchObject({
+        chipId: 'image',
+        mediaSelection: {
+          template: 'image-product',
+          model: 'gpt-image-2',
+          aspect: '3:4',
+        },
+      });
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    await waitFor(() => expect(rejectedSubmit).toHaveBeenCalledTimes(1));
+
+    const acceptedSubmit = vi.fn<React.ComponentProps<typeof HomeView>['onSubmit']>(
+      async () => true,
+    );
+    const retryPromptTemplates = vi.fn();
+    const retry = render(
+      <HomeView
+        projects={[]}
+        onSubmit={acceptedSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptTemplates={[]}
+        promptTemplatesLoaded={false}
+        promptTemplatesLoadFailed
+        onPromptTemplatesRetry={retryPromptTemplates}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
+      expect(JSON.parse(
+        window.localStorage.getItem('open-design:home-composer:chip') ?? '{}',
+      )).toMatchObject({
+        chipId: 'image',
+        mediaSelection: {
+          template: 'image-product',
+          model: 'gpt-image-2',
+          aspect: '3:4',
+        },
+      });
+    });
+    fireEvent.click(screen.getByTestId('home-hero-error-action'));
+    expect(retryPromptTemplates).toHaveBeenCalledTimes(1);
+
+    retry.rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={acceptedSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptTemplates={[]}
+        promptTemplatesLoaded={false}
+        promptTemplatesLoading
+      />,
+    );
+    expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId('home-hero-error-action')).toBeNull();
+
+    retry.rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={acceptedSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptTemplates={[LANDSCAPE_TEMPLATE, PORTRAIT_TEMPLATE]}
+        promptTemplatesLoaded
+        promptTemplatesLoading={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Image');
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    await waitFor(() => expect(acceptedSubmit).toHaveBeenCalledTimes(1));
+
+    const expectedProjectMetadata = {
+      kind: 'image',
+      imageModel: 'gpt-image-2',
+      imageAspect: '3:4',
+      promptTemplate: {
+        id: 'image-product',
+        surface: 'image',
+        title: 'Image product concept',
+        prompt: 'A polished product image prompt.',
+        summary: 'A polished product image prompt.',
+        category: 'product',
+        model: 'gpt-image-2',
+        aspect: '3:4',
+        source: { repo: 'open-design/image-prompts', license: 'MIT' },
+      },
+    };
+    for (const submit of [rejectedSubmit, acceptedSubmit]) {
+      expect(submit.mock.calls[0]?.[0].projectMetadata).toEqual(expectedProjectMetadata);
+    }
   });
 
   it.each(['mobile', 'wireframe'])('migrates the legacy top-level %s chip into a nested Prototype scene', async (legacyChipId) => {
