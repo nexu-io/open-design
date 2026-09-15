@@ -287,11 +287,11 @@ export interface AgentFocusOpenInput {
   // daemon proved the file exists on disk, but the workspace opens tabs by
   // name, and a name we cannot resolve would spawn a placeholder tab.
   readonly projectFiles: ReadonlyArray<CandidateFile>;
-  // File names that already existed when this turn started. The product ruling
-  // is that the agent may only auto-open files it CREATED this turn, so a
-  // declared path that was already there is declined — the agent is pointing at
-  // something the user may already have open and reasoned about.
+  // The turn baseline distinguishes new output from untouched existing files.
   readonly preTurnFileNames: ReadonlySet<string> | null | undefined;
+  // Successful tool writes for this turn, resolved to project file names.
+  // A declared existing main artifact is eligible only with this edit proof.
+  readonly agentTouchedFileNames?: ReadonlySet<string>;
   // True once the user has taken the preview over themselves during this turn.
   // See `decideAgentFocusOpen` for why that wins.
   readonly userTookOverPreview: boolean;
@@ -319,9 +319,9 @@ export interface AgentFocusOpenInput {
  *     mid-read on, with no undo and no explanation. Auto-open features earn
  *     their "focus theft" reputation precisely here.
  *
- *  3. **Created this turn.** A path that existed before the turn started is
- *     declined even when the agent names it. The agent is allowed to say which
- *     of ITS OWN outputs matters, not to navigate the workspace at will.
+ *  3. **Produced this turn.** New files qualify; an existing file requires a
+ *     proven successful write this turn. A declared updated main file must not
+ *     lose to a newly created backup, but untouched old files remain ineligible.
  *
  *  4. **Resolvable and previewable.** The name must exist in the file list and
  *     must not be a module of a multi-file HTML entry.
@@ -353,10 +353,13 @@ export function decideAgentFocusOpen(
   const file = matches[0]!;
 
   const preTurn = input.preTurnFileNames;
-  // Without a pre-turn snapshot we cannot prove the file is new. Decline rather
-  // than assume: a legacy/recovered path that has no snapshot is exactly the
-  // case where "the agent named an old file" is most likely.
-  if (!preTurn || preTurn.has(file.name)) return declined;
+  // Recovery may lack the file baseline. A successful write from this run
+  // still proves ownership; without either proof a declaration cannot promote
+  // an untouched file, even when it appears in the terminal inventory.
+  const writtenThisTurn = input.agentTouchedFileNames?.has(file.name);
+  if (!writtenThisTurn && (!preTurn || preTurn.has(file.name))) {
+    return declined;
+  }
 
   if ((input.moduleFileNames ?? NO_MODULES).has(file.name)) return declined;
   return { shouldOpen: true, fileName: file.name };
