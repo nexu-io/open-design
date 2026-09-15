@@ -9515,6 +9515,7 @@ export async function startServer({
     workspaceResources: {
       getWorkspaceResource,
       getWorkspaceResourceByResourceId,
+      ensureWorkspaceResource,
       workspaceTeamPluginBindingAllowsRead,
       getWorkspaceProjectByProjectId,
     },
