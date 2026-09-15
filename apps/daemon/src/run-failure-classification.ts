@@ -438,6 +438,14 @@ function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
   if (/\bdoesn'?t support the document field\b|\bdocument field for user messages\b|\bdoesn'?t support documents\b/i.test(text)) {
     return 'model_document_unsupported';
   }
+  // Same provider, same shape for images: a text-only model on the Converse
+  // route (Nova Micro, Qwen3, DeepSeek) rejects an `image` block with "This
+  // model doesn't support the image content block that you provided". The
+  // model is reachable and works for text; switching models is the fix, so it
+  // takes the generic "doesn't support this task" switch-model card.
+  if (/\bdoesn'?t support the image content block\b/i.test(text)) {
+    return 'model_not_supported';
+  }
   if (/\brequires a newer version of codex\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
     return 'cli_version_incompatible';
   }

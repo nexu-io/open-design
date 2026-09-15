@@ -320,6 +320,30 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('classifies Bedrock "doesn\'t support the image content block" as a switch-model failure', () => {
+    // Measured on bedrock-runtime Converse with Nova Micro, Qwen3 and DeepSeek R1
+    // (2026-09-15) when the read tool returns an image to a text-only model.
+    const message =
+      "undefined: This model doesn't support the image content block that you provided. Update the content block and try again.";
+
+    expect(
+      classifyForAgent(
+        'byok-opencode',
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'model_not_supported',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+  });
+
   it('classifies the current Bedrock wording "This model doesn\'t support documents." the same way', () => {
     // Measured on bedrock-runtime Converse with Nova Micro, Qwen3 and DeepSeek V3
     // (2026-09-15); the older "document field" wording is kept above.
