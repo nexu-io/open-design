@@ -476,6 +476,12 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('html[data-od-comment-mode] body iframe');
     expect(srcdoc).toContain('html[data-od-inspect-mode] body iframe');
     expect(srcdoc).toContain('pointer-events: none !important');
+    expect(srcdoc).toContain('function projectFramePath(frame)');
+    expect(srcdoc).toContain('function relayProjectFrameSelection(ev)');
+    expect(srcdoc).toContain("'od:comment-target': true");
+    expect(srcdoc).toContain('function routeProjectFrameCommand(data)');
+    expect(srcdoc).toContain("'od:inspect-set': true");
+    expect(srcdoc).toContain('iframe:not([data-od-project-frame])');
   });
 
   it('emits free-pin fallback coordinates in viewport space', () => {
@@ -508,6 +514,327 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain("data.type === 'od:inspect-extract'");
     expect(srcdoc).toContain("data-od-inspect-overrides");
     expect(srcdoc).toContain('html[data-od-inspect-mode]');
+  });
+
+  it('replays active mode into a direct project child when its bridge becomes ready', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    const hostMessages: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html',
+      },
+      source: childWindow,
+    }));
+
+    expect(received).toEqual([
+      { type: 'od:comment-mode', enabled: true, mode: 'picker' },
+      { type: 'od:inspect-mode', enabled: true },
+    ]);
+    dom.window.close();
+  });
+
+  it('preserves descendant metadata, hover point, and slide index through a nested relay', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, { pretendToBeVisual: true, runScripts: 'dangerously', url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html' });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!frame || !childWindow) throw new Error('Expected child iframe window');
+    Object.defineProperty(frame, 'clientWidth', { value: 100 });
+    Object.defineProperty(frame, 'clientHeight', { value: 100 });
+    frame.getBoundingClientRect = () => ({ x: 10, y: 20, width: 100, height: 100 } as DOMRect);
+    const hostMessages: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:comment-target', elementId: 'hero', selector: '[data-od-id="hero"]', label: 'Hero', text: 'Hero',
+        position: { x: 1, y: 2, width: 3, height: 4 }, htmlHint: '<h1>', style: {},
+        clickedDescendant: { label: 'span.badge', text: 'Badge' }, hoverPoint: { x: 4, y: 5 }, slideIndex: 2,
+      },
+      source: childWindow,
+    }));
+    expect(hostMessages).toContainEqual(expect.objectContaining({
+      clickedDescendant: { label: 'span.badge', text: 'Badge' }, hoverPoint: { x: 4, y: 5 }, slideIndex: 2,
+    }));
+    dom.window.close();
+  });
+
+  it('does not replay mode for a child-ready URL outside the current preview scope (#7008 review: frame.src staleness)', () => {
+    // A ready ping is validated against the scope, not against frame.src, so
+    // the meaningful "reject" case is now an href genuinely outside this
+    // srcdoc's daemon-minted scope -- not merely one that differs from the
+    // frame's original src (see the companion "self-navigated" test below,
+    // which is the legitimate case this scope check must still allow).
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        // A different scope segment (scope-2 vs this srcdoc's scope-1) is
+        // outside the prefix projectFramePathFromHref requires, unlike a
+        // same-scope path change from self-navigation.
+        href: 'http://preview.local/api/projects/project-1/preview/scope-2/old-child.html',
+      },
+      source: childWindow,
+    }));
+
+    expect(received).toEqual([]);
+    dom.window.close();
+  });
+
+  it('replays mode and caches the live path for a child-ready URL that self-navigated within scope (#7008 review: frame.src staleness)', () => {
+    // frame.src still reflects the iframe's ORIGINAL attribute ("child.html")
+    // because a child navigating itself (an internal link, a
+    // window.location assignment) never updates the parent's reflected src.
+    // The ready ping's self-reported href is ground truth and must be
+    // accepted even though it disagrees with frame.src.
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/slide-2.html',
+      },
+      source: childWindow,
+    }));
+
+    expect(received).toEqual([
+      { type: 'od:comment-mode', enabled: true, mode: 'picker' },
+      { type: 'od:inspect-mode', enabled: true },
+    ]);
+    // The confirmed live path is now closure-private (#7008 review: nettee --
+    // no longer an inspectable/writable DOM attribute), so verify its effect
+    // indirectly: an od:inspect-set targeting a frame-qualified id keyed by
+    // the CONFIRMED path ('slide-2.html', not the original 'child.html' src)
+    // must resolve to and relay into this exact frame.
+    received.length = 0;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-set',
+        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
+        prop: 'color',
+        value: 'red',
+      },
+    }));
+    expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'red' }]);
+    dom.window.close();
+  });
+
+  it('rejects a forged target from a departed document reusing the frame’s stale declared identity (#7296 review R9-2)', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow || !frame) throw new Error('Expected child iframe window');
+    const hostMessages: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
+
+    // The declared child confirms itself normally first.
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:url-selection-bridge-ready', href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html' },
+      source: childWindow,
+    }));
+
+    // It then leaves for a destination with no bridge/ready ping (an
+    // external site, a non-HTML file) -- the parent's src ATTRIBUTE is
+    // untouched by that internal navigation, but the frame's native load
+    // event still fires. The SAME WindowProxy (childWindow) now belongs to
+    // that departed document, which forges a shaped od:comment-target
+    // message claiming the frame's old, still-declared "child.html"
+    // identity.
+    frame.dispatchEvent(new dom.window.Event('load'));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:comment-target', elementId: 'forged', selector: '[data-od-id="forged"]',
+        label: 'forged', text: 'forged', position: { x: 1, y: 1, width: 20, height: 20 },
+      },
+      source: childWindow,
+    }));
+
+    expect(hostMessages).toEqual([]);
+    dom.window.close();
+  });
+
+  it('falls back from the cached live path synchronously when the parent changes a frame src (#7008 review: cache invalidation)', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow || !frame) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/slide-2.html',
+      },
+      source: childWindow,
+    }));
+    // Cache is closure-private (#7008 review: nettee) -- verify it's set by
+    // routing a frame-qualified command keyed by the confirmed path. Clear
+    // the ready-ping's own mode-broadcast replies first.
+    received.length = 0;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-set',
+        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
+        prop: 'color',
+        value: 'red',
+      },
+    }));
+    expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'red' }]);
+
+    frame.setAttribute('src', 'slide-3.html');
+    // A real src reassignment navigates the frame -- JSDOM (like a real
+    // browser reloading a child) replaces contentWindow with a fresh object,
+    // so the mock from before the mutation no longer intercepts anything.
+    const childWindowAfterReload = frame.contentWindow;
+    expect(childWindowAfterReload).toBeTruthy();
+    if (!childWindowAfterReload) throw new Error('Expected reloaded child iframe window');
+    childWindowAfterReload.postMessage = (message: unknown) => received.push(message);
+    // The stale 'slide-2.html' identity no longer resolves to this frame...
+    received.length = 0;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-set',
+        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
+        prop: 'color',
+        value: 'blue',
+      },
+    }));
+    expect(received).toEqual([]);
+
+    // ...projectFramePath() now falls back to re-deriving from the mutated
+    // src attribute, so the NEW path resolves instead.
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-set',
+        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-3.html', 'hero']))}`,
+        prop: 'color',
+        value: 'green',
+      },
+    }));
+    expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'green' }]);
+    dom.window.close();
+  });
+
+  it('relays a child comment-leave to the top-level host (#7008 review: hover dismiss)', () => {
+    // od:comment-leave carries no target identity — it must still reach the
+    // host so FileViewer can dismiss the hover card, not just target/hover/
+    // active-target-update messages that carry a position+elementId.
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+
+    const received: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:comment-leave' },
+      source: childWindow,
+    }));
+
+    expect(received).toEqual([{ type: 'od:comment-leave' }]);
+    dom.window.close();
+  });
+
+  it('does not relay a comment-leave from a source that is not a known project frame', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const received: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:comment-leave' },
+      source: { unrelated: true } as unknown as MessageEventSource,
+    }));
+
+    expect(received).toEqual([]);
+    dom.window.close();
   });
 
   it('hydrates inspect overrides from a persisted style block on bridge boot', () => {
@@ -568,6 +895,88 @@ describe('buildSrcdoc', () => {
     // a flash of unstyled preview between the two postMessages a
     // per-prop replay would require.
     expect(srcdoc).toContain('overrides = Object.create(null);');
+  });
+
+  it('relays a frame-qualified entry in an od:inspect-replay payload to the matching child (#7008 review: nettee)', () => {
+    // A frame-qualified id (frame:[...]) has no matching selector in the
+    // root document's own DOM -- safeSelectorFor would reject it and the
+    // entry would be silently dropped instead of reaching the child it
+    // actually belongs to.
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    const frameElementId = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-replay',
+        overrides: {
+          [frameElementId]: { selector: '[data-od-id="hero"]', props: { color: 'red' } },
+        },
+      },
+      source: dom.window.parent,
+    }));
+
+    expect(received).toEqual([
+      { type: 'od:inspect-replay', overrides: { hero: { selector: '[data-od-id="hero"]', props: { color: 'red' } } } },
+    ]);
+    dom.window.close();
+  });
+
+  it('queues a frame-qualified inspect replay until the child reports ready', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    let childListening = false;
+    childWindow.postMessage = (message: unknown) => { if (childListening) received.push(message); };
+
+    const frameElementId = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-replay',
+        overrides: {
+          [frameElementId]: { selector: '[data-od-id="hero"]', props: { 'font-weight': '700' } },
+        },
+      },
+      source: dom.window.parent,
+    }));
+    expect(received).toEqual([]);
+
+    childListening = true;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html',
+      },
+      source: childWindow,
+    }));
+    expect(received).toContainEqual(
+      { type: 'od:inspect-replay', overrides: { hero: { selector: '[data-od-id="hero"]', props: { 'font-weight': '700' } } } },
+    );
+    dom.window.close();
   });
 
   it('hardens inspect overrides with a prop allow-list, value sanitizer, and trusted selector', () => {
