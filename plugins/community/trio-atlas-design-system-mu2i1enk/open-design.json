@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "trio-atlas-design-system-mu2i1enk",
+  "title": "Trio Atlas Design System",
+  "version": "0.1.0",
+  "description": "The single source of truth for **Trio** — TrioSoft's AI-powered enterprise IT platform (MDM/UEM/RMM, endpoint security, identity & access, compliance, and patch & vulnerability management) for IT administrators and MSPs.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

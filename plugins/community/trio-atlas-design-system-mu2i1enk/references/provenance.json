@@ -1,0 +1,19 @@
+{
+  "candidateId": "fc037c25-2507-41cb-96d2-8bfc589541cd",
+  "projectId": "7d371be6-fd9f-402a-90e4-c045ef76490f",
+  "runId": "8097f734-1489-4303-9d88-1bd588d4351d",
+  "conversationId": "ef8830b1-2403-4526-9992-0d2fd082e248",
+  "provenance": {
+    "summary": "Detected from atlas/reference/readme.md after a successful run.",
+    "detectedAt": 1789466281344
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "atlas/reference/readme.md",
+      "label": "atlas/reference/readme.md",
+      "size": 25110,
+      "copied": true
+    }
+  ]
+}
