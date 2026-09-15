@@ -988,6 +988,8 @@ export interface Dict {
   // MCP server settings
   'settings.mcpTitle': string;
   'settings.mcpHint': string;
+  'settings.mcpLocalRuntimeOnly': string;
+  'settings.mcpRemoteSetup': string;
   'settings.mcpDaemonError': string;
   'settings.mcpBuildDaemon': string;
   'settings.mcpNodeMissing': string;

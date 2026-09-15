@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const fa: Dict = {
+  'settings.mcpLocalRuntimeOnly': 'فقط محیط محلی: این تنظیم به دستگاه یا کانتینری نیاز دارد که OpenDesign را اجرا می‌کند. برای عامل کدنویسی روی دستگاه دیگر، از پل SSH/Docker استفاده کنید.',
+  'settings.mcpRemoteSetup': 'راه‌اندازی Docker از راه دور',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
