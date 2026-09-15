@@ -11,6 +11,9 @@ type ParserKind = string;
 type ParserState = {
   cursorTextSoFar: string;
   cursorTurnStart: number;
+  // Last cursor-agent session id surfaced as a status event for capture-style
+  // resume persistence.
+  cursorSessionId: string | null;
   openCodeToolUses: Set<string>;
   openCodeToolResults: Set<string>;
   codexToolUses: Set<string>;
@@ -665,13 +668,25 @@ function reconcileCursorTurnReplay(text: string, onEvent: StreamEventHandler, st
 function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
+  const sessionId =
+    typeof obj.session_id === 'string' && obj.session_id.length > 0
+      ? obj.session_id
+      : null;
+
   if (obj.type === 'system' && obj.subtype === 'init') {
+    if (sessionId) state.cursorSessionId = sessionId;
     onEvent({
       type: 'status',
       label: 'initializing',
       model: typeof obj.model === 'string' ? obj.model : undefined,
+      sessionId,
     });
     return true;
+  }
+
+  if (sessionId && state.cursorSessionId !== sessionId) {
+    state.cursorSessionId = sessionId;
+    onEvent({ type: 'status', label: 'running', sessionId });
   }
 
   if (obj.type === 'assistant' && obj.message) {
@@ -1332,6 +1347,7 @@ function createParserState(): ParserState {
   return {
     cursorTextSoFar: '',
     cursorTurnStart: 0,
+    cursorSessionId: null,
     openCodeToolUses: new Set<string>(),
     openCodeToolResults: new Set<string>(),
     codexToolUses: new Set<string>(),
