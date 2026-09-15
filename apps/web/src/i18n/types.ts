@@ -3022,6 +3022,14 @@ export interface Dict {
   'chat.deleteConversation': string;
   'chat.renameConversationLabel': string;
   'chat.deleteConversationConfirm': string;
+  // Manual context compaction (conversations-menu item + /compact slash).
+  'chat.compactContext': string;
+  'chat.compactContextUnsupported': string;
+  'chat.compactContextNoSession': string;
+  'chat.compactContextBusy': string;
+  'chat.compactContextWaitForRun': string;
+  'chat.compactContextFailed': string;
+  'chat.compactSlashDesc': string;
   'chat.untitledConversation': string;
   /**
    * 回合动作行那颗按钮失败时的提示。key 名还带 `fork` 是历史,**文案不带** ——

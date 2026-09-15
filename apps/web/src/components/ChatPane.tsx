@@ -777,6 +777,12 @@ interface Props {
   messagesConversationId?: string | null;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
+  // Runtime capability and session state for manual context compaction. The
+  // action stays visible but disabled with a reason when it cannot run.
+  onCompactContext?: () => void;
+  compactContextSupported?: boolean;
+  compactContextHasSession?: boolean;
+  compactContextBusy?: boolean;
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: (section?: SettingsSection) => void;
@@ -1393,6 +1399,10 @@ export function ChatPane({
   messagesConversationId = null,
   onSelectConversation,
   onDeleteConversation,
+  onCompactContext,
+  compactContextSupported = false,
+  compactContextHasSession = false,
+  compactContextBusy = false,
   onOpenSettings,
   onSwitchModel,
   amrBalanceCardUsd = null,
@@ -4223,6 +4233,8 @@ export function ChatPane({
         return onSend(prompt, attachments, commentAttachments, meta);
       }}
       onStop={onStop}
+      onCompactContext={onCompactContext}
+      compactContextAvailable={compactContextSupported}
       onOpenSettings={onOpenSettings}
       onOpenMcpSettings={onOpenMcpSettings}
       onBrowsePlugins={onBrowsePlugins}
@@ -4371,6 +4383,47 @@ export function ChatPane({
                     * 一样渲染。这一行只剩标题 + 计数,`.chat-history-menu-head` 本来就
                     * 不画分隔线,不会留下空分区。 */}
                 </div>
+                {onCompactContext ? (
+                  (() => {
+                    const compactDisabledReason = !compactContextSupported
+                      ? t('chat.compactContextUnsupported')
+                      : !compactContextHasSession
+                        ? t('chat.compactContextNoSession')
+                        : compactContextBusy
+                          ? t('chat.compactContextBusy')
+                          : streaming
+                            ? t('chat.compactContextWaitForRun')
+                            : null;
+                    const compactDisabled = compactDisabledReason !== null;
+                    return (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="chat-history-compact"
+                        data-testid="conversation-compact-context"
+                        disabled={compactDisabled}
+                        title={compactDisabledReason ?? t('chat.compactContext')}
+                        onClick={() => {
+                          if (compactDisabled) return;
+                          trackChatPanelClick(analytics.track, {
+                            page_name: 'chat_panel',
+                            area: 'chat_panel',
+                            element: 'compact_context',
+                          });
+                          onCompactContext();
+                          setShowConvList(false);
+                        }}
+                      >
+                        <Icon name="sliders" size={12} />
+                        <span>
+                          {compactContextBusy
+                            ? t('chat.compactContextBusy')
+                            : t('chat.compactContext')}
+                        </span>
+                      </button>
+                    );
+                  })()
+                ) : null}
                 <label className="chat-history-search">
                   <Icon name="search" size={12} />
                   <input

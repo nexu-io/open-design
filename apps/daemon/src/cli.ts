@@ -8878,6 +8878,9 @@ async function runConversation(args) {
                                            source message.
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
+  od conversation compact <projectId> <conversationId> [--agent <id>] [--model <id>]
+                                           Compact a conversation's resumed
+                                           runtime context.
 
 Common options:
   --daemon-url <url>         OpenDesign daemon HTTP base.
@@ -8889,7 +8892,7 @@ Common options:
   const sub = args[0];
   const rest = args.slice(1);
   const conversationStringFlags =
-    sub === 'new' || sub === 'list'
+    sub === 'new' || sub === 'list' || sub === 'compact'
       ? PROJECT_RESOURCE_STRING_FLAGS
       : PROJECT_STRING_FLAGS;
   const flags = parseFlags(rest, {
@@ -8898,7 +8901,7 @@ Common options:
   });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   const workspaceHeaders =
-    sub === 'new' || sub === 'list'
+    sub === 'new' || sub === 'list' || sub === 'compact'
       ? workspaceHeadersFromExplicitFlags(flags) ?? {}
       : {};
   switch (sub) {
@@ -8958,6 +8961,39 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'compact': {
+      const positionals = positionalArgs(rest, conversationStringFlags);
+      const projectId =
+        typeof flags.project === 'string' && flags.project
+          ? flags.project
+          : positionals[0];
+      const conversationId =
+        typeof flags.conversation === 'string' && flags.conversation
+          ? flags.conversation
+          : positionals[1];
+      if (!projectId || !conversationId) {
+        console.error(
+          'Usage: od conversation compact <projectId> <conversationId> [--agent <id>] [--model <id>] [--json]',
+        );
+        process.exit(2);
+      }
+      const body = {};
+      if (typeof flags.agent === 'string' && flags.agent) body.agentId = flags.agent;
+      if (typeof flags.model === 'string' && flags.model) body.model = flags.model;
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/compact`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...workspaceHeaders },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[conversation] compacting ${conversationId} as run ${data.runId}`);
       return;
     }
     default:
