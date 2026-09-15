@@ -154,7 +154,10 @@ export function resolvePrivateIpcPath(stamp: SidecarStamp, platform: NodeJS.Plat
       })()
     : String(process.getuid?.() ?? process.env.USER ?? "unknown");
   const digest = createHash("sha256").update(`${principal}\n${sidecarStampKey(stamp)}`).digest("hex").slice(0, 32);
-  return platform === "win32"
-    ? `\\\\.\\pipe\\open-design-sidecar-${digest}`
-    : join(tmpdir(), `od-sidecar-${principal}`, `${digest}.sock`);
+  if (platform === "win32") return `\\\\.\\pipe\\open-design-sidecar-${digest}`;
+  const endpoint = join(tmpdir(), `od-sidecar-${principal}`, `${digest}.sock`);
+  // macOS sun_path allows 103 path bytes plus a null terminator.
+  return platform === 'darwin' && Buffer.byteLength(endpoint) > 103
+    ? join('/tmp', `od-sidecar-${principal}`, `${digest}.sock`)
+    : endpoint;
 }
