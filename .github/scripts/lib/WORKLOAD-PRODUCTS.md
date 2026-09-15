@@ -12,8 +12,12 @@ Download/integrity failure reports `restored=false` and exits nonzero by default
 the original workload on false. No fallback failure may become a success receipt.
 Configuration/selection errors remain fatal even with `--allow-miss`.
 
-This command does not change the planner's current product verification strategy,
-GitHub artifact promotion format or trusted publisher admission. Avoid claiming
-elimination of duplicate downloads until the caller/plan transport is integrated
-and measured. A directory is owned by one caller; concurrent writers to the same
-destination are not supported.
+Planning validates receipt bindings and probes product availability with a bounded
+range read; it does not hash-download payloads. Independent receipt reads use at
+most eight workers and retain per-workload fail-open decisions. A plan hit is not
+proof of restored byte integrity: every consuming path must check SHA-256 and
+either rebuild on acquisition failure or fail, never silently use invalid bytes.
+Proof-only hits require no product download. GitHub artifact promotion and trusted
+publisher admission are unchanged. End-to-end transfer savings still need a real
+workflow measurement. A directory is owned by one caller; concurrent writers to
+the same destination are not supported.

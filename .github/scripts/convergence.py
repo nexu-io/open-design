@@ -17,6 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -500,15 +501,12 @@ def resolve_results(
         if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
             base_url = None
             invalid_base_url = True
-    for identity, expected in calculated.items():
+    def resolve_one(item: tuple[str, dict[str, Any]]) -> tuple[str, bool, str, Any]:
+        identity, expected = item
         if not expected["reusable"]:
-            hits[identity] = False
-            reasons[identity] = "reuse-disabled"
-            continue
+            return identity, False, "reuse-disabled", None
         if not base_url:
-            hits[identity] = False
-            reasons[identity] = "base-url-invalid" if invalid_base_url else "base-url-missing"
-            continue
+            return identity, False, "base-url-invalid" if invalid_base_url else "base-url-missing", None
         key = result_key(repository_id, workflow.name, workflow.policy, identity, expected["digest"])
         url = f"{base_url.rstrip('/')}/{key}"
         try:
@@ -521,17 +519,12 @@ def resolve_results(
                 expected=expected,
             )
             for product in result["products"].values():
-                declared_digest = product.get("data", {}).get("sha256")
-                if declared_digest is None:
-                    probe_product(product["source"], timeout)
-                elif sha256_url(product["source"], timeout) != declared_digest:
-                    raise ConfigError("workload result product digest mismatch")
-            results[identity] = result
-            hits[identity] = True
-            reasons[identity] = "result-hit"
+                # Scheduling observes availability, never materializes payloads.
+                # Consumers must verify SHA-256 before exposing restored bytes.
+                probe_product(product["source"], timeout)
+            return identity, True, "result-hit", result
         except urllib.error.HTTPError as error:
-            hits[identity] = False
-            reasons[identity] = "result-missing" if error.code == 404 else f"read-http-{error.code}"
+            return identity, False, "result-missing" if error.code == 404 else f"read-http-{error.code}", None
         except (
             ConfigError,
             json.JSONDecodeError,
@@ -541,8 +534,15 @@ def resolve_results(
             urllib.error.URLError,
             TimeoutError,
         ) as error:
-            hits[identity] = False
-            reasons[identity] = f"read-unavailable:{type(error).__name__}"
+            return identity, False, f"read-unavailable:{type(error).__name__}", None
+    # Bound independent public metadata reads; preserve declaration order and
+    # per-workload fail-open decisions regardless of completion order.
+    if calculated:
+        with ThreadPoolExecutor(max_workers=min(8, len(calculated))) as executor:
+            for identity, hit, reason, result in executor.map(resolve_one, calculated.items()):
+                hits[identity], reasons[identity] = hit, reason
+                if result is not None:
+                    results[identity] = result
     return hits, reasons, results
 
 
@@ -1126,8 +1126,17 @@ def self_check() -> None:
     product_expected = {**expected, "products": "manifest"}
     product_receipt = json.loads(canonical_json(receipt))
     product_receipt["products"] = {
-        "bundle": {"type": "url", "source": "https://results.example/bundle.zip"}
+        "bundle": {"type": "url", "source": "https://results.example/bundle.zip",
+                   "data": {"sha256": "a" * 64}}
     }
+    with (
+        patch.object(module, "fetch_result", return_value=product_receipt),
+        patch.object(module, "probe_product") as probe,
+        patch.object(module, "sha256_url", side_effect=AssertionError("planner downloaded payload")),
+    ):
+        hits, _, _ = resolve_results("https://results.example", 42, workflow, {"unit": product_expected}, 0.1)
+        if hits != {"unit": True} or probe.call_count != 1:
+            raise ConfigError("convergence self-check did not use metadata-only product availability")
     with (
         patch.object(module, "fetch_result", return_value=product_receipt),
         patch.object(module, "probe_product", side_effect=TimeoutError()),
