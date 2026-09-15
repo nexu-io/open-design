@@ -155,6 +155,8 @@ export interface SseClient {
 
 export interface ChatRun {
   id: string;
+  executionSourceReceipt?: { sourceSha: string | null } | null;
+  terminalAt?: number | null;
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
