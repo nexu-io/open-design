@@ -3385,10 +3385,10 @@ describe('projectSplitClassName', () => {
     expect(projectSplitStyle(true, 512, 'minmax(420px, 1fr)')).toBeUndefined();
   });
 
-  it('starts an uncustomized wide project at an equal chat/preview split', () => {
-    // 1600 total − the 8px handle = two 796px content columns. This must not
-    // regress to the old fixed 460px default or its former 720px ceiling.
-    expect(defaultChatPanelWidthForSplit(1600)).toBe(796);
+  it('starts an uncustomized wide project at the design chat baseline', () => {
+    // The ChatPanel design baseline is 460px; a wide workspace must not make
+    // a first-open chat column consume half the available split.
+    expect(defaultChatPanelWidthForSplit(1600)).toBe(460);
   });
 
   it('keeps the workspace minimum when the viewport is too narrow for 1:1', () => {
