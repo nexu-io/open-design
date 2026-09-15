@@ -399,10 +399,14 @@ async function renderOneCover(
 ): Promise<void> {
   let result: DesktopExportArtifactResult;
   try {
-    result = await withBudget(renderer(render), CHAT_ARTIFACT_COVER_BUDGET_MS);
+    result = await withBudget(
+      renderer(render),
+      CHAT_ARTIFACT_COVER_BUDGET_MS,
+      (err) => logCoverFailure(row.labelAtCapture, err),
+    );
   } catch (err) {
     logCoverFailure(row.labelAtCapture, err);
-    recordCoverFailure(deps, row, 'renderer_unavailable');
+    recordCoverFailure(deps, row, err instanceof CoverBudgetExceededError ? 'timeout' : 'renderer_unavailable');
     return;
   }
 
@@ -489,14 +493,38 @@ function projectIdForWorkspaceArtifact(
   return row?.projectId ?? null;
 }
 
-async function withBudget<T>(work: Promise<T>, budgetMs: number): Promise<T> {
+class CoverBudgetExceededError extends Error {
+  constructor(budgetMs: number) {
+    super(`chat artifact cover exceeded ${budgetMs}ms`);
+    this.name = 'CoverBudgetExceededError';
+  }
+}
+
+async function withBudget(
+  work: Promise<DesktopExportArtifactResult>,
+  budgetMs: number,
+  onLateCleanupFailure: (err: unknown) => void,
+): Promise<DesktopExportArtifactResult> {
   let timer: NodeJS.Timeout | undefined;
+  let timedOut = false;
+  const ownedWork = work.then(async (result) => {
+    // Promise.race does not cancel the renderer. After the deadline the ref
+    // already owns a failed snapshot; only release the renderer's late temp
+    // output, never attach it or announce a ready cover.
+    if (timedOut && result?.ok && typeof result.path === 'string' && result.path.length > 0) {
+      await fs.promises.rm(result.path, { force: true }).catch(onLateCleanupFailure);
+    }
+    return result;
+  });
   try {
     return await Promise.race([
-      work,
+      ownedWork,
       new Promise<never>((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error(`chat artifact cover exceeded ${budgetMs}ms`)),
+          () => {
+            timedOut = true;
+            reject(new CoverBudgetExceededError(budgetMs));
+          },
           budgetMs,
         );
         timer.unref?.();
