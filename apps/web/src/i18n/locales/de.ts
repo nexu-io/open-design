@@ -3564,6 +3564,8 @@ export const de: Dict = {
   'assistant.verbFetching': 'Holt',
   'assistant.verbCalling': 'Ruft auf',
   'qf.answered': 'beantwortet',
+  "qf.unanswered": "Unbeantwortet",
+  "qf.unansweredContinued": "Diese Frage wurde nicht beantwortet. Das Gespräch wurde fortgesetzt.",
   'qf.answeredConfirmed': 'Bestätigt',
   'qf.answeredSkipped': 'Übersprungen',
   "chat.att.cancelUpload": "Upload von {name} abbrechen",

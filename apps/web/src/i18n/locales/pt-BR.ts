@@ -3564,6 +3564,8 @@ export const ptBR: Dict = {
   'assistant.verbFetching': 'Buscando',
   'assistant.verbCalling': 'Chamando',
   'qf.answered': 'respondido',
+  "qf.unanswered": "Sem resposta",
+  "qf.unansweredContinued": "Esta pergunta não foi respondida. A conversa continuou.",
   'qf.answeredConfirmed': 'Confirmado',
   'qf.answeredSkipped': 'Ignorada',
   "chat.att.cancelUpload": "Cancelar o envio de {name}",

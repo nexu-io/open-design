@@ -37,7 +37,7 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
   };
 }
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChatPane } from '../../../src/components/ChatPane';
 import { memoryWrittenCardContent } from '../../../src/runtime/useMemoryWrittenCard';
@@ -198,7 +198,7 @@ describe('OPEND-2644 记忆卡插在问卷后面', () => {
     expect(summary!.textContent).toContain('Overview only');
   });
 
-  it('用户真的走过去了(答了别的话)—— 那张没答的表仍旧锁住,并说明它来自此前的回合', () => {
+  it('用户答了别的话后,未回答问卷默认折叠,展开后仍不可重答', () => {
     /*
      * 反向那一半。没有这条,第 2 处可以退化成「永远可交互」,把历史里所有没答完的
      * 问卷都重新打开 —— 而那种退化在只看正向用例的套件里是全绿的。
@@ -210,8 +210,18 @@ describe('OPEND-2644 记忆卡插在问卷后面', () => {
       userMessage('user-other', 'never mind, just start with the overview'),
     ]);
 
-    expect(formIsAnswerable(), '用户已经走过去了,这张表不该还能填').toBe(false);
-    expect(screen.getByText(en['qf.lockedPrev'])).toBeTruthy();
+    // OPEND-2947 的新确认行为:普通续聊收起未回答问卷,不再使用通用只读宿主说明。
+    const form = formCard();
+    const disclosure = within(form).getByText('Defense brief', { exact: true }).closest('summary');
+    expect(disclosure).not.toBeNull();
+    const details = disclosure!.closest('details')!;
+    expect(details.open).toBe(false);
+    expect(within(form).getByText(en['qf.unanswered'], { exact: true })).toBeVisible();
+    fireEvent.click(disclosure!);
+    expect(details.open).toBe(true);
+    for (const option of within(form).getAllByRole('radio')) expect(option).toBeDisabled();
+    expect(within(form).getByText(en['qf.unansweredContinued'], { exact: true })).toBeVisible();
+    expect(within(form).queryByText(en['qf.lockedPrev'])).toBeNull();
     expect(screen.queryByText(en['qf.answered']), '没提交过就不许说「已回答」').toBeNull();
   });
 });

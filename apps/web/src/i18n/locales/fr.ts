@@ -3564,6 +3564,8 @@ export const fr: Dict = {
   'assistant.verbFetching': 'Récupération',
   'assistant.verbCalling': 'Appel',
   'qf.answered': 'répondu',
+  "qf.unanswered": "Sans réponse",
+  "qf.unansweredContinued": "Cette question est restée sans réponse. La conversation a continué.",
   'qf.answeredConfirmed': 'Confirmé',
   'qf.answeredSkipped': 'Ignorée',
   "chat.att.cancelUpload": "Annuler l’envoi de {name}",

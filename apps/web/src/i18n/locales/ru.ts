@@ -3564,6 +3564,8 @@ export const ru: Dict = {
   'assistant.verbFetching': 'Получение',
   'assistant.verbCalling': 'Вызов',
   'qf.answered': 'отвечено',
+  "qf.unanswered": "Без ответа",
+  "qf.unansweredContinued": "Этот вопрос остался без ответа. Разговор продолжился.",
   'qf.answeredConfirmed': 'Подтверждено',
   'qf.answeredSkipped': 'Пропущено',
   "chat.att.cancelUpload": "Отменить загрузку {name}",

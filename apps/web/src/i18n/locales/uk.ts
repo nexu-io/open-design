@@ -3564,6 +3564,8 @@ export const uk: Dict = {
   'assistant.verbFetching': 'Отримання',
   'assistant.verbCalling': 'Виклик',
   'qf.answered': 'відповідь дано',
+  "qf.unanswered": "Без відповіді",
+  "qf.unansweredContinued": "Це запитання залишилося без відповіді. Розмова продовжилася.",
   'qf.answeredConfirmed': 'Підтверджено',
   'qf.answeredSkipped': 'Пропущено',
   "chat.att.cancelUpload": "Скасувати завантаження {name}",

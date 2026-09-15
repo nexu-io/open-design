@@ -3564,6 +3564,8 @@ export const ja: Dict = {
   'assistant.verbFetching': 'フェッチ中',
   'assistant.verbCalling': '呼び出し中',
   'qf.answered': '回答済み',
+  "qf.unanswered": "未回答",
+  "qf.unansweredContinued": "この質問には回答されず、会話が続行されました。",
   'qf.answeredConfirmed': '確定しました',
   'qf.answeredSkipped': 'スキップ',
   "chat.att.cancelUpload": "{name} のアップロードをキャンセル",

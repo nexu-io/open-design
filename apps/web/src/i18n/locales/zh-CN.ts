@@ -3750,6 +3750,8 @@ export const zhCN: Dict = {
   "assistant.verbFetching": "抓取",
   "assistant.verbCalling": "调用",
   "qf.answered": "已回答",
+  "qf.unanswered": "未回答",
+  "qf.unansweredContinued": "此问题未回复，对话已继续。",
   "qf.answeredConfirmed": "已确认",
   "qf.answeredSkipped": "已跳过",
   "chat.att.cancelUpload": "取消上传 {name}",

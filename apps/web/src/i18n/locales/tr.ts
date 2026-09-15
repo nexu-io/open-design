@@ -3564,6 +3564,8 @@ export const tr: Dict = {
   'assistant.verbFetching': 'Getiriyor',
   'assistant.verbCalling': 'Çağırıyor',
   'qf.answered': 'cevapladı',
+  "qf.unanswered": "Yanıtlanmadı",
+  "qf.unansweredContinued": "Bu soru yanıtlanmadı. Konuşma devam etti.",
   'qf.answeredConfirmed': 'Onaylandı',
   'qf.answeredSkipped': 'Atlandı',
   "chat.att.cancelUpload": "{name} yüklemesini iptal et",

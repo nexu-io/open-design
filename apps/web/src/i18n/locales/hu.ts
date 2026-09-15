@@ -3564,6 +3564,8 @@ export const hu: Dict = {
   'assistant.verbFetching': 'Lekérés',
   'assistant.verbCalling': 'Hívás',
   'qf.answered': 'megválaszolva',
+  "qf.unanswered": "Megválaszolatlan",
+  "qf.unansweredContinued": "Ez a kérdés megválaszolatlan maradt. A beszélgetés folytatódott.",
   'qf.answeredConfirmed': 'Megerősítve',
   'qf.answeredSkipped': 'Kihagyva',
   "chat.att.cancelUpload": "{name} feltöltésének megszakítása",

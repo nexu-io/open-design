@@ -4505,6 +4505,8 @@ export interface Dict {
 
   // Question form labels
   'qf.answered': string;
+  'qf.unanswered': string;
+  'qf.unansweredContinued': string;
   /** 「已回答」陈述块的标题(交付稿 `.answered .k`) */
   'qf.answeredConfirmed': string;
   /**

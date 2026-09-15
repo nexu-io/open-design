@@ -3564,6 +3564,8 @@ export const fa: Dict = {
   'assistant.verbFetching': 'در حال دریافت',
   'assistant.verbCalling': 'در حال فراخوانی',
   'qf.answered': 'پاسخ داده شده',
+  "qf.unanswered": "بی‌پاسخ",
+  "qf.unansweredContinued": "این پرسش پاسخ داده نشد و گفتگو ادامه یافته است.",
   'qf.answeredConfirmed': 'تأیید شد',
   'qf.answeredSkipped': 'رد شده',
   "chat.att.cancelUpload": "لغو بارگذاری {name}",

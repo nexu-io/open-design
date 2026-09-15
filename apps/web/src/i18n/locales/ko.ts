@@ -3564,6 +3564,8 @@ export const ko: Dict = {
   'assistant.verbFetching': '가져오는 중',
   'assistant.verbCalling': '호출 중',
   'qf.answered': '답변 완료',
+  "qf.unanswered": "미응답",
+  "qf.unansweredContinued": "이 질문에 답변하지 않은 채 대화가 계속되었습니다.",
   'qf.answeredConfirmed': '확인됨',
   'qf.answeredSkipped': '건너뜀',
   "chat.att.cancelUpload": "{name} 업로드 취소",

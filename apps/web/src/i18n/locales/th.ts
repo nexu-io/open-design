@@ -3564,6 +3564,8 @@ export const th: Dict = {
   'assistant.verbFetching': 'ชักนำผลผ่านตัวออนไลน์',
   'assistant.verbCalling': 'ตามสั่งเครื่องมือมาใช้',
   'qf.answered': 'ได้ส่งคำไปแล้ว',
+  "qf.unanswered": "ยังไม่ได้ตอบ",
+  "qf.unansweredContinued": "คำถามนี้ไม่ได้รับคำตอบ และการสนทนาได้ดำเนินต่อแล้ว",
   'qf.answeredConfirmed': 'ยืนยันแล้ว',
   'qf.answeredSkipped': 'ข้ามแล้ว',
   "chat.att.cancelUpload": "ยกเลิกการอัปโหลด {name}",

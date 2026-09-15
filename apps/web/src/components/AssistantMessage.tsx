@@ -2960,10 +2960,10 @@ function ProseBlock({
    * 助手消息(`ProjectView` 的 memory-applied 记忆卡)—— 问卷不再是最后一条,
    * 于是一个字都没答就被锁住、还被标成「已回答」(OPEND-2644)。
    *
-   * `isLastAssistant` 仍然留在或的前半:流式当轮里 `nextUserContent` 本来就是空的,
-   * 两半同时成立,它是判据的一个特例,不是替代品。
+   * 普通 user 到达但下一条 assistant 尚未到达时,旧问卷仍可能是最后一条助手消息;
+   * 因此只看下一条 user 是否存在,不能再用 isLastAssistant 放宽。
    */
-  const questionFormAnswerable = isLastAssistant || nextUserContent === undefined;
+  const questionFormAnswerable = nextUserContent === undefined;
   /**
    * 逐字化开(W9):稿子把流式光标删了,新到的字自己化开就是流式的样子。
    * 判据挂在「这是最后一条且还在流」上 —— 历史消息重渲染时不能再化开一遍。
@@ -3461,6 +3461,7 @@ function FormBlock({
       <QuestionFormView
         form={form}
         interactive={interactive}
+        unanswered={nextUserContent !== undefined && !submittedFromHistory}
         draftAnswers={draftAnswers}
         onDraftChange={updateDraftAnswers}
         onAnswerChange={handleAnswerChange}

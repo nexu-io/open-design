@@ -3564,6 +3564,8 @@ export const ar: Dict = {
   'assistant.verbFetching': 'جلب',
   'assistant.verbCalling': 'اتصال',
   'qf.answered': 'تمت الإجابة',
+  "qf.unanswered": "لم تتم الإجابة",
+  "qf.unansweredContinued": "لم تتم الإجابة عن هذا السؤال، وقد استمرت المحادثة.",
   'qf.answeredConfirmed': 'تم التأكيد',
   'qf.answeredSkipped': 'تم التخطي',
   "chat.att.cancelUpload": "إلغاء رفع {name}",
