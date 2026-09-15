@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
+  bedrockConverseOutputLimit,
   BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_ID,
   bedrockModelFamily,
@@ -642,7 +643,44 @@ describe('byok-opencode Bedrock provider config', () => {
         'amazon-bedrock',
         'amazon.nova-2-lite-v1:0',
       ),
-    ).toEqual({ context: 128_000, output: 8_192 });
+    ).toEqual({ context: 128_000, output: 16_384 });
+  });
+
+  // Discovery-to-run fixture: ids exactly as Fetch models returns them, run
+  // through the config builder, must never declare more output than Bedrock's
+  // measured maxTokens ceiling for that model (us-east-1, 2026-09-15).
+  it('keeps the Converse-route output limit within each fetched model\'s Bedrock ceiling', () => {
+    const limitOf = (config: ReturnType<typeof buildOpenCodeByokProviderConfig>, providerId: string, model: string) =>
+      (config?.config as { provider: Record<string, { models: Record<string, { limit: { output: number } }> }> })
+        .provider[providerId]?.models[model]?.limit;
+    const base = { protocol: 'bedrock' as const, baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' };
+    const cases: Array<[string, number]> = [
+      ['mistral.mistral-small-2402-v1:0', 8_192],
+      ['mistral.mixtral-8x7b-instruct-v0:1', 4_096],
+      ['meta.llama3-70b-instruct-v1:0', 2_048],
+      ['us.meta.llama3-3-70b-instruct-v1:0', 8_192],
+      ['us.amazon.nova-lite-v1:0', 10_000],
+      ['amazon.nova-micro-v1:0', 10_000],
+      ['us.deepseek.r1-v1:0', 16_384],
+      ['global.amazon.nova-2-lite-v1:0', 16_384],
+    ];
+    for (const [model, ceiling] of cases) {
+      const output = limitOf(
+        buildOpenCodeByokProviderConfig({ ...base, apiKey: 'ABSKbedrock-key' }, model),
+        'amazon-bedrock',
+        model,
+      ).output;
+      expect(output, model).toBeLessThanOrEqual(ceiling);
+      expect(output, model).toBe(bedrockConverseOutputLimit(model));
+    }
+  });
+
+  it('applies the documented unknown-model policy on the Converse route', () => {
+    expect(bedrockConverseOutputLimit('vendor.brand-new-model-v9:0')).toBe(4_096);
+    expect(bedrockConverseOutputLimit('eu.vendor.brand-new-model-v9:0')).toBe(4_096);
+    // Inference-profile prefixes resolve to the base model's ceiling.
+    expect(bedrockConverseOutputLimit('apac.amazon.nova-lite-v1:0')).toBe(10_000);
+    expect(bedrockConverseOutputLimit('amazon.nova-lite-v1:0')).toBe(10_000);
   });
 
   it('passes the AWS profile to OpenCode and exports no bearer token in profile mode', () => {

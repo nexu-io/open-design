@@ -24,7 +24,6 @@ export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
 const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
-const BEDROCK_CONVERSE_OUTPUT_TOKEN_LIMIT = 8_192;
 
 const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], string> = {
   anthropic: 'https://api.anthropic.com/v1',
@@ -209,14 +208,85 @@ export function bedrockModelFamily(modelId: string): BedrockModelFamily {
 const BEDROCK_MODEL_LIMITS: Record<BedrockModelFamily, { context: number; output: number }> = {
   anthropic: { context: 200_000, output: 32_000 },
   openai: { context: 400_000, output: 32_000 },
-  // The Converse route serves every non-Anthropic, non-OpenAI model. OpenCode
-  // sends `limit.output` as the request's maxTokens and Bedrock rejects a
-  // value above the model's own ceiling before the model runs ("The maximum
-  // tokens you requested exceeds the model limit of 10000", measured on Nova
-  // Micro). Amazon Nova caps at 10000, Llama and Mistral at 8192, so 8192 is
-  // the largest value every model on this route accepts.
-  other: { context: DEFAULT_CONTEXT_TOKEN_LIMIT, output: BEDROCK_CONVERSE_OUTPUT_TOKEN_LIMIT },
+  // The Converse route serves every non-Anthropic, non-OpenAI model; its
+  // output limit is resolved per model by `bedrockConverseOutputLimit()`.
+  other: { context: DEFAULT_CONTEXT_TOKEN_LIMIT, output: DEFAULT_OUTPUT_TOKEN_LIMIT },
 };
+
+// OpenCode sends `limit.output` as the Converse request's maxTokens and
+// Bedrock rejects a value above the model's own ceiling before the model runs
+// ("The maximum tokens you requested exceeds the model limit of N"). The
+// ceilings below were measured on bedrock-runtime us-east-1 (2026-09-15) by
+// sending an oversized maxTokens to every active on-demand text model and
+// reading N from that validation error. Keys are base model ids; an
+// inference-profile prefix (`us.`, `eu.`, `apac.`, `jp.`, `global.`) is
+// stripped before lookup, since the profile shares the base model's ceiling.
+const BEDROCK_CONVERSE_OUTPUT_CEILINGS: Record<string, number> = {
+  'amazon.nova-micro-v1:0': 10_000,
+  'amazon.nova-lite-v1:0': 10_000,
+  'amazon.nova-pro-v1:0': 10_000,
+  'amazon.nova-2-lite-v1:0': 65_535,
+  'meta.llama3-8b-instruct-v1:0': 2_048,
+  'meta.llama3-70b-instruct-v1:0': 2_048,
+  'meta.llama3-1-8b-instruct-v1:0': 8_192,
+  'meta.llama3-1-70b-instruct-v1:0': 8_192,
+  'meta.llama3-3-70b-instruct-v1:0': 8_192,
+  'mistral.mistral-7b-instruct-v0:2': 8_192,
+  'mistral.mixtral-8x7b-instruct-v0:1': 4_096,
+  'mistral.mistral-small-2402-v1:0': 8_192,
+  'mistral.mistral-large-2402-v1:0': 8_192,
+  'mistral.pixtral-large-2502-v1:0': 131_072,
+  'mistral.magistral-small-2509': 131_072,
+  'mistral.voxtral-mini-3b-2507': 32_768,
+  'mistral.voxtral-small-24b-2507': 32_768,
+  'mistral.ministral-3-3b-instruct': 262_144,
+  'mistral.ministral-3-8b-instruct': 262_144,
+  'mistral.ministral-3-14b-instruct': 262_144,
+  'mistral.devstral-2-123b': 262_144,
+  'mistral.mistral-large-3-675b-instruct': 262_144,
+  'deepseek.r1-v1:0': 32_768,
+  'deepseek.v3.2': 163_840,
+  'qwen.qwen3-32b-v1:0': 32_768,
+  'qwen.qwen3-coder-30b-a3b-v1:0': 262_144,
+  'qwen.qwen3-coder-next': 262_144,
+  'qwen.qwen3-next-80b-a3b': 262_144,
+  'qwen.qwen3-vl-235b-a22b': 262_144,
+  'writer.palmyra-vision-7b': 4_096,
+  'writer.palmyra-x4-v1:0': 8_192,
+  'writer.palmyra-x5-v1:0': 8_192,
+  'google.gemma-3-4b-it': 131_072,
+  'google.gemma-3-12b-it': 131_072,
+  'google.gemma-3-27b-it': 131_072,
+  'minimax.minimax-m2.1': 196_608,
+  'minimax.minimax-m2.5': 196_608,
+  'moonshot.kimi-k2-thinking': 262_144,
+  'moonshotai.kimi-k2.5': 262_144,
+  'nvidia.nemotron-nano-9b-v2': 131_072,
+  'nvidia.nemotron-nano-12b-v2': 131_072,
+  'nvidia.nemotron-nano-3-30b': 262_144,
+  'nvidia.nemotron-super-3-120b': 262_144,
+  'zai.glm-4.7': 202_752,
+  'zai.glm-4.7-flash': 202_752,
+  'zai.glm-5': 202_752,
+};
+
+// Unknown-model policy: a model missing from the table (a new release, a
+// vendor not probed) gets the smallest ceiling seen among Converse chat
+// models that take tools, 4096. A request never fails validation for it, at
+// the cost of shorter answers until the table is extended; the model card
+// probe that produced the table (`aws bedrock list-foundation-models` plus
+// one oversized Converse call per id) is the way to extend it.
+const BEDROCK_CONVERSE_UNKNOWN_OUTPUT_LIMIT = 4_096;
+
+const BEDROCK_INFERENCE_PROFILE_PREFIX = /^(?:us|eu|apac|jp|au|ca|sa|us-gov|global)\./i;
+
+export function bedrockConverseOutputLimit(modelId: string): number {
+  const base = modelId.trim().replace(BEDROCK_INFERENCE_PROFILE_PREFIX, '');
+  const ceiling = BEDROCK_CONVERSE_OUTPUT_CEILINGS[base] ?? BEDROCK_CONVERSE_UNKNOWN_OUTPUT_LIMIT;
+  // Never ask for more than the route default even when the model allows it:
+  // maxTokens is a budget, not a target, and a 262k budget buys nothing here.
+  return Math.min(ceiling, DEFAULT_OUTPUT_TOKEN_LIMIT);
+}
 
 // OpenCode gates file parts on the model's declared input modalities and
 // replaces an unsupported one with an "ERROR: Cannot read ... (this model does
@@ -232,9 +302,13 @@ const BEDROCK_MODEL_MODALITIES: Partial<
 
 function bedrockModelEntry(family: BedrockModelFamily, rawModel: string): Record<string, unknown> {
   const modalities = BEDROCK_MODEL_MODALITIES[family];
+  const limit =
+    family === 'other'
+      ? { ...BEDROCK_MODEL_LIMITS.other, output: bedrockConverseOutputLimit(rawModel) }
+      : BEDROCK_MODEL_LIMITS[family];
   return {
     name: rawModel,
-    limit: BEDROCK_MODEL_LIMITS[family],
+    limit,
     ...(modalities ? { modalities } : {}),
   };
 }
