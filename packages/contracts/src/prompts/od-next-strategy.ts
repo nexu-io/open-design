@@ -443,7 +443,12 @@ The project directory is the source of truth. Read the relevant project and arti
 
 const TEXT_ARTIFACT_EXECUTION_SECTION = `## Native text-artifact execution
 
-This execution profile has no project-file tools. Produce only the complete declared text artifact in the host-supported artifact envelope. Do not claim to have written project files or simulate filesystem tool calls.`;
+This execution profile has no project-file tools. Do not claim to have written project files or simulate filesystem tool calls.
+On a planning or clarification turn, return the required plan/runtime protocol blocks and any clarification form; do not generate the deliverable yet.
+When the current stage permits delivery, use this exact envelope outside Markdown fences:
+<artifact identifier="page-name" type="text/html" title="Page title">COMPLETE FILE CONTENT</artifact>
+The identifier is a lowercase kebab-case name without a path or extension (at most 60 characters). Only identifier, type, and title attributes are supported; do not add path, filename, language, or other attributes. Supported types are text/html, text/css, image/svg+xml, and text/markdown. For a prototype, prefer one complete self-contained HTML entry point.
+The artifact envelope does not replace the required Open Design plan/runtime protocol blocks: include those outside the artifact exactly as the output contract specifies. Keep planning concise and reserve enough output for the complete deliverable and closing protocol blocks.`;
 
 const DISCOVERY_AND_PLANNING_SECTION = `## Discovery, planning, and Build surface
 

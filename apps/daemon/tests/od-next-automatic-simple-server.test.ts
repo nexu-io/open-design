@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { execFile } from 'node:child_process';
 import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -2420,6 +2420,85 @@ describe('OD Next automatic production through the real server', () => {
     expect(persistedEvents).not.toContain('INTERNAL_CHILD_TEXT_SHOULD_NOT_PERSIST');
     expect(persistedEvents).not.toContain('INTERNAL_CHILD_TOOL_INPUT');
     expect(persistedEvents).not.toContain('INTERNAL_CHILD_TOOL_OUTPUT');
+  });
+
+  it.skipIf(!process.env.OD_VELA_STRATEGY_REPLAY_BIN)('runs the real Vela text-artifact request and production chain', async () => {
+    const fixture = await createFixture('repair');
+    delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
+    const template = await createStrategyTemplate();
+    const plan = planContract(template.snapshotId, template.strategy, 'repair');
+    plan.runManifest.selectedAgentId = 'amr';
+    const requests: string[] = [];
+    const failures: string[] = [];
+    const provider = createServer(async (req, res) => {
+      try {
+        if (new URL(req.url!, 'http://localhost').pathname === '/v1/models') {
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ data: [{ id: 'replay-model' }] }));
+          return;
+        }
+        if (req.url !== '/v1/chat/completions') throw new Error(`Unexpected endpoint ${req.url}`);
+        let raw = '';
+        for await (const chunk of req) raw += chunk;
+        const body = JSON.parse(raw);
+        if (body.tools || body.tool_choice) throw new Error('Bare model must not receive tools');
+        expect(body.model).toBe('replay-model');
+        const prompt = body.messages.at(-1).content as string;
+        requests.push(prompt);
+        let text: string;
+        if (requests.length === 1) {
+          expect(prompt).toContain('profile="text_artifact"');
+          plan.strategy.snapshotId = /applied_snapshot="([^"]+)"/.exec(prompt)![1]!;
+          plan.runManifest.capabilitySnapshotHash = /capabilitySnapshotHash[^a-f0-9]*([a-f0-9]{64})/.exec(prompt)![1]!;
+          text = machineBlock('open-design-plan-contract', plan)
+            + machineBlock('open-design-runtime-state', runtimeState({ outcome: 'plan_ready' }));
+        } else {
+          expect(prompt).toContain('production');
+          expect(body.messages.some((message: { role: string; content: string }) => message.role === 'assistant' && message.content.includes('open-design-plan-contract'))).toBe(true);
+          text = '<artifact identifier="index" type="text/html"><!doctype html><html><head><title>Replay</title></head><body>Prototype</body></html></artifact>'
+            + machineBlock('open-design-runtime-state', runtimeState({ inputStage: 'production', outcome: 'completed' }));
+        }
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write(`data: ${JSON.stringify({ id: 'replay-' + requests.length, model: 'replay-model', choices: [{ index: 0, delta: { role: 'assistant', content: text }, finish_reason: null }] })}\n\n`);
+        res.end(`data: ${JSON.stringify({ id: 'replay-' + requests.length, model: 'replay-model', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } })}\n\ndata: [DONE]\n\n`);
+      } catch (error) {
+        failures.push(String(error));
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
+    const address = provider.address();
+    if (!address || typeof address === 'string') throw new Error('Missing loopback port');
+    try {
+      const configured = await fetch(`${started!.url}/api/app-config`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agentId: 'amr', agentCliEnv: { amr: {
+          VELA_BIN: process.env.OD_VELA_STRATEGY_REPLAY_BIN,
+          VELA_LINK_URL: `http://127.0.0.1:${address.port}`,
+          VELA_RUNTIME_KEY: 'local-replay-key', AMR_HOME: binDir,
+        } } }),
+      });
+      expect(configured.status).toBe(200);
+      queueFixtureIds(fixture);
+      const created = await postRun(started!.url, {
+        ...createRunRequest(fixture, 'Build a prototype.'), agentId: 'amr', amrRuntime: 'none', model: 'replay-model',
+      });
+      expect(created.taskExecutionId).toBeTruthy();
+      const first = await waitForRunTerminal(started!.url, created.runId);
+      expect(first.status, JSON.stringify({error: first.error, failures, requests: requests.length})).toBe('succeeded');
+      const task = await waitForTask(created.taskExecutionId, 'completed');
+      expect(failures).toEqual([]);
+      expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
+      expect(requests).toHaveLength(2);
+      const productionRun = await waitForRunTerminal(started!.url, task.runs.at(-1)!.runId);
+      expect(productionRun.strategyTask).toMatchObject({ outcome: 'completed', terminal: true });
+    } finally {
+      await stopServer(started);
+      started = null;
+      provider.closeAllConnections();
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
   });
 
   async function createFixture(

@@ -23,3 +23,10 @@ it.each(['codex', 'claude', 'dsh', 'none'] as const)('passes %s through and keep
     .toEqual(['agent', 'run', '--runtime', runtime]);
   expect(agentSessionStorageKey('amr', runtime)).toBe(`amr:${runtime}`);
 });
+
+// Every AMR runtime shares the production 2-minute first-output window carried
+// on the shared AMR def, so the evaluation matches what online users get. Other
+// agents keep their own def value (no watchdog when it is unset).
+it('keeps the production first-output window on the shared AMR def', () => {
+  expect(amrAgentDef.firstOutputTimeoutMs).toBe(2 * 60 * 1000);
+});

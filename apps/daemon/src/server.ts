@@ -12576,9 +12576,9 @@ export async function startServer({
       // them, so the reap targets THIS attempt's group and never the next one.
       const priorChild = run.child;
       const priorProcessGroupId = run.processGroupId;
-      // Release the previous child's stdio streams before letting the
-      // reference drop — see destroyChildStdio for rationale.
-      destroyChildStdio(priorChild);
+      // Keep the read ends open during shutdown: a CLI may flush its final
+      // response before releasing its session lease. Closing these pipes first
+      // can terminate it with EPIPE/SIGPIPE before deferred cleanup runs.
       // Disband the WHOLE process group of the failed attempt, not just the
       // direct child. A same-run retry that only SIGTERMs run.child leaves the
       // CLI's spawned descendants (MCP servers, tool subprocesses) orphaned
@@ -12591,7 +12591,7 @@ export async function startServer({
         priorChild,
         priorProcessGroupId,
         { reason: 'retry_generation_replaced' },
-      );
+      ).finally(() => destroyChildStdio(priorChild));
       run.status = 'queued';
       run.updatedAt = Date.now();
       run.child = null;
@@ -12881,9 +12881,6 @@ export async function startServer({
         failure,
         attemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
-        // AMR direct-model evaluation is one request per user turn. A host
-        // retry would silently turn that baseline into a second model call.
-        ...(def.id === 'amr' && selectedAmrRuntime === 'none' ? { maxAttempts: 0 } : {}),
       });
       if (allowRetry && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
         run.retryOriginalFailure ??= failure ?? undefined;
@@ -15995,7 +15992,22 @@ export async function startServer({
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
         }).autoReseedFullTranscript
       ) {
-        if (strategyTaskAtStart && strategyTaskAtStart.inputStage !== 'request') {
+        // A post-request OD Next turn blocks only when the cold re-seed would
+        // lose the plan. `resolveAgentResumeFailurePolicy` already classes this
+        // failure as recoverable — including the OpenCode compaction
+        // continuation that vela 0.0.35 (#1847) split onto its own request —
+        // and the re-seed below re-enters `startChatRun`, which re-reads
+        // `strategy_task_executions`. So whenever the plan contract is still on
+        // the task, re-seeding rebuilds the full transcript AND the plan,
+        // exactly like the cold start every non-OpenCode harness takes on every
+        // turn. Only a task whose plan never reached the store is genuinely
+        // unrecoverable here; blocking the rest turned a recoverable stream EOF
+        // into a dead Build turn that no retry could clear.
+        if (
+          strategyTaskAtStart
+          && strategyTaskAtStart.inputStage !== 'request'
+          && !strategyTaskAtStart.planContract
+        ) {
           const blocked = blockAutomaticContinuation(db, { runId: run.id });
           if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
           send('error', createSseErrorPayload(
