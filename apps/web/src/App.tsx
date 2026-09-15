@@ -4358,6 +4358,7 @@ function AppInner() {
     capturedAfterListGeneration: number;
     workspaceScope?: ProjectWorkspaceScope;
     resolvedDir?: string | null;
+    canonicalResolvedDir?: string;
     workspaceContext?: WorkspaceCollabContext;
     awaitingFirstMaterialization?: boolean;
   } | null>(null);
@@ -4387,7 +4388,7 @@ function AppInner() {
           ? { workspaceScope: previous.workspaceScope }
           : {}),
         ...(preservesBootstrapWitness && previous.resolvedDir !== undefined
-          ? { resolvedDir: previous.resolvedDir }
+          ? { resolvedDir: previous.resolvedDir, canonicalResolvedDir: previous.canonicalResolvedDir }
           : {}),
         ...(preservesBootstrapWitness && previous.workspaceContext
           ? { workspaceContext: previous.workspaceContext }
@@ -4623,6 +4624,7 @@ function AppInner() {
           capturedAfterListGeneration: latestAppliedProjectListGenerationRef.current,
           workspaceScope: bootstrap.scope,
           resolvedDir: bootstrap.resolvedDir,
+          canonicalResolvedDir: bootstrap.canonicalResolvedDir,
           awaitingFirstMaterialization:
             bootstrap.project.metadata?.sharedProjectPlaceholderAt != null,
         };
@@ -4668,6 +4670,7 @@ function AppInner() {
             capturedAfterListGeneration: latestAppliedProjectListGenerationRef.current,
             workspaceScope: progressive.scope,
             resolvedDir: progressive.resolvedDir,
+            canonicalResolvedDir: progressive.canonicalResolvedDir,
             workspaceContext: firstOpenTeamContext,
             awaitingFirstMaterialization:
               progressive.awaitingFirstMaterialization,
@@ -5330,6 +5333,7 @@ function AppInner() {
               ? {
                   project: routeProjectSnapshotRef.current.project,
                   resolvedDir: routeProjectSnapshotRef.current.resolvedDir,
+                  canonicalResolvedDir: routeProjectSnapshotRef.current.canonicalResolvedDir,
                 }
               : undefined
           }

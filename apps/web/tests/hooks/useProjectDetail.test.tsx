@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 
@@ -68,12 +68,13 @@ describe('useProjectDetail', () => {
       project.id,
       teamContext(),
       'workspace-a',
-      { project, resolvedDir: '/tmp/od/projects/p-bootstrap' },
+      { project, resolvedDir: '/tmp/od/projects/p-bootstrap', canonicalResolvedDir: '/real/projects/p-bootstrap' },
     ));
 
     expect(result.current).toMatchObject({
       project,
       resolvedDir: '/tmp/od/projects/p-bootstrap',
+      canonicalResolvedDir: '/real/projects/p-bootstrap',
       loading: false,
       error: null,
     });
@@ -168,4 +169,60 @@ describe('useProjectDetail', () => {
     expect(result.current.error?.message).toContain('workspace authority');
     expect(fetchMock).not.toHaveBeenCalled();
   });
+});
+
+
+it('clears canonical proof across project changes and legacy responses', async () => {
+  const replies: Array<(response: Response) => void> = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise((resolve) => replies.push(resolve)));
+  const { result, rerender } = renderHook(({ id }) => useProjectDetail(id), { initialProps: { id: 'a' } });
+  await act(async () => replies.shift()!(new Response(JSON.stringify({ project: { id: 'a' }, resolvedDir: '/alias/a', canonicalResolvedDir: '/real/a' }))));
+  expect(result.current.canonicalResolvedDir).toBe('/real/a');
+  let oldRefresh!: Promise<void>;
+  act(() => { oldRefresh = result.current.refresh(); });
+  rerender({ id: 'b' });
+  expect(result.current.canonicalResolvedDir).toBeNull();
+  await act(async () => {
+    replies.shift()!(new Response(JSON.stringify({ project: { id: 'a' }, canonicalResolvedDir: '/real/a' })));
+    await oldRefresh;
+  });
+  expect(result.current.canonicalResolvedDir).toBeNull();
+  await act(async () => replies.shift()!(new Response(JSON.stringify({ project: { id: 'b' }, resolvedDir: '/alias/b' }))));
+  expect(result.current.canonicalResolvedDir).toBeNull();
+});
+
+
+it('discards an aborted lazy-root detail refresh instead of publishing its late response', async () => {
+  let reply!: (response: Response) => void;
+  vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise((resolve) => { reply = resolve; }));
+  const project = { id: 'lazy', name: 'Lazy', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 };
+  const { result } = renderHook(() => useProjectDetail('lazy', null, null, { project, resolvedDir: '/alias/lazy' }));
+  const controller = new AbortController();
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.refresh(controller.signal); });
+  controller.abort();
+  await act(async () => {
+    reply(new Response(JSON.stringify({ project, resolvedDir: '/alias/lazy', canonicalResolvedDir: '/real/lazy' })));
+    await pending;
+  });
+  expect(result.current.canonicalResolvedDir).toBeNull();
+});
+
+
+it('keeps the new project canonical proof when an older manual refresh resolves last', async () => {
+  const replies: Array<(response: Response) => void> = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise((resolve) => replies.push(resolve)));
+  const { result, rerender } = renderHook(({ id }) => useProjectDetail(id), { initialProps: { id: 'a' } });
+  await act(async () => replies.shift()!(new Response(JSON.stringify({ project: { id: 'a' }, canonicalResolvedDir: '/real/a' }))));
+  let oldRefresh!: Promise<void>;
+  act(() => { oldRefresh = result.current.refresh(); });
+  const replyA = replies.shift()!;
+  rerender({ id: 'b' });
+  await act(async () => replies.shift()!(new Response(JSON.stringify({ project: { id: 'b' }, canonicalResolvedDir: '/real/b' }))));
+  expect(result.current.canonicalResolvedDir).toBe('/real/b');
+  await act(async () => {
+    replyA(new Response(JSON.stringify({ project: { id: 'a' }, canonicalResolvedDir: '/real/a' })));
+    await oldRefresh;
+  });
+  expect(result.current.canonicalResolvedDir).toBe('/real/b');
 });

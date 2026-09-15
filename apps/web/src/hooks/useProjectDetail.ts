@@ -15,14 +15,16 @@ import type {
 export interface ProjectDetailState {
   project: Project | null;
   resolvedDir: string | null;
+  canonicalResolvedDir: string | null;
   loading: boolean;
   error: Error | null;
-  refresh: () => Promise<void>;
+  refresh: (signal?: AbortSignal) => Promise<void>;
 }
 
 export interface ProjectDetailSeed {
   project: Project;
   resolvedDir: string | null;
+  canonicalResolvedDir?: string | null;
 }
 
 export function useProjectDetail(
@@ -62,6 +64,16 @@ export function useProjectDetail(
     authorityWorkspaceId && authorityMemberId
       ? `${authorityWorkspaceId}:${authorityMemberId}`
       : 'none';
+  const canonicalOwner = `${projectId}:${boundWorkspaceId}:${authorityKey}`;
+  const canonicalOwnerRef = useRef(canonicalOwner);
+  canonicalOwnerRef.current = canonicalOwner;
+  const [canonicalRoot, setCanonicalRoot] = useState(() => ({
+    owner: canonicalOwner,
+    value: initialDetailCanSeed ? initialDetail?.canonicalResolvedDir ?? null : null,
+  }));
+  const canonicalResolvedDir = canonicalRoot.owner === canonicalOwner
+    ? canonicalRoot.value
+    : null;
 
   const fetchOnce = useCallback(
     async (signal?: AbortSignal) => {
@@ -97,6 +109,12 @@ export function useProjectDetail(
             ? nextProject.metadata.baseDir
             : null;
         setResolvedDir(reported ?? fallback);
+        if (canonicalOwnerRef.current === canonicalOwner) {
+          setCanonicalRoot({
+            owner: canonicalOwner,
+            value: typeof body.canonicalResolvedDir === 'string' ? body.canonicalResolvedDir : null,
+          });
+        }
       } catch (err) {
         if (signal?.aborted) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -109,6 +127,7 @@ export function useProjectDetail(
       authorityMemberId,
       authorityWorkspaceId,
       boundWorkspaceId,
+      canonicalOwner,
       projectId,
     ],
   );
@@ -123,7 +142,7 @@ export function useProjectDetail(
     return () => controller.abort();
   }, [fetchOnce, initialDetailCanSeed]);
 
-  const refresh = useCallback(() => fetchOnce(), [fetchOnce]);
+  const refresh = useCallback((signal?: AbortSignal) => fetchOnce(signal), [fetchOnce]);
 
-  return { project, resolvedDir, loading, error, refresh };
+  return { project, resolvedDir, canonicalResolvedDir, loading, error, refresh };
 }
