@@ -3263,6 +3263,7 @@ export const de: Dict = {
   'fileViewer.exportSlideEta': 'Folie {current}/{total} · noch ca. {seconds}s',
   'fileViewer.exportFailed': 'Export fehlgeschlagen. Bitte erneut versuchen.',
   'fileViewer.exportDone': 'Export abgeschlossen',
+  'fileViewer.exportDegradedFallback': 'Projektdateien konnten nicht abgerufen werden – dieses ZIP enthält nur die gerenderte Seite.',
   'fileViewer.exportImageFailed': 'Bildaufnahme fehlgeschlagen. Bitte versuchen Sie es erneut oder verwenden Sie das Screenshot-Tool Ihres Browsers.',
   'fileViewer.exportImageModalSubtitle': 'Wählen Sie ein Format und laden Sie dann die aktuelle Vorschau als Bild herunter.',
   'fileViewer.exportImageFormatLabel': 'Format',

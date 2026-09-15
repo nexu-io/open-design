@@ -3263,6 +3263,7 @@ export const ko: Dict = {
   'fileViewer.exportSlideEta': '슬라이드 {current}/{total} 내보내는 중 · 약 {seconds}초 남음',
   'fileViewer.exportFailed': '내보내기에 실패했습니다. 다시 시도해 주세요.',
   'fileViewer.exportDone': '내보내기 완료',
+  'fileViewer.exportDegradedFallback': '프로젝트 파일에 접근하지 못했습니다. 이 ZIP에는 렌더링된 페이지만 포함되어 있습니다.',
   'fileViewer.exportImageFailed': '이미지 캡처에 실패했습니다. 다시 시도하거나 브라우저의 스크린샷 도구를 사용하세요.',
   'fileViewer.exportImageModalSubtitle': '형식을 선택한 다음 현재 미리보기를 이미지로 다운로드합니다.',
   'fileViewer.exportImageFormatLabel': '형식',

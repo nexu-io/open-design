@@ -3263,6 +3263,7 @@ export const ptBR: Dict = {
   'fileViewer.exportSlideEta': 'Slide {current}/{total} · ~{seconds}s restantes',
   'fileViewer.exportFailed': 'Falha na exportação. Tente novamente.',
   'fileViewer.exportDone': 'Exportação concluída',
+  'fileViewer.exportDegradedFallback': 'Não foi possível acessar os arquivos do projeto — este ZIP contém apenas a página renderizada.',
   'fileViewer.exportImageFailed': 'Falha ao capturar a imagem. Tente novamente ou use a ferramenta de captura de tela do seu navegador.',
   'fileViewer.exportImageModalSubtitle': 'Escolha um formato e baixe a prévia atual como imagem.',
   'fileViewer.exportImageFormatLabel': 'Formato',

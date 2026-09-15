@@ -871,6 +871,146 @@ export function exportReactComponentAsZip(
 // directory we scope the archive to that directory, otherwise we ask the
 // daemon for the whole project. Falls back to the in-memory single-file
 // ZIP on any failure so the action never silently no-ops.
+/** Local file header — every non-empty ZIP starts with one. */
+const ZIP_LOCAL_FILE_SIGNATURE = [0x50, 0x4b, 0x03, 0x04] as const;
+/** End of central directory record: 22 bytes, plus an optional comment. */
+const ZIP_EOCD_SIGNATURE = [0x50, 0x4b, 0x05, 0x06] as const;
+const ZIP_EOCD_SIZE = 22;
+/** The EOCD comment length field is a uint16, so the record starts at most this far from the end. */
+const ZIP_MAX_COMMENT = 0xffff;
+/** Central directory file header — one per entry, 46 bytes plus name/extra/comment. */
+const ZIP_CENTRAL_HEADER_SIGNATURE = [0x50, 0x4b, 0x01, 0x02] as const;
+const ZIP_CENTRAL_HEADER_SIZE = 46;
+
+/**
+ * Walks the central directory the EOCD points at and confirms it holds
+ * exactly the number of well-formed records the EOCD declares, consuming the
+ * declared size exactly.
+ *
+ * Checking only that the directory's byte range fits inside the file is not
+ * enough: a stream damaged in that region keeps a plausible range while the
+ * records themselves are gone, and a reader then fails with something like
+ * "expected 1 records in central dir, got 0".
+ */
+async function centralDirectoryIsIntact(
+  blob: Blob,
+  offset: number,
+  size: number,
+  declaredEntries: number,
+): Promise<boolean> {
+  // An empty archive has no directory at all.
+  if (size === 0) return declaredEntries === 0;
+  if (size < ZIP_CENTRAL_HEADER_SIZE) return false;
+
+  // The EOCD entry count is a uint16, so it is only ever the low 16 bits of
+  // the real total. Writers that predate Zip64 — including JSZip, which the
+  // daemon uses to build project archives, and this app's own `buildZip` —
+  // truncate rather than emitting the Zip64 sentinel, so 65,536 entries are
+  // written as 0 and 65,537 as 1. Comparing modulo 65,536 accepts those
+  // readable archives while still catching a directory that genuinely
+  // disagrees with its own count. 0xffff is the Zip64 sentinel proper, where
+  // the real count lives in the Zip64 record and no comparison is possible.
+  const countIsComparable = declaredEntries !== 0xffff;
+
+  const bytes = new Uint8Array(await blob.slice(offset, offset + size).arrayBuffer());
+  if (bytes.length !== size) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  let cursor = 0;
+  let found = 0;
+  while (cursor < bytes.length) {
+    if (cursor + ZIP_CENTRAL_HEADER_SIZE > bytes.length) return false;
+    if (!ZIP_CENTRAL_HEADER_SIGNATURE.every((b, k) => bytes[cursor + k] === b)) return false;
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    cursor += ZIP_CENTRAL_HEADER_SIZE + nameLength + extraLength + commentLength;
+    found += 1;
+  }
+  // The records must consume the declared directory size exactly, and — when
+  // the EOCD count is trustworthy — match it.
+  if (cursor !== bytes.length) return false;
+  return countIsComparable ? found % 0x10000 === declaredEntries : found > 0;
+}
+
+/**
+ * True when the blob is a structurally complete ZIP.
+ *
+ * A 2xx is not proof the body is an archive: an authenticating proxy can
+ * answer with its own HTML interstitial at 200, and an empty or truncated
+ * transfer arrives short. Without this check each is handed to the user as a
+ * .zip and reported as a successful export.
+ *
+ * A signature prefix alone is not enough either. `PK\x05\x06` is only the
+ * first four bytes of the 22-byte end-of-central-directory record, and
+ * `PK\x03\x04…` is a local header with no central directory behind it —
+ * both are unreadable archives, and a truncated stream produces exactly the
+ * latter. So the EOCD is located and validated:
+ *
+ *   1. scan back from the end for the EOCD signature (bounded by the maximum
+ *      comment length, so the window is at most 64 KiB + 22 bytes),
+ *   1a. require the single-volume form: both disk fields zero, and the
+ *      per-disk entry count equal to the total,
+ *   2. require the declared comment length to account for every remaining
+ *      byte, so nothing is missing after the record,
+ *   3. walk the central directory it points at and require exactly the
+ *      declared number of well-formed records, consuming its declared size.
+ *
+ * This establishes that the archive's index is present and self-consistent.
+ * It is not a full parse: entry contents and CRCs are not verified.
+ */
+async function looksLikeZip(blob: Blob): Promise<boolean> {
+  if (blob.size < ZIP_EOCD_SIZE) return false;
+
+  const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  const startsWith = (sig: readonly number[]): boolean => sig.every((b, i) => head[i] === b);
+  if (!startsWith(ZIP_LOCAL_FILE_SIGNATURE) && !startsWith(ZIP_EOCD_SIGNATURE)) return false;
+
+  const windowSize = Math.min(blob.size, ZIP_EOCD_SIZE + ZIP_MAX_COMMENT);
+  const tail = new Uint8Array(await blob.slice(blob.size - windowSize).arrayBuffer());
+  const view = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+
+  for (let i = tail.length - ZIP_EOCD_SIZE; i >= 0; i -= 1) {
+    if (!ZIP_EOCD_SIGNATURE.every((b, k) => tail[i + k] === b)) continue;
+    // Every byte after the record must be accounted for by its comment.
+    if (ZIP_EOCD_SIZE + view.getUint16(i + 20, true) !== tail.length - i) continue;
+    // Only the single-volume form is supported, so require the disk
+    // identifiers to say so. A record advertising a multi-volume archive
+    // passes every other check unchanged while the response carries one
+    // volume, and this guard has no multi-volume handling to fall back on.
+    //
+    // Note this is a metadata-consistency check, not a readability one:
+    // JSZip 3.10.1 and Python's zipfile both still open an archive whose
+    // disk number has been flipped. Nothing in the real path produces one —
+    // the daemon builds these with JSZip, which always writes zero — so
+    // rejecting an unsupported shape costs nothing and beats guessing.
+    const thisDisk = view.getUint16(i + 4, true);
+    const centralDirStartDisk = view.getUint16(i + 6, true);
+    const entriesOnThisDisk = view.getUint16(i + 8, true);
+    const declaredEntries = view.getUint16(i + 10, true);
+    if (thisDisk !== 0 || centralDirStartDisk !== 0) continue;
+    if (entriesOnThisDisk !== declaredEntries) continue;
+    const centralDirSize = view.getUint32(i + 12, true);
+    const centralDirOffset = view.getUint32(i + 16, true);
+    const eocdAt = blob.size - (tail.length - i);
+    if (centralDirOffset + centralDirSize > eocdAt) continue;
+    if (await centralDirectoryIsIntact(blob, centralDirOffset, centralDirSize, declaredEntries)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Downloads the project's on-disk tree as a ZIP.
+ *
+ * When the archive request fails the browser still receives a ZIP, but it is
+ * a client-rendered single-file snapshot rather than the project files. That
+ * substitution used to be silent, so a failed export was indistinguishable
+ * from a successful one. Returning 'degraded' — mirroring the 'cancelled'
+ * sentinel other exporters use — lets the caller tell the user which artifact
+ * they actually got.
+ */
 export async function exportProjectAsZip(opts: {
   projectId: string;
   filePath: string;
@@ -878,7 +1018,7 @@ export async function exportProjectAsZip(opts: {
   fallbackTitle: string;
   versionId?: string;
   workspaceContext?: WorkspaceCollabContext | null;
-}): Promise<void> {
+}): Promise<void | 'degraded'> {
   if (opts.versionId) {
     const segments = opts.filePath
       .split('/')
@@ -897,9 +1037,15 @@ export async function exportProjectAsZip(opts: {
       exportAsZip(await resp.text(), opts.fallbackTitle);
       return;
     } catch (err) {
+      // Same silent-substitution problem as the archive path below, though
+      // milder: callers pass the selected version's own cached content as
+      // `fallbackHtml` (`HtmlVersionExportContext.content` is required), so
+      // the user gets the right version — but as a client-rendered snapshot
+      // instead of the server-rendered export they asked for. Still a
+      // different artifact than the one requested, so say so.
       console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
       exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
-      return;
+      return 'degraded';
     }
   }
   const root = archiveRootFromFilePath(opts.filePath);
@@ -914,10 +1060,14 @@ export async function exportProjectAsZip(opts: {
       : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
+    if (!await looksLikeZip(blob)) {
+      throw new Error(`archive response was not a ZIP (${blob.size} bytes)`);
+    }
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
   } catch (err) {
     console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
     exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+    return 'degraded';
   }
 }
 
@@ -1246,6 +1396,9 @@ export async function downloadDesignSystemArchive(opts: {
       : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
+    if (!await looksLikeZip(blob)) {
+      throw new Error(`archive response was not a ZIP (${blob.size} bytes)`);
+    }
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, ''));
     return true;
   } catch (err) {
@@ -1272,6 +1425,9 @@ export async function downloadProjectArchive(opts: {
       : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
+    if (!await looksLikeZip(blob)) {
+      throw new Error(`archive response was not a ZIP (${blob.size} bytes)`);
+    }
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
     return true;
   } catch (err) {
