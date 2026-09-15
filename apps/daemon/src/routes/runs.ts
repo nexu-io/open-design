@@ -1336,6 +1336,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       nativeSessionResume: true,
       taskExecutionId: task.taskExecutionId,
       taskRunIndex,
+      executionIntent: task.executionIntent ?? 'produce',
       answer,
     });
     meta.taskExecutionId = task.taskExecutionId;
@@ -2901,6 +2902,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                       snapshotId: resolvedSnapshot.snapshotId,
                       selectedAgentId: candidate.agentId!,
                       initialRunId: candidate.id,
+                      sessionMode: meta.sessionMode === 'chat' || meta.sessionMode === 'plan' ? meta.sessionMode : 'design',
                       frozenSkillPackage,
                       promptBundleText: preparedPromptBundleText,
                       taskInputManifestSha256: initialTaskInputSnapshot.manifestSha256,
@@ -3873,8 +3875,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     const chatPluginId = clarificationTask?.strategyId
       ?? (typeof requestBody.pluginId === 'string' ? requestBody.pluginId : null);
+    // Same authority as POST /api/runs: the validated task and frozen snapshot
+    // own an internal continuation; it is not a newly requested public plugin.
+    const internalStrategyContinuation = Boolean(
+      clarificationTask?.strategyId === 'od-next-strategy'
+      && clarificationContinuation?.snapshot.pluginId === clarificationTask.strategyId
+      && clarificationContinuation.snapshot.strategy?.id === clarificationTask.strategyId,
+    );
     if (
-      chatPluginId
+      !internalStrategyContinuation
+      && chatPluginId
       && ctx.plugins.authorizePluginRequest
       && !await ctx.plugins.authorizePluginRequest(req, res, chatPluginId)
     ) return;

@@ -507,6 +507,7 @@ async function taskAggregate(
         telemetry: run.promptTelemetry,
         persisted: mapping.finalText,
         stage: mapping.inputStage,
+        ...(mapping.purpose ? { purpose: mapping.purpose } : {}),
       });
     }
     const quality = options.dataDir

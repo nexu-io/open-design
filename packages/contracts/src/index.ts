@@ -83,6 +83,7 @@ export * from './prompts/od-next-strategy.js';
 export * from './prompts/canonical-xml.js';
 export * from './prompts/od-next-prompt-bundle.js';
 export * from './prompts/od-next-prompt-bundle-v2.js';
+export * from './prompts/od-next-intent-resolution.js';
 export * from './prompts/od-next-task-inputs.js';
 export * from './prompts/plugin-block.js';
 export * from './prompts/atom-block.js';

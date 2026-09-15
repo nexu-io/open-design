@@ -247,6 +247,8 @@ export interface ChatRun {
     designSystemCreated: boolean;
     previewModuleCount: number;
     filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
     diff?: RunArtifactDiff;
   };
   artifactPaths?: string[];

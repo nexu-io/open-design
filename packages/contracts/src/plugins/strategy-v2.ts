@@ -448,8 +448,12 @@ export const OpenDesignPlanContractV2Schema = z.object({
 }).strict().superRefine(rejectForbiddenStrategySemantics);
 export type OpenDesignPlanContractV2 = z.infer<typeof OpenDesignPlanContractV2Schema>;
 
+export const StrategyExecutionIntentV2Schema = z.enum(['produce', 'plan_only']);
+export type StrategyExecutionIntentV2 = z.infer<typeof StrategyExecutionIntentV2Schema>;
+
 export const StrategyRuntimeStateV2Schema = z.object({
   schema: z.literal(OD_NEXT_RUNTIME_STATE_SCHEMA),
+  executionIntent: StrategyExecutionIntentV2Schema.optional(),
   route: StrategyRouteV2Schema,
   inputStage: StrategyInputStageV2Schema,
   outcome: StrategyOutcomeV2Schema,
@@ -457,6 +461,17 @@ export const StrategyRuntimeStateV2Schema = z.object({
   reasonCodes: z.array(z.string().min(1)),
 }).strict().superRefine((value, context) => {
   rejectForbiddenStrategySemantics(value, context);
+
+  if (value.executionIntent === 'plan_only') {
+    if (value.route !== 'full_plan' || !['request', 'clarification'].includes(value.inputStage)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['executionIntent'],
+        message: 'Planning intent is confined to Full Plan request and clarification.',
+      });
+    }
+    if (value.outcome === 'completed') return;
+  }
 
   if (value.route === 'direct_edit') {
     if (value.inputStage !== 'request') {
@@ -717,6 +732,7 @@ export const StrategyTaskProjectionV2Schema = z.object({
   outcome: z.union([z.literal('running'), StrategyOutcomeV2Schema]),
   route: StrategyRouteV2Schema.nullable(),
   executionMode: StrategyExecutionModeV2Schema.nullable(),
+  executionIntent: StrategyExecutionIntentV2Schema.optional(),
   activeRunId: z.string().min(1),
   nextRunId: z.string().min(1).optional(),
   terminal: z.boolean(),
@@ -772,6 +788,7 @@ export const StrategyTaskProjectionV2Schema = z.object({
       inputStage: value.inputStage,
       outcome: value.outcome,
       executionMode: value.executionMode,
+      executionIntent: value.executionIntent,
       reasonCodes: [],
     });
     if (!state.success) {
@@ -816,7 +833,7 @@ export const StrategyTaskProjectionV2Schema = z.object({
       message: 'Production projections require a locked execution mode.',
     });
   }
-  if (value.outcome === 'completed' && value.inputStage !== 'production') {
+  if (value.outcome === 'completed' && value.inputStage !== 'production' && value.executionIntent !== 'plan_only') {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['outcome'],
