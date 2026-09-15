@@ -7,6 +7,10 @@ import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
+import {
+  resolveVelaNodeBin,
+  velaManagedWebRuntimeForEnv,
+} from './vela-managed-web.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
 import { resolveProjectRootFromNestedModule } from '../project-root.js';
 import {
@@ -105,7 +109,7 @@ export function spawnEnvForAgent(
   baseEnv: RuntimeEnvMap,
   configuredEnv: unknown = {},
   systemProxyEnv: RuntimeEnvMap = resolveSystemProxyEnv(),
-  _options: SpawnEnvOptions = {},
+  options: SpawnEnvOptions = {},
 ): NodeJS.ProcessEnv {
   const sandboxRuntime = sandboxRuntimeConfigForBaseEnv(baseEnv);
   const expandedConfiguredEnv = expandConfiguredEnv(configuredEnv);
@@ -160,6 +164,23 @@ export function spawnEnvForAgent(
     if (!env.VELA_OPENCODE_BIN?.trim()) {
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
+    }
+    // The flag above mounts the managed search service for OpenCode by config
+    // alone, but Codex and Pi reach the same service through runtime assets
+    // that ship in `@powerformer/vela-cli`, and vela reads their paths from the
+    // environment. Only the package's `bin/vela.cjs` launcher sets them, and we
+    // spawn the platform package's raw binary directly — so without this both
+    // harnesses fail every run with "launch through the Vela npm package"
+    // instead of merely losing web access. Resolve the assets from the same
+    // release we are about to launch, like VELA_OPENCODE_BIN above.
+    const managedWeb = velaManagedWebRuntimeForEnv(env, options.resolvedBin);
+    if (managedWeb.webTools && managedWeb.piWebExtension) {
+      const nodeBin = resolveVelaNodeBin(env);
+      if (nodeBin && !env.VELA_NODE_BIN?.trim()) env.VELA_NODE_BIN = nodeBin;
+      if (!env.VELA_WEB_TOOLS?.trim()) env.VELA_WEB_TOOLS = managedWeb.webTools;
+      if (!env.VELA_PI_WEB_EXTENSION?.trim()) {
+        env.VELA_PI_WEB_EXTENSION = managedWeb.piWebExtension;
+      }
     }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }

@@ -12881,9 +12881,6 @@ export async function startServer({
         failure,
         attemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
-        // AMR direct-model evaluation is one request per user turn. A host
-        // retry would silently turn that baseline into a second model call.
-        ...(def.id === 'amr' && selectedAmrRuntime === 'none' ? { maxAttempts: 0 } : {}),
       });
       if (allowRetry && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
         run.retryOriginalFailure ??= failure ?? undefined;
@@ -15995,7 +15992,22 @@ export async function startServer({
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
         }).autoReseedFullTranscript
       ) {
-        if (strategyTaskAtStart && strategyTaskAtStart.inputStage !== 'request') {
+        // A post-request OD Next turn blocks only when the cold re-seed would
+        // lose the plan. `resolveAgentResumeFailurePolicy` already classes this
+        // failure as recoverable — including the OpenCode compaction
+        // continuation that vela 0.0.35 (#1847) split onto its own request —
+        // and the re-seed below re-enters `startChatRun`, which re-reads
+        // `strategy_task_executions`. So whenever the plan contract is still on
+        // the task, re-seeding rebuilds the full transcript AND the plan,
+        // exactly like the cold start every non-OpenCode harness takes on every
+        // turn. Only a task whose plan never reached the store is genuinely
+        // unrecoverable here; blocking the rest turned a recoverable stream EOF
+        // into a dead Build turn that no retry could clear.
+        if (
+          strategyTaskAtStart
+          && strategyTaskAtStart.inputStage !== 'request'
+          && !strategyTaskAtStart.planContract
+        ) {
           const blocked = blockAutomaticContinuation(db, { runId: run.id });
           if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
           send('error', createSseErrorPayload(

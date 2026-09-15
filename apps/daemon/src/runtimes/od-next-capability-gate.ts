@@ -262,7 +262,13 @@ export const OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS:
     CODEX_0_147_0_BEST_EFFORT_MANIFEST,
     CLAUDE_2_1_233_BEST_EFFORT_MANIFEST,
     OPENCODE_1_18_18_BEST_EFFORT_MANIFEST,
-    VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
+    // Harness-evaluation branch: VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST (its
+    // seven-path complex evidence) is intentionally excluded from the active
+    // registry so AMR opencode resolves to the six-local SIMPLE fixture, the
+    // same simple-only admission the other five AMR harnesses get. This keeps
+    // the harness comparison on one execution mode and matches production,
+    // where complex is ~0.3% of OD Next tasks. The const stays defined as
+    // recorded evidence; re-add it here only to re-enable complex for opencode.
     VELA_PI_LOCAL_BEST_EFFORT_MANIFEST,
     ...VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS,
   ];
