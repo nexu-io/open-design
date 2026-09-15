@@ -15,8 +15,10 @@ import {
 } from '@open-design/contracts/runtime/preview-observability';
 import {
   buildPreviewFocusGuard,
+  buildPreviewInPageLinkGuard,
   buildPreviewRedirectGuard,
   buildPreviewSandboxShim,
+  PREVIEW_IN_PAGE_LINK_GUARD_MARKER,
   PREVIEW_URL_GUARD_MAX_HTML_BYTES,
   previewHtmlHasLoadTimeLocationNavigation,
 } from '@open-design/contracts/runtime/preview-guards';
@@ -1642,10 +1644,30 @@ function injectAfterHeadOpen(html: string, marker: string, injection: string): s
 
 function injectUrlPreviewBridge(
   html: string,
-  bridge: 'scroll' | 'selection' | 'snapshot' | 'observability' | 'sandbox' | 'focus' | 'redirect',
+  bridge:
+    | 'scroll'
+    | 'selection'
+    | 'snapshot'
+    | 'observability'
+    | 'sandbox'
+    | 'focus'
+    | 'redirect'
+    | 'links',
 ): string {
+  if (bridge === 'links') {
+    return injectAfterHeadOpen(
+      html,
+      PREVIEW_IN_PAGE_LINK_GUARD_MARKER,
+      buildPreviewInPageLinkGuard(),
+    );
+  }
   if (bridge === 'sandbox') {
-    return injectAfterHeadOpen(html, 'data-od-sandbox-shim', buildPreviewSandboxShim());
+    // The link guard used to live inside the shim script. Keep the opaque-origin
+    // path shipping both so the split is invisible to artifacts that reach it.
+    return injectUrlPreviewBridge(
+      injectAfterHeadOpen(html, 'data-od-sandbox-shim', buildPreviewSandboxShim()),
+      'links',
+    );
   }
   if (bridge === 'focus') {
     return injectAfterHeadOpen(html, 'data-od-preview-focus-guard', buildPreviewFocusGuard());
@@ -6153,16 +6175,23 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     const baseHref = `/api/projects/${encodeURIComponent(projectId)}`
       + `/preview/${encodeURIComponent(scope)}/${dirSuffix}`;
     const bridge = buildPreviewBaseHrefBridge({ href: baseHref, expiresAt });
+    // The base governs every relative URL in the document, including the
+    // artifact's own `#section` links -- which resolve onto the scope route
+    // rather than this document and navigate the preview away from the
+    // artifact (OPEND-2970). Containment travels with the guard that keeps
+    // those clicks on the page.
+    const withLinkGuard = injectUrlPreviewBridge(html, 'links');
     // Same structural rule as the bridge injectors above: a `<head>` inside a
     // script string is text, not this document's head.
-    const headOpenIndex = findRealTagOffset(html, /<head(?=[\t\n\f\r />])/i);
+    const headOpenIndex = findRealTagOffset(withLinkGuard, /<head(?=[\t\n\f\r />])/i);
     if (headOpenIndex >= 0) {
-      const openTagEnd = endOfTag(html, headOpenIndex);
+      const openTagEnd = endOfTag(withLinkGuard, headOpenIndex);
       if (openTagEnd >= 0) {
-        return `${html.slice(0, openTagEnd + 1)}${baseTag}${bridge}${html.slice(openTagEnd + 1)}`;
+        return `${withLinkGuard.slice(0, openTagEnd + 1)}${baseTag}${bridge}`
+          + `${withLinkGuard.slice(openTagEnd + 1)}`;
       }
     }
-    return prependAfterDoctype(html, `${baseTag}${bridge}`);
+    return prependAfterDoctype(withLinkGuard, `${baseTag}${bridge}`);
   }
 
   function rewriteWorkspaceScopedHtmlAssetUrls(
