@@ -10,6 +10,10 @@ import {
   finalizeMessageAgentEvents,
   upsertMessage,
 } from '../db.js';
+import {
+  boundPersistedAgentEvent,
+  serializeRunEventsForStorage,
+} from './run-event-payload-budget.js';
 
 type SqliteDb = Database.Database;
 
@@ -360,7 +364,7 @@ export function persistRunFailureClassification(
       events.push(enriched);
     }
     db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`).run(
-      JSON.stringify(events),
+      serializeRunEventsForStorage(events),
       run.assistantMessageId,
     );
     const telemetry = ensureRunMessageEventPersistenceTelemetry(run);
@@ -371,7 +375,22 @@ export function persistRunFailureClassification(
   }
 }
 
+/**
+ * The persisted form of one SSE run event, or `null` when the event is
+ * live-only. Always within the per-event storage budget
+ * (`boundPersistedAgentEvent`): this is where every run event enters the
+ * pending batch, so an oversized tool payload is never held, flushed or
+ * folded at full size.
+ */
 export function runSseEventToPersistedAgentEvent(
+  event: string,
+  data: unknown,
+): PersistedAgentEvent | null {
+  const persisted = unboundedPersistedAgentEvent(event, data);
+  return persisted ? boundPersistedAgentEvent(persisted) : null;
+}
+
+function unboundedPersistedAgentEvent(
   event: string,
   data: unknown,
 ): PersistedAgentEvent | null {
@@ -406,7 +425,7 @@ export function runSseEventToPersistedAgentEvent(
     };
   }
   if (event !== 'agent') return null;
-  return daemonAgentPayloadToPersistedAgentEvent(record);
+  return unboundedAgentPayloadToPersistedAgentEvent(record);
 }
 
 /**
@@ -440,7 +459,13 @@ const TRANSIENT_ACP_PERSISTED_STATUS_LABELS = new Set([
   'opencode_compaction',
 ]);
 
+/** The persisted form of one `agent` SSE payload, within the storage budget. */
 export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): PersistedAgentEvent | null {
+  const persisted = unboundedAgentPayloadToPersistedAgentEvent(data);
+  return persisted ? boundPersistedAgentEvent(persisted) : null;
+}
+
+function unboundedAgentPayloadToPersistedAgentEvent(data: unknown): PersistedAgentEvent | null {
   if (!isRecord(data)) return null;
   const type = data.type;
   if (type === 'status' && typeof data.label === 'string') {
@@ -641,7 +666,14 @@ export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): Persiste
         : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
     return { kind: 'status', label: 'warning', detail };
   }
-  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
+  if (type === 'raw' && typeof data.line === 'string') {
+    // The stream parsers already bound the line at the source; keep the
+    // metadata that says so.
+    const truncated = isRecord(data.truncated) && typeof data.truncated.originalBytes === 'number'
+      ? { originalBytes: data.truncated.originalBytes }
+      : undefined;
+    return truncated ? { kind: 'raw', line: data.line, truncated } : { kind: 'raw', line: data.line };
+  }
   return null;
 }
 

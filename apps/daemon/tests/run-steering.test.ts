@@ -9,8 +9,8 @@
 // fails silently if we only guess:
 //   1. the runtime must deliver its prompt as `stream-json` — that is the only
 //      format whose writer leaves stdin open past the opening prompt. Every
-//      other runtime calls `writePromptAndEndStdin`, so a later write lands on
-//      a closed pipe (EPIPE at best, silently dropped at worst).
+//      other plain-text runtime gets its prompt as a file-backed stdin at
+//      spawn, so there is no pipe for a later write to reach.
 //   2. the run must still be live.
 //   3. `run.stdinOpen` must still be true. A clean `turn_end` closes stdin
 //      (applyClaudeStreamJsonRunBookkeeping); a `stop_reason: 'tool_use'` pause

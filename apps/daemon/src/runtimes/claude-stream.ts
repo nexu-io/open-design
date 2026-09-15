@@ -30,6 +30,7 @@ import {
   createToolInputPathScanner,
   type ToolInputPathScanner,
 } from './tool-input-path-scanner.js';
+import { boundedRawAgentEvent } from './run-event-payload-budget.js';
 
 type StreamEvent = Record<string, unknown>;
 type EventSink = (event: StreamEvent) => void;
@@ -695,7 +696,9 @@ export function createClaudeStreamHandler(
       try {
         obj = JSON.parse(line);
       } catch {
-        onEvent({ type: 'raw', line });
+        // Bounded at the source: the live stream and the run buffer carry the
+        // same line the transcript stores (see run-event-payload-budget.ts).
+        onEvent(boundedRawAgentEvent(line, null));
         continue;
       }
       handleObject(obj);
@@ -709,7 +712,7 @@ export function createClaudeStreamHandler(
       try {
         handleObject(JSON.parse(rem));
       } catch {
-        onEvent({ type: 'raw', line: rem });
+        onEvent(boundedRawAgentEvent(rem));
       }
     }
     flushPendingArtifactText();
