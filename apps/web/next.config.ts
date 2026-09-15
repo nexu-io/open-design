@@ -169,6 +169,16 @@ const nextConfig: NextConfig = {
     root: WORKSPACE_ROOT,
   },
   ...(DEV_TSCONFIG_PATH ? { typescript: { tsconfigPath: DEV_TSCONFIG_PATH } } : {}),
+  // Packaged desktop builds run Next from inside the installed application
+  // directory, which is root-owned and read-only for the user running the app
+  // (`/opt/...` on Linux, the app bundle on macOS). Next's incremental cache
+  // defaults to flushing prerendered routes to `<distDir>/server/app/...`, so
+  // every render attempted an mkdir there and logged
+  // `EACCES: permission denied` without ever succeeding. Keep that cache in
+  // memory for server output: a local-first desktop app serves one user, the
+  // cache has no value across restarts, and nothing should write into the
+  // installation at runtime.
+  ...(isServerOutput ? { experimental: { isrFlushToDisk: false } } : {}),
   // Static exports keep Next.js's default `out/` output directory so static
   // hosts like Vercel can publish the generated site directly. Server runtimes
   // still keep a predictable traced build directory for sidecar launchers.
