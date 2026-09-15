@@ -107,6 +107,7 @@ export interface PostToolResumeRecoveryInput {
   sideEffects?: RunRetrySideEffectState;
   supportsNativeSessionContinue: boolean;
   hasNativeSession: boolean;
+  hasVerifiedAmrContinuation?: boolean;
 }
 
 export function decidePostToolResumeRecovery(
@@ -143,7 +144,10 @@ export function decidePostToolResumeRecovery(
     !input.supportsNativeSessionContinue ||
     !input.hasNativeSession ||
     !sideEffects.toolCallSeen ||
-    !isPostToolTransientFailure
+    !(isPostToolTransientFailure || (
+      failure?.failure_detail === 'continuation_incomplete' &&
+      failure.failure_stage === 'post_tool_resume' && input.hasVerifiedAmrContinuation === true
+    ))
   ) {
     return null;
   }
@@ -245,6 +249,9 @@ export function decideSafeRunRetry(
 
   const failure = input.failure;
   if (!failure) return suppress('missing_failure_signal');
+  if (failure.failure_detail === 'continuation_incomplete') {
+    return suppress(attemptCount >= retryMaxAttempts ? 'attempt_limit_reached' : 'unsafe_failure_stage');
+  }
   if (failure?.failure_detail === 'hard_quota') return suppress('hard_quota');
   const transientReason = transientSuppressedReason(
     failure.failure_category,
