@@ -375,12 +375,13 @@ describe('Design System route family exact Workspace authority', () => {
     expect(calls.static).toHaveBeenCalledWith(
       DESIGN_SYSTEM_ID,
       'system/kit.html',
-      { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, exactTeam: false },
+      // A query scope that names no workspace type has asserted none.
+      { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, workspaceTypeVerified: null, exactTeam: false },
     );
     expect(calls.static).toHaveBeenCalledWith(
       DESIGN_SYSTEM_ID,
       'tokens.css',
-      { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, exactTeam: false },
+      { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, workspaceTypeVerified: null, exactTeam: false },
     );
     expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
   });
