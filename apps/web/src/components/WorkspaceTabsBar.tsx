@@ -1,3 +1,8 @@
+import { Button, Dialog, DialogTitle, DialogDescription, DialogFooter } from '@open-design/components';
+import { requestProjectShare } from '../state/projectShareRequest';
+import { fetchProjectFiles } from '../providers/registry';
+import { RemixIcon } from './RemixIcon';
+import styles from './WorkspaceProjectActions.module.css';
 import {
   type DragEvent,
   type ReactNode,
@@ -102,6 +107,8 @@ interface TabDragTarget {
 }
 
 interface Props {
+  onRenameProject?: (id: string, name: string) => Promise<unknown>;
+  onDeleteProject?: (id: string) => Promise<boolean | void> | boolean | void;
   route: Route;
   projects: Project[];
   /**
@@ -150,6 +157,16 @@ const PREVIEW_HOVER_DELAY_MS = 180;
    the menu it fits on. */
 const PREVIEW_WIDTH_PX = 216;
 const PREVIEW_GAP_PX = 8;
+
+function dockFlyoutPosition(rect: DOMRect, viewportWidth: number, width = PREVIEW_WIDTH_PX) {
+  const right = rect.right + PREVIEW_GAP_PX;
+  const fits = right + width + PREVIEW_GAP_PX <= viewportWidth;
+  return {
+    top: rect.top,
+    left: fits ? right : Math.max(PREVIEW_GAP_PX, rect.left - PREVIEW_GAP_PX - width),
+  };
+}
+
 
 const STORAGE_KEY = 'open-design:workspace-tabs:v1';
 const OPEN_WORKSPACE_TAB_EVENT = 'open-design:workspace-tabs:open';
@@ -757,6 +774,8 @@ function DockRowPreview({
 }
 
 export function WorkspaceTabsBar({
+  onRenameProject,
+  onDeleteProject,
   route,
   projects,
   activeProjectWorkspaceId,
@@ -792,6 +811,17 @@ export function WorkspaceTabsBar({
   const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
   // Docked-mode white dropdown (project route): open state of its tab list.
   const [dockMenuOpen, setDockMenuOpen] = useState(false);
+  const [dockActions, setDockActions] = useState<string | null>(null);
+  const [dockActionPosition, setDockActionPosition] = useState({ left: 0, top: 0 });
+  const [projectAction, setProjectAction] = useState<{ kind: 'rename' | 'share' | 'delete'; id: string; title: string } | null>(null);
+  const [projectNameDraft, setProjectNameDraft] = useState('');
+  const [projectActionBusy, setProjectActionBusy] = useState(false);
+  const [dockActionError, setDockActionError] = useState('');
+  useEffect(() => {
+    setDockActions(null);
+    setDockActionError('');
+  }, [dockMenuOpen]);
+
   // Most-recently-activated tab ids, newest first — the dropdown lists tabs
   // in this order (最近打开的在前). Session-local: falls back to strip order
   // for tabs never activated since launch.
@@ -1818,7 +1848,7 @@ export function WorkspaceTabsBar({
         ? projectById.get(previewTab.projectId) ?? null
         : null;
     return (
-      <div className="workspace-tabs-dropdown" data-testid="workspace-tabs-dropdown">
+      <div className="workspace-tabs-dropdown" data-testid="workspace-tabs-dropdown" onKeyDown={(event) => { if (event.key === 'Escape') { setDockActions(null); setDockMenuOpen(false); } }}>
         <button
           type="button"
           className="workspace-tabs-dropdown__trigger"
@@ -1853,7 +1883,7 @@ export function WorkspaceTabsBar({
                 return (
                   <div
                     key={tab.id}
-                    className={`workspace-tabs-dropdown__row${active ? ' is-active' : ''}`}
+                    className={`${styles.row} workspace-tabs-dropdown__row${active ? ' is-active' : ''}`}
                   >
                     <button
                       type="button"
@@ -1881,6 +1911,25 @@ export function WorkspaceTabsBar({
                         <Icon name="check" size={14} className="workspace-tabs-dropdown__row-check" />
                       ) : null}
                     </button>
+                    {tab.kind === 'project' ? (
+                      <button type="button" className={styles.more}
+                        aria-label={t('designFiles.rowMenu')} aria-haspopup="menu"
+                        aria-expanded={dockActions === tab.id}
+                        onClick={() => { const rect = dockMenuRef.current?.getBoundingClientRect(); if (rect) setDockActionPosition(dockFlyoutPosition(rect, window.innerWidth, 120)); clearPreview(); setDockActions(dockActions === tab.id ? null : tab.id); setDockActionError(''); }}>
+                        <RemixIcon name="more-2-line" size={16} />
+                      </button>
+                    ) : null}
+                    {dockActions === tab.id && tab.kind === 'project' ? createPortal(
+                      <div className={styles.actions} role="menu" style={{ position: 'fixed', left: dockActionPosition.left, top: dockActionPosition.top, right: 'auto', width: 120, zIndex: 1200 }}>
+                        {(['rename', 'share', 'delete'] as const).map((kind) => (
+                          <button key={kind} type="button" role="menuitem" className={kind === 'delete' ? styles.danger : undefined}
+                            onClick={() => { setProjectNameDraft(display.title); setDockActionError(''); setProjectAction({ kind, id: tab.projectId, title: display.title }); setDockMenuOpen(false); }}>
+                            <RemixIcon name={kind === 'rename' ? 'edit-line' : kind === 'share' ? 'share-forward-line' : 'delete-bin-line'} size={14} />
+                            {t(kind === 'rename' ? 'common.rename' : kind === 'share' ? 'common.share' : 'designs.menuDelete')}
+                          </button>
+                        ))}
+                      </div>, document.body,
+                    ) : null}
                   </div>
                 );
               })}
@@ -1890,7 +1939,7 @@ export function WorkspaceTabsBar({
                 same picture for a project. Purely informational (aria-hidden,
                 no pointer events), so it can't sit between the pointer and a
                 row. */}
-            {previewProject && previewAnchor && typeof document !== 'undefined' ? (
+            {!dockActions && previewProject && previewAnchor && typeof document !== 'undefined' ? (
               <DockRowPreview
                 /* Keyed by project so switching rows remounts the card instead
                    of pointing a live cover at a new project. */
@@ -2180,6 +2229,34 @@ export function WorkspaceTabsBar({
         className="workspace-chrome-account-actions"
         data-testid="workspace-chrome-account-actions"
       />
+      {projectAction ? createPortal(
+        <Dialog className="modal-confirm" role={projectAction.kind === 'delete' ? 'alertdialog' : 'dialog'}
+          ariaLabelledBy="project-action-title" closeOnEscape onClose={() => { if (!projectActionBusy) setProjectAction(null); }}>
+          <DialogTitle id="project-action-title">{t(projectAction.kind === 'rename' ? 'common.rename' : projectAction.kind === 'share' ? 'common.share' : 'designs.menuDelete')}</DialogTitle>
+          <DialogDescription>{projectAction.kind === 'delete' ? t('designs.deleteConfirm', { name: projectAction.title }) : projectAction.title}</DialogDescription>
+          {projectAction.kind === 'rename' ? <input autoFocus aria-label={t('common.rename')} value={projectNameDraft} disabled={projectActionBusy} onChange={(event) => setProjectNameDraft(event.target.value)} /> : null}
+          {dockActionError ? <p role="alert">{dockActionError}</p> : null}
+          <DialogFooter className="row">
+            <Button disabled={projectActionBusy} onClick={() => setProjectAction(null)}>{t('common.cancel')}</Button>
+            <Button variant="primary" disabled={projectActionBusy || (projectAction.kind === 'rename' && !projectNameDraft.trim())} onClick={async () => {
+              setProjectActionBusy(true); setDockActionError('');
+              try {
+                if (projectAction.kind === 'rename') await onRenameProject?.(projectAction.id, projectNameDraft.trim());
+                else if (projectAction.kind === 'delete') await onDeleteProject?.(projectAction.id);
+                else {
+                  const files = await fetchProjectFiles(projectAction.id, { workspaceContext });
+                  const file = files.find((entry) => /\.html?$/i.test(entry.name));
+                  if (!file) throw new Error(t('workspace.noFilesMatch'));
+                  requestProjectShare(projectAction.id, file.name);
+                  navigate({ kind: 'project', projectId: projectAction.id, conversationId: null, fileName: file.name });
+                }
+                setProjectAction(null);
+              } catch (error) { setDockActionError(String(error)); }
+              finally { setProjectActionBusy(false); }
+            }}>{t(projectAction.kind === 'share' ? 'common.share' : projectAction.kind === 'delete' ? 'designs.menuDelete' : 'designs.renameSave')}</Button>
+          </DialogFooter>
+        </Dialog>, document.body,
+      ) : null}
       {radialMenu ? createPortal(
         <div className="workspace-radial-layer" onMouseDown={() => setRadialMenu(null)}>
           <div

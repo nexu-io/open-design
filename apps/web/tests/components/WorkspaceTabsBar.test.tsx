@@ -2,6 +2,8 @@
 // @vitest-environment jsdom
 
 import { StrictMode } from 'react';
+import * as registry from '../../src/providers/registry';
+import * as shareRequests from '../../src/state/projectShareRequest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1968,5 +1970,73 @@ describe('WorkspaceTabsBar dock dropdown run status', () => {
     await waitFor(() => {
       expect(within(reopened).queryByRole('img', { name: 'designs.status.succeeded' })).toBeNull();
     });
+  });
+});
+
+describe('WorkspaceTabsBar project actions', () => {
+  let dock: HTMLDivElement;
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    dock = document.createElement('div');
+    document.body.append(dock);
+    setWorkspaceTabsDock(dock);
+  });
+  afterEach(() => { cleanup(); dock.remove(); vi.restoreAllMocks(); });
+
+  async function openActions() {
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    fireEvent.click(screen.getByRole('button', { name: 'designFiles.rowMenu' }));
+  }
+
+  it('renames the selected project only after confirmation', async () => {
+    const rename = vi.fn().mockResolvedValue(undefined);
+    render(<WorkspaceTabsBar route={projectRoute} projects={[project]} onRenameProject={rename} />);
+    await openActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'common.rename' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Renamed project' } });
+    expect(rename).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'designs.renameSave' }));
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(project.id, 'Renamed project'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('opens an HTML artifact for sharing after confirmation', async () => {
+    vi.spyOn(registry, 'fetchProjectFiles').mockResolvedValue([
+      { name: 'design.html' } as Awaited<ReturnType<typeof registry.fetchProjectFiles>>[number],
+    ]);
+    const request = vi.spyOn(shareRequests, 'requestProjectShare').mockImplementation(() => {});
+    render(<WorkspaceTabsBar route={projectRoute} projects={[project]} />);
+    await openActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'common.share' }));
+    expect(request).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'common.share' }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith(project.id, 'design.html'));
+    expect(navigate).toHaveBeenCalledWith({ kind: 'project', projectId: project.id, conversationId: null, fileName: 'design.html' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('keeps the dialog open when the project has no HTML artifact', async () => {
+    vi.spyOn(registry, 'fetchProjectFiles').mockResolvedValue([]);
+    const request = vi.spyOn(shareRequests, 'requestProjectShare').mockImplementation(() => {});
+    render(<WorkspaceTabsBar route={projectRoute} projects={[project]} />);
+    await openActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'common.share' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'common.share' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('workspace.noFilesMatch');
+    expect(request).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('offers Share and cancels deletion without deleting the project', async () => {
+    const remove = vi.fn();
+    render(<WorkspaceTabsBar route={projectRoute} projects={[project]} onDeleteProject={remove} />);
+    await openActions();
+    expect(screen.getByRole('menuitem', { name: 'common.share' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'designs.menuDelete' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'common.cancel' }));
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });

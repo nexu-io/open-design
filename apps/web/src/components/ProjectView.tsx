@@ -1,3 +1,4 @@
+import { useProjectShareRequest, clearProjectShareRequest } from '../state/projectShareRequest';
 import {
   startTransition,
   useCallback,
@@ -12297,6 +12298,15 @@ export function ProjectView({
     },
     [requestOpenFile],
   );
+
+  const pendingProjectShare = useProjectShareRequest();
+  useEffect(() => {
+    if (!pendingProjectShare || pendingProjectShare.projectId !== project.id) return;
+    if (!projectFiles.some((file) => file.name === pendingProjectShare.fileName)) return;
+    handleArtifactShare(pendingProjectShare.fileName);
+    clearProjectShareRequest(pendingProjectShare);
+  }, [pendingProjectShare, project.id, projectFiles, handleArtifactShare]);
+
   // Mirrors share, but opens the workspace's Download/Export menu (PDF / image /
   // zip / standalone HTML / save-as-template) instead of a bare file download.
   /*
