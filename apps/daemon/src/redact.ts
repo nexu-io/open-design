@@ -96,7 +96,7 @@ const PATTERNS: readonly Pattern[] = [
   // require a non-digit (or start of string) before the run instead.
   {
     name: 'phone',
-    regex: /(?<!\d)(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g,
+    regex: /(?<!\w)(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\w)/g,
   },
 ];
 
