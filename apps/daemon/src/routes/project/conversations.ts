@@ -319,12 +319,18 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           ? sourceConversation.title.trim()
           : null;
       seedMessages.forEach((m, index) => {
+        // A transcript fork reuses the conversation context, but it starts a
+        // fresh run lineage. Events and produced files belong to the source
+        // run and would otherwise render as new output in the fork. Keep
+        // attachments and artifact references intact: those are user supplied
+        // context rather than run products.
+        const { events: _sourceEvents, producedFiles: _sourceProducedFiles, ...forkMessage } = m;
         // Fresh id per copied message; upsertMessage assigns the next
         // position so role/content ordering is preserved. Drop the source's
         // run pointers (runId/lastRunEventId) but keep each turn's verdict —
         // see `settledForkVerdict`.
         upsertMessage(db, conv.id, {
-          ...m,
+          ...forkMessage,
           id: randomId(),
           runId: undefined,
           runStatus: settledForkVerdict(m.runStatus),
