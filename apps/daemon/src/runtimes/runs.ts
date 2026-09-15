@@ -73,6 +73,15 @@ function runHasHostRecordedDeliveryFailure(run) {
 
 const RUN_STATE_SCHEMA_VERSION = 1;
 
+// Legacy compatibility belongs to actual hydration, never client metadata or
+// a serialized flag. Weak provenance also cannot keep discarded Runs alive.
+const hydratedWithoutAppliedSnapshot = new WeakSet<object>();
+
+export function isLegacyHydratedRunWithoutAppliedSnapshot(run: object): boolean {
+  return hydratedWithoutAppliedSnapshot.has(run)
+    && !Object.prototype.hasOwnProperty.call(run, 'appliedPluginSnapshotId');
+}
+
 const DIAGNOSTIC_SOURCE = 'open-design-daemon';
 
 function availableDiagnostic(value, definition, complete = true, source = DIAGNOSTIC_SOURCE) {
@@ -563,7 +572,7 @@ function durableRunState(run) {
     assistantMessageId: run.assistantMessageId,
     clientRequestId: run.clientRequestId,
     requestFingerprint: run.requestFingerprint,
-    ...(typeof run.appliedPluginSnapshotId === 'string'
+    ...(Object.prototype.hasOwnProperty.call(run, 'appliedPluginSnapshotId')
       ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
       : {}),
     ...(run.strategyRolloutDecision
@@ -856,10 +865,6 @@ export function createChatRunService({
       requestFingerprint:
         typeof state.requestFingerprint === 'string' ? state.requestFingerprint : null,
       agentId: typeof state.agentId === 'string' ? state.agentId : null,
-      appliedPluginSnapshotId:
-        typeof state.appliedPluginSnapshotId === 'string' && state.appliedPluginSnapshotId
-          ? state.appliedPluginSnapshotId
-          : null,
       projectMetadata: null,
       events,
       nextEventId: events.reduce((max, record) => Math.max(max, record.id), 0) + 1,
@@ -879,6 +884,9 @@ export function createChatRunService({
       mediaExecution: normalizeMediaExecutionPolicyForRun(null),
       toolBundle: normalizeRunToolBundleForRun(null),
     };
+    if (!Object.prototype.hasOwnProperty.call(state, 'appliedPluginSnapshotId')) {
+      hydratedWithoutAppliedSnapshot.add(run);
+    }
     runs.set(id, run);
     return run;
   };
@@ -1469,7 +1477,10 @@ export function createChatRunService({
     designSystemRequestedId: run.designSystemRequestedId ?? null,
     designSystemSelectionSource: run.designSystemSelectionSource ?? null,
     designSystemDigest: run.designSystemDigest ?? null,
-    appliedPluginSnapshotId: run.appliedPluginSnapshotId ?? null,
+    appliedPluginSnapshotId:
+      typeof run.appliedPluginSnapshotId === 'string' && run.appliedPluginSnapshotId
+        ? run.appliedPluginSnapshotId
+        : null,
     pluginId: run.pluginId ?? null,
     strategyRolloutDecision: run.strategyRolloutDecision ?? null,
     status: run.status,

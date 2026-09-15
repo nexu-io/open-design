@@ -189,7 +189,10 @@ import {
   type RunSteeringRefusal,
 } from '../runtimes/run-steering.js';
 import { runMessageEventPersistenceAnalytics } from '../runtimes/chat-run-messages.js';
-import { TERMINAL_RUN_STATUSES } from '../runtimes/runs.js';
+import {
+  isLegacyHydratedRunWithoutAppliedSnapshot,
+  TERMINAL_RUN_STATUSES,
+} from '../runtimes/runs.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
@@ -982,7 +985,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       telemetry: ctx.telemetry,
     }),
   });
-  const strategyTaskForRun = (run: ChatRun): StrategyTaskExecutionRecord | null => {
+  const runMatchesTaskImmutableOwner = (
+    run: ChatRun,
+    task: StrategyTaskExecutionRecord,
+  ): boolean => Boolean(
+    run.odNextTaskInputSnapshot
+    && run.odNextTaskInputSnapshot.taskExecutionId === task.taskExecutionId
+    && run.odNextTaskInputSnapshot.manifestSha256
+      === task.frozenInputIdentity.taskInputManifestSha256
+    && run.projectId === task.projectId
+    && run.conversationId === task.conversationId
+    && run.agentId === task.selectedAgentId
+  );
+  const strategyTaskForRun = (
+    run: ChatRun,
+    allowLegacyReadProjection = false,
+  ): StrategyTaskExecutionRecord | null => {
     const task = getStrategyTaskExecutionByRunId(db, run.id);
     if (!task && run.odNextTaskInputSnapshot) {
       throw new InvalidStrategyTaskRecordError(
@@ -992,14 +1010,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (
       task
       && (
-        !run.odNextTaskInputSnapshot
-        || run.odNextTaskInputSnapshot.taskExecutionId !== task.taskExecutionId
-        || run.odNextTaskInputSnapshot.manifestSha256
-          !== task.frozenInputIdentity.taskInputManifestSha256
-        || run.projectId !== task.projectId
-        || run.conversationId !== task.conversationId
-        || run.agentId !== task.selectedAgentId
-        || run.appliedPluginSnapshotId !== task.snapshotId
+        !runMatchesTaskImmutableOwner(run, task)
+        || (
+          run.appliedPluginSnapshotId !== task.snapshotId
+          && !(allowLegacyReadProjection && isLegacyHydratedRunWithoutAppliedSnapshot(run))
+        )
       )
     ) {
       throw new InvalidStrategyTaskRecordError(
@@ -1009,10 +1024,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     return task;
   };
   const statusWithStrategyTask = (run: ChatRun): ChatRunStatusResponse => {
+    let projectedSnapshotId: string | undefined;
     try {
-      const strategyTask = strategyTaskForRun(run);
+      const strategyTask = strategyTaskForRun(run, true);
       const projection = strategyTask ? projectStrategyTask(strategyTask, run.id) : null;
       if (projection) run.strategyTask = projection;
+      if (strategyTask && isLegacyHydratedRunWithoutAppliedSnapshot(run)) {
+        projectedSnapshotId = strategyTask.snapshotId;
+      }
     } catch (error) {
       if (
         !(error instanceof InvalidFrozenSkillPackageError)
@@ -1029,7 +1048,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         );
       }
     }
-    return design.runs.statusBody(run);
+    const status = design.runs.statusBody(run);
+    // A read can derive display identity from the validated task, but must not
+    // stamp the source Run and bypass clarification's linked-snapshot witness.
+    return projectedSnapshotId
+      ? { ...status, appliedPluginSnapshotId: projectedSnapshotId }
+      : status;
   };
 
   /**
