@@ -361,6 +361,24 @@ const AUTOMATION_WEEKDAY_TOKENS = {
   sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
 };
+
+function splitCommaSeparatedIds(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) return [];
+  const seen = new Set();
+  const out = [];
+  for (const part of value.split(',')) {
+    const id = part.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+// `const` alias for the id splitter, so it must live here too: the
+// top-of-file dispatch can reach `automationContextFromFlags` before
+// module evaluation passes any declaration further down (see #7611).
+const splitAutomationIds = splitCommaSeparatedIds;
 const RECOVERABLE_EXIT_CODES = {
   'daemon-not-running':       64,
   'plugin-not-found':         65,
@@ -11305,21 +11323,6 @@ function describeAutomationTargetForCli(target) {
   if (target.mode === 'reuse') return `reuse=${target.projectId}`;
   return 'new-project';
 }
-
-function splitCommaSeparatedIds(value) {
-  if (typeof value !== 'string' || value.trim().length === 0) return [];
-  const seen = new Set();
-  const out = [];
-  for (const part of value.split(',')) {
-    const id = part.trim();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push(id);
-  }
-  return out;
-}
-
-const splitAutomationIds = splitCommaSeparatedIds;
 
 function automationContextFromFlags(flags) {
   const skillIds = splitAutomationIds(flags.skill);
