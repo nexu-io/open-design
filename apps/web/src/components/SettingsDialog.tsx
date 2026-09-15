@@ -108,8 +108,8 @@ export {
   providerModelsCacheKey,
 } from './providerModelsCache';
 import {
-  MAX_MAX_TOKENS,
   MIN_MAX_TOKENS,
+  maxTokensUpperBound,
   modelMaxTokensDefault,
 } from '../state/maxTokens';
 import type {
@@ -1156,6 +1156,14 @@ function applyApiProtocolConfig(
     apiKey: apiConfig.apiKey,
     baseUrl: resolveFixedOriginBaseUrl(protocol, apiConfig.baseUrl),
     model: apiConfig.model,
+    // Every path that changes the active model meets here — the model picker, a
+    // provider-tab switch, a restored draft — so the override is validated once,
+    // here. A model with a lower ceiling would otherwise leave Settings showing
+    // a number `effectiveMaxTokens` discards at request time.
+    maxTokens:
+      config.maxTokens != null && config.maxTokens > maxTokensUpperBound(apiConfig.model)
+        ? undefined
+        : config.maxTokens,
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
     // byokImageModel applies to the protocols that inject the daemon-side
@@ -1543,6 +1551,11 @@ export function SettingsDialog({
   const [maxTokensInput, setMaxTokensInput] = useState(
     initialFormConfig.maxTokens == null ? '' : String(initialFormConfig.maxTokens),
   );
+  // Re-display the override whenever the model changes, so the text follows
+  // whatever survived the bound check above instead of stranding the previous
+  // model's number in the field. Keyed on the model alone: mirroring every
+  // cfg.maxTokens change would wipe what the user is part-way through typing.
+  const lastModelForMaxTokens = useRef(initialFormConfig.model);
   const [pendingMediaProviderEditIds, setPendingMediaProviderEditIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -1551,6 +1564,12 @@ export function SettingsDialog({
   const lastSavedAppearanceRef = useRef({
     accentColor: resolveAccentColor(initial.accentColor),
   });
+
+  useEffect(() => {
+    if (lastModelForMaxTokens.current === cfg.model) return;
+    lastModelForMaxTokens.current = cfg.model;
+    setMaxTokensInput(cfg.maxTokens == null ? '' : String(cfg.maxTokens));
+  }, [cfg.model, cfg.maxTokens]);
 
   useEffect(() => {
     onDraftChange?.(cfg);
@@ -2329,13 +2348,16 @@ export function SettingsDialog({
       return;
     }
     const value = Number(trimmed);
-    const nextMaxTokens =
-      Number.isInteger(value) &&
-      value >= MIN_MAX_TOKENS &&
-      value <= MAX_MAX_TOKENS
-        ? value
-        : undefined;
-    setCfg((c) => ({ ...c, maxTokens: nextMaxTokens }));
+    // The upper bound is model-aware, so read the model from current state
+    // rather than a closure: the same rule has to hold for whichever model is
+    // selected when the edit lands.
+    setCfg((c) => ({
+      ...c,
+      maxTokens:
+        Number.isInteger(value) && value >= MIN_MAX_TOKENS && value <= maxTokensUpperBound(c.model)
+          ? value
+          : undefined,
+    }));
   };
   const markAgentInstallIntent = () => {
     pendingAgentInstallRescanRef.current = true;
@@ -5659,7 +5681,7 @@ export function SettingsDialog({
                 <input
                   type="number"
                   min={MIN_MAX_TOKENS}
-                  max={MAX_MAX_TOKENS}
+                  max={maxTokensUpperBound(cfg.model)}
                   step={1}
                   placeholder={String(modelMaxTokensDefault(cfg.model))}
                   value={maxTokensInput}
