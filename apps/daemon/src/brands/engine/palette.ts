@@ -24,6 +24,7 @@ const brightnessStep1 = 0.05; // 亮度阶梯,浅色部分
 const brightnessStep2 = 0.15; // 亮度阶梯,深色部分
 const lightColorCount = 5; // 浅色数量,主色上
 const darkColorCount = 4; // 深色数量,主色下
+const darkSeedLightValueFloor = 2 / 3;
 
 /** Dark-theme blend recipe: { index into the light ladder (1-based), opacity % }. */
 const darkColorMap: Array<{ index: number; opacity: number }> = [
@@ -179,6 +180,16 @@ function getValue(hsv: HSV, i: number, light: boolean): number {
   let value: number;
   if (light) {
     value = hsv.v + brightnessStep1 * i;
+    // A dark chromatic seed needs a real tint ladder rather than five small
+    // offsets that remain near the seed. Reserve the closest tint at two-thirds
+    // value, then space the remaining tints evenly toward white. Achromatic
+    // ramps retain the original Ant progression.
+    if (hsv.s > 0 && hsv.v < darkSeedLightValueFloor) {
+      const adaptiveFloor =
+        darkSeedLightValueFloor +
+        ((1 - darkSeedLightValueFloor) * (i - 1)) / lightColorCount;
+      value = Math.max(value, adaptiveFloor);
+    }
   } else {
     value = hsv.v - brightnessStep2 * i;
   }
