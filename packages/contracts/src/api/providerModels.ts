@@ -25,4 +25,19 @@ export interface ProviderModelsResponse {
   models?: ProviderModelOption[];
   status?: number;
   detail?: string;
+  /**
+   * The provider answered with its curated fallback rather than a live
+   * catalogue. Present only for providers that have one (OrcaRouter); its
+   * absence means `models` is live when `ok` is true.
+   *
+   * Carried so a picker can tell a degraded list from a live one: the caller
+   * must use a successful live response alone (an empty one included) and fall
+   * back to `models` only here.
+   */
+  degraded?: boolean;
+  /**
+   * Metadata-preserving fallback rows for the degraded case. Distinct from
+   * `models` so a caller can never merge unverified rows into a live list.
+   */
+  seedModels?: ProviderModelOption[];
 }

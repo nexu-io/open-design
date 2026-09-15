@@ -7,6 +7,13 @@ export interface ModelMetadata {
   capability?: ModelCapability;
   /** Provider/catalog-declared total context window; observability only. */
   contextWindowTokens?: number;
+  /**
+   * Input modalities the catalog explicitly declares for this route
+   * (`text`, `image`, `audio`, `video`, `file`). Absent means the provider
+   * published no evidence — callers must treat that as unknown, never as
+   * "supports nothing".
+   */
+  inputModalities?: string[];
 }
 
 export interface AgentModelOption {

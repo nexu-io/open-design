@@ -39,6 +39,18 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'nanobanana', label: 'Nano Banana', hint: 'Uses Google’s official API by default. You can also configure a custom gateway.', integrated: true, defaultBaseUrl: 'https://generativelanguage.googleapis.com', supportsCustomModel: true },
   { id: 'imagerouter', label: 'ImageRouter', hint: 'OpenAI-compatible image + video routing', integrated: true, defaultBaseUrl: 'https://api.imagerouter.io/v1/openai', docsUrl: 'https://docs.imagerouter.io/api-reference/image-generation/', supportsCustomModel: true, customModelPlaceholder: 'openai/gpt-image-2 or xAI/grok-imagine-video' },
   { id: 'openrouter', label: 'OpenRouter', hint: 'Unified gateway for image + video models', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://openrouter.ai/api/v1', docsUrl: 'https://openrouter.ai/settings/keys' },
+  {
+    id: 'orcarouter',
+    label: 'OrcaRouter',
+    hint: 'OpenAI-compatible image + video routing',
+    integrated: true,
+    credentialsRequired: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://api.orcarouter.ai/v1',
+    docsUrl: 'https://www.orcarouter.ai/console/authorized-apps',
+    supportsCustomModel: true,
+    customModelPlaceholder: 'openai/gpt-image-2 or kling/kling-v3',
+  },
   { id: 'custom-image', label: 'Custom Image API', hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)', integrated: true, docsUrl: 'https://platform.openai.com/docs/api-reference/images', supportsCustomModel: true, customModelPlaceholder: 'my-image-model' },
   { id: 'comfyui', label: 'ComfyUI', hint: 'Local JSON workflow server (planned adapter)', integrated: false, defaultBaseUrl: 'http://127.0.0.1:8188', docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow' },
   { id: 'bfl', label: 'Black Forest Labs', hint: 'FLUX 1.1 Pro / FLUX Pro / Dev', integrated: false, defaultBaseUrl: 'https://api.bfl.ai' },
@@ -119,6 +131,12 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'openai/gpt-image-1.5', label: 'openai/gpt-image-1.5', hint: 'ImageRouter · routed GPT Image', provider: 'imagerouter', caps: ['t2i'] },
   { id: 'black-forest-labs/FLUX-1.1-pro', label: 'FLUX-1.1-pro', hint: 'ImageRouter · Black Forest Labs', provider: 'imagerouter', caps: ['t2i'] },
 
+  // OrcaRouter image rows. Ids are the gateway's own catalogue ids with the
+  // `orcarouter/` catalogue prefix in front so they stay unambiguous next to
+  // the other aggregators; the renderer strips that prefix before the wire
+  // call, exactly like the imagerouter/openrouter rows above.
+  { id: 'orcarouter/gpt-image-2', label: 'gpt-image-2 (OrcaRouter)', hint: 'OrcaRouter · OpenAI · routed image generation', provider: 'orcarouter', caps: ['t2i'] },
+  { id: 'orcarouter/openai/gpt-image-1.5', label: 'gpt-image-1.5 (OrcaRouter)', hint: 'OrcaRouter · OpenAI · routed image generation', provider: 'orcarouter', caps: ['t2i'] },
   { id: 'openrouter/google/gemini-2.5-flash-image', label: 'gemini-flash-image (OR)', hint: 'OpenRouter · Gemini', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/black-forest-labs/flux-1.1-pro', label: 'flux-1.1-pro (OR)', hint: 'OpenRouter · BFL', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/recraft/recraft-v3', label: 'recraft-v3 (OR)', hint: 'OpenRouter · Recraft', provider: 'openrouter', caps: ['t2i'] },
@@ -165,6 +183,11 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'grok-imagine-video', label: 'grok-imagine-video', hint: 'xAI · 720p t2v + i2v + native audio', provider: 'grok', caps: ['t2v', 'i2v', 'audio'] },
 
   // OpenRouter video models.
+  // OrcaRouter video rows. OrcaRouter advertises these on its `openai-video`
+  // endpoint type; the renderer posts them to the OpenAI-standard
+  // /v1/videos/generations path.
+  { id: 'orcarouter/kling/kling-v3', label: 'kling-v3 (OrcaRouter)', hint: 'OrcaRouter · Kuaishou Kling · routed video', provider: 'orcarouter', caps: ['t2v', 'i2v'] },
+  { id: 'orcarouter/minimax/minimax-h3', label: 'minimax-h3 (OrcaRouter)', hint: 'OrcaRouter · MiniMax · routed video', provider: 'orcarouter', caps: ['t2v'] },
   { id: 'openrouter/bytedance/seedance-2.0:1080p', label: 'seedance-2.0 1080p (OR)', hint: 'OpenRouter · ByteDance · 1080p', provider: 'openrouter', caps: ['t2v', 'i2v'], default: true },
   { id: 'openrouter/bytedance/seedance-2.0', label: 'seedance-2.0 720p (OR)', hint: 'OpenRouter · ByteDance · 720p', provider: 'openrouter', caps: ['t2v', 'i2v'] },
   { id: 'openrouter/bytedance/seedance-2.0:480p', label: 'seedance-2.0 480p (OR)', hint: 'OpenRouter · ByteDance · 480p', provider: 'openrouter', caps: ['t2v', 'i2v'] },
