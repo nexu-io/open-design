@@ -544,7 +544,6 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (layer) return layer;
     layer = document.createElement('div');
     layer.setAttribute('data-od-edit-guides-layer', 'true');
-    layer.setAttribute('aria-hidden', 'true');
     document.body.appendChild(layer);
     return layer;
   }
@@ -555,6 +554,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   function addGuideNode(layer, className, style, text){
     var node = document.createElement('div');
     node.className = className;
+    node.setAttribute('aria-hidden', 'true');
     Object.keys(style || {}).forEach(function(key){ node.style[key] = style[key]; });
     if (text) node.textContent = text;
     layer.appendChild(node);
@@ -589,6 +589,18 @@ export function buildManualEditBridge(enabled: boolean): string {
         top: Math.round(points[i][1]) + 'px'
       });
     }
+    var deleteAction = document.createElement('button');
+    deleteAction.type = 'button';
+    deleteAction.className = 'od-edit-selection-action od-edit-selection-action-danger';
+    deleteAction.setAttribute('data-od-edit-delete-action', target.id);
+    deleteAction.setAttribute('aria-label', 'Delete element');
+    deleteAction.title = 'Delete element';
+    deleteAction.textContent = 'Delete';
+    deleteAction.style.left = Math.max(8, Math.min(window.innerWidth - 76, rect.x + rect.width / 2 - 34)) + 'px';
+    deleteAction.style.top = (rect.y >= 42
+      ? rect.y - 38
+      : Math.min(window.innerHeight - 36, rect.y + rect.height + 8)) + 'px';
+    layer.appendChild(deleteAction);
   }
   function renderSelectedChromeForCurrent(){
     if (!enabled || !guidesEnabled || !selectedTargetId) {
@@ -1046,6 +1058,18 @@ export function buildManualEditBridge(enabled: boolean): string {
   document.addEventListener('click', function(ev){
     if (!enabled) return;
     if (justDragged) { justDragged = false; ev.preventDefault(); ev.stopPropagation(); return; }
+    var deleteAction = ev.target && ev.target.closest
+      ? ev.target.closest('[data-od-edit-delete-action]')
+      : null;
+    if (deleteAction) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      window.parent.postMessage({
+        type: 'od-edit-delete-request',
+        id: deleteAction.getAttribute('data-od-edit-delete-action') || ''
+      }, '*');
+      return;
+    }
     if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
     ev.preventDefault();
     ev.stopPropagation();
@@ -1134,6 +1158,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   }, true);
   document.addEventListener('pointerover', function(ev){
     if (!enabled) return;
+    if (ev.target && ev.target.closest && ev.target.closest('[data-od-edit-delete-action]')) return;
     // A drag in progress owns the overlay (selection chrome only); pointerover
     // must not surface hover reference guides that would clutter the move.
     if (dragPending && dragPending.started) return;
@@ -1157,6 +1182,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   }, true);
   document.addEventListener('pointermove', function(ev){
     if (!enabled) return;
+    if (ev.target && ev.target.closest && ev.target.closest('[data-od-edit-delete-action]')) return;
     // Active/candidate drag takes over pointermove: translate the element live
     // and skip the hover-guides bookkeeping below.
     if (dragPending) {
@@ -1250,6 +1276,18 @@ export function buildManualEditBridge(enabled: boolean): string {
   // is editing a text element.
   var screenshotTap = { at: 0, left: false, right: false };
   document.documentElement.addEventListener('keydown', function(ev){
+    if (!enabled || activeTextEdit || !selectedTargetId) return;
+    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
+    var origin = ev.target;
+    if (origin && (
+      origin.isContentEditable
+      || /^(INPUT|TEXTAREA|SELECT)$/.test(String(origin.tagName || ''))
+    )) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    window.parent.postMessage({ type: 'od-edit-delete-request', id: selectedTargetId }, '*');
+  }, true);
+  document.documentElement.addEventListener('keydown', function(ev){
     if (!enabled) return;
     if (ev.key !== 'Meta') {
       screenshotTap.at = 0;
@@ -1332,6 +1370,24 @@ html[data-od-edit-mode] [data-od-editing="true"] {
   border-radius: 999px;
   background: Canvas;
   box-sizing: border-box;
+}
+[data-od-edit-guides-layer] .od-edit-selection-action {
+  position: fixed;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 8px;
+  background: Canvas;
+  color: CanvasText;
+  box-shadow: 0 4px 14px color-mix(in srgb, CanvasText 18%, transparent);
+  cursor: pointer !important;
+  font: 600 12px/1 Inter, system-ui, sans-serif;
+  pointer-events: auto;
+}
+[data-od-edit-guides-layer] .od-edit-selection-action-danger:hover {
+  border-color: color-mix(in srgb, #ef4444 45%, transparent);
+  background: color-mix(in srgb, #ef4444 10%, Canvas);
+  color: #dc2626;
 }
 [data-od-edit-guides-layer] .od-edit-guide-line {
   position: fixed;
