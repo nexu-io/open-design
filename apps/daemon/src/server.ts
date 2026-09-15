@@ -11686,6 +11686,7 @@ export async function startServer({
         skillsDir: SKILLS_DIR,
         designSystemsDir: DESIGN_SYSTEMS_DIR,
         linkedDirs,
+        activeSkillDirs,
       }),
       ...(odNextTaskInputSnapshot
         ? [odNextTaskInputSnapshot.projectionAccessRoot]
