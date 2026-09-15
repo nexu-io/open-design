@@ -7,6 +7,7 @@
  * connectionTest.ts and server.ts (via the acp/ barrel).
  */
 import path from 'node:path';
+import { createWriteProgressObserver } from './write-progress.js';
 import type { ExecutionProfile } from '@open-design/contracts';
 import {
   createDsmlArtifactTextSuppressor,
@@ -142,6 +143,8 @@ export interface AttachAcpSessionOptions {
   resumeSessionId?: string | null;
   /** Safe model/session metadata attached to the exact prompt-frame diagnostic. */
   promptBudgetContext?: AcpPromptBudgetContext;
+  /** Parsed non-diagnostic ACP traffic advances the caller's activity clock. */
+  onAgentActivity?: () => void;
   // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
   // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
@@ -203,12 +206,19 @@ export function attachAcpSession({
   completePromptOnTurnEnd = false,
   resumeSessionId,
   promptBudgetContext,
+  onAgentActivity,
   onCliReady,
   onSessionInit,
   onPromptComplete,
   onTerminal,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
+  const writeProgress = createWriteProgressObserver((payload, hostSynthesized) =>
+    send('agent', payload, {
+      countsAsProgress: false,
+      ...(hostSynthesized ? { hostSynthesized: true } : {}),
+    }),
+  );
   const toolExecutionLifecycleDeduper = createToolExecutionLifecycleDeduper();
   const effectiveCwd = path.resolve(cwd || process.cwd());
   if (!child.stdin || !child.stdout) {
@@ -547,6 +557,7 @@ export function attachAcpSession({
     finished = true;
     fatal = true;
     clearStageTimer();
+    writeProgress.close();
     let terminalOwnedByCaller = false;
     try {
       onTerminal?.('fatal');
@@ -587,6 +598,7 @@ export function attachAcpSession({
     finished = true;
     fatal = true;
     clearStageTimer();
+    writeProgress.close();
     let terminalOwnedByCaller = false;
     try {
       onTerminal?.('fatal');
@@ -949,6 +961,7 @@ export function attachAcpSession({
     emitArtifactTextSuppressionSummary();
     emitUsageIfPresent(usageSource);
     clearStageTimer();
+    writeProgress.close();
     stdin.end();
     let terminalOwnedByCaller = false;
     try {
@@ -1004,9 +1017,21 @@ export function attachAcpSession({
 
   const parser = createJsonLineStream((raw, rawLine) => {
     if (aborted || finished) return;
+    const candidate = asObject(raw);
+    const diagnosticParams = asObject(candidate?.params);
+    const diagnosticUpdate = asObject(diagnosticParams?.update);
+    if (candidate?.method === 'session/update' && diagnosticUpdate?.sessionUpdate === 'write_progress') {
+      if (modelUnavailableErrorCode && promptRequestId !== null && sessionId && diagnosticParams?.sessionId === sessionId) {
+        writeProgress.observe(diagnosticUpdate);
+      }
+      // Even rejected diagnostics must not reset the response watchdog or leak
+      // through generic status projection. These are evidence, not liveness.
+      return;
+    }
     resetStageTimer('response');
-    const obj = asObject(raw);
+    const obj = candidate;
     if (!obj) return;
+    onAgentActivity?.();
     // First well-formed ACP JSON-RPC message = CLI ready (#3408 §4). Caller
     // dedupes, so re-notifying on later messages is harmless.
     onCliReady?.();
@@ -1455,8 +1480,9 @@ export function attachAcpSession({
     if (promotedPayload) failWithPayload(promotedPayload);
   });
   child.on('close', (code, signal) => {
-    clearStageTimer();
     parser.flush();
+    clearStageTimer();
+    writeProgress.close();
     if (!finished && !aborted && !fatal) {
       const stderrTail = redactSecrets(
         acpStderrTail
@@ -1546,6 +1572,7 @@ export function attachAcpSession({
       aborted = true;
       finished = true;
       clearStageTimer();
+      writeProgress.close();
       if (!child.stdin || child.stdin.destroyed || child.stdin.writableEnded)
         return;
       // Only cancel an established session; before session/new resolves there
