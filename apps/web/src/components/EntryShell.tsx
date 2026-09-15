@@ -2621,6 +2621,8 @@ function OnboardingView({
       model: config.model,
       apiVersion: config.apiVersion ?? '',
       apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+      awsAuthMode: config.awsAuthMode,
+      awsProfile: config.awsProfile ?? '',
     };
     const nextProtocolConfig: ApiProtocolConfig = {
       ...currentConfig,
@@ -2635,6 +2637,12 @@ function OnboardingView({
       model: nextProtocolConfig.model,
       apiVersion: protocol === 'azure' ? (nextProtocolConfig.apiVersion ?? '') : '',
       apiProviderBaseUrl: nextProtocolConfig.apiProviderBaseUrl ?? null,
+      // Bedrock's auth mode / AWS profile are projected onto AppConfig the
+      // same way Settings does it (and the same way apiVersion is): the
+      // onboarding panel reads them back from `config`, so dropping them
+      // here left the mode toggle inert.
+      awsAuthMode: protocol === 'bedrock' ? nextProtocolConfig.awsAuthMode : undefined,
+      awsProfile: protocol === 'bedrock' ? (nextProtocolConfig.awsProfile ?? '') : '',
       apiProtocolConfigs: {
         ...(config.apiProtocolConfigs ?? {}),
         [protocol]: nextProtocolConfig,
