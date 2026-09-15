@@ -14,6 +14,12 @@ import { navigate, type Route } from '../../src/router';
 import type { Project } from '../../src/types';
 import { setWorkspaceTabsDock } from '../../src/components/workspaceTabsDock';
 
+const seedHomeComposerPromptMock = vi.fn();
+
+vi.mock('../../src/components/HomeView', () => ({
+  seedHomeComposerPrompt: (prompt: string) => seedHomeComposerPromptMock(prompt),
+}));
+
 afterEach(() => {
   setWorkspaceTabsDock(null);
 });
@@ -1841,6 +1847,27 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       expect(JSON.stringify(parsed.scopes?.['user-1::ws-a'] ?? {})).toContain(
         'project-alpha',
       );
+    });
+  });
+
+  it('clears the Home composer when creating a new tab', async () => {
+    render(
+      <WorkspaceTabsBar
+        route={{ kind: 'home', view: 'home' }}
+        projects={[project]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+    });
+
+    seedHomeComposerPromptMock.mockClear();
+
+    fireEvent.keyDown(document, { key: 't', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(seedHomeComposerPromptMock).toHaveBeenCalledWith('');
     });
   });
 });
