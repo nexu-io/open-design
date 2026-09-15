@@ -107,13 +107,14 @@ describe('inferPluginPreview', () => {
     const out = inferPluginPreview(
       make({
         id: 'ex',
-        preview: { type: 'html', entry: './example.html' },
+        preview: { type: 'html', entry: './example.html', motion: 'scroll' },
       }),
     );
     expect(out.kind).toBe('html');
     if (out.kind !== 'html') return;
     expect(out.src).toBe('/api/plugins/ex/preview');
     expect(out.label).toBe('example.html');
+    expect(out.motion).toBe('scroll');
   });
 
   it('uses baked previews only when the gallery explicitly opts in', () => {

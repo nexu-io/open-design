@@ -1,6 +1,6 @@
 // Home example-prompt chip filtering — pure derivation contract.
 //
-// Two invariants this suite locks:
+// Three invariants this suite locks:
 //   1. A video / HyperFrames template that only carries an `audio-reactive`
 //      tag must NOT leak into the audio example gallery — its home is the
 //      Video / HyperFrames chips. (Regression: the audio rule used a bare
@@ -8,6 +8,8 @@
 //   2. The generic `od-media-generation` catch-all router must never appear
 //      as an example preset under any media chip, so the "Media generation
 //      (default scenario)" card neither shows up nor shows up pre-selected.
+//   3. Document terms are matched on token boundaries: `annual-letter` is a
+//      document, while `newsletter` alone does not imply one.
 
 import { describe, expect, it } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
@@ -76,6 +78,24 @@ const audioJingle = make({
   scenario: 'marketing',
 });
 
+const genericNewsletter = make({
+  id: 'example-generic-newsletter',
+  title: 'Generic Newsletter',
+  tags: ['example', 'prototype', 'email', 'newsletter'],
+  mode: 'prototype',
+  surface: 'web',
+  scenario: 'marketing',
+});
+
+const annualLetter = make({
+  id: 'document-annual-letter',
+  title: 'Annual Letter',
+  tags: ['document-template', 'first-party', 'annual-letter'],
+  mode: 'document',
+  surface: 'web',
+  scenario: 'document',
+});
+
 // Mirrors plugins/_official/scenarios/od-media-generation (catch-all default).
 const mediaGeneration = make({
   id: 'od-media-generation',
@@ -106,4 +126,15 @@ describe('homeHeroExamplePluginsForChip — audio chip', () => {
     expect(ids).not.toContain('video-template-hyperframes-brand-sizzle-reel');
     expect(ids).not.toContain('od-media-generation');
   });
+});
+
+describe('pluginMatchesExampleChip — document chip', () => {
+  it('keeps a genuine annual letter under the document chip', () => {
+    expect(pluginMatchesExampleChip(annualLetter, 'document')).toBe(true);
+  });
+
+  it('does not classify newsletters as letters/documents', () => {
+    expect(pluginMatchesExampleChip(genericNewsletter, 'document')).toBe(false);
+  });
+
 });
