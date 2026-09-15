@@ -11686,6 +11686,10 @@ export async function startServer({
         ? [odNextTaskInputSnapshot.projectionAccessRoot]
         : []),
     ];
+    const skillDirs = resolveChatExtraAllowedDirs({
+      agentId,
+      skillsDir: SKILLS_DIR,
+    });
     const researchCommandContract = resolveResearchCommandContract(
       research,
       isOdNextRequestStage
@@ -13528,6 +13532,7 @@ export async function startServer({
           hasPriorAssistantTurn,
           agentLogFilePath,
           promptFilePath: promptFile?.path,
+          skillDirs,
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
           disablePlugins:
