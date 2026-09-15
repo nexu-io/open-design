@@ -709,6 +709,9 @@ export interface Dict {
   'settings.designSystemsImportProject': string;
   'settings.designSystemsImportedStatus': string;
   'settings.designSystemsViewImported': string;
+  'settings.designSystemsImportErrorInvalid': string;
+  'settings.designSystemsImportErrorInternal': string;
+  'settings.designSystemsImportErrorDetails': string;
   'settings.designSystemsCategory': string;
   'settings.designSystemsAllCategories': string;
   'settings.designSystemsShowInHomeGallery': string;
