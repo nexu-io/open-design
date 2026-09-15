@@ -9,6 +9,13 @@ export interface ModelMetadata {
   contextWindowTokens?: number;
 }
 
+export interface AgentReasoningOption {
+  id: string;
+  label: string;
+  description?: string;
+  default?: boolean;
+}
+
 export interface AgentModelOption {
   id: string;
   label: string;
@@ -27,7 +34,9 @@ export interface AgentModelOption {
   /** Service tiers supported by this model, keyed by Codex config id. */
   serviceTierOptions?: AgentModelOption[];
   /** Reasoning efforts advertised for this exact model route. */
-  reasoningOptions?: AgentModelOption[];
+  reasoningOptions?: AgentReasoningOption[];
+  /** CLI-advertised default, without overriding the user's CLI configuration. */
+  defaultReasoning?: string;
 }
 
 /**
