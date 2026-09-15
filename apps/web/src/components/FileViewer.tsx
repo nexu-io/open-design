@@ -3333,7 +3333,7 @@ type HtmlVersionExportContext = {
 
 type ExportToastState = {
   message: string;
-  tone: 'default' | 'success' | 'error' | 'loading';
+  tone: 'default' | 'success' | 'error' | 'warning' | 'loading';
 };
 
 export type DeckKeyboardShortcut = 'next' | 'prev' | 'first' | 'last' | 'reset';
@@ -7593,6 +7593,16 @@ function HtmlViewer({
               if (toastFormats.has(format)) setExportToast(null);
               return;
             }
+            if (result === 'degraded') {
+              // Degraded project ZIP (issue #8005): a file downloaded, but it
+              // is the rendered-page snapshot, not the project archive the
+              // menu item names. Show the caveat instead of the plain
+              // success toast; analytics keeps result=success with the
+              // degradation carried by error_code.
+              void finish('success', 'degraded_zip_fallback');
+              if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDegradedZip'), tone: 'warning' });
+              return;
+            }
             void finish('success');
             if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
           },
@@ -7606,6 +7616,11 @@ function HtmlViewer({
         if (out === 'cancelled') {
           void finish('cancelled');
           if (toastFormats.has(format)) setExportToast(null);
+          return;
+        }
+        if (out === 'degraded') {
+          void finish('success', 'degraded_zip_fallback');
+          if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDegradedZip'), tone: 'warning' });
           return;
         }
         void finish('success');
