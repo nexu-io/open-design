@@ -83,6 +83,42 @@ function completeHandshake(child: FakeChild, threadId = 'th-1') {
 
 describe('codex app-server session', () => {
   describe('handshake', () => {
+    it.each([
+      ['open-design/0.122.0 (macOS 26.0; arm64) open-design/9.9.9', false],
+      ['open-design/0.123.0 (macOS 26.0; arm64)', true],
+      ['codex/0.149.1', true],
+      ['open-design/0.153.4', true],
+      ['codex/1.0.0', true],
+      ['codex/0.123.0-alpha.1', false],
+      ['codex/unknown client/9.9.9', false],
+      ['', false],
+      [undefined, false],
+    ])('gates patch preview using the running server version %s', (userAgent, enabled) => {
+      for (const resumeSessionId of [null, 'existing-thread']) {
+        const { child, agentEvents } = harness({ resumeSessionId });
+        child.say({ id: child.sent('initialize')?.id, result: { userAgent } });
+        const thread = child.sent('thread/start') ?? child.sent('thread/resume');
+        expect(thread?.params.config).toEqual(enabled ? { 'features.apply_patch_streaming_events': true } : undefined);
+        child.say({ id: thread?.id, result: { thread: { id: 'existing-thread' } } });
+        expect(child.sent('turn/start')).toBeDefined();
+        expect(agentEvents.some(e => e.type === 'error')).toBe(false);
+      }
+    });
+
+    it('does not start a turn when cancellation races the handshake', () => {
+      const { child, session } = harness();
+      session.abort();
+      child.say({ id: child.sent('initialize')?.id, result: { userAgent: 'codex/0.153.4' } });
+      expect(child.sent('thread/start')).toBeUndefined();
+    });
+
+    it('drops buffered patch previews after cancellation', () => {
+      const { child, session, agentEvents } = harness();
+      completeHandshake(child);
+      session.abort();
+      child.say({ method: 'item/fileChange/patchUpdated', params: { itemId: 'p', changes: [{path:'/w/late.html',kind:{type:'add'},diff:'late'}] } });
+      expect(agentEvents.some(e => e.type === 'tool_in_flight')).toBe(false);
+    });
     it('opens with initialize before anything else', () => {
       const { child } = harness();
       const frames = child.frames();
@@ -221,7 +257,7 @@ describe('codex app-server session', () => {
     // which is the cleanest available shutdown — no signal, no null exit code,
     // and no special-casing in the run's close classifier.
     it('closes stdin once the turn completes so the server exits', () => {
-      const { child } = harness();
+      const { child, marks } = harness();
       completeHandshake(child);
       expect(child.stdinEnded).toBe(0);
       child.say({
@@ -233,6 +269,9 @@ describe('codex app-server session', () => {
         },
       });
       expect(child.stdinEnded).toBe(1);
+      child.say({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+      expect(child.stdinEnded).toBe(1);
+      expect(marks.filter(mark => mark === 'turn-complete')).toHaveLength(1);
     });
 
     it('keeps stdin open while the turn is still running', () => {

@@ -220,14 +220,32 @@ the active-run staging implementation is in
 
 ### 5.3 Codex
 
-- A new session runs `codex exec --json --skip-git-repo-check` with the
-  effective sandbox configuration, create-only `-C`/`--add-dir` arguments,
-  and optional model/reasoning overrides. The composed prompt is written to
-  stdin.
+- The default transport runs the installed CLI's built-in `codex app-server`
+  over stdio JSON-RPC; no separate app-server installation or patched Codex
+  binary is required. New sessions use `thread/start`, follow-up turns use
+  `thread/resume`, and prompts arrive through `turn/start`.
+- Official file previews use `item/fileChange/patchUpdated`. The daemon enables
+  `features.apply_patch_streaming_events` per thread only when the running
+  server's initialize response identifies a stable version >= **0.123.0**.
+  [Upstream 0.123.0](https://github.com/openai/codex/releases/tag/rust-v0.123.0)
+  first wired the event through app-server (#18289); 0.122.0 only had the
+  internal event. Older, unknown, and prerelease versions keep the existing
+  completed-file behavior without receiving this feature override. This is a
+  preview capability floor, not a new minimum version for running Codex.
+- A patch preview creates one lightweight Write/Edit row per file as soon as
+  its path is available, before the full patch finishes generating. Final
+  events settle the same row with diff statistics and execution status.
+  This covers `apply_patch`, not arbitrary shell command arguments. The
+  upstream feature remains opt-in; absence of preview events does not block
+  completion. See [patch-stream validation](testing/codex-patch-streaming.md).
+- `OD_CODEX_TRANSPORT=exec-json` selects the legacy transport:
+  `codex exec --json --skip-git-repo-check` with the effective sandbox,
+  create-only `-C`/`--add-dir`, and optional model/reasoning overrides.
+  This transport does not carry early patch previews.
 - [`runtimes/json-event-stream.ts`](../apps/daemon/src/runtimes/json-event-stream.ts)
   parses Codex's structured JSON events; this is not a regex-based plain-text
   adapter. The parser captures `thread.started.thread_id`.
-- Follow-up turns use `codex exec resume --json ... <thread-id>`. Resume uses
+- Legacy follow-up turns use `codex exec resume --json ... <thread-id>`. Resume uses
   `-c sandbox_mode=...` because Codex rejects create-only `--sandbox`, `-C`,
   and `--add-dir` flags on `exec resume`.
 - Detection uses `codex login status` for auth and `codex debug models` for

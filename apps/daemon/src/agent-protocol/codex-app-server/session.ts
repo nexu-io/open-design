@@ -127,6 +127,21 @@ function isRecord(value: unknown): value is JsonObject {
   return value != null && typeof value === 'object' && !Array.isArray(value);
 }
 
+/**
+ * PatchUpdated reached app-server in rust-v0.123.0 (upstream #18289).
+ * 0.122.0 already had the internal event but did not forward it to clients.
+ * Read the running server's version, not another `codex` found on PATH. The
+ * first user-agent token is client-name/CODEX_VERSION; later tokens include
+ * OS and client versions and must not be mistaken for the server version.
+ * Unknown and prerelease builds keep the existing completion-only behavior.
+ */
+function supportsPatchStreaming(userAgent: unknown): boolean {
+  if (typeof userAgent !== 'string') return false;
+  const match = /^[^/\s]+\/(\d+)\.(\d+)\.(\d+)(?:\+[\w.-]+)?(?:\s|$)/u.exec(userAgent);
+  if (!match) return false;
+  return Number(match[1]) > 0 || Number(match[2]) >= 123;
+}
+
 export function attachCodexAppServerSession(
   opts: CodexAppServerSessionOptions,
 ): CodexAppServerSession {
@@ -144,7 +159,7 @@ export function attachCodexAppServerSession(
     onTurnComplete,
   } = opts;
 
-  const normalizer = createCodexAppServerNormalizer(onAgentEvent);
+  const normalizer = createCodexAppServerNormalizer(onAgentEvent, Date.now, cwd);
   const pending = new Map<number, (frame: JsonObject) => void>();
   let nextId = 1;
   let buffer = '';
@@ -165,6 +180,7 @@ export function attachCodexAppServerSession(
   let protectsLegacyHistory = false;
   let archiveTimer: ReturnType<typeof setTimeout> | undefined;
   const ownsThread = !resumeSessionId || opts.resumeSessionOwned === true;
+  let patchStreaming = false;
 
   function write(frame: JsonObject, onWritten?: () => void): void {
     const stdin = child.stdin;
@@ -258,6 +274,7 @@ export function attachCodexAppServerSession(
       cwd,
       sandbox: sandboxMode,
       approvalPolicy: APPROVAL_POLICY_NEVER,
+      ...(patchStreaming ? { config: { 'features.apply_patch_streaming_events': true } } : {}),
     };
     const onThread = (result: JsonObject) => {
       const thread = isRecord(result.thread) ? result.thread : null;
@@ -327,8 +344,9 @@ export function attachCodexAppServerSession(
   }
 
   function handleFrame(frame: JsonObject): void {
+    // Preserve archive replies after a terminal event, but never reopen a canceled turn.
     if (turnEnded || childClosed) return;
-    if (aborted && !terminalReceived && frame.method !== 'turn/completed') return;
+    if ((aborted || fatalReported) && !terminalReceived && frame.method !== 'turn/completed') return;
     if (!cliReadySeen) {
       cliReadySeen = true;
       onCliReady?.();
@@ -453,6 +471,7 @@ export function attachCodexAppServerSession(
       const capabilities = codexHistoryCapabilities(result.userAgent);
       supportsPaginatedHistory = opts.manageThreadVisibility === true && capabilities.paginated;
       protectsLegacyHistory = opts.manageThreadVisibility === true && capabilities.legacy;
+      patchStreaming = supportsPatchStreaming(result.userAgent);
       notify('initialized', {});
       openThread();
     },
