@@ -1040,7 +1040,17 @@ export function createOdNextRunInputProjection(input: {
     }
     fs.chmodSync(attachmentsDir, 0o555);
     fs.chmodSync(projectionDir, 0o555);
-    fs.chmodSync(taskProjectionRoot, 0o555);
+    // The access root is handed to adapters as a writable root, and codex's
+    // Linux sandbox materialises synthetic bubblewrap mount targets (`.codex`,
+    // `.agents`, `.git`) directly inside every writable root. Creating them
+    // succeeds because bwrap runs in a user namespace, but the teardown that
+    // unlinks them runs as the real user and needs write permission on the
+    // PARENT. Freezing the root to 0o555 therefore made codex abort with
+    // `failed to remove synthetic bubblewrap mount target ... Permission
+    // denied`, and made our own cleanup below leave the root behind forever.
+    // Immutability lives on the projection directory and its 0o444 files, one
+    // level down; the root only needs to be traversable and owner-writable.
+    fs.chmodSync(taskProjectionRoot, 0o700);
     const projectedPaths = loaded.files.map((file) => (
       path.join(projectionDir, file.relativePath)
     ));
@@ -1060,7 +1070,7 @@ export function createOdNextRunInputProjection(input: {
     if (projectionPathVerified) {
       removeRunProjectionTree(projectionDir);
       if (fs.existsSync(taskProjectionRoot)) {
-        try { fs.chmodSync(taskProjectionRoot, 0o555); } catch { /* best effort */ }
+        try { fs.chmodSync(taskProjectionRoot, 0o700); } catch { /* best effort */ }
       }
     }
     throw error;
@@ -1096,10 +1106,26 @@ export function removeOdNextRunInputProjection(
   }
   fs.chmodSync(projectionAccessRoot, 0o700);
   removeRunProjectionTree(projectionDir);
+  // Sandboxes that treat the access root as a writable root leave their own
+  // synthetic mount targets behind: empty directories such as `.codex`,
+  // `.agents` and `.git`. They are not ours to interpret, but an EMPTY
+  // directory carries no caller data, so removing it is safe and keeps the
+  // per-Run root from accumulating forever. Anything else — a file, a symlink,
+  // a directory with content — is left untouched and reported by the root
+  // surviving this call.
+  for (const entry of fs.readdirSync(projectionAccessRoot)) {
+    const candidate = path.join(projectionAccessRoot, entry);
+    try {
+      const stat = fs.lstatSync(candidate);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) continue;
+      if (fs.readdirSync(candidate).length !== 0) continue;
+      fs.rmdirSync(candidate);
+    } catch { /* best effort: leave the entry and the root behind */ }
+  }
   if (fs.readdirSync(projectionAccessRoot).length === 0) {
     fs.rmdirSync(projectionAccessRoot);
   } else {
-    fs.chmodSync(projectionAccessRoot, 0o555);
+    fs.chmodSync(projectionAccessRoot, 0o700);
   }
 }
 
