@@ -642,7 +642,7 @@ describe('byok-opencode Bedrock provider config', () => {
         'amazon-bedrock',
         'amazon.nova-2-lite-v1:0',
       ),
-    ).toEqual({ context: 128_000, output: 16_384 });
+    ).toEqual({ context: 128_000, output: 8_192 });
   });
 
   it('passes the AWS profile to OpenCode and exports no bearer token in profile mode', () => {

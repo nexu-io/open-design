@@ -24,6 +24,7 @@ export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
 const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
+const BEDROCK_CONVERSE_OUTPUT_TOKEN_LIMIT = 8_192;
 
 const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], string> = {
   anthropic: 'https://api.anthropic.com/v1',
@@ -208,7 +209,13 @@ export function bedrockModelFamily(modelId: string): BedrockModelFamily {
 const BEDROCK_MODEL_LIMITS: Record<BedrockModelFamily, { context: number; output: number }> = {
   anthropic: { context: 200_000, output: 32_000 },
   openai: { context: 400_000, output: 32_000 },
-  other: { context: DEFAULT_CONTEXT_TOKEN_LIMIT, output: DEFAULT_OUTPUT_TOKEN_LIMIT },
+  // The Converse route serves every non-Anthropic, non-OpenAI model. OpenCode
+  // sends `limit.output` as the request's maxTokens and Bedrock rejects a
+  // value above the model's own ceiling before the model runs ("The maximum
+  // tokens you requested exceeds the model limit of 10000", measured on Nova
+  // Micro). Amazon Nova caps at 10000, Llama and Mistral at 8192, so 8192 is
+  // the largest value every model on this route accepts.
+  other: { context: DEFAULT_CONTEXT_TOKEN_LIMIT, output: BEDROCK_CONVERSE_OUTPUT_TOKEN_LIMIT },
 };
 
 // OpenCode gates file parts on the model's declared input modalities and

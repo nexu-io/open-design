@@ -430,9 +430,12 @@ function isByokOpenCodeProviderNotFoundText(
 
 function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
   // Bedrock Converse rejects `document` blocks (PDF attachments) for models
-  // that do not take documents, e.g. OpenAI models on Bedrock, while Anthropic
-  // and Nova models on the same provider accept them: a switch-model case.
-  if (/\bdoesn'?t support the document field\b|\bdocument field for user messages\b/i.test(text)) {
+  // that do not take documents (Nova Micro, Qwen, DeepSeek V3 among others),
+  // while Anthropic and Nova Lite/Pro on the same provider accept them: a
+  // switch-model case. Bedrock has used two wordings for it: "doesn't support
+  // the document field for user messages" and, currently, "This model doesn't
+  // support documents."
+  if (/\bdoesn'?t support the document field\b|\bdocument field for user messages\b|\bdoesn'?t support documents\b/i.test(text)) {
     return 'model_document_unsupported';
   }
   if (/\brequires a newer version of codex\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
