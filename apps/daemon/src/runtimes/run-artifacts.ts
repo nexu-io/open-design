@@ -48,14 +48,48 @@ export const WRITE_OR_EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
   'str_replace_edit',
   'MultiEdit',
   'multi_edit',
+  'create_artifact',
 ]);
+
+// Normalizes MCP-style tool names like 'mcp__open-design__create_artifact' to 'create_artifact'.
+export function normalizeToolName(name: string): string {
+  if (typeof name !== 'string') return '';
+  if (name.startsWith('mcp__')) {
+    const lastDoubleUnderscore = name.lastIndexOf('__');
+    if (lastDoubleUnderscore >= 0) {
+      return name.slice(lastDoubleUnderscore + 2);
+    }
+  }
+  return name;
+}
+
+// Exported so the side-effect ledger and batch counters accept both bare
+// and MCP-qualified tool names (e.g. mcp__open-design__create_artifact).
+export function isWriteOrEditToolName(name: string): boolean {
+  if (typeof name !== 'string') return false;
+  return (
+    WRITE_OR_EDIT_TOOL_NAMES.has(name) ||
+    WRITE_OR_EDIT_TOOL_NAMES.has(normalizeToolName(name))
+  );
+}
 
 // Exported so the incremental ledger extracts the written path identically.
 export function extractToolFilePath(input: unknown): string | null {
   if (!input || typeof input !== 'object') return null;
-  const obj = input as { file_path?: unknown; path?: unknown };
+  const obj = input as {
+    file_path?: unknown;
+    path?: unknown;
+    name?: unknown;
+    filename?: unknown;
+    filePath?: unknown;
+    TargetFile?: unknown;
+  };
   if (typeof obj.file_path === 'string' && obj.file_path) return obj.file_path;
   if (typeof obj.path === 'string' && obj.path) return obj.path;
+  if (typeof obj.name === 'string' && obj.name) return obj.name;
+  if (typeof obj.filename === 'string' && obj.filename) return obj.filename;
+  if (typeof obj.filePath === 'string' && obj.filePath) return obj.filePath;
+  if (typeof obj.TargetFile === 'string' && obj.TargetFile) return obj.TargetFile;
   return null;
 }
 
@@ -150,13 +184,16 @@ export function readToolResultIsError(data: unknown): boolean {
 // `countNewArtifacts` so the counters stay aligned.
 function collectWrittenPathsMatching(
   events: readonly RunEventLike[],
-  predicate: (path: string) => boolean,
+  predicate: (path: string, toolName: string) => boolean,
 ): Set<string> {
   if (!events || events.length === 0) return new Set();
   const resultByToolUseId = new Map<string, { isError: boolean }>();
   for (const rec of events) {
     if (rec?.event !== 'agent') continue;
-    const data = rec.data as { type?: string } | null | undefined;
+    const data = rec.data as
+      | { type?: string; tool_use_id?: unknown; is_error?: unknown }
+      | null
+      | undefined;
     if (data?.type !== 'tool_result') continue;
     const id = readToolResultId(rec.data);
     if (!id) continue;
@@ -171,16 +208,17 @@ function collectWrittenPathsMatching(
       | undefined;
     if (data?.type !== 'tool_use') continue;
     if (typeof data.name !== 'string') continue;
-    if (!WRITE_OR_EDIT_TOOL_NAMES.has(data.name)) continue;
+    if (!isWriteOrEditToolName(data.name)) continue;
     const path = extractToolFilePath(data.input);
     if (!path) continue;
-    if (!predicate(path)) continue;
+    if (!predicate(path, data.name)) continue;
     const toolUseId = readToolUseId(rec.data);
     if (!toolUseId) continue;
     const outcome = resultByToolUseId.get(toolUseId);
     if (!outcome) continue;
     if (outcome.isError) continue;
-    writtenPaths.add(path);
+    const targetPath = path.endsWith('.artifact.json') ? path.slice(0, -'.artifact.json'.length) : path;
+    writtenPaths.add(targetPath);
   }
   return writtenPaths;
 }
@@ -190,7 +228,7 @@ function collectWrittenPathsMatching(
 export function didRunCreateDesignSystemFile(
   events: readonly RunEventLike[],
 ): boolean {
-  return collectWrittenPathsMatching(events, isDesignSystemFile).size > 0;
+  return collectWrittenPathsMatching(events, (path) => isDesignSystemFile(path)).size > 0;
 }
 
 // Count of distinct preview modules the run wrote under `preview/`.
@@ -200,7 +238,7 @@ export function didRunCreateDesignSystemFile(
 export function countDesignSystemPreviewModules(
   events: readonly RunEventLike[],
 ): number {
-  return collectWrittenPathsMatching(events, isPreviewModulePath).size;
+  return collectWrittenPathsMatching(events, (path) => isPreviewModulePath(path)).size;
 }
 
 // Count of distinct artifact files (HTML + image/video/audio) the run
@@ -209,7 +247,13 @@ export function countDesignSystemPreviewModules(
 // `collectWrittenPathsMatching` helper (a tool_use whose tool_result reports
 // `isError` does not count; a file written then edited counts once).
 export function countNewArtifacts(events: readonly RunEventLike[]): number {
-  return collectWrittenPathsMatching(events, isArtifactPath).size;
+  return collectWrittenPathsMatching(events, (path, toolName) => {
+    return (
+      isArtifactPath(path) ||
+      path.endsWith('.artifact.json') ||
+      normalizeToolName(toolName) === 'create_artifact'
+    );
+  }).size;
 }
 
 // Count of distinct files of ANY type the run successfully wrote or edited —
