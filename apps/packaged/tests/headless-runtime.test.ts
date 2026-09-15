@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, mkdir, readlink, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   acquirePackagedHeadlessStartup,
@@ -30,30 +33,47 @@ describe("parsePackagedHeadlessRequest", () => {
 });
 
 describe("resolvePackagedMcpBootstrapLaunch", () => {
-  it("uses macOS open against the stable signed app bundle", () => {
-    expect(resolvePackagedMcpBootstrapLaunch({
-      currentExecutablePath:
-        "/private/payload/Open Design.app/Contents/MacOS/Open Design",
-      installedLaunchPath: "/Applications/Open Design.app",
-      platform: "darwin",
-    })).toEqual({
-      command: "/usr/bin/open",
-      args: [
-        "-g",
-        "-j",
-        "/Applications/Open Design.app",
-        "--args",
-        "--headless",
-      ],
-    });
+  it("keeps one stable macOS bootstrap alias pointed at the active payload", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-mcp-bootstrap-alias-"));
+    try {
+      const namespaceRoot = join(root, "launcher", "channels", "stable", "namespaces", "release-stable");
+      const firstBundle = join(namespaceRoot, "versions", "0.21.0", "payload", "Open Design.app");
+      const secondBundle = join(namespaceRoot, "versions", "0.21.1", "payload", "Open Design.app");
+      await mkdir(join(firstBundle, "Contents", "MacOS"), { recursive: true });
+      await mkdir(join(secondBundle, "Contents", "MacOS"), { recursive: true });
+
+      const first = await resolvePackagedMcpBootstrapLaunch({
+        currentExecutablePath: join(firstBundle, "Contents", "MacOS", "Open Design"),
+        installedLaunchPath: "/Applications/Open Design.app",
+        launcherNamespaceRoot: namespaceRoot,
+        platform: "darwin",
+      });
+      const stableBundle = join(namespaceRoot, "active", "Open Design.app");
+      expect(first).toEqual({
+        command: "/usr/bin/open",
+        args: ["-g", "-j", stableBundle, "--args", "--headless"],
+      });
+      expect(await readlink(stableBundle)).toBe(firstBundle);
+
+      const second = await resolvePackagedMcpBootstrapLaunch({
+        currentExecutablePath: join(secondBundle, "Contents", "MacOS", "Open Design"),
+        installedLaunchPath: "/Applications/Open Design.app",
+        launcherNamespaceRoot: namespaceRoot,
+        platform: "darwin",
+      });
+      expect(second.args[2]).toBe(stableBundle);
+      expect(await readlink(stableBundle)).toBe(secondBundle);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
-  it("invokes a non-macOS installed launcher directly", () => {
-    expect(resolvePackagedMcpBootstrapLaunch({
+  it("invokes a non-macOS installed launcher directly", async () => {
+    await expect(resolvePackagedMcpBootstrapLaunch({
       currentExecutablePath: "/tmp/payload/open-design",
       installedLaunchPath: "/opt/open-design/open-design",
       platform: "linux",
-    })).toEqual({
+    })).resolves.toEqual({
       command: "/opt/open-design/open-design",
       args: ["--headless"],
     });
