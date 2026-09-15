@@ -166,6 +166,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
    */
   const [colorText, setColorText] = useState<Record<string, string>>({});
   const [rangeText, setRangeText] = useState<Record<string, string>>({});
+  const [customText, setCustomText] = useState<Record<string, string>>({});
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [skippedQuestionIds, setSkippedQuestionIds] = useState<Set<string>>(() => new Set());
   const [autoContinueRemaining, setAutoContinueRemaining] = useState(
@@ -269,6 +270,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     if (expanded) {
       if (q.type === 'checkbox') {
         const current = Array.isArray(answers[q.id]) ? (answers[q.id] as string[]) : [];
+        clearDraftText(setCustomText, q.id);
         update(q.id, current.filter((entry) => questionValueIsKnown(q, entry)));
       } else {
         const current = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
@@ -364,6 +366,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     q: QuestionForm['questions'][number],
     value: string,
     onChangeOwn: (next: string) => void,
+    onSettleOwn?: () => void,
   ) {
     const on = customChoiceExpanded(q);
     const label = q.customLabel ?? t('qf.ownAnswer');
@@ -411,6 +414,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
             placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
             disabled={locked}
             onChange={(e) => onChangeOwn(e.target.value)}
+            onBlur={onSettleOwn}
           />
         </span>
       </div>
@@ -492,11 +496,24 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     onAnswerChange?.(id, next);
   }
 
+  /**
+   * 自填框在敲字。答案照旧收成拆分、去空白的条目,但**文本要原样留着** ——
+   * 这个框是受控的,答案回流就是显示,少了这一份在编文本,
+   * 「hello 」会在下一个字符进来前被 trim 成「hello」,敲出来的是「helloworld」。
+   *
+   * 和 `typeColor` / `typeRange` 同一条路:在编文本归文本,收好的值归答案。
+   */
   function updateCheckboxCustom(q: QuestionForm['questions'][number], raw: string) {
     if (locked) return;
+    setCustomText((prev) => ({ ...prev, [q.id]: raw }));
     const current = Array.isArray(answers[q.id]) ? (answers[q.id] as string[]) : [];
     const fixed = current.filter((entry) => questionValueIsKnown(q, entry));
     update(q.id, [...fixed, ...splitCustomEntries(raw)]);
+  }
+
+  /** 失焦:文本让位给答案,显示于是收成规范形(去掉首尾空白、空条目)。 */
+  function settleCheckboxCustom(q: QuestionForm['questions'][number]) {
+    clearDraftText(setCustomText, q.id);
   }
 
   function finalizeSubmission(
@@ -873,7 +890,12 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                     );
                   })}
                   {shouldRenderCustomChoice(q)
-                    ? renderOwnChoice(q, customCheckboxValue(q, value), (next) => updateCheckboxCustom(q, next))
+                    ? renderOwnChoice(
+                        q,
+                        customText[q.id] ?? customCheckboxValue(q, value),
+                        (next) => updateCheckboxCustom(q, next),
+                        () => settleCheckboxCustom(q),
+                      )
                     : null}
                 </div>
               ) : null}
