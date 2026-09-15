@@ -259,9 +259,8 @@ export interface ProjectMetadata {
   // Externally prepared scratch workspace provenance. OD may read/write
   // metadata.baseDir, but source authority and writeback stay outside OD.
   orchestratorWorkspace?: OrchestratorWorkspace;
-  // Hint stamped by the Home composer working-directory chip. It records
-  // where the user wanted the project to live without granting write access
-  // to that path; actual filesystem roots still use baseDir/import flows.
+  // Transient hint stamped by project-creation surfaces before the trusted
+  // working-directory route promotes the selected folder to baseDir.
   userWorkingDir?: string;
   imageModel?: string;
   imageAspect?: MediaAspect;
