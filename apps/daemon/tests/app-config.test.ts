@@ -14,6 +14,7 @@ import {
 } from 'vitest';
 
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from '../src/app-config.js';
+import { spawnEnvForAgent } from '../src/runtimes/env.js';
 import { readOdNextRolloutPolicy } from '../src/strategies/od-next/rollout.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 
@@ -507,6 +508,11 @@ describe('app-config', () => {
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
           },
+          pi: {
+            PI_BIN: '  ~/bin/pi  ',
+            PI_CODING_AGENT_DIR: '  ~/.pi-isolated/agent  ',
+            PI_CODING_AGENT_SESSION_DIR: 'not part of the contract yet',
+          },
           __proto__: {
             CLAUDE_CONFIG_DIR: 'bad',
           },
@@ -526,6 +532,9 @@ describe('app-config', () => {
         },
         opencode: { OPENCODE_BIN: '~/bin/opencode' },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
+        // pi's config-directory override survives the save (#8093); the
+        // neighbouring session-dir key is not in the contract and still does not.
+        pi: { PI_BIN: '~/bin/pi', PI_CODING_AGENT_DIR: '~/.pi-isolated/agent' },
       });
       expect(agentCliEnvForAgent(cfg.agentCliEnv, 'byok-opencode')).toEqual({
         OPENCODE_BIN: '~/bin/opencode',
@@ -612,6 +621,30 @@ describe('app-config', () => {
 
       expect(cfg.agentCliEnv).toBeUndefined();
       expect(cfg.agentCliEnvIntent).toBeUndefined();
+    });
+
+    it('carries a saved PI_CODING_AGENT_DIR through a save cycle and into the pi launch env', async () => {
+      // #8093 end to end. Persistence alone is not the fix: the whole point of
+      // the key is that pi reads its config from the isolated directory, so
+      // the assertion follows the value from app-config.json to the env
+      // spawnEnvForAgent hands the process.
+      await writeAppConfig(dataDir, {
+        agentId: 'pi',
+        agentCliEnv: {
+          pi: {
+            PI_BIN: '/Users/test/bin/pi',
+            PI_CODING_AGENT_DIR: '/Users/test/.pi-isolated/agent',
+          },
+        },
+      });
+
+      const cfg = await readAppConfig(dataDir);
+      const configured = agentCliEnvForAgent(cfg.agentCliEnv, 'pi');
+      expect(configured.PI_CODING_AGENT_DIR).toBe('/Users/test/.pi-isolated/agent');
+
+      const env = spawnEnvForAgent('pi', { PATH: '/usr/bin' }, configured);
+      expect(env.PI_CODING_AGENT_DIR).toBe('/Users/test/.pi-isolated/agent');
+      expect(env.PI_BIN).toBe('/Users/test/bin/pi');
     });
 
     it('drops orphan CLI env intent entries when the agent env is empty', async () => {
