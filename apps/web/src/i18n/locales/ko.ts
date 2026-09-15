@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  "workspace.copyProject": "복제",
+  "workspace.shareToTeam": "팀에 공유",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

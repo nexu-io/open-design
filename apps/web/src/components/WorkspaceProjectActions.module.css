@@ -1,0 +1,41 @@
+.row { position: relative; }
+.more {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  opacity: 0;
+}
+.row:hover .more,
+.row:focus-within .more,
+.more[aria-expanded='true'] { opacity: 1; }
+.row > :global(.workspace-tabs-dropdown__row-main):hover:not(:disabled),
+.row > .more:hover:not(:disabled) { background: transparent; }
+.actions {
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--shadow-md);
+}
+.actions button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  border-radius: 6px;
+}
+.actions button:hover { background: var(--bg-subtle); }
+.actions .danger { color: var(--red, #dc2626); }

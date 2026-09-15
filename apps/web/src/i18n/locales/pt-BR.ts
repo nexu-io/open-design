@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const ptBR: Dict = {
+  "workspace.copyProject": "Duplicar",
+  "workspace.shareToTeam": "Compartilhar com a equipe",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

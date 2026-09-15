@@ -1,0 +1,15 @@
+/* Owns the project composer's surface and the queue rows immediately above it. */
+.composer:global(.chat-composer-fixed-layer) :global(.composer-shell) {
+  padding: 5px;
+  gap: 8px;
+  border-color: var(--chat-border-soft);
+  border-radius: var(--chat-radius-xl);
+  background: var(--chat-floating-card-bg);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.queueRow:global(.chat-queued-send-row) {
+  gap: 4px;
+  padding: 6px 4px;
+}

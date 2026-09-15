@@ -1,3 +1,4 @@
+import composerQueueStyles from './chat/ComposerQueue.module.css';
 import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../runtime/chat/conversation-time';
 import { QuoteBar } from './chat/QuoteBar';
@@ -1612,6 +1613,7 @@ export function ChatPane({
   const composerSlotRef = useRef<HTMLDivElement | null>(null);
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
   const queuedSendStripRef = useRef<HTMLDivElement | null>(null);
+  const [queuedSendExpanded, setQueuedSendExpanded] = useState(false);
   const didInitialScrollRef = useRef(false);
   const runFailedToastSurfaceKeysRef = useRef<Set<string>>(new Set());
   const runRecoverySurfaceKeysRef = useRef<Set<string>>(new Set());
@@ -2059,7 +2061,7 @@ export function ChatPane({
    * 也不是他伸手要够的东西;人贴着底时他已经在最新上,回底按钮无事可做,
    * 位置该让给进度。两者因此天然不同时出现,不需要谁给谁让一档。
    */
-  const showJumpToLatest = scrolledFromBottom;
+  const showJumpToLatest = scrolledFromBottom && !queuedSendExpanded;
   const planPillVisible = planPillEligible && !scrolledFromBottom;
   /**
    * 重试在飞时,报错卡**钉在被重试的那一轮上**(OPEND-2758)。
@@ -5083,6 +5085,7 @@ export function ChatPane({
             <QueuedSendStrip
               key={activeConversationId ?? projectId ?? 'draft'}
               containerRef={queuedSendStripRef}
+              onExpandedChange={setQueuedSendExpanded}
               items={queuedItems}
               editingId={editingQueuedSendId}
               onEdit={(item) => {
@@ -5148,7 +5151,7 @@ export function ChatPane({
                    * (联系支持弹窗、产物卡浮层、输入框)。
                    */
                   <div
-                    {...chatSeam('chat-composer-fixed-layer')}
+                    {...chatSeam('chat-composer-fixed-layer' + ' ' + composerQueueStyles.composer)}
                     ref={composerLayerRef}
                     data-chat-panel-top={composerPortalRect.top}
                     style={{
@@ -6369,10 +6372,12 @@ function queuedTipPlacement(
   onReorder,
   onSendNow,
   steerBlockedReason,
+  onExpandedChange,
 }: {
   containerRef?: MutableRefObject<HTMLDivElement | null>;
   editingId?: string | null;
   items: QueuedSendItem[];
+  onExpandedChange?: (expanded: boolean) => void;
   onEdit?: (item: QueuedSendItem) => void;
   onRemove?: (id: string) => void;
   onReorder?: (orderedIds: string[]) => void;
@@ -6461,6 +6466,7 @@ function queuedTipPlacement(
 
   return (
     <QueuedSendStack
+      onExpandedChange={onExpandedChange}
       containerRef={containerRef}
       label={`${t('chat.queuedHeader')} · ${items.length}`}
       dragging={Boolean(dragState)}
@@ -6483,7 +6489,7 @@ function queuedTipPlacement(
                  唯一的处理是 `border-top: none`,没有首行底色。
                  原来这里按 `index === 0` 挂过一枚 `-active`,规则已删、类名也跟着走 ——
                  留着就是一个没有任何规则消费、却在 diff 里长得像「首行有特殊态」的钩子。 */
-              className={`chat-queued-send-row${
+              className={`${composerQueueStyles.queueRow} chat-queued-send-row${
                 editingId === item.id ? ' chat-queued-send-row-editing' : ''
               }${isDragging ? ' chat-queued-send-row-dragging' : ''}${dropClass}`}
               data-testid="chat-queued-send-row"
@@ -6491,8 +6497,6 @@ function queuedTipPlacement(
               onDragOver={(event) => handleDragOver(event, item.id)}
               onDrop={(event) => handleDrop(event, item.id)}
             >
-              {/* 稿子这一行是 `grip → ix → tx → qops`:**拖动手柄在最左**,序号跟在它右边。
-                  原来这两个是反的(序号在最左),整行的起手就和稿子对不上。 */}
               <button
                 type="button"
                 className="chat-queued-send-drag-handle chat-queued-send-tooltip od-tooltip"
@@ -6507,8 +6511,6 @@ function queuedTipPlacement(
               >
                 <Icon name="grip-vertical" size={14} />
               </button>
-              {/* 序号:出队后重排是数组下标的自然结果,不用另外维护 */}
-              <span className="chat-queued-send-index" data-testid="chat-queued-send-index" aria-hidden>{index + 1}</span>
               <div className="chat-queued-send-main">
                 <span className="chat-queued-send-title">{summarizeQueuedPrompt(item, t)}</span>
               </div>

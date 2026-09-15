@@ -1,6 +1,8 @@
 import type { Dict } from "../types";
 
 export const zhCN: Dict = {
+  "workspace.copyProject": "复制",
+  "workspace.shareToTeam": "分享给团队",
   'invite.header.eyebrow': "团队邀请",
   'invite.loading': "正在加载邀请…",
   'invite.landing.title': "加入团队",

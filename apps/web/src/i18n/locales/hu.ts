@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+  "workspace.copyProject": "Másolás",
+  "workspace.shareToTeam": "Megosztás a csapattal",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

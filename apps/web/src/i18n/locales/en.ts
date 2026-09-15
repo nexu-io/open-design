@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const en: Dict = {
+  "workspace.copyProject": "Duplicate",
+  "workspace.shareToTeam": "Share with team",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
