@@ -1,3 +1,4 @@
+import { createCodexTurnUsage } from '../../observability/codex-turn-usage.js';
 /** @module agent-protocol/codex-app-server/normalize
  *
  * Translates codex `app-server` JSON-RPC notifications into the OpenDesign
@@ -193,6 +194,7 @@ export function createCodexAppServerNormalizer(
   now: () => number = Date.now,
   cwd?: string,
 ): CodexAppServerNormalizer {
+  const evaluationUsage = createCodexTurnUsage();
   let emittedCount = 0;
   const emit = (event: AgentEvent) => {
     emittedCount += 1;
@@ -533,8 +535,8 @@ export function createCodexAppServerNormalizer(
     const tokenUsage = isRecord(params.tokenUsage) ? params.tokenUsage : null;
     // `total` is the thread-cumulative counter, which is the same semantics
     // `exec --json` reports at `turn.completed` (codex's stream usage has
-    // always been cumulative). `last` is per-turn and deliberately unused so a
-    // resumed thread keeps reporting the same number the exec path would.
+    // always been cumulative). Keep legacy counters unchanged for resumed threads.
+    // Additive v2 separately deduplicates last-call usage within an explicit Turn.
     const total = tokenUsage && isRecord(tokenUsage.total) ? tokenUsage.total : null;
     if (!total) return;
     const usage: Record<string, number> = {};
@@ -554,7 +556,7 @@ export function createCodexAppServerNormalizer(
     if (cacheWrite !== undefined) usage.cached_write_tokens = cacheWrite;
     if (totalTokens !== undefined) usage.total_tokens = totalTokens;
     if (Object.keys(usage).length === 0) return;
-    emit({ type: 'usage', usage });
+    emit({ type: 'usage', usage, usageScope: 'sessionCumulative', evaluationTurnUsage: evaluationUsage.add(str(params.turnId), tokenUsage) });
     emitThinkingTokens(reasoning);
   }
 
@@ -650,6 +652,7 @@ export function createCodexAppServerNormalizer(
           return;
         }
         case 'turn/started':
+          evaluationUsage.start(str(isRecord(params.turn) ? params.turn.id : params.turnId));
           patchTurnEnded = false;
           completedPatches.clear();
           previousEventWasMessage = false;

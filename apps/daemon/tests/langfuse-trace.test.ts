@@ -2957,6 +2957,16 @@ function makeFeedbackCtx(
 }
 
 describe('buildFeedbackPayload', () => {
+  it('targets the owning Task while keeping physical Run score IDs stable', () => {
+    const batch = buildFeedbackPayload(makeFeedbackCtx({ traceId: 'strategy-task:task-1' })) as Array<{ body: Record<string, unknown> }>;
+    expect(batch[0]?.body).toMatchObject({
+      id: 'run-feedback-1-rating', traceId: 'strategy-task:task-1',
+      metadata: { runId: 'run-feedback-1' },
+    });
+    expect(batch[1]?.body).toMatchObject({
+      id: 'run-feedback-1-reason-matched_request', traceId: 'strategy-task:task-1',
+    });
+  });
   it('emits a numeric user_rating score plus per-reason categorical scores', () => {
     const batch = buildFeedbackPayload(
       makeFeedbackCtx({

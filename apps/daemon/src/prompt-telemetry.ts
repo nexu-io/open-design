@@ -207,7 +207,7 @@ export function redactLocalPaths(input: string): string {
     });
 }
 
-function redactPromptText(input: string): string {
+export function redactPromptText(input: string): string {
   return redactLocalPaths(redactSecrets(input));
 }
 
