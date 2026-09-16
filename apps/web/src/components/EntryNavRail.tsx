@@ -1810,6 +1810,17 @@ export function EntryNavRail({
           <Icon name="globe" size={16} />
         </NavButton>
 
+        <NavButton
+          active={false}
+          ariaLabel={t('entry.navNewProject')}
+          label={t('entry.navNewProject')}
+          onClick={onNewProject}
+          disabled={newProjectDisabled}
+          testId="entry-nav-new-project"
+        >
+          <Icon name="plus" size={16} />
+        </NavButton>
+
         {context ? (
           <div className="entry-nav-rail__team-section">
             <NavButton
