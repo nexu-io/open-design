@@ -64,6 +64,7 @@ import {
 } from './memory-extractions.js';
 import { resolveProviderConfig } from './media/config.js';
 import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
+import { openCodeSessionHeaders } from './integrations/opencode-go.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -194,6 +195,13 @@ const PROVIDER_DEFAULTS = {
     model: 'gpt-4o-mini',
     baseUrl: 'https://aihubmix.com/v1',
   },
+  // OpenCode Go is OpenAI-wire-compatible and requires the
+  // `x-opencode-session` routing header on every request (injected in
+  // callOpenAI). Default to a small/fast model so the memory pass stays cheap.
+  'opencode-go': {
+    model: 'deepseek-v4-flash',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+  },
 };
 
 // Some Settings -> Media providers credentials are usable for text
@@ -262,6 +270,13 @@ function envKeyFor(provider) {
     return (
       process.env.OD_AIHUBMIX_API_KEY?.trim()
       || process.env.AIHUBMIX_API_KEY?.trim()
+      || ''
+    );
+  }
+  if (provider === 'opencode-go') {
+    return (
+      process.env.OD_OPENCODE_GO_API_KEY?.trim()
+      || process.env.OPENCODE_GO_API_KEY?.trim()
       || ''
     );
   }
@@ -828,6 +843,8 @@ async function callOpenAI(provider, system, user) {
           ...(provider.kind === 'aihubmix' && AIHUBMIX_APP_CODE
             ? { 'APP-Code': AIHUBMIX_APP_CODE }
             : {}),
+          // OpenCode Go rejects requests without a routing session id.
+          ...(provider.kind === 'opencode-go' ? openCodeSessionHeaders() : {}),
         },
         body: JSON.stringify({
           model: provider.model,
