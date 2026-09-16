@@ -198,8 +198,15 @@ function buildProviderEntry(
 
   // OpenCode Go rejects requests without `x-opencode-session` (MissingSessionID).
   // Every other protocol ignores the extra header, so it is applied uniformly.
+  //
+  // The key is `headers`, not `extraHeaders`: OpenCode passes a provider's
+  // `options` verbatim to the AI SDK provider factory, and every package we
+  // emit here (@ai-sdk/openai, @ai-sdk/openai-compatible, @ai-sdk/anthropic,
+  // @ai-sdk/azure, @ai-sdk/google) declares `headers` in its settings type.
+  // `extraHeaders` is not a recognised setting, so the header was silently
+  // dropped on the run path while the raw-fetch callers stayed correct.
   const openCodeSessionHeaderOptions = {
-    extraHeaders: openCodeSessionHeaders(sessionId),
+    headers: openCodeSessionHeaders(sessionId),
   };
 
   const usesAzureOpenAICompatiblePath =
