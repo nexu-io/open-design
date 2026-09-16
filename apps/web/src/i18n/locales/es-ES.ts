@@ -487,6 +487,7 @@ export const esES: Dict = {
   'settings.testSuccessApi': 'Conectado. Respondió en {ms} ms — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} respondió en {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Autenticación fallida. Comprueba tu clave de API.',
+  'settings.testAuthFailedProfile': 'Autenticación fallida. Comprueba el perfil de AWS o inicia sesión con AWS SSO si su sesión ha caducado.',
   'settings.testForbidden': 'Acceso prohibido. Verifica cuenta, región u organización.',
   'settings.testNotFoundModel': 'No se encontró el modelo \'{model}\' en este endpoint.',
   'settings.testInvalidModelId': 'El id de modelo \'{model}\' no es válido. Los ids personalizados deben empezar con una letra o un número y no contener espacios.',

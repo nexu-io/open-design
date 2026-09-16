@@ -487,6 +487,7 @@ export const ptBR: Dict = {
   'settings.testSuccessApi': 'Conectado. Respondeu em {ms} ms — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} respondeu em {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Falha na autenticação. Verifique sua chave de API.',
+  'settings.testAuthFailedProfile': 'Falha na autenticação. Verifique o perfil da AWS ou entre com o AWS SSO se a sessão expirou.',
   'settings.testForbidden': 'Acesso proibido. Verifique conta, região ou organização.',
   'settings.testNotFoundModel': 'Modelo \'{model}\' não encontrado neste endpoint.',
   'settings.testInvalidModelId': 'O id de modelo \'{model}\' é inválido. IDs personalizados devem começar com letra ou número e não conter espaços.',

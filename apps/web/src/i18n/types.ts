@@ -405,6 +405,7 @@ export interface Dict {
   'settings.testSuccessApi': string;
   'settings.testSuccessCli': string;
   'settings.testAuthFailed': string;
+  'settings.testAuthFailedProfile': string;
   'settings.testForbidden': string;
   'settings.testNotFoundModel': string;
   'settings.testInvalidModelId': string;

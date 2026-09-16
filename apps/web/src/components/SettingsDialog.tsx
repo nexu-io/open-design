@@ -2165,6 +2165,10 @@ export function SettingsDialog({
     cfg.baseUrl,
     cfg.model,
     cfg.apiVersion,
+    // Bedrock: the auth mode and the profile are part of the tested
+    // credential, so a result from the other mode is stale once they change.
+    cfg.awsAuthMode,
+    cfg.awsProfile,
   ]);
   useEffect(() => {
     if (providerModelsFirstResetRef.current) {
@@ -3018,7 +3022,10 @@ export function SettingsDialog({
     }
     switch (result.kind) {
       case 'auth_failed':
-        return t('settings.testAuthFailed');
+        return cfg.apiProtocol === 'bedrock'
+          && resolveBedrockAuthMode(cfg.awsAuthMode) === 'profile'
+          ? t('settings.testAuthFailedProfile')
+          : t('settings.testAuthFailed');
       case 'forbidden':
         return t('settings.testForbidden');
       case 'not_found_model':
@@ -3792,6 +3799,8 @@ export function SettingsDialog({
     byokDraftValidation,
     cfg.apiKey,
     cfg.apiVersion,
+    cfg.awsAuthMode,
+    cfg.awsProfile,
     cfg.baseUrl,
     cfg.mode,
     cfg.model,
@@ -3840,6 +3849,7 @@ export function SettingsDialog({
       ? currentProviderModelsResult.models.length
       : 0;
   const apiKeyAuthFailed =
+    !bedrockProfileMode &&
     currentProviderModelsResult?.ok === false &&
     currentProviderModelsResult.kind === 'auth_failed';
   const providerModelsFailureMessage =
@@ -3854,7 +3864,11 @@ export function SettingsDialog({
     providerTestState.status === 'done' &&
     !providerTestState.result.ok &&
     providerTestState.result.kind === 'invalid_base_url';
+  // An auth failure is rendered on the API key field, not on the test status
+  // line. In Bedrock profile mode there is no key field, so the result has to
+  // stay on the status line or the user gets a "Retry test" with no reason.
   const providerTestApiKeyAuthFailed =
+    !bedrockProfileMode &&
     providerTestState.status === 'done' &&
     !providerTestState.result.ok &&
     providerTestState.result.kind === 'auth_failed';

@@ -487,6 +487,7 @@ export const de: Dict = {
   'settings.testSuccessApi': 'Verbunden. Antwort in {ms} ms — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} antwortete in {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Authentifizierung fehlgeschlagen. Pruefen Sie Ihren API-Schluessel.',
+  'settings.testAuthFailedProfile': 'Authentifizierung fehlgeschlagen. Pruefen Sie das AWS-Profil oder melden Sie sich mit AWS SSO an, falls die Sitzung abgelaufen ist.',
   'settings.testForbidden': 'Zugriff verweigert. Pruefen Sie Konto, Region oder Organisation.',
   'settings.testNotFoundModel': 'Modell \'{model}\' an diesem Endpunkt nicht gefunden.',
   'settings.testInvalidModelId': 'Modell-ID \'{model}\' ist ungueltig. Benutzerdefinierte IDs muessen mit einem Buchstaben oder einer Zahl beginnen und duerfen keine Leerzeichen enthalten.',

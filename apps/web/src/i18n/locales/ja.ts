@@ -487,6 +487,7 @@ export const ja: Dict = {
   'settings.testSuccessApi': '接続成功。{ms} ms で応答 — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} が {ms} ms で応答 — \'{sample}\'',
   'settings.testAuthFailed': '認証に失敗しました。API キーを確認してください。',
+  'settings.testAuthFailedProfile': '認証に失敗しました。AWS プロファイルを確認するか、セッションが期限切れの場合は AWS SSO でサインインしてください。',
   'settings.testForbidden': 'アクセスが拒否されました。アカウント、リージョン、組織を確認してください。',
   'settings.testNotFoundModel': 'このエンドポイントにモデル \'{model}\' は見つかりません。',
   'settings.testInvalidModelId': 'モデル ID \'{model}\' は無効です。カスタム ID は英数字で始まり、空白を含めないでください。',

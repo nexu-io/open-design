@@ -487,6 +487,7 @@ export const id: Dict = {
   'settings.testSuccessApi': 'Tersambung. Membalas dalam {ms} md — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} membalas dalam {ms} md — \'{sample}\'',
   'settings.testAuthFailed': 'Autentikasi gagal. Periksa API key kamu.',
+  'settings.testAuthFailedProfile': 'Autentikasi gagal. Periksa profil AWS, atau masuk dengan AWS SSO jika sesinya sudah berakhir.',
   'settings.testForbidden': 'Akses ditolak. Verifikasi akun, wilayah, atau organisasi kamu.',
   'settings.testNotFoundModel': 'Model \'{model}\' tidak ditemukan di endpoint ini.',
   'settings.testInvalidModelId': 'ID model \'{model}\' tidak valid. ID kustom harus diawali huruf atau angka dan tidak boleh berisi spasi.',

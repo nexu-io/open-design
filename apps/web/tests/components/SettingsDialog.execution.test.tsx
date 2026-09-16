@@ -2742,6 +2742,73 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByRole('button', { name: 'Retry test' })).toBeTruthy();
   });
 
+  it('drops a stale API-key auth failure when Bedrock switches to profile mode and reports profile failures inline', async () => {
+    // Regression: switching the Bedrock auth mode did not reset the test
+    // state, so a key-mode auth_failed stuck around in profile mode, where
+    // the API key field that carries it no longer exists. The user saw a
+    // bare "Retry test" with no reason.
+    const bedrockBaseUrl = 'https://bedrock-runtime.us-east-1.amazonaws.com';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url !== '/api/test/connection') {
+        return new Response(JSON.stringify({ context: null, enabled: true, memories: [], extraction: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      const body = JSON.parse(String(init?.body ?? '{}')) as { apiKey?: string; awsProfile?: string };
+      if (body.awsProfile === 'team-dev') {
+        return new Response(
+          JSON.stringify({ ok: true, kind: 'success', latencyMs: 9, model: 'global.anthropic.claude-sonnet-5' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(
+        JSON.stringify({ ok: false, kind: 'auth_failed', latencyMs: 12, model: 'global.anthropic.claude-sonnet-5' }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({
+      mode: 'api',
+      apiKey: 'ABSKstale',
+      apiProtocol: 'bedrock',
+      baseUrl: bedrockBaseUrl,
+      apiProviderBaseUrl: bedrockBaseUrl,
+      model: 'global.anthropic.claude-sonnet-5',
+    });
+
+    // Key mode: the failure lands on the API key field, as for every provider.
+    expect(await screen.findByText('Invalid API key.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry test' })).toBeTruthy();
+
+    // Profile mode with an unknown profile: the stale key failure is gone and
+    // the profile-mode failure is reported on the status line.
+    fireEvent.click(screen.getByRole('button', { name: 'AWS profile' }));
+    expect(screen.queryByText('Invalid API key.')).toBeNull();
+    fireEvent.change(screen.getByLabelText(/AWS profile name/), {
+      target: { value: 'expired-profile' },
+    });
+    expect(
+      await screen.findByText(
+        'Authentication failed. Check the AWS profile, or sign in with AWS SSO if its session has expired.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('Authentication failed. Check your API key.')).toBeNull();
+
+    // A working profile clears it.
+    fireEvent.change(screen.getByLabelText(/AWS profile name/), {
+      target: { value: 'team-dev' },
+    });
+    expect(await screen.findByText(/Connected\. Replied in 9 ms/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+    const profileCalls = fetchMock.mock.calls
+      .filter(([input]) => input.toString() === '/api/test/connection')
+      .map(([, init]) => JSON.parse(String(init?.body ?? '{}')) as { apiKey?: string; awsProfile?: string });
+    expect(profileCalls.at(-1)).toMatchObject({ apiKey: '', awsProfile: 'team-dev' });
+  });
+
   it('focuses the model field when the BYOK test returns model not found', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();

@@ -487,6 +487,7 @@ export const ru: Dict = {
   'settings.testSuccessApi': 'Подключено. Ответ за {ms} мс — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} ответил за {ms} мс — \'{sample}\'',
   'settings.testAuthFailed': 'Сбой аутентификации. Проверьте ключ API.',
+  'settings.testAuthFailedProfile': 'Сбой аутентификации. Проверьте профиль AWS или войдите через AWS SSO, если сессия истекла.',
   'settings.testForbidden': 'Доступ запрещен. Проверьте учетную запись, регион или организацию.',
   'settings.testNotFoundModel': 'Модель \'{model}\' не найдена на этом эндпойнте.',
   'settings.testInvalidModelId': 'ID модели \'{model}\' недействителен. Пользовательский ID должен начинаться с буквы или цифры и не содержать пробелов.',

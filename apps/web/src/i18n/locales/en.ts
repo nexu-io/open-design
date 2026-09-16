@@ -487,6 +487,7 @@ export const en: Dict = {
   'settings.testSuccessApi': 'Connected. Replied in {ms} ms — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} replied in {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Authentication failed. Check your API key.',
+  'settings.testAuthFailedProfile': 'Authentication failed. Check the AWS profile, or sign in with AWS SSO if its session has expired.',
   'settings.testForbidden': 'Access forbidden. Verify your account, region, or organization.',
   'settings.testNotFoundModel': 'Model \'{model}\' not found on this endpoint.',
   'settings.testInvalidModelId': 'Model id \'{model}\' is invalid. Custom ids must start with a letter or number and contain no spaces.',

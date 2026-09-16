@@ -487,6 +487,7 @@ export const th: Dict = {
   'settings.testSuccessApi': 'เชื่อมต่อแล้ว ตอบกลับใน {ms} มิลลิวินาที — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} ตอบกลับใน {ms} มิลลิวินาที — \'{sample}\'',
   'settings.testAuthFailed': 'การยืนยันตัวตนล้มเหลว ตรวจสอบ API Key ของคุณ',
+  'settings.testAuthFailedProfile': 'การยืนยันตัวตนล้มเหลว ตรวจสอบโปรไฟล์ AWS หรือลงชื่อเข้าใช้ด้วย AWS SSO หากเซสชันหมดอายุ',
   'settings.testForbidden': 'ถูกปฏิเสธการเข้าถึง ตรวจสอบบัญชี ภูมิภาค หรือองค์กรของคุณ',
   'settings.testNotFoundModel': 'ไม่พบโมเดล \'{model}\' ใน Endpoint นี้',
   'settings.testInvalidModelId': 'ID โมเดล \'{model}\' ไม่ถูกต้อง ID ต้องขึ้นต้นด้วยตัวอักษรหรือตัวเลข และไม่มีช่องว่าง',

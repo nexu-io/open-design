@@ -487,6 +487,7 @@ export const pl: Dict = {
   'settings.testSuccessApi': 'Połączono. Odpowiedź w {ms} ms — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} odpowiedział w {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Uwierzytelnianie nie powiodło się. Sprawdź klucz API.',
+  'settings.testAuthFailedProfile': 'Uwierzytelnianie nie powiodło się. Sprawdź profil AWS lub zaloguj się przez AWS SSO, jeśli sesja wygasła.',
   'settings.testForbidden': 'Brak dostępu. Sprawdź konto, region lub organizację.',
   'settings.testNotFoundModel': 'Nie znaleziono modelu \'{model}\' w tym punkcie końcowym.',
   'settings.testInvalidModelId': 'Id modelu \'{model}\' jest nieprawidłowy. Własne id musi zaczynać się od litery lub cyfry i nie może zawierać spacji.',

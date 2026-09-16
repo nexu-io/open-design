@@ -487,6 +487,7 @@ export const it: Dict = {
   'settings.testSuccessApi': 'Connesso. Risposto in {ms} ms — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} ha risposto in {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Autenticazione fallita. Controlla la tua chiave API.',
+  'settings.testAuthFailedProfile': 'Autenticazione fallita. Controlla il profilo AWS oppure accedi con AWS SSO se la sessione è scaduta.',
   'settings.testForbidden': 'Accesso negato. Controlla account, regione o organizzazione.',
   'settings.testNotFoundModel': 'Modello \'{model}\' non trovato su questo endpoint.',
   'settings.testInvalidModelId': 'L\'id del modello \'{model}\' non è valido. Gli id personalizzati devono iniziare con una lettera o un numero e non contenere spazi.',

@@ -487,6 +487,7 @@ export const fa: Dict = {
   'settings.testSuccessApi': 'متصل شد. در {ms} میلی‌ثانیه پاسخ داد — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} در {ms} میلی‌ثانیه پاسخ داد — \'{sample}\'',
   'settings.testAuthFailed': 'احراز هویت ناموفق بود. کلید API را بررسی کنید.',
+  'settings.testAuthFailedProfile': 'احراز هویت ناموفق بود. پروفایل AWS را بررسی کنید یا اگر نشست منقضی شده است با AWS SSO وارد شوید.',
   'settings.testForbidden': 'دسترسی مجاز نیست. حساب، منطقه یا سازمان را بررسی کنید.',
   'settings.testNotFoundModel': 'مدل \'{model}\' در این نقطه پایانی یافت نشد.',
   'settings.testInvalidModelId': 'شناسه مدل \'{model}\' نامعتبر است. شناسه سفارشی باید با حرف یا عدد شروع شود و فاصله نداشته باشد.',

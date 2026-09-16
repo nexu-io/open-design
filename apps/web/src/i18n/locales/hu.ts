@@ -487,6 +487,7 @@ export const hu: Dict = {
   'settings.testSuccessApi': 'Csatlakozva. Válasz {ms} ms alatt — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} {ms} ms alatt válaszolt — \'{sample}\'',
   'settings.testAuthFailed': 'A hitelesítés sikertelen. Ellenőrizd az API kulcsot.',
+  'settings.testAuthFailedProfile': 'A hitelesítés sikertelen. Ellenőrizd az AWS profilt, vagy jelentkezz be AWS SSO-val, ha a munkamenet lejárt.',
   'settings.testForbidden': 'A hozzáférés tiltott. Ellenőrizd a fiókot, régiót vagy szervezetet.',
   'settings.testNotFoundModel': 'A(z) \'{model}\' modell nem található ezen a végponton.',
   'settings.testInvalidModelId': 'A(z) \'{model}\' modellazonosító érvénytelen. Az egyéni azonosító betűvel vagy számmal kezdődjön, és ne tartalmazzon szóközt.',

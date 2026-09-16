@@ -487,6 +487,7 @@ export const tr: Dict = {
   'settings.testSuccessApi': 'Bağlandı. {ms} ms içinde yanıtladı — \'{sample}\'',
   'settings.testSuccessCli': '{agentName}, {ms} ms içinde yanıtladı — \'{sample}\'',
   'settings.testAuthFailed': 'Kimlik doğrulama başarısız. API anahtarınızı kontrol edin.',
+  'settings.testAuthFailedProfile': 'Kimlik doğrulama başarısız. AWS profilini kontrol edin veya oturumu süresi dolduysa AWS SSO ile giriş yapın.',
   'settings.testForbidden': 'Erişim yasak. Hesabı, bölgeyi veya kuruluşu doğrulayın.',
   'settings.testNotFoundModel': 'Bu uçta \'{model}\' modeli bulunamadı.',
   'settings.testInvalidModelId': '\'{model}\' model id geçersiz. Özel id harf veya rakamla başlamalı ve boşluk içermemelidir.',

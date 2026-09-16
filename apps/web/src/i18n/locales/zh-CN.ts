@@ -479,6 +479,7 @@ export const zhCN: Dict = {
   "settings.testSuccessApi": "已连接。{ms} 毫秒响应 — '{sample}'",
   "settings.testSuccessCli": "{agentName} 在 {ms} 毫秒内响应 — '{sample}'",
   "settings.testAuthFailed": "鉴权失败，请检查 API 密钥。",
+  "settings.testAuthFailedProfile": "鉴权失败，请检查 AWS 配置文件；若会话已过期，请使用 AWS SSO 登录。",
   "settings.testForbidden": "访问被拒绝。请检查账号、地区或组织。",
   "settings.testNotFoundModel": "未在此端点找到模型 '{model}'。",
   "settings.testInvalidModelId":

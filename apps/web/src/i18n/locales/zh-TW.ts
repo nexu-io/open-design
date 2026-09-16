@@ -480,6 +480,7 @@ export const zhTW: Dict = {
   "settings.testSuccessApi": "已連線。{ms} 毫秒回應 — '{sample}'",
   "settings.testSuccessCli": "{agentName} 在 {ms} 毫秒內回應 — '{sample}'",
   "settings.testAuthFailed": "驗證失敗，請檢查 API 金鑰。",
+  "settings.testAuthFailedProfile": "驗證失敗，請檢查 AWS 設定檔；若工作階段已過期，請使用 AWS SSO 登入。",
   "settings.testForbidden": "存取被拒絕，請確認帳戶、地區或組織。",
   "settings.testNotFoundModel": "此端點找不到模型 '{model}'。",
   "settings.testInvalidModelId":

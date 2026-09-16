@@ -487,6 +487,7 @@ export const uk: Dict = {
   'settings.testSuccessApi': 'З’єднано. Відповідь за {ms} мс — \'{sample}\'',
   'settings.testSuccessCli': '{agentName} відповів за {ms} мс — \'{sample}\'',
   'settings.testAuthFailed': 'Помилка автентифікації. Перевірте ключ API.',
+  'settings.testAuthFailedProfile': 'Помилка автентифікації. Перевірте профіль AWS або увійдіть через AWS SSO, якщо сесія завершилася.',
   'settings.testForbidden': 'Доступ заборонено. Перевірте обліковий запис, регіон або організацію.',
   'settings.testNotFoundModel': 'Модель \'{model}\' не знайдено на цій кінцевій точці.',
   'settings.testInvalidModelId': 'ID моделі \'{model}\' недійсний. Власний ID має починатися з літери або цифри й не містити пробілів.',

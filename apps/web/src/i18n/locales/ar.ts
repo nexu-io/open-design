@@ -487,6 +487,7 @@ export const ar: Dict = {
   'settings.testSuccessApi': 'تم الاتصال. رد خلال {ms} مللي ثانية — \'{sample}\'',
   'settings.testSuccessCli': 'رد {agentName} خلال {ms} مللي ثانية — \'{sample}\'',
   'settings.testAuthFailed': 'فشلت المصادقة. تحقق من مفتاح الـ API.',
+  'settings.testAuthFailedProfile': 'فشلت المصادقة. تحقق من ملف تعريف AWS، أو سجّل الدخول عبر AWS SSO إذا انتهت صلاحية الجلسة.',
   'settings.testForbidden': 'الوصول ممنوع. تحقق من الحساب أو المنطقة أو المؤسسة.',
   'settings.testNotFoundModel': 'لم يتم العثور على النموذج \'{model}\' في هذه النقطة.',
   'settings.testInvalidModelId': 'معرّف النموذج \'{model}\' غير صالح. يجب أن يبدأ المعرّف المخصص بحرف أو رقم وألا يحتوي على مسافات.',
