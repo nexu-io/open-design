@@ -1,4 +1,5 @@
 import type { ByokChatProviderConfig } from '@open-design/contracts';
+import { randomUUID } from 'node:crypto';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
@@ -42,6 +43,7 @@ export function opencodeByokModelId(model: string | null | undefined): string | 
 export function buildOpenCodeByokProviderConfig(
   provider: ByokChatProviderConfig | null | undefined,
   model: string | null | undefined,
+  options?: { sessionId?: string },
 ): OpenCodeByokProviderConfig | null {
   if (!provider || typeof provider !== 'object') return null;
   const protocol = provider.protocol;
@@ -65,11 +67,17 @@ export function buildOpenCodeByokProviderConfig(
   const modelId = opencodeByokModelId(rawModel);
   if (!modelId) return null;
 
+  // Generate a stable session ID for OpenCode Go tracking.
+  // Use caller-provided ID if available (e.g. conversation-scoped),
+  // otherwise generate a fresh UUID for this provider config build.
+  const sessionId = options?.sessionId ?? randomUUID();
+
   const providerEntry = buildProviderEntry(
     protocol,
     baseUrl,
     provider.apiVersion,
     needsApiKey,
+    sessionId,
   );
   const config = {
     provider: {
@@ -179,10 +187,18 @@ function buildProviderEntry(
   baseUrl: string,
   apiVersion: string | undefined,
   includeApiKey: boolean,
+  sessionId: string,
 ): { npm: ProviderPackage; options: Record<string, unknown> } {
   const apiKeyOption = includeApiKey
-    ? { apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` }
+    ? { apiKey: `{env:...V}}` }
     : {};
+
+  // OpenCode Go requires x-opencode-session on every request for routing.
+  // Add it as extraHeaders so the AI SDK injects it into all HTTP calls.
+  const openCodeSessionHeaders = {
+    extraHeaders: { 'x-opencode-session': sessionId },
+  };
+
   const usesAzureOpenAICompatiblePath =
     protocol === 'azure' && /\/openai\/v\d+(?:$|\/)/.test(safeUrlPathname(baseUrl));
   switch (protocol) {
@@ -192,6 +208,7 @@ function buildProviderEntry(
         options: {
           ...apiKeyOption,
           ...(baseUrl ? { baseURL: baseUrl } : {}),
+          ...openCodeSessionHeaders,
         },
       };
     case 'azure':
@@ -204,6 +221,7 @@ function buildProviderEntry(
             ? {}
             : { useDeploymentBasedUrls: true }),
           ...apiVersionOption(apiVersion, usesAzureOpenAICompatiblePath),
+          ...openCodeSessionHeaders,
         },
       };
     case 'google':
@@ -212,6 +230,7 @@ function buildProviderEntry(
         options: {
           ...apiKeyOption,
           ...(baseUrl ? { baseURL: baseUrl } : {}),
+          ...openCodeSessionHeaders,
         },
       };
     case 'ollama':
@@ -220,6 +239,7 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...openCodeSessionHeaders,
         },
       };
     case 'openai':
@@ -232,6 +252,7 @@ function buildProviderEntry(
           options: {
             ...apiKeyOption,
             ...(baseUrl ? { baseURL: baseUrl } : {}),
+            ...openCodeSessionHeaders,
           },
         };
       }
@@ -240,6 +261,7 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...openCodeSessionHeaders,
         },
       };
     case 'senseaudio':
@@ -249,6 +271,7 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...openCodeSessionHeaders,
         },
       };
   }
