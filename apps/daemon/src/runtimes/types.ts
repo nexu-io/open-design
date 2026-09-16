@@ -15,12 +15,18 @@ export type RuntimeModelOption = {
   metadata?: ModelMetadata;
   additionalSpeedTiers?: string[];
   serviceTierOptions?: RuntimeModelOption[];
-  reasoningOptions?: RuntimeModelOption[];
+  reasoningOptions?: RuntimeReasoningOption[];
+  defaultReasoning?: string;
 };
 
 export type RuntimeModelSource = 'live' | 'fallback';
 
-export type RuntimeReasoningOption = RuntimeModelOption;
+export type RuntimeReasoningOption = {
+  id: string;
+  label: string;
+  description?: string;
+  default?: boolean;
+};
 
 export type RuntimeBuildOptions = {
   model?: string | null;

@@ -200,6 +200,7 @@ export type ConnectionTestKind =
   | 'forbidden'
   | 'not_found_model'
   | 'invalid_model_id'
+  | 'invalid_reasoning'
   | 'invalid_base_url'
   | 'rate_limited'
   | 'upstream_unavailable'

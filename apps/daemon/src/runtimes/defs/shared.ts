@@ -19,7 +19,8 @@ export function clampCodexReasoning(
     id.startsWith('gpt-5.2') ||
     id.startsWith('gpt-5.3') ||
     id.startsWith('gpt-5.4') ||
-    id.startsWith('gpt-5.5');
+    id.startsWith('gpt-5.5') ||
+    id.startsWith('gpt-5.6');
   if (isGpt5LateFamily && effort === 'minimal') return 'low';
   if (id === 'gpt-5.1' && effort === 'xhigh') return 'high';
   if (id === 'gpt-5.1-codex-mini') {

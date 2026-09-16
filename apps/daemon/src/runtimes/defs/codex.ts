@@ -4,6 +4,30 @@ import { resolveAgentLaunch } from '../launch.js';
 import type { RuntimeModelOption } from '../types.js';
 import type { RuntimeAgentDef } from '../types.js';
 
+import { parseReasoningId } from '../reasoning.js';
+import type { RuntimeReasoningOption } from '../types.js';
+
+/** Keep the catalogue's vocabulary and progression, including future efforts. */
+function parseReasoningOptions(raw: unknown): RuntimeReasoningOption[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const options: RuntimeReasoningOption[] = [];
+  const seen = new Set<string>();
+  const labels: Record<string, string> = {
+    none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium',
+    high: 'High', xhigh: 'XHigh', max: 'Max', ultra: 'Ultra',
+  };
+  for (const value of raw) {
+    const entry = value && typeof value === 'object' ? value : null;
+    const id = parseReasoningId(entry ? entry.effort : value);
+    if (!id || id === 'default' || seen.has(id)) continue;
+    seen.add(id);
+    const description = typeof entry?.description === 'string'
+      ? entry.description.trim() : '';
+    options.push({ id, label: Object.hasOwn(labels, id) ? labels[id]! : id, ...(description ? { description } : {}) });
+  }
+  return raw.length === 0 || options.length > 0 ? options : undefined;
+}
+
 function parseCodexStringList(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const values = raw
@@ -79,6 +103,8 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
       display_name?: unknown;
       name?: unknown;
       visibility?: unknown;
+      supported_reasoning_levels?: unknown;
+      default_reasoning_level?: unknown;
       additional_speed_tiers?: unknown;
       service_tiers?: unknown;
     };
@@ -98,6 +124,12 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
           ? entry.name.trim()
           : id;
     const model: RuntimeModelOption = { id, label };
+    const reasoningOptions = parseReasoningOptions(entry.supported_reasoning_levels);
+    if (reasoningOptions !== undefined) model.reasoningOptions = reasoningOptions;
+    const defaultReasoning = parseReasoningId(entry.default_reasoning_level);
+    if (defaultReasoning && reasoningOptions?.some((option) => option.id === defaultReasoning)) {
+      model.defaultReasoning = defaultReasoning;
+    }
     const additionalSpeedTiers = parseCodexStringList(
       entry.additional_speed_tiers,
     );
