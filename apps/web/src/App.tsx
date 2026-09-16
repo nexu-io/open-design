@@ -5666,6 +5666,8 @@ function AppInner() {
         data-host-platform={hostPlatform}
       >
         <WorkspaceTabsBar
+          onRenameProject={handleRenameProject}
+          onDeleteProject={handleDeleteProject}
           route={route}
           // The ambient list may still be loading (or belong to a different
           // selected Workspace) while a deep-linked project is already open.
