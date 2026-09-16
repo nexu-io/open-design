@@ -478,6 +478,16 @@ export class PendingAuthCache {
     return this.store.size;
   }
 
+  /**
+   * Drop every pending state, ending any authorization attempt still waiting on
+   * a callback. Used by flows that own an explicit Cancel/Disconnect affordance
+   * and must make the attempt's state unusable rather than merely stopping its
+   * listener.
+   */
+  clear(): void {
+    this.store.clear();
+  }
+
   /** Stop the background sweeper. Used by tests; production lets the
    * timer ride on the daemon process lifetime. */
   stop(): void {

@@ -74,6 +74,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           // stream's pace, so compressing the pace keeps the trigger and drops
           // the cost. Inert unless a recording is selected.
           OD_REPLAY_SPEED: '8',
+          // Live-evidence runs read the real OrcaRouter catalogue with the
+          // credential the daemon resolves from its own environment. The key
+          // never reaches the browser and is never logged; it is forwarded to
+          // this suite's daemon only when a spec explicitly opts in.
+          ...(process.env.OD_ORCAROUTER_LIVE_EVIDENCE === '1' && process.env.ORCA_API_KEY
+            ? { ORCA_API_KEY: process.env.ORCA_API_KEY }
+            : {}),
         });
         await warmPlaywrightWebRuntime(toolsDev.url.web('/'));
         await warmPlaywrightDaemonRuntime(toolsDev.url.daemon('/api/health'));

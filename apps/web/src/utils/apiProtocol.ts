@@ -10,6 +10,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
+  orcarouter: 'OrcaRouter',
   bedrock: 'AWS Bedrock',
 };
 

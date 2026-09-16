@@ -1,5 +1,6 @@
 import type { TrackingByokPreflightBlockReason } from '@open-design/contracts/analytics';
 import { KNOWN_PROVIDERS } from '../../state/config';
+import { orcaRouterAccountConnected } from '../../state/orcarouterAccount';
 import type { AppConfig } from '../../types';
 import { byokProviderRequiresApiKey } from '../../utils/byokProvider';
 import { blockingByokDraftIssues, validateByokDraft } from './validation';
@@ -8,6 +9,23 @@ type ByokPreflightConfig = Pick<
   AppConfig,
   'apiKey' | 'apiProtocol' | 'apiProviderBaseUrl' | 'baseUrl' | 'model'
 >;
+
+/**
+ * True when the credential this run needs is held by the daemon rather than by
+ * the browser.
+ *
+ * Only OrcaRouter qualifies: neither of its acquisition paths has to put a key
+ * in the config (the PKCE login never does, and the pasted key is mirrored into
+ * the same daemon store). The secret stays server-side, so this reports
+ * presence, not a value. For every other protocol the browser-held key remains
+ * the only proof, and an unknown/absent status is NOT treated as configured —
+ * a preflight that optimistically passes would let a keyless run reach the
+ * daemon and fail there instead of being blocked with an actionable reason.
+ */
+function daemonHoldsByokCredential(protocol: AppConfig['apiProtocol']): boolean {
+  if (protocol !== 'orcarouter') return false;
+  return orcaRouterAccountConnected() === true;
+}
 
 export function byokPreflightBlockReason(
   config: ByokPreflightConfig,
@@ -32,6 +50,7 @@ export function byokPreflightBlockReason(
         selectedProvider,
         config.baseUrl,
       ),
+      credentialConfigured: daemonHoldsByokCredential(protocol),
     },
   );
   const missingReasons = new Set<TrackingByokPreflightBlockReason>();
