@@ -16,7 +16,7 @@
 // poster-less entries, so the discovery surface degrades cleanly
 // instead of leaving a broken-image state.
 
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { MediaSurface } from '../../src/components/plugins-home/cards/MediaSurface';
 import type { MediaPreviewSpec } from '../../src/components/plugins-home/preview';
@@ -154,6 +154,45 @@ describe('MediaSurface video-ready opacity gate (black first-frame flash)', () =
     rerender(<MediaSurface preview={nextClip} pluginTitle="Clip" inView={true} />);
     const nextVideo = container.querySelector('video') as HTMLVideoElement;
     expect(nextVideo.style.opacity).toBe('0');
+  });
+});
+
+describe('MediaSurface baked-clip hover recovery', () => {
+  it('restarts a still-mounted clip on hover after the browser pauses it', () => {
+    // Electron/Chromium may pause a backgrounded workspace tab without
+    // changing React's `playing` inputs. For a baked clip those inputs are
+    // already true while idle, so merely flipping `hovering` used to select
+    // the pan/deck time span without rerunning play(): the card stayed frozen
+    // until leaving Community and mounting it again.
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockImplementation(async () => {});
+    const pause = vi
+      .spyOn(HTMLMediaElement.prototype, 'pause')
+      .mockImplementation(() => {});
+    try {
+      const { container } = render(
+        <MediaSurface preview={BAKED_CLIP} pluginTitle="Clip" inView={true} />,
+      );
+      const media = container.querySelector('.plugins-home__media') as HTMLDivElement;
+      const video = container.querySelector('video') as HTMLVideoElement;
+      expect(media).not.toBeNull();
+      expect(video).not.toBeNull();
+
+      // Model the transport-level pause that happens while the React tree and
+      // its `playing=true` state remain untouched, then isolate the hover's
+      // recovery call from the initial mount's autoplay call.
+      video.pause();
+      expect(pause).toHaveBeenCalledTimes(1);
+      play.mockClear();
+
+      fireEvent.mouseEnter(media);
+
+      expect(play).toHaveBeenCalledTimes(1);
+    } finally {
+      play.mockRestore();
+      pause.mockRestore();
+    }
   });
 });
 
