@@ -296,9 +296,7 @@ export async function recordTestAcceptance(
 							capabilities:
 								input.placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
 									? [...TEST_CAMPAIGN_MODAL_CAPABILITIES]
-									: input.placementKey === "opend.home.account-badge"
-										? ["static-action"]
-										: [...placementCapabilities],
+									: [...placementCapabilities],
 						}
 					: undefined,
 			}),

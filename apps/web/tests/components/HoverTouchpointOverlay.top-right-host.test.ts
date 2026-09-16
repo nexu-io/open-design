@@ -27,9 +27,7 @@ describe('HoverTouchpointOverlay top-right host', () => {
     expect(appSource).not.toContain('<ProductionCampaignHover');
   });
 
-  it('keeps the hover entry distinct from the account badge and removes its bottom-right positioning', () => {
-    expect(entryShellSource).toContain('<ProductionCampaignBadge');
-    expect(entryShellSource).toContain('not renamed from—the account badge');
+  it('removes the hover entry bottom-right positioning', () => {
     const entryRuleStart = overlayStyles.indexOf('.entry {');
     const entryRuleEnd = overlayStyles.indexOf('}', entryRuleStart);
     const entryRule = overlayStyles.slice(entryRuleStart, entryRuleEnd);

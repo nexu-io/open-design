@@ -177,8 +177,6 @@ export const CMS_HOST_RELEASE_INPUTS = [
   'apps/web/src/components/TestCampaignModal.tsx',
   'apps/web/src/components/TestCampaignModal.module.css',
   'apps/web/src/components/ProductionCampaignModal.tsx',
-  'apps/web/src/components/ProductionCampaignBadge.tsx',
-  'apps/web/src/components/ProductionCampaignBadge.module.css',
   'apps/web/src/components/ProductionCampaignHover.tsx',
   'apps/web/src/components/HoverTouchpointOverlay.tsx',
   'apps/web/src/components/HoverTouchpointOverlay.module.css',

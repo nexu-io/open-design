@@ -66,22 +66,13 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
       /topRightSlot=\{[\s\S]*?\{\s*topRightCampaignAudience\s*\?\s*\([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{topRightCampaignAudience\}[\s\S]*?page="home"/,
     );
     expect(entryShellSource).toMatch(
-      /canRenderProductionCampaignBadge\(amrLoggedIn === true, amrAccountId\)\s*\?\s*<ProductionCampaignBadge authenticated sessionSubject=\{amrAccountId\}/,
-    );
-    expect(entryShellSource).toMatch(
       /<ProductionCampaignHover\s+authenticated=\{amrLoggedIn === true\}\s+sessionSubject=\{amrAccountId\}/,
     );
     expect(entryShellSource).not.toMatch(
       /topRightSlot=\{\s*view === 'home'/,
     );
     expect(entryNavRailSource).toMatch(
-      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{\s*campaignAudience\s*\|\|\s*canRenderProductionCampaignBadge\(amrLoggedIn === true, amrAccountId\)\s*\?\s*\(/,
-    );
-    expect(entryNavRailSource).toMatch(
-      /export function WorkspaceTopRightAccountCluster[\s\S]*?\{\s*campaignAudience\s*\?\s*\([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{campaignAudience\}[\s\S]*?page="project"/,
-    );
-    expect(entryNavRailSource).toMatch(
-      /export function WorkspaceTopRightAccountCluster[\s\S]*?canRenderProductionCampaignBadge\(amrLoggedIn === true, amrAccountId\)\s*\?\s*<ProductionCampaignBadge authenticated sessionSubject=\{amrAccountId\}/,
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{\s*campaignAudience\s*\?\s*\([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{campaignAudience\}[\s\S]*?page="project"/,
     );
     expect(appSource).toMatch(
       /<WorkspaceTopRightAccountCluster[\s\S]*?amrLoggedIn=\{amrLoginStatus\?\.loggedIn \?\? null\}[\s\S]*?metricsConsent=\{config\.telemetry\?\.metrics === true\}/,

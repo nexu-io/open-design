@@ -3,7 +3,6 @@ import { emitWebTouchpointDiagnostic } from "./touchpoint-component";
 import type { TouchpointStaticAction } from "./touchpoint-static-actions";
 
 export const TEST_CAMPAIGN_PLACEMENTS = [
-	"opend.home.account-badge",
 	"opend.home.campaign-modal",
 	"opend.home.hover-entry",
 	"opend.home.hover-layer",

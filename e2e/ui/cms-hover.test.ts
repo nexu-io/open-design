@@ -27,7 +27,6 @@ const hostReleaseFingerprint = cmsHostReleaseFingerprint((file) =>
 
 const ENTRY_PLACEMENT = "opend.home.hover-entry";
 const LAYER_PLACEMENT = "opend.home.hover-layer";
-const BADGE_PLACEMENT = "opend.home.account-badge";
 const ACTION_ID = "learn";
 
 const entryModule = `
@@ -51,16 +50,6 @@ const layerModule = `
     return button;
   }
 `;
-const badgeModule = `
-  export function mount(root) {
-    const badge = document.createElement('span');
-    badge.textContent = 'Campaign badge';
-    badge.style.cssText = 'display: inline-block; width: 116px; height: 24px;';
-    root.append(badge);
-    return badge;
-  }
-`;
-
 const manifest = {
 	formatVersion: 2 as const,
 	runtimeKind: "web-component" as const,
@@ -101,31 +90,14 @@ const manifest = {
 				},
 			],
 		},
-		{
-			key: BADGE_PLACEMENT,
-			entry: "badge.js",
-			resources: [],
-			locales: ["en-US"],
-			requiredCapabilities: ["static-action"],
-			staticActions: [
-				{
-					id: ACTION_ID,
-					target: {
-						kind: "https" as const,
-						url: "https://example.com/campaign",
-					},
-				},
-			],
-		},
 	],
-	resources: ["hover-entry.js", "hover-layer.js", "badge.js"],
+	resources: ["hover-entry.js", "hover-layer.js"],
 	images: [],
 };
 
 const moduleByPlacement = new Map([
 	[ENTRY_PLACEMENT, ["hover-entry.js", entryModule]],
 	[LAYER_PLACEMENT, ["hover-layer.js", layerModule]],
-	[BADGE_PLACEMENT, ["badge.js", badgeModule]],
 ] as const);
 
 function contentFor(placementKey: string) {
@@ -169,10 +141,7 @@ function decisionFor(placementKey: string) {
 		endsAt: new Date(now + 300_000).toISOString(),
 		serverTime: new Date(now).toISOString(),
 		placementKey,
-		requiredCapabilities:
-			placementKey === BADGE_PLACEMENT
-				? ["static-action"]
-				: ["hover", "static-action"],
+		requiredCapabilities: ["hover", "static-action"],
 		staticActions: [
 			{
 				id: ACTION_ID,
@@ -304,7 +273,7 @@ test.beforeEach(async ({ page }) => {
 	await installDesktopHost(page);
 });
 
-test("[P1] controlled CMS fixture mounts the top-right badge and hover pair in the real browser", async ({
+test("[P1] controlled CMS fixture mounts the top-right hover pair in the real browser", async ({
 	page,
 }) => {
 	const fixture = await installCmsFixture(page);
@@ -312,12 +281,10 @@ test("[P1] controlled CMS fixture mounts the top-right badge and hover pair in t
 
 	const cluster = page.locator(".entry-top-right-cluster");
 	await expect(cluster).toBeVisible();
-	const badge = cluster.getByTestId("production-campaign-badge");
-	await expect(badge).toBeVisible({ timeout: T.medium });
 	const hoverRoot = cluster.getByTestId("cms-hover-overlay-root");
 	const entry = hoverRoot.locator("opend-touchpoint").first();
 	await expect(entry).toBeVisible();
-	await expect.poll(() => fixture.responses.length).toBeGreaterThanOrEqual(3);
+	await expect.poll(() => fixture.responses.length).toBeGreaterThanOrEqual(2);
 	expect(
 		fixture.responses.every(
 			(response) => response.fingerprint === hostReleaseFingerprint,

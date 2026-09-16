@@ -127,7 +127,6 @@ function fetches(response: Record<string, unknown> = runtime()) {
 }
 
 const allTestPlacements = [
-	"opend.home.account-badge",
 	"opend.home.campaign-modal",
 	"opend.home.hover-entry",
 	"opend.home.hover-layer",
@@ -147,9 +146,7 @@ const allTestManifest = {
 		requiredCapabilities:
 			key === "opend.home.campaign-modal"
 				? ["close", "static-action"]
-				: key === "opend.home.account-badge"
-					? ["static-action"]
-					: ["hover", "static-action"],
+				: ["hover", "static-action"],
 		staticActions: [],
 	})),
 	resources: allTestPlacements.map((key) => `${key.split(".").at(-1)}.js`),
@@ -814,9 +811,7 @@ describe("Test campaign four-placement contract", () => {
 					requiredCapabilities:
 						placementKey === "opend.home.campaign-modal"
 							? ["close", "static-action"]
-							: placementKey === "opend.home.account-badge"
-								? ["static-action"]
-								: ["hover", "static-action"],
+							: ["hover", "static-action"],
 					activityId: deployment.activityId,
 					testContext: { ...context, scheduleState: "active" as const },
 				},
@@ -881,7 +876,7 @@ describe("Test campaign four-placement contract", () => {
 		await waitFor(() =>
 			expect(
 				screen.getByTestId("test-runtime-decision-count"),
-			).toHaveTextContent("4"),
+			).toHaveTextContent("3"),
 		);
 		await waitFor(() => expect(mount).toHaveBeenCalledTimes(1));
 		const acceptanceCalls = () =>

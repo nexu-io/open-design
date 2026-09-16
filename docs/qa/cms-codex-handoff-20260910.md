@@ -53,7 +53,8 @@
 - 生产弹窗、账号徽标、悬浮入口与详情使用客户端 i18n 语言，并以「账号 + 语言」隔离加载、授权和挂载状态；渲染仍使用 CMS 返回的 `content.locale`，不改服务端翻译与回退规则。
 - 验收入口：设置 → 通用 → 界面语言。切换后返回首页，徽标与悬浮入口/详情应显示新语言；相同 activity、decision 和 content version 身份不能阻止语言替换。
 - 正在显示的同一活动弹窗取得新语言授权后继续展示；已关闭的活动不能因切换语言重新弹出。旧语言迟到响应和失效授权不得恢复旧展示。
-- 回归入口：`apps/web/tests/components/ProductionCampaignBadge.test.tsx`、`ProductionCampaignHover.test.tsx`、`ProductionCampaignModal.test.tsx`，以及 `touchpoint-lifecycle.test.ts`。
+- 回归入口：`apps/web/tests/components/ProductionCampaignHover.test.tsx`、`ProductionCampaignModal.test.tsx`，以及 `touchpoint-lifecycle.test.ts`。
+- 补充（2026-09-15）：`opend.home.account-badge` 点位此后已下线，客户端渲染代码与 `ProductionCampaignBadge.test.tsx` 一并删除。本节其余记录保留当时的验收事实，不代表当前仍有账号徽标点位。
 - 本地浏览器通过实际设置控件执行英文 → 简体中文 → 英文，并观察请求参数与 Shadow DOM 内容；中文弹窗关闭后切回英文未重开。验证边界：真实 web/daemon + 本地 CMS HTTP fixture + 模拟官方桌面宿主接口，非真实 Electron 或线上 CMS 验收。fixture 未提供账号工作区服务，截图中的账号连接提示不是本次验收对象。
 
 | 英文首页 | 语言设置入口 | 中文首页 |

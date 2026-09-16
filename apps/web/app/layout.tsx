@@ -10,7 +10,6 @@ import '../src/styles/home/index.css';
 // preload-only resource after the host mounts.
 import '../src/components/TestCampaignModal.module.css';
 import '../src/components/HoverTouchpointOverlay.module.css';
-import '../src/components/ProductionCampaignBadge.module.css';
 
 export const metadata: Metadata = {
   title: 'OpenDesign',

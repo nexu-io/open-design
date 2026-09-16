@@ -43,7 +43,7 @@ Admin 排期输入和展示固定使用北京时间 `Asia/Shanghai`（UTC+08:00�
 
 ## 客户端核心要求：Test 与 Production 必须共用一个展示生命周期
 
-**OpenDesign worktree 已合并展示生命周期实现。** `TestCampaignModal`、`ProductionCampaignModal`、`ProductionCampaignBadge`、`ProductionCampaignHover` 均调用 `touchpoint-lifecycle.ts` 的 `useTouchpointLifecycle`；旧的各宿主 polling/lease/wake effects 已移除。独立展示组各自持有实例，但调度、授权和代际隔离只有这一套实现，Test 不再绕开它。Test 选择/验收、生产展示频控和布局留在外层。下表保留重构前审计，不能当作当前代码状态。
+**OpenDesign worktree 已合并展示生命周期实现。** `TestCampaignModal`、`ProductionCampaignModal`、`ProductionCampaignHover` 均调用 `touchpoint-lifecycle.ts` 的 `useTouchpointLifecycle`；旧的各宿主 polling/lease/wake effects 已移除。独立展示组各自持有实例，但调度、授权和代际隔离只有这一套实现，Test 不再绕开它。Test 选择/验收、生产展示频控和布局留在外层。下表保留重构前审计，不能当作当前代码状态。
 
 ### 重构前调用链与差异（历史基线）
 
