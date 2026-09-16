@@ -97,6 +97,7 @@ import {
   requiredInputsAreUserFillable,
 } from '../utils/pluginRequiredInputs';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
+import { ServerDirectoryPicker } from './ServerDirectoryPicker';
 import { AppWashKineticGrid } from './AppWashKineticGrid';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
@@ -646,6 +647,8 @@ export function HomeView({
   const [contextWorkspaceItems, setContextWorkspaceItems] = useState<WorkspaceContextItem[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [workingDir, setWorkingDir] = useState<string | null>(null);
+  const [serverFolderPickerOpen, setServerFolderPickerOpen] = useState(false);
+  const serverFolderPickerResolveRef = useRef<((path: string | null) => void) | null>(null);
   // Token paired with `workingDir` when picked through the desktop host's
   // native dialog. Spent on the post-creation working-dir POST so the
   // daemon's desktop-auth gate accepts the path. Null for web picks.
@@ -2139,6 +2142,11 @@ export function HomeView({
     setContextWorkspaceItems((current) => current.filter((item) => item.id !== id));
   }
 
+  function pickServerDirectory(): Promise<string | null> {
+    setServerFolderPickerOpen(true);
+    return new Promise((resolve) => { serverFolderPickerResolveRef.current = resolve; });
+  }
+
   async function handlePickWorkingDir() {
     // On desktop the working-dir POST is gated behind a host-minted token, so
     // pick through the host bridge to capture { baseDir, token } together.
@@ -2167,13 +2175,22 @@ export function HomeView({
     }
     // Pure web path: no desktop host, so there is no token gate — the raw
     // browser folder path is the expected, working input.
-    const picked = await openFolderDialog();
-    if (picked) {
-      setWorkingDir(picked);
+    const result = await openFolderDialog({ detailed: true });
+    if (result.status === 'fallback') {
+      const selected = await pickServerDirectory();
+      if (!selected) return null;
+      setWorkingDir(selected);
       setWorkingDirToken(null);
-      void rememberRecentDir(picked);
-      return picked;
+      void rememberRecentDir(selected);
+      return selected;
     }
+    if (result.status === 'selected') {
+      setWorkingDir(result.path);
+      setWorkingDirToken(null);
+      void rememberRecentDir(result.path);
+      return result.path;
+    }
+    if (result.status === 'error') setError(result.message);
     return null;
   }
 
@@ -2190,11 +2207,17 @@ export function HomeView({
       );
       return null;
     }
-    const picked = await openFolderDialog();
-    if (picked) {
-      void rememberRecentDir(picked);
-      return picked;
+    const result = await openFolderDialog({ detailed: true });
+    if (result.status === 'fallback') {
+      const selected = await pickServerDirectory();
+      if (selected) void rememberRecentDir(selected);
+      return selected;
     }
+    if (result.status === 'selected') {
+      void rememberRecentDir(result.path);
+      return result.path;
+    }
+    if (result.status === 'error') setError(result.message);
     return null;
   }
 
@@ -3351,6 +3374,19 @@ export function HomeView({
             onClose={() => setDetailsSkill(null)}
           />
         ) : null}
+        <ServerDirectoryPicker
+          open={serverFolderPickerOpen}
+          onClose={() => {
+            setServerFolderPickerOpen(false);
+            serverFolderPickerResolveRef.current?.(null);
+            serverFolderPickerResolveRef.current = null;
+          }}
+          onSelect={(directory) => {
+            setServerFolderPickerOpen(false);
+            serverFolderPickerResolveRef.current?.(directory);
+            serverFolderPickerResolveRef.current = null;
+          }}
+        />
         {figmaModalOpen ? (
           <FigmaImportModal
             onClose={() => setFigmaModalOpen(false)}

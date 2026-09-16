@@ -1382,6 +1382,21 @@ describe('openFolderDialog', () => {
     await expect(openFolderDialog({ throwOnError: true }))
       .rejects.toThrow('Could not open folder picker: zenity is not installed');
   });
+
+  it.each([
+    ['selected', 200, { path: '/srv/workspace' }, { status: 'selected', path: '/srv/workspace' }],
+    ['cancelled', 200, { path: null }, { status: 'cancelled' }],
+    ['remote fallback', 403, { code: 'NATIVE_FOLDER_DIALOG_REMOTE', message: 'remote', fallback: 'server-directory-picker' }, { status: 'fallback' }],
+    ['native failure fallback', 503, { code: 'NATIVE_FOLDER_DIALOG_UNAVAILABLE', message: 'unavailable', fallback: 'server-directory-picker' }, { status: 'fallback' }],
+    ['error', 500, { error: 'picker failed' }, { status: 'error', message: 'picker failed' }],
+  ])('reports the detailed %s outcome for callers that can offer the shared picker', async (_name, status, body, expected) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })),
+    );
+
+    await expect(openFolderDialog({ detailed: true })).resolves.toEqual(expected);
+  });
 });
 
 describe('fetchSkillExample', () => {

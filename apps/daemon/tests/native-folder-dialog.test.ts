@@ -61,11 +61,14 @@ describe('native folder dialog helpers', () => {
     expect(parseLinuxFolderDialogResult(err, '', '(zenity:123): Gtk-WARNING **: Theme parsing error\n')).toBeNull();
   });
 
-  it('throws for Linux folder picker display failures', () => {
+  it.each([
+    'Gtk-WARNING **: cannot open display: :99',
+    'Failed to open display',
+  ])('throws for Linux folder picker display failures: %s', (stderr) => {
     const err = dialogError('Command failed: zenity', 1);
 
-    expect(() => parseLinuxFolderDialogResult(err, '', 'Gtk-WARNING **: cannot open display: :99')).toThrow(
-      'Could not open folder picker: Gtk-WARNING **: cannot open display: :99',
+    expect(() => parseLinuxFolderDialogResult(err, '', stderr)).toThrow(
+      `Could not open folder picker: ${stderr}`,
     );
   });
 
