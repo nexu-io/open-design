@@ -44,7 +44,7 @@ describe('BrandLogo Workspace scope', () => {
     const { container } = render(createElement(BrandLogo, props));
 
     expect(container.querySelector('img')?.getAttribute('src')).toBe(
-      '/api/brands/brand-nike/logo?workspaceId=workspace-brand&workspaceMemberId=member-brand',
+      '/api/brands/brand-nike/logo?workspaceId=workspace-brand&workspaceMemberId=member-brand&workspaceType=team',
     );
   });
 
@@ -75,7 +75,7 @@ describe('BrandLogo Workspace scope', () => {
       />,
     );
     expect(view.container.querySelector('img')?.getAttribute('src')).toBe(
-      '/api/brands/brand-nike/logo?workspaceId=workspace-brand&workspaceMemberId=member-brand',
+      '/api/brands/brand-nike/logo?workspaceId=workspace-brand&workspaceMemberId=member-brand&workspaceType=team',
     );
   });
 });
