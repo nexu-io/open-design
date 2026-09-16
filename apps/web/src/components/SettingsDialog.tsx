@@ -3607,6 +3607,12 @@ export function SettingsDialog({
       cfg.apiProviderBaseUrl,
       cfg.baseUrl,
       cfg.model,
+      // Bedrock's credential slot moves with the auth mode: in profile mode
+      // the key is not required and the profile name is. Both must re-run the
+      // preflight or the draft notice keeps reporting a missing key after the
+      // user switched modes.
+      cfg.awsAuthMode,
+      cfg.awsProfile,
     ],
   );
   const apiKeyDraftInvalid = byokBlockingDraftIssues.some((issue) =>

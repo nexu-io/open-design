@@ -1189,6 +1189,57 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('activates a Bedrock AWS-profile setup without an API key once the profile is named', async () => {
+    // Regression: the draft-notice preflight memo did not track awsAuthMode /
+    // awsProfile, so switching to profile mode kept reporting "API key
+    // required" and the form never read as complete.
+    const bedrockBaseUrl = 'https://bedrock-runtime.us-east-1.amazonaws.com';
+    const { onPersist } = renderSettingsDialog({
+      mode: 'daemon',
+      agentId: 'codex',
+      apiKey: '',
+      apiProtocol: 'bedrock',
+      baseUrl: bedrockBaseUrl,
+      apiProviderBaseUrl: bedrockBaseUrl,
+      model: 'global.anthropic.claude-sonnet-5',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /API providers.*API provider/i }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Amazon Bedrock' }));
+
+    // API-key mode with an empty key: incomplete, notice shown.
+    expect(screen.getByTestId('settings-byok-draft-notice')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'AWS profile' }));
+    // Profile mode with an empty profile: still incomplete.
+    expect(screen.getByTestId('settings-byok-draft-notice')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/AWS profile name/), {
+      target: { value: 'team-dev' },
+    });
+
+    // No key anywhere: the profile is the credential, the form is complete.
+    expect(screen.queryByTestId('settings-byok-draft-notice')).toBeNull();
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        mode: 'api',
+        apiProtocol: 'bedrock',
+        apiKey: '',
+        awsAuthMode: 'profile',
+        awsProfile: 'team-dev',
+        baseUrl: bedrockBaseUrl,
+        model: 'global.anthropic.claude-sonnet-5',
+      }),
+      {},
+    );
+    expect(onPersist.mock.calls.at(-1)?.[0].byokPendingProviderKey).toBeUndefined();
+
+    // Back to API-key mode: the key becomes required again.
+    fireEvent.click(screen.getByRole('button', { name: 'Bedrock API key' }));
+    expect(screen.getByTestId('settings-byok-draft-notice')).toBeTruthy();
+  });
+
   it('keeps the last valid BYOK config active while an edited replacement is incomplete', async () => {
     const { onPersist } = renderSettingsDialog({
       mode: 'api',
