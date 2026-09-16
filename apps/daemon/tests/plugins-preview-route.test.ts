@@ -148,6 +148,15 @@ describe('GET /api/plugins/:id/preview', () => {
     expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
     const body = await resp.text();
     expect(body).toContain('preview body');
+    expect(body).toContain('data-od-plugin-preview-motion');
+    expect(body).toContain("data.type !== 'od:plugin-preview-motion'");
+    // Live HTML fallbacks must follow the same hover-pan contract as baked
+    // preview clips: constant-speed travel, repeat while hovered, and an
+    // immediate reset to the top when hover ends.
+    expect(body).toContain('from + (target - from) * progress');
+    expect(body).toContain('animationFrame = requestAnimationFrame(animateScroll)');
+    expect(body).toContain('if (!active) { window.scrollTo(0, 0); return; }');
+    expect(body).not.toContain('var eased =');
   });
 
   it('returns 404 when the plugin id is unknown', async () => {

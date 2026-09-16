@@ -2697,7 +2697,19 @@
 }
 
 .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-  transform: scale(0.172);
+  --home-html-preview-scale: 0.172;
+  transform: scale(var(--home-html-preview-scale));
+}
+
+/* Document pages center themselves inside the fixed 1440px HTML viewport.
+   The Home preset clip is narrower than that viewport after scaling, so a
+   left-anchored iframe crops only the right side and makes the paper look
+   shifted. Center the crop for document scenarios while leaving website and
+   prototype previews anchored to their meaningful top-left origin. */
+.home-hero__plugin-preset[data-od-scenario="documents"] .plugins-home__html-iframe {
+  left: 50%;
+  translate: -50% 0;
+  transform-origin: top center;
 }
 
 /* Decks ship a fixed 16:9 stage that scales itself to its viewport, so the
@@ -2950,7 +2962,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-    transform: scale(0.146);
+    --home-html-preview-scale: 0.146;
   }
   /* Plan §B follow-up: chip rail must never require horizontal
      scrolling. The base rule already wraps; on narrow viewports
@@ -2997,7 +3009,7 @@
     grid-template-columns: 1fr;
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-    transform: scale(0.134);
+    --home-html-preview-scale: 0.134;
   }
 }
 
