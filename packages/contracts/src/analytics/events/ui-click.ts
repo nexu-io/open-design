@@ -758,7 +758,10 @@ export interface ChatPanelClickProps {
     | 'figma_help'
     | 'send'
     | 'mention_popover_trigger'
-    | 'resources_popover_trigger';
+    | 'resources_popover_trigger'
+    // The "Compact context" item inside the conversations menu (manual
+    // context compaction for the active conversation).
+    | 'compact_context';
 }
 
 // Composer mode the user sends prompts in. `ask` is the lighter Q&A mode
