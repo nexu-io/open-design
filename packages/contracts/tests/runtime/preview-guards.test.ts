@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPreviewFocusGuard,
+  buildPreviewInPageLinkGuard,
   buildPreviewRedirectGuard,
   buildPreviewSandboxShim,
   PREVIEW_URL_GUARD_MAX_HTML_BYTES,
@@ -12,6 +13,17 @@ describe('preview document guards', () => {
     expect(buildPreviewSandboxShim()).toContain('<script data-od-sandbox-shim>');
     expect(buildPreviewFocusGuard()).toContain('<script data-od-preview-focus-guard>');
     expect(buildPreviewRedirectGuard()).toContain('<script data-od-preview-redirect-guard>');
+    expect(buildPreviewInPageLinkGuard())
+      .toContain('<script data-od-preview-in-page-link-guard>');
+  });
+
+  // The shim covers what the opaque origin takes away; the link guard covers
+  // what the containment base changes. They ship on different conditions, so a
+  // shim that still owned link clicks would put the fix behind an unrelated
+  // Web Storage heuristic (OPEND-2970).
+  it('keeps in-page link handling out of the opaque-origin shim', () => {
+    expect(buildPreviewSandboxShim()).not.toContain("addEventListener('click'");
+    expect(buildPreviewInPageLinkGuard()).toContain("addEventListener('click'");
   });
 
   it('embeds the load-time redirect decision in the redirect guard', () => {
