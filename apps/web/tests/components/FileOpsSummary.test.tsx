@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FileOpsSummary } from '../../src/components/FileOpsSummary';
-import type { FileOpEntry } from '../../src/runtime/file-ops';
+import { deriveFileOps, type FileOpEntry } from '../../src/runtime/file-ops';
 
 function entry(partial: Partial<FileOpEntry> & { path: string }): FileOpEntry {
   return {
@@ -212,6 +212,32 @@ describe('FileOpsSummary', () => {
 // project-scoped URLs.
 describe('FileOpsSummary artifact cards', () => {
   afterEach(() => cleanup());
+
+  it('keeps the nested image URL for a running successful Write from the canonical project root', () => {
+    // Recorded native run 96939e53: GET project resolvedDir used /tmp while
+    // the real CLI cwd/file_path used /private/tmp. The file existed at the
+    // nested relative path; the basename raw URL returned 404 in Chrome.
+    const projectId = '1e42586d-aa2c-4971-b6e0-1262d35f5aa2';
+    const relativePath = 'assets/pokemon/squirtle.png';
+    const entries = deriveFileOps([
+      {
+        kind: 'tool_use', id: 'write-image', name: 'Write',
+        input: { file_path: `/private/tmp/od-astra-chatpanel-followup-data/projects/${projectId}/${relativePath}` },
+      },
+      { kind: 'tool_result', toolUseId: 'write-image', content: 'Wrote 4539 bytes.', isError: false },
+      { kind: 'artifact_focus', open: relativePath },
+    ], {
+      projectId,
+      resolvedDir: `/tmp/od-astra-chatpanel-followup-data/projects/${projectId}`,
+      canonicalResolvedDir: `/private/tmp/od-astra-chatpanel-followup-data/projects/${projectId}`,
+    });
+    const { container } = render(
+      <FileOpsSummary entries={entries} projectId={projectId} />,
+    );
+    expect(container.querySelector('img.artifact-card-media')?.getAttribute('src')).toBe(
+      `/api/projects/${projectId}/raw/${relativePath}`,
+    );
+  });
 
   it('keeps text rows when no project id is available', () => {
     render(<FileOpsSummary entries={[entry({ path: 'result.html' })]} />);

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import { realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { load } from 'cheerio';
 import {
@@ -4996,6 +4996,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
     }
     const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+    // Optional proof of an existing root alias; lazy/unavailable projects keep
+    // their original successful detail response without materialization.
+    const canonicalResolvedDir = await realpath(resolvedDir).catch(() => undefined);
     const binding = getWorkspaceProjectByProjectId(db, project.id);
     /** @type {import('@open-design/contracts').ProjectResponse} */
     const body = {
@@ -5007,6 +5010,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             : null,
       },
       resolvedDir,
+      ...(canonicalResolvedDir ? { canonicalResolvedDir } : {}),
     };
     res.json(body);
   });

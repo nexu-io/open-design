@@ -55,6 +55,17 @@ afterEach(() => {
 });
 
 describe('bootstrapProjectRoute', () => {
+  it('preserves the canonical root returned by the authorized detail read', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify(
+      String(input).endsWith('/workspace-scope')
+        ? { scope: { kind: 'personal', projectId: PROJECT_ID } }
+        : { project: { ...PROJECT_A, workspaceId: null }, resolvedDir: '/alias/project', canonicalResolvedDir: '/real/project' },
+    ), { status: 200 })));
+    await expect(bootstrapProjectRoute(PROJECT_ID, { accountGeneration: 90 })).resolves.toMatchObject({
+      kind: 'found', resolvedDir: '/alias/project', canonicalResolvedDir: '/real/project',
+    });
+  });
+
   it('revalidates a headerless team discovery with exact scope and detail reads', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
