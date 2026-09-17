@@ -11470,12 +11470,33 @@ export async function startServer({
       if (run.artifactOutcome) return run.artifactOutcome;
 
       const artifactBaseline = runArtifactBaselines.take(run.id);
-      const fallbackOutcome = () => ({
-        artifactCount: runArtifactCountForRun(run),
-        designSystemCreated: runDesignSystemCreatedForRun(run),
-        previewModuleCount: runPreviewModuleCountForRun(run),
-        filesWritten: runFilesWrittenForRun(run),
-      });
+      const fallbackOutcome = () => {
+        const ledgerPaths = run?.sideEffectLedger?.artifactPaths
+          ? Array.from(run.sideEffectLedger.artifactPaths)
+              .map((filePath) => filePath.replaceAll('\\', '/'))
+              .filter((filePath) =>
+                filePath.length > 0 &&
+                filePath !== '..' &&
+                !filePath.startsWith('../') &&
+                !path.isAbsolute(filePath),
+              )
+          : [];
+        if (ledgerPaths.length > 0) {
+          run.artifactPaths = ledgerPaths;
+        }
+        return {
+          artifactCount: runArtifactCountForRun(run),
+          designSystemCreated: runDesignSystemCreatedForRun(run),
+          previewModuleCount: runPreviewModuleCountForRun(run),
+          filesWritten: runFilesWrittenForRun(run),
+          ...(ledgerPaths.length > 0 && artifactBaseline?.cwd
+            ? {
+                projectRoot: artifactBaseline.cwd,
+                diff: { touchedPaths: ledgerPaths, renderDependencyTouchedPaths: [] },
+              }
+            : {}),
+        };
+      };
       let outcome;
       if (!artifactBaseline || artifactBaseline.contended) {
         outcome = fallbackOutcome();
