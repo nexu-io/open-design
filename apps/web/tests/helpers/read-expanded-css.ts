@@ -23,6 +23,14 @@ function expandCssFile(filePath: string, seen = new Set<string>()): string {
   });
 }
 
+// The expanded cascade is a pure function of the checked-in stylesheets, so
+// one expansion serves every test in the worker. Re-reading dozens of files
+// and re-running the import expansion per call site made each consuming test
+// pay ~seconds of redundant I/O under a loaded CI runner — enough to push a
+// render-heavy case past its timeout budget.
+let cachedExpandedIndexCss: string | null = null;
+
 export function readExpandedIndexCss(): string {
-  return expandCssFile(join(process.cwd(), 'src/index.css'));
+  cachedExpandedIndexCss ??= expandCssFile(join(process.cwd(), 'src/index.css'));
+  return cachedExpandedIndexCss;
 }
