@@ -875,6 +875,7 @@ export function createRunAnalyticsLifecycle(
                 diff = diffRunArtifacts(
                   artifactBaseline.before,
                   snapshotProjectArtifacts(artifactBaseline.cwd),
+                  artifactBaseline.cwd,
                 );
               } catch {
                 diff = null;
