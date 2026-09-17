@@ -366,6 +366,7 @@ export type TrackingRunFailureDetail =
   | 'stream_error'
   | 'exit_nonzero'
   | 'fatal_rpc_error'
+  | 'continuation_incomplete'
   | 'execution_failed'
   | 'user_cancelled'
   | 'unknown';
