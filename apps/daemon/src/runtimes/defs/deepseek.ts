@@ -19,8 +19,9 @@ export const deepseekAgentDef = {
     // so users can paste anything else through the custom-model input.
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
+      { id: 'deepseek-flash', label: 'deepseek-flash' },
       { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
-      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash (legacy)' },
     ],
     // DeepSeek's exec mode requires the prompt as a positional argument
     // (no `-` stdin sentinel; `prompt: String` is a required clap field).
