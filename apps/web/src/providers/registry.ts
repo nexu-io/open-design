@@ -133,9 +133,15 @@ const IN_FLIGHT_SHARE_ONLY_MS = 0;
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const NETLIFY_PROVIDER_ID = 'netlify';
+export const RENDER_PROVIDER_ID = 'render';
+export const RAILWAY_PROVIDER_ID = 'railway';
 export const DEPLOY_PROVIDER_IDS = [
   DEFAULT_DEPLOY_PROVIDER_ID,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  NETLIFY_PROVIDER_ID,
+  RENDER_PROVIDER_ID,
+  RAILWAY_PROVIDER_ID,
 ] as const;
 
 export type WebDeployProviderId = (typeof DEPLOY_PROVIDER_IDS)[number];
