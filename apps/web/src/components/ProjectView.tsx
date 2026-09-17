@@ -7081,6 +7081,9 @@ export function ProjectView({
             ? preservedTaskPrefixEvents
             : []
           : [...(message.events ?? [])];
+        let focusRunEventStart = needsFullReplay
+          ? preservedTaskPrefixEvents.length
+          : taskPrefixEventCount;
         let daemonArtifactCount = status.artifactCount;
         let latestReattachRunStatus: ChatMessage['runStatus'] = status.status;
         let authoritativeReattachArtifactPaths = status.artifactPaths;
@@ -7177,6 +7180,7 @@ export function ProjectView({
           },
           onRunCreated: (nextRunId, strategyTask) => {
             manualFileWriteRegistration.bindRun(nextRunId);
+            if (nextRunId !== activeReattachRunId) focusRunEventStart = replayedEvents.length;
             activeReattachRunId = nextRunId;
             claimReattachRun(nextRunId);
             textBuffer.flush();
@@ -7373,6 +7377,8 @@ export function ProjectView({
                 const touchedFilePaths = extractTouchedFilePathsFromEvents(
                   needsFullReplay ? replayedEvents : message.events,
                 );
+                const focusRunEvents = replayedEvents.slice(focusRunEventStart);
+                const currentRunTouchedFilePaths = extractTouchedFilePathsFromEvents(focusRunEvents);
                 const ownedFiles = attributableRunFiles(
                   nextFiles, manualFileWrites,
                   [...touchedFilePaths, ...(authoritativeReattachArtifactPaths ?? [])],
@@ -7385,6 +7391,7 @@ export function ProjectView({
                   authoritativeReattachArtifactPaths,
                   project.id,
                   projectDetail.resolvedDir,
+                  currentRunTouchedFilePaths,
                 ) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                 const traceObjectFiles = mergeRecoveredTraceObjectFile(
@@ -7417,8 +7424,39 @@ export function ProjectView({
                     projectDetail.resolvedDir,
                   ),
                 });
-                if (turnArtifacts.focused && !userTookOverPreviewRef.current) {
-                  requestOpenTurnArtifacts(turnArtifacts.open, turnArtifacts.focused);
+                // Recovered streams retain the same explicit focus contract as
+                // live completion, without borrowing a prior task run's intent.
+                let declaredPath: string | null = null;
+                for (let index = focusRunEvents.length - 1; index >= 0; index -= 1) {
+                  const event = focusRunEvents[index]!;
+                  if (event.kind === 'artifact_focus' && event.open) {
+                    declaredPath = event.open;
+                    break;
+                  }
+                }
+                const moduleFileNames = declaredPath && /\.(jsx|tsx)$/i.test(declaredPath)
+                  ? await collectReferencedJsxNames(nextFiles, readProjectHtml)
+                  : undefined;
+                const declaredFocus = decideAgentFocusOpen({
+                  declaredPath,
+                  projectFiles: nextFiles,
+                  preTurnFileNames: preTurn ? beforeFileNames : undefined,
+                  agentTouchedFileNames: resolveAgentTouchedFileNames(
+                    currentRunTouchedFilePaths,
+                    nextFiles, project.id, projectDetail.resolvedDir,
+                  ),
+                  userTookOverPreview: userTookOverPreviewRef.current,
+                  moduleFileNames,
+                });
+                const focused = declaredFocus.fileName ?? turnArtifacts.focused;
+                if (
+                  focused
+                  && !userTookOverPreviewRef.current
+                  && projectIdRef.current === project.id
+                  && activeConversationIdRef.current === reattachConversationId
+                  && !supersededRunsRef.current.has(controller)
+                ) {
+                  requestOpenTurnArtifacts(turnArtifacts.open, focused);
                 }
                 const deliveryContent = needsFullReplay ? replayedContent : message.content;
                 const deliveryEvents = needsFullReplay ? replayedEvents : message.events;
@@ -9008,12 +9046,16 @@ export function ProjectView({
       // consuming a replacement run's colliding tool id.
       const pendingWrites = new Map<string, string>();
       const traceTouchedFilePaths = new Set<string>();
+      const currentRunTouchedFilePaths = new Set<string>();
+      const completedTaskArtifactPaths = new Set<string>();
+      let artifactTaskExecutionId: string | undefined;
       const manualFileWrites = new Map<string, ProjectFile>();
       // Per-write file-list reads are intentionally fire-and-forget so a file
       // can open while the run is still streaming. Once terminal completion
       // has selected a turn-level artifact, however, an older Write refresh
       // must not move focus again.
       let completionSelectedAutoOpen = false;
+      let declaredArtifactFocusPath: string | null = null;
       // A new run gets a clean slate: taking the preview over during the last
       // turn says nothing about this one.
       userTookOverPreviewRef.current = false;
@@ -9021,6 +9063,8 @@ export function ProjectView({
         manualFileWriteRegistration.release(recoverable);
         pendingWrites.clear();
         traceTouchedFilePaths.clear();
+        currentRunTouchedFilePaths.clear();
+        completedTaskArtifactPaths.clear();
       };
       const provenTraceTouchedFiles = () => [...traceTouchedFilePaths]
         .map((touchedPath, index) => {
@@ -9031,6 +9075,31 @@ export function ProjectView({
           return name ? { name, path: name, mtime: index } : null;
         })
         .filter((file): file is { name: string; path: string; mtime: number } => file !== null);
+
+      const resolveDeclaredArtifactFocus = async (nextFiles: ProjectFile[]) => {
+        const declaredPath = declaredArtifactFocusPath;
+        const moduleFileNames = declaredPath && /\.(jsx|tsx)$/i.test(declaredPath)
+          ? await collectReferencedJsxNames(nextFiles, readProjectHtml)
+          : undefined;
+        if (
+          declaredPath !== declaredArtifactFocusPath
+          || projectIdRef.current !== project.id
+          || activeConversationIdRef.current !== runConversationId
+          || supersededRunsRef.current.has(controller)
+        ) {
+          return { shouldOpen: false, fileName: null } as const;
+        }
+        return decideAgentFocusOpen({
+          declaredPath,
+          projectFiles: nextFiles,
+          preTurnFileNames: beforeFileNames,
+          agentTouchedFileNames: resolveAgentTouchedFileNames(
+            [...traceTouchedFilePaths], nextFiles, project.id, projectDetail.resolvedDir,
+          ),
+          userTookOverPreview: userTookOverPreviewRef.current,
+          moduleFileNames,
+        });
+      };
 
       const parser = createArtifactParser();
       let parsedArtifact: Artifact | null = null;
@@ -9110,33 +9179,26 @@ export function ProjectView({
          *
          * daemon 已经证过三件事:key 是这一轮的、路径落在项目根之内、文件**非空**
          * (空白预览在用户眼里就是 bug,产品明确拍过)。所以这里不再复核那三条,
-         * 只判客户端才知道的两条:是不是**本轮新建**的,以及用户有没有自己接管
-         * 过预览。判据全在 `decideAgentFocusOpen` 里,那是个纯函数,有独立红测。
-         *
-         * 事件可能在**回合中途**到达 —— 这正是它存在的意义:agent 写完 index.html
-         * 之后还要再花一分半写配套资源,不该让用户对着空白等到回合结束。
+         * 只判客户端才知道的本轮产出归属和用户是否接管预览。
+         * 已存在的主文件需要本轮成功写入证据，不能仅靠声明打开旧文件。
          */
         if (ev.kind === 'artifact_focus' && ev.open) {
-          const declaredPath = ev.open;
+          declaredArtifactFocusPath = ev.open;
           void refreshProjectFiles().then(async (nextFiles) => {
-            const moduleFileNames = /\.(jsx|tsx)$/i.test(declaredPath)
-              ? await collectReferencedJsxNames(nextFiles, readProjectHtml)
-              : undefined;
-            const decision = decideAgentFocusOpen({
-              declaredPath,
-              projectFiles: nextFiles,
-              preTurnFileNames: beforeFileNames,
-              userTookOverPreview: userTookOverPreviewRef.current,
-              moduleFileNames,
-            });
-            if (decision.shouldOpen && decision.fileName) {
-              // agent 的明示优先于本轮后续的启发式排序:它比 rank/mtime 更知道
-              // 哪个才是交付物。置位之后,尾随的配套文件写入不会再抢走焦点。
+            const decision = await resolveDeclaredArtifactFocus(nextFiles);
+            if (
+              decision.shouldOpen && decision.fileName
+              && !userTookOverPreviewRef.current
+              && projectIdRef.current === project.id
+              && activeConversationIdRef.current === runConversationId
+              && !supersededRunsRef.current.has(controller)
+            ) {
               completionSelectedAutoOpen = true;
               requestOpenFile(decision.fileName);
             }
           }).catch(() => {
-            // 后台读文件列表失败不具权威性 —— 保持现状,等下一个事件。
+            // A failed background read does not invalidate the declaration;
+            // completion retries it against the final fresh file snapshot.
           });
         }
         if (ev.kind === 'live_artifact') {
@@ -9176,6 +9238,7 @@ export function ProjectView({
             pendingWrites.delete(ev.toolUseId);
             if (!ev.isError) {
               traceTouchedFilePaths.add(filePath);
+              currentRunTouchedFilePaths.add(filePath);
               // Absolute daemon tool paths can prove containment before the
               // asynchronous file-list refresh completes. Open the best
               // proven touched artifact immediately so a terminal status and
@@ -9304,6 +9367,10 @@ export function ProjectView({
       );
       const cancelController = new AbortController();
       let authoritativeArtifactPaths: string[] | undefined;
+      const currentRunArtifactPaths = (): readonly string[] => authoritativeArtifactPaths
+        ?? [...currentRunTouchedFilePaths];
+      const completionTouchedPaths = (): string[] =>
+        [...new Set([...completedTaskArtifactPaths, ...currentRunArtifactPaths()])];
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
@@ -9526,9 +9593,10 @@ export function ProjectView({
               const produced = computeProducedFiles(
                 beforeFileNames,
                 ownedFiles,
-                authoritativeArtifactPaths,
+                authoritativeArtifactPaths === undefined ? undefined : completionTouchedPaths(),
                 project.id,
                 projectDetail.resolvedDir,
+                completionTouchedPaths(),
               ) ?? [];
               // Completion half of the onboarding funnel: the first generation
               // in a recommendation-started project that actually produced a
@@ -9583,7 +9651,11 @@ export function ProjectView({
                 ),
               });
               const turnArtifactToOpen = turnArtifacts.focused;
-              const producedArtifactToOpen = selectAutoOpenProducedArtifact(
+              // Revalidate the current declaration against the final snapshot:
+              // the completion ranking must not replace an explicitly selected
+              // edited main file with its newly created backup.
+              const declaredFocus = await resolveDeclaredArtifactFocus(nextFiles);
+              const producedArtifactToOpen = declaredFocus.fileName ?? selectAutoOpenProducedArtifact(
                 [
                   ...provenTraceTouchedFiles(),
                   ...(turnArtifactToOpen
@@ -9595,7 +9667,13 @@ export function ProjectView({
                 ],
                 { ...autoOpenArtifactOptions, preTurnFileNames: beforeFileNames },
               );
-              if (producedArtifactToOpen) {
+              if (
+                producedArtifactToOpen
+                && !userTookOverPreviewRef.current
+                && projectIdRef.current === project.id
+                && activeConversationIdRef.current === runConversationId
+                && !supersededRunsRef.current.has(controller)
+              ) {
                 completionSelectedAutoOpen = true;
                 requestOpenTurnArtifacts(turnArtifacts.open, producedArtifactToOpen);
               }
@@ -10126,6 +10204,23 @@ export function ProjectView({
               && latestAssistantMsg.runId
               && latestAssistantMsg.runId !== runId,
             );
+            if (latestAssistantMsg.runId && latestAssistantMsg.runId !== runId) {
+              // The provider reports paths per physical run, but this message
+              // carries the logical task. Retain only a proven same-task
+              // predecessor; a new task must not inherit its artifacts.
+              if (strategyTask?.taskExecutionId
+                && strategyTask.taskExecutionId === artifactTaskExecutionId) {
+                for (const filePath of currentRunArtifactPaths()) {
+                  completedTaskArtifactPaths.add(filePath);
+                }
+              } else {
+                completedTaskArtifactPaths.clear();
+              }
+              authoritativeArtifactPaths = undefined;
+              currentRunTouchedFilePaths.clear();
+              pendingWrites.clear();
+            }
+            artifactTaskExecutionId = strategyTask?.taskExecutionId;
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
@@ -14775,25 +14870,31 @@ export function computeProducedFiles(
   authoritativePaths?: readonly string[],
   projectId?: string,
   projectRoot?: string | null,
+  fallbackTouchedPaths: readonly string[] = [],
 ): ProjectFile[] | undefined {
   const beforeSet = beforeNames
     ? beforeNames instanceof Set
       ? beforeNames
       : new Set(beforeNames)
     : null;
-  if (authoritativePaths !== undefined) {
+  if (authoritativePaths !== undefined || fallbackTouchedPaths.length > 0) {
     const byName = new Map<string, ProjectFile>();
-    // The daemon's authoritative list intentionally covers user-facing
-    // artifacts and render dependencies, not every file an agent can create
-    // (for example plugin manifests and Markdown). Preserve all files that are
-    // provably new from the turn baseline, then use authoritative paths to add
-    // modified existing artifacts without attributing untouched inputs.
+    // Run authority covers both new and modified HTML/media artifacts. A
+    // later /files response may also contain another run's newly added files.
+    // Keep the baseline fallback only outside the daemon's tracked extension
+    // set (runtimes/run-artifacts.ts), e.g. Markdown, plugin JSON and scripts.
+    // The UI's broader artifact classifier also includes untracked OGG.
     if (beforeSet) {
       for (const file of next) {
-        if (!beforeSet.has(file.name)) byName.set(file.name, file);
+        const trackedArtifact = /\.(html?|png|jpe?g|gif|webp|avif|svg|mp4|mov|webm|mp3|wav|m4a)$/i.test(file.name);
+        if (!beforeSet.has(file.name) && (authoritativePaths === undefined || !trackedArtifact)) {
+          byName.set(file.name, file);
+        }
       }
     }
-    for (const rawPath of authoritativePaths) {
+    // An absent authority may use successful tool writes; an explicit empty
+    // list is a verdict and must not be replaced by those fallback paths.
+    for (const rawPath of authoritativePaths ?? fallbackTouchedPaths) {
       const file = findTouchedProjectFile(rawPath, next, projectId, projectRoot);
       if (file) byName.set(file.name, file);
     }
