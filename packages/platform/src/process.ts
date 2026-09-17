@@ -16,6 +16,17 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { createCommandInvocation, type CommandInvocationRequest } from "./command.js";
 
+/** Opt-in query budget; existing snapshot callers retain their current defaults. */
+export type ProcessSnapshotOptions = { timeoutMs?: number };
+
+function snapshotBudget(options: ProcessSnapshotOptions): { timeout?: number; killSignal?: "SIGKILL" } {
+  if (options.timeoutMs === undefined) return {};
+  if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0) {
+    throw new RangeError("Process snapshot timeout must be a positive integer");
+  }
+  return { timeout: options.timeoutMs, killSignal: "SIGKILL" };
+}
+
 export type ProcessStampShape = object;
 
 export type ProcessStampField<TStamp extends ProcessStampShape> = Extract<keyof TStamp, string>;
@@ -348,9 +359,9 @@ function parsePsOutput(stdout: string): ProcessSnapshot[] {
 }
 
 /** @internal Enumerate process snapshots on POSIX via `ps`. */
-async function listPosixProcessSnapshots(): Promise<ProcessSnapshot[]> {
+async function listPosixProcessSnapshots(options: ProcessSnapshotOptions = {}): Promise<ProcessSnapshot[]> {
   const stdout = await new Promise<string>((resolveList, rejectList) => {
-    execFile("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
+    execFile("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, ...snapshotBudget(options) }, (error, out) => {
       if (error) rejectList(error);
       else resolveList(out);
     });
@@ -359,13 +370,13 @@ async function listPosixProcessSnapshots(): Promise<ProcessSnapshot[]> {
 }
 
 /** @internal Enumerate process snapshots on Windows via `Get-CimInstance Win32_Process` JSON. */
-async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
+async function listWindowsProcessSnapshots(options: ProcessSnapshotOptions = {}): Promise<ProcessSnapshot[]> {
   const command = [
     "$ErrorActionPreference = 'Stop'",
     "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine, @{Name='StartedAtMs';Expression={([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds()}} | ConvertTo-Json -Compress",
   ].join("; ");
   const stdout = await new Promise<string>((resolveList, rejectList) => {
-    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, ...snapshotBudget(options) }, (error, out) => {
       if (error) rejectList(error);
       else resolveList(out);
     });
@@ -422,10 +433,10 @@ export function parseWindowsProcessSnapshots(stdout: string): ProcessSnapshot[] 
  * empty snapshot. Mutation paths use this strict form so discovery failure can
  * never be mistaken for an already-stopped process set.
  */
-export async function captureProcessSnapshot(): Promise<ProcessSnapshot[]> {
+export async function captureProcessSnapshot(options: ProcessSnapshotOptions = {}): Promise<ProcessSnapshot[]> {
   return process.platform === "win32"
-    ? await listWindowsProcessSnapshots()
-    : await listPosixProcessSnapshots();
+    ? await listWindowsProcessSnapshots(options)
+    : await listPosixProcessSnapshots(options);
 }
 
 /**
@@ -608,6 +619,30 @@ export function collectProcessTreePids(
     }
   }
   return [...visited].sort((left, right) => right - left);
+}
+
+/**
+ * Revalidate known Windows process generations before extending their tree.
+ * The caller supplies identities captured while its owned child was alive;
+ * this function never upgrades a bare root PID into an ownership proof.
+ */
+export function selectOwnedProcessTree(known: ProcessSnapshot[], current: ProcessSnapshot[]): ProcessSnapshot[] {
+  const validTime = (value: number | undefined): value is number =>
+    typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  const currentByPid = new Map(current.map(entry => [entry.pid, entry]));
+  const selected = new Map<number, ProcessSnapshot>();
+  const queue = known.flatMap(entry => {
+    const live = currentByPid.get(entry.pid);
+    return live && validTime(entry.startedAtMs) && live.startedAtMs === entry.startedAtMs ? [live] : [];
+  });
+  for (let index = 0; index < queue.length; index++) {
+    const parent = queue[index]!;
+    if (selected.has(parent.pid)) continue;
+    selected.set(parent.pid, parent);
+    queue.push(...current.filter(entry => entry.ppid === parent.pid
+      && validTime(entry.startedAtMs) && entry.startedAtMs >= parent.startedAtMs!));
+  }
+  return [...selected.values()];
 }
 
 /** Send a signal to each PID, ignoring `ESRCH` (already-dead) but rethrowing other errors. */

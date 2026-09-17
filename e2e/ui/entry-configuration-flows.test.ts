@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { expectStableCount } from '@/playwright/assertions';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import type { Locator, Page } from '@playwright/test';
 
@@ -69,6 +69,10 @@ async function readSavedConfig(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx) and its backdrop sits
+  // at z-index 1500 — above the z-index 120 chrome that owns the rail/settings
+  // controls this spec clicks. A live release card would swallow those clicks.
+  await suppressWhatsNew(page);
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,

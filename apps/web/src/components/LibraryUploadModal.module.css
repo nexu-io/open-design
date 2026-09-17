@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: 32px;
-  background: rgba(17, 24, 39, 0.55);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }

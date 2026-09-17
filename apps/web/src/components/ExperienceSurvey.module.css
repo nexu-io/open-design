@@ -176,7 +176,7 @@
 .cell.picked {
   background: var(--brand, #87ea5c);
   color: var(--brand-text, #0d5400);
-  font-weight: 650;
+  font-weight: 600;
   box-shadow: none;
 }
 
@@ -350,7 +350,7 @@
 .thanksTitle {
   margin: 0;
   font-size: var(--font-size-13, 13px);
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-strong, #202020);
 }
 

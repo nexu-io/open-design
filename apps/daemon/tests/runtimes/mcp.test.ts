@@ -95,6 +95,7 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
   assert.deepEqual(Object.keys(createProperties).sort(), ['input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(updateProperties).sort(), ['artifactId', 'input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(connectorsListProperties).sort(), ['useCase']);
+
 });
 
 test('live artifact MCP connector list forwards daily digest use case to daemon tools', async () => {

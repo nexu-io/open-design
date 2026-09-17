@@ -1,0 +1,154 @@
+name: release-prerelease-tests
+
+# The code test suites for one prerelease build, run OUTSIDE the pipeline that
+# produced it.
+#
+# These four jobs used to live in release-prerelease.yml. They never gated
+# delivery there — build and publish deliberately ignore them — but they still
+# held the workflow open, and release-prerelease.yml's concurrency group is one
+# repository-wide string with cancel-in-progress: false. So a 45-minute test
+# suite did not delay one prerelease, it delayed the NEXT one from starting.
+# Moving them here removes that coupling entirely: this workflow has a
+# concurrency group scoped to the origin run, so two prereleases can be
+# validated at once and neither can queue a build.
+#
+# Nothing dispatches this on a schedule or a push. release-prerelease.yml's
+# `dispatch_validation` job POSTs it the moment the build commit is resolved,
+# via .github/scripts/release/dispatch-validation.sh. Results reach a human
+# through the progressive Feishu card (release-prerelease-card.yml), which
+# watches this run's jobs; they are not workflow outputs, because nothing in the
+# release path is allowed to consume them as a gate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Exact commit SHA to test. This is the commit release-prerelease actually built, not a branch head."
+        required: true
+        type: string
+      version:
+        description: "Prerelease version these suites are validating, e.g. 0.21.1-prerelease.3. Display only."
+        required: false
+        type: string
+        default: ""
+      origin_run_id:
+        description: "Run id of the release-prerelease pipeline that dispatched this. Carried in the run name so the Feishu card and a human can walk between the two."
+        required: false
+        type: string
+        default: ""
+
+run-name: prerelease tests · ${{ inputs.version || inputs.commit }} · origin-run ${{ inputs.origin_run_id }}
+
+permissions:
+  contents: read
+
+concurrency:
+  # Scoped to the origin run, never repository-wide: this workflow must not be
+  # able to queue behind — or ahead of — anything. Two prereleases in flight get
+  # two independent test runs.
+  group: release-prerelease-tests-${{ inputs.origin_run_id || inputs.commit }}
+  cancel-in-progress: false
+
+jobs:
+  functional_e2e:
+    name: P0 Functional E2E
+    uses: ./.github/workflows/ui-extended-main.yml
+    with:
+      ref: ${{ inputs.commit }}
+      suite: p0
+  e2e_vitest:
+    name: E2E Vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.commit }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Setup Playwright
+        run: pnpm -C e2e exec playwright install --with-deps chromium
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor.
+      # The daemon launches the installed Chromium directly instead of through
+      # Playwright. Restore user namespaces on this ephemeral runner so the real
+      # Chromium sandbox remains enabled rather than disabling that protection.
+      - name: Allow Chromium user namespaces on GitHub Ubuntu
+        shell: bash
+        run: |
+          set -euo pipefail
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+      - name: Run E2E Vitest
+        run: pnpm --filter @open-design/e2e test
+  daemon_unit_tests:
+    name: Daemon tests (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.commit }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run daemon test shard
+        env:
+          OD_WATCHER_TEST_DEBUG: "1"
+        run: pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4
+  verify:
+    name: Verify build (typecheck + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.commit }}
+          # Shallow: nothing here reads git history. `pnpm guard` uses
+          # `git ls-files` (the index, not history), and a full clone of this
+          # repository is a 2.2 GiB pack.
+          fetch-depth: 1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build daemon and desktop (typecheck dependencies)
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+      - name: Typecheck workspaces
+        run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
+      - name: Check repository layout policies
+        run: pnpm guard

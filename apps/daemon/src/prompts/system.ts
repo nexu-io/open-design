@@ -49,6 +49,9 @@ import {
   composeOdNextStrategyRequestPromptV2,
   executionProfileFromStreamFormat,
   INTEGRATIONS_MCP_PATH,
+  normalizePromptLocale,
+  PROMPT_LOCALE_EXEMPT_TERMS_SENTENCE,
+  promptLanguageName,
   SETTINGS_MEDIA_PROVIDERS_PATH,
   type ByokMediaDefaults,
   type ChatSessionMode,
@@ -87,18 +90,14 @@ function renderUiLocalePrompt(
   locale: string | undefined,
   options?: { includeQuickBriefSamples?: boolean },
 ): string {
-  const normalized = locale?.trim();
-  if (!normalized || normalized.toLowerCase() === 'en') return '';
-  const languageName = normalized === 'zh-CN'
-    ? 'Simplified Chinese'
-    : normalized === 'zh-TW'
-      ? 'Traditional Chinese'
-      : normalized;
+  const normalized = normalizePromptLocale(locale);
+  if (!normalized) return '';
+  const languageName = promptLanguageName(normalized);
   const lines = [
     '# UI locale override',
     '',
-    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
-    `The artifacts you generate must also be in ${languageName}: every piece of user-visible copy in the HTML/React/page/deck you produce — headings, body text, navigation, button and link labels, captions, alt text, and form fields — is written in this language by default. This holds even when a chosen template, plugin, or design system ships its reference/example content in another language: treat that copy as a layout and style reference and translate/adapt it into ${languageName}, do not ship its wording verbatim. Keep brand names, code, and technical identifiers as-is, and honor an explicit user request for a different output language.`,
+    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, question labels, placeholders, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    `The artifacts you generate must also be in ${languageName}: every piece of user-visible copy in the HTML/React/page/deck you produce — headings, body text, navigation, button and link labels, captions, alt text, and form fields — is written in this language by default. This holds even when a chosen template, plugin, or design system ships its reference/example content in another language: treat that copy as a layout and style reference and translate/adapt it into ${languageName}, do not ship its wording verbatim. ${PROMPT_LOCALE_EXEMPT_TERMS_SENTENCE}`,
   ];
   // The worked zh-CN quick-brief copy below matches the CLASSIC default
   // discovery form verbatim. The slim charter recipes that form instead of
@@ -114,7 +113,6 @@ function renderUiLocalePrompt(
       '- output label/options: `我们要做什么？` / `幻灯片 / 路演稿`, `单页网页原型 / 落地页`, `多屏应用原型`, `数据看板 / 工具界面`, `编辑式 / 营销页面`, `其他 — 我来描述`',
       '- platform label/options: `目标平台` / `响应式网页`, `桌面网页`, `iOS 应用`, `Android 应用`, `平板应用`, `桌面应用`, `固定画布 (1920×1080)`',
       '- audience label/placeholder: `目标用户` / `例如：早期投资人、开发者工具采购者、内部高管评审`',
-      '- tone label/options: `视觉调性` / `编辑 / 杂志感`, `现代极简`, `活泼 / 插画感`, `科技 / 工具型`, `奢华 / 精致`, `粗野 / 实验性`, `人性化 / 亲切`',
       '- brand label/options: `品牌背景` / `帮我选一个方向`, `我有品牌规范 — 稍后分享`, `参考网站 / 截图 — 稍后附上`',
       '- scale label/placeholder: `大概需要多少内容？` / `例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面`',
       '- constraints label/placeholder: `还有什么需要知道的吗？` / `真实文案、必须使用的字体、需要避免的内容、截止时间…`',
@@ -618,7 +616,7 @@ Normal rhythm for artifact work:
 
 Never type a tool invocation into assistant text as XML, markdown, JSON, or prose; if the runtime cannot call the tool, briefly explain that instead of simulating it.
 
-This tool-call rule does not apply to OpenDesign UI markup. \`<question-form>\` and \`<od-card>\` are assistant text blocks that the host renders in the UI, not tool calls. When you need to ask structured questions, emit the complete \`<question-form>...</question-form>\` block directly in assistant text; do not route it through a native tool call and do not stop after an introductory sentence.
+This tool-call rule does not apply to OpenDesign UI markup. \`<question-form>\`, \`<od-card>\`, the self-closing \`<od-next key="..." value="..."/>\` follow-up markers, and the \`<od-focus key="..."/>\` display marker are assistant text blocks that the host renders in the UI, not tool calls. When you need to ask structured questions, emit the complete \`<question-form>...</question-form>\` block directly in assistant text; do not route it through a native tool call and do not stop after an introductory sentence.
 
 When you write or edit an HTML file in the project folder through the native file tool, that file is already visible in the user's file panel and preview.
 
@@ -703,7 +701,7 @@ const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
 Active design system exception: the active design system is the visual direction for this project. Use its DESIGN.md palette, typography, spacing, component rules, and theme tokens as the source of truth for color and mood.
 
 - Do not ask the user to pick a separate theme color, visual direction, palette, typography mood, or direction card.
-- Do not emit a direction question-form, a \`direction-cards\` picker, or any visual-direction card while an active design system is present.
+- Do not emit a direction question-form while an active design system is present.
 - If an earlier discovery answer asks to "Pick a direction for me", treat that as already satisfied by the active design system and continue with the plan.
 - When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
 `;
@@ -733,6 +731,17 @@ export interface ComposeInput {
   odNextStrategyRecipe?: OdNextStrategyRequestRecipeV2 | undefined;
   agentId?: string | null | undefined;
   streamFormat?: string | undefined;
+  /**
+   * The plan-tool sentence for this run, pre-resolved by the caller.
+   *
+   * Only the OD Next fork reads it. The legacy stack below resolves its own
+   * from `planToolNoteForRuntime(agentId, streamFormat)` a few lines down, and
+   * a caller that passes nothing gets exactly today's behaviour there. It is an
+   * input rather than a second internal derivation so this composer and its
+   * `@open-design/contracts` mirror stay byte-identical for identical inputs —
+   * the parity that `tests/plugins-strategy-recipe.test.ts` pins.
+   */
+  planToolNote?: string | null | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -792,8 +801,8 @@ export interface ComposeInput {
   // memory config (`profileEnabled` / `rewriteEnabled` / `verifyEnabled`).
   // An absent object — or an absent field — is treated as TRUE so callers
   // with no memory config wired (and the contracts/BYOK fallback) keep the
-  // loops on by default. `rewrite` drives the PRE intent-gateway task-brief
-  // card; `verify` drives the POST self-verify scorecard. `profile` is
+  // loops on by default. `rewrite` gates the applied-memory chip;
+  // `verify` drives the POST self-verify scorecard. `profile` is
   // consumed by the memory-body composer; it is accepted here only so the
   // same object threads through unchanged.
   memoryHooks?: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
@@ -891,6 +900,7 @@ export interface ComposeInput {
 export function composeSystemPrompt({
   odNextStrategyRecipe,
   agentId,
+  planToolNote,
   skillBody,
   skillName,
   skillMode,
@@ -943,6 +953,13 @@ export function composeSystemPrompt({
   if (odNextStrategyRecipe) {
     return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
       agentId,
+      // The plan-tool fact has to cross the fork with everything else. Without
+      // it an OD Next run keeps the pre-fix behaviour the slim charter no
+      // longer has: a plan step whose tool is never named, and a sanctioned
+      // prose branch to fall into instead. Resolved by the caller (see
+      // `planToolNote` on ComposeInput) so this fork and its contracts mirror
+      // stay byte-identical.
+      planToolNote,
       sessionMode,
       locale,
       deckIntent: odNextStrategyRecipe.taskType !== 'ppt' && freeformDeckSignal === true,
@@ -1033,14 +1050,13 @@ export function composeSystemPrompt({
             '\n\n---\n\n',
           ]
         : [PROMPT_INJECTION_RESISTANCE, '\n\n---\n\n'];
-  // The slim charter's plan step is deliberately generic ("use your runtime's
-  // plan/todo tool, else a numbered list") so it works on codex / opencode /
-  // ACP agents that have no such tool. Claude-family runs (streamFormat
-  // 'claude-stream-json': claude, codebuddy, amp) are the only ones with a
-  // `TodoWrite` tool the host renders as a live Todos card — name the concrete
-  // tool + its UI benefit here, for that family only.
-  if (isSlimCharterHead && streamFormat === 'claude-stream-json') {
-    parts.push(CLAUDE_PLAN_TOOL_NOTE, '\n\n---\n\n');
+  // The slim charter's plan step stays generic ("use your runtime's plan/todo
+  // tool, else a numbered list") because it is prepended to every slim run and
+  // some runtimes genuinely have no such tool. The concrete tool NAME is added
+  // here instead, per runtime, so only the runs that can act on it pay for it.
+  if (isSlimCharterHead) {
+    const planToolNote = planToolNoteForRuntime(agentId, streamFormat);
+    if (planToolNote) parts.push(planToolNote, '\n\n---\n\n');
   }
   const activeDesignSystemBody = designSystemBody?.trim();
   const activeSkillModes = new Set(
@@ -1195,14 +1211,13 @@ export function composeSystemPrompt({
     // Slim variants of the two-loop memory scaffolding: identical headings
     // and od-card shapes (the web client parses the card types and the
     // daemon programmatically checks the verify-scorecard), with the
-    // repeated rationale prose cut. The classic wording below stays
-    // byte-stable for the classic stack.
+    // repeated rationale prose cut.
     parts.push(
       `\n\n## Personal memory (auto-extracted from past chats)\n\nPreferences and context sedimented from this user's previous conversations — authoritative for tone, terminology, and what they already told you; never re-ask what is captured here. On conflict the active design system wins tokens and the active skill wins workflow (see Precedence). Use memory to silently expand short asks into a full internal brief before acting; ask a clarifying question only when a critical target, permission, or conflict cannot be resolved from the request plus memory.\n\n${memoryBody.trim()}`,
     );
     if ((memoryHooks?.rewrite ?? true)) {
       parts.push(
-        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen memory lets you expand a short or underspecified request into a clear brief, surface it as ONE collapsed card at the very start of your reply, then continue working without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nAt most one per turn; skip it when the request is already explicit or trivial (you may emit one compact chip instead: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>). When the card resolves the intent, continue without a clarification form. It never replaces TodoWrite or the pre-ship self-check, and never appears as prose.`,
+        `\n\nIf you applied memory, you may emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>.`,
       );
     }
     if ((memoryHooks?.verify ?? true)) {
@@ -1211,7 +1226,7 @@ export function composeSystemPrompt({
       );
     }
     parts.push(
-      `\n\n## Propose new verified rules from corrections\n\nWhen a user correction implies a reusable, checkable rule, PROPOSE it — never save it silently:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nAt most one per turn, and only when confident it generalizes beyond the current artifact.`,
+      `\n\nNever save new verified rules silently.`,
     );
   }
 
@@ -1228,7 +1243,7 @@ export function composeSystemPrompt({
     // use no backticks so they stay literal inside the template strings.
     if ((memoryHooks?.rewrite ?? true)) {
       parts.push(
-        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nWhen the task-brief card makes the intent clear, continue without a clarification form. The card does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check.`,
+        `\n\nIf you applied memory, you may emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>.`,
       );
     }
 
@@ -1239,7 +1254,7 @@ export function composeSystemPrompt({
     }
 
     parts.push(
-      `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact. Do not claim in prose that a rule was recorded, saved, noted, added to memory, or will be remembered unless this same response includes the rule-proposal card for that rule; the rule becomes saved only after the user clicks Keep.`,
+      `\n\nNever save new verified rules silently.`,
     );
   }
 
@@ -1483,7 +1498,32 @@ export function composeSystemPrompt({
   // originating assistant message, and answers return as the next user message.
   // Applies to every agent — question-form is UI-parsed markup, not a tool.
   if (!isSlimCharterHead || isAskMode) parts.push(
-    "\n\n---\n\n## Structured clarification on any turn\n\nWhen clarification is materially necessary and the answer benefits from structured input, emit a `<question-form>` block instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the OpenDesign UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
+    "\n\n---\n\n## Structured clarification on any turn\n\nWhen clarification is materially necessary and the answer benefits from structured input, emit a `<question-form>` block instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the OpenDesign UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.\n\nAt most 6-7 options per question; merge near-duplicates instead of listing more. Choose `radio` vs `select` by option count, not importance: `radio` for a short list, `select` once it runs long (languages, timezones, voices); `checkbox` is always a plain list. `select` options may carry `group` (first group expands, the rest collapse) and `trailingLabel` (a short end-of-row code such as `ZH-CN`); both optional. Label options in the user's words, not jargon: \"Magazine-style layout\", not \"Editorial\". Reword only `label`; never change a stable `value`. Keep each `label` under ~40 characters; put anything longer in `description`.",
+  );
+
+  /*
+   * How a turn is laid out in this chat panel.
+   *
+   * The individual markers were each taught in their own place — `<question-form>`
+   * above, `<od-card>` in the memory sections, `<od-done>` in the per-turn slice —
+   * but nothing told the model what the reader actually SEES, so it could not tell
+   * which of its output lands in a collapsed drawer and which lands in front of a
+   * person. That gap shows up as turns that re-narrate the whole process after the
+   * answer, or that skip a plan and leave the user with no progress to watch.
+   *
+   * Facts about the host's rendering only — no new product rules. Kept in the
+   * cached stable prefix rather than the per-turn slice: it never varies by turn,
+   * and re-sending it every turn would pay for it every turn.
+   */
+  if (!isSlimCharterHead || isAskMode) parts.push(
+    "\n\n---\n\n## How your turn is rendered\n\n" +
+    "This panel does not print your output as one flat transcript. A turn renders as a **collapsed execution card** with your **answer below it**, and the completion marker is the boundary between them (see the turn-completion rules in this turn's instructions). Knowing which side something lands on is the difference between a readable turn and a wall of text.\n\n" +
+    "- **Inside the card** (default collapsed once the turn ends): every tool call, your thinking, and any narration you write while working. Each tool call is one row — a verb plus what it acted on — so a command whose intent is legible from its head reads well here, and a 200-character one-liner does not.\n" +
+    "- **Below the card**: only what comes after the completion marker. This is the part a person reads without clicking anything. Keep it about the outcome — what now exists, what changed, what needs their decision. Do not replay the steps; they are one click away and already legible.\n" +
+    "- **TodoWrite is the progress the user watches.** The list renders as `Plan · N steps` plus one drawer per step inside the card, and while the run is in flight a pill above the composer shows which step is current. So a multi-step task without a plan leaves the user watching a spinner. Update the list as you go — each entry's state is read live, and a plan written once and never advanced reads as a stall.\n" +
+    "- **Artifact cards are the deliverables you declare**, not every file you touch. The display marker in this turn's instructions decides which files get a card with a preview under the turn; a turn that declares none falls back to the host's own pick of the main artifacts it wrote — pages, documents and images, never a stylesheet or a script — and every file stays reachable in the project's file list either way. Pasting file contents back into your answer duplicates something the user can already see and open.\n" +
+    "- **Questions go through `<question-form>`**, never as a markdown list of options — a list renders as plain text and forces the user to type their answer back.\n\n" +
+    "One consequence worth stating plainly: everything you write before the completion marker is filed away by default. If a caveat matters to the decision, it belongs after the marker, not buried in the working narration."
   );
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
@@ -1518,7 +1558,75 @@ export function composeSystemPrompt({
  * precedence war and let `<todo-list>` / `[读取 X]` pseudo-tool markup
  * leak into the chat.
  */
-const CLAUDE_PLAN_TOOL_NOTE = `Your plan tool is \`TodoWrite\` — use it for the plan step above; the host renders it as a live Todos card. Mark each item \`in_progress\` when started and \`completed\` as it lands.`;
+/**
+ * Which plan tool a Claude-family session actually has depends on its build.
+ * Claude Code >= 2.1.x retired `TodoWrite` and moved the capability to
+ * `TaskCreate` / `TaskUpdate` (verified on 2.1.247: the init frame's `tools`
+ * array carries no `TodoWrite` on any model). The daemon reduces both dialects
+ * into one canonical `TodoWrite` snapshot before the client ever sees them
+ * (`emitCanonicalTaskSnapshot` in ../runtimes/claude-stream.ts), so the note
+ * names both and lets the session use whichever it was given. Naming only the
+ * retired one pointed newer builds at a tool that does not exist.
+ */
+const CLAUDE_PLAN_TOOL_NOTE = `Your plan tool is \`TodoWrite\`, or \`TaskCreate\` plus \`TaskUpdate\` on builds that ship those instead — use whichever your session actually exposes for the plan step above; the host renders either as the same live Todos card. Mark each item \`in_progress\` when started and \`completed\` as it lands.`;
+
+/**
+ * Codex's plan tool is `update_plan`. Both codex transports translate its
+ * frames into the same canonical `TodoWrite` snapshot the Todos card is drawn
+ * from — `handleTurnPlan` for the app-server `turn/plan/updated` notification,
+ * `emitCodexTodoList` for the `exec --json` `todo_list` item — so a plan codex
+ * commits through the tool lands in exactly the card the Claude family gets.
+ */
+const CODEX_PLAN_TOOL_NOTE = `Your plan tool is \`update_plan\` — use it for the plan step above; the host renders it as a live Todos card. Mark each item \`in_progress\` when started and \`completed\` as it lands.`;
+
+/**
+ * OpenCode's plan tool is `todowrite`, spelled lowercase. Unlike the Claude and
+ * codex families the parser forwards this name unchanged, and the canonical
+ * `isTodoWriteToolName` accepts it, so the call reaches the Todos card as-is.
+ */
+const OPENCODE_PLAN_TOOL_NOTE = `Your plan tool is \`todowrite\` — use it for the plan step above; the host renders it as a live Todos card. Mark each item \`in_progress\` when started and \`completed\` as it lands.`;
+
+/**
+ * The plan-tool note for one run, or null when this runtime has no plan tool
+ * whose output the daemon can turn into a Todos card.
+ *
+ * Why the note is needed at all: the charter's plan step offers "Otherwise,
+ * provide a numbered plan in your response" as a sanctioned branch, and asks
+ * the model to self-assess whether "the runtime supports task lists". A model
+ * that was never told its tool's NAME reads the prose branch as the compliant
+ * one — which is what a codex run did on 2026-09-03 in answer to an explicit
+ * 「先用 todo 进行一轮规划」: it wrote a seven-item plan into the reply body and
+ * called no plan tool. Naming the tool removes the ambiguity without touching
+ * the charter (which is under a byte ceiling and is prepended to every run);
+ * a runtime with no plan tool still pays nothing.
+ *
+ * Every entry is evidence-backed, not inferred from a family resemblance. A
+ * runtime is added here only once its real tool name is known AND the daemon
+ * demonstrably reduces that tool's output into a `TodoWrite` snapshot; naming
+ * a tool that does not exist is the exact failure the Claude Code 2.1 rename
+ * caused, and a silent guess would rebuild it.
+ *
+ * This is the ONE home for that table, and it now has two consumers: the slim
+ * charter below, and the OD Next fork, which composes an entirely separate
+ * prompt and would otherwise stay in the pre-fix state forever. OD Next
+ * receives the resolved sentence as `planToolNote` — first through
+ * `odNextStableRequestContext` in server.ts (the shipping Bundle path), and
+ * mirrored on this file's own early return. Callers pass the sentence rather
+ * than the runtime so the table never gets a second copy on the other side of
+ * the fork.
+ */
+export function planToolNoteForRuntime(
+  agentId: string | null | undefined,
+  streamFormat: string | undefined,
+): string | null {
+  // claude / codebuddy / amp — the whole Claude-stream family.
+  if (streamFormat === 'claude-stream-json') return CLAUDE_PLAN_TOOL_NOTE;
+  if (agentId === 'codex') return CODEX_PLAN_TOOL_NOTE;
+  if (agentId === 'opencode' || agentId === 'byok-opencode') {
+    return OPENCODE_PLAN_TOOL_NOTE;
+  }
+  return null;
+}
 
 const API_MODE_OVERRIDE = `# API mode — no tools available (read first — overrides every rule below)
 
@@ -1537,6 +1645,7 @@ Do not mention tool unavailability to the user. Avoid phrases such as "TodoWrite
 - Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
 - A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
 - \`<question-form>\` blocks when material clarification is needed on any turn, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
+- The self-closing \`<od-next key="..." value="..."/>\` follow-up markers described in this turn's instructions, as the very last thing you write — also markup the host parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 
@@ -2040,8 +2149,21 @@ function shouldRenderElevenLabsVoiceOptions(
     && audioVoiceOptions.length > 0;
 }
 
+/**
+ * OPEND-2707. 这道题曾经把「交上去的是 voice_id,不是你看到的那行描述」写在
+ * 每题副标题(help 字段)里 —— 全仓唯一由仓库自己写出这个字段的地方。澄清卡不再
+ * 渲染副标题之后,那句话写了就丢,所以它并进了 `label`。
+ *
+ * 为什么是 `label` 而不是别处:`FormQuestion` 没有题级 `description`(只有选项有),
+ * `placeholder` 归 "Choose a voice" 占着 —— `label` 是唯一还会渲染、又属于这道题
+ * 本身的位置。信息不能删:选项的可见文字是音色描述,不说一声用户看不出交上去的是 id。
+ *
+ * 这份 JSON 会被整段 `JSON.stringify` 进系统提示词,所以它同时是模型看到的
+ * 「一道题可以长这样」的范例 —— 留一个 help 键在这里,撤发问就撤了个寂寞。
+ * 钉在 `apps/daemon/tests/system-prompt-template.test.ts`,镜像那份钉在
+ * `packages/contracts/tests/system-prompt-audio-voices.test.ts`。
+ */
 function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
-  description: string;
   questions: Array<{
     id: string;
     label: string;
@@ -2049,7 +2171,6 @@ function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
     required: boolean;
     allowCustom: false;
     placeholder: string;
-    help: string;
     options: Array<{ label: string; value: string }>;
   }>;
   submitLabel: string;
@@ -2059,17 +2180,14 @@ function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
     value: option.voiceId,
   }));
   return {
-    description:
-      'Pick a voice by description. The selected answer will be the exact voice_id passed to the renderer.',
     questions: [
       {
         id: 'voice',
-        label: 'Voice',
+        label: 'Voice — the answer submits the matching Voice ID',
         type: 'select',
         required: true,
         allowCustom: false,
         placeholder: 'Choose a voice',
-        help: 'Select a voice description; the answer submits the matching Voice ID.',
         options,
       },
     ],

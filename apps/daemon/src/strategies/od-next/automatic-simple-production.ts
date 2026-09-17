@@ -31,6 +31,7 @@ import {
   type OdNextComplexRuntimeEvidence,
 } from './complex-production.js';
 import { createOdNextNativeBuildPackageBindings } from './native-build-package.js';
+import { mintRunDoneKey } from '../../runtimes/run-done-key.js';
 
 type SqliteDb = Database.Database;
 
@@ -218,6 +219,8 @@ export function prepareAutomaticSimpleProductionRun<
   service: InternalRunCreationService<TMeta, TRun>;
   task: StrategyTaskExecutionRecord;
   createMeta: (instruction: string, taskRunIndex: number) => TMeta;
+  /** Run UI locale; see `prepareAutomaticStrategyContinuation` (OPEND-2765). */
+  locale?: string | undefined;
   updatedAt?: number;
 }): {
   prepared: PreparedInternalRunResult<TRun>;
@@ -231,16 +234,21 @@ export function prepareAutomaticSimpleProductionRun<
       ['od_next_simple_production_not_ready'],
     );
   }
+  const hostProtocolKey = mintRunDoneKey();
   const instruction = composeOdNextStrategyContinuationV2({
     stage: 'production',
     nativeSessionResume: true,
     taskExecutionId: task.taskExecutionId,
     taskRunIndex: task.runs.length,
     planContractHash: task.planContractHash,
+    hostProtocolKey,
+    ...(input.locale ? { locale: input.locale } : {}),
   });
   let claimed: StrategyTaskExecutionRecord | null = null;
+  const meta = input.createMeta(instruction, task.runs.length);
+  meta.doneKey = hostProtocolKey;
   const prepared = input.service.prepare({
-    meta: input.createMeta(instruction, task.runs.length),
+    meta,
     beforeClaimCommit: (run) => {
       claimed = beginAutomaticSimpleProduction(input.db, {
         task,
@@ -298,6 +306,13 @@ export function prepareAutomaticStrategyContinuation<
     deliverableValid: boolean;
   };
   complexRuntimeEvidence?: OdNextComplexRuntimeEvidence;
+  /**
+   * Run UI locale (OPEND-2765). The production stage closes with the keyed
+   * host protocols, and their follow-up-suggestion rule is the only part of
+   * this payload that is user-visible prose. Omitting it made a zh-CN run's
+   * three suggestions come back in English.
+   */
+  locale?: string | undefined;
   updatedAt?: number;
 }): PreparedAutomaticStrategyContinuation<TRun> {
   const complexPlanningReasonCodes = (() => {
@@ -401,6 +416,7 @@ export function prepareAutomaticStrategyContinuation<
         plan: input.parsed.planContract!,
       })
     : [];
+  const hostProtocolKey = repairCandidate ? null : mintRunDoneKey();
   const instruction = repairCandidate
       ? composeOdNextStrategyContinuationV2({
           stage: 'contract_repair',
@@ -415,14 +431,18 @@ export function prepareAutomaticStrategyContinuation<
           taskExecutionId: input.task.taskExecutionId,
           taskRunIndex: input.task.runs.length,
           planContractHash: strategyPlanContractHash(input.parsed.planContract!),
+          hostProtocolKey: hostProtocolKey!,
+          ...(input.locale ? { locale: input.locale } : {}),
           ...(nativeBuildPackageBindings.length > 0
             ? { nativeBuildPackageBindings }
             : {}),
         });
   let result: OdNextCoordinatorResult | null = null;
   try {
+    const meta = input.createMeta(stage, instruction, input.task.runs.length);
+    if (hostProtocolKey) meta.doneKey = hostProtocolKey;
     const prepared = input.service.prepare({
-      meta: input.createMeta(stage, instruction, input.task.runs.length),
+      meta,
       beforeClaimCommit: (nextRun) => {
         const accepted = finalize(
           repairCandidate

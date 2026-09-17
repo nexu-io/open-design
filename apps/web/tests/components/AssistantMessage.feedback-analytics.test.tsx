@@ -61,11 +61,16 @@ describe('AssistantMessage feedback analytics', () => {
         projectKind="prototype"
         conversationId="conversation-1"
         onFeedback={vi.fn()}
+        // 反馈按钮挂在回合状态行上,而那一行**只在最后一轮出**(2026-08-26 产品裁决:
+        // 「应该只有最后一轮底部才会显示,之前轮次不要显示,hover 也不显示」)。
+        // 这一条要点〔Helpful〕,就得把这条消息摆成最后一轮。
+        isLast
       />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
-    fireEvent.click(await screen.findByLabelText('Understood my request'));
+    // 原因项按稿子第 40 格改成了胶囊按钮(`aria-pressed` 承担多选),不再是 label+checkbox
+    fireEvent.click(await screen.findByRole('button', { name: 'Understood my request' }));
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
 
     const resultCall = analyticsMocks.track.mock.calls.find(

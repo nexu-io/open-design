@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   collectProcessTreePids,
+  selectOwnedProcessTree,
   processCommandExactlyRunsExecutable,
   stopProcesses,
   type ProcessStampContract,
@@ -201,4 +202,33 @@ describe("stopProcesses", () => {
     },
     5_000,
   );
+});
+
+
+describe("generation-fenced owned process trees", () => {
+  const processAt = (pid: number, ppid: number, startedAtMs?: number): ProcessSnapshot => ({
+    pid, ppid, command: "same executable", ...(startedAtMs === undefined ? {} : { startedAtMs }),
+  });
+  const root = processAt(10, 1, 100);
+  const child = processAt(11, 10, 101);
+  it("extends only a proven live ancestor and ignores same-name siblings", () => {
+    expect(selectOwnedProcessTree([root], [root, child, processAt(12, 11, 102), processAt(20, 1, 101)])
+      .map(entry => entry.pid)).toEqual([10, 11, 12]);
+  });
+  it("retains a known child after the wrapper exits, without trusting a reused wrapper PID", () => {
+    const replacement = processAt(10, 1, 200);
+    expect(selectOwnedProcessTree([root, child], [replacement, child, processAt(12, 11, 102), processAt(21, 10, 201)])
+      .map(entry => entry.pid)).toEqual([11, 12]);
+  });
+  it("rejects a reused descendant PID and that replacement's children", () => {
+    expect(selectOwnedProcessTree([root, child], [processAt(11, 1, 200), processAt(12, 11, 201)])).toEqual([]);
+  });
+  it("rejects unknown creation times and children older than their claimed parent", () => {
+    expect(selectOwnedProcessTree([root], [root, processAt(11, 10), processAt(12, 10, 99)])).toEqual([root]);
+    expect(selectOwnedProcessTree([processAt(10, 1)], [root, child])).toEqual([]);
+  });
+  it("does not discover an orphan from a root PID that was never captured", () => {
+    expect(selectOwnedProcessTree([], [child])).toEqual([]);
+    expect(selectOwnedProcessTree([root], [child])).toEqual([]);
+  });
 });

@@ -402,3 +402,67 @@ export interface CritiqueArtifactRef {
   /** Daemon-relative HTTP path the web layer fetches to stream the bytes. */
   url: string;
 }
+
+/* ── 评审剧场通信语法:唯一出处 ─────────────────────────────────────────────
+ *
+ * 剧场本身已经在总闸上关掉了(`apps/daemon/src/critique/rollout.ts`),这一段留的是
+ * **兜底**:凡是这套语法,一律不进聊天正文。用户在真实客户端里连着撞到四次
+ * `<CRITIQUE_RUN>` / `<PANELIST role="Critic" score="9.0">` 原样打在回答里。
+ *
+ * 语法只能有一个出处 —— daemon 用它剥**流**(带半截缓冲),web 用它剥**历史**
+ * (已经落库的旧对话,daemon 那道来不及了)。两边分头写早晚会分叉。
+ */
+
+/**
+ * 成对出现、要**脱壳留字**的标记 —— 里面那句话是人写给人看的。
+ *
+ * 标签名以**真实语法**为准,不凭印象写:prompt 在
+ * `apps/daemon/src/prompts/panel.ts`,解析器在
+ * `apps/daemon/src/critique/parsers/v1.ts`(`MUST_FIX_RE`),fixtures 在
+ * `apps/daemon/src/critique/__fixtures__/`。三处一致才算数。
+ *
+ * 这里曾经写成 `MUSTFIX`(漏了下划线)。那个拼法在真实数据里一次都没出现过,
+ * 于是它挡不住任何东西:同一段话里的 `<PANELIST>` 被剥掉了,
+ * `<MUST_FIX id="…">…</MUST_FIX>` 却整条留在正文里给用户看见。
+ * 更难认的是它长什么样 —— markdown 把 `MUST_FIX` 里那对下划线当成强调标记,
+ * 屏幕上显示的是**斜体的 `MUSTFIX`**,下划线已经被吃掉,
+ * 照着屏幕回头找代码只会找到这个错的拼法,正好自圆其说。
+ */
+export const CRITIQUE_INLINE_TAGS = ['PANELIST', 'MUST_FIX', 'RESOLVED', 'SHIP'] as const;
+/** 整条都是协议的标记 */
+export const CRITIQUE_BLOCK_TAGS = ['CRITIQUE_RUN', 'ROUND', 'ROUND_END'] as const;
+export const CRITIQUE_GRAMMAR_TAGS: readonly string[] = [
+  ...CRITIQUE_INLINE_TAGS,
+  ...CRITIQUE_BLOCK_TAGS,
+];
+
+/**
+ * 一条完整标记:`<TAG …>` / `</TAG>` / `<TAG …/>`。
+ * 标签名后面必须紧跟空白、`>` 或 `/`,否则 `<PANELISTS>` 这种会被误吃。
+ *
+ * 每次现造一个,不共享 —— 带 `g` 的正则有 `lastIndex` 状态,共享实例会让
+ * 相邻两次调用互相干扰(第二次从上一次停下的位置开始找)。
+ */
+export function critiqueGrammarTagPattern(): RegExp {
+  return new RegExp(`</?(?:${CRITIQUE_GRAMMAR_TAGS.join('|')})(?=[\\s/>])[^>]*>`, 'g');
+}
+
+/**
+ * 把一整段**已经完整**的文本里的剧场语法剥掉(给历史消息用)。
+ *
+ * 只摘标记、不吞标记之间的字:`<PANELIST role="Designer">已完成…</PANELIST>`
+ * 剩下「已完成…」。宁可多留一句人话,也不要把用户的正文吃掉。
+ *
+ * **不避开代码块**,和 daemon 那道流式剥离保持同一口径:那边按 SSE 分片处理,
+ * 根本不知道自己在不在围栏里。两边口径必须一致,否则同一段文字在
+ * 「刚生成」和「刷新后」会长得不一样。真要在正文里展示这套标记,用转义。
+ *
+ * 连续标记之间只剩空行时会塌成一个换行 —— 否则剥完会留下一大片空白,
+ * 读着像回答中间断了一截。
+ */
+export function stripCritiqueGrammar(text: string): string {
+  if (!text || !text.includes('<')) return text;
+  const withoutTags = text.replace(critiqueGrammarTagPattern(), '');
+  if (withoutTags === text) return text;
+  return withoutTags.replace(/\n{3,}/g, '\n\n');
+}

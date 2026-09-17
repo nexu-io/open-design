@@ -40,6 +40,34 @@ describe('resolveVelaConsoleOrigin', () => {
     })).toBe('https://feature.example.invalid');
   });
 
+  // The publicly named profiles resolve without any build injection, so their
+  // literals in PUBLIC_ORIGINS are the shipped value. vela moved the test Cloud
+  // entry off `vela.powerformer.net` onto `open-design.powerformer.net/cloud`
+  // (vela #1922 prepare / #1929 finalize); that host maps `/cloud*` and `/amr*`
+  // to the Web origin, and the legacy hostname is explicitly no longer a mapped
+  // test route, so a stale value here sends every console link off-environment.
+  it('resolves the public console origin for a runtime profile selection', () => {
+    expect(resolveVelaConsoleOrigin({}, { OPEN_DESIGN_AMR_PROFILE: 'test' })).toBe(
+      'https://open-design.powerformer.net/cloud',
+    );
+    expect(resolveVelaConsoleOrigin({}, { OPEN_DESIGN_AMR_PROFILE: 'prod' })).toBe(
+      'https://open-design.ai/cloud',
+    );
+    expect(resolveVelaConsoleOrigin({}, { OPEN_DESIGN_AMR_PROFILE: 'local' })).toBe(
+      'http://localhost:5173',
+    );
+  });
+
+  // feature-test is deliberately NOT in the public table: its deployment
+  // hostname is internal, and this repository ships publicly. It arrives only
+  // through OD_VELA_WEB_URLS / OD_VELA_WEB_URL at packaging time, so with no
+  // injection the runtime reports nothing rather than guessing a hostname.
+  it('has no public origin for the internal feature-test profile', () => {
+    expect(
+      resolveVelaConsoleOrigin({}, { OPEN_DESIGN_AMR_PROFILE: 'feature-test' }),
+    ).toBeUndefined();
+  });
+
   it('never reuses the packaged origin after switching to an unmapped profile', () => {
     expect(resolveVelaConsoleOrigin({
       OPEN_DESIGN_AMR_PROFILE: 'test',

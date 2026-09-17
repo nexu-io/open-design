@@ -66,10 +66,13 @@ describe('conversation timestamps', () => {
     expect(screen.queryByText('2h ago')).toBeNull();
     expect(screen.queryByText('1h ago')).toBeNull();
     // The relative "just now" message-time element (MessageTimestamp) is gone.
+    // 这两条**故意**按类名查:钉的是「那段 DOM 已经删掉了」——
+    // `.msg-time` 和 `.chat-day-separator` 在源码里已经没有对应元素了,
+    // 被删的东西不会有 testid,类名就是被钉的东西本身。
     expect(container.querySelector('.msg-time')).toBeNull();
   });
 
-  it('does not render the user-message "You" header or time stamp', () => {
+  it('does not render the user-message "You" header, and keeps the time inside the hover-revealed footer', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
 
@@ -82,12 +85,20 @@ describe('conversation timestamps', () => {
       },
     ]);
 
-    const userMessage = container.querySelector('.msg.user');
+    const userMessage = container.querySelector('[data-testid="user-message"]');
     expect(userMessage).not.toBeNull();
-    // Both redundant metadata elements are removed from the user message:
-    // the "You" role header and the time stamp beside the copy button.
+    // The "You" role header stays gone (#4515).
     expect(userMessage?.querySelector('.role')).toBeNull();
-    expect(container.querySelector('.user-actions-time')).toBeNull();
+    // The time stamp came back with the ChatPanel 1:1 redesign (grids #50 / #51),
+    // but NOT as resting chrome: it lives inside `.user-actions`, the footer that
+    // is `opacity: 0` until the bubble is hovered or focused. #4515 removed it as
+    // "redundant metadata above/around each user message" — that objection was about
+    // metadata that costs space at rest, which this treatment no longer does.
+    // ⚠️ Still a reversal of a shipped decision — flagged for product sign-off.
+    const time = container.querySelector('.user-actions-time');
+    expect(time).not.toBeNull();
+    expect(time?.closest('.user-actions')).not.toBeNull();
+    expect(time?.textContent).toMatch(/^\d{2}:\d{2}$/);
   });
 
   it('keeps a screen-reader-only sender label on user messages', () => {
@@ -100,7 +111,7 @@ describe('conversation timestamps', () => {
       },
     ]);
 
-    const userMessage = container.querySelector('.msg.user');
+    const userMessage = container.querySelector('[data-testid="user-message"]');
     expect(userMessage).not.toBeNull();
     // The visible "You" header is gone, but assistive tech still needs to
     // know the message is from the user — a visually-hidden sender label
@@ -161,11 +172,11 @@ describe('conversation timestamps', () => {
     ).toBe(true);
   });
 
-  it('shows fixed latest run duration in the conversation menu instead of live relative age', () => {
+  it('shows hours and minutes since the last update for completed conversations', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
     const t = (key: string, vars?: Record<string, string | number>) =>
-      key === 'common.minutesShort' ? `${vars?.n}m` : key;
+      key === 'common.minutesShort' ? `${vars?.n}m` : key === 'common.hoursShort' ? `${vars?.n}h` : key;
     const conversation: Conversation = {
       id: 'conv-1',
       projectId: 'project-1',
@@ -180,14 +191,14 @@ describe('conversation timestamps', () => {
       },
     };
 
-    expect(conversationMetaLabel(conversation, t as never)).toBe('15s');
+    expect(conversationMetaLabel(conversation, t as never)).toBe('1h 59m');
   });
 
-  it('prefers cumulative conversation duration over the latest run duration', () => {
+  it('keeps conversation recency independent of cumulative run duration', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
     const t = (key: string, vars?: Record<string, string | number>) =>
-      key === 'common.minutesShort' ? `${vars?.n}m` : key;
+      key === 'common.minutesShort' ? `${vars?.n}m` : key === 'common.hoursShort' ? `${vars?.n}h` : key;
     const conversation = {
       id: 'conv-1',
       projectId: 'project-1',
@@ -203,6 +214,6 @@ describe('conversation timestamps', () => {
       },
     } satisfies Conversation & { totalDurationMs: number };
 
-    expect(conversationMetaLabel(conversation, t as never)).toBe('1m 25s');
+    expect(conversationMetaLabel(conversation, t as never)).toBe('1h 57m');
   });
 });

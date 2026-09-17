@@ -1,3 +1,4 @@
+import type { UpdateLifecycleObservation } from "@open-design/desktop/main";
 import type { ChildProcess } from "node:child_process";
 import { access, appendFile, mkdir, open, rename, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -96,7 +97,7 @@ function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = fal
 }
 
 export type PackagedSidecarHandle = {
-  close(): Promise<void>;
+  close(observe?: (event: UpdateLifecycleObservation) => Promise<void>): Promise<void>;
   /**
    * URL of the web sidecar that is live *right now*. `web` below is the
    * first-boot snapshot and goes stale as soon as the sidecar is
@@ -808,7 +809,8 @@ export function createPackagedSidecarSpawnOptions(input: {
   };
 }
 
-export async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
+export async function closeManagedChild(child: ManagedSidecarChild, observe?: (event: UpdateLifecycleObservation) => Promise<void>): Promise<void> {
+  const startedAt = Date.now();
   const appendLifecycleLog = async (message: string): Promise<void> => appendSidecarLifecycleLog(child.logPath, message);
   try {
     await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
@@ -816,6 +818,11 @@ export async function closeManagedChild(child: ManagedSidecarChild): Promise<voi
     // The sidecar generation boundary still owns escalation; packaged only
     // supplies a bounded grace appropriate for that lifecycle operation.
     const stop = await child.generation.stop({ termGraceMs: child.app === APP_KEYS.DAEMON ? 30_000 : 5_000 });
+    try {
+      await observe?.({ stage: child.app === APP_KEYS.DAEMON ? "cleanup_daemon" : "cleanup_web",
+        outcome: stop.remainingPids.length > 0 ? "failed" : stop.forcedPids.length > 0 ? "forced" : "completed",
+        duration_ms: Date.now() - startedAt, forced_process_count: stop.forcedPids.length, remaining_process_count: stop.remainingPids.length });
+    } catch {}
     if (stop.forcedPids.length > 0) {
       await appendLifecycleLog(`[open-design packaged] graceful shutdown timed out app=${child.app} pid=${child.child.pid ?? "unknown"}; forced=${stop.forcedPids.join(",")}`);
     }
@@ -899,6 +906,7 @@ export async function startPackagedSidecars(
   await mkdir(paths.electronSessionDataRoot, { recursive: true });
 
   const children: ManagedSidecarChild[] = [];
+  let shutdownObserver: ((event: UpdateLifecycleObservation) => Promise<void>) | undefined;
   let webSupervisor: { close(): Promise<void> } | null = null;
 
   const daemonSidecarEntry =
@@ -993,7 +1001,7 @@ export async function startPackagedSidecars(
     const daemonPort = extractPort(daemonStatus.url);
 
     const supervisor = createWebSidecarSupervisor<ManagedSidecarChild, WebStatusSnapshot>({
-      closeChild: closeManagedChild,
+      closeChild: (child) => closeManagedChild(child, shutdownObserver),
       hasExited: (web) => web.child.exitCode !== null || web.child.signalCode !== null,
       onExit: (web, listener) => web.child.once("exit", listener),
       registerUrl: async (url) => await registerPackagedWebUrl(daemon.stamp, url),
@@ -1042,14 +1050,15 @@ export async function startPackagedSidecars(
       daemon: daemonStatus,
       web: webStatus,
       currentWebUrl: supervisor.currentUrl,
-      async close() {
+      async close(observe) {
+        shutdownObserver = observe;
         const closeErrors: unknown[] = [];
         await supervisor.close().catch((error: unknown) => {
           closeErrors.push(error);
           console.error("failed to close packaged web sidecar", error);
         });
         for (const child of [...children].reverse()) {
-          await closeManagedChild(child).catch((error: unknown) => {
+          await closeManagedChild(child, observe).catch((error: unknown) => {
             closeErrors.push(error);
             console.error(`failed to close packaged ${child.app} sidecar`, error);
           });

@@ -6,14 +6,14 @@
 // updatedAt. A "stale" verdict means the design intent recorded in
 // DESIGN.md likely no longer matches the current project state.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   Conversation,
   ProjectFile,
-  ProjectFilesResponse,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { parseProvenance } from '../lib/parse-provenance';
+import { fetchProjectFiles } from '../providers/registry';
 import { listConversations } from '../state/projects';
 import {
   workspaceIdentityCacheKey,
@@ -79,23 +79,44 @@ export function useDesignMdState(
 ): DesignMdState {
   const [state, setState] = useState<Omit<DesignMdState, 'refresh'>>(INITIAL);
 
+  // Which `refreshKey` this hook has already computed for. A change means the
+  // caller is announcing a mutation it wants observed (file-changed SSE, a
+  // finished turn); a repeat is only an effect replay. See `compute`'s
+  // `revalidate` for why the difference is load-bearing.
+  const computedRefreshKeyRef = useRef<number | null>(null);
+
   const compute = useCallback(
-    async (signal?: AbortSignal): Promise<void> => {
+    async (
+      signal?: AbortSignal,
+      options?: { revalidate?: boolean },
+    ): Promise<void> => {
       const projectIdEnc = encodeURIComponent(projectId);
       setState((prev) => ({ ...prev, loading: true, error: null }));
       try {
-        const filesResp = await fetch(`/api/projects/${projectIdEnc}/files`, {
-          signal,
-          ...(workspaceContext
-            ? { headers: workspaceProjectHeaders(workspaceContext) }
-            : {}),
+        // `fetchProjectFiles` is the single owner of this URL — its key
+        // (project + Workspace identity), its invalidation fence, and its
+        // shared cancellation all live there. Reading it with a private
+        // `fetch` put this hook outside that reader, so its own effect replay
+        // was a second request and neither of them could join the one
+        // ProjectView had already opened for the same list.
+        //
+        // `requireAuthoritative` keeps this hook's existing distinction
+        // between "the project has no DESIGN.md" and "the directory could not
+        // be read": the broad list/card callers want the empty fallback, a
+        // staleness verdict does not.
+        //
+        // `fresh` is what stops the shared reader from turning into a cache
+        // for THIS consumer. The shared entry survives a second past a settled
+        // read, and a `refreshKey` bump or an explicit `refresh()` is exactly a
+        // caller saying "something changed, look again" — those must reach the
+        // daemon. A plain mount read has nothing to supersede and joins.
+        const files = await fetchProjectFiles(projectId, {
+          ...(signal ? { signal } : {}),
+          ...(workspaceContext ? { workspaceContext } : {}),
+          ...(options?.revalidate ? { fresh: true } : {}),
+          requireAuthoritative: true,
         });
-        if (!filesResp.ok) {
-          throw new Error(`GET files → HTTP ${filesResp.status}`);
-        }
-        const filesBody = (await filesResp.json()) as ProjectFilesResponse;
         if (signal?.aborted) return;
-        const files = filesBody.files ?? [];
         const designMd = files.find((f) => f.name === DESIGN_MD);
 
         if (!designMd) {
@@ -169,12 +190,18 @@ export function useDesignMdState(
   );
 
   useEffect(() => {
+    // A replay of the same `refreshKey` (StrictMode, a settling dependency) is
+    // not new information and may join a read already on the wire; a bumped
+    // `refreshKey` is, and must supersede it.
+    const previousRefreshKey = computedRefreshKeyRef.current;
+    const revalidate = previousRefreshKey !== null && previousRefreshKey !== refreshKey;
+    computedRefreshKeyRef.current = refreshKey;
     const controller = new AbortController();
-    void compute(controller.signal);
+    void compute(controller.signal, { revalidate });
     return () => controller.abort();
-  }, [compute]);
+  }, [compute, refreshKey]);
 
-  const refresh = useCallback(() => compute(), [compute]);
+  const refresh = useCallback(() => compute(undefined, { revalidate: true }), [compute]);
 
   return { ...state, refresh };
 }

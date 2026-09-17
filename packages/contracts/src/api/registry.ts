@@ -156,6 +156,33 @@ export interface AgentInfo {
    * live Vela catalog). Undefined === allow, matching the historical UX.
    */
   supportsCustomModel?: boolean;
+  /**
+   * How the daemon writes the composed prompt to this runtime's stdin. Mirrors
+   * `RuntimeAgentDef.promptInputFormat` in the daemon (same precedent as
+   * `externalMcpInjection` above). `'text'` writes the prompt and closes stdin
+   * immediately; `'stream-json'` wraps it as one JSONL `user` message and KEEPS
+   * stdin open, which is the only way a further message can reach the model
+   * mid-turn. Undefined means `'text'`.
+   *
+   * Read it through `agentSupportsMidTurnSteering` rather than comparing the
+   * literal, so the rule lives in one place.
+   */
+  promptInputFormat?: 'text' | 'stream-json';
+}
+
+/**
+ * Whether B11 「引导对话」 (steer the running turn) can work on this agent at all.
+ *
+ * Steering writes a further JSONL `user` frame onto the agent child's stdin
+ * while the turn is still running. Only a `stream-json` runtime leaves stdin
+ * open past the opening prompt; for every other runtime the daemon has already
+ * closed it, so the write would be silently lost. UI surfaces must gate the
+ * affordance on this instead of assuming every agent can be steered.
+ */
+export function agentSupportsMidTurnSteering(
+  agent: Pick<AgentInfo, 'promptInputFormat'> | null | undefined,
+): boolean {
+  return agent?.promptInputFormat === 'stream-json';
 }
 
 export interface AgentsResponse {

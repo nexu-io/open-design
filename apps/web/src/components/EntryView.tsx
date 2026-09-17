@@ -31,7 +31,12 @@ import type {
 // hero + recent projects + plugins). Keeping the redesign in a sibling
 // component lets future rebases against upstream `EntryView` (props,
 // connector lifecycle, exported helpers) stay close to a no-op here.
-import { EntryShell, type ProjectTitleHint } from './EntryShell';
+import {
+  EntryShell,
+  type OptimisticProjectCreationHandoff,
+  type ProjectTitleHint,
+} from './EntryShell';
+import type { HomeAmrBalanceGateBlock } from './HomeAmrBalanceGateDialogs';
 import type { IntegrationTab } from './IntegrationsView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import {
@@ -121,6 +126,9 @@ interface Props {
   projectsLoading?: boolean;
   promptTemplatesLoading?: boolean;
   onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
+  /** Forwarded to EntryShell — see the prop docs there. */
+  onBeginProjectCreation: (input: EntryCreateProjectInput) => OptimisticProjectCreationHandoff;
+  onAmrBalanceGateBlockChange: (block: HomeAmrBalanceGateBlock | null) => void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -290,6 +298,8 @@ export function EntryView({
   projectsLoading = false,
   promptTemplatesLoading = false,
   onCreateProject,
+  onBeginProjectCreation,
+  onAmrBalanceGateBlockChange,
   onCreatePluginShareProject,
   onImportClaudeDesign,
   onImportFolder,
@@ -419,6 +429,8 @@ export function EntryView({
       onSkillsChanged={onSkillsChanged}
           onRefreshAgents={onRefreshAgents}
       onCreateProject={onCreateProject}
+      onBeginProjectCreation={onBeginProjectCreation}
+      onAmrBalanceGateBlockChange={onAmrBalanceGateBlockChange}
       onCreatePluginShareProject={onCreatePluginShareProject}
       onImportClaudeDesign={onImportClaudeDesign}
       {...(onImportFolder ? { onImportFolder } : {})}

@@ -1,4 +1,7 @@
-import type { WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  workspacePrincipalKey,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
 import type { Project } from '../types';
@@ -18,7 +21,21 @@ export interface ProjectDisplaySnapshot {
 
 interface StoredProjectDisplaySnapshot extends ProjectDisplaySnapshot {
   accountGeneration: number;
-  workspaceIdentity: string;
+  /**
+   * WHO this snapshot belongs to — account/workspace/member, not `role`.
+   *
+   * The KEY (see {@link projectDisplaySnapshotKey}) still folds in the full
+   * request identity, because a read and its write always come from the same
+   * shell context. Invalidation does not: a share/unshare is issued from the
+   * project page, whose context comes from the daemon's scope fast path and
+   * therefore always reports the placeholder `role: 'member'`. Matching that
+   * against a role-bearing key meant a workspace owner's own share never marked
+   * their own home grid dirty, and Back showed the pre-share state. Null when the
+   * snapshot has no workspace identity (the local/signed-out bucket); a null
+   * principal is never equal to anything, so that bucket stays unreachable from
+   * a workspace mutation exactly as it was before.
+   */
+  workspacePrincipal: string | null;
   view: ProjectDisplayView | undefined;
 }
 
@@ -55,7 +72,7 @@ export function writeProjectDisplaySnapshot(
   const key = projectDisplaySnapshotKey(scope);
   const snapshot: StoredProjectDisplaySnapshot = {
     accountGeneration: scope.accountGeneration,
-    workspaceIdentity: workspaceIdentityCacheKey(scope.context),
+    workspacePrincipal: workspacePrincipalKey(scope.context),
     view: scope.view,
     projects,
     dirty: false,
@@ -78,9 +95,10 @@ export function markProjectDisplaySnapshotsDirty(input: {
   context: WorkspaceCollabContext;
   accountGeneration?: number;
 }): void {
-  const workspaceIdentity = workspaceIdentityCacheKey(input.context);
+  const workspacePrincipal = workspacePrincipalKey(input.context);
+  if (workspacePrincipal === null) return;
   for (const snapshot of snapshots.values()) {
-    if (snapshot.workspaceIdentity !== workspaceIdentity) continue;
+    if (snapshot.workspacePrincipal !== workspacePrincipal) continue;
     if (
       input.accountGeneration !== undefined
       && snapshot.accountGeneration !== input.accountGeneration
@@ -96,9 +114,10 @@ export function patchProjectDisplaySnapshots(input: {
   accountGeneration?: number;
   patch: (projects: Project[], view: ProjectDisplayView | undefined) => Project[];
 }): void {
-  const workspaceIdentity = workspaceIdentityCacheKey(input.context);
+  const workspacePrincipal = workspacePrincipalKey(input.context);
+  if (workspacePrincipal === null) return;
   for (const snapshot of snapshots.values()) {
-    if (snapshot.workspaceIdentity !== workspaceIdentity) continue;
+    if (snapshot.workspacePrincipal !== workspacePrincipal) continue;
     if (
       input.accountGeneration !== undefined
       && snapshot.accountGeneration !== input.accountGeneration

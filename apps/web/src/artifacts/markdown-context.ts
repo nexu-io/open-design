@@ -9,32 +9,17 @@
  * literal Markdown and must not be treated as a real protocol tag.
  */
 
-// Line-anchored fence delimiters, mirror runtime/markdown.tsx:44 (open) and
-// runtime/markdown.tsx:49 (close). The renderer is asymmetric on purpose:
-// an opening fence may carry an info string (e.g. ```html), a closing fence
-// must be a bare triple-backtick line. Neither permits leading indentation —
-// an indented "   ```" line is rendered as a paragraph, not a fence.
-export const FENCE_OPEN_RE = /^```(\w[\w+-]*)?\s*$/;
-export const FENCE_CLOSE_RE = /^```\s*$/;
+import {
+  CHAT_PROTOCOL_FENCE_OPEN_RE as FENCE_OPEN_RE,
+  CHAT_PROTOCOL_FENCE_CLOSE_RE as FENCE_CLOSE_RE,
+  isChatProtocolStandaloneLine as isStandaloneMarkdownLine,
+  type ChatProtocolRange as Range,
+} from '@open-design/contracts';
 
-// Inline code span (single-backtick pair), mirrors runtime/markdown.tsx:164.
+export { FENCE_OPEN_RE, FENCE_CLOSE_RE, isStandaloneMarkdownLine, type Range };
+
+// Same single-backtick grammar as the existing chat renderer.
 export const INLINE_CODE_RE = /`[^`]+`/g;
-
-// Paragraph-break recognizers — these mirror the inner paragraph-accumulation
-// loop in `parseBlocks()` (runtime/markdown.tsx:95-104), which is what
-// actually decides where a paragraph ends. The outer loop in `parseBlocks`
-// has additional block-starters (HR, fenced-code with `^```` prefix, etc.)
-// but those only take effect when no paragraph is currently being built;
-// mid-paragraph they are paragraph content. The renderer therefore treats
-// `intro \`` / `---` / `<artifact …>` / `---` / `closing \`` as ONE paragraph
-// whose backticks pair across the recitation — so this walker must too.
-//
-// Notable omission: HR — see comment above. HR-shaped lines (`---` / `***`
-// / `___`) carry no backticks of their own, so leaving them inside the
-// surrounding paragraph region is benign for inline-code scanning either way.
-const HEADING_RE = /^#{1,4}\s+/;
-const UL_ITEM_RE = /^\s*[-*+]\s+/;
-const OL_ITEM_RE = /^\s*\d+\.\s+/;
 
 // `<artifact` followed by whitespace is a real protocol open tag; any other
 // continuation (e.g. `<artifactual`) is a prefix-shared literal that must not
@@ -44,8 +29,6 @@ export function isRealArtifactOpenAt(content: string, idx: number): boolean {
   const next = content.charAt(idx + '<artifact'.length);
   return next !== '' && /\s/.test(next);
 }
-
-export type Range = readonly [number, number];
 
 /**
  * Compute the half-open `[start, end)` ranges of `buffer` that the renderer
@@ -90,7 +73,7 @@ export function computeSkipRanges(buffer: string): {
       } else if (line.trim() === '') {
         // Blank lines separate blocks.
         closeBlockBefore(pos);
-      } else if (HEADING_RE.test(line) || UL_ITEM_RE.test(line) || OL_ITEM_RE.test(line)) {
+      } else if (isStandaloneMarkdownLine(line)) {
         // Heading and list-item lines are each their own block in the
         // renderer (`renderInline` runs per item / per heading), so they get
         // a one-line inline-scan region rather than joining adjacent

@@ -3,7 +3,8 @@
 // The Home starter grid is organized around the artifact a user wants
 // to make first:
 //
-//   Slides · Prototype · Live Artifact · Image · Video · HyperFrames · Audio
+//   Slides · Document · WebGL · Prototype · Live Artifact · Image · Video ·
+//   HyperFrames · Audio
 //
 // Prototype, Slides, Image, and Video have enough bundled templates to
 // deserve a second row. Those child buckets follow the Feishu prompt
@@ -137,6 +138,49 @@ function isLiveArtifactPlugin(record: InstalledPluginRecord): boolean {
   return (CURATED_LIVE_ARTIFACT_PLUGIN_IDS as readonly string[]).includes(record.id);
 }
 
+// Documents (OPEND-3118): prototype-mode plugins whose tags name a document —
+// résumés, reports, specs, invoices, guides, letters. This is the tag group the
+// retired 原型 → 文档 / 报告 scene bucket matched, so the same plugins move from
+// that sub-row to their own kind; every consumer that reads `document` (the
+// Community 文档 tab, the Home `document` chip) now finds them. Mode-gated so a
+// deck about a report stays a deck and an image poster tagged `resume` stays
+// an image.
+const DOCUMENT_TAG_SLUGS = [
+  'report',
+  'financial-report',
+  'finance-report',
+  'case-report',
+  'clinical-case',
+  'case-study',
+  'guide',
+  'tutorial',
+  'pm-spec',
+  'prd',
+  'spec',
+  'invoice',
+  'resume',
+  'cv',
+  'docs',
+  'documentation',
+  'letter',
+  'one-pager',
+  'memo',
+] as const;
+
+function isDocumentPlugin(record: InstalledPluginRecord): boolean {
+  return byMode('prototype')(record) && hasAnySlug(record, DOCUMENT_TAG_SLUGS);
+}
+
+// WebGL (OPEND-3098): the bundled `webgl-*` examples — full-screen shader /
+// 3D scenes that render in the powered preview. Any of these slugs is enough;
+// a plugin that names webgl / a shader / the GPU is a GPU artifact whichever
+// mode it declares, and the Home `webgl` chip creates them as prototypes.
+const WEBGL_TESTS = [byAnySlug('webgl', 'webgl2', 'shader', 'gpu')];
+
+function isWebglPlugin(record: InstalledPluginRecord): boolean {
+  return matchesAny(record, WEBGL_TESTS);
+}
+
 // Curated artifact-kind list. Keep this aligned with the Home creation
 // intents and the app's artifact product types.
 const PRIMARY_CATEGORIES: readonly CategoryDef[] = [
@@ -145,6 +189,21 @@ const PRIMARY_CATEGORIES: readonly CategoryDef[] = [
     label: 'Slides',
     starterPrompt: 'Create an OpenDesign plugin that generates a polished slide deck from a narrative brief.',
     test: byMode('deck'),
+  },
+  // `find` takes the first hit, so Document and WebGL sit ahead of the
+  // prototype mode they share: a prototype-mode plugin is a document or a
+  // GPU scene FIRST, and only a plain prototype when it is neither.
+  {
+    slug: 'document',
+    label: 'Document',
+    starterPrompt: 'Create an OpenDesign plugin that generates a polished document — a report, spec, résumé, or invoice — from a brief.',
+    test: (record) => isDocumentPlugin(record) && !isLiveArtifactPlugin(record),
+  },
+  {
+    slug: 'webgl',
+    label: 'WebGL',
+    starterPrompt: 'Create an OpenDesign plugin that generates a real-time WebGL shader or 3D scene that runs live on the GPU.',
+    test: (record) => isWebglPlugin(record) && !isLiveArtifactPlugin(record),
   },
   {
     slug: 'prototype',
@@ -258,7 +317,6 @@ const SUBCATEGORY_DISPLAY_ORDER: Record<string, readonly string[]> = {
     'business-dashboards',
     'app-prototypes',
     'developer-tools',
-    'docs-reports',
   ],
   // Deck order is the commercial-priority order declared above.
   deck: DECK_COMMERCIAL_ORDER,
@@ -279,9 +337,9 @@ function orderSubcategoriesForDisplay(parent: string, options: FacetOption[]): F
     .map((entry) => entry.option);
 }
 
-// Scene child buckets based on the Feishu prompt taxonomy. HyperFrames
-// and Audio intentionally have no children, so selecting them keeps the
-// section flat.
+// Scene child buckets based on the Feishu prompt taxonomy. Document, WebGL,
+// HyperFrames and Audio intentionally have no children, so selecting them
+// keeps the section flat.
 //
 // NOTE: array order here is matching precedence (see SUBCATEGORY_DISPLAY_ORDER
 // above), NOT the on-screen order. Keep it stable.
@@ -369,28 +427,9 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
       'issue',
     ),
   },
-  {
-    parent: 'prototype',
-    slug: 'docs-reports',
-    label: 'Docs / reports',
-    starterPrompt: 'Create an OpenDesign prototype plugin for reports, documents, case studies, specs, invoices, or resumes.',
-    test: byAnySlug(
-      'report',
-      'financial-report',
-      'finance-report',
-      'case-report',
-      'clinical-case',
-      'case-study',
-      'guide',
-      'tutorial',
-      'pm-spec',
-      'prd',
-      'spec',
-      'invoice',
-      'resume',
-      'cv',
-    ),
-  },
+  // (The former `docs-reports` prototype scene is the `document` primary
+  // category now — see DOCUMENT_TAG_SLUGS. Document, like HyperFrames and
+  // Audio, stays flat.)
   {
     parent: 'prototype',
     slug: 'brand-design',

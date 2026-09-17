@@ -416,7 +416,7 @@ describe('resolveDeepLinkedTeamSharedProject', () => {
 
   it('resolves as found immediately when the local project already exists', async () => {
     const getProject = vi.fn(async () => sharedProject);
-    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ isTeamShared: false, pulled: false }));
+    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ catalogAvailable: true, isTeamShared: false, pulled: false }));
 
     const resolution = await resolveDeepLinkedTeamSharedProject('shared-1', {
       getProject,
@@ -435,7 +435,7 @@ describe('resolveDeepLinkedTeamSharedProject', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(sharedProject);
-    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ isTeamShared: true, pulled: true }));
+    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ catalogAvailable: true, isTeamShared: true, pulled: true }));
 
     const resolution = await resolveDeepLinkedTeamSharedProject('shared-1', {
       getProject,
@@ -459,7 +459,7 @@ describe('resolveDeepLinkedTeamSharedProject', () => {
   // path must not run for a project the hub says they can see.
   it('resolves as still-materializing (never not-found) when the hub confirms sharing but local sync is still catching up', async () => {
     const getProject = vi.fn(async () => null);
-    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ isTeamShared: true, pulled: true }));
+    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ catalogAvailable: true, isTeamShared: true, pulled: true }));
 
     const resolution = await resolveDeepLinkedTeamSharedProject('shared-1', {
       getProject,
@@ -478,7 +478,7 @@ describe('resolveDeepLinkedTeamSharedProject', () => {
   // navigate-home behavior keeps firing exactly as before this fix.
   it('resolves as not-found when the hub never confirms team membership', async () => {
     const getProject = vi.fn(async () => null);
-    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ isTeamShared: false, pulled: false }));
+    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ catalogAvailable: true, isTeamShared: false, pulled: false }));
 
     const resolution = await resolveDeepLinkedTeamSharedProject('missing-1', {
       getProject,
@@ -497,7 +497,7 @@ describe('resolveDeepLinkedTeamSharedProject', () => {
       calls += 1;
       return null;
     });
-    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ isTeamShared: true, pulled: false }));
+    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({ catalogAvailable: true, isTeamShared: true, pulled: false }));
 
     const resolution = await resolveDeepLinkedTeamSharedProject('shared-1', {
       getProject,
@@ -512,5 +512,27 @@ describe('resolveDeepLinkedTeamSharedProject', () => {
     expect(resolution).toEqual({ kind: 'still-materializing' });
     expect(getProject).toHaveBeenCalledTimes(1);
     expect(pullTeamSharedProjectIfAvailable).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when the Team catalog is unavailable instead of waiting the materialization budget', async () => {
+    const getProject = vi.fn(async () => null);
+    const pullTeamSharedProjectIfAvailable = vi.fn(async () => ({
+      catalogAvailable: false,
+      isTeamShared: false,
+      pulled: false,
+    }));
+    const delay = vi.fn(async () => {});
+
+    const resolution = await resolveDeepLinkedTeamSharedProject('shared-1', {
+      getProject,
+      pullTeamSharedProjectIfAvailable,
+      delay,
+      retryAttempts: 21,
+    });
+
+    expect(resolution).toEqual({ kind: 'unavailable' });
+    expect(getProject).toHaveBeenCalledTimes(1);
+    expect(pullTeamSharedProjectIfAvailable).toHaveBeenCalledTimes(1);
+    expect(delay).not.toHaveBeenCalled();
   });
 });

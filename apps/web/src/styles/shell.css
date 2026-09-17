@@ -473,7 +473,7 @@ html.od-radial-open .workspace-shell {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
 }
 /* Hairline between the home icon and the sidebar toggle in the pinned pill. */
@@ -769,8 +769,9 @@ html.od-radial-open .workspace-shell {
   --app-chrome-traffic-margin: 0px; /* Set to 8px on macOS */
   display: flex;
   align-items: center;
-  min-height: 48px;
-  padding: 5px 14px;
+  /* 44px top chrome per design (OPEND-3111); the 32px controls center in it. */
+  min-height: 44px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   gap: 12px;
@@ -867,7 +868,7 @@ html.od-radial-open .workspace-shell {
   padding: 0 12px;
   border-radius: var(--radius);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -1881,9 +1882,12 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
      280px min-width kept forcing the menu wide. */
   min-width: 0;
   padding: 6px;
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
+  /* Flat elevated surface, no glass: the popover opens over the composer's
+     own translucent card, and a second blur layer there read as a smeared
+     patch instead of a menu (per the #8113 Demo). */
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
@@ -2013,7 +2017,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   overflow: hidden;
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2036,7 +2040,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
 .avatar-amr-row__stat-label {
   flex: 0 0 auto;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
 }
 .avatar-amr-row__stat-value {
@@ -2062,7 +2066,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   background: var(--accent);
   color: #fff;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1;
   /* The actual fix for the vertically-stacked label. */
@@ -2294,7 +2298,7 @@ a.avatar-item:visited {
 .env-pill-dot[data-mode="api"] {
   background: linear-gradient(135deg, #1c1b1a 0%, #4b4948 100%);
 }
-.env-pill-label { font-weight: 500; font-size: 12px; }
+.env-pill-label { font-weight: 600; font-size: 12px; }
 .env-pill-meta {
   font-size: 12px; color: var(--text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
@@ -2315,11 +2319,11 @@ a.avatar-item:visited {
 @property --project-chat-handle-width {
   syntax: '<length>';
   inherits: true;
-  initial-value: 8px;
+  initial-value: 4px;
 }
 .split {
   --project-chat-panel-width: 460px;
-  --project-chat-handle-width: 8px;
+  --project-chat-handle-width: 4px;
   --project-workspace-panel-track: minmax(400px, 1fr);
   display: grid;
   /* Always three tracks — collapsing never drops to a 1-column layout.
@@ -2394,6 +2398,22 @@ a.avatar-item:visited {
   flex: 1 1 auto;
   min-width: 0;
 }
+/* OPEND-2170 · creation hand-off (owner: ProjectView `creationHandoff`).
+   While a Home send's first transcript settles, the hand-off's chat card
+   (`[data-creation-handoff]`, a ProjectCreationPendingChat) is the column's
+   in-flow pane and the real ChatPane keeps its layout underneath, hidden:
+   it must stay mounted (stream subscription, auto-send) but must not paint
+   its own spinner / skeleton / empty log through the translucent material.
+   `top` matches `.split-chat-tabs-dock { height: 48px }` in routines.css. */
+.split-chat-slot--creation-handoff > .pane:not([data-creation-handoff]) {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .split-edit-divider {
   grid-column: 2;
   width: 8px;
@@ -2421,6 +2441,18 @@ a.avatar-item:visited {
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
+}
+/* The floating comments card lives outside the workspace grid, so it does not
+   naturally reduce the preview's layout width. Reserve the card's 360px width,
+   its 16px viewport inset, and the same 12px breathing room as the local dock
+   while the portal is populated. Keeping the reservation on `.viewer-body`
+   makes the iframe, annotation overlays, and composer popover share one
+   unobstructed coordinate space; the toolbar may continue beneath the float.
+   Preserve a small usable canvas on narrow split layouts instead of allowing
+   padding to consume the whole viewer. */
+.split:has(> .comment-float-host:not(:empty)) .viewer-body {
+  box-sizing: border-box;
+  padding-right: max(0px, min(388px, calc(100% - 160px)));
 }
 /* The portal target is pre-mounted so opening comments never waits a frame
    for parent state. An empty host must be visually and interactively absent. */
@@ -2493,8 +2525,8 @@ a.avatar-item:visited {
   grid-column: 2;
   position: relative;
   z-index: 45;
-  width: 8px;
-  min-width: 8px;
+  width: var(--project-chat-handle-width, 4px);
+  min-width: 0;
   height: 100%;
   cursor: col-resize;
   background: transparent;
@@ -2546,4 +2578,9 @@ a.avatar-item:visited {
 }
 .split-resize-handle:focus-visible {
   outline: none;
+}
+/* Keep the resize hit area out of persistent message navigation markers:
+   whenever the rail is mounted, the handle's chat-side edge stays flush. */
+.split:has(.chat-message-rail) > .split-resize-handle::before {
+  inset-inline-start: 0;
 }

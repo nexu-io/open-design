@@ -494,7 +494,6 @@ describe('run failure telemetry smoke', () => {
     delete process.env.POSTHOG_KEY;
 
     started = await startIsolatedServer();
-    restoreSetTimeout = accelerateLangfuseTerminalFallbackDelay();
     await putConfig(started.url, {
       agentId: 'claude',
       agentCliEnv: { claude: { CLAUDE_BIN: path.join(binDir, 'claude-terminal-failure') } },
@@ -504,7 +503,12 @@ describe('run failure telemetry smoke', () => {
       odNextStrategyMode: 'active',
     });
 
-    const run = await createAndWaitForRun(started.url, {
+    // Create the project before accelerating 15s timers: POST /api/projects
+    // races its own 15s preparation deadline, and the blunt setTimeout stub
+    // would fire that deadline immediately and answer 504 instead of 200.
+    const project = await createSmokeProject(started.url, 'headerless_terminal_fallback');
+    restoreSetTimeout = accelerateLangfuseTerminalFallbackDelay();
+    const run = await startAndWaitForRun(started.url, project, {
       caseId: 'headerless_terminal_fallback',
       agentId: 'claude',
       message: 'od-failure-smoke-headerless-terminal-fallback',
@@ -529,7 +533,6 @@ describe('run failure telemetry smoke', () => {
     delete process.env.POSTHOG_KEY;
 
     started = await startIsolatedServer();
-    restoreSetTimeout = accelerateLangfuseTerminalFallbackDelay(1000);
     await putConfig(started.url, {
       agentId: 'claude',
       agentCliEnv: { claude: { CLAUDE_BIN: path.join(binDir, 'claude-buffered-fallback') } },
@@ -539,7 +542,11 @@ describe('run failure telemetry smoke', () => {
       odNextStrategyMode: 'active',
     });
 
-    const run = await createAndWaitForRun(started.url, {
+    // Same ordering as above: keep the create's own 15s deadline out of the
+    // accelerated window so a cold catalogue read cannot answer 504.
+    const project = await createSmokeProject(started.url, 'buffered_unfinalized_failed_message');
+    restoreSetTimeout = accelerateLangfuseTerminalFallbackDelay(1000);
+    const run = await startAndWaitForRun(started.url, project, {
       caseId: 'buffered_unfinalized_failed_message',
       agentId: 'claude',
       message: 'od-failure-smoke-buffered-unfinalized-message',
@@ -792,31 +799,47 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
   expect(response.status).toBe(200);
 }
 
-async function createAndWaitForRun(url: string, input: {
-  caseId: string;
-  agentId: string;
-  message: string;
-}): Promise<RunStatus> {
-  const projectId = `failure_smoke_${input.caseId}_${randomUUID()}`;
+type SmokeProject = { projectId: string; conversationId: string };
+
+async function createSmokeProject(url: string, caseId: string): Promise<SmokeProject> {
+  const projectId = `failure_smoke_${caseId}_${randomUUID()}`;
   const projectResponse = await fetch(`${url}/api/projects`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       id: projectId,
-      name: `Failure smoke ${input.caseId}`,
+      name: `Failure smoke ${caseId}`,
       metadata: { kind: 'prototype' },
       skipDiscoveryBrief: true,
     }),
   });
   expect(projectResponse.status).toBe(200);
   const projectBody = await projectResponse.json() as { conversationId: string };
+  return { projectId, conversationId: projectBody.conversationId };
+}
+
+async function createAndWaitForRun(url: string, input: {
+  caseId: string;
+  agentId: string;
+  message: string;
+}): Promise<RunStatus> {
+  const project = await createSmokeProject(url, input.caseId);
+  return await startAndWaitForRun(url, project, input);
+}
+
+async function startAndWaitForRun(url: string, project: SmokeProject, input: {
+  caseId: string;
+  agentId: string;
+  message: string;
+}): Promise<RunStatus> {
+  const { projectId } = project;
   const assistantMessageId = `assistant_${input.caseId}_${randomUUID()}`;
   const runResponse = await fetch(`${url}/api/runs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       projectId,
-      conversationId: projectBody.conversationId,
+      conversationId: project.conversationId,
       assistantMessageId,
       clientRequestId: `client_${input.caseId}_${randomUUID()}`,
       agentId: input.agentId,

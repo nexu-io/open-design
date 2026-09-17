@@ -5,6 +5,7 @@ import {
   velaCommandStdout,
 } from '../src/integrations/vela-command.js';
 import {
+  VELA_MEDIA_CLI_INCOMPATIBLE_CODE,
   VELA_SAFETY_REJECTION_CODE,
   VelaMediaError,
   renderVelaImage,
@@ -71,6 +72,21 @@ describe('velaCommandStderr', () => {
 });
 
 describe('velaMediaErrorFromFailure', () => {
+	it('classifies an installed Vela build without media commands', () => {
+		const decoded = velaMediaErrorFromFailure(
+			Object.assign(
+				new Error('Command failed: vela media models --json Error: unknown command "media" for "vela"'),
+				{ code: 1 },
+			),
+			'media models',
+		);
+
+		expect(decoded).toBeInstanceOf(VelaMediaError);
+		expect(decoded?.code).toBe(VELA_MEDIA_CLI_INCOMPATIBLE_CODE);
+		expect(decoded?.retryable).toBe(false);
+		expect(decoded?.message).not.toContain('Command failed');
+	});
+
 	it.each([
 		['sensitive_words_detected', 'sensitive_words_detected'],
 		['content_policy_violation', 'Content policy rejected the prompt'],
@@ -223,6 +239,24 @@ describe('renderVelaImage', () => {
     expect((thrown as VelaMediaError).subject).toBe('prompt');
     expect((thrown as VelaMediaError).retryable).toBe(false);
   });
+
+	it('classifies a missing media command during capability discovery', async () => {
+		const runCommand = (async () => {
+			throw Object.assign(
+				new Error('Command failed: vela media models --json Error: unknown command "media" for "vela"'),
+				{ code: 1 },
+			);
+		}) as unknown as Parameters<typeof renderVelaImage>[1];
+
+		const thrown = await renderVelaImage(
+			{ ...input, aspect: '1:1' },
+			runCommand,
+		).catch((error: unknown) => error);
+
+		expect(thrown).toBeInstanceOf(VelaMediaError);
+		expect((thrown as VelaMediaError).code).toBe(VELA_MEDIA_CLI_INCOMPATIBLE_CODE);
+		expect((thrown as VelaMediaError).retryable).toBe(false);
+	});
 
   it('leaves an unclassified command failure exactly as it was', async () => {
     const original = failedCommand('vela: connection refused\n');

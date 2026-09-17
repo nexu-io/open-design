@@ -70,6 +70,12 @@ const VELA_MAX_INPUT_IMAGES = 5;
 const VELA_VIDEO_RATIOS = new Set(['16:9', '9:16', '1:1']);
 const VELA_VIDEO_DURATIONS = new Set([5, 10]);
 
+/** The installed local media runtime predates Vela's media command surface. */
+export const VELA_MEDIA_CLI_INCOMPATIBLE_CODE = 'MEDIA_CLI_INCOMPATIBLE';
+
+const VELA_MEDIA_COMMAND_MISSING_RE =
+  /unknown command\s+["'](?:media|image|video)["']\s+for\s+["']vela["']/i;
+
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -272,10 +278,15 @@ async function fetchPublishedImageCapabilities(
   wireModel: string,
   runCommand: VelaCommandRunner,
 ): Promise<VelaPublishedImageCapabilities | null> {
-  const stdout = await runCommand(['media', 'models', '--json'], {
-    ...velaWorkspaceCommandOptions(input.workspaceId),
-    timeoutMs: VELA_MODELS_TIMEOUT_MS,
-  });
+  let stdout: string;
+  try {
+    stdout = await runCommand(['media', 'models', '--json'], {
+      ...velaWorkspaceCommandOptions(input.workspaceId),
+      timeoutMs: VELA_MODELS_TIMEOUT_MS,
+    });
+  } catch (error) {
+    throw velaMediaErrorFromFailure(error, 'media models') ?? error;
+  }
   return parsePublishedProfiles(stdout, wireModel, edits);
 }
 
@@ -529,6 +540,16 @@ export function velaMediaErrorFromFailure(
   error: unknown,
   label: string,
 ): VelaMediaError | undefined {
+  const commandMessage = error instanceof Error ? error.message : '';
+  if (VELA_MEDIA_COMMAND_MISSING_RE.test(commandMessage)) {
+    return new VelaMediaError(
+      'the local media runtime is too old; update it and try again',
+      {
+        code: VELA_MEDIA_CLI_INCOMPATIBLE_CODE,
+        retryable: false,
+      },
+    );
+  }
   const stdout = velaCommandStdout(error).trim();
   if (!stdout) return undefined;
   let parsed: unknown;

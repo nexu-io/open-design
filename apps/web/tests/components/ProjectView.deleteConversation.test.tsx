@@ -48,6 +48,7 @@ const chatPaneProps: {
     sourceAssistantMessageId?: string,
   ) => boolean | Promise<boolean>;
   questionFormSubmitDisabled?: boolean;
+  viewerOnly?: boolean;
   activeConversationId?: string | null;
   conversations?: Array<{ id: string; title?: string | null }>;
   messages?: ChatMessage[];
@@ -142,6 +143,7 @@ vi.mock('../../src/components/ChatPane', () => ({
       sourceAssistantMessageId?: string,
     ) => boolean | Promise<boolean>;
     questionFormSubmitDisabled?: boolean;
+    viewerOnly?: boolean;
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
     messages?: ChatMessage[];
@@ -150,6 +152,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     chatPaneProps.onForkFromMessage = props.onForkFromMessage;
     chatPaneProps.onSubmitQuestionForm = props.onSubmitQuestionForm;
     chatPaneProps.questionFormSubmitDisabled = props.questionFormSubmitDisabled;
+    chatPaneProps.viewerOnly = props.viewerOnly;
     chatPaneProps.activeConversationId = props.activeConversationId;
     chatPaneProps.conversations = props.conversations;
     chatPaneProps.messages = props.messages;
@@ -209,6 +212,7 @@ describe('ProjectView conversation delete', () => {
     chatPaneProps.onForkFromMessage = undefined;
     chatPaneProps.onSubmitQuestionForm = undefined;
     chatPaneProps.questionFormSubmitDisabled = undefined;
+    chatPaneProps.viewerOnly = undefined;
     chatPaneProps.activeConversationId = undefined;
     chatPaneProps.conversations = undefined;
     chatPaneProps.messages = undefined;
@@ -245,10 +249,12 @@ describe('ProjectView conversation delete', () => {
 
     renderProjectView(onProjectsRefresh);
 
-    // ChatPane mount is async (ProjectView loads conversations in an
-    // effect, then renders chat). Wait for the mocked ChatPane to
-    // surface its `onDeleteConversation` prop.
-    await waitFor(() => expect(chatPaneProps.onDeleteConversation).toBeDefined());
+    // ChatPane can expose its callback before workspace scope settles.
+    // Wait for the real permission state to permit deletion as well.
+    await waitFor(() => {
+      expect(chatPaneProps.onDeleteConversation).toBeDefined();
+      expect(chatPaneProps.viewerOnly).toBe(false);
+    });
 
     await act(async () => {
       await chatPaneProps.onDeleteConversation!('conv-1');
@@ -548,6 +554,90 @@ describe('ProjectView conversation fork analytics', () => {
         duration_ms: expect.any(Number),
       }),
       { requestId: 'fork-request-1' },
+    );
+  });
+
+  it('lets the daemon name the new conversation instead of sending a localized title', async () => {
+    /*
+     * 2026-09-03 产品裁决:新会话不再叫「{原标题} 分叉」,改成「{原标题} (n)」的自增编号。
+     *
+     * 编号要唯一就得先看一眼这个项目里已有哪些标题,而那份名单只有 daemon 手上是权威的
+     * —— 客户端手里的 `conversations` 是可能过期的快照,两个客户端各算各的必然撞号。
+     * 所以标题整个交给 daemon 起(`apps/daemon/src/conversation-fork-title.ts`),
+     * 客户端**一个字都不传**;传了就会被当成「我知道我要叫什么」而盖掉编号。
+     *
+     * 这一条钉的就是「客户端不传」。它红过一次:改之前这里传的是
+     * `t('chat.forkedConversationTitle', ...)`。
+     */
+    prepareForkHarness();
+    createConversation.mockResolvedValue({ id: 'conv-fork', title: 'Conversation 1 (1)' });
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.messages).toEqual(sourceMessages));
+    await act(async () => {
+      await chatPaneProps.onForkFromMessage?.(sourceMessages[1]!);
+    });
+
+    // 先钉住「确实调了一次」—— 否则下面那条 toBeUndefined 在「压根没调」时也真空通过。
+    expect(createConversation).toHaveBeenCalledTimes(1);
+    const [projectId, forkTitle, opts] = createConversation.mock.calls[0] as [
+      string,
+      string | undefined,
+      { seedFromConversationId?: string } | undefined,
+    ];
+    expect(projectId).toBe('project-1');
+    expect(opts?.seedFromConversationId).toBe('conv-1');
+    expect(forkTitle, '标题归 daemon 起 —— 客户端不该自己拼一份文案送过去').toBeUndefined();
+  });
+
+  it('leaves the fork divider to the new conversation instead of stamping the source', async () => {
+    /*
+     * 2026-08-26 用户裁决:「要在新的 fork 里出现,而不是旧会话里出现啊」。
+     *
+     * 这一条原来断言客户端给**源会话**那条助手消息盖 `forkedInto` 并写回。
+     * 可点完分叉页面就跳到新会话,人此刻站在那边 —— 源会话上的那条线除非专门
+     * 翻回去否则永远看不到,而那行脚注「从上一个会话继续」对着原地没动的
+     * 源会话说也不成立。
+     *
+     * 标记改由 daemon 在建新会话时盖在**带过来的最后一条**上
+     * (`apps/daemon/src/routes/project/conversations.ts` 的 fork 分支),
+     * 顺带白拿了 CLI 那条路。所以这一层现在要钉的是**客户端不再写源会话**。
+     */
+    prepareForkHarness();
+    createConversation.mockResolvedValue({ id: 'conv-fork', title: 'Conversation 1 fork' });
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.messages).toEqual(sourceMessages));
+    await act(async () => {
+      await chatPaneProps.onForkFromMessage?.(sourceMessages[1]!);
+    });
+
+    const stampedSource = saveMessage.mock.calls.filter(
+      ([, conversationId, message]) =>
+        conversationId === 'conv-1'
+        && !!(message as { forkedInto?: unknown } | undefined)?.forkedInto,
+    );
+    expect(stampedSource, '源会话不该被盖分界 —— 那条线归新会话').toEqual([]);
+  });
+
+  it('leaves forkedInto unset when the fork never produced a conversation', async () => {
+    prepareForkHarness();
+    createConversation.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.messages).toEqual(sourceMessages));
+    await act(async () => {
+      await chatPaneProps.onForkFromMessage?.(sourceMessages[1]!);
+    });
+
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'project-1',
+      'conv-1',
+      expect.objectContaining({ forkedInto: expect.anything() }),
+      expect.anything(),
     );
   });
 

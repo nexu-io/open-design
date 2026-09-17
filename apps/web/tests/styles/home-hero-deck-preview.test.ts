@@ -29,7 +29,7 @@ function ruleValue(block: string, property: string): string {
 }
 
 describe('HomeHero deck preset previews', () => {
-  it('center-crops baked 1.31 posters through a 16:9 media frame', () => {
+  it('center-crops baked 1.31 posters through a 16:9 media frame that fills the tile', () => {
     const frame = cssDeclarations(
       '.home-hero__plugin-preset[data-od-mode="deck"] .home-hero__plugin-preset-preview',
     );
@@ -48,14 +48,15 @@ describe('HomeHero deck preset previews', () => {
 
     expect(ruleValue(frame, 'background')).toBe('var(--bg-panel)');
     expect(ruleValue(preview, 'background')).toBe('var(--bg-panel)');
-    expect(ruleValue(preview, 'display')).toBe('flex');
-    expect(ruleValue(preview, 'align-items')).toBe('center');
-    expect(ruleValue(preview, 'justify-content')).toBe('center');
 
-    expect(ruleValue(media, 'position')).toBe('relative');
-    expect(ruleValue(media, 'width')).toBe('100%');
-    expect(ruleValue(media, 'height')).toBe('auto');
+    // The 16:9 stage COVERS the (wider) preview cell — full height, overflowing
+    // width, centered — so no card-coloured band is left above or below it.
+    expect(ruleValue(media, 'position')).toBe('absolute');
+    expect(ruleValue(media, 'inset')).toBe('0 auto 0 50%');
+    expect(ruleValue(media, 'width')).toBe('auto');
+    expect(ruleValue(media, 'height')).toBe('100%');
     expect(ruleValue(media, 'aspect-ratio')).toBe('16 / 9');
+    expect(ruleValue(media, 'transform')).toBe('translateX(-50%)');
 
     expect(ruleValue(image, 'object-position')).toBe('center');
     expect(ruleValue(video, 'object-position')).toBe('center');

@@ -5,7 +5,9 @@ import {
   findGoPlanSunsetMessage,
   GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX,
   pullMessageCenter,
+  readArchivedIds,
   type MessageCenterMessage,
+  writeArchivedIds,
 } from '../src/message-center-client';
 
 describe('message center client', () => {
@@ -59,6 +61,36 @@ describe('message center client', () => {
     expect(storage.has('open-design.message-center.anonymous-started-at.v1')).toBe(false);
     expect(storage.has('open-design.message-center.anonymous-messages.v1')).toBe(false);
     expect(storage.has('open-design.message-center.anonymous-read-ids.v1')).toBe(false);
+  });
+
+  // Archiving is a LOCAL third state (the vela model carries only `readAt`),
+  // and signing in is exactly when the anonymous mirror gets wiped — so the
+  // archive has to be stored outside it or every sign-in would silently
+  // un-archive everything the user put away.
+  it('keeps archived ids across the sign-in hand-off that clears anonymous state', () => {
+    const storage = new Map<string, string>();
+    const adapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => void storage.set(key, value),
+      removeItem: (key: string) => void storage.delete(key),
+    } as Storage;
+    writeArchivedIds(adapter, new Set(['msg-1', 'msg-2']));
+    storage.set('open-design.message-center.anonymous-messages.v1', '[]');
+    storage.set('open-design.message-center.anonymous-read-ids.v1', '["msg-1"]');
+
+    clearAnonymousState(adapter);
+
+    expect(storage.has('open-design.message-center.anonymous-read-ids.v1')).toBe(false);
+    expect([...readArchivedIds(adapter)].sort()).toEqual(['msg-1', 'msg-2']);
+  });
+
+  it('reads an empty archive set when nothing was ever archived', () => {
+    const adapter = {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    } as unknown as Storage;
+    expect(readArchivedIds(adapter).size).toBe(0);
   });
 
   it('follows pagination until the server cursor is exhausted', async () => {

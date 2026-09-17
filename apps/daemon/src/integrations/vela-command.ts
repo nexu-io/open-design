@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
 import { isAbortedOperationError } from './aborted-error.js';
 
 import {
@@ -248,8 +249,14 @@ export function runVelaCommand(
       if (settled) return;
       settled = true;
       clearTriggers();
-      if ('error' in outcome) reject(outcome.error);
-      else resolve(outcome.stdout);
+      if ('error' in outcome) {
+        if (args[0] === 'team-projects' && args[1] === 'list') {
+          recordDiagnosticFailure({ source: 'team-projects', error: outcome.error, env: childEnv, workspaceId: childEnv.VELA_WORKSPACE_ID });
+        } else if (args[0] === 'resource' && args[1] === 'shared') {
+          recordDiagnosticFailure({ source: 'shared-resources', error: outcome.error, env: childEnv, workspaceId: childEnv.VELA_WORKSPACE_ID });
+        }
+        reject(outcome.error);
+      } else resolve(outcome.stdout);
     };
 
     const terminate = (reason: VelaTerminationReason): void => {

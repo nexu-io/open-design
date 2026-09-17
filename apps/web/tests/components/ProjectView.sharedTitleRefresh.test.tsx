@@ -32,7 +32,6 @@ import {
   listConversations,
   listMessages,
   loadTabs,
-  patchProject,
   ProjectConversationsHttpError,
 } from '../../src/state/projects';
 import {
@@ -42,14 +41,6 @@ import {
 } from '../../src/providers/registry';
 
 const fileWorkspaceRenderSpy = vi.hoisted(() => vi.fn());
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
 
 vi.mock('../../src/i18n', () => ({
   useT: () => (key: string) => key,
@@ -128,6 +119,29 @@ vi.mock('../../src/collab/useProjectWorkspaceScope', async (importOriginal) => (
           },
         }
   ),
+}));
+
+// ProjectView also mounts `useDesignMdState` (the Continue-in-CLI staleness
+// chip), which reads the same project file list through `fetchProjectFiles` so
+// the two share ONE request in the browser instead of opening two (W82). These
+// cases measure ProjectView's own file reads through the mocked reader, above
+// the layer where that sharing happens, so the hook is stubbed out here to keep
+// the mocked call sequence describing ProjectView alone. The hook's own
+// behaviour is covered by tests/hooks/useDesignMdState.test.tsx.
+vi.mock('../../src/hooks/useDesignMdState', () => ({
+  useDesignMdState: () => ({
+    exists: false,
+    generatedAt: null,
+    transcriptMessageCount: null,
+    designSystemId: null,
+    currentArtifact: null,
+    isStale: false,
+    staleReason: null,
+    loading: false,
+    error: null,
+    refresh: async () => {},
+  }),
+  computeStale: () => ({ isStale: false, staleReason: null }),
 }));
 
 vi.mock('../../src/providers/registry', async () => {
@@ -237,7 +251,6 @@ const mockedFetchPreviewComments = vi.mocked(fetchPreviewComments);
 const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
 const mockedInvalidateProjectFilesCache = vi.mocked(invalidateProjectFilesCache);
 const mockedGetProject = vi.mocked(getProject);
-const mockedPatchProject = vi.mocked(patchProject);
 
 const onProjectChangeMock = vi.fn();
 
@@ -548,289 +561,10 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
     });
   });
 
-  it('commits an owner rename before refreshing every list projection', async () => {
-    const workspace = teamWorkspaceContext();
-    const ownerProject = {
-      ...project,
-      name: 'Before rename',
-      workspaceId: workspace.workspaceId,
-    };
-    const persisted = {
-      ...ownerProject,
-      name: 'After rename',
-      updatedAt: 456,
-    };
-    mockedUseProjectCollab.mockReturnValue(sharedMemberCollab({
-      viewerOnly: false,
-      writerAuthority: 'allowed',
-      isOwner: true,
-      isEffectiveOwner: true,
-      isSharedNonOwner: false,
-      ownerDisplayName: null,
-      ownerRole: null,
-    }));
-    mockedPatchProject.mockResolvedValue(persisted);
-    const onProjectChange = vi.fn();
-    const onProjectsRefresh = vi.fn(async () => undefined);
-
-    render(projectViewElement(ownerProject, {
-      workspaceContextOverride: workspace,
-      onProjectChange,
-      onProjectsRefresh,
-    }));
-    const title = await screen.findByTestId('project-title');
-    title.textContent = 'After rename';
-    fireEvent.blur(title);
-
-    await waitFor(() => {
-      expect(mockedPatchProject).toHaveBeenCalledWith(
-        ownerProject.id,
-        expect.objectContaining({ name: 'After rename' }),
-        workspace,
-      );
-    });
-    await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalledTimes(1));
-    expect(onProjectChange).toHaveBeenLastCalledWith(persisted);
-  });
-
-  it('settles the exact rename fence after the view switches to another Workspace project', async () => {
-    const workspaceA = teamWorkspaceContext();
-    const workspaceB = {
-      ...teamWorkspaceContext(),
-      workspaceId: 'ws-2',
-      workspaceMemberId: 'wm-2',
-    };
-    const projectA = {
-      ...project,
-      name: 'Workspace A project',
-      workspaceId: workspaceA.workspaceId,
-    };
-    const projectB = {
-      ...project,
-      id: 'project-2',
-      name: 'Workspace B project',
-      workspaceId: workspaceB.workspaceId,
-    };
-    const patch = deferred<Project | null>();
-    const token: ProjectRenameFenceToken = {
-      accountGeneration: 7,
-      scopeKey: 'workspace:ws-1:wm-1',
-      projectId: projectA.id,
-      mutationVersion: 11,
-    };
-    const onProjectRenameStarted = vi.fn(() => token);
-    const onProjectRenameSettled = vi.fn();
-    const onProjectsRefresh = vi.fn();
-    mockedUseProjectCollab.mockReturnValue(sharedMemberCollab({
-      viewerOnly: false,
-      writerAuthority: 'allowed',
-      isOwner: true,
-      isEffectiveOwner: true,
-      isSharedNonOwner: false,
-      ownerDisplayName: null,
-      ownerRole: null,
-    }));
-    mockedPatchProject.mockImplementationOnce(() => patch.promise);
-
-    const view = render(projectViewElement(projectA, {
-      workspaceContextOverride: workspaceA,
-      onProjectRenameStarted,
-      onProjectRenameSettled,
-      onProjectsRefresh,
-    }));
-    const title = await screen.findByTestId('project-title');
-    title.textContent = 'Renamed while leaving';
-    fireEvent.blur(title);
-    await waitFor(() => expect(mockedPatchProject).toHaveBeenCalledTimes(1));
-
-    view.rerender(projectViewElement(projectB, {
-      workspaceContextOverride: workspaceB,
-      onProjectRenameStarted,
-      onProjectRenameSettled,
-      onProjectsRefresh,
-    }));
-    const persisted = {
-      ...projectA,
-      name: 'Renamed while leaving',
-      updatedAt: projectA.updatedAt + 1,
-    };
-    await act(async () => {
-      patch.resolve(persisted);
-      await patch.promise;
-    });
-
-    expect(onProjectRenameSettled).toHaveBeenCalledWith(token, persisted);
-    expect(onProjectsRefresh).not.toHaveBeenCalled();
-    expect(screen.getByTestId('project-title').textContent).toBe('Workspace B project');
-  });
-
-  it('settles independent Project and Workspace rename fences when A and B finish out of order', async () => {
-    const workspaceA = teamWorkspaceContext();
-    const workspaceB = {
-      ...teamWorkspaceContext(),
-      workspaceId: 'ws-2',
-      workspaceMemberId: 'wm-2',
-    };
-    const projectA = {
-      ...project,
-      name: 'Workspace A project',
-      workspaceId: workspaceA.workspaceId,
-    };
-    const projectB = {
-      ...project,
-      id: 'project-2',
-      name: 'Workspace B project',
-      workspaceId: workspaceB.workspaceId,
-    };
-    const patchA = deferred<Project | null>();
-    const patchB = deferred<Project | null>();
-    const tokenA: ProjectRenameFenceToken = {
-      accountGeneration: 7,
-      scopeKey: 'workspace:ws-1:wm-1',
-      projectId: projectA.id,
-      mutationVersion: 11,
-    };
-    const tokenB: ProjectRenameFenceToken = {
-      accountGeneration: 7,
-      scopeKey: 'workspace:ws-2:wm-2',
-      projectId: projectB.id,
-      mutationVersion: 12,
-    };
-    const onProjectRenameStarted = vi.fn((next: Project) =>
-      next.id === projectA.id ? tokenA : tokenB);
-    const onProjectRenameSettled = vi.fn();
-    mockedUseProjectCollab.mockReturnValue(sharedMemberCollab({
-      viewerOnly: false,
-      writerAuthority: 'allowed',
-      isOwner: true,
-      isEffectiveOwner: true,
-      isSharedNonOwner: false,
-      ownerDisplayName: null,
-      ownerRole: null,
-    }));
-    mockedPatchProject
-      .mockImplementationOnce(() => patchA.promise)
-      .mockImplementationOnce(() => patchB.promise);
-
-    const view = render(projectViewElement(projectA, {
-      workspaceContextOverride: workspaceA,
-      onProjectRenameStarted,
-      onProjectRenameSettled,
-    }));
-    let title = await screen.findByTestId('project-title');
-    title.textContent = 'Rename A';
-    fireEvent.blur(title);
-    await waitFor(() => expect(mockedPatchProject).toHaveBeenCalledTimes(1));
-
-    view.rerender(projectViewElement(projectB, {
-      workspaceContextOverride: workspaceB,
-      onProjectRenameStarted,
-      onProjectRenameSettled,
-    }));
-    title = await screen.findByTestId('project-title');
-    title.textContent = 'Rename B';
-    fireEvent.blur(title);
-    await waitFor(() => expect(mockedPatchProject).toHaveBeenCalledTimes(2));
-
-    const persistedB = {
-      ...projectB,
-      name: 'Rename B',
-      updatedAt: projectB.updatedAt + 1,
-    };
-    await act(async () => {
-      patchB.resolve(persistedB);
-      await patchB.promise;
-    });
-    await waitFor(() => {
-      expect(onProjectRenameSettled).toHaveBeenCalledWith(tokenB, persistedB);
-    });
-
-    const persistedA = {
-      ...projectA,
-      name: 'Rename A',
-      updatedAt: projectA.updatedAt + 1,
-    };
-    await act(async () => {
-      patchA.resolve(persistedA);
-      await patchA.promise;
-    });
-    await waitFor(() => {
-      expect(onProjectRenameSettled).toHaveBeenCalledWith(tokenA, persistedA);
-    });
-    expect(onProjectRenameSettled).toHaveBeenCalledTimes(2);
-    expect(screen.getByTestId('project-title').textContent).toBe('Rename B');
-  });
-
-  it.each([
-    [false, false, 'Confirmed name'],
-    [true, false, 'Rename A'],
-    [false, true, 'Rename B'],
-    [true, true, 'Rename B'],
-  ])(
-    'serializes repeated renames (first=%s, second=%s) and ends at %s',
-    async (firstSucceeds, secondSucceeds, expectedName) => {
-    const workspace = teamWorkspaceContext();
-    const ownerProject = {
-      ...project,
-      name: 'Confirmed name',
-      workspaceId: workspace.workspaceId,
-    };
-    const firstPatch = deferred<Project | null>();
-    const secondPatch = deferred<Project | null>();
-    mockedUseProjectCollab.mockReturnValue(sharedMemberCollab({
-      viewerOnly: false,
-      writerAuthority: 'allowed',
-      isOwner: true,
-      isEffectiveOwner: true,
-      isSharedNonOwner: false,
-      ownerDisplayName: null,
-      ownerRole: null,
-    }));
-    mockedPatchProject
-      .mockImplementationOnce(() => firstPatch.promise)
-      .mockImplementationOnce(() => secondPatch.promise);
-
-    function RenameShell() {
-      const [activeProject, setActiveProject] = useState<Project>(ownerProject);
-      return projectViewElement(activeProject, {
-        workspaceContextOverride: workspace,
-        onProjectChange: setActiveProject,
-      });
-    }
-
-    render(<RenameShell />);
-    const rename = async (name: string) => {
-      const title = await screen.findByTestId('project-title');
-      title.textContent = name;
-      fireEvent.blur(title);
-    };
-
-    await rename('Rename A');
-    await waitFor(() => expect(mockedPatchProject).toHaveBeenCalledTimes(1));
-    await rename('Rename B');
-    await act(async () => Promise.resolve());
-    expect(mockedPatchProject).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('project-title').textContent).toBe('Rename B');
-
-    await act(async () => {
-      firstPatch.resolve(firstSucceeds
-        ? { ...ownerProject, name: 'Rename A', updatedAt: ownerProject.updatedAt + 1 }
-        : null);
-      await firstPatch.promise;
-    });
-    await waitFor(() => expect(mockedPatchProject).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('project-title').textContent).toBe('Rename B');
-
-    await act(async () => {
-      secondPatch.resolve(secondSucceeds
-        ? { ...ownerProject, name: 'Rename B', updatedAt: ownerProject.updatedAt + 2 }
-        : null);
-      await secondPatch.promise;
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId('project-title').textContent).toBe(expectedName);
-    });
-  });
+  // The inline title rename in the chat card is gone (OPEND-3128): the
+  // project is named once, in the switcher, whose row menu renames through
+  // App's own projection fence. The rename-fence specs that drove
+  // `project-title` left with it.
 
   it.each([
     ['member', sharedMemberCollab()],
@@ -1108,6 +842,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       sharedProject.id,
       conversation.id,
       workspace,
+      expect.any(AbortSignal),
     );
   });
 
@@ -1144,6 +879,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       sharedProject.id,
       conversation.id,
       workspace,
+      expect.any(AbortSignal),
     );
   });
 
@@ -1309,6 +1045,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       sharedProjectA.id,
       conversation.id,
       workspaceA,
+      expect.any(AbortSignal),
     );
     await act(async () => {
       resolveOldWorkspaceARecovery?.([conversation]);

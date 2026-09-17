@@ -19,6 +19,7 @@ import {
   buildRunFinishedV4Aliases,
   deriveConfigureGlobals,
   harnessAnalyticsFromRolloutDecision,
+  odNextBlockedAnalyticsFromStrategyTask,
   modelIdForTracking,
   sessionModeToTracking,
   type RunTaskLineageProps,
@@ -49,7 +50,9 @@ import {
   agentProviderIdForRunAnalytics,
   amrUserIdForRunAnalytics,
   hasExplicitRequestedModelForAnalytics,
+  perRequestUsageForRun,
   runtimeTypeForRunAnalytics,
+  scanRunEventsForPerRequestUsageAnalytics,
   scanRunEventsForUsageAnalytics,
   summarizeRunTimingAnalytics,
   summarizeToolAnalytics,
@@ -747,6 +750,7 @@ export function createRunAnalyticsLifecycle(
             reqBody.model,
             userQueryTokens,
           );
+          const perRequestUsage = perRequestUsageForRun(run);
           // Whether this run is a non-first turn in its conversation — i.e. a
           // prior completed assistant turn exists (excluding this run's own
           // placeholder). The session-reuse cache win only applies to follow-up
@@ -968,6 +972,13 @@ export function createRunAnalyticsLifecycle(
             : undefined;
           const finishedProperties: Record<string, unknown> = {
               ...baseProps,
+              // The gate that refused an OD Next turn. `result` above comes
+              // from the physical run status, and a refused turn normally exits
+              // 0 — so without this the whole class counted as `success` while
+              // the user was looking at a failure card. Read off the run's own
+              // terminal projection, the same object the SSE `end` payload and
+              // the failure card were built from, so the three cannot drift.
+              ...odNextBlockedAnalyticsFromStrategyTask(run.strategyTask),
               design_system_id: run.designSystemId ?? undefined,
               design_system_digest: run.designSystemDigest ?? undefined,
               design_system_selection_source: run.designSystemSelectionSource ?? 'none',
@@ -1135,6 +1146,21 @@ export function createRunAnalyticsLifecycle(
               cache_token_source: usageAnalytics.cache_token_source,
               // Prefer provider scan over run_created baseProps (`estimated`).
               token_count_source: usageAnalytics.token_count_source,
+              // Per-request token coverage (#4610): how many model requests in
+              // this run carry a per-request usage record (request_id + tokens),
+              // and whether their token sum reconciles with the run-level
+              // aggregate above. Lifts request-level cost/percentile analysis off
+              // the ~0.9% floor for claude_code.
+              request_usage_count: perRequestUsage.request_count,
+              ...(perRequestUsage.input_tokens_sum !== undefined
+                ? { request_usage_input_tokens_sum: perRequestUsage.input_tokens_sum }
+                : {}),
+              ...(perRequestUsage.output_tokens_sum !== undefined
+                ? { request_usage_output_tokens_sum: perRequestUsage.output_tokens_sum }
+                : {}),
+              ...(perRequestUsage.reconciles_aggregate !== null
+                ? { request_usage_reconciles_aggregate: perRequestUsage.reconciles_aggregate }
+                : {}),
               tool_error_count: toolAnalytics.tool_error_count,
               tool_name_count: toolAnalytics.tool_name_count,
               tool_names: toolAnalytics.tool_names_csv,

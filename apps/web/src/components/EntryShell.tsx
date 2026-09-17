@@ -25,7 +25,6 @@ import {
 import {
   automaticStrategyTaskProfileForProjectMetadata,
   defaultScenarioPluginIdForProjectMetadata,
-  type AmrWalletSnapshot,
   type ChatSessionMode,
   type ConnectorDetail,
   type CreateProjectExampleReference,
@@ -113,20 +112,23 @@ import { LibrarySection } from './LibrarySection';
 import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
 import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
-import { AmrBalanceDialog } from './AmrBalanceDialog';
+import type { HomeAmrBalanceGateBlock } from './HomeAmrBalanceGateDialogs';
+import {
+  amrBalanceBlockedDialog,
+  amrBalanceDialogUpgradeIntent,
+  resolveAmrBalanceBranch,
+} from '../runtime/amr-balance-branch';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
-import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
   amrBalanceGateScopeForWorkspaceContext,
   checkAmrBalanceGate,
   retryUnavailableAmrBalanceGate,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
 import { HomeView, seedHomeComposerPrompt } from './HomeView';
 import { entryStrategyRoutingFields } from './entry-strategy-routing';
 import { EntryBlankState } from './EntryBlankState';
-import { RecentProjectsStrip } from './RecentProjectsStrip';
+import { RecentProjectsStrip, type ProjectCollectionScope } from './RecentProjectsStrip';
 import {
   createPluginAuthoringHandoff,
   createPluginUseHandoff,
@@ -235,6 +237,7 @@ import {
 import {
   ENTRY_RAIL_STATE_EVENT,
   ENTRY_RAIL_TOGGLE_EVENT,
+  ENTRY_SEARCH_OPEN_EVENT,
   RAIL_OPEN_STORAGE_KEY,
   readStoredRailOpen,
 } from './entryRailBridge';
@@ -343,12 +346,30 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   autoSendFirstMessage?: boolean;
   /** Exact workspace/member authority checked by the Home AMR preflight. */
   amrGatePrecheckWitness?: AmrBalanceGateScope;
+  /**
+   * The optimistic project already flushed by `onBeginProjectCreation`. The
+   * create reuses this id (the daemon accepts a caller-minted id) instead of
+   * starting a second hand-off.
+   */
+  optimisticProjectId?: string;
   requestId?: string;
   pendingFiles?: File[];
   userWorkingDirToken?: string;
   linkedDirs?: string[] | null;
   onboardingEntry?: OnboardingEntry;
 };
+
+/**
+ * What App hands back once a Home send has entered the project frame
+ * optimistically: the client-minted project id the create must reuse, and the
+ * way to undo the hand-off (drop the optimistic row, return to Home with the
+ * draft and staged files intact) when no project is going to be created —
+ * a dismissed balance dialog, or a gate that could not answer.
+ */
+export interface OptimisticProjectCreationHandoff {
+  projectId: string;
+  rollback: (options?: { notice?: string }) => void;
+}
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
   return defaultScenarioPluginIdForProjectMetadata(metadata);
@@ -502,6 +523,19 @@ interface Props {
   onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
+  /**
+   * Flush the optimistic project frame for a Home send on the click tick,
+   * before any admission check. Owned by App because the hand-off leaves the
+   * Home route (and unmounts this shell).
+   */
+  onBeginProjectCreation: (input: EntryCreateProjectInput) => OptimisticProjectCreationHandoff;
+  /**
+   * Publish (or clear) the AMR balance-gate hard block for App to render. The
+   * dialog cannot live here: by the time the gate answers, the send is already
+   * on the project route and this shell is unmounted (see
+   * `HomeAmrBalanceGateDialogs`).
+   */
+  onAmrBalanceGateBlockChange: (block: HomeAmrBalanceGateBlock | null) => void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -629,6 +663,8 @@ export function EntryShell({
   onSkillsChanged,
   onRefreshAgents,
   onCreateProject,
+  onBeginProjectCreation,
+  onAmrBalanceGateBlockChange,
   onImportClaudeDesign,
   onImportFolder,
   onImportFolderResponse,
@@ -674,6 +710,7 @@ export function EntryShell({
     ? null
     : workspaceContext;
   const usesOpenDesignCloud = config.mode === 'daemon' && config.agentId === 'amr';
+  const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE ?? null;
   const amrAuthRequired =
     workspaceContextState.failure === 'reauth-required'
     || (
@@ -986,6 +1023,17 @@ export function EntryShell({
   // placeholder, then ProjectView opens while the daemon materializes content in
   // the background. The placeholder stamp keeps every content writer fail-closed.
   const [pullingProjectId, setPullingProjectId] = useState<string | null>(null);
+  // The 全部项目 page's collection tab (OPEND-3108). The legacy `all-projects`
+  // view is a deep link to the 团队项目 tab; every other entry keeps whatever
+  // tab the user last picked.
+  const [projectsCollection, setProjectsCollection] = useState<ProjectCollectionScope>('recent');
+  useEffect(() => {
+    // Entering the page from the rail opens 最近浏览过 (the Demo's strip
+    // remounts on every visit, so it never carries a tab over); the legacy
+    // `/all-projects` view is the one deep link that lands on 团队项目.
+    if (view === 'all-projects') setProjectsCollection('teamProjects');
+    else if (view === 'drafts') setProjectsCollection('recent');
+  }, [view]);
   async function handleOpenAllProjects(id: string): Promise<boolean> {
     // The grid already reconciled the local row with the authoritative team
     // catalog (notably the owner's current project name). Carry its title and
@@ -1089,9 +1137,11 @@ export function EntryShell({
   }
   // Workspace-only destinations. Personal and team workspaces both use these;
   // signed-out/local state falls back to home once the context has resolved.
-  // `community` is allowed in both states, so it is not guarded.
+  // `community` is allowed in both states, so it is not guarded, and neither
+  // is `drafts` any more (OPEND-3140): without a workspace it is the local
+  // project list — `buildDraftsList` folds to every local project — and the
+  // rail's 项目 item opens it on both branches.
   const isWorkspaceOnlyView =
-    view === 'drafts' ||
     view === 'all-projects' ||
     view === 'members' ||
     view === 'board' ||
@@ -1103,28 +1153,12 @@ export function EntryShell({
     }
   }, [workspaceLoading, isWorkspaceOnlyView, hasWorkspaceContext]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  // Hard block from the pre-run balance gate on a home submit (empty wallet
-  // or signed out); non-null renders the AmrBalanceDialog on the home page —
-  // the project is never created, so the composer draft stays put. The dialog
-  // resolves the promise the submit handler is awaiting: 'retry' (sign-in
-  // completed / recharge landed) re-runs the gate and continues the very same
-  // create-and-run; 'dismiss' hands the composer back to the user.
-  const [amrBalanceGateBlock, setAmrBalanceGateBlock] = useState<
-    {
-      reason: 'insufficient' | 'signed_out';
-      snapshot: AmrWalletSnapshot;
-      resolve: (decision: 'retry' | 'dismiss') => void;
-    } | null
-  >(null);
-  // Soft low-balance warning holding a pending home submit: the dialog
-  // resolves the promise the submit handler is awaiting ('proceed' continues
-  // the very same create-and-run).
-  const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    {
-      snapshot: AmrWalletSnapshot;
-      resolve: (decision: AmrLowBalanceDecision) => void;
-    } | null
-  >(null);
+  // Home has NO low-balance surface, and since T66 (product 2026-09-07) neither
+  // does anywhere else: a positive balance produces nothing at all and the run
+  // just starts. Home reached that end state first — ruling 2026-09-06 (T53),
+  // "什么都不显示,有余额就允许运行" — and the project page has now been pulled
+  // level with it, so `handlePluginLoopSubmit` having no low-balance branch is
+  // simply the shape of the gate: there is no such result kind to handle.
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
   // as an overlay that dismisses on selection / backdrop click / Escape.
@@ -1187,6 +1221,14 @@ export function EntryShell({
     const onToggle = () => setRailOpen((v) => !v);
     window.addEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
     return () => window.removeEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
+  }, []);
+  // Same story for the search button, which sits in that chrome row beside the
+  // rail toggle (per product: 搜索和收起跟 home icon 一起放在顶部) while the
+  // palette it opens is owned here.
+  useEffect(() => {
+    const onOpen = () => setProjectSearchOpen(true);
+    window.addEventListener(ENTRY_SEARCH_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(ENTRY_SEARCH_OPEN_EVENT, onOpen);
   }, []);
   const [localProviderModelsCache, setLocalProviderModelsCache] =
     useState<ProviderModelsCache>({});
@@ -1388,11 +1430,18 @@ export function EntryShell({
       navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
       return 'blocked' as const;
     }
+    const createInput = pluginLoopCreateInput(payload);
+    // OPEND-2614: the project frame opens on the click tick for EVERY agent,
+    // before any admission check. Everything below runs behind that frame —
+    // this shell is unmounted the moment the hand-off navigates, so nothing
+    // after this line may rely on this instance's state or DOM. App owns the
+    // hand-off and the way back.
+    const handoff = onBeginProjectCreation(createInput);
     // OpenDesign Cloud pre-run balance gate: hard blocks (empty wallet or
-    // signed out) and the soft low-balance reminder both fire BEFORE the
-    // project is created, so the dialog appears right here on the home page
-    // and the composer keeps its draft. In-project sends are gated separately
-    // in ProjectView.handleSend.
+    // signed out) fire BEFORE the project is created — the dialog now sits over
+    // the pending frame, and a dismiss rolls the hand-off back to Home with the
+    // composer draft intact. In-project sends are gated separately in
+    // ProjectView.handleSend.
     let amrGatePrecheckWitness: AmrBalanceGateScope | undefined;
     let amrGatePrecheckPassed = false;
     if (config.mode === 'daemon' && config.agentId === 'amr') {
@@ -1425,33 +1474,53 @@ export function EntryShell({
         // wallet is empty) → the dialog re-shows with the fresh snapshot.
         while (gate.kind === 'hard') {
           const blocked = gate;
+          // 「哪张弹窗」和「它的主按钮去哪」问的是同一个 branch 快照,免得两次
+          // 分别求值之间的一次工作区切换让两者各说各话(规格 §6.V / T58)。
+          const blockedBranch = resolveAmrBalanceBranch({
+            context: gateWorkspaceContext,
+            billing: workspaceBilling,
+          });
           const decision = await new Promise<'retry' | 'dismiss'>((resolve) => {
-            setAmrBalanceGateBlock({
+            onAmrBalanceGateBlockChange({
               reason: blocked.reason,
+              // 被登出说的是登录不是钱,无条件走原来那张(主按钮是应用内登录,
+              // 落点那一位那时用不上)。余额耗尽才按身份 × 订阅分支。
+              dialog:
+                blocked.reason === 'signed_out'
+                  ? 'upgrade'
+                  : amrBalanceBlockedDialog(blockedBranch),
+              upgradeIntent:
+                blocked.reason === 'signed_out'
+                  ? 'pricing'
+                  : amrBalanceDialogUpgradeIntent(blockedBranch),
               snapshot: blocked.snapshot,
               resolve,
             });
           });
-          setAmrBalanceGateBlock(null);
-          if (decision === 'dismiss') return 'blocked' as const;
+          onAmrBalanceGateBlockChange(null);
+          if (decision === 'dismiss') {
+            // The dialog was the feedback; the composer gets its draft back
+            // without a second error on top.
+            handoff.rollback();
+            return 'blocked' as const;
+          }
           gate = await retryUnavailableAmrBalanceGate(
             () => checkAmrBalanceGate(gateScope, amrModelId),
           );
         }
-        if (gate.kind === 'unavailable') return false;
-        if (gate.kind === 'soft') {
-          // Hold THIS submit while the reminder waits for a decision; 'proceed'
-          // resumes the same create-and-run below, so HomeView's normal accept
-          // path (draft clearing, context consumption) still applies.
-          const plan = await resolveAmrPlan(gate.snapshot);
-          if (isPaidAmrPlan(plan)) {
-            const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-              setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
-            });
-            setAmrLowBalanceWarn(null);
-            if (decision !== 'proceed') return 'blocked' as const;
-          }
+        if (gate.kind === 'unavailable') {
+          handoff.rollback({ notice: t('home.amrGateUnavailable') });
+          return false;
         }
+        // Everything else falls through and the run starts. Home used to hold
+        // the submit open behind a centered reminder dialog ("额度不多了" + 仍要
+        // 发起任务 / 去充值). Product ruled it away on 2026-09-06 — "软提醒弹窗
+        // 就是产品告诉我不要这个的" — and ruled Home's replacement to be nothing
+        // at all: "什么都不显示,有余额就允许运行" (T53). T66 (2026-09-07) then
+        // retired the low-balance tier everywhere, so there is no longer even a
+        // result kind here to consider handling. `empty_not_blocked` also falls
+        // through on purpose: it is a stood-down hard block, and Home has no
+        // conversation to hang its card on. Do not re-add a branch here.
         if (
           currentWorkspaceAccountGeneration() !== gateAccountGeneration
           || workspaceIdentityCacheKey(
@@ -1466,8 +1535,36 @@ export function EntryShell({
         amrGatePrecheckPassed = true;
         break;
       }
-      if (!amrGatePrecheckPassed) return false;
+      if (!amrGatePrecheckPassed) {
+        handoff.rollback({ notice: t('home.createFailed') });
+        return false;
+      }
     }
+    const create = () => Promise.resolve(onCreateProject({
+      ...createInput,
+      optimisticProjectId: handoff.projectId,
+      ...(amrGatePrecheckWitness ? { amrGatePrecheckWitness } : {}),
+    }));
+    try {
+      return await create();
+    } catch (error) {
+      if (
+        error instanceof ProjectCreateError
+        && error.code === 'AMR_AUTH_REQUIRED'
+      ) {
+        navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
+        return 'blocked' as const;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The create request a Home composer send turns into. Pure: it reads only
+   * the payload, so it can be computed before the optimistic hand-off and
+   * reused by the create that follows the admission check.
+   */
+  function pluginLoopCreateInput(payload: PluginLoopSubmit): EntryCreateProjectInput {
     const summarizedName = summarizeProjectNameFromPrompt(payload.prompt);
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
@@ -1512,7 +1609,7 @@ export function EntryShell({
       } : {}),
     };
     const strategyRoutingFields = entryStrategyRoutingFields(payload, metadata);
-    const createInput: EntryCreateProjectInput = {
+    return {
       name,
       ...strategyRoutingFields,
       ...(strategyRoutingFields.skillId && payload.skillCatalogScope
@@ -1546,21 +1643,7 @@ export function EntryShell({
       // not need the desktop main-process trust token that baseDir imports
       // require for write access.
       autoSendFirstMessage: true,
-      ...(amrGatePrecheckWitness ? { amrGatePrecheckWitness } : {}),
     };
-    const create = () => Promise.resolve(onCreateProject(createInput));
-    try {
-      return await create();
-    } catch (error) {
-      if (
-        error instanceof ProjectCreateError
-        && error.code === 'AMR_AUTH_REQUIRED'
-      ) {
-        navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
-        return 'blocked' as const;
-      }
-      throw error;
-    }
   }
 
   /**
@@ -1658,6 +1741,43 @@ export function EntryShell({
     />
   );
 
+  // Everything a HomeView needs except which surface it is on. Home renders
+  // one as the page; the community view docks a second at its bottom, and both
+  // must submit through the SAME handlers — a docked composer that created
+  // projects down a second path would drift from Home's the first time either
+  // changed.
+  const homeViewProps = {
+    projects: homeProjectsList,
+    projectsLoading,
+    designSystems,
+    designSystemsLoading,
+    defaultDesignSystemId,
+    onSubmit: handlePluginLoopSubmit,
+    onOpenProject,
+    // The Add menu's "Add plugin" row lands on the plugins page.
+    onBrowseRegistry: () => changeView('plugins'),
+    onOpenIntegrations: () => openIntegrationTab('connectors'),
+    onOpenMcp: () => openIntegrationTab('mcp'),
+    onOpenNewProject: (tab: 'template') => {
+      openNewProject(tab);
+    },
+    onStartBlankProject: startBlankProjectFromRail,
+    projectOwnerMemberIds: teamProjectOwnerMemberIds,
+    skills,
+    skillsLoading,
+    connectors,
+    promptTemplates,
+    promptTemplatesLoaded,
+    promptTemplatesLoadFailed,
+    onPromptTemplatesRetry,
+    promptTemplatesLoading,
+    artifactUpgradeSlot,
+    deepSeekV4FlashCampaignAudience,
+    onDeepSeekV4FlashCampaignUseNow: applyDeepSeekCampaignModel,
+    deepSeekV4FlashCampaignMetricsConsent: config.telemetry?.metrics === true,
+    deepSeekV4FlashCampaignInstallationId: config.installationId ?? null,
+  };
+
   return (
     <div className="entry-shell entry-shell--no-header">
       <div
@@ -1703,14 +1823,26 @@ export function EntryShell({
           // only a successful null context (or known local sign-out) may show
           // the sign-in card.
           footerNotice={accountFooterNotice}
-          priorityAnnouncementActive={
-            view === 'home'
-            && goPlanSunsetMessagePending
-            && amrBalanceGateBlock == null
-            && amrLowBalanceWarn == null
-          }
+          /* Same catalog and same opener the 全部项目 grid uses below, so the
+             rail's 最近浏览过 list and that view's 最近浏览过 tab are two views of
+             ONE list rather than two sorts of two lists. */
+          recentProjects={projectSearchProjects}
+          onOpenRecentProject={handleOpenAllProjects}
+          /* Same handlers the projects grid drives its own row menu with, so a
+             rename or a delete from the rail lands in exactly one place. */
+          onRenameRecentProject={onRenameProject}
+          onDeleteRecentProject={onDeleteProject}
+          onDuplicateRecentProject={onDuplicateProject}
+          /* And the same shared-state answer + optimistic markers the grids
+             get, so 转入团队空间 from the rail updates every list at once. */
+          isSharedRecentProject={isSharedProject}
+          recentProjectOwnerMemberIds={teamProjectOwnerMemberIds}
+          onRecentProjectShared={markProjectShared}
+          onRecentProjectShareFailed={markProjectShareFailed}
+          priorityAnnouncementActive={view === 'home' && goPlanSunsetMessagePending}
           onPriorityAnnouncementPendingChange={setGoPlanSunsetMessagePending}
           priorityAnnouncementCurrentPlanId={deepSeekCampaignPlan}
+          priorityAnnouncementAmrProfile={amrProfile}
           priorityAnnouncementMetricsConsent={config.telemetry?.metrics === true}
         />
         {projectSearchOpen ? (
@@ -1731,28 +1863,6 @@ export function EntryShell({
           <WhatsNewPopup active={view === 'home' && !goPlanSunsetMessagePending} />
           {/* The campaign badge lives in EntryNavRail's top-right cluster so it
               stays beside the account module across every entry tab. */}
-          {amrBalanceGateBlock ? (
-            <AmrBalanceDialog
-              reason={amrBalanceGateBlock.reason}
-              balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}
-              profile={amrBalanceGateBlock.snapshot.profile}
-              entrySource="home_balance_gate_upgrade"
-              metricsConsent={config.telemetry?.metrics === true}
-              installationId={config.installationId}
-              onClose={() => amrBalanceGateBlock.resolve('dismiss')}
-              onResolved={() => amrBalanceGateBlock.resolve('retry')}
-            />
-          ) : null}
-          {amrLowBalanceWarn ? (
-            <AmrLowBalanceDialog
-              balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
-              profile={amrLowBalanceWarn.snapshot.profile}
-              entrySource="home_low_balance_warn_recharge"
-              metricsConsent={config.telemetry?.metrics === true}
-              installationId={config.installationId}
-              onDecision={amrLowBalanceWarn.resolve}
-            />
-          ) : null}
           <div
             className={[
               'entry-main__inner',
@@ -1761,45 +1871,15 @@ export function EntryShell({
           >
             <div className="entry-main__view-home" data-testid="entry-view-home" data-active={view === 'home' ? 'true' : 'false'} {...inactiveViewProps(view === 'home')}>
               <HomeView
+                {...homeViewProps}
                 isActive={view === 'home'}
-                projects={homeProjectsList}
-                projectsLoading={projectsLoading}
-                designSystems={designSystems}
-                designSystemsLoading={designSystemsLoading}
-                defaultDesignSystemId={defaultDesignSystemId}
-                onSubmit={handlePluginLoopSubmit}
-                onOpenProject={onOpenProject}
-                onViewAllProjects={() => changeView('projects')}
-                onDeleteProject={onDeleteProject}
-                onDuplicateProject={onDuplicateProject}
-                onRenameProject={onRenameProject}
-                onBrowseRegistry={() => changeView('plugins')}
-                onOpenIntegrations={() => openIntegrationTab('connectors')}
-                onOpenMcp={() => openIntegrationTab('mcp')}
-                onOpenNewProject={(tab) => {
-                  openNewProject(tab);
-                }}
-                onStartBlankProject={startBlankProjectFromRail}
+                /* Home is the one composer in the shell and consumes the page
+                   handoff. The community view used to dock a second HomeView
+                   (`variant="dock"`) with a handoff of its own; that mount
+                   was taken out (OPEND-2793) until phase three gives it a
+                   template-bound shape. */
                 promptHandoff={homePromptHandoff}
-                isSharedProject={isSharedProject}
-                onProjectShared={markProjectShared}
-                onProjectShareFailed={markProjectShareFailed}
-                onProjectUnshared={markProjectUnshared}
-                projectOwnerMemberIds={teamProjectOwnerMemberIds}
-                skills={skills}
-                skillsLoading={skillsLoading}
-                connectors={connectors}
-                promptTemplates={promptTemplates}
-                promptTemplatesLoaded={promptTemplatesLoaded}
-                promptTemplatesLoadFailed={promptTemplatesLoadFailed}
-                onPromptTemplatesRetry={onPromptTemplatesRetry}
-                promptTemplatesLoading={promptTemplatesLoading}
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
-                artifactUpgradeSlot={artifactUpgradeSlot}
-                deepSeekV4FlashCampaignAudience={deepSeekV4FlashCampaignAudience}
-                onDeepSeekV4FlashCampaignUseNow={applyDeepSeekCampaignModel}
-                deepSeekV4FlashCampaignMetricsConsent={config.telemetry?.metrics === true}
-                deepSeekV4FlashCampaignInstallationId={config.installationId ?? null}
               />
             </div>
             <div data-testid="entry-view-projects" data-active={view === 'projects' ? 'true' : 'false'} {...inactiveViewProps(view === 'projects')}>
@@ -1958,9 +2038,13 @@ export function EntryShell({
                   })();
                 }}
                 onUsePrompt={(target) => {
-                  // Seed the Home composer with the template's starting prompt,
-                  // then switch to Home to review + send it (keep in sync with
-                  // the standalone /community branch in App.tsx).
+                  // Hands off to Home (OPEND-2793, product decision B): the
+                  // community view no longer docks a composer at its foot —
+                  // that bar had no relation to the gallery, the filters or
+                  // the card under it, and phase three will bring it back in
+                  // a template-bound shape. Same seed + binding pair the
+                  // standalone /community route in App.tsx uses, so Use
+                  // lands the prompt AND the plugin driver in Home's composer.
                   seedHomeComposerPrompt(target.prompt);
                   setHomePromptHandoff(createPluginUseHandoff(Date.now(), target.templateId, {
                     action: 'use',
@@ -1985,12 +2069,20 @@ export function EntryShell({
                 view is provided by another lane (B = members/board, D = team
                 project spaces / workspace settings), rendered as a placeholder
                 until those land. */}
-            {view === 'drafts' ? (
-              projectsLoading ? (
+            {view === 'drafts' || view === 'all-projects' ? (
+              // 全部项目 (OPEND-3108): ONE catalog — the same list the rail's
+              // 最近浏览过 shows — split by the strip's 最近浏览过 / 个人项目 /
+              // 团队项目 tabs. The legacy `all-projects` view (the
+              // `/all-projects` deep link) is this page opened on its 团队项目
+              // tab. The team half of the catalog comes from `teamProjects`,
+              // which has its own loading state and restarts from empty
+              // whenever the entry shell remounts (e.g. returning from a
+              // project); wait for BOTH reads before calling the page empty.
+              projectsLoading || (projectSearchProjects.length === 0 && teamProjects.loading) ? (
                 <div className="entry-section">
                   <CenteredLoader label={t('common.loading')} />
                 </div>
-              ) : draftProjectsList.length === 0 ? (
+              ) : projectSearchProjects.length === 0 ? (
                 <EntryBlankState
                   heading={t('entry.navDrafts')}
                   description={t('entry.blankDraftsDescription')}
@@ -2000,58 +2092,25 @@ export function EntryShell({
               ) : (
                 <div className="entry-section">
                   <RecentProjectsStrip
-                    projects={draftProjectsList}
+                    projects={projectSearchProjects}
                     designSystems={designSystems}
                     limit={1000}
                     heading={t('entry.navDrafts')}
                     space="drafts"
-                    isSharedProject={isSharedProject}
-                    onProjectShared={markProjectShared}
-                    onProjectShareFailed={markProjectShareFailed}
-                    onProjectUnshared={markProjectUnshared}
-                    projectOwnerMemberIds={teamProjectOwnerMemberIds}
-                    onOpen={(id) => onOpenProject(id)}
-                    onViewAll={() => {}}
-                    onDelete={onDeleteProject}
-                    onRename={onRenameProject}
-                  />
-                </div>
-              )
-            ) : null}
-            {view === 'all-projects' ? (
-              // The all-projects grid is fed by `teamProjects`, which has its own
-              // loading state and restarts from empty whenever the entry shell
-              // remounts (e.g. returning from a project). Gating only on
-              // `projectsLoading` flashed the "还没有团队项目" empty state during
-              // that team read; wait for BOTH before deciding the grid is empty.
-              projectsLoading || teamProjects.loading ? (
-                <div className="entry-section">
-                  <CenteredLoader label={t('common.loading')} />
-                </div>
-              ) : allProjectsList.length === 0 ? (
-                <EntryBlankState
-                  heading={t('entry.navAllProjects')}
-                  description={t('entry.blankAllProjectsDescription')}
-                  actionLabel={t('entry.blankCreate')}
-                  onCreate={() => startBlankProjectFromRail()}
-                />
-              ) : (
-                <div className="entry-section">
-                  <RecentProjectsStrip
-                    projects={allProjectsList}
-                    designSystems={designSystems}
-                    limit={1000}
-                    heading={t('entry.navAllProjects')}
-                    space="team"
+                    collection={projectsCollection}
+                    onCollectionChange={setProjectsCollection}
                     isSharedProject={isSharedProject}
                     onProjectShared={markProjectShared}
                     onProjectShareFailed={markProjectShareFailed}
                     onProjectUnshared={markProjectUnshared}
                     projectOwnerMemberIds={teamProjectOwnerMemberIds}
                     openingProjectId={pullingProjectId}
+                    // Pull-first opener: a 团队项目 row that is not local yet
+                    // materializes before it opens, like the old team grid.
                     onOpen={handleOpenAllProjects}
                     onViewAll={() => {}}
                     onDelete={onDeleteProject}
+                    onDuplicate={onDuplicateProject}
                     onRename={onRenameProject}
                     canAssignInviteRoles={workspaceContext?.permissions.canInviteMembers === true}
                     canManageProjectCollection={workspaceContext?.permissions.canShareProjects === true}

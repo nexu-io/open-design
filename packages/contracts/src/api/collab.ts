@@ -459,6 +459,117 @@ export function workspaceContextHasWorkspaceIdentity(
   return Boolean(context && context.workspaceId && context.workspaceMemberId);
 }
 
+/**
+ * The fields that name WHO a workspace context belongs to — and nothing else.
+ *
+ * ## Why this exists
+ *
+ * The product resolves the same person's workspace context from two sources,
+ * and they legitimately disagree:
+ *
+ * - The SHELL (`GET /api/workspace/context`, the account membership
+ *   directory) reports the member's REAL `role`.
+ * - The PROJECT scope fast path (`GET /api/projects/:id/workspace-scope` →
+ *   `resolveLocalProjectWorkspaceScope` in apps/daemon) resolves *without
+ *   consulting the membership directory* — that is its stated contract and the
+ *   reason the read-only decision can paint on the first frame — so it fills
+ *   `role` with a least-privilege `member` placeholder. That placeholder is
+ *   load-bearing: it is how "creator may write / non-creator is read-only" is
+ *   implemented (see `workspaceResourceAccess` in
+ *   apps/daemon/src/collab/workspace-resource-mutation.ts). It must not be
+ *   "fixed", and it must not be made to wait on the network.
+ *
+ * Everything else the two sources publish for one member of one workspace is
+ * byte-identical: `canShareProjects` / `canWriteSyncedFiles` derive from
+ * `memberStatus` + `lifecycleState` only (see {@link buildWorkspacePermissions}),
+ * never from `role`. So `role` is the ONLY field that can differ — which is why
+ * a naive "are these the same context" comparison silently works for a plain
+ * member and silently fails for an owner or an admin.
+ *
+ * That has produced the same defect seven times so far, always written as an
+ * ad-hoc field-by-field or cache-key comparison at the call site:
+ *
+ *  1. A balance dialog that told the team owner to "ask your team owner"
+ *     (§6.V / OPEND-2720) — fixed by {@link workspaceBillingAuthorityContext}.
+ *  2. A plan-gated model whose "upgrade to use this" tooltip did nothing when
+ *     clicked, on team AND personal workspaces (`AvatarMenu`).
+ *  3. "项目不存在" on a team owner's own project, opened from its directory card
+ *     (`bootstrapProjectRoute`).
+ *  4. The progressive first-open lane dead for every owner/admin, silently
+ *     falling back to full materialization (`bootstrapFirstOpenTeamProjectRoute`).
+ *  5. A home project grid that never went stale after the owner shared or
+ *     unshared, so Back showed the pre-share state (`project-display-cache`).
+ *  6. Every project open by an owner/admin discarding the route bootstrap's
+ *     pre-fetched scope and refetching it (`useProjectWorkspaceScope`).
+ *  7. `App.handleProjectChange`'s route-snapshot match, which compares the
+ *     route snapshot's scope-derived context against the directory-derived
+ *     project context — still open at the time of writing.
+ *
+ * ## The rule
+ *
+ * Asking **"is this the same person in the same workspace?"** goes through this
+ * helper — never through a cache key, never through a hand-rolled field
+ * comparison. `role` is authorization state, not identity, and the answer to
+ * "who is this" may not depend on it.
+ *
+ * `memberStatus` and `lifecycleState` are excluded for a related reason: the two
+ * sources describe DIFFERENT OBJECTS' state (the project's own row versus the
+ * workspace's directory entry — a frozen project reads back `locked` while its
+ * workspace is `active`). They are state of an identity, not the identity, and
+ * every consumer that cares about them still reads them from whichever context
+ * is authoritative for its own question.
+ *
+ * Using `role` to decide **whether this person may change this thing** remains
+ * correct and is untouched by this helper — that is what
+ * `workspaceResourceAccess`, the `x-od-workspace-role` request header, and the
+ * daemon's mutation gate do.
+ */
+export type WorkspacePrincipal = Pick<
+  WorkspaceCollabContext,
+  'workspaceId' | 'workspaceType' | 'workspaceMemberId'
+>;
+
+/**
+ * A stable partition token for one workspace principal, or `null` when the
+ * context is absent or its identity incomplete.
+ *
+ * `null` is deliberately not a token: an absent identity is not equal to
+ * another absent identity, so callers that store this key can compare it
+ * directly without accidentally letting two unknowns match.
+ */
+export function workspacePrincipalKey(
+  context: WorkspacePrincipal | null | undefined,
+): string | null {
+  if (!context) return null;
+  // Blankness disqualifies, but the token itself keys on the raw values so this
+  // stays exactly as strict as the field-by-field `!==` comparisons it
+  // replaced. `JSON.stringify` keeps the three fields unambiguous even if an id
+  // ever contains the separator.
+  if (!context.workspaceId?.trim() || !context.workspaceMemberId?.trim()) return null;
+  return JSON.stringify([
+    context.workspaceId,
+    context.workspaceType,
+    context.workspaceMemberId,
+  ]);
+}
+
+/**
+ * Whether two workspace contexts name the same person in the same workspace.
+ *
+ * Fail-closed: an absent or incomplete identity on either side is never "the
+ * same person", including when both sides are absent.
+ *
+ * See {@link WorkspacePrincipal} for why this exists and why `role` is not part
+ * of the answer.
+ */
+export function isSameWorkspacePrincipal(
+  a: WorkspacePrincipal | null | undefined,
+  b: WorkspacePrincipal | null | undefined,
+): boolean {
+  const key = workspacePrincipalKey(a);
+  return key !== null && key === workspacePrincipalKey(b);
+}
+
 export function isWorkspaceLifecycleWritable(state: WorkspaceLifecycleState): boolean {
   return state === 'active';
 }
@@ -484,6 +595,125 @@ export function buildWorkspacePermissions(input: {
     canWriteSyncedFiles: writable,
     canViewWorkspaceSettings: readable,
     canManageSharedResources: writable && (isOwner || isAdmin),
+  };
+}
+
+/**
+ * Whether this context may be shown a billing entrance — an upgrade link, a
+ * plan surface, a top-up destination.
+ *
+ * `canManageBilling` answers a TEAM question: which member of a shared
+ * workspace may spend money that is not only theirs. B enforces the same bit
+ * server-side (`services/api/src/billing/http/routes.ts` refuses a caller
+ * without it), so surfacing an external billing action to a team member
+ * without it can only produce a button that fails on arrival. That gate is
+ * correct and this predicate keeps it exactly as strict.
+ *
+ * A PERSONAL workspace has no second member. The wallet is the signed-in
+ * user's own, there is nobody to ask, and there is no one to protect the money
+ * from. Asking a team-membership permission whether someone may pay for
+ * themselves does not gate anything — it only deletes the person's own way to
+ * pay. That is how an empty personal wallet ended up looking at a dialog that
+ * said "upgrade to keep creating" under a single 「暂不需要」 button
+ * (`run-error-catalog.md` §6.Y, reproduced on a real runtime 2026-09-07).
+ *
+ * This is the ONE predicate every billing entrance must agree on. The audience
+ * split that decides WHICH dialog appears (`runtime/amr-balance-branch.ts`) and
+ * the resolver that decides whether that dialog HAS a destination
+ * (`workspaceUpgradeUrl`) both read it here, because a user who is routed to
+ * the upgrade dialog and a user who is handed an upgrade link have to be the
+ * same user. Deriving it twice is how a dialog grows a body with no way out.
+ *
+ * Note this is about the ENTRANCE, not the action. Whether the entrance leads
+ * to a plan surface or to auto-recharge is a separate question owned by
+ * `canManageAutoRecharge` (`writable && isOwner`, a strictly narrower bit).
+ */
+export function canReachWorkspaceBillingEntrance(
+  context: Pick<WorkspaceCollabContext, 'workspaceType'> & {
+    permissions?: Pick<WorkspacePermissions, 'canManageBilling'>;
+  },
+): boolean {
+  if (context.workspaceType !== 'team') return true;
+  return context.permissions?.canManageBilling === true;
+}
+
+/**
+ * The one context a billing entrance may be resolved from, for a run that a
+ * specific project's workspace pays for.
+ *
+ * Two questions get confused here, and they have different authorities.
+ *
+ * WHICH WORKSPACE PAYS is the project's resolved scope, and only the project's
+ * resolved scope. A settled unavailable/forbidden scope produces no context at
+ * all, and that absence must stay an absence: substituting whichever workspace
+ * the navigation rail happens to be in is how a Team project's empty wallet
+ * ends up asking about the viewer's Personal one. So `scoped` is passed through
+ * untouched in its identity — there is no input to this function that can make
+ * the result name a different `workspaceId`, `workspaceType`, or
+ * `workspaceMemberId` than `scoped` did, and a null `scoped` stays null.
+ *
+ * WHO IS ASKING the project scope cannot answer. `resolveLocalProjectWorkspaceScope`
+ * (apps/daemon) resolves a project's scope *without consulting the membership
+ * directory* — that is its stated contract and the reason it is fast and
+ * local — so it fills `role` with a least-privilege `member` placeholder. That
+ * placeholder is load-bearing for writes: the daemon's resource gate derives
+ * `privileged` from the role the project request asserts, and a placeholder
+ * that said `owner` would let a workspace owner write every project in the
+ * workspace, including ones they did not create. It must not be "fixed".
+ *
+ * What it must not do is answer a MONEY question. Asked whether the viewer may
+ * reach a billing entrance, the placeholder demotes a workspace owner to a
+ * member and deletes their own way to pay — the dialog becomes "ask your team
+ * owner" for the team owner themselves (§6.V / OPEND-2720, reproduced on a
+ * real runtime 2026-09-07).
+ *
+ * So this adopts exactly one thing — the membership role — and only from an
+ * authoritative context (`GET /api/workspace/context`) that names the very same
+ * workspace AND the very same member. Permissions are re-derived through
+ * {@link buildWorkspacePermissions} using the SCOPE's own lifecycle and member
+ * status, because those describe this project's state (a frozen project reads
+ * back `locked`) rather than the directory's view of the workspace. A frozen
+ * project therefore stays unwritable no matter whose role is adopted.
+ *
+ * Everything else — a mismatch of any identity field, an absent authority —
+ * keeps the fail-closed scope exactly as it is.
+ *
+ * The AUTHORITY's own `memberStatus` is deliberately not consulted (product
+ * ruling 2026-09-07). It could only ever change the outcome for the pairing
+ * "the directory reports this member removed, yet the project's scope still
+ * resolves for them", and the product ships no entrance that removes a member,
+ * so that pairing has no way to occur. Adding the branch anyway would only buy
+ * an unreachable one: nothing this function returns is an authorization. The
+ * permission bits are still re-derived from the SCOPE's own `memberStatus`
+ * above, so a scope that does report `removed` stays closed regardless of the
+ * role adopted, and every money action behind the entrance is enforced
+ * server-side. The residue if the pairing ever became reachable is a removed
+ * member seeing an upgrade link — which is not a harm worth a dead branch.
+ *
+ * The result is for billing entrances only (which dialog, whether an upgrade
+ * link exists, where it lands). It must never be used as a project request's
+ * workspace identity, nor reach a write/read-only decision.
+ */
+export function workspaceBillingAuthorityContext(
+  scoped: WorkspaceCollabContext | null | undefined,
+  authoritative: WorkspaceCollabContext | null | undefined,
+): WorkspaceCollabContext | null {
+  if (!scoped) return null;
+  if (!authoritative) return scoped;
+  if (
+    !isSameWorkspacePrincipal(authoritative, scoped)
+    || authoritative.role === scoped.role
+  ) {
+    return scoped;
+  }
+  return {
+    ...scoped,
+    role: authoritative.role,
+    permissions: buildWorkspacePermissions({
+      role: authoritative.role,
+      lifecycleState: scoped.lifecycleState,
+      memberStatus: scoped.memberStatus,
+    }),
   };
 }
 

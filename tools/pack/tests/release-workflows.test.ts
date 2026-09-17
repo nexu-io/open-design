@@ -29,6 +29,152 @@ function countOccurrences(content: string, needle: string): number {
   return content.split(needle).length - 1;
 }
 
+type WorkflowJob = { needs: string[]; if: string };
+
+/**
+ * Minimal `jobs:` reader: job id -> its `needs` list and its job-level `if`.
+ *
+ * Deliberately not a YAML parser. These workflows are hand-written with a
+ * stable two-space job indentation, and the alternative is adding a YAML
+ * dependency to tools/pack purely for a topology assertion.
+ */
+function parseJobGraph(content: string): Map<string, WorkflowJob> {
+  const lines = content.split("\n");
+  const jobsIndex = lines.indexOf("jobs:");
+  expect(jobsIndex).toBeGreaterThanOrEqual(0);
+
+  const blocks = new Map<string, string[]>();
+  let current: string | null = null;
+  for (const line of lines.slice(jobsIndex + 1)) {
+    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
+    if (header?.[1] != null) {
+      current = header[1];
+      blocks.set(current, []);
+      continue;
+    }
+    if (line.trim().length > 0 && /^\S/.test(line)) break;
+    if (current != null) blocks.get(current)?.push(line);
+  }
+
+  const jobs = new Map<string, WorkflowJob>();
+  for (const [name, block] of blocks) {
+    const job: WorkflowJob = { needs: [], if: "" };
+    for (let index = 0; index < block.length; index += 1) {
+      const line = block[index] ?? "";
+      const inlineNeeds = /^ {4}needs:\s*(.+)$/.exec(line);
+      if (inlineNeeds?.[1] != null) {
+        const value = inlineNeeds[1].split("#")[0]?.trim() ?? "";
+        job.needs = value.startsWith("[")
+          ? value.replace(/[[\]]/g, "").split(",").map((entry) => entry.trim()).filter(Boolean)
+          : [value].filter(Boolean);
+        continue;
+      }
+      if (/^ {4}needs:\s*$/.test(line)) {
+        for (const candidate of block.slice(index + 1)) {
+          const item = /^ {6}- ([A-Za-z0-9_-]+)/.exec(candidate);
+          if (item?.[1] == null) break;
+          job.needs.push(item[1]);
+        }
+        continue;
+      }
+      const conditionStart = /^ {4}if:\s*(.*)$/.exec(line);
+      if (conditionStart != null) {
+        let value = conditionStart[1] ?? "";
+        for (const candidate of block.slice(index + 1)) {
+          if (/^ {4}\S/.test(candidate)) break;
+          value += ` ${candidate.trim()}`;
+        }
+        job.if = value.trim();
+      }
+    }
+    jobs.set(name, job);
+  }
+  return jobs;
+}
+
+/** Every job `name` depends on, directly or through another job. */
+function transitiveNeeds(jobs: Map<string, WorkflowJob>, name: string): string[] {
+  const seen = new Set<string>();
+  const stack = [...(jobs.get(name)?.needs ?? [])];
+  while (stack.length > 0) {
+    const next = stack.pop();
+    if (next == null || seen.has(next) || !jobs.has(next)) continue;
+    seen.add(next);
+    stack.push(...(jobs.get(next)?.needs ?? []));
+  }
+  return [...seen];
+}
+
+type WorkflowStep = { job: string; name: string; if: string };
+
+/**
+ * Minimal `steps:` reader: every step in the file as job id + step name +
+ * step-level `if` (block scalars folded onto one line).
+ *
+ * Same rationale as parseJobGraph — hand-written workflows with stable
+ * indentation, and this is a topology assertion rather than a YAML feature
+ * test. Keys of a step sit at exactly eight spaces (or on the `- ` line), so
+ * `run:`/`env:` bodies, which must be indented deeper than their key, never
+ * look like one.
+ */
+function parseWorkflowSteps(content: string): WorkflowStep[] {
+  const steps: WorkflowStep[] = [];
+  let job: string | null = null;
+  let inSteps = false;
+  let collectingIf = false;
+  for (const line of content.split("\n")) {
+    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
+    if (header?.[1] != null) {
+      job = header[1];
+      inSteps = false;
+      collectingIf = false;
+      continue;
+    }
+    if (/^ {4}steps:\s*$/.test(line)) {
+      inSteps = true;
+      continue;
+    }
+    if (!inSteps || job == null) continue;
+
+    const isStepKey = /^ {6}- |^ {8}[A-Za-z_-]+:/.test(line);
+    if (collectingIf && !isStepKey) {
+      const last = steps[steps.length - 1];
+      const text = line.trim();
+      if (last != null && text.length > 0 && !text.startsWith("#")) last.if += ` ${text}`;
+      continue;
+    }
+    collectingIf = false;
+
+    if (/^ {6}- /.test(line)) steps.push({ job, name: "", if: "" });
+    const current = steps[steps.length - 1];
+    if (current == null) continue;
+
+    const name = /^(?: {6}- | {8})name:\s*(.*)$/.exec(line);
+    if (name?.[1] != null) {
+      current.name = name[1].trim();
+      continue;
+    }
+    const condition = /^(?: {6}- | {8})if:\s*(.*)$/.exec(line);
+    if (condition != null) {
+      current.if = (condition[1] ?? "").trim();
+      collectingIf = true;
+    }
+  }
+  return steps;
+}
+
+/**
+ * Status-check functions that make a job evaluate its own `if` instead of
+ * inheriting a skip from somewhere up the chain. `success()` does not count:
+ * it is what GitHub already applies implicitly.
+ *
+ * The same list applies one level down. A step-level `if` without a status
+ * function also gets an implicit `success()`, evaluated against the job's
+ * status SO FAR — so a step placed after one that failed is skipped before its
+ * own condition is read, exactly as a job is.
+ */
+const SKIP_CHAIN_BREAKERS = ["always(", "cancelled(", "failure("];
+
 describe("release workflows", () => {
   it("retains only the newest outer tools-pack cache for each release lane", async () => {
     const workflows = await Promise.all([
@@ -65,7 +211,7 @@ describe("release workflows", () => {
     const linux = sectionBetween(beta, "  build_linux_x64:", "  publish:");
     const betaMetadata = sectionBetween(beta, "  metadata:", "  build_mac_arm64:");
     const betaPublish = sectionAfter(beta, "  publish:");
-    const prereleaseMetadata = sectionBetween(prerelease, "  metadata:", "  verify:");
+    const prereleaseMetadata = sectionBetween(prerelease, "  metadata:", "  dispatch_validation:");
     const prereleasePublish = sectionBetween(prerelease, "  publish:", "  cleanup_partial_release_assets:");
     const prereleaseMac = sectionBetween(prerelease, "  build_mac:", "  build_mac_intel:");
     const prereleaseMacX64 = sectionBetween(prerelease, "  build_mac_intel:", "  build_win:");
@@ -254,7 +400,7 @@ describe("release workflows", () => {
     ).toBe(2);
     expect(prereleaseMacX64).toContain("tools-release write-report");
     for (const [prereleaseMacJob, nextStep] of [
-      [prereleaseMac, "Smoke prerelease mac"],
+      [prereleaseMac, "Write mac_arm64 release report"],
       [prereleaseMacX64, "Write mac_x64 release report"],
     ] as const) {
       expect(prereleaseMacJob).toContain("Verify prerelease mac");
@@ -341,6 +487,262 @@ describe("release workflows", () => {
     expect(modeLine, "notify-release-feishu must forward win_x64_smoke_mode").toBeDefined();
     expect(modeLine).not.toMatch(/\|\|\s*''\s*\}\}/);
     expect(modeLine).toMatch(/\|\|\s*'core'\s*\}\}/);
+  });
+
+  it("keeps a job that hand-checks an upstream result reachable past a skipped ancestor", async () => {
+    // GitHub, on `jobs.<job_id>.needs`: "If a job fails or is skipped, all jobs
+    // that need it are skipped unless the jobs use a conditional expression
+    // that causes the job to continue. If a run contains a series of jobs that
+    // need each other, a failure or skip applies to all jobs in the dependency
+    // chain from the point of failure or skip onwards."
+    //
+    // The break is per job and is NOT inherited. `always()` on `publish` lets
+    // PUBLISH run past a skipped `build_linux`; it does nothing for publish's
+    // own dependents, which are still downstream of the same skip. A job whose
+    // `if` hand-checks `needs.<x>.result` is by construction making its own
+    // decision about an upstream outcome — so it has to break the chain too,
+    // or GitHub's implicit `success()` skips it before that condition is ever
+    // evaluated.
+    //
+    // release-prerelease.yml's `dispatch_smoke` was exactly that shape, and
+    // `build_linux` is skipped on every single run because the repository has
+    // no ENABLE_STABLE_LINUX variable. Run 34149795952: publish succeeded,
+    // version_metadata_url was published, enable_smoke came through as true —
+    // and the job was skipped with zero steps, so release-prerelease-smoke.yml
+    // had never once run.
+    const files = [
+      "release-prerelease.yml",
+      "release-beta.yml",
+      "release-stable.yml",
+      "notify-release-feishu.yml",
+      // The dispatched prerelease lanes were outside this sweep, which left
+      // release-prerelease-card.yml's `fallback_notice` — a job whose `if`
+      // hand-checks `needs.card.result` — uncovered by the very rule it has to
+      // obey.
+      "release-prerelease-card.yml",
+      "release-prerelease-tests.yml",
+      "release-prerelease-smoke.yml",
+    ];
+    const contents = await Promise.all(
+      files.map((file) => readFile(new URL(`../../../.github/workflows/${file}`, import.meta.url), "utf8")),
+    );
+
+    const unreachable: string[] = [];
+    for (const [index, content] of contents.entries()) {
+      const jobs = parseJobGraph(content);
+      for (const [name, job] of jobs) {
+        if (!/needs\.[A-Za-z0-9_-]+\.result/.test(job.if)) continue;
+        if (SKIP_CHAIN_BREAKERS.some((breaker) => job.if.includes(breaker))) continue;
+        const skippableAncestors = transitiveNeeds(jobs, name).filter(
+          (ancestor) => (jobs.get(ancestor)?.if ?? "").length > 0,
+        );
+        if (skippableAncestors.length === 0) continue;
+        unreachable.push(`${files[index]}:${name} (skippable ancestors: ${skippableAncestors.sort().join(", ")})`);
+      }
+    }
+    expect(unreachable, "these jobs are skipped before their own condition is evaluated").toEqual([]);
+
+    // And specifically: the smoke dispatcher must stay reachable while
+    // build_linux stays opt-in.
+    const prerelease = parseJobGraph(contents[0] ?? "");
+    const dispatchSmoke = prerelease.get("dispatch_smoke");
+    expect(dispatchSmoke, "release-prerelease.yml must still dispatch packaged smoke").toBeDefined();
+    expect(transitiveNeeds(prerelease, "dispatch_smoke")).toContain("build_linux");
+    expect(prerelease.get("build_linux")?.if).toContain("vars.ENABLE_STABLE_LINUX");
+    expect(SKIP_CHAIN_BREAKERS.some((breaker) => (dispatchSmoke?.if ?? "").includes(breaker))).toBe(true);
+  });
+
+  it("keeps the prerelease card fallback reachable after the step it alerts on has failed", async () => {
+    // The job-level trap above has a step-level twin, and it is easier to walk
+    // into because there is no `needs:` to remind you. GitHub applies an
+    // implicit `success()` to any step-level `if` that carries no status
+    // function, and that success() is evaluated against the JOB'S STATUS SO
+    // FAR. So a step placed after a step that failed is skipped before its own
+    // condition is ever read.
+    //
+    // That is fatal for exactly one kind of step: one whose job is to speak up
+    // BECAUSE something earlier failed. The prerelease card fallback is that
+    // kind. `dispatch-validation.sh` exits non-zero when it could not dispatch
+    // the card on any ref, which marks the job failed — and a card that was
+    // never dispatched is the headline reason the fallback exists. A notifier
+    // that inherits success() there is silent in precisely its own emergency.
+    //
+    // Not a rule that generalizes to every step: most steps SHOULD stop when
+    // something before them broke. It binds the fallback notifier group, whose
+    // whole contract is the opposite.
+    const [prerelease, card] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease-card.yml", import.meta.url), "utf8"),
+    ]);
+
+    // The notifier group inside `dispatch_validation` sits after two dispatch
+    // steps that can fail, so every step of it needs a status function.
+    const dispatchSteps = parseWorkflowSteps(prerelease).filter((step) => step.job === "dispatch_validation");
+    const notifierStart = dispatchSteps.findIndex((step) => step.name === "Setup Node.js for the fallback notifier");
+    expect(notifierStart, "release-prerelease.yml must still carry the fallback notifier").toBeGreaterThan(0);
+    const stranded = dispatchSteps
+      .slice(notifierStart)
+      .filter((step) => !SKIP_CHAIN_BREAKERS.some((breaker) => step.if.includes(breaker)));
+    expect(
+      stranded.map((step) => step.name),
+      "these fallback steps inherit success() and are skipped by the very dispatch failure they exist to report",
+    ).toEqual([]);
+
+    // Wherever the composed notice is consumed, same rule — and one more: a
+    // consumer must require the composer to have SUCCEEDED. `alert` is written
+    // last precisely so a half-written notice cannot claim to be one, and the
+    // outcome check says the same thing at the workflow layer, so neither a
+    // crashed nor a skipped composer can hand feishu-notice.ts an empty body.
+    for (const [file, content] of [
+      ["release-prerelease.yml", prerelease],
+      ["release-prerelease-card.yml", card],
+    ] as const) {
+      const consumers = parseWorkflowSteps(content).filter((step) => step.if.includes("steps.notice.outputs"));
+      expect(consumers.length, `${file} must consume the composed notice`).toBeGreaterThan(0);
+      for (const consumer of consumers) {
+        expect(
+          SKIP_CHAIN_BREAKERS.some((breaker) => consumer.if.includes(breaker)),
+          `${file}:${consumer.job}:${consumer.name} inherits success() and cannot report an upstream failure`,
+        ).toBe(true);
+        expect(
+          consumer.if,
+          `${file}:${consumer.job}:${consumer.name} must not post a notice its composer failed to finish`,
+        ).toContain("steps.notice.outcome == 'success'");
+      }
+    }
+  });
+
+  it("keeps every prerelease validation lane out of the release concurrency group", async () => {
+    // release-prerelease.yml holds ONE repository-wide concurrency group with
+    // cancel-in-progress: false. Anything that outlives `publish` inside it
+    // keeps that group held, which stops the next prerelease from STARTING —
+    // so making the test jobs advisory was not enough, they had to leave the
+    // workflow. Lock that: the pipeline is metadata → build → publish plus two
+    // fire-and-forget dispatchers, and the lanes live in workflows whose
+    // concurrency is scoped to the origin run.
+    const [prerelease, tests, smoke, card, dispatcher] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease-tests.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease-smoke.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease-card.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/scripts/release/dispatch-validation.sh", import.meta.url), "utf8"),
+    ]);
+
+    expect(prerelease).toContain("group: open-design-release-prerelease");
+    for (const jobId of ["  functional_e2e:", "  e2e_vitest:", "  daemon_unit_tests:", "  verify:", "  test_signals:"]) {
+      expect(prerelease, `${jobId} must not be a release-prerelease job any more`).not.toContain(jobId);
+    }
+    // The mac/Windows packaged smoke left with them; Linux keeps its in-job
+    // smoke because that whole lane is opt-in and on nobody's critical path.
+    expect(prerelease).not.toContain("Smoke prerelease mac packaged runtime");
+    expect(prerelease).not.toContain("Smoke prerelease mac_x64 packaged runtime");
+    expect(prerelease).not.toContain("Smoke prerelease windows packaged runtime");
+    expect(prerelease).toContain("Smoke prerelease linux AppImage runtime");
+
+    // Dispatchers, and nothing depending on them.
+    expect(prerelease).toContain("  dispatch_validation:");
+    expect(prerelease).toContain("  dispatch_smoke:");
+    expect(prerelease).toContain("dispatch-validation.sh release-prerelease-tests.yml");
+    expect(prerelease).toContain("dispatch-validation.sh release-prerelease-card.yml");
+    expect(prerelease).toContain("dispatch-validation.sh release-prerelease-smoke.yml");
+    expect(prerelease).not.toContain("- dispatch_validation");
+    expect(prerelease).not.toContain("- dispatch_smoke");
+    // Smoke needs a package, so it waits for publish — but only long enough to
+    // POST the dispatch. Asserted as substance rather than as one literal
+    // line: the previous form pinned the exact string of a condition that
+    // never ran, which made the topology test agree with the bug. Reachability
+    // itself is covered by "keeps a job that hand-checks an upstream result
+    // reachable past a skipped ancestor" above.
+    const smokeCondition = parseJobGraph(prerelease).get("dispatch_smoke")?.if ?? "";
+    expect(smokeCondition).toContain("inputs.enable_smoke");
+    expect(smokeCondition).toContain("needs.publish.result == 'success'");
+    expect(smokeCondition).toContain("needs.publish.outputs.version_metadata_url != ''");
+
+    // Two refs, tried in order, so a release branch cut before these lanes
+    // existed still gets validated from the default branch.
+    expect(dispatcher).toContain('for candidate in "${PRIMARY_REF:-}" "${FALLBACK_REF:-}"');
+    expect(dispatcher).toContain('gh workflow run "$workflow" --ref "$ref"');
+
+    for (const [label, workflow] of [
+      ["tests", tests],
+      ["smoke", smoke],
+      ["card", card],
+    ] as const) {
+      expect(workflow, label).toContain("workflow_dispatch:");
+      expect(workflow, label).not.toContain("open-design-release-prerelease");
+      expect(workflow, label).toContain("cancel-in-progress: false");
+      // Correlation is the run name: `gh workflow run` returns no run id, so
+      // the Feishu card finds these runs by matching `origin-run <id>`.
+      expect(workflow, label).toContain("origin-run ${{ inputs.origin_run_id }}");
+      expect(workflow, label).toContain("group: release-prerelease-");
+    }
+
+    // The suites moved verbatim and still run against the resolved build commit.
+    for (const suite of [
+      "pnpm --filter @open-design/e2e test",
+      "pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4",
+      "pnpm -r --workspace-concurrency=4 --if-present run typecheck",
+      "run: pnpm guard",
+      "uses: ./.github/workflows/ui-extended-main.yml",
+    ]) {
+      expect(tests).toContain(suite);
+    }
+    expect(tests).toContain("ref: ${{ inputs.commit }}");
+    expect(tests).not.toContain("needs.metadata.outputs.commit");
+
+    // Smoke installs the PUBLISHED artifact, not a local build directory.
+    expect(smoke).toContain("smoke-artifacts.ts plan");
+    expect(smoke).toContain("smoke-artifacts.ts stage");
+    expect(smoke).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
+    expect(smoke).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
+    expect(smoke).not.toContain("tools-pack mac build");
+    // mac.spec.ts reads the profile with a bare `??`, so an empty string reads
+    // as "not core" and selects the updater path — which then dies for want of
+    // a fixture. It must be a literal, never an expression.
+    expect(smoke).toContain("OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: core");
+    expect(smoke).not.toMatch(/OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: \$\{\{/);
+    // Every platform lane is gated on what actually published, not on the flags
+    // the build was dispatched with.
+    expect(smoke).toContain("if: ${{ needs.plan.outputs.mac_arm64 == 'true' }}");
+    expect(smoke).toContain("if: ${{ needs.plan.outputs.mac_x64 == 'true' }}");
+
+    // The card watcher reads job state and writes only to Feishu.
+    expect(card).toContain("actions: read");
+    expect(card).not.toContain("actions: write");
+    expect(card).toContain("tools/release/src/notifications/prerelease-progress-card.ts");
+    expect(card).toContain("FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}");
+    expect(card).toContain("FEISHU_RELEASE_CHAT_ID: ${{ secrets.FEISHU_RELEASE_CHAT_ID }}");
+  });
+
+  it("keeps macOS Intel and the validation lanes on by default without breaking the off switch", async () => {
+    const [prerelease, notify] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/notify-release-feishu.yml", import.meta.url), "utf8"),
+    ]);
+
+    // Intel builds on every prerelease: stable ships Intel, and stable's gate
+    // is a validated prerelease artifact, so an Intel-less prerelease cannot be
+    // promoted at all.
+    for (const flag of ["enable_mac_x64", "enable_smoke", "enable_tests"]) {
+      const declarations = prerelease
+        .split("\n")
+        .map((line, index) => ({ index, line }))
+        .filter((entry) => entry.line.trim() === `${flag}:`);
+      // Declared once for workflow_dispatch and once for workflow_call.
+      expect(declarations, flag).toHaveLength(2);
+      for (const declaration of declarations) {
+        const block = prerelease.split("\n").slice(declaration.index, declaration.index + 6).join("\n");
+        expect(block, flag).toContain("default: true");
+      }
+    }
+
+    // `${{ inputs.<flag> || true }}` would be unturnoffable: `inputs` is unset
+    // on push (so the fallback is right there) but on a dispatch with the box
+    // UNCHECKED, `false || true` is also true. Test the event instead.
+    for (const flag of ["enable_mac_x64", "enable_smoke", "enable_tests"]) {
+      expect(notify).toContain(`${flag}: \${{ github.event_name != 'workflow_dispatch' || inputs.${flag} }}`);
+      expect(notify).not.toContain(`${flag}: \${{ inputs.${flag} || true }}`);
+    }
   });
 
   it("bakes both halves of the workspace-team gate into every shipping lane", async () => {

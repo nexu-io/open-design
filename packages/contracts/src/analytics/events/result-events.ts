@@ -43,6 +43,37 @@ export interface MediaGenerationResultProps {
   used_stub_fallback: boolean;
 }
 
+/**
+ * One chat turn's artifact-snapshot outcome, emitted at the run's terminal
+ * chokepoint — the moment the daemon decides what evidence this message will
+ * carry forever.
+ *
+ * `source_changed_count` is broken out of `failed_count` on purpose. Every
+ * other failure means "we could not keep a copy"; this one means the file on
+ * disk stopped being the file this turn produced BEFORE the copy was taken, so
+ * the capture window itself is wrong. It is the only counter here that
+ * indicates a correctness failure rather than a capacity or availability one,
+ * and it should alarm on its own rather than be averaged into a failure rate.
+ *
+ * Nothing here identifies content: no paths, no labels, no digests, no bytes.
+ */
+export interface ChatArtifactCaptureResultProps {
+  page_name: 'studio';
+  area: 'chat_artifact_capture';
+  project_id: string;
+  run_id: string;
+  /** Cards this turn will show. */
+  ref_count: number;
+  /** Snapshots this pass wrote. */
+  captured_count: number;
+  /** Snapshots the media path had already frozen for this run. */
+  reused_count: number;
+  failed_count: number;
+  /** Subset of `failed_count`. Alarms on its own; see above. */
+  source_changed_count: number;
+  result: 'success' | 'degraded';
+}
+
 export interface ProjectCreateResultProps {
   page_name: 'home';
   area: 'new_project';
@@ -465,6 +496,21 @@ export interface RunCreatedProps extends RunTaskLineageProps {
    * and when the user never opted in (there is nothing to explain).
    */
   harness_fallback_reason?: string;
+  /**
+   * The gate that refused an OD Next turn, when its logical task settled
+   * `blocked`.
+   *
+   * `result` is derived from the PHYSICAL run status, and a refused turn
+   * usually exits 0 with a complete reply on screen — so this whole class of
+   * failure reported `result: 'success'` and left no trace anywhere queryable.
+   * The user saw a red card; the data said the run was fine. Carrying the
+   * primary reason code (the same `reasonCodes[0]` the failure card keys on)
+   * makes the class countable without changing what `result` means.
+   *
+   * Omitted for every run whose strategy task did not block, which is the
+   * common case.
+   */
+  od_next_blocked_reason_code?: string;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
@@ -576,6 +622,44 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   asked_user_question: boolean;
   /** v4 name; asked_user_question remains during the compatibility window. */
   clarification_requested: boolean;
+  // Artifact-focus declaration, the mechanism that decides which files get a
+  // result card. Build all four with `buildArtifactFocusTelemetry`
+  // (`analytics/artifact-focus.ts`) rather than by hand — `declared_*` counts
+  // paths the host could actually ACT on, which is not the same as paths the
+  // model wrote, and `fallback_picked_count` has to agree with the panel's own
+  // `pickPrimaryArtifacts` or the two columns cannot be compared.
+  //
+  // Optional because they are only knowable where the turn's marker events and
+  // its written-file list are both in hand; emit sites without that evidence
+  // omit them rather than reporting a confident `false`.
+  /**
+   * The turn emitted a `<od-focus show="…">` the host could act on.
+   *
+   * The one number that says whether the instruction works. Its only prior
+   * measurement came from a diagnostics zip that happened to be attached to a
+   * bug report: 100% on turns that created a file, 22–25% on turns that only
+   * edited one.
+   */
+  declared_artifact_focus?: boolean;
+  /** Usable paths in that declaration. `0` when the turn declared nothing. */
+  declared_count?: number;
+  /**
+   * Main artifacts the host picked for an UNDECLARED turn; `0` when the turn
+   * declared (the fallback did not run). A `0` on a turn that wrote files is a
+   * turn with no result cards at all — the OPEND-2550 symptom.
+   */
+  fallback_picked_count?: number;
+  /**
+   * Every file this turn wrote was a dependency (`.js` / `.css` / `.svg` /
+   * `.json` and family), so the fallback had no deliverable to show.
+   *
+   * This is the frequency of the ONE case that would justify letting a card
+   * point at a file the turn did not write ("changed `app.js`, show the
+   * `index.html` that includes it"). That exception is deliberately NOT built:
+   * it breaks the marker contract's own rule that a card never points outside
+   * the turn's output. If this stays near zero it never needs building.
+   */
+  wrote_only_dependencies?: boolean;
   /** Main user-visible artifact outcome; omitted for Ask, clarification and DS Runs. */
   primary_artifact_change?: 'none' | 'created' | 'modified';
   input_tokens?: number;
@@ -601,6 +685,17 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   // where session reuse applies.
   is_followup_turn?: boolean;
   cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
+  // Per-request token coverage (#4610). `request_usage_count` is how many model
+  // requests in the run carry a per-request usage record (request_id + tokens);
+  // 0 means only the run-level aggregate was available. The `_sum` fields are
+  // the per-request token totals, and `request_usage_reconciles_aggregate` is
+  // whether that sum matches the run-level `result.usage` (the #4610 invariant).
+  // Together these let request-level cost/percentile analysis graduate off the
+  // run-level floor for claude_code.
+  request_usage_count?: number;
+  request_usage_input_tokens_sum?: number;
+  request_usage_output_tokens_sum?: number;
+  request_usage_reconciles_aggregate?: boolean;
   queue_duration_ms?: number;
   pre_spawn_duration_ms?: number;
   prompt_build_duration_ms?: number;

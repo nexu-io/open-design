@@ -440,6 +440,9 @@ export interface StrategyTaskTurnProjection {
    *  learn the verdict, and surfaces keyed off the agent's TodoWrite snapshot
    *  (the "continue remaining tasks" offer) would resurrect on every reload. */
   delivered: boolean;
+  /** Persisted task verdict, independent of the physical Run's status. */
+  blocked: boolean;
+  blockedText: string | null;
 }
 
 /**
@@ -451,6 +454,10 @@ export interface StrategyTaskTurnProjection {
  * know which assistant messages belong to the same turn so a continuation is
  * not drawn as an answer nobody asked for.
  *
+ * Message run pointers may be client supplied. An existing task must belong
+ * to the authorized project and conversation before any metadata is exposed;
+ * only a genuinely missing task row retains the legacy turn-position fallback.
+ *
  * Deliberately does NOT go through `rowToTask`: this is a projection for
  * display, so it must stay cheap over a whole conversation and must never let
  * one unverifiable task record fail the entire message list.
@@ -458,6 +465,7 @@ export interface StrategyTaskTurnProjection {
 export function strategyTaskTurnsForRunIds(
   db: SqliteDb,
   runIds: readonly string[],
+  owner: { projectId: string; conversationId: string },
 ): Map<string, StrategyTaskTurnProjection> {
   const turns = new Map<string, StrategyTaskTurnProjection>();
   const unique = [...new Set(runIds.filter((id) => typeof id === 'string' && id))];
@@ -470,7 +478,8 @@ export function strategyTaskTurnsForRunIds(
         SELECT r.run_id AS runId,
                r.task_execution_id AS taskExecutionId,
                r.task_run_index AS taskRunIndex,
-               t.outcome AS outcome
+               t.outcome AS outcome,
+               t.blocked_visible_text AS blockedVisibleText
           FROM strategy_task_runs r
           -- LEFT so a mapping whose task row is gone still yields its turn
           -- position: losing that would un-fold an already-rendered Full Plan
@@ -478,7 +487,9 @@ export function strategyTaskTurnsForRunIds(
           LEFT JOIN strategy_task_executions t
             ON t.task_execution_id = r.task_execution_id
          WHERE r.run_id IN (${chunk.map(() => '?').join(', ')})
-      `).all(...chunk) as DbRow[];
+           AND (t.task_execution_id IS NULL
+                OR (t.project_id = ? AND t.conversation_id = ?))
+      `).all(...chunk, owner.projectId, owner.conversationId) as DbRow[];
       for (const row of rows) {
         if (
           typeof row['runId'] !== 'string'
@@ -489,6 +500,12 @@ export function strategyTaskTurnsForRunIds(
           taskExecutionId: row['taskExecutionId'],
           taskRunIndex: row['taskRunIndex'],
           delivered: row['outcome'] === 'completed',
+          blocked: row['outcome'] === 'blocked',
+          blockedText: row['outcome'] === 'blocked'
+            && typeof row['blockedVisibleText'] === 'string'
+            && row['blockedVisibleText'].trim().length > 0
+            ? row['blockedVisibleText']
+            : null,
         });
       }
     }

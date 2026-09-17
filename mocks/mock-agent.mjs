@@ -91,8 +91,21 @@ async function main() {
     const cmd = (opts.positionals[0] || '').trim();
     if (cmd === 'login')  return runVelaLogin();
     if (cmd === 'models') return runVelaModels();
-    // Default: `agent run` — fall through to the ACP
-    // server below with the vela-flavored protocol.
+    // Only `vela agent run …` is the ACP path. Everything else must fail here
+    // and say so: falling through would start an ACP server that blocks on
+    // stdin forever, and OD calls several one-shot subcommands (`billing
+    // summary`, `billing workspace-snapshot`) whose callers await stdout with
+    // no timeout. One unmodeled subcommand then wedges every request on the
+    // web origin — the browser's six HTTP/1.1 connections all end up parked on
+    // handlers waiting for a mock that will never answer, and the app looks
+    // hung rather than mocked.
+    if (cmd !== 'agent' && cmd !== '') {
+      process.stderr.write(
+        `mock-agent: \`vela ${opts.positionals.join(' ')}\` is not modelled by the mock.\n` +
+        'Modelled: `vela login`, `vela models`, `vela agent run …` (ACP).\n' +
+        'Add a handler in mocks/lib/vela-subcommands.mjs if a test needs this one.\n');
+      process.exit(1);
+    }
   }
 
   // Modern Kimi rejects the old `kimi acp ...` launch shape; keep the

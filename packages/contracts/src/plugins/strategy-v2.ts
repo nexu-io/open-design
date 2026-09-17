@@ -9,6 +9,19 @@ export const OD_NEXT_PLAN_CONTRACT_BLOCK = 'open-design-plan-contract' as const;
 export const OD_NEXT_RUNTIME_STATE_BLOCK = 'open-design-runtime-state' as const;
 export const OD_NEXT_BUNDLED_STRATEGY_SCHEMA = 'open-design.bundled-strategy/v2' as const;
 
+/**
+ * The reason a task carries when the agent itself declared the turn blocked and
+ * raised no machine code of its own.
+ *
+ * Shared because it is the one blocked verdict whose visible text can be taken
+ * as the explanation. Every other block is a gate the agent did not ask for —
+ * a missing Runtime State, an unresolvable deliverable, an unproven session —
+ * and the prose sitting next to it is the agent's ordinary reply, not an
+ * account of the stop. Reading the code, rather than the presence of text,
+ * keeps those two apart.
+ */
+export const OD_NEXT_AGENT_DECLARED_BLOCK_REASON = 'od_next_agent_declared_block' as const;
+
 export const StrategyTaskTypeV2Schema = z.enum([
   'prototype',
   'ppt',

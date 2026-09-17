@@ -14,6 +14,7 @@ export const MODAL_WINDOW_DRAG_BACKDROP_SELECTOR = [
   '.project-ds-picker-fullscreen',
   '.staged-preview-modal',
   '.qs-overlay',
+  '.community-template-preview',
 ].join(',');
 
 export function eventHitsModalWindowDragStrip(event: MouseEvent | PointerEvent): boolean {

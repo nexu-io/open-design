@@ -734,6 +734,49 @@ test('attachAcpSession suppresses split duplicate DSML artifact text and preserv
   );
 });
 
+test('attachAcpSession suppresses a split fullwidth DSML tool protocol tail', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'suggest follow-up edits',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: '保留这段建议</｜｜DS' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'ML｜｜parameter>\n</｜｜DSML｜｜invoke>\n</｜｜DSML｜｜tool_calls>' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const text = events
+    .filter((entry) =>
+      entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta'
+    )
+    .map((entry) => (entry.payload as { delta?: string }).delta ?? '')
+    .join('');
+  assert.equal(text, '保留这段建议');
+  assert.equal(text.includes('DSML'), false);
+  assert.equal(
+    events.some((entry) =>
+      entry.event === 'agent' &&
+      (entry.payload as { type?: unknown; name?: unknown }).type === 'diagnostic' &&
+      (entry.payload as { name?: unknown }).name === 'acp_tool_call_text_suppression_summary'
+    ),
+    true,
+  );
+});
+
 test('attachAcpSession suppresses split duplicate legacy artifact text', () => {
   const child = new FakeAcpChild();
   const events: Array<{ event: string; payload: unknown }> = [];
@@ -2697,7 +2740,7 @@ test('attachAcpSession preserves literal artifact prose before any write echo is
   assert.deepEqual(textDeltas, [literal]);
 });
 
-test('attachAcpSession exposes abort and sends session cancel after session creation', () => {
+test('attachAcpSession abort sends one session/cancel notification after session creation', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
   child.stdin.on('data', (chunk) => writes.push(String(chunk)));
@@ -2723,6 +2766,8 @@ test('attachAcpSession exposes abort and sends session cancel after session crea
   assert.equal(cancelRequests.length, 1);
   const cancelRequest = cancelRequests[0];
   assert.ok(cancelRequest);
+  // ACP cancellation is a notification. Vela rejects an id-bearing request.
+  assert.equal(Object.hasOwn(cancelRequest, 'id'), false);
   assert.deepEqual(cancelRequest.params, { sessionId: 'session-1' });
 });
 

@@ -1,0 +1,121 @@
+/* ============================================================
+   Home composer — border beam.
+
+   The prompt card lights along its BORDER while the user has it
+   focused: a soft coloured blob orbits the card's perimeter, and the
+   light fades out on blur.
+
+   Ported from badtz-ui's `border-beam`
+   (https://badtz-ui.com/docs/components/border-beam — the component
+   behind https://21st.dev/@badtzx0/components/border-beam). Two things
+   changed on the way in:
+
+   1. No `motion/react`. The original animates `offsetDistance` through
+      Framer Motion; `offset-distance` is a plain animatable CSS
+      property, so the orbit is a two-frame keyframe instead of a React
+      dependency. The card is CSS-only otherwise and the beam mounts on
+      focus, which a keyframe handles without a render.
+   2. Two colours instead of the single `lightColor`, keeping the
+      product's green→cyan pair (see `--beam-color` / `--beam-color-2`).
+
+   Kept verbatim from the original: the ring mask (a border-box mask
+   XOR'd with a padding-box one, so only the border shows), the light as
+   a square radial blob riding `offset-path`, and the rectangular path
+   itself — `path("M 0 0 H w V h H 0 V 0")`, measured in JS because CSS
+   cannot interpolate the card's pixel size into a `path()`. HomeHero.tsx
+   owns that measurement; see `--beam-path` there.
+
+   Knobs, all set on the mount rule below:
+     --beam-color         core colour                  (default #00FF08)
+     --beam-color-2       falloff colour               (default #00FBFF)
+     --beam-radius        corner radius the ring takes (card + stroke)
+     --beam-border-width  thickness of the lit ring    (default 1px)
+     --beam-light-width   diameter of the blob         (default 280px)
+     --beam-duration      one lap of the perimeter     (default 8s)
+     --beam-strength      0–1 master intensity         (default 1)
+
+   `styles/base.css` neutralises the motion under
+   `prefers-reduced-motion`.
+   ============================================================ */
+
+.home-hero__composer-beam[data-beam='composer'] {
+  position: absolute;
+  /* Cover the card's BORDER box, not its padding box, so the lit ring
+     lands on the same pixels as the focus border instead of 1px inside
+     it: `inset` resolves against the card's PADDING box, and the card's
+     own 1px border makes that box 2px smaller, so -1px a side lands the
+     beam's border box exactly on the card's.
+     The radius is therefore the card's own, NOT card + 1: two 1px rings
+     sharing one outer box are concentric only when their outer radii are
+     equal. Read from the card (which publishes `--composer-card-radius`)
+     rather than restated here — a hard-coded 18 outlived the card's move
+     to 16 and left the light cutting its own corner. */
+  inset: calc(-1 * var(--stroke-thin));
+  --beam-radius: var(--composer-card-radius, 16px);
+  --beam-border-width: var(--stroke-thin);
+  --beam-light-width: 280px;
+  --beam-duration: 8s;
+  /* The light's two colours (per product): green core grading out
+     through cyan. */
+  --beam-color: #00ff08;
+  --beam-color-2: #00fbff;
+
+  border-radius: var(--beam-radius);
+  /* The ring: a border-box mask minus a padding-box one leaves exactly
+     the border, which is the only place the orbiting light shows. */
+  border: var(--beam-border-width) solid transparent;
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: padding-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: padding-box, border-box;
+  mask-composite: exclude;
+  /* Above the card's own content, below every popover the card traps —
+     those sit at 1503/1701 in this same stacking context. */
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.home-hero__composer-beam[data-beam='composer'][data-active] {
+  animation: beam-fade-in-composer 0.6s ease forwards;
+}
+
+.home-hero__composer-beam[data-beam='composer'][data-fading] {
+  animation: beam-fade-out-composer 0.5s ease forwards;
+}
+
+/* The light itself. `offset-anchor` defaults to the blob's own centre, so
+   the path runs through the middle of the glow rather than its corner;
+   `offset-rotate: 0deg` keeps it from spinning as it turns each corner. */
+.home-hero__composer-beam[data-beam='composer'] [data-beam-bloom] {
+  position: absolute;
+  inset: 0;
+  width: var(--beam-light-width);
+  aspect-ratio: 1;
+  background: radial-gradient(
+    ellipse at center,
+    var(--beam-color),
+    var(--beam-color-2),
+    transparent,
+    transparent
+  );
+  offset-path: var(--beam-path);
+  offset-rotate: 0deg;
+  animation: beam-orbit-composer var(--beam-duration) linear infinite;
+}
+
+@keyframes beam-orbit-composer {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+
+@keyframes beam-fade-in-composer {
+  from { opacity: 0; }
+  to { opacity: var(--beam-strength, 1); }
+}
+
+@keyframes beam-fade-out-composer {
+  from { opacity: var(--beam-strength, 1); }
+  to { opacity: 0; }
+}

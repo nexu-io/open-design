@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.21.1",
+  "version": "0.22.1",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
@@ -36,7 +36,8 @@
     "@open-design/tools-serve": "workspace:*",
     "@types/node": "20.19.39",
     "tsx": "4.22.3",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "yaml": "2.9.0"
   },
   "engines": {
     "node": "~24",

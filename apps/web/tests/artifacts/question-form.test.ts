@@ -137,6 +137,65 @@ describe('form content language (lang)', () => {
 });
 
 describe('splitOnQuestionForms', () => {
+  it('renders the legacy child-tag form persisted by older conversations', () => {
+    const input = [
+      '<question-form id="audio-brief" title="Audio brief">',
+      '  <question-select id="format" label="Which format?" required="true">',
+      '    <option value="mp3">MP3</option>',
+      '    <option value="wav">WAV</option>',
+      '  </question-select>',
+      '  <question-text id="mood" label="Describe the mood" placeholder="Warm and concise" />',
+      '</question-form>',
+    ].join('\n');
+
+    expect(splitOnQuestionForms(input)).toEqual([
+      {
+        kind: 'form',
+        raw: input,
+        form: {
+          id: 'audio-brief',
+          title: 'Audio brief',
+          questions: [
+            {
+              id: 'format',
+              label: 'Which format?',
+              type: 'select',
+              required: true,
+              options: [
+                { label: 'MP3', value: 'mp3' },
+                { label: 'WAV', value: 'wav' },
+              ],
+            },
+            {
+              id: 'mood',
+              label: 'Describe the mood',
+              type: 'text',
+              placeholder: 'Warm and concise',
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('keeps a streamed legacy child-tag form hidden instead of leaking markup', () => {
+    const partial = [
+      'One quick check.\n',
+      '<question-form id="audio-brief" title="Audio brief">',
+      '<question-select id="format" label="Which format?">',
+      '<option value="mp3">MP3</option>',
+    ].join('');
+
+    expect(stripTrailingOpenQuestionForm(partial)).toEqual({
+      text: 'One quick check.\n',
+      hadOpenForm: true,
+    });
+    expect(parsePartialQuestionForm(partial)).toMatchObject({
+      id: 'audio-brief',
+      title: 'Audio brief',
+    });
+  });
+
   it('normalizes string and object question options', () => {
     const input = [
       '<question-form id="discovery" title="Quick brief">',
@@ -397,14 +456,16 @@ describe('splitOnQuestionForms', () => {
       `<question-form id="discovery" title="Quick brief">${VALID_BODY}</question-form>\n\n` +
       `Now I'll proceed.`;
     const out = splitOnQuestionForms(input);
-    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
-    if (out[2]?.kind === 'form') {
-      expect(out[2].form.id).toBe('discovery');
-      expect(out[2].form.questions).toHaveLength(1);
-    }
+    const forms = out.filter((segment) => segment.kind === 'form');
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.form).toMatchObject({
+      id: 'discovery', title: 'Quick brief',
+      questions: [{ id: 'platform', label: 'Platform', type: 'radio', required: true,
+        options: [{ label: 'Mobile' }, { label: 'Desktop' }, { label: 'Responsive' }] }],
+    });
     // Segments must reconstruct the input without gaps or duplication.
     const reconstructed = out
-      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .map((s) => (s.kind === 'form' ? s.raw : s.text))
       .join('');
     expect(reconstructed).toBe(input);
   });
@@ -415,13 +476,15 @@ describe('splitOnQuestionForms', () => {
       `<question-form id="real" title="Brief">${VALID_BODY}</question-form>\n\n` +
       `Done.`;
     const out = splitOnQuestionForms(input);
-    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
-    if (out[2]?.kind === 'form') {
-      expect(out[2].form.id).toBe('real');
-      expect(out[2].form.questions).toHaveLength(1);
-    }
+    const forms = out.filter((segment) => segment.kind === 'form');
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.form).toMatchObject({
+      id: 'real', title: 'Brief',
+      questions: [{ id: 'platform', label: 'Platform', type: 'radio', required: true,
+        options: [{ label: 'Mobile' }, { label: 'Desktop' }, { label: 'Responsive' }] }],
+    });
     const reconstructed = out
-      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .map((s) => (s.kind === 'form' ? s.raw : s.text))
       .join('');
     expect(reconstructed).toBe(input);
   });
@@ -482,15 +545,15 @@ describe('parsePartialQuestionForm (true token-by-token streaming)', () => {
     ).toBe('discovery');
   });
 
-  it('does not let a nested question id/description masquerade as form metadata', () => {
+  it('does not let nested or legacy description data become form metadata', () => {
     // No form-level id on the tag or top-level body — only a question-level
     // id. The form id must stay the stable fallback, not adopt "platform"
     // (which would change the live panel's identity mid-stream).
     const f = parsePartialQuestionForm(
-      '<question-form>{"questions":[{"id":"platform","label":"Platform","description":"nested"',
+      '<question-form>{"description":"legacy","questions":[{"id":"platform","label":"Platform","description":"nested"',
     );
     expect(f?.id).toBe('discovery');
-    expect(f?.description).toBeUndefined();
+    expect(f).not.toHaveProperty('description');
     expect(f?.questions.map((q) => q.label)).toEqual(['Platform']);
   });
 

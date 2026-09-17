@@ -80,6 +80,18 @@ export type ToolsDevSuiteOptions = {
   skipFatalLogCheck?: boolean;
 };
 
+export function resolveVitestToolsDevEnv(
+  env: Record<string, string | undefined> = {},
+): Record<string, string | undefined> {
+  return {
+    // The hermetic Codex fixture emits the legacy `exec --json` stream. Pin
+    // its matching transport here; app-server protocol coverage lives in the
+    // daemon transport/parity suites, not in these fake-CLI smoke tests.
+    OD_CODEX_TRANSPORT: 'exec-json',
+    ...env,
+  };
+}
+
 const workspaceRoot = resolveE2eWorkspaceRoot();
 
 export async function createSmokeSuite(
@@ -252,6 +264,7 @@ async function runToolsDevSuite(
   run: (context: ToolsDevSuiteContext) => Promise<void>,
   options: ToolsDevSuiteOptions = {},
 ): Promise<string> {
+  const runtimeEnv = resolveVitestToolsDevEnv(options.env);
   const toolsDev = createToolsDevSuite({
     codexHomeDir: suite.codexHomeDir,
     dataDir: suite.dataDir,
@@ -265,16 +278,16 @@ async function runToolsDevSuite(
   let success = false;
 
   try {
-    const start = await toolsDev.startWeb(options.env);
+    const start = await toolsDev.startWeb(runtimeEnv);
     const runtime = toolsDev.portAllocation;
     if (runtime == null) throw new Error('tools-dev did not expose its allocated ports');
     const webUrl = assertRuntimeUrl(start.web?.status.url, 'web');
-    const status = await toolsDev.status(options.env);
+    const status = await toolsDev.status(runtimeEnv);
     assertToolsDevStatus(suite, status);
 
     context = {
-      check: () => toolsDev.check(options.env),
-      logs: () => toolsDev.logs(options.env),
+      check: () => toolsDev.check(runtimeEnv),
+      logs: () => toolsDev.logs(runtimeEnv),
       runtime,
       start,
       status,
@@ -288,7 +301,7 @@ async function runToolsDevSuite(
     success = true;
   } catch (error) {
     caughtError = error;
-    diagnostics = await toolsDev.check(options.env).catch((diagnosticError: unknown) => ({
+    diagnostics = await toolsDev.check(runtimeEnv).catch((diagnosticError: unknown) => ({
       error: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError),
     }));
     await options.onFailure?.({ context, error, suite }).catch((failureHookError: unknown) => {
@@ -304,7 +317,7 @@ async function runToolsDevSuite(
     // next smoke run on a shared CI runner.
     let stopError: unknown = null;
     try {
-      await toolsDev.stopWeb(options.env);
+      await toolsDev.stopWeb(runtimeEnv);
     } catch (error) {
       stopError = error;
     }

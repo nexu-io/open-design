@@ -464,6 +464,51 @@ describe('run analytics lifecycle', () => {
     expect(h.captured).toEqual([]);
     expect(h.recoveries).toEqual([]);
   });
+
+  it('publishes per-request usage count, sums, and reconciliation invariant to run_finished', async () => {
+    const h = harness();
+    const run = fakeRun({
+      agentId: 'claude',
+      events: [
+        {
+          event: 'agent',
+          data: {
+            type: 'request_usage',
+            requestId: 'msg_1',
+            usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 2 },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'request_usage',
+            requestId: 'msg_2',
+            usage: { input_tokens: 20, output_tokens: 15, cache_read_input_tokens: 3 },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: { input_tokens: 30, output_tokens: 20, cache_read_input_tokens: 5 },
+          },
+        },
+      ],
+    });
+    h.lifecycle.install({
+      run,
+      body: { agentId: 'claude' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'succeeded' });
+
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties.request_usage_count).toBe(2);
+    expect(finished.properties.request_usage_input_tokens_sum).toBe(30);
+    expect(finished.properties.request_usage_output_tokens_sum).toBe(20);
+    expect(finished.properties.request_usage_reconciles_aggregate).toBe(true);
+  });
 });
 
 describe('inherited run lineage', () => {

@@ -389,6 +389,34 @@ describe('runAskedUserQuestion', () => {
     ).toBe(true);
   });
 
+  it('reassembles a legacy child-tag form split across text_delta chunks', () => {
+    expect(
+      runAskedUserQuestion([
+        {
+          event: 'agent',
+          data: {
+            type: 'text_delta',
+            delta: '<question-form id="audio"><question-se',
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'text_delta',
+            delta: 'lect id="format" label="Format"><option value="mp3">MP3</option>',
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'text_delta',
+            delta: '</question-select><question-text id="mood" label="Mood" /></question-form>',
+          },
+        },
+      ]),
+    ).toBe(true);
+  });
+
   // `<ask-question>` is an accepted alias for `<question-form>` (whitelisted by
   // the UI parser and the daemon open-tag matcher). A model that drifts to the
   // alias still renders the clarification banner, so the analytics signal must

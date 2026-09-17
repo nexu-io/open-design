@@ -536,6 +536,55 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
 }
 
+/**
+ * Strip anything host-shaped out of a diagnostic string: filesystem paths
+ * (POSIX and Windows), loopback host:port pairs, and process ids.
+ */
+function stripHostDetail(value: string): string {
+  return value
+    .replace(/[A-Za-z]:\\[^\s"'<>|]+/g, '<path>')
+    .replace(/(^|[\s:'"(=])\/(?:[A-Za-z0-9._@%+-]+\/)*[A-Za-z0-9._@%+-]+/g, '$1<path>')
+    .replace(/\b(?:pid|PID)\s+\d+/g, 'pid <pid>')
+    .replace(/\b(?:127\.0\.0\.1|localhost|0\.0\.0\.0)(?::\d{2,5})?/g, '<host>')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * Turn a desktop-renderer IPC failure into the message we are willing to hand
+ * back over HTTP, and put the unredacted one in the daemon log.
+ *
+ * This split is the point. The renderer is reached over a unix socket whose
+ * path encodes the runtime namespace, so a failed connect arrives as
+ * `connect ENOENT /tmp/open-design/ipc/<namespace>/desktop.sock` and a timeout
+ * as `IPC request timed out: <same path>`. That string does not stop here:
+ * `od export` writes the daemon's `message` verbatim to its stderr, the agent
+ * reads it, and from there it is one prompt-adherence failure away from the
+ * user's reply. Redaction is the defence behind the prompt rule, not a
+ * replacement for it.
+ *
+ * The log call is load-bearing rather than decorative: it is the ONLY copy.
+ * `sendApiError` does not log, `recordApiFailure` keeps just
+ * {method, route, status, code} and drops the message, and the sidecar's own
+ * `traceJsonIpc` is gated behind OD_JSON_IPC_TRACE. Remove it and the socket
+ * path stops being a leak by ceasing to exist anywhere.
+ *
+ * What survives redaction is deliberate. `apps/web/src/analytics/export-error-code.ts`
+ * buckets export failures by matching this message — `unknown \w+ sidecar
+ * message` is the daemon↔desktop version-skew signal, `renderer unavailable`
+ * and `timed out` are the others — so this returns a redacted sentence rather
+ * than a fixed one. Flattening it would silently empty those buckets.
+ */
+export function describeDesktopRendererFailure(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  try {
+    console.error(`[od-export] desktop renderer ipc failed: ${raw}`);
+  } catch {
+    /* logging is best effort */
+  }
+  return `desktop renderer unavailable: ${stripHostDetail(raw)}`;
+}
+
 const DESKTOP_RENDERER_IPC_TIMEOUT_MS = 600_000;
 const RENDERER_PREVIEW_SCOPE_SETUP_MARGIN_MS = 10_000;
 const SCREENSHOT_RENDER_PREVIEW_SCOPE_TTL_MS =
@@ -609,8 +658,19 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     } = {},
   ): Promise<AuthorizedExportRead | null> {
     const authorization = req.get('authorization');
+    // Only Bearer credentials can be run-scoped tool tokens: that is the sole
+    // shape `bearerTokenFromRequest` parses. A reverse proxy that authenticates
+    // browsers itself (Coolify/Traefik basic auth) forwards its own
+    // `Authorization: Basic ...` header, and claiming those for the tool lane
+    // fails every browser export with TOOL_TOKEN_MISSING. Foreign Bearer
+    // tokens still fail closed inside the registry.
+    // The scheme is classified independently of whether a token follows it: a
+    // bare `Bearer` (or `Bearer ` trimmed to it) is still a caller reaching for
+    // the tool-token lane and must keep failing closed with TOOL_TOKEN_MISSING
+    // rather than downgrading to browser project authority.
     if (
       typeof authorization === 'string'
+      && /^Bearer(?:\s|$)/i.test(authorization.trim())
       && !ctx.isApiTokenAuthorization(authorization)
     ) {
       const grant = ctx.auth.authorizeToolRequest(
@@ -935,7 +995,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
               res,
               502,
               'UPSTREAM_UNAVAILABLE',
-              `desktop renderer unavailable: ${err?.message || String(err)}`,
+              describeDesktopRendererFailure(err),
             );
           } finally {
             if (renderPreviewScope) {
@@ -1056,7 +1116,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
           res,
           502,
           'UPSTREAM_UNAVAILABLE',
-          `desktop renderer unavailable: ${err?.message || String(err)}`,
+          describeDesktopRendererFailure(err),
         );
       } finally {
         if (renderPreviewScope) {

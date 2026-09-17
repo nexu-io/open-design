@@ -2,7 +2,10 @@ import type http from 'node:http';
 import express from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { registerMediaRoutes } from '../../src/routes/media.js';
+import {
+  mediaTaskErrorFromFailure,
+  registerMediaRoutes,
+} from '../../src/routes/media.js';
 
 const servers: http.Server[] = [];
 
@@ -132,6 +135,15 @@ async function postGenerate(
 }
 
 describe('Vela media route Workspace attribution', () => {
+	it('does not persist a numeric process exit code as a public media code', () => {
+		const error = mediaTaskErrorFromFailure(
+			Object.assign(new Error('renderer crashed'), { code: 1 }),
+		);
+
+		expect(error.message).toBe('renderer crashed');
+		expect(error).not.toHaveProperty('code');
+	});
+
   it('uses a team Workspace binding even when the project remains personal', async () => {
     const generateMedia = vi.fn(async (_args: { workspaceId?: string }) => ({
       name: 'result.png',

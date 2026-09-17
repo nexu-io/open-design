@@ -156,6 +156,263 @@ describe('structured agent stream fixtures', () => {
     });
   });
 
+  /*
+   * Claude Code owns the task ids, and its task store OUTLIVES a single run.
+   *
+   * Every OpenDesign turn spawns a fresh `claude -p --resume <session>`, so this
+   * stream handler starts empty while Claude Code carries #1, #2, … forward from
+   * the previous turn. Recorded against claude 2.1.247 (`--resume`, turn 2):
+   *
+   *   TaskList   {}                              -> "#1 [pending] Draft copy\n#2 [pending] Pick colors"
+   *   TaskCreate {subject: 'Pick fonts'}         -> "Task #3 created successfully: Pick fonts"
+   *   TaskUpdate {taskId: '1', status: 'completed'}
+   *
+   * A locally invented counter therefore numbers "Pick fonts" as #1 and hands
+   * the `taskId: '1'` update to the wrong row. The ids must come from the
+   * runtime's own tool_result, never from a counter this handler restarts.
+   */
+  it('binds Claude task ids from the runtime tool_result, not a local counter', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [
+          { type: 'tool_use', id: 'toolu-create-3', name: 'TaskCreate', input: { subject: 'Pick fonts' } },
+        ],
+      },
+    })}\n`);
+    handler.feed(`${JSON.stringify({
+      type: 'user',
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'toolu-create-3', content: 'Task #3 created successfully: Pick fonts' },
+        ],
+      },
+    })}\n`);
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-2',
+        content: [
+          { type: 'tool_use', id: 'toolu-update-3', name: 'TaskUpdate', input: { taskId: '3', status: 'completed' } },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'tool_use',
+      id: 'toolu-update-3:todo-task',
+      name: 'TodoWrite',
+      input: { todos: [{ content: 'Pick fonts', status: 'completed' }] },
+    });
+  });
+
+  /*
+   * The same recording, read for its destructive half: `taskId: '1'` names
+   * "Draft copy" — a task created in an EARLIER run that this stream never saw.
+   * Under a local counter it resolves to the task this turn just created, so the
+   * card reports work finished that nobody finished. Dropping an unknown id is
+   * the only honest answer.
+   */
+  it('never applies an unknown Claude task id to a task created this turn', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [
+          { type: 'tool_use', id: 'toolu-create-3', name: 'TaskCreate', input: { subject: 'Pick fonts' } },
+        ],
+      },
+    })}\n`);
+    handler.feed(`${JSON.stringify({
+      type: 'user',
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'toolu-create-3', content: 'Task #3 created successfully: Pick fonts' },
+        ],
+      },
+    })}\n`);
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-2',
+        content: [
+          { type: 'tool_use', id: 'toolu-update-1', name: 'TaskUpdate', input: { taskId: '1', status: 'completed' } },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    const todoSnapshots = events.filter(
+      (event): event is { name: string; input: { todos: Array<{ content: string; status: string }> } } =>
+        Boolean(event)
+        && typeof event === 'object'
+        && (event as { name?: unknown }).name === 'TodoWrite',
+    );
+    expect(todoSnapshots.length).toBeGreaterThan(0);
+    for (const snapshot of todoSnapshots) {
+      expect(snapshot.input.todos).not.toContainEqual(
+        expect.objectContaining({ content: 'Pick fonts', status: 'completed' }),
+      );
+    }
+  });
+
+  /*
+   * `TaskList` is how Claude recovers the ids it wrote in an earlier run (it
+   * called it unprompted on the resumed turn above). Its result is the runtime's
+   * own authoritative snapshot, so reading it is what puts a previous turn's
+   * plan back on the card instead of showing only whatever this turn created.
+   */
+  it('seeds the Claude task snapshot from a TaskList result', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [{ type: 'tool_use', id: 'toolu-list-1', name: 'TaskList', input: {} }],
+      },
+    })}\n`);
+    handler.feed(`${JSON.stringify({
+      type: 'user',
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu-list-1',
+            content: '#1 [completed] Draft copy\n#2 [in_progress] Pick colors',
+          },
+        ],
+      },
+    })}\n`);
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-2',
+        content: [
+          { type: 'tool_use', id: 'toolu-update-2', name: 'TaskUpdate', input: { taskId: '2', status: 'completed' } },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'tool_use',
+      id: 'toolu-update-2:todo-task',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Draft copy', status: 'completed' },
+          { content: 'Pick colors', status: 'completed' },
+        ],
+      },
+    });
+  });
+
+  /*
+   * The recorded shape end to end, replayed from claude 2.1.247. `TaskCreate`
+   * declares `isConcurrencySafe: false`, so the runtime emits exactly one tool
+   * call per assistant message and answers it before the next — every create
+   * carries its real id before any update can name it.
+   *
+   * Ids here start at #5 the way a third turn of a resumed session does. The
+   * card must read as the runtime's own list, not as a list renumbered from 1.
+   */
+  it('tracks a resumed Claude session whose task ids do not start at 1', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    const assistantToolUse = (msgId: string, id: string, name: string, input: unknown) => `${JSON.stringify({
+      type: 'assistant',
+      message: { id: msgId, content: [{ type: 'tool_use', id, name, input }] },
+    })}\n`;
+    const toolResult = (id: string, content: string) => `${JSON.stringify({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: id, content }] },
+    })}\n`;
+
+    handler.feed(assistantToolUse('m1', 'u1', 'TaskCreate', { subject: 'Draft copy', activeForm: 'Drafting copy' }));
+    handler.feed(toolResult('u1', 'Task #5 created successfully: Draft copy'));
+    handler.feed(assistantToolUse('m2', 'u2', 'TaskCreate', { subject: 'Pick colors', activeForm: 'Picking colors' }));
+    handler.feed(toolResult('u2', 'Task #6 created successfully: Pick colors'));
+    handler.feed(assistantToolUse('m3', 'u3', 'TaskUpdate', { taskId: '5', status: 'in_progress' }));
+    handler.feed(toolResult('u3', 'Updated task #5 status'));
+    handler.feed(assistantToolUse('m4', 'u4', 'TaskUpdate', { taskId: '5', status: 'completed' }));
+    handler.feed(toolResult('u4', 'Updated task #5 status'));
+    handler.feed(assistantToolUse('m5', 'u5', 'TaskUpdate', { taskId: '6', status: 'in_progress' }));
+    handler.feed(toolResult('u5', 'Updated task #6 status'));
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'tool_use',
+      id: 'u5:todo-task',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Draft copy', status: 'completed', activeForm: 'Drafting copy' },
+          { content: 'Pick colors', status: 'in_progress', activeForm: 'Picking colors' },
+        ],
+      },
+    });
+    // The mid-run states the pill reads must be there too, in order.
+    expect(events).toContainEqual({
+      type: 'tool_use',
+      id: 'u3:todo-task',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Draft copy', status: 'in_progress', activeForm: 'Drafting copy' },
+          { content: 'Pick colors', status: 'pending', activeForm: 'Picking colors' },
+        ],
+      },
+    });
+  });
+
+  /*
+   * A create the runtime refused never gets an id, so nothing may later claim to
+   * have updated it — and the failed call must not leave the stream waiting on a
+   * result that already came.
+   */
+  it('does not bind a Claude task id from a failed TaskCreate', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [{ type: 'tool_use', id: 'toolu-create-9', name: 'TaskCreate', input: { subject: 'Pick fonts' } }],
+      },
+    })}\n`);
+    handler.feed(`${JSON.stringify({
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'toolu-create-9',
+          is_error: true,
+          content: 'Task #9 created successfully: Pick fonts',
+        }],
+      },
+    })}\n`);
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-2',
+        content: [{ type: 'tool_use', id: 'toolu-update-9', name: 'TaskUpdate', input: { taskId: '9', status: 'completed' } }],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).not.toContainEqual(expect.objectContaining({
+      type: 'tool_use',
+      id: 'toolu-update-9:todo-task',
+    }));
+  });
+
   it('suppresses duplicate Claude artifact text after writing a file', () => {
     const events: unknown[] = [];
     const handler = createClaudeStreamHandler((event: unknown) => events.push(event));

@@ -371,15 +371,16 @@ describe('AMR terminal report delivery', () => {
       .toEqual({ code: 'unsupported' });
   });
 
+  // Giving up on a queued report forever is the strongest thing this outbox can
+  // do, so the signal that triggers it has to be a vela sign-in report rather
+  // than any sentence containing the word "auth". Each shape below names the
+  // AMR/vela credential: the two vela codes, the vela CLI's own refusal
+  // (`apps/cli/internal/commands/control.go:92`), and the sign-in session
+  // reported unusable in either English word order.
   it.each([
     'auth_required',
-    'authentication required',
-    'not authenticated',
-    'not logged in',
-    'login missing',
-    'please sign in again',
-    'sign-in-again',
-    'token has expired',
+    'unauthenticated',
+    'profile "default" is not logged in; run `vela login`',
     'expired session',
     'invalid session',
   ])('terminal-fails established AMR auth signal: %s', async (message) => {
@@ -393,6 +394,32 @@ describe('AMR terminal report delivery', () => {
     expect(store.diagnostics(now)).toMatchObject({ pending: 0, terminalFailed: 1 });
     expect(db.prepare(`SELECT last_error_code AS code FROM amr_terminal_report_outbox`).get())
       .toEqual({ code: 'auth_required' });
+  });
+
+  // The other half of the list this test used to carry. None of these is a
+  // shape vela sends — they were synonyms — and each one is live against
+  // whatever the failing `vela` invocation happened to print. Reading one as a
+  // sign-in failure discards the run's terminal report permanently, so they now
+  // fall through to `transport` and stay queued for the ordinary backoff, which
+  // is the recoverable side of the decision to be wrong on.
+  it.each([
+    'authentication required',
+    'not authenticated',
+    'login missing',
+    'please sign in again',
+    'sign-in-again',
+    'token has expired',
+  ])('retries rather than discarding a report on unattributed auth prose: %s', async (message) => {
+    const { db, store, now } = fixture();
+    store.enqueue({ runId: 'auth-run', outcome: 'failed', terminalAt: now });
+    await createAmrTerminalReportDeliveryService({
+      store,
+      run: vi.fn().mockRejectedValue(new Error(message)),
+      now: () => now,
+    }).processDue();
+    expect(store.diagnostics(now)).toMatchObject({ terminalFailed: 0 });
+    expect(db.prepare(`SELECT last_error_code AS code FROM amr_terminal_report_outbox`).get())
+      .toEqual({ code: 'transport' });
   });
 
   it('stores only safe codes, redacted errors, and canonical receipt fields', async () => {

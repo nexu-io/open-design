@@ -22,12 +22,14 @@ afterEach(() => {
 function renderDialog(
   onDismiss = vi.fn(async () => undefined),
   locale: Locale = 'zh-CN',
+  profile: string | null = null,
 ) {
   const result = render(
     <I18nProvider initial={locale}>
       <GoPlanSunsetDialog
         active
         currentPlanId="go"
+        profile={profile}
         metricsConsent={false}
         onDismiss={onDismiss}
       />
@@ -154,6 +156,21 @@ describe('GoPlanSunsetDialog', () => {
     }), undefined);
     expect(open).toHaveBeenCalledWith(
       expect.stringContaining('od_entry_source=go_plan_sunset_modal'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
+  it('opens the test profile dashboard for the plan action', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderDialog(vi.fn(async () => undefined), 'zh-CN', 'test');
+
+    fireEvent.click(screen.getByRole('button', { name: '查看其他订阅' }));
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'https://open-design.powerformer.net/cloud/dashboard?source=open_design&billing=plan',
+      ),
       '_blank',
       'noopener,noreferrer',
     );

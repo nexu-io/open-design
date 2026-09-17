@@ -2,7 +2,11 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { strategyTaskProvesDelivery, todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import {
+  strategyTaskProvesDelivery,
+  todoSnapshotHasUnfinishedWork,
+  turnEndedByAskingUser,
+} from '@open-design/contracts';
 import {
   collectProcessTreePids,
   listProcessSnapshots,
@@ -25,6 +29,7 @@ import {
   RESTART_ERROR_CODE,
   RESTART_ERROR_MESSAGE,
 } from './run-restart-recovery.js';
+import { classifyRunSteering, writeSteeringUserMessage } from './run-steering.js';
 import {
   beginRunTelemetryDelivery,
   finalizeRunTelemetryDelivery,
@@ -37,9 +42,34 @@ import {
   terminalLifecycleSnapshot,
   terminalPersistenceErrorType,
 } from '../observability/run-terminal-lifecycle.js';
+import { mintRunDoneKey } from './run-done-key.js';
 import { normalizeTelemetryAppVersionInfo } from '../app-version.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+
+/** How many host-recorded media failures one attempt keeps. A fan-out that
+ *  fails wholesale is still one verdict; the list is evidence, not a log. */
+const MAX_RUN_MEDIA_TASK_FAILURES = 20;
+
+/**
+ * Did the HOST itself watch a piece of this turn's declared work fail?
+ *
+ * The only evidence this predicate accepts is evidence the daemon wrote down
+ * about its own execution: a media generation dispatched under this run's tool
+ * grant that `routes/media.ts` recorded as `failed`. It never reads the model's
+ * output. That boundary is the point — the turn-completion marker, the TodoWrite
+ * snapshot and the closing prose are all the model's account of its own turn,
+ * and an account cannot outrank a failure the host observed. Judging on the
+ * agent's words would also make a copy edit (the S22 apology sentence in
+ * `prompts/media-contract.ts` is verbatim-copied product copy) silently change
+ * a completeness verdict.
+ *
+ * Scoped to the attempt: `prepareRestart` clears the list, so a retry that
+ * finally delivers is judged on its own execution.
+ */
+function runHasHostRecordedDeliveryFailure(run) {
+  return Array.isArray(run?.mediaTaskFailures) && run.mediaTaskFailures.length > 0;
+}
 
 const RUN_STATE_SCHEMA_VERSION = 1;
 
@@ -533,6 +563,9 @@ function durableRunState(run) {
     assistantMessageId: run.assistantMessageId,
     clientRequestId: run.clientRequestId,
     requestFingerprint: run.requestFingerprint,
+    ...(typeof run.appliedPluginSnapshotId === 'string'
+      ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
+      : {}),
     ...(run.strategyRolloutDecision
       ? { strategyRolloutDecision: run.strategyRolloutDecision }
       : {}),
@@ -549,12 +582,16 @@ function durableRunState(run) {
     failureCategory: run.failureCategory ?? null,
     failureDetail: run.failureDetail ?? null,
     failureAction: run.failureAction ?? null,
+    retryable: run.retryable ?? null,
     cancelOrigin: run.cancelOrigin ?? null,
     terminalTrigger: run.terminalTrigger ?? null,
     resumable: run.resumable ?? false,
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
     ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
+    ...(runHasHostRecordedDeliveryFailure(run)
+      ? { mediaTaskFailures: run.mediaTaskFailures }
+      : {}),
     ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
     ...(typeof run.model === 'string' ? { model: run.model } : {}),
     ...(typeof run.resolvedModelId === 'string'
@@ -608,6 +645,12 @@ function durableRunState(run) {
       : {}),
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
+      : {}),
+    ...(run.deliverableSyntaxRepair
+      ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
+      : {}),
+    ...(run.deliverableSyntaxValidation
+      ? { deliverableSyntaxValidation: run.deliverableSyntaxValidation }
       : {}),
     ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     ...(run.odNextTaskInputSnapshot
@@ -707,6 +750,28 @@ export function createChatRunService({
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
   const runIdsByPluginWorkflowId = new Map();
+  // Every run id ever persisted or created for a project, whether or not the
+  // run object is currently in `runs`. This is the index a project-scoped
+  // `list()` completes itself from; see `hydrateProjectRuns`.
+  const runIdsByProjectId = new Map();
+
+  const indexRunProject = (projectId, runId) => {
+    if (typeof projectId !== 'string' || !projectId) return;
+    if (typeof runId !== 'string' || !runId) return;
+    let ids = runIdsByProjectId.get(projectId);
+    if (!ids) {
+      ids = new Set();
+      runIdsByProjectId.set(projectId, ids);
+    }
+    ids.add(runId);
+  };
+
+  const unindexRunProject = (projectId, runId) => {
+    const ids = runIdsByProjectId.get(projectId);
+    if (!ids) return;
+    ids.delete(runId);
+    if (ids.size === 0) runIdsByProjectId.delete(projectId);
+  };
 
   const finalizeTerminalLocally = (run, status, terminalAt) => {
     if (!onTerminal) return;
@@ -733,6 +798,7 @@ export function createChatRunService({
         const statePath = path.join(runsLogDir, entry.name, 'state.json');
         const state = readDurableRunState(statePath);
         if (!state) continue;
+        indexRunProject(state.projectId, state.id);
         if (
           typeof state.clientRequestId === 'string'
           && state.clientRequestId
@@ -813,6 +879,10 @@ export function createChatRunService({
       requestFingerprint:
         typeof state.requestFingerprint === 'string' ? state.requestFingerprint : null,
       agentId: typeof state.agentId === 'string' ? state.agentId : null,
+      appliedPluginSnapshotId:
+        typeof state.appliedPluginSnapshotId === 'string' && state.appliedPluginSnapshotId
+          ? state.appliedPluginSnapshotId
+          : null,
       projectMetadata: null,
       events,
       nextEventId: events.reduce((max, record) => Math.max(max, record.id), 0) + 1,
@@ -836,6 +906,31 @@ export function createChatRunService({
     return run;
   };
 
+  /**
+   * Bring every persisted run of `projectId` into `runs`.
+   *
+   * Invariant: a project-scoped run list is complete with respect to persisted
+   * history. The in-memory map only ever holds what this process created or
+   * happened to hydrate by id, so after a daemon restart (or after the terminal
+   * TTL evicted a run) a project's newest terminal run can be missing while an
+   * older one is present, and every consumer that folds the list into one
+   * status per project — `GET /api/runs?projectId`, the Home entry rail, the
+   * `od run list` CLI — then reports the wrong outcome. Hydration is scoped to
+   * the one project being listed so listing never loads the whole run history.
+   *
+   * A run whose durable state can no longer be read (dropped, or the journal
+   * is gone) is forgotten from the index so it is not re-read on every call.
+   */
+  const hydrateProjectRuns = (projectId) => {
+    if (!runsLogDir) return;
+    const ids = runIdsByProjectId.get(projectId);
+    if (!ids) return;
+    for (const id of [...ids]) {
+      if (runs.has(id)) continue;
+      if (!hydrateDurableRun(id)) unindexRunProject(projectId, id);
+    }
+  };
+
   const create = (meta = {}) => {
     const now = Date.now();
     const id = randomUUID();
@@ -848,6 +943,10 @@ export function createChatRunService({
     }
     const run = {
       id,
+      // This turn's done-marker nonce. Injected into the system prompt and
+      // emitted to the client as a `done_key` agent event before any model
+      // output; see `mintRunDoneKey`.
+      doneKey: typeof meta.doneKey === 'string' && meta.doneKey ? meta.doneKey : mintRunDoneKey(),
       projectId: typeof meta.projectId === 'string' && meta.projectId ? meta.projectId : null,
       conversationId: typeof meta.conversationId === 'string' && meta.conversationId ? meta.conversationId : null,
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
@@ -961,10 +1060,27 @@ export function createChatRunService({
       // `endedWithUnfinishedWork` from them via the canonical predicate.
       lastTodoSnapshot: null,
       truncatedMidTurn: false,
+      // The turn's visible assistant text, capped, accumulated by the `send`
+      // sink in server.ts — the one point every text path reaches. finish()
+      // scans it ONCE, at the terminal choke point, to ask the canonical
+      // `turnEndedByAskingUser` whether this turn handed the baton back to the
+      // user; a `<question-form>` is only a form once its close tag lands, so
+      // there is nothing to decide per delta. The missing-artifacts guard reads
+      // the same buffer.
+      askUserScanText: '',
+      authenticatedDoneConclusion: false,
+      completionMarkerTail: '',
+      completionMarkerAwaitingConclusion: false,
+      // Media generations this attempt dispatched that the host itself watched
+      // fail, recorded by `noteMediaTaskFailure` from routes/media.ts. The one
+      // completeness signal on this run that is not the model's self-report.
+      mediaTaskFailures: [],
       endedWithUnfinishedWork: false,
       artifactCount: undefined as number | undefined,
       artifactPaths: undefined as string[] | undefined,
       artifactOutcome: undefined,
+      deliverableSyntaxRepair: undefined,
+      deliverableSyntaxValidation: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       statePath: runsLogDir ? path.join(runsLogDir, id, 'state.json') : null,
       eventsLogStream: null,
@@ -987,6 +1103,7 @@ export function createChatRunService({
       run.workspaceScope = meta.workspaceScope ?? null;
     }
     runs.set(run.id, run);
+    indexRunProject(run.projectId, run.id);
     if (run.clientRequestId) runIdsByClientRequestId.set(run.clientRequestId, run.id);
     if (
       run.externalPluginAnalytics?.externalPluginId === OPEN_DESIGN_PLUGIN_ID
@@ -1031,6 +1148,53 @@ export function createChatRunService({
   const persistState = (run) => {
     if (!run?.statePath) return { ok: false, errorType: 'storage_unavailable' };
     return writeDurableState(run.statePath, durableRunState(run));
+  };
+
+  /**
+   * Hand a failed media generation back to the turn that asked for it.
+   *
+   * The dual of `associateLateRunProducedFile`: that one gives the turn the
+   * bytes a 202 dispatch eventually produced, this one gives it the fact that
+   * the dispatch produced none. Until it existed, `routes/media.ts` knew the
+   * failing task's `run_id` — it printed it in the `[media]` diagnostic and
+   * shipped it to analytics — and told the run nothing, so the turn's verdict
+   * came from the agent's exit code alone and a turn whose only deliverable
+   * failed still published `succeeded` with a green check.
+   *
+   * Additive and idempotent per task id: a task reports at most one failure, and
+   * a re-entrant call (retry, replay, both catch paths firing) must not double
+   * count. Bounded, because a batch fan-out can fail wholesale and this is
+   * evidence, not a log. Recording is accepted whether or not the run is already
+   * terminal — a late failure still belongs in the run's record — but a run that
+   * has already published its terminal frame keeps the verdict it published;
+   * re-deriving completeness after the fact is a separate contract.
+   */
+  const noteMediaTaskFailure = (runId, failure) => {
+    if (typeof runId !== 'string' || !runId) return false;
+    const taskId = typeof failure?.taskId === 'string' ? failure.taskId : '';
+    if (!taskId) return false;
+    const run = get(runId);
+    if (!run) return false;
+    if (!Array.isArray(run.mediaTaskFailures)) run.mediaTaskFailures = [];
+    if (run.mediaTaskFailures.some((recorded) => recorded?.taskId === taskId)) return false;
+    if (run.mediaTaskFailures.length >= MAX_RUN_MEDIA_TASK_FAILURES) return false;
+    run.mediaTaskFailures.push({
+      taskId,
+      ...(typeof failure.surface === 'string' && failure.surface
+        ? { surface: failure.surface }
+        : {}),
+      ...(typeof failure.model === 'string' && failure.model ? { model: failure.model } : {}),
+      failedAt: Number.isFinite(failure.failedAt) ? failure.failedAt : Date.now(),
+      error: failure.error && typeof failure.error === 'object'
+        ? failure.error
+        : { message: 'media generation failed' },
+    });
+    // A run that already went terminal keeps its terminal clock: `updatedAt` is
+    // what `prepareRestart` measures the resume wait against, and a late failure
+    // arriving after the frame was published must not move it.
+    if (!TERMINAL_RUN_STATUSES.has(run.status)) run.updatedAt = Date.now();
+    persistState(run);
+    return true;
   };
 
   const persistTerminalState = (run, lifecycleEvidence = run.terminalLifecycle) => {
@@ -1205,6 +1369,7 @@ export function createChatRunService({
     run.failureCategory = null;
     run.failureDetail = null;
     run.failureAction = null;
+    run.retryable = null;
     run.resumable = false;
     run.cancelRequested = false;
     run.cancelOrigin = null;
@@ -1225,7 +1390,16 @@ export function createChatRunService({
     run.deliverableValidation = undefined;
     run.deliverableEntryFile = undefined;
     run.deliverableArtifactKind = undefined;
+    run.deliverableSyntaxRepair = undefined;
+    run.deliverableSyntaxValidation = undefined;
     run.endedWithUnfinishedWork = false;
+    // Host-observed failures belong to the attempt that produced them. A resume
+    // that finally delivers must not inherit the previous attempt's verdict.
+    run.mediaTaskFailures = [];
+    run.askUserScanText = '';
+    run.authenticatedDoneConclusion = false;
+    run.completionMarkerTail = '';
+    run.completionMarkerAwaitingConclusion = false;
     run.child = null;
     run.acpSession = null;
     run.childPid = null;
@@ -1365,8 +1539,12 @@ export function createChatRunService({
     failureCategory: run.failureCategory ?? null,
     failureDetail: run.failureDetail ?? null,
     failureAction: run.failureAction ?? null,
+    retryable: run.retryable ?? null,
     resumable: run.resumable ?? false,
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
+    ...(runHasHostRecordedDeliveryFailure(run)
+      ? { mediaTaskFailures: run.mediaTaskFailures }
+      : {}),
     ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
     ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     eventsLogPath: run.eventsLogPath ?? null,
@@ -1404,6 +1582,12 @@ export function createChatRunService({
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.deliverableSyntaxRepair
+      ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
+      : {}),
+    ...(run.deliverableSyntaxValidation
+      ? { deliverableSyntaxValidation: run.deliverableSyntaxValidation }
+      : {}),
     ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     ...(run.terminalLifecycle ? { terminalLifecycle: run.terminalLifecycle } : {}),
     ...(TERMINAL_RUN_STATUSES.has(run.status)
@@ -1419,8 +1603,8 @@ export function createChatRunService({
     lifecycleEvidence = null,
   ) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
-    if (beforeFinish) beforeFinish(run, status, code, signal);
     const terminalAt = Date.now();
+    if (beforeFinish) beforeFinish(run, status, code, signal, terminalAt);
     run.status = status;
     run.exitCode = code;
     run.signal = signal;
@@ -1438,9 +1622,44 @@ export function createChatRunService({
     // the agent's own checklist is routinely left with a stale `pending` item.
     // Truncation stays an independent term — a cut-off generation is unfinished
     // whatever verdict was recorded.
+    // The normal composer teaches the model this run's nonce; a matching
+    // marker plus conclusion is therefore stronger than a stale self-reported
+    // Todo snapshot. OD Next's frozen Harness prompt currently bypasses that
+    // per-turn instruction, so its normal completion authority remains
+    // strategyTaskProvesDelivery below (the marker path is unreachable unless
+    // a future frozen bundle explicitly adopts the protocol).
+    const authenticatedDoneProvesDelivery =
+      status === 'succeeded' && run.authenticatedDoneConclusion === true;
+    // A clarification turn writes its plan, asks its question, and exits 0. It
+    // did not stop with work undone — it handed the baton back, and the user's
+    // answer is the continuation. Judging it on the TodoWrite snapshot alone
+    // asserted a termination cause nothing had caused: run
+    // 441ff961-bd66-4c4a-91e7-812f1d489668 ended `succeeded` / code 0 / no error
+    // and still stamped this flag, which is what projected the project card and
+    // the pet task centre as `incomplete`. Gated on `succeeded` for the same
+    // reason the marker above is: a turn the USER stopped is stopped, whatever
+    // it asked on the way out. Truncation stays independent and still wins.
+    const endedByAskingUser =
+      status === 'succeeded' && turnEndedByAskingUser(run.askUserScanText);
+    // Counter-evidence the host holds against its own turn. It is a term of its
+    // own, deliberately OUTSIDE the marker/todo clause below, because that whole
+    // clause is the agent's account of its own work: the completion marker, the
+    // strategy verdict and the TodoWrite snapshot can each veto "unfinished",
+    // and a run that apologised for a failed generation reached `succeeded` with
+    // a green check because the marker vetoed a `cancelled` todo. A failure the
+    // daemon watched happen is not something the turn's own narration may
+    // overrule — nor may it be read out of that narration (the apology copy is
+    // product copy, changed at will). Gated on `succeeded` for the same reason
+    // the two clauses above are: a run the user stopped is stopped, and one that
+    // already failed carries its verdict in `status`.
+    const hostRecordedDeliveryFailure =
+      status === 'succeeded' && runHasHostRecordedDeliveryFailure(run);
     run.endedWithUnfinishedWork =
       Boolean(run.truncatedMidTurn)
+      || hostRecordedDeliveryFailure
       || (!strategyTaskProvesDelivery(run.strategyTask)
+        && !authenticatedDoneProvesDelivery
+        && !endedByAskingUser
         && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
     // Commit the terminal Run snapshot before exposing its terminal event. The
     // optional outbox hook is local-only and synchronous by contract.
@@ -1467,10 +1686,26 @@ export function createChatRunService({
       terminalAt,
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
+      ...(runHasHostRecordedDeliveryFailure(run)
+        ? { mediaTaskFailures: run.mediaTaskFailures }
+        : {}),
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
       ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
+      ...(run.deliverableSyntaxRepair
+        ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
+        : {}),
+      ...(run.deliverableSyntaxValidation
+        ? { deliverableSyntaxValidation: run.deliverableSyntaxValidation }
+        : {}),
+      // The verdict, not just the classification: what the user should do, and
+      // whether re-running can help. The chat picks the error card's button off
+      // this frame, so leaving them out forced it to re-derive retryability from
+      // the detail NAME — a lookup table that disagreed with the daemon on
+      // forty-odd causes it had already ruled futile.
+      failureAction: run.failureAction ?? null,
+      retryable: run.retryable ?? null,
       ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     }, terminalAt, false);
     for (const sse of run.clients) sse.end();
@@ -1544,9 +1779,129 @@ export function createChatRunService({
     finish(run, 'failed', 1, null);
   };
 
+  /**
+   * Deterministic timeline replay of a previously recorded run.
+   *
+   * Development/diagnostics only, armed exclusively by `OD_REPLAY_EVENTS`.
+   * The invariant it exists to hold: **everything downstream of the agent
+   * child process must be the real product path.** So the replay substitutes
+   * only the *source* of the events — the agent subprocess — and then hands
+   * each recorded record to the very same `emit()` / `finish()` the live
+   * spawn path uses. Persistence, the SSE fan-out to `run.clients`, run
+   * analytics, terminal reconciliation and the web's consumption of
+   * `GET /api/runs/:id/events` are untouched and unaware.
+   *
+   * Timing is reproduced from the recording's own `timestamp` field, which is
+   * the daemon's wall clock at the original `emit()`. Records are scheduled
+   * against a single monotonic origin rather than sleeping per gap, so the
+   * replay does not accumulate the timer's own overshoot across thousands of
+   * records; records whose target instant has already passed are flushed in
+   * the same tick, which is also how the original sub-millisecond bursts
+   * (41% of gaps are 0 ms) reached the wire.
+   *
+   * Env:
+   *   OD_REPLAY_EVENTS      absolute path to a recorded events.jsonl
+   *   OD_REPLAY_DIR         directory of `<runId>/events.jsonl` recordings. The
+   *                         recording for the next turn is named in the sibling
+   *                         pointer file `<dir>/.selected`, so one daemon can
+   *                         play any recording without a restart. The pointer is
+   *                         read per run, not cached.
+   *   OD_REPLAY_SPEED       wall-clock multiplier, default 1 (2 = twice as fast)
+   *   OD_REPLAY_MAX_GAP_MS  clamp for idle gaps, default 0 = no clamp
+   */
+  const resolveReplaySource = () => {
+    const dir = process.env.OD_REPLAY_DIR;
+    const fallback = process.env.OD_REPLAY_EVENTS || null;
+    if (!dir) return fallback;
+    let selected = '';
+    try {
+      selected = fs.readFileSync(path.join(dir, '.selected'), 'utf8').trim().toLowerCase();
+    } catch {
+      return fallback;
+    }
+    if (!selected) return fallback;
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.toLowerCase().startsWith(selected))
+      .map((e) => e.name);
+    if (entries.length !== 1) {
+      throw new Error(
+        `OD_REPLAY_DIR: .selected="${selected}" matched ${entries.length} recordings in ${dir}`,
+      );
+    }
+    return path.join(dir, entries[0], 'events.jsonl');
+  };
+
+  const replayRecordedEvents = async (run, sourcePath) => {
+    const records = readDurableRunEvents(sourcePath);
+    if (records.length === 0) {
+      throw new Error(`OD_REPLAY_EVENTS: no usable records in ${sourcePath}`);
+    }
+    records.sort((a, b) => a.id - b.id);
+    const speed = Math.max(Number(process.env.OD_REPLAY_SPEED) || 1, 0.01);
+    const maxGapRaw = Number(process.env.OD_REPLAY_MAX_GAP_MS);
+    const maxGapMs = Number.isFinite(maxGapRaw) && maxGapRaw > 0 ? maxGapRaw : 0;
+
+    // Offsets are built by walking the recording so a clamped idle gap
+    // shortens the timeline from that point on instead of shifting one record.
+    const offsets = new Array(records.length);
+    let offset = 0;
+    offsets[0] = 0;
+    for (let i = 1; i < records.length; i += 1) {
+      let gap = records[i].timestamp - records[i - 1].timestamp;
+      if (!Number.isFinite(gap) || gap < 0) gap = 0;
+      if (maxGapMs > 0 && gap > maxGapMs) gap = maxGapMs;
+      offset += gap / speed;
+      offsets[i] = offset;
+    }
+
+    const originMs = Date.now();
+    const sleepUntil = (targetMs) => new Promise((resolve) => {
+      const delay = targetMs - Date.now();
+      if (delay <= 0) { resolve(); return; }
+      const timer = setTimeout(resolve, delay);
+      timer.unref?.();
+    });
+
+    for (let i = 0; i < records.length; i += 1) {
+      if (run.cancelRequested || TERMINAL_RUN_STATUSES.has(run.status)) return;
+      await sleepUntil(originMs + offsets[i]);
+      const record = records[i];
+      // Recorded payloads carry the ORIGINAL run's identity. Rewriting it is
+      // required, not cosmetic: the web keys streamed frames to the run it
+      // subscribed to, and a stale id would make every frame look foreign.
+      const data = (record.data && typeof record.data === 'object' && !Array.isArray(record.data))
+        ? { ...record.data, ...(typeof record.data.runId === 'string' ? { runId: run.id } : {}) }
+        : record.data;
+      if (record.event === 'end') {
+        finish(
+          run,
+          typeof data?.status === 'string' ? data.status : 'succeeded',
+          typeof data?.code === 'number' ? data.code : 0,
+          typeof data?.signal === 'string' ? data.signal : null,
+        );
+        return;
+      }
+      emit(run, record.event, data);
+    }
+    // A recording truncated before its `end` still has to settle the run.
+    if (!TERMINAL_RUN_STATUSES.has(run.status)) finish(run, 'succeeded', 0, null);
+  };
+
   const start = (run, starter) => {
     createRunLifecycleTracer(run).mark('start_requested');
-    void starter(run).catch((err) => {
+    // Arming the directory is NOT by itself a decision to replay. A shared
+    // test runtime points `OD_REPLAY_DIR` at a scratch folder for its whole
+    // lifetime, and only the one spec that wants a deterministic turn drops a
+    // `.selected` pointer in it. Every other Run in that runtime — and every
+    // Run in production, where nothing is armed — must reach the real agent.
+    // Failing here instead of falling through would hijack them all.
+    const replaySource = (process.env.OD_REPLAY_EVENTS || process.env.OD_REPLAY_DIR)
+      ? resolveReplaySource()
+      : null;
+    const effectiveStarter = replaySource
+      ? (r) => replayRecordedEvents(r, replaySource)
+      : starter;
+    void effectiveStarter(run).catch((err) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });
     return run;
@@ -1580,13 +1935,16 @@ export function createChatRunService({
     });
   };
 
-  const list = ({ projectId, conversationId, status } = {}) => Array.from(runs.values()).filter((run) => {
-    if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
-    if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
-    if (status === 'active') return !TERMINAL_RUN_STATUSES.has(run.status);
-    if (typeof status === 'string' && status) return run.status === status;
-    return true;
-  });
+  const list = ({ projectId, conversationId, status } = {}) => {
+    if (typeof projectId === 'string' && projectId) hydrateProjectRuns(projectId);
+    return Array.from(runs.values()).filter((run) => {
+      if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
+      if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
+      if (status === 'active') return !TERMINAL_RUN_STATUSES.has(run.status);
+      if (typeof status === 'string' && status) return run.status === status;
+      return true;
+    });
+  };
 
   const childHasExited = (child) => !child || child.exitCode !== null || child.signalCode !== null;
 
@@ -1899,6 +2257,45 @@ export function createChatRunService({
     run.stdinOpen = false;
   };
 
+  /**
+   * B11 「引导对话」: hand one more user message to a turn that is still running,
+   * instead of stopping it and re-sending.
+   *
+   * `runtimeAccepts` comes from the caller's resolved runtime def
+   * (`runtimeAcceptsMidTurnInput`) because the runs service has no agent
+   * registry of its own. Everything else about admissibility lives in
+   * `classifyRunSteering`, so the HTTP route and the CLI cannot drift.
+   *
+   * Returns the refusal instead of throwing: a child racing to exit between the
+   * verdict and the write is an ordinary outcome here, not a daemon fault.
+   */
+  const steer = (run, text, runtimeAccepts) => {
+    const verdict = classifyRunSteering({
+      runtimeAccepts: !!runtimeAccepts,
+      terminal: TERMINAL_RUN_STATUSES.has(run.status),
+      stdinOpen: !!run.stdinOpen,
+    });
+    if (!verdict.ok) return verdict;
+    const write = writeSteeringUserMessage(run.child?.stdin, text);
+    if (!write.delivered) {
+      // The pipe died between the verdict and the write. Record the truth so
+      // the next caller gets the same answer, and refuse rather than pretending.
+      run.stdinOpen = false;
+      return { ok: false, refusal: 'stdin_closed' };
+    }
+    if (write.backpressure) run.stdinBackpressure = true;
+    run.updatedAt = Date.now();
+    // Observability only — the delivered text is durable as a `role: 'user'`
+    // message in the conversation, written by the route.
+    emit(run, 'steering_message', {
+      runId: run.id,
+      length: text.length,
+      at: run.updatedAt,
+    });
+    persistState(run);
+    return { ok: true, backpressure: write.backpressure };
+  };
+
   // A same-run retry can be waiting out its backoff window (server.ts
   // scheduleRetryRestart). Cancellation/shutdown must drop that pending restart
   // so a cancelled run is not resurrected after the timer fires.
@@ -2014,6 +2411,7 @@ export function createChatRunService({
       try { finalize(); } catch { /* best-effort */ }
     }
     runs.delete(run.id);
+    unindexRunProject(run.projectId, run.id);
     if (
       run.clientRequestId
       && runIdsByClientRequestId.get(run.clientRequestId) === run.id
@@ -2057,10 +2455,12 @@ export function createChatRunService({
     list,
     stream,
     cancel,
+    steer,
     shutdownActive,
     wait,
     emit,
     persistState,
+    noteMediaTaskFailure,
     setAnalyticsRecovery,
     beginAnalyticsDelivery,
     finalizeAnalyticsDelivery,

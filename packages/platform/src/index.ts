@@ -28,6 +28,7 @@ export {
 
 export type {
   ProcessSnapshot,
+  ProcessSnapshotOptions,
   ProcessStampContract,
   ProcessStampField,
   ProcessStampShape,
@@ -54,6 +55,7 @@ export {
   readProcessStamp,
   readProcessStampFromCommand,
   signalProcesses,
+  selectOwnedProcessTree,
   spawnBackgroundProcess,
   spawnLoggedProcess,
   stopProcesses,
