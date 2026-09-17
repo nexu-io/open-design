@@ -466,6 +466,15 @@
   border-color: rgba(255, 255, 255, 0.34);
   background: rgba(255, 255, 255, 0.24);
 }
+/* Warning toasts need their own hover: the amber resting disc above
+   (3-class specificity) would otherwise smother the generic currentColor
+   hover, leaving the close button with no visible hover feedback on the
+   light surface (QA follow-up on #8134). */
+.od-toast.tone-warning .od-toast-close:hover {
+  border-color: color-mix(in srgb, var(--amber, #ff7528) 34%, transparent);
+  background: color-mix(in srgb, var(--amber, #ff7528) 18%, transparent);
+  opacity: 1;
+}
 .od-toast-dismiss {
   margin-top: 8px;
   background: rgba(255, 255, 255, 0.12);
