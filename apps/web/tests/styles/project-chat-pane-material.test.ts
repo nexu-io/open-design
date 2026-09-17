@@ -72,7 +72,7 @@ describe('project chat pane material (styles/viewer/routines.css)', () => {
     expect(slot).toMatch(/background:\s*var\(--veil-page, transparent\);/);
   });
 
-  it('lets the app wash show through the card: transparent, no backdrop blur, rounded and clipped', () => {
+  it('lets the app wash show through the card: transparent, no backdrop blur, square-cornered and clipped', () => {
     const pane = declarations(routinesCss, '.app .split-chat-slot > .pane');
     expect(pane).toMatch(/background:\s*transparent;/);
     expect(pane).toMatch(/-webkit-backdrop-filter:\s*none;/);
@@ -80,7 +80,13 @@ describe('project chat pane material (styles/viewer/routines.css)', () => {
     expect(pane).not.toMatch(/color-mix\(in srgb, #fff 85%, transparent\)/);
     expect(pane).not.toMatch(/var\(--material-regular-backdrop\)/);
     expect(pane).toMatch(/border:\s*none;/);
-    expect(pane).toMatch(/border-radius:\s*var\(--radius-lg\);/);
+    // Square on purpose: a radius on this clipping box turns it into a rounded
+    // clip around `.chat-log`, which Chromium's compositor cannot hit-test on
+    // its own, so every wheel notch waits on the main thread. The card paints
+    // nothing, so the corner is invisible either way. Guarded from the other
+    // side by tests/components/chat/chat-log-ancestor-rounded-clip.test.ts.
+    expect(pane).toMatch(/border-radius:\s*0;/);
+    expect(pane).not.toMatch(/border-radius:\s*var\(--radius-lg\);/);
     expect(pane).toMatch(/box-shadow:\s*none;/);
     expect(pane).toMatch(/overflow:\s*hidden;/);
   });

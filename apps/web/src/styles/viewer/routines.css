@@ -1567,7 +1567,20 @@
      fixed/portaled layer, so it isn't clipped and auto-follows the inset via
      composerPortalRect). */
   border: none;
-  border-radius: var(--radius-lg);
+  /* No corner radius on this card — on purpose, and not for looks.
+     The card is transparent (OPEND-3090 below), so a radius paints nothing;
+     what it DID do was turn the `.pane { overflow: hidden }` clip into a
+     rounded clip around `.chat-log`, and Chromium's compositor cannot
+     hit-test a scroller behind a rounded clip on its own: every wheel notch
+     on the transcript went `FindScrollTargetOnMainThread` → main-thread
+     reply → `ScrollTree::ScrollBy` (13/13 notches, real Chrome 152 CDP
+     trace, 2026-09-17), against 0/6 for a plain overflow div. While a run
+     streams, the main thread is busy re-rendering, the reply waits, the
+     wheel stalls, and the scroll-freeze probe reports `wheel_stall`. With
+     `border-radius: 0` (or a non-clipping pane) the same trace shows 0/13
+     main-thread hit tests. Guard:
+     `tests/components/chat/chat-log-ancestor-rounded-clip.test.ts`. */
+  border-radius: 0;
   box-shadow: none;
   /* Product decision (OPEND-3090, per the #8113 Demo): the card paints
      nothing of its own, so the app wash / window vibrancy shows through the
