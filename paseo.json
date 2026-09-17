@@ -1,17 +1,17 @@
 {
   "worktree": {
-    "setup": "mise exec -- corepack pnpm install --frozen-lockfile && mise exec -- corepack pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending",
-    "teardown": "namespace=$(basename \"$PWD\"); mise exec -- corepack pnpm tools-dev stop --namespace \"$namespace\""
+    "setup": [
+      "corepack pnpm install --frozen-lockfile",
+      "corepack pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending"
+    ],
+    "teardown": "corepack pnpm tools-dev paseo-workspace stop"
   },
   "scripts": {
     "dev": {
-      "command": "namespace=$(basename \"$PWD\"); exec ports run open-design -- sh -c 'exec mise exec -- corepack pnpm tools-dev run web --namespace \"$1\" --daemon-port \"$DAEMON_PORT\" --web-port \"$WEB_PORT\"' sh \"$namespace\""
-    },
-    "cleanup": {
-      "command": "root=$(git rev-parse --show-toplevel); lease_pid=$(ports leases --json | mise exec -- node -e 'let input = \"\"; process.stdin.setEncoding(\"utf8\"); process.stdin.on(\"data\", (chunk) => input += chunk); process.stdin.on(\"end\", () => { const root = process.argv[1]; const matches = JSON.parse(input).filter((lease) => lease.project === \"open-design\" && lease.worktree === root); if (matches.length > 1) { console.error(`multiple Open Design port leases found for ${root}`); process.exit(1); } if (matches[0]) process.stdout.write(String(matches[0].pid)); });' \"$root\"); if [ -n \"$lease_pid\" ]; then kill -TERM \"$lease_pid\"; fi; namespace=$(basename \"$root\"); mise exec -- corepack pnpm tools-dev stop --namespace \"$namespace\""
+      "command": "corepack pnpm tools-dev paseo-workspace run"
     },
     "status": {
-      "command": "namespace=$(basename \"$PWD\"); mise exec -- corepack pnpm tools-dev status --namespace \"$namespace\" --json"
+      "command": "corepack pnpm tools-dev paseo-workspace status --json"
     }
   }
 }

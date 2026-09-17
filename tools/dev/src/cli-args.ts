@@ -1,4 +1,15 @@
-const CLI_COMMANDS = new Set(["start", "run", "status", "stop", "restart", "logs", "inspect", "check", "help"]);
+const CLI_COMMANDS = new Set([
+  "start",
+  "run",
+  "status",
+  "stop",
+  "restart",
+  "logs",
+  "inspect",
+  "check",
+  "paseo-workspace",
+  "help",
+]);
 const OPTIONS_WITH_VALUE = new Set([
   "--daemon-port",
   "--env-file",

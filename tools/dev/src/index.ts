@@ -71,6 +71,12 @@ import {
 import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
+import {
+  parsePaseoWorkspaceAction,
+  resolvePaseoLeasePorts,
+  resolvePaseoWorkspaceNamespace,
+  runPaseoPortLease,
+} from "./paseo-workspace.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
@@ -1249,6 +1255,39 @@ addSharedOptions(cli.command("check [app]", "Print status and recent logs for qu
     printCheckResult({ apps, diagnostics: createLogDiagnostics(logs), logs, namespace: config.namespace }, options);
   },
 );
+
+addSharedOptions(
+  cli.command("paseo-workspace <action>", "Run the current Paseo worktree's development lifecycle"),
+).action(async (actionValue: string, options: CliOptions) => {
+  const action = parsePaseoWorkspaceAction(actionValue);
+  const namespace = resolvePaseoWorkspaceNamespace(WORKSPACE_ROOT);
+  const workspaceOptions = { ...options, namespace };
+
+  if (action === "run") {
+    assertSupportedNodeRuntimeForStart();
+    const leasePorts = resolvePaseoLeasePorts(process.env);
+    if (leasePorts == null) {
+      await runPaseoPortLease(WORKSPACE_ROOT);
+      return;
+    }
+    await runForeground(
+      resolveToolDevConfig({ ...workspaceOptions, ...leasePorts }),
+      APP_KEYS.WEB,
+      { ...workspaceOptions, ...leasePorts },
+    );
+    return;
+  }
+
+  if (action === "status") {
+    printStatusResult(await status(resolveToolDevConfig(workspaceOptions), undefined), options, undefined);
+    return;
+  }
+
+  const config = resolveToolDevConfig(workspaceOptions);
+  const targets = resolveStopApps(undefined);
+  const result = await runSequential(targets, (target) => stopApp(config, target));
+  printStopResult(result, options);
+});
 
 cli.help();
 

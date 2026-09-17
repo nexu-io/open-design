@@ -46,6 +46,7 @@ describe("tools-dev CLI argument rewriting", () => {
   it("preserves explicit commands", () => {
     assert.deepEqual(rewriteCliArgsForDefaultStart(["status", "--json"]), ["status", "--json"]);
     assert.deepEqual(rewriteCliArgsForDefaultStart(["--namespace", "demo", "logs"]), ["--namespace", "demo", "logs"]);
+    assert.deepEqual(rewriteCliArgsForDefaultStart(["paseo-workspace", "run"]), ["paseo-workspace", "run"]);
   });
 
   it("does not require --env-file when parsing shared command options", () => {
