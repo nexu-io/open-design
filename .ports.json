@@ -1,0 +1,7 @@
+{
+  "project": "open-design",
+  "ports": {
+    "DAEMON_PORT": 0,
+    "WEB_PORT": 1
+  }
+}
