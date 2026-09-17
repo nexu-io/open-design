@@ -1,23 +1,17 @@
-# OD Next HyperFrames Task Profile v2.0.0
+# OD Next HyperFrames Task Profile v2.1.0-no-plan.1
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill; how HyperFrames is actually invoked is defined
-by the engineering implementation. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+Direct generation and the ship-on-write boundary follow the general
+orchestration Skill. Apply these task-specific requirements while producing
+the requested deliverables; no preliminary specification document is needed.
 
-## Profile fields
+## Task requirements
 
-Resolve platform and purpose, duration, frame shape and rate, script or
-storyboard locks, scenes, supplied media, on-screen copy, voice, music,
-captions, and required source and rendered outputs. Freeze palette, type,
-composition, scene language, motion timing, transitions, safe areas, and
-audio rules in the Design Spec.
-
-Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
-explicit assumption with its risk disclosed in prose.
+Apply the platform, purpose, duration, frame shape and rate, script or
+storyboard locks, scenes, supplied media, copy, voice, music, captions, and
+required outputs directly to the source timeline. Keep palette, type,
+composition, scene language, motion, safe areas, and audio coherent.
 
 Quality focus: narrative and pacing, visual unity, motivated motion, text
 readability, asset fidelity, and audio-picture sync.
@@ -28,13 +22,12 @@ The canonical deliverable is editable HyperFrames source — a timeline-driven
 HTML source artifact — with a stable render entry. Final-cut files such as
 MP4 are rendered by Open Design's product-side engineering capability after
 the source is written and are outside the Agent's responsibility, unless the
-task contract explicitly assigns a rendered media file to a Build Package; a
-package that owns rendering declares the exact format, duration, frame
-dimensions, and frame rate.
+user explicitly requests a rendered media file and the host provides that
+capability. Honor its exact format, duration, frame dimensions, and frame rate.
 
 Writing the HyperFrames HTML source artifact to disk IS the delivery: no
 playback, no frame extraction, no final-cut rendering outside a declared
-render-owning package. Never describe a final-cut file as completed before
+rendering responsibility. Never describe a final-cut file as completed before
 the declared production route has actually rendered it.
 
 ## Build Requirements
@@ -59,7 +52,7 @@ scope; this profile's defaults fill in only what has not been specified.
 
 ### Organize information in time
 
-- Turn the script or plan into clear visual segments, each carrying one
+- Turn the requested content or supplied script into clear visual segments, each carrying one
   distinct narrative job, organized into a readable temporal arc.
 - Establish the subject, mood, or a reason to keep watching as early in the
   opening as possible.
@@ -80,8 +73,7 @@ scope; this profile's defaults fill in only what has not been specified.
 - Limit how many elements move at once so the viewer always knows where to
   look.
 
-When task configuration provides the following values, execute them and
-record them in the Design Spec:
+Apply these task-configuration values directly to the generated source:
 
 - **Visual style** sets the visual language: motion graphics leads with
   typography and graphic movement; live-action look leads with camera
@@ -109,7 +101,7 @@ record them in the Design Spec:
 - When the task includes voiceover, music, or sound effects, keep visual
   changes aligned with the sound's rhythm and meaning, and keep voice,
   captions, music, sound effects, and visual transitions aligned to the
-  frozen timing plan.
+  source timeline.
 - Sync subtitles with the voiceover in both content and timing.
 - Use sound effects to reinforce actions and transitions, never to mask the
   voiceover or key information.
@@ -150,12 +142,3 @@ shot definitions):
 - Produce the declared source bundle and any assigned render outputs through
   the stated production route; never describe a final-cut file as completed
   before that route has actually rendered it.
-
-## Build Packages
-
-Simple mode builds the full timeline in one context. Complex mode may split
-complete, independently renderable segments only after the script, timeline,
-asset assignments, Design Spec, and integration boundaries are frozen. A
-single shot stays within one package — never split a single shot.
-Dependencies name shared intros, transitions, audio stems, or preceding
-segment outputs explicitly.

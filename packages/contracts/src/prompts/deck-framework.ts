@@ -361,13 +361,7 @@ ${DECK_PROTOCOL_V1_INLINE_RUNTIME}
 export type DeckFrameworkHandoffProfile = 'filesystem' | 'text_artifact';
 export type DeckFrameworkMode = 'canonical' | 'legacy_compatible';
 
-const DECK_FRAMEWORK_BODY = `# Slide deck — fixed framework (this is non-negotiable for deck mode)
-
-Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, OD Deck Protocol v1 absolute navigation + state events, hidden programmatic prev/next + counter, capture-phase keyboard with R reset-to-first-slide, half-slide click navigation, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
-
-**You do not write any of that. You do not modify any of that.** Your job is to fill content slots only.
-
-## Workflow — copy framework first, then fill content
+const DECK_STANDARD_WORKFLOW = `## Workflow — copy framework first, then fill content
 
 When the user asks for slides, your plan **must** start with "copy the deck framework verbatim" before any content step. The intended order is:
 
@@ -379,7 +373,20 @@ When the user asks for slides, your plan **must** start with "copy the deck fram
 5.  Replace each <section class="slide"> SLOT with real content
 6.  Self-check (no rewriting framework chrome / @media print / nav script)
 7.  Complete the active execution profile's final handoff exactly as described after the canonical skeleton
-\`\`\`
+\`\`\``;
+
+const DECK_DIRECT_GENERATION_WORKFLOW = `## Generate the complete deck directly
+
+Use the canonical framework below and preserve its runtime, navigation, and print rules verbatim. Apply the palette and fonts to :root, add per-deck styles in the second <style> block, and fill every slide slot with the requested content in the same generation pass. Express the narrative arc and visual rhythm directly in the slides. Complete the active execution profile's final handoff once the source is written.`;
+
+function renderDeckFrameworkBody(workflow: 'standard' | 'direct_generation'): string {
+  return `# Slide deck — fixed framework (this is non-negotiable for deck mode)
+
+Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, OD Deck Protocol v1 absolute navigation + state events, hidden programmatic prev/next + counter, capture-phase keyboard with R reset-to-first-slide, half-slide click navigation, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
+
+**You do not write any of that. You do not modify any of that.** Your job is to fill content slots only.
+
+${workflow === 'direct_generation' ? DECK_DIRECT_GENERATION_WORKFLOW : DECK_STANDARD_WORKFLOW}
 
 If you find yourself writing \`<style>\` rules for \`.deck-shell\`, \`.deck-stage\`, \`.slide\`, \`.canvas\`, \`fit()\`, \`@media print\`, or a keyboard handler — STOP. The framework already has them. Re-read this directive, then keep going from "fill SLOT content".
 
@@ -547,6 +554,7 @@ ${DECK_SKELETON_HTML}
 
 When the brief is "make me a deck", your output is this skeleton with theme tokens tuned, per-deck classes added, and \`<section class="slide">\` blocks filled in — nothing more, nothing less. Skill-specific guidance (typography, theme presets, layout vocabulary) layers *on top of* this framework, not in place of it.
 `;
+}
 
 const DECK_FILESYSTEM_HANDOFF = `## Final handoff — filesystem
 
@@ -572,8 +580,9 @@ function renderDeckHandoff(profile: DeckFrameworkHandoffProfile): string {
 
 export function renderDeckFrameworkDirective(
   profile: DeckFrameworkHandoffProfile,
+  workflow: 'standard' | 'direct_generation' = 'standard',
 ): string {
-  return `${DECK_FRAMEWORK_BODY}\n\n${renderDeckHandoff(profile)}`;
+  return `${renderDeckFrameworkBody(workflow)}\n\n${renderDeckHandoff(profile)}`;
 }
 
 export function renderLegacyDeckCompatibilityDirective(

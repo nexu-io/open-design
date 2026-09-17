@@ -166,7 +166,7 @@ describe('OD Next V2 request recipe wiring', () => {
     expect(prompt).toContain("type: 'od:slide-state'");
   });
 
-  it('composes the real package and atom bodies as one planning/Build-only golden', async () => {
+  it('composes the real package and atom bodies as one direct-generation prompt', async () => {
     const recipe = await resolveRecipe();
     expect(recipe).not.toBeNull();
     if (!recipe) throw new Error('expected OD Next recipe');
@@ -206,19 +206,11 @@ describe('OD Next V2 request recipe wiring', () => {
     expect(prompt).toContain('compact operator interfaces');
     expect(prompt).toContain('Use concise product language.');
     expect(prompt).toContain('Prioritize incident triage.');
-    expect(prompt).toContain('open-design.plan-contract/v2');
+    expect(prompt).not.toContain('open-design.plan-contract/v2');
     expect(prompt).toContain('open-design.strategy-state/v2');
-    expect(prompt).toContain('capabilitySnapshotHash');
-    expect(prompt).toContain('productionRoutes');
-    expect(prompt).toContain('decisionSummary');
     expect(prompt.split('\n').filter((line) => (
       line.startsWith('## Active stage:') || line.startsWith('### ')
     ))).toEqual(expect.arrayContaining([
-      '## Active stage: discovery',
-      '### discovery-question-form',
-      '## Active stage: plan',
-      '### direction-picker',
-      '### todo-write',
       '## Active stage: generate',
       '### file-write',
       '### live-artifact',
@@ -259,7 +251,6 @@ describe('OD Next V2 request recipe wiring', () => {
     }).result.appliedPlugin;
     expect(ordinary.strategy).toBeUndefined();
     expect(ordinary.pipeline?.stages.map((stage) => stage.id)).toEqual([
-      'discovery',
       'plan',
       'generate',
       'critique',
@@ -273,50 +264,65 @@ describe('OD Next V2 request recipe wiring', () => {
     })).toThrow(InternalBundledStrategyApplyError);
   });
 
-  it('fails closed when atom prompts are disabled, incomplete, or contaminated', async () => {
-    await expect(resolveRecipe({ enabled: false })).rejects.toThrow(
-      /atom prompts are disabled/i,
-    );
+  it('loads only generation atoms and rejects stale planning or contaminated bodies', async () => {
+    await expect(resolveRecipe({ enabled: false })).rejects.toThrow(/atom prompts are disabled/i);
+    const requested: string[][] = [];
+    const recipe = await resolveRecipe({
+      loadAtomBodies: async (_database, ids) => {
+        requested.push([...ids]);
+        return [];
+      },
+    });
+    expect(recipe?.activeStages).toEqual([
+      { name: 'generate', atoms: [{ name: 'file-write' }, { name: 'live-artifact' }] },
+    ]);
+    expect(requested).toEqual([['file-write', 'live-artifact']]);
     await expect(resolveRecipe({
-      loadAtomBodies: async (database, atomIds) => (
-        (await loadBundledAtomBodiesStrict(database, atomIds))
-          .filter((entry) => entry.atomId !== 'direction-picker')
-      ),
-    })).rejects.toThrow(/direction-picker/i);
-
+      loadAtomBodies: async () => [{ atomId: 'todo-write', pluginId: 'todo-write', body: 'Make a plan.' }],
+    })).rejects.toThrow(/do not match the validated pipeline/i);
+    for (const body of [
+      '# Critique Theater',
+      'Render-and-inspect using a browser screenshot of the DOM, then fix after inspection.',
+    ]) {
+      await expect(resolveRecipe({
+        loadAtomBodies: async () => [{ atomId: 'file-write', pluginId: 'file-write', body }],
+      })).rejects.toThrow(/forbidden/i);
+    }
     await expect(resolveRecipe({
-      loadAtomBodies: async (database, atomIds) => (
-        (await loadBundledAtomBodiesStrict(database, atomIds)).map((entry) => (
-          entry.atomId === 'todo-write'
-            ? { ...entry, body: `${entry.body}\n\n# Critique Theater` }
-            : entry
-        ))
-      ),
-    })).rejects.toThrow(/forbidden/i);
-
-    await expect(resolveRecipe({
-      loadAtomBodies: async (database, atomIds) => (
-        (await loadBundledAtomBodiesStrict(database, atomIds)).map((entry) => (
-          entry.atomId === 'todo-write'
-            ? { ...entry, body: `${entry.body}\n\n### Hidden subsection` }
-            : entry
-        ))
-      ),
+      loadAtomBodies: async () => [{ atomId: 'file-write', pluginId: 'file-write', body: '### Hidden subsection' }],
     })).rejects.toThrow(/unexpected subsection heading/i);
-
-    await expect(resolveRecipe({
-      loadAtomBodies: async (database, atomIds) => (
-        (await loadBundledAtomBodiesStrict(database, atomIds)).map((entry) => (
-          entry.atomId === 'todo-write'
-            ? {
-                ...entry,
-                body: `${entry.body}\n\nRender-and-inspect using a browser screenshot of the DOM, then fix after inspection.`,
-              }
-            : entry
-        ))
-      ),
-    })).rejects.toThrow(/forbidden/i);
   });
+
+  it.each(['prototype', 'ppt', 'marketing', 'hyperframes'] as const)(
+    'composes the real %s profile without a planning prerequisite',
+    async (taskType) => {
+      const binding = createBundledStrategyBindingV2({ plugin, taskType });
+      const applied = {
+        ...applyPlugin({ plugin, inputs: {}, registry: EMPTY_REGISTRY, internalStrategyBinding: binding })
+          .result.appliedPlugin,
+        snapshotId: `no-plan-${taskType}`,
+      };
+      const recipe = await resolveRecipe({ activeSnapshot: applied });
+      if (!recipe) throw new Error('expected OD Next recipe');
+      const prompt = composeSystemPrompt({
+        odNextStrategyRecipe: recipe, agentId: 'codex',
+        planToolNote: 'Use update_plan before generation.',
+      });
+      expect(prompt).toBe(composeContractsSystemPrompt({
+        odNextStrategyRecipe: recipe, agentId: 'codex',
+        planToolNote: 'Use update_plan before generation.',
+      }));
+      expect(prompt).toContain('Do not call TodoWrite, update_plan, todowrite');
+      expect(prompt).toContain('for both new work and existing artifacts');
+      for (const absent of [
+        '## Active stage: plan', '### todo-write', '### direction-picker',
+        '<open_design_plan_contract>', 'open-design.plan-contract/v2',
+        'planning-only', 'Keep the Todo plan live', 'Use update_plan before generation.',
+        'Produce ordered Full Plan', 'record them in the Design Spec',
+        'your plan **must**', 'Plan the slide arc', 'state aloud before writing',
+      ]) expect(prompt).not.toContain(absent);
+    },
+  );
 
   it('fails closed when a real loaded craft section restores a post-Build loop', async () => {
     const recipe = await resolveRecipe();
@@ -399,7 +405,7 @@ describe('OD Next V2 request recipe wiring', () => {
       },
     };
     await expect(resolveRecipe({ activeSnapshot: pipelineDrift })).rejects.toThrow(
-      /exactly discovery, plan, and generate/i,
+      /exactly the generate stage/i,
     );
 
     const topLevelPollution = {
@@ -414,7 +420,7 @@ describe('OD Next V2 request recipe wiring', () => {
 
     const stagePollution = {
       stages: snapshot.pipeline!.stages.map((stage, index) => (
-        index === 2 ? { ...stage, acceptanceChecklist: ['review artifact'] } : stage
+        index === 0 ? { ...stage, acceptanceChecklist: ['review artifact'] } : stage
       )),
     } as PluginPipeline;
     expect(() => enforceOdNextStrategyPipelineV2({

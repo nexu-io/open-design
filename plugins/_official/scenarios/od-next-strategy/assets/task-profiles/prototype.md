@@ -1,26 +1,19 @@
-# OD Next Prototype Task Profile v2.2.0
+# OD Next Prototype Task Profile v2.3.0-no-plan.1
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics, required-field rules,
-and the artifact contract bind to the V2 machine contract at the recorded
-taskProfileVersion; this file is the prototype projection of that contract.
+Direct generation and the ship-on-write boundary follow the general
+orchestration Skill. Apply these task-specific requirements while producing
+the requested deliverables; no preliminary specification document is needed.
 
-## Profile fields
+## Task requirements
 
-Resolve product surface and target device, audience, primary flow, required
+Apply the product surface, target device, audience, primary flow, required
 screens and interactions, fidelity, baseline artifact, content locks, brand
-references, and required output format. Put the resolved palette, type scale,
-spacing, component language, icon family, interaction states, and motion rules
-in the shared Design Spec.
-
-Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
-explicit assumption with its risk disclosed in prose. When fidelity is
-wireframe or low-fi, content and interaction-state requirements downgrade to
-structural sketches and the visual-direction rules below do not apply; when
-fidelity is unspecified, default to high fidelity.
+references, and output format directly to the generated source. Keep palette,
+type, spacing, components, icons, interaction states, and motion consistent.
+When fidelity is wireframe or low-fi, use structural sketches; when
+unspecified, default to high fidelity.
 
 Quality focus: information hierarchy, interaction clarity, flow completeness,
 visual consistency, responsive behavior, and reference adherence.
@@ -76,10 +69,9 @@ and this profile's defaults fill only what is left unspecified.
   calm, credible low-saturation blue-greens with restrained detail; tools /
   productivity lean neutral high-contrast minimalism; children / education
   lean bright rounded shapes with an illustrated feel. Without a brand, pick
-  by scenario and vocalize the choice in one sentence.
+  a coherent style fitting the scenario and apply it in the source.
 
-When task configuration provides the following values, execute them and
-record them in the Design Spec:
+Apply these task-configuration values directly to the generated source:
 
 - **Visual style** sets the palette's character, the type pairing, and
   corner-radius and shadow intensity; the chosen style never exempts the
@@ -308,11 +300,3 @@ Meet the following in one pass, while writing the source:
   order explicitly defined in the source.
 - Locked content, user-specified assets, and non-target regions stay
   untouched — no incidental edits.
-
-## Build Packages
-
-Use simple mode for a cohesive flow that benefits from one context. Complex
-mode may split only when the general orchestration Skill's independent-output
-conditions are met, and only along independently deliverable feature loops,
-roles, or device surfaces after navigation, content locks, and the Design
-Spec are frozen. Do not split one interaction loop across Children.

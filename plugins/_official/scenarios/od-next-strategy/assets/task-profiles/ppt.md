@@ -1,22 +1,17 @@
-# OD Next Presentation Task Profile v2.0.0
+# OD Next Presentation Task Profile v2.1.0-no-plan.1
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+Direct generation and the ship-on-write boundary follow the general
+orchestration Skill. Apply these task-specific requirements while producing
+the requested deliverables; no preliminary specification document is needed.
 
-## Profile fields
+## Task requirements
 
-Resolve audience, purpose, speaking time or page budget, source material and
-locked scope, story arc, data sources, brand references, and presentation
-format. Freeze type, color, page grid, margins, chart language, imagery, and
-section rhythm in the Design Spec. Record the chosen narrative structure in
-the Task Profile.
-
-Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
-explicit assumption with its risk disclosed in prose.
+Apply the audience, purpose, speaking time or page budget, source material,
+locked scope, story arc, data sources, brand references, and format directly
+to the deck. Keep type, color, grids, margins, charts, imagery, and section
+rhythm coherent across the generated slides.
 
 Quality focus: narrative coherence, one clear point per slide, readability,
 truthful data, layout fitted to content, and consistency across the deck.
@@ -136,11 +131,10 @@ slide type:
 - **Style-direction inference examples:** fundraising pitches lean confident
   high-contrast large type; academic and retrospective reports lean
   restrained serifs with data first; corporate training leans steady
-  brand-color-driven layouts. Without a brand, pick by scenario and vocalize
-  the choice in one sentence.
+  brand-color-driven layouts. Without a brand, apply a coherent style fitting
+  the scenario directly to the source.
 
-When the task configuration supplies the following values, execute them and
-record them in the Design Spec:
+Apply these task-configuration values directly to the generated slides:
 
 - **Visual style** decides the palette, font pairing, and chart style: a
   data-dense style favors tables and chart density; a brand-forward visual
@@ -205,10 +199,3 @@ Meet the following in one pass, while writing the source:
 - The output is a genuinely usable, still-editable single-file HTML; never
   describe a PPTX or PDF that Open Design's engineering has not yet produced
   as completed.
-
-## Build Packages
-
-Simple mode owns the full narrative. Complex mode may split complete
-chapters, each finishable independently, only after the story arc, data
-definitions, page grid, and Design Spec are frozen. Each package returns a
-complete ordered chapter, not disconnected individual pages.

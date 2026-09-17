@@ -45,7 +45,7 @@ export function enforceOdNextStrategyPipelineV2(input: {
     || stages.length !== OD_NEXT_PROMPT_STAGE_CONTRACT_V2.length
   ) {
     throw new InvalidOdNextStrategyPipelineV2Error(
-      'OD Next V2 pipeline must contain exactly discovery, plan, and generate.',
+      'OD Next V2 pipeline must contain exactly the generate stage.',
     );
   }
   for (const [index, expected] of OD_NEXT_PROMPT_STAGE_CONTRACT_V2.entries()) {

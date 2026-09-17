@@ -11,10 +11,8 @@ import {
   type OdNextStrategyRequestRecipeV2,
 } from '../src/prompts/od-next-strategy.js';
 import {
-  FullPlanV2Schema,
   OD_NEXT_PLAN_CONTRACT_BLOCK,
   OD_NEXT_RUNTIME_STATE_BLOCK,
-  OpenDesignPlanContractV2Schema,
   StrategyRuntimeStateV2Schema,
 } from '../src/plugins/strategy-v2.js';
 import { composeSystemPrompt } from '../src/prompts/system.js';
@@ -39,11 +37,9 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
   taskType: 'prototype',
   executionProfile: 'filesystem',
   coreStrategy: '# Core\n\nKeep route and execution facts locked.',
-  generalOrchestration: '# Orchestration\n\nPrepare a Design Spec and Full Plan, then Build.',
+  generalOrchestration: '# Orchestration\n\nGenerate the requested deliverables directly.',
   taskSkill: '# Prototype\n\nProduce the declared editable prototype.',
   activeStages: [
-    { name: 'discovery', atoms: [{ name: 'discovery-question-form' }] },
-    { name: 'plan', atoms: [{ name: 'direction-picker' }, { name: 'todo-write' }] },
     { name: 'generate', atoms: [{ name: 'file-write' }, { name: 'live-artifact' }] },
   ],
 };
@@ -77,6 +73,9 @@ describe('OD Next V2 prompt recipe', () => {
       .sessionSkills.taskTypeSkill.body;
 
     expect(prompt).toContain('OD Deck Protocol v1');
+    expect(prompt).toContain('## Generate the complete deck directly');
+    expect(prompt).not.toContain('your plan **must**');
+    expect(prompt).not.toContain('Plan the slide arc');
     expect(prompt).toContain('data-od-deck-protocol="1"');
     expect(prompt).toContain("type: 'od:deck-ready'");
     expect(prompt).toContain("type: 'od:slide-state'");
@@ -168,96 +167,6 @@ describe('OD Next V2 prompt recipe', () => {
     expect(resolveOdNextDeckFrameworkMode({ taskType: 'prototype' })).toBeUndefined();
   });
 
-  it('states the deliverable rules that only bite once a plan declares more than one', () => {
-    // The canonical Plan Contract example carries a single deliverable whose id
-    // equals `canonicalDeliverable.id`, so the membership rule reads as a
-    // coincidence of the one-item example rather than an invariant. A complex
-    // plan naturally declares one deliverable per page and picks one as
-    // canonical, at which point codex emitted a canonical id that appeared
-    // nowhere in requiredDeliverables and terminated on
-    // `taskProfile.requiredDeliverables: The canonical deliverable must be part
-    // of requiredDeliverables.`
-    const prompt = composeOdNextStrategyRequestPromptV2(recipe);
-    const contract = OpenDesignPlanContractV2Schema.parse(
-      parseWireBlock(prompt, OD_NEXT_PLAN_CONTRACT_BLOCK),
-    );
-    const multiDeliverable = {
-      ...contract,
-      taskProfile: {
-        ...contract.taskProfile,
-        canonicalDeliverable: { ...contract.taskProfile.canonicalDeliverable, id: 'home' },
-        requiredDeliverables: [
-          { id: 'pricing', kind: contract.taskProfile.canonicalDeliverable.kind },
-          { id: 'about', kind: contract.taskProfile.canonicalDeliverable.kind },
-        ],
-      },
-    };
-    const rejected = OpenDesignPlanContractV2Schema.safeParse(multiDeliverable);
-    expect(rejected.success).toBe(false);
-    expect(JSON.stringify(rejected.error?.issues)).toContain(
-      'The canonical deliverable must be part of requiredDeliverables.',
-    );
-    expect(prompt).toContain(
-      'taskProfile.canonicalDeliverable.id must itself appear as one of the requiredDeliverables ids',
-    );
-    expect(prompt).toContain('Ids must be unique within requiredDeliverables and within buildRequirements');
-  });
-
-  it('spells out the Build Package shape that only a complex plan ever emits', () => {
-    // The canonical Plan Contract example is a SIMPLE plan, and the schema
-    // rejects a simple plan that carries Build Packages, so that example's
-    // `buildPackages` is necessarily `[]`. It left the one array unique to
-    // complex mode with neither a template nor a prose shape, while
-    // `buildRequirements` and `readinessArtifacts` both got spelled out. A
-    // model asked for complex therefore had to invent seven `.strict()` field
-    // names: codex and opencode independently guessed `dependencies` plus a
-    // stray `boundary`, and both terminated on
-    // `od_next_protocol_plan_contract_invalid_schema`.
-    const buildPackage = FullPlanV2Schema.parse({
-      executionMode: 'complex',
-      steps: [
-        { id: 'shell', objective: 'Build the shared shell.', outputs: ['shell'] },
-        { id: 'flow', objective: 'Build the primary flow.', outputs: ['flow'], dependsOn: ['shell'] },
-      ],
-      readinessArtifacts: [],
-      buildPackages: [
-        {
-          id: 'shell',
-          objective: 'Build the shared shell.',
-          inputs: [],
-          outputs: ['shell'],
-          sharedConstraints: ['Use the frozen type and spacing tokens.'],
-          dependsOn: [],
-          allowedResources: ['project-source'],
-        },
-        {
-          id: 'flow',
-          objective: 'Build the primary flow.',
-          inputs: ['shell'],
-          outputs: ['flow'],
-          sharedConstraints: ['Use the frozen type and spacing tokens.'],
-          dependsOn: ['shell'],
-          allowedResources: ['project-source'],
-        },
-      ],
-    }).buildPackages[0]!;
-
-    const prompt = composeOdNextStrategyRequestPromptV2(recipe);
-    // Naming every accepted key means a new schema field cannot land without
-    // the contract prose growing to describe it.
-    for (const field of Object.keys(buildPackage)) {
-      expect(prompt).toContain(field);
-    }
-    expect(prompt).toContain(
-      'Every buildPackages entry is an object with exactly id, objective, inputs, outputs, '
-      + 'sharedConstraints, dependsOn, and allowedResources',
-    );
-    expect(prompt).toContain(
-      'a complex plan needs at least two Build Packages, an acyclic dependsOn graph, '
-      + 'and exactly one owning Build Package per output',
-    );
-  });
-
   it('tells the request stage the canonical-deliverable rule that judges a Direct Edit completion', () => {
     // A Direct Edit turn declares `outcome: completed` on the REQUEST stage and
     // is then judged by `validateRunDeliverable` — the same entry-resolution
@@ -266,15 +175,14 @@ describe('OD Next V2 prompt recipe', () => {
     // were never given, which surfaced as a terminal
     // `od_next_canonical_deliverable_invalid` with no repair path.
     const prompt = composeOdNextStrategyRequestPromptV2(recipe);
-    expect(prompt).toContain('Direct Edit remains the only route allowed to perform Build work on the request stage.');
-    expect(prompt).toContain('canonical-deliverable check that gates production already applies');
+    expect(prompt).toContain('for both new work and existing artifacts');
     expect(prompt).toContain('it looks for a root `index.html`, then a single root-level html file, then a single file matching the project kind');
     // Writing outside the project directory yields `no_artifact`, which reads
     // to the agent as "I finished" and to Open Design as "nothing delivered".
     expect(prompt).toContain('Write every deliverable inside the project directory');
   });
 
-  it('composes a versioned request golden with one Task Skill and ordered planning/Build sections', () => {
+  it('composes a versioned request golden with one Task Skill and a generation stage', () => {
     const prompt = composeOdNextStrategyRequestPromptV2(recipe);
     const headings = prompt.split('\n').filter((line) => line.startsWith('#'));
 
@@ -283,18 +191,13 @@ describe('OD Next V2 prompt recipe', () => {
         "# Open Design execution and security boundary",
         "## Native filesystem execution",
         "## Versioned recipe identity",
-        "## Discovery, planning, and Build surface",
+        "## Direct generation surface",
         "## OD Next core strategy",
         "# Core",
         "## OD Next general orchestration",
         "# Orchestration",
         "## Task Skill — prototype",
         "# Prototype",
-        "## Active stage: discovery",
-        "### discovery-question-form",
-        "## Active stage: plan",
-        "### direction-picker",
-        "### todo-write",
         "## Active stage: generate",
         "### file-write",
         "### live-artifact",
@@ -302,36 +205,24 @@ describe('OD Next V2 prompt recipe', () => {
       ]
     `);
     expect(prompt.match(/^## Task Skill —/gm)).toHaveLength(1);
-    expect(prompt).toContain('<question-form>');
-    expect(prompt).toContain('Todo plan');
-    expect(prompt).toContain('Design Spec');
-    expect(prompt).toContain('Full Plan');
-    expect(prompt).toContain('Build Packages');
-    expect(prompt).toContain('request and clarification stages are planning-only');
-    expect(prompt).toContain('Direct Edit remains the only route allowed to perform Build work');
+    expect(prompt).not.toContain('<question-form>');
+    expect(prompt).not.toContain(`<${OD_NEXT_PLAN_CONTRACT_BLOCK}>`);
+    expect(prompt).not.toContain('Todo plan');
+    expect(prompt).not.toContain('planning-only');
+    expect(prompt).toContain('Create or edit the requested deliverables in the current request turn');
     expect(prompt).toContain(`strategy package: \`${A}\``);
     expect(prompt).toContain(`selected Task Skill digest: \`${B}\``);
   });
 
-  // Every clarification rule in both prompt trees was phrased as "when to emit
-  // a form" / "skip the form"; nothing forbade writing the bare marker as a
-  // section label. A real turn duly answered `<question-form> 无需提出——…` — an
-  // unclosed marker with prose for a body — which renders as nothing and
-  // latches the project on `Needs input`. The skip case has to name the marker
-  // itself, not just the form.
-  it('forbids restating the literal question-form marker when nothing is asked', () => {
-    const prompt = composeOdNextStrategyRequestPromptV2(recipe);
-    expect(prompt).toContain(
-      'do not output, quote, or explain the `<question-form>` marker',
-    );
-    // The constraint has to travel with the section that introduces the form,
-    // so a bundle that ships only the core system prompt still carries it.
-    expect(
-      composeOdNextStrategyBundleHeadV2(recipe).coreSystemPrompt.discoveryAndPlanningSurface,
-    ).toContain('do not output, quote, or explain the `<question-form>` marker');
+  it('settles missing essential inputs without starting a planning continuation', () => {
+    const surface = composeOdNextStrategyBundleHeadV2(recipe)
+      .coreSystemPrompt.discoveryAndPlanningSurface;
+    expect(surface).toContain('declare `outcome: blocked`');
+    expect(surface).toContain('The user can supply it in a new request');
+    expect(surface).not.toContain('<question-form>');
   });
 
-  it('pins daemon-owned planning facts into the strict machine example', () => {
+  it('retains runtime facts without asking for a Plan Contract', () => {
     const prompt = composeOdNextStrategyRequestPromptV2({
       ...recipe,
       planningFacts: {
@@ -342,21 +233,10 @@ describe('OD Next V2 prompt recipe', () => {
         nativeChildLifecycleVerified: true,
       },
     });
-    const contract = parseWireBlock(prompt, OD_NEXT_PLAN_CONTRACT_BLOCK);
-    // The example carries only per-task-type values; every per-task value is a
-    // placeholder the Agent copies from <runtime_facts>.
-    expect(OpenDesignPlanContractV2Schema.parse(contract)).toMatchObject({
-      taskProfile: {
-        taskProfileVersion: '2.0.0',
-        canonicalDeliverable: { kind: 'prototype' },
-      },
-      runManifest: {
-        capabilitySnapshotHash: '0'.repeat(64),
-        inputRefs: ['copy-input-refs-from-runtime-facts'],
-        productionRoutes: ['copy-production-route-from-runtime-facts'],
-      },
-    });
-    expect(contract).not.toMatchObject({ runManifest: { capabilitySnapshotHash: B } });
+    expect(prompt).not.toContain(`<${OD_NEXT_PLAN_CONTRACT_BLOCK}>`);
+    expect(StrategyRuntimeStateV2Schema.parse(
+      parseWireBlock(prompt, OD_NEXT_RUNTIME_STATE_BLOCK),
+    )).toMatchObject({ route: 'direct_edit', inputStage: 'request', outcome: 'completed' });
     // The real facts live in the separately rendered runtime-facts block.
     const facts = renderOdNextRuntimeFactsV2({
       ...recipe,
@@ -512,18 +392,17 @@ describe('OD Next V2 prompt recipe', () => {
     })).not.toContain('name="example-reference"');
   });
 
-  it('prints wrapper protocol examples that remain valid against the exact V2 schemas', () => {
+  it('emits a Runtime State accepted by the existing schema without a Plan Contract', () => {
     const prompt = composeOdNextStrategyRequestPromptV2(recipe, { agentId: 'codex' });
-    const planContract = parseWireBlock(prompt, OD_NEXT_PLAN_CONTRACT_BLOCK);
-    const runtimeState = parseWireBlock(prompt, OD_NEXT_RUNTIME_STATE_BLOCK);
-
-    expect(OpenDesignPlanContractV2Schema.parse(planContract)).toEqual(planContract);
-    expect(StrategyRuntimeStateV2Schema.parse(runtimeState)).toEqual(runtimeState);
-    expect(prompt).toContain('open-design.plan-contract/v2');
-    expect(prompt).toContain('open-design.strategy-state/v2');
-    expect(prompt).toContain('capabilitySnapshotHash');
-    expect(prompt).toContain('productionRoutes');
-    expect(prompt).toContain('decisionSummary');
+    const state = StrategyRuntimeStateV2Schema.parse(parseWireBlock(prompt, OD_NEXT_RUNTIME_STATE_BLOCK));
+    expect(state).toEqual({
+      schema: 'open-design.strategy-state/v2', route: 'direct_edit',
+      inputStage: 'request', outcome: 'completed', executionMode: 'simple', reasonCodes: [],
+    });
+    expect(StrategyRuntimeStateV2Schema.parse({ ...state, outcome: 'blocked' }).outcome).toBe('blocked');
+    expect(prompt).not.toContain(`<${OD_NEXT_PLAN_CONTRACT_BLOCK}>`);
+    expect(prompt).not.toContain('plan_ready');
+    expect(prompt).not.toContain('buildPackages');
   });
 
   it('keeps post-Build quality semantics out of the recipe structure and text', () => {
@@ -540,34 +419,16 @@ describe('OD Next V2 prompt recipe', () => {
   it('fails closed when stages are incomplete or smuggle post-Build quality work', () => {
     expect(() => composeOdNextStrategyRequestPromptV2({
       ...recipe,
-      activeStages: recipe.activeStages.slice(0, 2),
-    })).toThrow(/exactly discovery, plan, and generate/i);
+      activeStages: [],
+    })).toThrow(/exactly the generate stage/i);
     expect(() => composeOdNextStrategyRequestPromptV2({
       ...recipe,
-      activeStages: [
-        recipe.activeStages[0]!,
-        { name: 'plan', atoms: [{ name: 'direction-picker' }] },
-        recipe.activeStages[2]!,
-      ],
-    })).toThrow(/must declare exactly direction-picker, todo-write/i);
+      activeStages: [{ name: 'generate', atoms: [{ name: 'file-write' }] }],
+    })).toThrow(/must declare exactly file-write, live-artifact/i);
     expect(() => composeOdNextStrategyRequestPromptV2({
       ...recipe,
-      activeStages: [recipe.activeStages[1]!, recipe.activeStages[0]!, recipe.activeStages[2]!],
-    })).toThrow(/must describe the discovery stage/i);
-    expect(() => composeOdNextStrategyRequestPromptV2({
-      ...recipe,
-      activeStages: [
-        recipe.activeStages[0]!,
-        recipe.activeStages[1]!,
-        {
-          name: 'generate',
-          atoms: [
-            { name: 'file-write', body: '## Verification\n\nReview the finished artifact.' },
-            { name: 'live-artifact' },
-          ],
-        },
-      ],
-    })).toThrow(/forbidden/i);
+      activeStages: [{ name: 'plan', atoms: [{ name: 'todo-write' }] }],
+    })).toThrow(/must describe the generate stage/i);
     const forbiddenContamination = [
       'Review the finished output in a browser.',
       'Inspect the DOM after generation.',
@@ -584,8 +445,6 @@ describe('OD Next V2 prompt recipe', () => {
       expect(() => composeOdNextStrategyRequestPromptV2({
         ...recipe,
         activeStages: [
-          recipe.activeStages[0]!,
-          recipe.activeStages[1]!,
           {
             name: 'generate',
             atoms: [{ name: 'file-write', body: contamination }, { name: 'live-artifact' }],
@@ -802,79 +661,18 @@ describe('layout primitives in the stable request context', () => {
   });
 });
 
-/**
- * The runtime's own plan-tool name has to survive the OD Next prompt fork.
- *
- * ── The defect ────────────────────────────────────────────────────────────
- *
- * On 2026-09-03 a codex run answered an explicit 「先用 todo 进行一轮规划」 by
- * writing a seven-item plan into its reply body and calling no plan tool. The
- * charter offers "Otherwise, provide a numbered plan in your response" as a
- * sanctioned branch, and codex had never been told the name of the tool it
- * actually has (`update_plan`), so prose WAS the compliant reading. The daemon
- * fix names each runtime's real tool through `planToolNoteForRuntime`
- * (`apps/daemon/src/prompts/system.ts`) — but only on the slim-charter path.
- *
- * OD Next runs never reach that path: `composeSystemPrompt` forks before it,
- * and the shipping request prompt is assembled from the Bundle head plus this
- * stable request context. Neither carried the note, so every OD Next run was
- * still in the pre-fix state.
- *
- * ── Why the note enters HERE and not in the Bundle head ───────────────────
- *
- * The head is the cache-stable prefix — byte-identical across every task that
- * shares a strategy version, task type, and execution profile. Which runtime
- * is driving is not one of those dimensions, so a per-runtime sentence in the
- * head would split that prefix. This block is already per-run (it carries
- * `runtime-selection`, project metadata, memory), so the note is cache-neutral
- * here and sits beside the `selectedAgentId` it is derived from.
- *
- * ── What this suite proves, and what it does not ──────────────────────────
- *
- * It proves the sentence travels: given the note the host resolved, the OD
- * Next request prompt contains it, and given no note it costs nothing. It does
- * NOT re-prove which name belongs to which runtime — that table lives in the
- * daemon and is owned by `apps/daemon/tests/prompts/plan-tool-note.test.ts`.
- * Duplicating the table here would create the second source of truth whose
- * drift is the exact failure the Claude Code 2.1 rename caused.
- */
-describe('runtime plan tool in the stable request context', () => {
-  // Verbatim from CODEX_PLAN_TOOL_NOTE — quoted as INPUT, the way the daemon
-  // supplies it. This suite never asserts the wording is right for codex.
-  const CODEX_NOTE = 'Your plan tool is `update_plan` — use it for the plan step above; the host renders it as a live Todos card. Mark each item `in_progress` when started and `completed` as it lands.';
+describe('direct generation omits the runtime planning-tool hint', () => {
+  const note = 'Your plan tool is `update_plan` — use it for the plan step above.';
 
-  it('carries the host-resolved note into the block the shipping Bundle reads', () => {
-    const stable = composeOdNextStrategyStableRequestContextV2({
-      agentId: 'codex',
-      planToolNote: CODEX_NOTE,
-    });
-    expect(stable).toContain('<od-next-context kind="instruction" name="runtime-plan-tool">');
-    expect(stable).toContain('Your plan tool is `update_plan`');
-    // Beside the runtime identity it is derived from, not adrift in project data.
-    expect(stable.indexOf('name="runtime-selection"'))
-      .toBeLessThan(stable.indexOf('name="runtime-plan-tool"'));
-  });
-
-  it('reaches the composed OD Next request prompt through both composers', () => {
-    const context = { agentId: 'codex', planToolNote: CODEX_NOTE };
-    const prompt = composeOdNextStrategyRequestPromptV2(recipe, context);
-    expect(prompt).toContain('Your plan tool is `update_plan`');
-    // `composeSystemPrompt` forks to the same composer; it must forward the
-    // note rather than drop it on the floor.
-    expect(composeSystemPrompt({ odNextStrategyRecipe: recipe, ...context }))
-      .toContain('Your plan tool is `update_plan`');
-  });
-
-  it('costs nothing for a runtime the host has no verified tool name for', () => {
-    // mimo and the ACP family are deliberately absent from the daemon table:
-    // no verified tool name, and guessing from family resemblance is what the
-    // Claude Code 2.1 rename punished. They resolve to no note, and no note
-    // must mean no bytes.
-    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'mimo' }))
-      .not.toContain('runtime-plan-tool');
-    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'vela', planToolNote: null }))
-      .not.toContain('runtime-plan-tool');
-    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'kimi', planToolNote: '' }))
-      .not.toContain('runtime-plan-tool');
+  it('omits the host-resolved hint from stable context and both composers', () => {
+    const context = { agentId: 'codex', planToolNote: note };
+    for (const prompt of [
+      composeOdNextStrategyStableRequestContextV2(context),
+      composeOdNextStrategyRequestPromptV2(recipe, context),
+      composeSystemPrompt({ odNextStrategyRecipe: recipe, ...context }),
+    ]) {
+      expect(prompt).not.toContain('runtime-plan-tool');
+      expect(prompt).not.toContain(note);
+    }
   });
 });

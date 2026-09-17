@@ -35,10 +35,10 @@ const forbiddenContent = [
 ];
 
 describe('bundled OD Next Strategy V2 package', () => {
-  it('declares the inactive versioned asset set and exact planning recipe identity', () => {
+  it('declares the inactive versioned asset set and existing recipe identity', () => {
     expect(manifest).toMatchObject({
       name: 'od-next-strategy',
-      version: '2.0.4',
+      version: '2.1.0-no-plan.1',
       od: {
         kind: 'scenario',
         hidden: true,
@@ -61,10 +61,8 @@ describe('bundled OD Next Strategy V2 package', () => {
     ]);
   });
 
-  it('declares discovery, plan, and generate without a repeating stage', () => {
+  it('declares generation without a planning or repeating stage', () => {
     expect(manifest.od?.pipeline?.stages).toEqual([
-      { id: 'discovery', atoms: ['discovery-question-form'] },
-      { id: 'plan', atoms: ['direction-picker', 'todo-write'] },
       { id: 'generate', atoms: ['file-write', 'live-artifact'] },
     ]);
     expect(manifest.od?.pipeline?.stages.some((stage) => stage.repeat)).toBe(false);

@@ -22,11 +22,7 @@ export class InvalidOdNextStrategyPromptRecipeV2Error extends Error {
   }
 }
 
-const REQUIRED_PROMPT_BODY_ATOMS = new Set([
-  'discovery-question-form',
-  'direction-picker',
-  'todo-write',
-]);
+// Generation atoms carry capability identity and may have no prompt body.
 
 export interface OdNextStrategyAtomBodyV2 {
   atomId: string;
@@ -72,13 +68,6 @@ function buildValidatedStage(
       );
     }
     bodies.set(atomId, body);
-  }
-  for (const atomId of stage.atoms) {
-    if (REQUIRED_PROMPT_BODY_ATOMS.has(atomId) && !bodies.has(atomId)) {
-      throw new InvalidOdNextStrategyPromptRecipeV2Error(
-        `OD Next required bundled atom body is unavailable: ${atomId}`,
-      );
-    }
   }
 
   return {

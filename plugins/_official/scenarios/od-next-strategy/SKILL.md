@@ -1,12 +1,12 @@
 ---
 name: od-next-strategy
-description: Bundled OD Next V2 strategy entrypoint for route-locked planning and Build execution.
+description: Bundled OD Next V2 strategy entrypoint for direct generation without execution plans.
 ---
 
 # OD Next Strategy V2
 
 This bundled scenario packages the stable content used by the internal OD Next
-planning and Build recipe. It is not a portable strategy selector and does not
+direct-generation recipe. It is not a portable strategy selector and does not
 activate itself.
 
 When Open Design supplies a validated V2 binding, load the assets in this order:

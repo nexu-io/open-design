@@ -3,7 +3,7 @@ name: od-next-media-inputs
 en_name: "OD Next Media Inputs"
 zh_name: "OD Next 素材输入"
 description: |
-  Prepare required media inputs within an existing OD Next plan. Reuse capability
+  Prepare required media inputs for the current OD Next request. Reuse capability
   evidence, acquire and measure assets efficiently, and resolve asynchronous
   jobs without removing required content or weakening quality standards.
 triggers:
@@ -15,14 +15,14 @@ od:
   category: image-generation
   design_system:
     requires: false
-  example_prompt: "Prepare the media inputs required by the frozen plan, preserving every asset slot and quality requirement."
+  example_prompt: "Prepare the media inputs required by the current request, preserving every asset slot and quality requirement."
 ---
 
 # OD Next Media Inputs
 
 Use only when the current task needs media inputs. Reuse these instructions
 while applicable; do not load them for tasks without asset work. Follow the
-current route, stage, frozen plan, and delivery boundary. During
+current route, stage, user requirements, and delivery boundary. During
 `contract_repair`, make no tool calls. Finish required input work before the
 deliverable write that depends on it. Never label post-write artifact
 inspection, rendering, validation, or repair as input preparation to bypass
@@ -30,7 +30,7 @@ ship-on-write.
 
 ## Preserve the required slots
 
-Use the frozen asset requirements in the existing working context: purpose,
+Use the asset requirements in the existing working context: purpose,
 subject, source/license constraints, geometry, reuse positions, and readiness.
 Reuse suitable user assets and the same asset across pages. Deduplicate work,
 not distinct subjects or required states. Do not add a new plan, manifest,
