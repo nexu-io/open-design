@@ -206,6 +206,7 @@ export function ProductionCampaignHover({
 	const lifecycle = useTouchpointLifecycle({
 		enabled,
 		identity: enabled ? JSON.stringify([sessionSubject, locale]) : null,
+		handoffKey: ENTRY_PLACEMENT,
 		load,
 		onError,
 	});

@@ -40,6 +40,12 @@ export type TouchpointLifecycleOptions<T> = Readonly<{
 	identity: string | null;
 	load: (signal: AbortSignal, active: T | null) => Promise<TouchpointLifecycleLoad<T>>;
 	onError?: (error: unknown) => void;
+	/**
+	 * Opts a host into lease handoff: a host remounted at another page position
+	 * under the same key and identity resumes the previous host's unexpired
+	 * lease instead of waiting for a network round trip. See `HANDOFF_WINDOW_MS`.
+	 */
+	handoffKey?: string;
 }>;
 
 type Clock = { monotonic: number; wall: number };
@@ -69,6 +75,21 @@ export const REQUEST_TIMEOUT_MS = 15_000;
  */
 export const RETRY_BACKOFF_MS = [1_000, 3_000] as const;
 const MAX_TIMER_MS = 2_147_483_647;
+/**
+ * A released lease is handed to a remount only within this window. It covers a
+ * page switch, not a later return: sign-out, route away and back after a pause,
+ * or any other long gap goes back to the server. The handed-off lease keeps its
+ * original start, so it can only shorten, never extend, display authority.
+ */
+export const HANDOFF_WINDOW_MS = 10_000;
+type ReleasedLease = Readonly<{ identity: string; key: string; value: unknown; start: Clock; validForMs: number; releasedAt: Clock }>;
+const releasedLeases = new Map<string, ReleasedLease>();
+
+/** Drops every pending handoff so module state never crosses a test boundary. */
+export function resetTouchpointLeaseHandoffs(): void {
+	releasedLeases.clear();
+}
+
 /** Only a failure carrying the server's own withdrawal may end a live lease. */
 const withdrawsDisplay = (error: unknown) =>
 	typeof error === "object" && error !== null && (error as { touchpointWithdrawal?: unknown }).touchpointWithdrawal === true;
@@ -78,7 +99,7 @@ const withdrawsDisplay = (error: unknown) =>
  * server-relative authority, never a client activation time. Renewing the same
  * immutable decision keeps its mount identity while replacing its lease.
  */
-export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: TouchpointLifecycleOptions<T>) {
+export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, handoffKey }: TouchpointLifecycleOptions<T>) {
 	const [state, setState] = useState<{ identity: string | null; current: T | null; generation: number; status: LifecycleStatus }>({ identity: null, current: null, generation: 0, status: null });
 	const generation = useRef(0);
 	const lease = useRef<{ identity: string; key: string; value: T; generation: number; start: Clock; validForMs: number } | null>(null);
@@ -124,6 +145,10 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 			++generation.current;
 			publish();
 		};
+		/** Revocation, withdrawal, expiry and page recovery never hand a lease on. */
+		const forget = () => {
+			if (handoffKey) releasedLeases.delete(handoffKey);
+		};
 		/**
 		 * A timeout or transport failure is not a revocation. Cancel the attempt
 		 * and keep display authority the server already granted; `armExpiry`
@@ -137,6 +162,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 			if (withdrawsDisplay(error) || !lease.current || elapsed(lease.current.start) >= lease.current.validForMs) {
 				revalidationLease = null;
 				status = "error";
+				forget();
 				revoke();
 			}
 			// Scheduled after any revoke above, which clears the retry timer: an
@@ -162,9 +188,12 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 			}
 			inputs.current.onError?.(error);
 		};
-		clearRef.current = () => { revalidationLease = null; revoke(); };
+		clearRef.current = () => { revalidationLease = null; forget(); revoke(); };
 		revoke();
-		if (!enabled || !identity) return () => { stopped = true; revoke(); };
+		if (!enabled || !identity) {
+			forget();
+			return () => { stopped = true; revoke(); };
+		}
 
 		const armExpiry = () => {
 			clearTimeout(expiryTimer);
@@ -172,7 +201,10 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 				const current = lease.current;
 				if (stopped || !current) return;
 				const remaining = current.validForMs - elapsed(current.start);
-				if (remaining <= 0) revoke();
+				if (remaining <= 0) {
+					forget();
+					revoke();
+				}
 				else expiryTimer = setTimeout(tick, Math.min(remaining, MAX_TIMER_MS));
 			};
 			tick();
@@ -217,6 +249,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 				}
 				if (result.kind === "clear") {
 					revalidationLease = null;
+					forget();
 					ended = result.ended === true;
 					status = ended ? "ended" : null;
 					revoke();
@@ -224,6 +257,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 				}
 				if (result.kind === "waiting") {
 					revalidationLease = null;
+					forget();
 					if (!Number.isFinite(result.retryAfterMs)) throw new Error("touchpoint_invalid_timing");
 					status = "before";
 					revoke();
@@ -263,6 +297,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 			if (stopped || ended) return;
 			revalidationLease = lease.current ?? revalidationLease;
 			status = document.hidden ? status : "loading";
+			forget();
 			revoke();
 			if (!document.hidden) void refresh();
 		};
@@ -278,6 +313,21 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 			}
 		};
 		const offline = () => cancelRequest();
+		const released = handoffKey ? releasedLeases.get(handoffKey) : undefined;
+		if (handoffKey) releasedLeases.delete(handoffKey);
+		if (
+			released &&
+			released.identity === identity &&
+			elapsed(released.releasedAt) <= HANDOFF_WINDOW_MS &&
+			elapsed(released.start) < released.validForMs &&
+			!document.hidden
+		) {
+			++generation.current;
+			lease.current = { identity, key: released.key, value: released.value as T, generation: generation.current, start: released.start, validForMs: released.validForMs };
+			status = "active";
+			publish();
+			armExpiry();
+		}
 		void refresh();
 		const interval = setInterval(() => void refresh(), POLL_MS);
 		window.addEventListener("focus", focus);
@@ -286,6 +336,9 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 		window.addEventListener("offline", offline);
 		document.addEventListener("visibilitychange", wake);
 		return () => {
+			const current = lease.current;
+			if (handoffKey && current && current.identity === identity && elapsed(current.start) < current.validForMs && !document.hidden)
+				releasedLeases.set(handoffKey, { identity: current.identity, key: current.key, value: current.value, start: current.start, validForMs: current.validForMs, releasedAt: clock() });
 			stopped = true;
 			revoke();
 			clearTimeout(retryTimer);
@@ -296,7 +349,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 			window.removeEventListener("offline", offline);
 			document.removeEventListener("visibilitychange", wake);
 		};
-	}, [enabled, identity, load]);
+	}, [enabled, handoffKey, identity, load]);
 
 	return {
 		current: enabled && state.identity === identity ? state.current : null,

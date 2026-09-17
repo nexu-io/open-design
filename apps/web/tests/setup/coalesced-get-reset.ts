@@ -14,6 +14,7 @@ import { resetProjectCoverSnapshots } from '../../src/lib/project-cover-cache';
 import { resetThumbnailLoadGateForTests } from '../../src/lib/thumbnail-load-gate';
 import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
 import { resetProjectRunStatusStore } from '../../src/hooks/useProjectRunStatuses';
+import { resetTouchpointLeaseHandoffs } from '../../src/components/touchpoint-lifecycle';
 
 beforeEach(() => {
   resetCoalescedGet();
@@ -34,4 +35,7 @@ beforeEach(() => {
   // its last answer at once; clear it so one test's statuses (or spent ✓s)
   // never seed the next.
   resetProjectRunStatusStore();
+  // Campaign hosts hand an unexpired lease to a remount at module scope; a
+  // lease released by one test's cleanup must not present in the next test.
+  resetTouchpointLeaseHandoffs();
 });

@@ -521,3 +521,86 @@ describe("shared display lifecycle", () => {
 		expect(result.current.current).toBeNull();
 	});
 });
+
+describe("lease handoff across a remount", () => {
+	const decided = (value: Content, validForMs = 60_000) => vi.fn<Load>().mockResolvedValue({ kind: "decision", value, key: "same", validForMs });
+	const pendingLoad = () => {
+		const pending = deferred<TouchpointLifecycleLoad<Content>>();
+		return { pending, load: vi.fn<Load>().mockReturnValue(pending.promise) };
+	};
+	const settle = () => act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+	it("presents a remounted host from the unexpired lease while revalidating in the background", async () => {
+		const firstLoad = decided(first);
+		const previous = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "user-a", handoffKey: "handoff-reuse", load: firstLoad }));
+		await settle();
+		previous.unmount();
+		const { pending, load } = pendingLoad();
+		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "user-a", handoffKey: "handoff-reuse", load }));
+		await act(async () => {});
+		expect(load).toHaveBeenCalledTimes(1);
+		expect(result.current.current).toBe(first);
+		expect(result.current.isCurrent(result.current.generation)).toBe(true);
+		const generation = result.current.generation;
+		await act(async () => { pending.resolve({ kind: "decision", value: { ...first }, key: "same", validForMs: 60_000 }); });
+		expect(result.current.current).toBe(first);
+		expect(result.current.generation).toBe(generation);
+	});
+
+	it("does not extend the handed-off lease beyond its original deadline", async () => {
+		const firstLoad = decided(first, 5_000);
+		const previous = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "user-a", handoffKey: "handoff-deadline", load: firstLoad }));
+		await settle();
+		await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+		previous.unmount();
+		const { load } = pendingLoad();
+		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "user-a", handoffKey: "handoff-deadline", load }));
+		await act(async () => {});
+		expect(result.current.current).toBe(first);
+		await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+		expect(result.current.current).toBeNull();
+	});
+
+	it.each([
+		["another account", "user-b", "handoff-identity", 0],
+		["a host that did not opt in", "user-a", null, 0],
+		["a remount after the handoff window", "user-a", "handoff-window", 10_001],
+	] as const)("does not hand a lease to %s", async (_name, identity, handoffKey, gapMs) => {
+		const firstLoad = decided(first);
+		const previous = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "user-a", handoffKey: handoffKey ?? undefined, load: firstLoad }));
+		await settle();
+		previous.unmount();
+		await act(async () => { await vi.advanceTimersByTimeAsync(gapMs); });
+		const { load } = pendingLoad();
+		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity, handoffKey: handoffKey ?? undefined, load }));
+		await act(async () => {});
+		expect(result.current.current).toBeNull();
+	});
+
+	it.each([
+		["an explicit clear", "handoff-clear"],
+		["page hiding", "handoff-hidden"],
+		["a withdrawn lease", "handoff-withdrawn"],
+	] as const)("does not hand a lease on after %s", async (_name, handoffKey) => {
+		const load = vi.fn<Load>()
+			.mockResolvedValueOnce({ kind: "decision", value: first, key: "same", validForMs: 60_000 })
+			.mockRejectedValue(Object.assign(new Error("withdrawn"), { touchpointWithdrawal: true }));
+		const previous = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "user-a", handoffKey, load }));
+		await settle();
+		if (handoffKey === "handoff-clear") act(() => previous.result.current.clear());
+		else if (handoffKey === "handoff-hidden") {
+			const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+			act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+			hidden.mockReturnValue(false);
+		} else {
+			act(() => { window.dispatchEvent(new Event("focus")); });
+			await settle();
+		}
+		expect(previous.result.current.current).toBeNull();
+		previous.unmount();
+		const next = pendingLoad();
+		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "user-a", handoffKey, load: next.load }));
+		await act(async () => {});
+		expect(result.current.current).toBeNull();
+	});
+});

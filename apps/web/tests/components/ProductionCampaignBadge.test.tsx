@@ -31,6 +31,22 @@ describe("ProductionCampaignBadge", () => {
     expect(badge.querySelector("iframe, webview")).toBeNull();
     expect(screen.queryByRole("button", { name: /close/i })).toBeNull();
   });
+  it("remounts at another page position from the unexpired lease without waiting for the decision request", async () => {
+    getOpenDesignHostMock.mockReturnValue({ client: { type: "desktop", osLocale: "en-US" } });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(decision()), { status: 200 }))
+      .mockImplementation(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const home = render(<ProductionCampaignBadge authenticated sessionSubject="account-a" />);
+    const homeBadge = await screen.findByTestId("production-campaign-badge");
+    await waitFor(() => expect(homeBadge.querySelector("opend-touchpoint")?.shadowRoot?.textContent).toContain("Badge"));
+    home.unmount();
+    render(<ProductionCampaignBadge authenticated sessionSubject="account-a" />);
+    const projectBadge = await screen.findByTestId("production-campaign-badge");
+    await waitFor(() => expect(projectBadge.querySelector("opend-touchpoint")?.shadowRoot?.textContent).toContain("Badge"));
+    // The remount still revalidates, but its request has not answered.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
   it("fails closed when the immutable content placement or static actions disagree with the outer decision", async () => {
     getOpenDesignHostMock.mockReturnValue({ client: { type: "desktop", osLocale: "en-US" } });
     const mismatchedContent = { ...content, placementKey: "opend.home.campaign-modal" };

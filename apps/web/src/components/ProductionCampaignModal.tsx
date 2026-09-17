@@ -1,21 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "../i18n";
 import { getOpenDesignHost } from "@open-design/host";
 import { openExternalUrl } from "../providers/registry";
-import {
-	touchpointStaticActionsMatch,
-	type TouchpointStaticAction,
-} from "./touchpoint-static-actions";
+import type { TouchpointStaticAction } from "./touchpoint-static-actions";
 import {
 	emitWebTouchpointDiagnostic,
 	ensureWebTouchpointElement,
-	readWebTouchpointHostContext,
 	lockWebTouchpointModalScroll,
 	supportsWebTouchpointCapabilities,
 	trapWebTouchpointModalFocus,
-	verifyWebTouchpoint,
-	webTouchpointContext,
-	type OpenDesignTouchpointElement,
 	type WebTouchpointContent,
 } from "./touchpoint-component";
 import {
@@ -23,6 +16,7 @@ import {
 	loadProductionTouchpointDecision,
 } from "./production-touchpoint-loader";
 import {
+	mountTouchpoint,
 	resolveAuthorizationDeadline,
 	useTouchpointLifecycle,
 	type TouchpointLifecycleLoad,
@@ -51,6 +45,16 @@ type Decision = {
 	staticActions: TouchpointStaticAction[];
 	content: WebTouchpointContent;
 };
+const testDecisionIds = new WeakMap<TestDecision, number>();
+let nextTestDecisionId = 0;
+/** A stable per-object key: a Test decision object is exactly one mount. */
+function testDecisionMountKey(decision: TestDecision): number {
+	const known = testDecisionIds.get(decision);
+	if (known !== undefined) return known;
+	const id = ++nextTestDecisionId;
+	testDecisionIds.set(decision, id);
+	return id;
+}
 const displayedKey = (subject: string, activity: string) =>
 	`touchpoint-displayed:v1:${encodeURIComponent(subject)}:${encodeURIComponent(activity)}`;
 
@@ -179,8 +183,75 @@ export async function dispatchProductionCampaignAction(
 		return false;
 	}
 }
+/**
+ * One modal chrome for Test and Production. The backdrop stays invisible and
+ * inert until the component reports that it mounted, so a slow or failed load
+ * never leaves an empty grey layer over the app; scroll lock, focus trap and
+ * Escape exist only while something is actually presented.
+ *
+ * Callers key the shell by mount identity (a Production generation, a Test
+ * decision), so every replacement mount starts hidden again; a renewal that
+ * keeps its mount keeps the shell presented.
+ */
+function CampaignModalShell({
+	label,
+	ready,
+	onClose,
+	children,
+}: {
+	label: string;
+	ready: boolean;
+	onClose: () => void;
+	children: ReactNode;
+}) {
+	const modalRef = useRef<HTMLDivElement | null>(null);
+	const [presented, setPresented] = useState(ready);
+	if (ready && !presented) setPresented(true);
+	useEffect(() => {
+		if (!presented) return;
+		const previous =
+			document.activeElement instanceof HTMLElement
+				? document.activeElement
+				: null;
+		const releaseScrollLock = lockWebTouchpointModalScroll();
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") onClose();
+			else trapWebTouchpointModalFocus(event, modalRef.current);
+		};
+		document.addEventListener("keydown", onKeyDown);
+		queueMicrotask(() =>
+			(
+				modalRef.current?.querySelector<HTMLElement>("button") ??
+				modalRef.current
+			)?.focus(),
+		);
+		return () => {
+			document.removeEventListener("keydown", onKeyDown);
+			releaseScrollLock();
+			previous?.focus();
+		};
+	}, [onClose, presented]);
+	return (
+		<div
+			className={styles.backdrop}
+			role="dialog"
+			aria-label={label}
+			aria-modal="true"
+			aria-hidden={presented ? undefined : true}
+			data-state={presented ? "open" : "loading"}
+		>
+			<div className={styles.modal} ref={modalRef} tabIndex={-1}>
+				{children}
+			</div>
+		</div>
+	);
+}
+
 /** Production v2 modal shares the Test adapter; it does not fall back to a frame when bytes or runtime identity fail. */
-type AuthorizedDecision = Decision & { sessionSubject: string };
+type AuthorizedDecision = Decision & {
+	sessionSubject: string;
+	presentationKey: string;
+};
 type OpenPresentation = Readonly<{
 	sessionSubject: string;
 	activityId: string;
@@ -220,14 +291,22 @@ export function ProductionCampaignModal({
 			setDismissedTestCampaigns(previous => new Set([...previous, testCampaignKey]));
 		}
 	}, [testCampaignKey]);
+	const [readyTestDecision, setReadyTestDecision] = useState<TestDecision | null>(null);
+	// A failed component suppresses only that decision, never the activity:
+	// a later locale or corrected redeployment is a new decision and may present.
+	const [failedTestDecisions, setFailedTestDecisions] = useState<ReadonlySet<TestDecision>>(() => new Set());
+	const onTestFailed = useCallback((failed: TestDecision) => {
+		setFailedTestDecisions(previous => new Set([...previous, failed]));
+	}, []);
 	const [closed, setClosed] = useState(false);
 	const openPresentation = useRef<OpenPresentation | null>(null);
 	const clearOpenPresentation = useCallback(() => {
 		openPresentation.current = null;
 	}, []);
 	const elementRef = useRef<HTMLDivElement | null>(null);
-	const modalRef = useRef<HTMLDivElement | null>(null);
-	const restoreFocus = useRef<HTMLElement | null>(null);
+	/** Decisions whose component failed to present; never offered again in this app session. */
+	const failedPresentations = useRef<Set<string>>(new Set());
+	const [readyGeneration, setReadyGeneration] = useState<number | null>(null);
 	const productionEnabled = !testRuntime && authenticated && !!sessionSubject && getOpenDesignHost()?.client.type === "desktop";
 	const load = useCallback(
 		async (signal: AbortSignal, active: AuthorizedDecision | null): Promise<TouchpointLifecycleLoad<AuthorizedDecision>> => {
@@ -261,7 +340,7 @@ export function ProductionCampaignModal({
 				openPresentation.current = {
 					...renewedPresentation,
 					// Anchor at request start so response latency cannot extend this presentation.
-					deadline: requestedAt + deadline - serverTime,
+					deadline: requestedAt - loaded.ageMs + deadline - serverTime,
 				};
 			const presentation = openPresentation.current;
 			if (
@@ -277,7 +356,9 @@ export function ProductionCampaignModal({
 				presentation.activityId === next.activityId &&
 				presentation.deadline > Date.now();
 			if (!continuesOpenPresentation && active?.activityId !== next.activityId && wasDisplayed(sessionSubject, next.activityId)) return { kind: "retain" };
-			return { kind: "decision", value: { ...next, sessionSubject }, key: next.touchpointDecisionId + ":" + next.deploymentId + ":" + next.activityId + ":" + next.content.id, validForMs: deadline - serverTime };
+			const key = next.touchpointDecisionId + ":" + next.deploymentId + ":" + next.activityId + ":" + next.content.id;
+			if (failedPresentations.current.has(JSON.stringify([sessionSubject, key]))) return { kind: "clear" };
+			return { kind: "decision", value: { ...next, sessionSubject, presentationKey: key }, key, validForMs: deadline - serverTime - loaded.ageMs };
 		},
 		[clearOpenPresentation, locale, sessionSubject],
 	);
@@ -308,200 +389,51 @@ export function ProductionCampaignModal({
 			decision.sessionSubject !== sessionSubject
 		)
 			return;
-		let cancelled = false;
 		const mountGeneration = generation;
-		const current = () => !cancelled && isCurrent(mountGeneration);
-		let verified: Awaited<ReturnType<typeof verifyWebTouchpoint>> | undefined;
-		const element = document.createElement(
-			"opend-touchpoint",
-		) as OpenDesignTouchpointElement;
-		let visibleFrame: number | undefined;
-		let mounted = false;
-		let recorded = false;
-		const recordWhenVisible = () => {
-			if (!mounted || recorded || visibleFrame !== undefined) return;
-			visibleFrame = requestAnimationFrame(() => {
-				visibleFrame = undefined;
-				if (
-					!current() ||
-					lifecycle.deadline <= Date.now() ||
-					document.hidden ||
-					!element.isConnected ||
-					element.hidden ||
-					element.getClientRects().length === 0
-				)
-					return;
-				recordDisplayed(decision.sessionSubject, decision.activityId);
-				recorded = true;
-			});
-		};
-		document.addEventListener("visibilitychange", recordWhenVisible);
-		let elementDisposed = false;
-		let verifiedDisposed = false;
-		const disposeElement = () => {
-			if (elementDisposed) return;
-			elementDisposed = true;
-			void element.dispose(verified?.resourceUrls).catch(() => undefined);
-		};
-		const disposeVerified = () => {
-			if (!verified || verifiedDisposed) return;
-			verifiedDisposed = true;
-			verified.dispose();
-		};
-		const dispose = () => {
-			disposeElement();
-			disposeVerified();
-		};
-		container.replaceChildren(element);
-		void (async () => {
-			try {
-				verified = await verifyWebTouchpoint(decision.content);
-				if (elementDisposed) disposeVerified();
-				if (!current()) {
-					dispose();
-					return;
-				}
-				const manifestPlacement = decision.content.manifest.placements.find(
-					(placement) => placement.key === PLACEMENT,
+		return mountTouchpoint(container, {
+			content: decision.content,
+			placementKey: PLACEMENT,
+			staticActions: decision.staticActions,
+			mode: "production",
+			locale: decision.content.locale,
+			isCurrent: () => isCurrent(mountGeneration),
+			dispatchAction: async (id) => {
+				await dispatchProductionCampaignAction(
+					decision,
+					id,
+					mountGeneration,
+					() => (isCurrent(mountGeneration) ? mountGeneration : -1),
+					lifecycle.deadline,
 				);
-				if (
-					!manifestPlacement ||
-					manifestPlacement.key !== PLACEMENT ||
-					!touchpointStaticActionsMatch(
-						decision.staticActions,
-						manifestPlacement.staticActions,
-					)
-				) {
-					emitWebTouchpointDiagnostic({ code: "touchpoint_decision_mismatch" });
-					dispose();
-					clear();
-					return;
-				}
-				const context = webTouchpointContext(
-					decision.content,
-					readWebTouchpointHostContext(
-						decision.content.locale,
-						document.documentElement.classList.contains("dark")
-							? "dark"
-							: "light",
-					),
-				);
-				if (!current() || !context) {
-					dispose();
-					if (current() && !context)
-						emitWebTouchpointDiagnostic({
-							code: "touchpoint_locale_unsupported",
-						});
-					return;
-				}
-				await element.mount(
-					verified.entryUrl,
-					decision.content.entryDigest,
-					{ ...context, mode: "production" },
-					verified.resourceUrls,
-					new Set(decision.staticActions.map((action) => action.id)),
-					{
-						requestClose: closeProductionModal,
-						dispatchAction: async (id) => {
-							await dispatchProductionCampaignAction(
-								decision,
-								id,
-								mountGeneration,
-								() => (isCurrent(mountGeneration) ? mountGeneration : -1),
-								lifecycle.deadline,
-							);
-						},
-						onDiagnostic: emitWebTouchpointDiagnostic,
-					},
-				);
-				if (!current()) {
-					dispose();
-					return;
-				}
-				mounted = true;
+			},
+			requestClose: closeProductionModal,
+			onReady: () => {
 				openPresentation.current = {
 					sessionSubject: decision.sessionSubject,
 					activityId: decision.activityId,
 					deadline: lifecycle.deadline,
 				};
-				recordWhenVisible();
-			} catch (error) {
-				if (!current()) {
-					dispose();
-					return;
-				}
-				if (current()) {
-					clearOpenPresentation();
-					emitWebTouchpointDiagnostic({
-						code:
-							error instanceof Error ? error.message : "touchpoint_load_failed",
-					});
-				}
-				dispose();
-			}
-		})();
-		return () => {
-			cancelled = true;
-			document.removeEventListener("visibilitychange", recordWhenVisible);
-			if (visibleFrame !== undefined) cancelAnimationFrame(visibleFrame);
-			dispose();
-			container.replaceChildren();
-		};
-	}, [authenticated, closeProductionModal, decision, generation, isCurrent, sessionSubject]);
-	useEffect(() => {
-		if (!decision) return;
-		restoreFocus.current =
-			document.activeElement instanceof HTMLElement
-				? document.activeElement
-				: null;
-		const releaseScrollLock = lockWebTouchpointModalScroll();
-		const key = (event: KeyboardEvent) => {
-			if (event.key === "Escape") closeProductionModal();
-			else trapWebTouchpointModalFocus(event, modalRef.current);
-		};
-		document.addEventListener("keydown", key);
-		queueMicrotask(() =>
-			(
-				modalRef.current?.querySelector<HTMLElement>("button") ??
-				modalRef.current
-			)?.focus(),
-		);
-		return () => {
-			document.removeEventListener("keydown", key);
-			releaseScrollLock();
-			restoreFocus.current?.focus();
-		};
-	}, [closeProductionModal, decision]);
+				setReadyGeneration(mountGeneration);
+			},
+			onVisible: () => {
+				if (lifecycle.deadline > Date.now())
+					recordDisplayed(decision.sessionSubject, decision.activityId);
+			},
+			onError: () => {
+				failedPresentations.current.add(
+					JSON.stringify([decision.sessionSubject, decision.presentationKey]),
+				);
+				clearOpenPresentation();
+				clear();
+			},
+		});
+	}, [authenticated, clear, clearOpenPresentation, closeProductionModal, decision, generation, isCurrent, sessionSubject]);
 	useEffect(() => {
 		if (!closed || !decision || !sessionSubject) return;
 		clearOpenPresentation();
 		clear();
 		setClosed(false);
 	}, [clear, clearOpenPresentation, closed, decision, sessionSubject]);
-	useEffect(() => {
-		if (!testDecision || testClosed || !authenticated) return;
-		const previous =
-			document.activeElement instanceof HTMLElement
-				? document.activeElement
-				: null;
-		const releaseScrollLock = lockWebTouchpointModalScroll();
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") closeTestModal();
-			else trapWebTouchpointModalFocus(event, modalRef.current);
-		};
-		document.addEventListener("keydown", onKeyDown);
-		queueMicrotask(() =>
-			(
-				modalRef.current?.querySelector<HTMLElement>("button") ??
-				modalRef.current
-			)?.focus(),
-		);
-		return () => {
-			document.removeEventListener("keydown", onKeyDown);
-			releaseScrollLock();
-			previous?.focus();
-		};
-	}, [authenticated, testClosed, testDecision, closeTestModal]);
 	const onTestVisible = useCallback(
 		(next: TestDecision, placementKey: TestCampaignPlacement) => {
 			if (!testRuntime) return;
@@ -511,37 +443,35 @@ export function ProductionCampaignModal({
 		},
 		[sessionSubject, testRuntime],
 	);
-	if (authenticated && testRuntime && testDecision && !testClosed) {
+	if (authenticated && testRuntime && testDecision && !testClosed && !failedTestDecisions.has(testDecision)) {
 		return (
-			<div
-				className={styles.backdrop}
-				role="dialog"
-				aria-label="Test campaign"
-				aria-modal="true"
+			<CampaignModalShell
+				key={testDecisionMountKey(testDecision)}
+				label="Test campaign"
+				ready={readyTestDecision === testDecision}
+				onClose={closeTestModal}
 			>
-				<div className={styles.modal} ref={modalRef} tabIndex={-1}>
-					<TestTouchpointMount
-						decision={testDecision}
-						placementKey={PLACEMENT}
-						testId="campaign-custom-element"
-						onVisible={onTestVisible}
-						requestClose={closeTestModal}
-						isAuthorized={testRuntime.isAuthorized}
-					/>
-				</div>
-			</div>
+				<TestTouchpointMount
+					decision={testDecision}
+					placementKey={PLACEMENT}
+					testId="campaign-custom-element"
+					onVisible={onTestVisible}
+					requestClose={closeTestModal}
+					isAuthorized={testRuntime.isAuthorized}
+					onReady={setReadyTestDecision}
+					onFailed={onTestFailed}
+				/>
+			</CampaignModalShell>
 		);
 	}
 	return authenticated && decision?.sessionSubject === sessionSubject ? (
-		<div
-			className={styles.backdrop}
-			role="dialog"
-			aria-label="Campaign"
-			aria-modal="true"
+		<CampaignModalShell
+			key={generation}
+			label="Campaign"
+			ready={readyGeneration === generation}
+			onClose={closeProductionModal}
 		>
-			<div className={styles.modal} ref={modalRef} tabIndex={-1}>
-				<div ref={elementRef} data-testid="campaign-custom-element" />
-			</div>
-		</div>
+			<div ref={elementRef} data-testid="campaign-custom-element" />
+		</CampaignModalShell>
 	) : null;
 }

@@ -357,6 +357,10 @@ export type TestTouchpointMountProps = Readonly<{
 	requestClose?: () => void;
 	isAuthorized: () => boolean;
 	onCloseControlChange?: (available: boolean | null) => void;
+	/** The component is mounted and may be presented. */
+	onReady?: (decision: TestDecision) => void;
+	/** The component can never be presented for this decision. */
+	onFailed?: (decision: TestDecision) => void;
 }>;
 
 /** Mounts one immutable v2 placement in the real OpenDesign Shadow DOM host. */
@@ -369,6 +373,8 @@ export function TestTouchpointMount({
 	requestClose,
 	isAuthorized,
 	onCloseControlChange,
+	onReady,
+	onFailed,
 }: TestTouchpointMountProps) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const [ready, setReady] = useState(false);
@@ -393,20 +399,26 @@ export function TestTouchpointMount({
 			requestClose,
 			onCloseControlChange,
 			onReady: () => {
-				if (authorized()) setReady(true);
+				if (!authorized()) return;
+				setReady(true);
+				onReady?.(decision);
 			},
 			onVisible: () => {
 				if (authorized()) onVisible(decision, placementKey);
 			},
-			onError: (error) =>
+			onError: (error) => {
 				emitWebTouchpointDiagnostic({
 					code: error,
-				}),
+				});
+				onFailed?.(decision);
+			},
 		});
 	}, [
 		decision,
 		isAuthorized,
 		onCloseControlChange,
+		onFailed,
+		onReady,
 		onVisible,
 		placementKey,
 		requestClose,

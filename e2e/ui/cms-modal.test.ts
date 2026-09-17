@@ -282,7 +282,39 @@ test("[P1] production modal closes through its mounted SDK control without a hos
 	await expect(modal).toBeHidden();
 });
 
-for (const mode of ["failed", "hidden", "disabled"] as const) {
+test("[P1] production modal never presents a grey backdrop when its component fails to mount", async ({
+	page,
+}) => {
+	await page.addInitScript(() => {
+		const scope = window as Window & { __cmsDiagnostics?: string[] };
+		scope.__cmsDiagnostics = [];
+		document.addEventListener("touchpointdiagnostic", (event) => {
+			scope.__cmsDiagnostics?.push(
+				String((event as CustomEvent<{ code?: unknown }>).detail?.code),
+			);
+		});
+	});
+	await installProductionFixture(page, { mode: "failed" });
+	await page.goto("/", { waitUntil: "domcontentloaded" });
+	await expect(page.getByText("Loading OpenDesign…")).toHaveCount(0, {
+		timeout: T.long,
+	});
+	await expect
+		.poll(
+			() =>
+				page.evaluate(
+					() =>
+						(window as Window & { __cmsDiagnostics?: string[] })
+							.__cmsDiagnostics?.length ?? 0,
+				),
+			{ timeout: T.long },
+		)
+		.toBeGreaterThan(0);
+	await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+	await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
+});
+
+for (const mode of ["hidden", "disabled"] as const) {
 	test(`[P1] production modal adds no host Close button and Escape dismisses when the mounted control is ${mode}`, async ({
 		page,
 	}) => {

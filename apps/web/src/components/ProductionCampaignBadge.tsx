@@ -84,13 +84,13 @@ export function ProductionCampaignBadge({
 			emitWebTouchpointDiagnostic({ code: "touchpoint_capability_unsupported", detail: next.requiredCapabilities?.join(",") });
 			return { kind: "clear" };
 		}
-		return { kind: "decision", value: { ...next, sessionSubject }, key: `${next.activityId}:${next.deploymentId}:${next.touchpointDecisionId}:${next.content.id}`, validForMs: deadline - Date.parse(next.serverTime) };
+		return { kind: "decision", value: { ...next, sessionSubject }, key: `${next.activityId}:${next.deploymentId}:${next.touchpointDecisionId}:${next.content.id}`, validForMs: deadline - Date.parse(next.serverTime) - loaded.ageMs };
 	}, [locale, sessionSubject]);
 	const onError = useCallback((error: unknown) => {
 		const diagnostic = emitProductionTouchpointLoadDiagnostic(error);
 		if (diagnostic) emitWebTouchpointDiagnostic(diagnostic);
 	}, []);
-	const lifecycle = useTouchpointLifecycle({ enabled, identity: enabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError });
+	const lifecycle = useTouchpointLifecycle({ enabled, identity: enabled ? JSON.stringify([sessionSubject, locale]) : null, handoffKey: PLACEMENT, load, onError });
 	const decision = lifecycle.current;
 	const clear = lifecycle.clear;
 
