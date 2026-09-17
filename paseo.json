@@ -1,0 +1,17 @@
+{
+  "worktree": {
+    "setup": "corepack pnpm install --frozen-lockfile",
+    "teardown": "namespace=$(basename \"$PWD\"); corepack pnpm tools-dev stop --namespace \"$namespace\""
+  },
+  "scripts": {
+    "dev": {
+      "command": "namespace=$(basename \"$PWD\"); exec ports run open-design -- corepack pnpm tools-dev run web --namespace \"$namespace\" --daemon-port \"$DAEMON_PORT\" --web-port \"$WEB_PORT\""
+    },
+    "cleanup": {
+      "command": "namespace=$(basename \"$PWD\"); corepack pnpm tools-dev stop --namespace \"$namespace\""
+    },
+    "status": {
+      "command": "namespace=$(basename \"$PWD\"); corepack pnpm tools-dev status --namespace \"$namespace\" --json"
+    }
+  }
+}
