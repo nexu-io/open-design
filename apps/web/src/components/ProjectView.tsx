@@ -643,6 +643,7 @@ function mergeServerMessageWithLocal(
   server: ChatMessage,
   local?: ChatMessage,
   absorbedASuccessorRun = false,
+  locallyStreaming = false,
 ): ChatMessage {
   if (!local) return server;
   const merged: ChatMessage = { ...server };
@@ -661,6 +662,19 @@ function mergeServerMessageWithLocal(
     merged.preTurnFileNames = local.preTurnFileNames;
   }
   if (!server.lastRunEventId && local.lastRunEventId) {
+    merged.lastRunEventId = local.lastRunEventId;
+  }
+  if (
+    locallyStreaming && !absorbedASuccessorRun
+    && local.role === 'assistant' && server.role === 'assistant'
+    && local.runId && local.runId === server.runId
+  ) {
+    // A live stream owns its transcript until its controller releases it.
+    // A GET can be ahead of both the SSE reader and its pending text buffer;
+    // accepting that text here would append the same frames again on flush.
+    // Keep the event cursor with the transcript, without deduplicating prose.
+    merged.content = local.content;
+    merged.events = local.events;
     merged.lastRunEventId = local.lastRunEventId;
   }
   if (!server.startedAt && local.startedAt) {
@@ -714,6 +728,7 @@ function mergeServerMessageWithLocal(
 export function mergeServerMessagesIntoConversation(
   current: ChatMessage[],
   serverMessages: ChatMessage[],
+  options: { liveAssistantMessageIds?: ReadonlySet<string> } = {},
 ): ChatMessage[] {
   const currentById = new Map(current.map((message) => [message.id, message]));
   const serverIds = new Set(serverMessages.map((message) => message.id));
@@ -723,6 +738,7 @@ export function mergeServerMessagesIntoConversation(
       message,
       currentById.get(message.id),
       absorbed.has(message.id),
+      options.liveAssistantMessageIds?.has(message.id) === true,
     ),
   );
   for (const message of current) {
@@ -4052,6 +4068,7 @@ export function ProjectView({
       }
     }
     const preservingLiveConversation = liveReloadMessageIds.size > 0;
+    const liveReloadController = preservingLiveConversation ? abortRef.current : null;
     // Reset the initialized flag so auto-send waits for this authoritative DB
     // read to settle before checking messages.length. A confirmed readable
     // scope for the same principal may keep already-loaded history visible;
@@ -4110,11 +4127,25 @@ export function ProjectView({
           transcriptController.signal,
         );
         if (cancelled) return;
+        // Capture ownership when this GET is admitted, before queuing React's
+        // updater. The same batch may next clear the controller on terminal
+        // status and enqueue its final buffer flush. Reading refs inside the
+        // delayed updater would accept the full GET and then append that flush
+        // again. A GET admitted after termination still takes normal history.
+        const liveAssistantMessageIds =
+          liveReloadController !== null
+          && abortRef.current === liveReloadController
+          && !liveReloadController.signal.aborted
+          && streamingConversationIdRef.current === activeConversationId
+          && projectResourceAuthorityRef.current !== 'denied'
+            ? liveReloadMessageIds
+            : undefined;
         setMessages((current) =>
           preservingLiveConversation
             ? mergeServerMessagesIntoConversation(
                 current.filter((message) => liveReloadMessageIds.has(message.id)),
                 list,
+                { liveAssistantMessageIds },
               )
             : normalizeConversationMessageOrder(list),
         );

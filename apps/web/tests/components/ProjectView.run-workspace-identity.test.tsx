@@ -43,6 +43,8 @@ import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
+import proseFixture from '../fixtures/chat/clarification-hydration.json';
+import * as transcriptLoader from '../../src/state/load-conversation-transcript';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import { streamViaDaemon } from '../../src/providers/daemon';
@@ -827,6 +829,96 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     expect(view.getByTestId('normal-send')).toBeDisabled();
     fireEvent.click(view.getByTestId('normal-send'));
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it.each(['buffer fallback', 'same-batch terminal'] as const)(
+    'does not append buffered clarification prose behind a newer authoritative form on Home authority refresh (%s)', async (settlement) => {
+    const activeStream = deferred<void>();
+    let runOptions: Parameters<typeof streamViaDaemon>[0] | undefined;
+    mockedStreamViaDaemon.mockImplementation((options) => {
+      runOptions = options;
+      return activeStream.promise;
+    });
+    const transcriptRead = vi.spyOn(transcriptLoader, 'loadConversationTranscript');
+    const view = renderProjectView();
+    await waitFor(() => expect(runOptions).toBeDefined());
+    await act(async () => {
+      runOptions?.onRunCreated?.('run-clarification-fixture');
+      runOptions?.onRunStatus?.('running');
+    });
+    const live = chatPaneSpy.mock.calls.at(-1)?.[0].messages as ChatMessage[];
+    const assistant = live.find((message) => message.role === 'assistant')!;
+    expect(assistant.runId).toBe('run-clarification-fixture');
+    vi.useFakeTimers();
+    const authorityReload = deferred<ChatMessage[]>();
+    mockedListMessages.mockReturnValueOnce(authorityReload.promise);
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team', projectId: PROJECT_ID, workspaceId: TEAM_WORKSPACE, visibility: 'team',
+        context: {
+          ...CALLER_CONTEXT, role: 'admin',
+          permissions: buildWorkspacePermissions({ role: 'admin', lifecycleState: 'active' }),
+        } as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
+    await act(async () => {
+      view.rerender(projectViewElement());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mockedListMessages).toHaveBeenCalledTimes(2);
+    const full = proseFixture.events.filter((event) => event.kind === 'text')
+      .map((event) => 'text' in event ? event.text : '').join('');
+    const prefix = full.slice(0, full.indexOf('<question-form'));
+    await act(async () => {
+      runOptions?.handlers.onDelta(prefix);
+      runOptions?.handlers.onAgentEvent({ kind: 'text', text: prefix });
+    });
+    expect((chatPaneSpy.mock.calls.at(-1)?.[0].messages as ChatMessage[])
+      .find((message) => message.id === assistant.id)?.content).toBe('');
+    // Spy only observes the real loader's completion promise: no replacement
+    // loader or guessed microtask count is needed to enqueue GET before end.
+    const pendingTranscript = transcriptRead.mock.results.at(-1)?.value as Promise<ChatMessage[]>;
+    expect(pendingTranscript).toBeInstanceOf(Promise);
+    try {
+      await act(async () => {
+        authorityReload.resolve(live.map((message) => message.id === assistant.id ? {
+          ...message, content: full, events: [{ kind: 'text', text: full }],
+        } : message));
+        await pendingTranscript;
+        if (settlement === 'same-batch terminal') {
+          const suffix = full.slice(prefix.length);
+          runOptions?.handlers.onDelta(suffix);
+          runOptions?.handlers.onAgentEvent({ kind: 'text', text: suffix });
+          // Provider terminal ordering: refs clear first, then onDone flushes.
+          // All callbacks stay in this act; do not advance any buffer timer.
+          runOptions?.onRunStatus?.('succeeded');
+          runOptions?.handlers.onDone(full);
+        } else {
+          await vi.advanceTimersByTimeAsync(0);
+        }
+      });
+      if (settlement === 'buffer fallback') {
+        // Existing live-stream case, followed by the genuinely new suffix.
+        await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+        await act(async () => {
+          const suffix = full.slice(prefix.length);
+          runOptions?.handlers.onDelta(suffix);
+          runOptions?.handlers.onAgentEvent({ kind: 'text', text: suffix });
+          await vi.advanceTimersByTimeAsync(250);
+        });
+      }
+      const actual = (chatPaneSpy.mock.calls.at(-1)?.[0].messages as ChatMessage[])
+        .find((message) => message.id === assistant.id)!;
+      expect(actual.content).toBe(full);
+      const text = actual.events?.filter((event) => event.kind === 'text')
+        .map((event) => event.text).join('');
+      expect(text).toBe(full);
+    } finally {
+      activeStream.resolve();
+      await act(async () => { await activeStream.promise; });
+      transcriptRead.mockRestore();
+    }
   });
 
   it('keeps a cold Home run attached when an empty authority refresh settles after stream events', async () => {

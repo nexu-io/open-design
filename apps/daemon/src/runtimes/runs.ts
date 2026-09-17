@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import {
   strategyTaskProvesDelivery,
   todoSnapshotHasUnfinishedWork,
@@ -1714,7 +1715,20 @@ export function createChatRunService({
     run.waiters.clear();
     // Close the event log stream now that no more events will be
     // emitted for this run. The file stays on disk for tail/grep.
-    try { run.eventsLogStream?.end(); } catch { /* ignore */ }
+    const closingLog = run.eventsLogStream;
+    if (closingLog) {
+      // A client can attach after status becomes terminal but before end() has
+      // flushed. Keep the completion signal, not a new reader of a partial file.
+      run.eventsLogFinalFlush = new Promise((resolve) => {
+        const done = (ok) => {
+          closingLog.off('error', onError);
+          resolve(ok);
+        };
+        const onError = () => done(false);
+        closingLog.once('error', onError);
+        try { closingLog.end(() => done(true)); } catch { done(false); }
+      });
+    }
     run.eventsLogStream = null;
     // Any event emitted after this point must not lazily re-open the log.
     run.eventsLogClosed = true;
@@ -1909,30 +1923,146 @@ export function createChatRunService({
 
   const stream = (run, req, res) => {
     const sse = createSseResponse(res);
-    const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
+    const requestedCursor = Number(req.get('Last-Event-ID') || req.query.after || 0);
+    const cursor = Number.isFinite(requestedCursor) ? Math.max(0, requestedCursor) : 0;
+    // Snapshot BEFORE sending: a send can synchronously trigger a new event,
+    // and every append to a full ring shifts the array being replayed.
+    const tail = run.events.slice();
+    const highWater = run.nextEventId - 1;
+    const prefixEnd = (tail[0]?.id ?? highWater + 1) - 1;
+    const needsJournal = Boolean(run.eventsLogPath) && cursor < prefixEnd;
+    const pending = [];
+    let replaying = true;
+    let closed = false;
+    let endPending = TERMINAL_RUN_STATUSES.has(run.status);
+    let lastSent = cursor;
     let sent = 0;
-    for (const record of run.events) {
-      if (!Number.isFinite(lastEventId) || record.id > lastEventId) {
-        sse.send(record.event, record.data, record.id);
-        sent++;
+    let reader = null;
+    let cancelFlush = null;
+
+    const deliver = (record) => {
+      if (closed || record.id <= lastSent) return;
+      lastSent = record.id;
+      sent++;
+      sse.send(record.event, record.data, record.id);
+    };
+    // The proxy owns the entire subscription, including finish()'s end().
+    // Neither live events nor a terminal end may overtake durable history.
+    const subscriber = {
+      send(event, data, id) {
+        if (closed) return false;
+        if (replaying) pending.push({ event, data, id });
+        else deliver({ event, data, id });
+        return true;
+      },
+      end() {
+        endPending = true;
+        if (!replaying && !closed) {
+          close();
+          sse.end();
+        }
+      },
+      cleanup() { close(); },
+    };
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      run.clients.delete(subscriber);
+      pending.length = 0;
+      reader?.destroy();
+      cancelFlush?.();
+      sse.cleanup();
+    };
+    res.on('close', close);
+    if (!endPending) run.clients.add(subscriber);
+
+    const completeReplay = () => {
+      for (const record of tail) deliver(record);
+      // Keep buffering while draining: sending a queued record can produce
+      // another event. A cursor check prevents duplicate replay/live overlap.
+      for (let index = 0; index < pending.length && !closed; index++) deliver(pending[index]);
+      pending.length = 0;
+      replaying = false;
+      if (closed) return;
+      if (endPending) {
+        // Preserve the existing terminal-cursor signal for reattached clients.
+        if (sent === 0 && tail.length > 0) {
+          const last = tail[tail.length - 1];
+          sse.send(last.event, last.data, last.id);
+        }
+        close();
+        sse.end();
       }
-    }
-    if (TERMINAL_RUN_STATUSES.has(run.status)) {
-      // Guarantee a reattaching client sees a terminal signal even if its
-      // cursor is at or past the final event id — otherwise the SSE
-      // stream ends silently and the client falls back to status-only fetch.
-      if (sent === 0 && run.events.length > 0) {
-        const last = run.events[run.events.length - 1];
-        sse.send(last.event, last.data, last.id);
-      }
-      sse.end();
+    };
+    if (!needsJournal) {
+      completeReplay();
       return;
     }
-    run.clients.add(sse);
-    res.on('close', () => {
-      run.clients.delete(sse);
-      sse.cleanup();
-    });
+
+    return (async () => {
+      try {
+        // emit() appends asynchronously. Its write callback is the boundary
+        // proving all records through our captured highWater reached the file.
+        const writer = run.eventsLogStream;
+        if (writer && !writer.writableFinished) {
+          await new Promise((resolve, reject) => {
+            const settle = (error = null) => {
+              writer.off('error', onError);
+              writer.off('close', onClose);
+              writer.off('finish', onFinish);
+              cancelFlush = null;
+              if (error) reject(error); else resolve();
+            };
+            const onError = (error) => settle(error);
+            const onClose = () => settle(new Error('Run event journal closed before replay flush'));
+            const onFinish = () => settle();
+            cancelFlush = () => settle(new Error('Run event replay disconnected'));
+            writer.once('error', onError);
+            writer.once('close', onClose);
+            if (writer.writableEnded) writer.once('finish', onFinish);
+            else writer.write('', settle);
+          });
+        } else if (run.eventsLogFinalFlush && !await run.eventsLogFinalFlush) {
+          throw new Error('Run event journal failed to flush');
+        }
+        if (closed) return;
+        reader = fs.createReadStream(run.eventsLogPath, { encoding: 'utf8' });
+        const lines = createInterface({ input: reader, crlfDelay: Infinity });
+        let nextId = cursor + 1;
+        try {
+          for await (const line of lines) {
+            if (closed) return;
+            if (!line) continue;
+            const record = JSON.parse(line);
+            if (!Number.isInteger(record.id) || typeof record.event !== 'string') {
+              throw new Error('Invalid run event journal record');
+            }
+            if (record.id <= cursor) continue;
+            if (record.id !== nextId || record.id > prefixEnd) {
+              throw new Error('Incomplete run event journal replay');
+            }
+            deliver(record);
+            nextId++;
+            if (record.id === prefixEnd) break;
+          }
+        } finally {
+          lines.close();
+          reader.destroy();
+          reader = null;
+        }
+        if (closed) return;
+        if (nextId !== prefixEnd + 1) throw new Error('Incomplete run event journal replay');
+        completeReplay();
+      } catch (error) {
+        if (closed) return;
+        // A replay transport failure is not a failure of the running agent.
+        // End this connection so the existing client reconnects; never present
+        // a truncated ring as a successful full replay or change the run verdict.
+        console.warn('[runs] durable event replay failed', run.id, error instanceof Error ? error.message : String(error));
+        close();
+        sse.end();
+      }
+    })();
   };
 
   const list = ({ projectId, conversationId, status } = {}) => {
