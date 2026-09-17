@@ -94,6 +94,9 @@ export interface Dict {
   'workspaceInvite.errorUnreachable': string;
   // Common
   'common.cancel': string;
+  'chat.omittedEvents.expand': string;
+  'chat.omittedEvents.loading': string;
+  'chat.omittedEvents.retry': string;
   'chat.selectFromLibrary': string;
   'chat.importFigma': string;
   'chat.plus.group.files': string;

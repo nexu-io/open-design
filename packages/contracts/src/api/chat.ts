@@ -1314,6 +1314,20 @@ export function isChatArtifactStaticCoverReady(
   return chatArtifactStaticCoverUrl(ref) !== null;
 }
 
+/**
+ * Why a transcript read withheld one message's event stream, and how much it
+ * withheld. Carries enough for the UI to offer an honest affordance ("执行记录
+ * 较大 · N 条") without having to fetch the stream to find out.
+ */
+export interface ChatMessageEventsOmitted {
+  /**
+   * Stored JSON bytes withheld. Deliberately the ONLY field: a byte length is
+   * free from SQLite (`length(events_json)`), whereas an event COUNT would
+   * require parsing the very blob this omission exists to avoid parsing.
+   */
+  bytes: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -1321,6 +1335,17 @@ export interface ChatMessage {
   agentId?: string;
   agentName?: string;
   events?: PersistedAgentEvent[];
+  /**
+   * Set when the transcript read deliberately withheld this message's `events`
+   * to keep the response bounded (see `grantTranscriptEventBudget`). `content`
+   * is never withheld, so the message still renders — as the plain assistant
+   * text every events-less message already renders as. Fetch the full stream
+   * from `GET /api/projects/:id/conversations/:cid/messages/:mid/events`.
+   *
+   * Absent means "these are all the events there are". `events: undefined`
+   * WITHOUT this field keeps its original meaning: the message never had any.
+   */
+  eventsOmitted?: ChatMessageEventsOmitted;
   createdAt?: number;
   runId?: string;
   runStatus?: ChatRunStatus;

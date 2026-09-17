@@ -1,4 +1,5 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchMessageEvents } from "../state/projects";
 import { useCharReveal } from "./chat/useCharReveal";
 import { ExecutionShell } from "./chat/ExecutionShell";
 import { buildTurnBlocks } from "../runtime/chat/build-turn-blocks";
@@ -333,6 +334,15 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   // identity and re-renders this row anyway.
 ];
 
+/**
+ * Withheld execution-record size, for the expand affordance. Rounded coarsely
+ * on purpose: this is "is this worth waiting for", not a measurement.
+ */
+function formatOmittedEventSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 function areAssistantMessagePropsEqual(prev: Props, next: Props): boolean {
   for (const key of ASSISTANT_MESSAGE_COMPARED_PROPS) {
     if (!Object.is(prev[key], next[key])) return false;
@@ -468,12 +478,37 @@ function AssistantMessageImpl({
   // execution shell (`components/chat/ExecutionShell.tsx`), which builds its own
   // link handler, so that memo has no consumer left and is deliberately dropped
   // rather than carried as an unused binding.
+  /**
+   * The transcript read may have withheld this turn's execution record to keep
+   * the response serializable (`ChatMessage.eventsOmitted`). Until the reader
+   * asks for it, this message renders exactly as any events-less message has
+   * always rendered — as its own prose, via the fallback below. Asking fetches
+   * the one message, never the conversation.
+   */
+  const [expandedEvents, setExpandedEvents] = useState<AgentEvent[] | null>(null);
+  const [expandingEvents, setExpandingEvents] = useState(false);
+  const [expandFailed, setExpandFailed] = useState(false);
+  const omittedBytes = message.eventsOmitted?.bytes ?? null;
+  const canExpandOmittedEvents =
+    omittedBytes !== null && expandedEvents === null && Boolean(projectId && conversationId);
+  const expandOmittedEvents = useCallback(() => {
+    if (!projectId || !conversationId) return;
+    setExpandingEvents(true);
+    setExpandFailed(false);
+    void fetchMessageEvents(projectId, conversationId, message.id)
+      .then((loaded) => setExpandedEvents(loaded as AgentEvent[]))
+      .catch(() => setExpandFailed(true))
+      .finally(() => setExpandingEvents(false));
+  }, [conversationId, message.id, projectId]);
+
   const events =
-    (message.events?.length ?? 0) > 0
-      ? message.events!
-      : message.content.trim()
-        ? ([{ kind: "text", text: message.content }] satisfies AgentEvent[])
-        : [];
+    expandedEvents && expandedEvents.length > 0
+      ? expandedEvents
+      : (message.events?.length ?? 0) > 0
+        ? message.events!
+        : message.content.trim()
+          ? ([{ kind: "text", text: message.content }] satisfies AgentEvent[])
+          : [];
   const displayEvents = useMemo(
     () => dedupeToolUsesById(dropSupersededInFlightToolUses(events)),
     [events],
@@ -1307,6 +1342,24 @@ function AssistantMessageImpl({
         </div>
       ) : null}
       <div className="assistant-flow" data-testid="assistant-flow">
+        {canExpandOmittedEvents ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            data-testid="assistant-expand-omitted-events"
+            disabled={expandingEvents}
+            onClick={expandOmittedEvents}
+          >
+            {expandingEvents
+              ? t("chat.omittedEvents.loading")
+              : expandFailed
+                ? t("chat.omittedEvents.retry")
+                : t("chat.omittedEvents.expand", {
+                    size: formatOmittedEventSize(omittedBytes ?? 0),
+                  })}
+          </Button>
+        ) : null}
         {/*
           壳与结论段**按发生顺序交替**,不再「先把壳全画完再画结论」(OPEND-2592)。
           跨轮折叠的会话里,中途那张表单的收口就夹在两张壳中间;把壳整体提到前面

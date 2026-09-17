@@ -226,7 +226,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         }
       }
     } else if (sourceConversation && sourceConversation.projectId === req.params.id) {
-      seedMessages = listMessages(db, seedFromConversationId);
+      // Unbounded on purpose: these rows are COPIED into the forked
+      // conversation, so an omitted event stream here is not a smaller
+      // response — it is permanent data loss in the new conversation. The
+      // fork's own transcript reads are budgeted like any other.
+      seedMessages = listMessages(db, seedFromConversationId, { eventsBudgetBytes: null });
       if (requestedForkMessageId) {
         const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
         if (forkIndex < 0) {
@@ -440,6 +444,31 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           } : {}),
         };
       }),
+    });
+  });
+
+  /**
+   * One message's full event stream — the escape hatch from the transcript's
+   * event budget (`ChatMessage.eventsOmitted`).
+   *
+   * Scoped to a single message on purpose. The transcript endpoint is bounded
+   * because an unbounded one cannot be serialized; an "expand" that accepted a
+   * list of ids, or a conversation, would just rebuild the unbounded response
+   * behind a second URL.
+   */
+  app.get('/api/projects/:id/conversations/:cid/messages/:mid/events', async (req, res) => {
+    if (!await authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    if (!conv) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    const message = getMessage(db, req.params.mid, req.params.cid);
+    if (!message) {
+      return res.status(404).json({ error: 'message not found' });
+    }
+    res.json({
+      messageId: String(message.id),
+      events: Array.isArray(message.events) ? message.events : [],
     });
   });
 

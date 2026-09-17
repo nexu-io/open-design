@@ -19,6 +19,7 @@ import type {
   AppliedPluginSnapshot,
   ApplyResult,
   ChatSessionMode,
+  PersistedAgentEvent,
   CollabProjectBootstrapResponse,
   CreateConversationRequest,
   CreateDesignSystemProjectFromProjectResponse,
@@ -1488,6 +1489,33 @@ export async function listMessages(
       true,
     );
   }
+}
+
+/**
+ * One message's full event stream, after a transcript read withheld it
+ * (`ChatMessage.eventsOmitted`). Single-message on purpose — see the route's
+ * docblock: a list-shaped expand would just rebuild the unbounded transcript
+ * response the budget exists to prevent.
+ */
+export async function fetchMessageEvents(
+  projectId: string,
+  conversationId: string,
+  messageId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+  signal?: AbortSignal,
+): Promise<PersistedAgentEvent[]> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations/${
+      encodeURIComponent(conversationId)
+    }/messages/${encodeURIComponent(messageId)}/events`,
+    {
+      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+      ...(signal ? { signal } : {}),
+    },
+  );
+  if (!resp.ok) throw new Error(`message events ${resp.status}`);
+  const json = (await resp.json()) as { events?: PersistedAgentEvent[] };
+  return json.events ?? [];
 }
 
 export interface SaveMessageOptions {

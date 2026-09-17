@@ -2794,7 +2794,121 @@ export function countMessages(db: SqliteDb, conversationId: string): number {
   return Number(row?.count ?? 0);
 }
 
-export function listMessages(db: SqliteDb, conversationId: string) {
+/**
+ * Default ceiling on the stored event bytes ONE transcript response may carry.
+ *
+ * The number that actually matters is the one this keeps us away from: V8
+ * cannot hold a string longer than ~512MB, and `res.json` builds exactly one
+ * such string, so an unbounded transcript does not degrade — it throws
+ * `RangeError: Invalid string length` and the conversation becomes permanently
+ * unreadable (OPEND-3302). Any budget comfortably under that limit restores the
+ * "responses are bounded" property; this value is picked to be generous for
+ * rendering rather than tight for transport.
+ */
+export const TRANSCRIPT_EVENT_BUDGET_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Ceiling on the stored event bytes ONE message may contribute. Without it a
+ * single runaway turn consumes the whole conversation's budget and every other
+ * message loses its events to one outlier.
+ */
+export const TRANSCRIPT_MESSAGE_EVENT_BUDGET_BYTES = 2 * 1024 * 1024;
+
+/** One message's stored event weight, read without parsing any of it. */
+export interface TranscriptEventWeight {
+  id: string;
+  bytes: number;
+}
+
+/**
+ * Decide which messages of a transcript may carry their `events`.
+ *
+ * The invariant: **the granted bytes never exceed `budgetBytes`, and a message
+ * is granted only if it also fits `perMessageBytes`.** Everything else is
+ * reported as omitted, and the caller must still return its `content` — an
+ * omission may cost a message its execution record, never its text.
+ *
+ * Granting walks NEWEST to OLDEST because that is what a reader looks at: the
+ * tail of a conversation is the live work, the head is history they scrolled
+ * past turns ago. Input order is the transcript's own (position ASC), so the
+ * walk is a reverse iteration and the result is order-independent.
+ *
+ * A message with zero stored bytes is granted for free — it has nothing to
+ * withhold, and charging it would let empty turns exhaust a budget.
+ */
+export function grantTranscriptEventBudget(
+  weights: readonly TranscriptEventWeight[],
+  budgetBytes: number = TRANSCRIPT_EVENT_BUDGET_BYTES,
+  perMessageBytes: number = TRANSCRIPT_MESSAGE_EVENT_BUDGET_BYTES,
+): Map<string, { granted: boolean; bytes: number }> {
+  const decisions = new Map<string, { granted: boolean; bytes: number }>();
+  let remaining = Math.max(0, budgetBytes);
+  for (let index = weights.length - 1; index >= 0; index -= 1) {
+    const weight = weights[index];
+    if (!weight) continue;
+    const bytes = Number.isFinite(weight.bytes) ? Math.max(0, weight.bytes) : 0;
+    if (bytes === 0) {
+      decisions.set(weight.id, { granted: true, bytes: 0 });
+      continue;
+    }
+    // Deliberately NOT `break` on the first message that does not fit: a single
+    // huge turn in the middle must not cost every turn before it its events.
+    const granted = bytes <= perMessageBytes && bytes <= remaining;
+    if (granted) remaining -= bytes;
+    decisions.set(weight.id, { granted, bytes });
+  }
+  return decisions;
+}
+
+/**
+ * Stored event bytes per message, straight from SQLite's `length()`.
+ *
+ * `length()` on a TEXT column does not materialize the value, so this stays
+ * cheap on exactly the conversations where parsing would not be.
+ */
+function readConversationMessageEventWeights(
+  db: SqliteDb,
+  conversationId: string,
+): TranscriptEventWeight[] {
+  const base = db.prepare(
+    `SELECT id, COALESCE(LENGTH(events_json), 0) AS bytes
+       FROM messages
+      WHERE conversation_id = ?
+      ORDER BY position ASC`,
+  ).all(conversationId) as DbRow[];
+  const batchBytes = new Map<string, number>();
+  if (hasMessageEventBatchStorage(db)) {
+    const rows = db.prepare(
+      `SELECT batch.message_id AS messageId,
+              COALESCE(SUM(LENGTH(batch.events_json)), 0) AS bytes
+         FROM message_event_batches AS batch
+         JOIN messages AS message ON message.id = batch.message_id
+        WHERE message.conversation_id = ?
+        GROUP BY batch.message_id`,
+    ).all(conversationId) as DbRow[];
+    for (const row of rows) batchBytes.set(String(row.messageId), Number(row.bytes ?? 0));
+  }
+  return base.map((row) => ({
+    id: String(row.id),
+    bytes: Number(row.bytes ?? 0) + (batchBytes.get(String(row.id)) ?? 0),
+  }));
+}
+
+export interface ListMessagesOptions {
+  /**
+   * Total stored event bytes this read may return. Pass `null` for an
+   * unbounded read — only for callers that consume the transcript in-process
+   * and never serialize it into one HTTP response.
+   */
+  eventsBudgetBytes?: number | null;
+  perMessageEventBytes?: number;
+}
+
+export function listMessages(
+  db: SqliteDb,
+  conversationId: string,
+  options: ListMessagesOptions = {},
+) {
   const messages = db
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
@@ -2821,16 +2935,42 @@ export function listMessages(db: SqliteDb, conversationId: string) {
         ORDER BY position ASC`,
     )
     .all(conversationId) as DbRow[];
+  // Budget FIRST, from stored lengths only. An omitted message is then never
+  // parsed and never materialized — the saving is CPU and heap, not just
+  // response bytes. `null` opts out for in-process callers (see the type).
+  const budget = options.eventsBudgetBytes === null
+    ? null
+    : grantTranscriptEventBudget(
+        readConversationMessageEventWeights(db, conversationId),
+        options.eventsBudgetBytes ?? TRANSCRIPT_EVENT_BUDGET_BYTES,
+        options.perMessageEventBytes ?? TRANSCRIPT_MESSAGE_EVENT_BUDGET_BYTES,
+      );
+  // Batches are read for EVERY message, granted or not: un-folded batches can
+  // still hold text that has not reached the `content` column, and `content`
+  // is the half an omission must never damage. What omission skips is the
+  // `events_json` blob — which is where a conversation's accumulated history
+  // actually sits, and the only half big enough to matter here.
   const eventBatches = readConversationMessageEventBatches(db, conversationId);
   // One query for the whole conversation. A per-message lookup here would be a
   // straight N+1 on every transcript read.
   const artifactRefs = conversationChatArtifactRefs(db, conversationId);
-  return messages.map((message) => normalizeMessage(
-    db,
-    message,
-    eventBatches.get(String(message.id)) ?? [],
-    artifactRefs.get(String(message.id)) ?? [],
-  ));
+  return messages.map((message) => {
+    const decision = budget?.get(String(message.id));
+    if (decision && !decision.granted) {
+      return normalizeMessageWithoutEvents(
+        message,
+        eventBatches.get(String(message.id)) ?? [],
+        { bytes: decision.bytes },
+        artifactRefs.get(String(message.id)) ?? [],
+      );
+    }
+    return normalizeMessage(
+      db,
+      message,
+      eventBatches.get(String(message.id)) ?? [],
+      artifactRefs.get(String(message.id)) ?? [],
+    );
+  });
 }
 
 function projectIdForConversation(db: SqliteDb, conversationId: string): string | null {
@@ -3360,6 +3500,31 @@ function readConversationMessageEventBatches(
   return batches;
 }
 
+/**
+ * One batch event's contribution to the message BODY, protocol markers removed.
+ *
+ * Shared by the full materializer and by the events-withheld read: a message
+ * whose events are withheld still owes its reader every byte of body text, so
+ * both paths must strip identically. Non-text events contribute nothing.
+ */
+function batchEventBodyText(event: DbRow | undefined): string {
+  if (event?.kind !== 'text' || typeof event.text !== 'string') return '';
+  return stripArtifactFocusMarkers(stripNextStepMarkers(stripDoneMarkers(event.text)));
+}
+
+/**
+ * Body text still sitting in un-folded batches, for a read that is NOT
+ * materializing this message's event stream. Deliberately does not merge,
+ * compact, or return events — only the text `content` would otherwise lose.
+ */
+function pendingBatchTextDelta(eventBatches: DbRow[][]): string {
+  let textDelta = '';
+  for (const batch of eventBatches) {
+    for (const event of batch) textDelta += batchEventBodyText(event);
+  }
+  return textDelta;
+}
+
 function materializeMessageAgentEvents(
   db: SqliteDb,
   messageId: string,
@@ -3387,9 +3552,7 @@ function materializeMessageAgentEvents(
        * surface a future path could reach without passing the stream stripper,
        * and the cost of being wrong there is a protocol tag in an export.
        */
-      if (event?.kind === 'text' && typeof event.text === 'string') {
-        textDelta += stripArtifactFocusMarkers(stripNextStepMarkers(stripDoneMarkers(event.text)));
-      }
+      textDelta += batchEventBodyText(event);
     }
     events = mergeMessageAgentEvents(events, batch);
   }
@@ -4547,7 +4710,7 @@ function normalizeMessage(
   row: DbRow,
   eventBatches?: DbRow[][],
   artifactRefs?: ChatArtifactRef[],
-) {
+): NormalizedMessage {
   const eventsJson = typeof row.eventsJson === 'string' ? row.eventsJson : null;
   const materializedEvents = materializeMessageAgentEvents(
     db,
@@ -4584,21 +4747,70 @@ function normalizeMessage(
     ? scrubDsmlToolProtocolTailFromEvents(materializedEvents.events)
     : materializedEvents.events;
   return {
-    id: row.id,
-    role: row.role,
+    ...normalizeMessageBaseFields(row, artifactRefs),
     content: scrubProtocolTail(
       `${typeof row.content === 'string' ? row.content : ''}${materializedEvents.textDelta}`,
     ),
+    events:
+      eventsJson !== null || materializedEvents.batchCount > 0
+        ? visibleEvents
+        : undefined,
+  };
+}
+
+/**
+ * A message read that deliberately withholds the event stream, for a transcript
+ * response that has spent its event budget (`grantTranscriptEventBudget`).
+ *
+ * The `events_json` blob is never parsed here — that is the entire point, and
+ * on the conversations this exists for it is also the entire cost. Un-folded
+ * batch text IS still folded into `content`, because withholding the execution
+ * record must never cost a message its words.
+ */
+function normalizeMessageWithoutEvents(
+  row: DbRow,
+  eventBatches: DbRow[][],
+  omitted: { bytes: number },
+  artifactRefs?: ChatArtifactRef[],
+): NormalizedMessage {
+  const scrubProtocolTail = row.role === 'assistant'
+    ? scrubDsmlToolProtocolTail
+    : (text: string) => text;
+  return {
+    ...normalizeMessageBaseFields(row, artifactRefs),
+    content: scrubProtocolTail(
+      `${typeof row.content === 'string' ? row.content : ''}${pendingBatchTextDelta(eventBatches)}`,
+    ),
+    events: undefined,
+    eventsOmitted: omitted,
+  };
+}
+
+/**
+ * The shape every message read returns, events present or withheld.
+ *
+ * Declared once and shared by both paths on purpose: without it the two return
+ * different anonymous shapes, callers get a union, and reading `eventsOmitted`
+ * off a transcript stops type-checking — which would push every consumer into
+ * a cast and quietly undo the point of putting the omission in the contract.
+ */
+export type NormalizedMessage = ReturnType<typeof normalizeMessageBaseFields> & {
+  content: string;
+  events: DbRow[] | undefined;
+  eventsOmitted?: { bytes: number };
+};
+
+/** Every message field that does not come from the event stream. */
+function normalizeMessageBaseFields(row: DbRow, artifactRefs?: ChatArtifactRef[]) {
+  return {
+    id: row.id,
+    role: row.role,
     agentId: row.agentId ?? undefined,
     agentName: row.agentName ?? undefined,
     runId: row.runId ?? undefined,
     runStatus: row.runStatus ?? undefined,
     resultDeliveryState: normalizeResultDeliveryState(row.resultDeliveryState),
     lastRunEventId: row.lastRunEventId ?? undefined,
-    events:
-      eventsJson !== null || materializedEvents.batchCount > 0
-        ? visibleEvents
-        : undefined,
     attachments: parseJsonOrUndef(row.attachmentsJson),
     commentAttachments: parseJsonOrUndef(row.commentAttachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),

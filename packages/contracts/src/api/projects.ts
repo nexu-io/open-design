@@ -1,4 +1,9 @@
-import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat.js';
+import type {
+  ChatMessage,
+  ChatRunStatus,
+  ChatSessionMode,
+  PersistedAgentEvent,
+} from './chat.js';
 import type { OrchestratorWorkspace } from './workspaces.js';
 import type {
   ProjectContextConnectorRef,
@@ -818,6 +823,17 @@ export interface UpdateConversationRequest {
 
 export interface MessagesResponse {
   messages: ChatMessage[];
+}
+
+/**
+ * One message's full event stream, fetched on demand after a transcript read
+ * withheld it (`ChatMessage.eventsOmitted`). Scoped to a single message on
+ * purpose: this is the escape hatch from the transcript's event budget, so it
+ * must never become a second way to pull a whole conversation's events.
+ */
+export interface MessageEventsResponse {
+  messageId: string;
+  events: PersistedAgentEvent[];
 }
 
 export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
