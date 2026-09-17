@@ -44,6 +44,7 @@ import {
   settledSignalFromMessages,
 } from '../runtime/chat/reconnect-state';
 import { forkBoundaryMessageIndex } from '../runtime/chat/fork-boundary';
+import { assistantMessageNeverHadARun } from '../runtime/chat/host-authored-message';
 import { resolveRecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
 import { loadConversationTranscript } from '../state/load-conversation-transcript';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
@@ -2769,12 +2770,13 @@ export function ProjectView({
     runId: string | null;
     detached: boolean;
     files: Map<string, ProjectFile>;
-    dispose: () => void;
+    dispose: (force?: boolean) => void;
+    retain: () => () => void;
   }>());
   useEffect(() => () => {
     for (const run of manualFileWritesByRunRef.current.values()) {
       if (run.projectId === project.id && run.authorityKey === projectRunAuthorityKey) {
-        run.dispose();
+        run.dispose(true);
       }
     }
   }, [project.id, projectRunAuthorityKey]);
@@ -4598,21 +4600,50 @@ export function ProjectView({
       for (const [name, file] of previous.files) files.set(name, file);
       previous.dispose();
     }
-    const dispose = () => {
+    let retained = 0;
+    let generation = 0;
+    let disposalRequested = false;
+    let disposed = false;
+    const onAbort = () => dispose(true);
+    const dispose = (force = false) => {
+      if (disposed) return;
+      if (!force && retained > 0) {
+        disposalRequested = true;
+        return;
+      }
+      disposed = true;
       manualFileWritesByRunRef.current.delete(controller);
-      controller.signal.removeEventListener('abort', dispose);
+      controller.signal.removeEventListener('abort', onAbort);
     };
     const entry = {
       projectId: project.id, authorityKey: projectRunAuthorityKey,
       conversationId, runId, detached: false, files, dispose,
+      retain: () => {
+        if (disposed) return () => {};
+        const retainedGeneration = generation;
+        retained += 1;
+        let released = false;
+        return () => {
+          if (released || generation !== retainedGeneration) return;
+          released = true;
+          retained -= 1;
+          if (retained === 0 && disposalRequested) dispose();
+        };
+      },
     };
     manualFileWritesByRunRef.current.set(controller, entry);
-    controller.signal.addEventListener('abort', dispose, { once: true });
+    controller.signal.addEventListener('abort', onAbort, { once: true });
     return {
       bindRun: (nextRunId: string) => {
         // A strategy successor can reuse the assistant and transport, but its
         // physical run must not inherit a predecessor's ownership receipts.
-        if (entry.runId && entry.runId !== nextRunId) files.clear();
+        if (entry.runId && entry.runId !== nextRunId) {
+          files.clear();
+          // An older recovery's finally must not dispose a successor's writer.
+          generation += 1;
+          retained = 0;
+          disposalRequested = false;
+        }
         entry.runId = nextRunId;
       },
       release: (recoverable = false) => {
@@ -4620,7 +4651,7 @@ export function ProjectView({
           // Keep observing real writes between transports, including during
           // the status probe/backoff. Only the same scoped physical run adopts it.
           entry.detached = true;
-          controller.signal.removeEventListener('abort', dispose);
+          controller.signal.removeEventListener('abort', onAbort);
         } else dispose();
       },
     };
@@ -4828,8 +4859,15 @@ export function ProjectView({
       art: Artifact,
       projectFilesSnapshot?: ProjectFile[],
       sourceText?: string,
-      options: { pointerMinMtime?: number } = {},
+      options: {
+        pointerMinMtime?: number;
+        isCurrent?: () => boolean;
+        shouldOpen?: () => boolean;
+      } = {},
     ) => {
+      if (options.isCurrent && !options.isCurrent()) {
+        return { ok: false as const, cancelled: true as const, error: undefined };
+      }
       const persistedHtml = resolvePersistedArtifactHtml({
         artifactHtml: art.html,
         identifier: art.identifier,
@@ -4872,7 +4910,7 @@ export function ProjectView({
             return { ok: true as const, fileName: pointerTarget };
           }
           savedArtifactRef.current = pointerTarget;
-          requestOpenFile(pointerTarget);
+          if (options.shouldOpen?.() !== false) requestOpenFile(pointerTarget);
           return { ok: true as const, fileName: pointerTarget };
         }
       }
@@ -4921,6 +4959,11 @@ export function ProjectView({
       const file = await writeProjectTextFile(project.id, fileName, artifactToPersist.html, {
         artifactManifest: manifest ?? undefined,
       }, projectRunWorkspaceContext);
+      // The server may have accepted the file before navigation, a new turn,
+      // or access revocation. Do not apply that old response to the current UI.
+      if (options.isCurrent && !options.isCurrent()) {
+        return { ok: false as const, cancelled: true as const, error: undefined };
+      }
       if (file) {
         savedArtifactRef.current = file.name;
         bumpFilesRefresh();
@@ -4937,7 +4980,8 @@ export function ProjectView({
         // Auto-open the freshly-persisted artifact as a tab so the user
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
-        requestOpenFile(file.name);
+        // Evaluate at response time: a user can select another tab during POST.
+        if (options.shouldOpen?.() !== false) requestOpenFile(file.name);
         return { ok: true as const, fileName: file.name };
       } else {
         // writeProjectTextFile collapses all failure paths (non-OK HTTP
@@ -7940,7 +7984,25 @@ export function ProjectView({
     const recoverArtifacts = async () => {
       if (recovering) return;
       recovering = true;
+      const retainedReceipts = new Map<string, NonNullable<ReturnType<typeof findDetachedManualFileWrites>>>();
+      const releaseReceipts: Array<() => void> = [];
+      const retainReceipt = (runId: string) => {
+        const existing = retainedReceipts.get(runId);
+        if (existing) return existing;
+        const receipt = findDetachedManualFileWrites(activeConversationId, runId);
+        if (receipt) {
+          retainedReceipts.set(runId, receipt);
+          releaseReceipts.push(receipt.retain());
+        }
+        return receipt;
+      };
       try {
+        // Pin the live writer before the first HTTP await. A sibling terminal
+        // finalizer may accept an earlier output meanwhile; late manual saves
+        // still have to update this same run's proof until recovery finishes.
+        for (const message of messagesRef.current) {
+          if (message.runId && hasRecoverableArtifactMessage(message)) retainReceipt(message.runId);
+        }
         const serverMessages = await listMessages(
           project.id,
           activeConversationId,
@@ -7956,6 +8018,32 @@ export function ProjectView({
           if (recoveredArtifactMessagesRef.current.has(message.id)) continue;
           const runId = message.runId;
           if (!runId) continue;
+          retainReceipt(runId);
+          const recoveryAuthority = canonicalProjectRunWorkspaceContextRef.current;
+          const latestAssistantMessage = () => {
+            for (let index = messagesRef.current.length - 1; index >= 0; index -= 1) {
+              const item = messagesRef.current[index];
+              // A host memory card belongs to the preceding turn; it does not
+              // supersede that run's pending artifact persistence.
+              if (item?.role === 'assistant' && !assistantMessageNeverHadARun(item)) return item;
+            }
+            return undefined;
+          };
+          const latestAssistantAtStart = latestAssistantMessage();
+          // Match the terminal reattach policy: a deliberate user selection
+          // wins over automatic recovery, without canceling file persistence.
+          const shouldOpenRecoveredArtifact = () => !userTookOverPreviewRef.current;
+          const recoveryTargetIsCurrent = () => {
+            const latestAssistant = latestAssistantMessage();
+            return mountedRef.current
+              && projectIdRef.current === project.id
+              && activeConversationIdRef.current === activeConversationId
+              && canonicalProjectRunWorkspaceContextRef.current === recoveryAuthority
+              && (projectResourceAuthorityRef.current === 'local' || projectResourceAuthorityRef.current === 'workspace')
+              && latestAssistant?.id === latestAssistantAtStart?.id
+              && latestAssistant?.runId === latestAssistantAtStart?.runId
+              && messagesRef.current.some((item) => item.id === message.id && item.runId === runId);
+          };
 
           const sourceText = message.content.trim().length > 0
             ? message.content
@@ -7996,6 +8084,7 @@ export function ProjectView({
             runId,
             projectRunWorkspaceContext,
           ).catch(() => null);
+          if (cancelled || !recoveryTargetIsCurrent()) return;
           let nextFiles = await refreshProjectFiles();
           if (cancelled) return;
           const beforeFileNames = new Set(
@@ -8016,17 +8105,23 @@ export function ProjectView({
               nextFiles,
               { minMtime: runStartedAt },
             );
+          if (!recoveryTargetIsCurrent()) return;
           if (recoveredExistingArtifact) {
             savedArtifactRef.current = recoveredExistingArtifact.name;
-            requestOpenFile(recoveredExistingArtifact.name);
+            if (shouldOpenRecoveredArtifact()) requestOpenFile(recoveredExistingArtifact.name);
           } else {
             savedArtifactRef.current = null;
             await persistArtifact(
               artifactToPersist,
               nextFiles,
               sourceText,
-              { pointerMinMtime: runStartedAt },
+              {
+                pointerMinMtime: runStartedAt,
+                isCurrent: recoveryTargetIsCurrent,
+                shouldOpen: shouldOpenRecoveredArtifact,
+              },
             );
+            if (!recoveryTargetIsCurrent()) return;
             nextFiles = await refreshProjectFiles();
             recoveredExistingArtifact = findExistingArtifactProjectFile(
               artifactToPersist,
@@ -8034,8 +8129,12 @@ export function ProjectView({
               { minMtime: runStartedAt },
             );
           }
-          if (cancelled) return;
-          const recoveredManualFileWrites = findDetachedManualFileWrites(activeConversationId, runId);
+          // Another terminal finalizer can accept an earlier output while this
+          // artifact POST is pending. That changes recovery eligibility and
+          // cleans up this effect, but the successful write still belongs to
+          // this same scoped run and must finish its message projection.
+          if (!recoveryTargetIsCurrent() || (cancelled && !recoveredExistingArtifact)) return;
+          const recoveredManualFileWrites = retainReceipt(runId);
           const manualWrites = recoveredManualFileWrites?.files ?? new Map<string, ProjectFile>();
           const agentPaths = [
             ...extractTouchedFilePathsFromEvents(message.events),
@@ -8055,7 +8154,9 @@ export function ProjectView({
             ...autoOpenArtifactOptions,
             preTurnFileNames: beforeFileNames,
           });
-          if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+          if (producedArtifactToOpen && shouldOpenRecoveredArtifact()) {
+            requestOpenFile(producedArtifactToOpen);
+          }
           // This message's persisted runStatus was already terminal (a
           // precondition of hasRecoverableArtifactMessage); when it has no
           // stored endedAt, fall back to the daemon's authoritative terminal
@@ -8066,9 +8167,10 @@ export function ProjectView({
             latestRunStatus,
             projectRunWorkspaceContext,
           );
+          if (!recoveryTargetIsCurrent()) return;
           updateMessageById(
             message.id,
-            (prev) => ({
+            (prev) => prev.runId !== runId ? prev : ({
               ...prev,
               content: sourceText,
               producedFiles: produced,
@@ -8096,6 +8198,7 @@ export function ProjectView({
           onProjectsRefresh();
         }
       } finally {
+        for (const release of releaseReceipts) release();
         recovering = false;
       }
     };
@@ -9458,6 +9561,27 @@ export function ProjectView({
             };
           });
           const finalizingRunId = currentRunId;
+          // File persistence can finish after the user has selected another
+          // preview or moved on to a new run. Recheck focus ownership at each
+          // open boundary without interrupting this run's output persistence.
+          const shouldOpenCompletedArtifact = () => {
+            let latestRunMessage: ChatMessage | undefined;
+            for (let index = messagesRef.current.length - 1; index >= 0; index -= 1) {
+              const message = messagesRef.current[index];
+              if (message?.role === 'assistant' && !assistantMessageNeverHadARun(message)) {
+                latestRunMessage = message;
+                break;
+              }
+            }
+            return mountedRef.current
+              && !userTookOverPreviewRef.current
+              && !supersededRunsRef.current.has(controller)
+              && projectIdRef.current === project.id
+              && activeConversationIdRef.current === runConversationId
+              && canonicalProjectRunWorkspaceContextRef.current.authorityKey === projectRunAuthorityKey
+              && projectResourceAuthorityRef.current !== 'denied'
+              && latestRunMessage?.id === assistantId;
+          };
           if (finalizingRunId) finalizingLocalRunIdsRef.current.add(finalizingRunId);
           if (runCommentAttachments.length > 0) {
             void patchAttachedStatuses(runCommentAttachments, 'needs_review');
@@ -9509,9 +9633,11 @@ export function ProjectView({
                   artifactPersistenceSucceeded = true;
                   savedArtifactRef.current = sameTurnWrite.name;
                   completionSelectedAutoOpen = true;
-                  requestOpenFile(sameTurnWrite.name);
+                  if (shouldOpenCompletedArtifact()) requestOpenFile(sameTurnWrite.name);
                 } else {
-                  const persistence = await persistArtifact(artifactToPersist, nextFiles, finalText);
+                  const persistence = await persistArtifact(artifactToPersist, nextFiles, finalText, {
+                    shouldOpen: shouldOpenCompletedArtifact,
+                  });
                   if (persistence.ok) artifactPersistenceSucceeded = true;
                   else artifactPersistenceError = persistence.error;
                   nextFiles = await refreshProjectFiles({ fresh: true });
@@ -9597,7 +9723,9 @@ export function ProjectView({
               );
               if (producedArtifactToOpen) {
                 completionSelectedAutoOpen = true;
-                requestOpenTurnArtifacts(turnArtifacts.open, producedArtifactToOpen);
+                if (shouldOpenCompletedArtifact()) {
+                  requestOpenTurnArtifacts(turnArtifacts.open, producedArtifactToOpen);
+                }
               }
               const deliveryCandidate: ChatMessage = {
                 ...latestAssistantMsg,
