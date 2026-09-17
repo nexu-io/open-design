@@ -47,6 +47,7 @@ export function useProjectDetail(
   const [loading, setLoading] = useState(!initialDetailCanSeed);
   const [error, setError] = useState<Error | null>(null);
   const initialDetailConsumedRef = useRef(false);
+  const requestSeqRef = useRef(0);
   const boundWorkspaceId =
     typeof persistedProjectWorkspaceId === 'string'
       ? persistedProjectWorkspaceId.trim()
@@ -64,12 +65,15 @@ export function useProjectDetail(
       : 'none';
 
   const fetchOnce = useCallback(
-    async (signal?: AbortSignal) => {
+    async () => {
+      const requestId = ++requestSeqRef.current;
       setLoading(true);
       setError(null);
       if (boundWorkspaceId && authorityKey === 'none') {
-        setError(new Error(`GET /api/projects/${projectId} requires exact workspace authority`));
-        setLoading(false);
+        if (requestId === requestSeqRef.current) {
+          setError(new Error(`GET /api/projects/${projectId} requires exact workspace authority`));
+          setLoading(false);
+        }
         return;
       }
       try {
@@ -82,13 +86,12 @@ export function useProjectDetail(
                 },
               }
             : {}),
-          signal,
         });
         if (!resp.ok) {
           throw new Error(`GET /api/projects/${projectId} → HTTP ${resp.status}`);
         }
         const body = (await resp.json()) as Partial<ProjectDetailResponse>;
-        if (signal?.aborted) return;
+        if (requestId !== requestSeqRef.current) return;
         const nextProject = body.project ?? null;
         setProject(nextProject);
         const reported = typeof body.resolvedDir === 'string' ? body.resolvedDir : null;
@@ -98,10 +101,10 @@ export function useProjectDetail(
             : null;
         setResolvedDir(reported ?? fallback);
       } catch (err) {
-        if (signal?.aborted) return;
+        if (requestId !== requestSeqRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
-        if (!signal?.aborted) setLoading(false);
+        if (requestId === requestSeqRef.current) setLoading(false);
       }
     },
     [
@@ -118,9 +121,10 @@ export function useProjectDetail(
       initialDetailConsumedRef.current = true;
       return;
     }
-    const controller = new AbortController();
-    void fetchOnce(controller.signal);
-    return () => controller.abort();
+    void fetchOnce();
+    return () => {
+      requestSeqRef.current += 1;
+    };
   }, [fetchOnce, initialDetailCanSeed]);
 
   const refresh = useCallback(() => fetchOnce(), [fetchOnce]);

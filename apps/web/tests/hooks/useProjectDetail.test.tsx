@@ -21,6 +21,14 @@ function mockFetchOnce(body: unknown, init?: { ok?: boolean; status?: number }) 
   });
 }
 
+function createDeferredResponse() {
+  let resolve!: (value: Response) => void;
+  const promise = new Promise<Response>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
 function teamContext(): WorkspaceCollabContext {
   return {
     workspaceId: 'workspace-a',
@@ -167,5 +175,56 @@ describe('useProjectDetail', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error?.message).toContain('workspace authority');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not wire an abort signal into the cleanup-sensitive request', () => {
+    let capturedSignal: AbortSignal | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      capturedSignal = init?.signal as AbortSignal | undefined;
+      return new Promise<Response>(() => {});
+    });
+
+    const { unmount } = renderHook(() => useProjectDetail('p5'));
+    unmount();
+
+    expect(capturedSignal).toBeUndefined();
+  });
+
+  it('ignores a stale response after the project id changes', async () => {
+    const p1 = createDeferredResponse();
+    const p2 = createDeferredResponse();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      return String(input).includes('/p1') ? p1.promise : p2.promise;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ projectId }) => useProjectDetail(projectId),
+      { initialProps: { projectId: 'p1' } },
+    );
+
+    rerender({ projectId: 'p2' });
+
+    p1.resolve(
+      new Response(
+        JSON.stringify({
+          project: { id: 'p1', name: 'Old', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 },
+          resolvedDir: '/tmp/old',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    p2.resolve(
+      new Response(
+        JSON.stringify({
+          project: { id: 'p2', name: 'New', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 },
+          resolvedDir: '/tmp/new',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.project?.id).toBe('p2');
+    expect(result.current.resolvedDir).toBe('/tmp/new');
   });
 });

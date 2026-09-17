@@ -607,7 +607,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await expect(sendButton).toBeEnabled({ timeout: T.medium });
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-    sendButton.evaluate((button: HTMLButtonElement) => button.click()),
+    input.press('Enter'),
   ]);
 }
 

@@ -181,7 +181,10 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
     examplePrompt:
       'Entwerfen Sie ‚mutuals‘ — eine Dating-Site für X-Poster. Tägliches Digest-Dashboard mit Statistiken, Balkendiagramm für gegenseitige Matches und Community-Ticker.',
   },
-  'design-brief': {},
+  'design-brief': {
+    description:
+      'Wandelt ein strukturiertes Design-Briefing oder eine natürliche Beschreibung in eine konkrete DESIGN.md-Spezifikation um, inklusive Palette, Typografie, Layout, Stimmung, Dichte und Einschränkungen.',
+  },
   'digital-eguide': {
     examplePrompt:
       'Entwerfen Sie ‚The Creator\'s Style & Format Guide‘ — Coverseite und eine Innenseite für eine Lifestyle-Creator-Brand.',
