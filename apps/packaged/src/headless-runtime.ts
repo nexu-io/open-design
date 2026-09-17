@@ -1,4 +1,6 @@
-import { mkdir } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir, readlink, rename, rm, symlink } from "node:fs/promises";
+import { basename, join, resolve, sep } from "node:path";
 
 import {
   APP_KEYS,
@@ -125,11 +127,49 @@ export function parsePackagedHeadlessRequest(
   return { headless: true, mcpInstallAgent: agent };
 }
 
-export function resolvePackagedMcpBootstrapLaunch(options: {
+function macAppBundleForExecutable(executablePath: string): string | null {
+  const marker = `${sep}Contents${sep}MacOS${sep}`;
+  const markerIndex = executablePath.lastIndexOf(marker);
+  if (markerIndex === -1) return null;
+  const bundlePath = executablePath.slice(0, markerIndex);
+  return bundlePath.endsWith(".app") ? bundlePath : null;
+}
+
+async function publishActiveMacAppAlias(
+  launcherNamespaceRoot: string,
+  appBundlePath: string,
+): Promise<string | null> {
+  const bundle = await lstat(appBundlePath).catch(() => null);
+  if (bundle == null || !bundle.isDirectory()) return null;
+
+  const activeRoot = join(launcherNamespaceRoot, "active");
+  const aliasPath = join(activeRoot, basename(appBundlePath));
+  const existing = await lstat(aliasPath).catch(() => null);
+  if (existing != null && !existing.isSymbolicLink()) return null;
+  if (existing?.isSymbolicLink()) {
+    const currentTarget = await readlink(aliasPath).catch(() => null);
+    if (currentTarget != null && resolve(activeRoot, currentTarget) === resolve(appBundlePath)) {
+      return aliasPath;
+    }
+  }
+
+  await mkdir(activeRoot, { recursive: true });
+  const pendingAliasPath = join(activeRoot, `.${basename(appBundlePath)}.${randomUUID()}`);
+  try {
+    await symlink(appBundlePath, pendingAliasPath, "dir");
+    await rename(pendingAliasPath, aliasPath);
+  } finally {
+    await rm(pendingAliasPath, { force: true });
+  }
+  return aliasPath;
+}
+
+export async function resolvePackagedMcpBootstrapLaunch(options: {
   currentExecutablePath?: string;
   installedLaunchPath: string | null;
+  launcherNamespaceRoot?: string;
   platform?: NodeJS.Platform;
-}): PackagedMcpBootstrapLaunch {
+}): Promise<PackagedMcpBootstrapLaunch> {
   const platform = options.platform ?? process.platform;
   const currentExecutablePath =
     options.currentExecutablePath ?? process.execPath;
@@ -137,12 +177,17 @@ export function resolvePackagedMcpBootstrapLaunch(options: {
     platform === "darwin"
     && options.installedLaunchPath?.endsWith(".app")
   ) {
+    const activeAppBundle = macAppBundleForExecutable(currentExecutablePath);
+    const launchPath = activeAppBundle != null && options.launcherNamespaceRoot != null
+      ? await publishActiveMacAppAlias(options.launcherNamespaceRoot, activeAppBundle)
+        .catch(() => null)
+      : null;
     return {
       command: "/usr/bin/open",
       args: [
         "-g",
         "-j",
-        options.installedLaunchPath,
+        launchPath ?? options.installedLaunchPath,
         "--args",
         "--headless",
       ],
@@ -184,8 +229,9 @@ export async function runPackagedHeadless(
   };
   const mcpBootstrap =
     options.mcpBootstrapLaunch
-    ?? resolvePackagedMcpBootstrapLaunch({
+    ?? await resolvePackagedMcpBootstrapLaunch({
       installedLaunchPath: launcherRuntime.installedLaunchPath,
+      launcherNamespaceRoot: launcherRuntime.launcherPaths.namespaceRoot,
     });
 
   await mkdir(paths.runtimeRoot, { recursive: true });
