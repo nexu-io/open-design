@@ -49,15 +49,14 @@ export const AUTO_COMPACTION_FALLBACK_WINDOW_TOKENS = 200_000;
  * metadata (ACP `findKnownModel` only covers ACP models), and LiteLLM keeps
  * one entry per provider path for thousands of models.
  *
- * Where LiteLLM is wrong for our usage, CONTEXT_WINDOW_OVERRIDES wins.
+ * Entries below cover ids the catalog does not track under any provider path;
+ * their windows are measured against the gateway that serves them. Without an
+ * entry such an id falls through to the conservative 128K family floor, which
+ * makes compaction fire roughly eight times too early.
  */
 const CONTEXT_WINDOW_OVERRIDES: Record<string, number> = {
-  // LiteLLM lists 1M for DeepSeek v4, but the official spec (and the
-  // settings shipped with this app) document 384K. Stay conservative so
-  // compaction fires before the real ceiling. Keys are normalized model
-  // ids (see normalizeModelId) and matched on the normalized needle.
-  deepseekv4pro: 393_216,
-  deepseekv4flash: 393_216,
+  deepseekv41flash: 1_048_576,
+  glm52: 1_048_576,
 };
 
 const LITELLM_CONTEXT_WINDOWS = (litellmData.contextWindows ?? {}) as Record<
@@ -116,6 +115,12 @@ function normalizeModelId(id: string): string {
   return id.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/** `xdf/deepseek-v4.1-flash` → `deepseek-v4.1-flash`; provider-less ids as-is. */
+function bareModelId(id: string): string {
+  const slash = id.lastIndexOf('/');
+  return slash >= 0 && slash + 1 < id.length ? id.slice(slash + 1) : id;
+}
+
 let litellmNormalizedIndex: Map<string, number> | null = null;
 
 function litellmNormalIndex(): Map<string, number> {
@@ -137,19 +142,23 @@ function lookupLitellmContextWindow(model: string): number | undefined {
   const raw = model.trim();
   if (!raw) return undefined;
 
+  // API-mode selections arrive as `provider/model` (`xdf/deepseek-v4.1-flash`)
+  // while the catalog keys the same model under other provider paths, so the
+  // bare model id gets its own pass.
+  const bare = bareModelId(raw);
+  for (const candidate of bare === raw ? [raw] : [raw, bare]) {
+    const hit = lookupLitellmCandidate(candidate);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
+function lookupLitellmCandidate(candidate: string): number | undefined {
   // Exact, case-insensitive raw key.
-  const exact = LITELLM_CONTEXT_WINDOWS[raw.toLowerCase()];
+  const exact = LITELLM_CONTEXT_WINDOWS[candidate.toLowerCase()];
   if (Number.isFinite(exact) && (exact as number) > 0) return exact;
 
-  // Strip a leading provider path (`openai/gpt-5.2` → `gpt-5.2`) and retry.
-  const slash = raw.lastIndexOf('/');
-  if (slash >= 0) {
-    const tail = raw.slice(slash + 1).toLowerCase();
-    const tailHit = LITELLM_CONTEXT_WINDOWS[tail];
-    if (Number.isFinite(tailHit) && (tailHit as number) > 0) return tailHit;
-  }
-
-  const norm = normalizeModelId(raw);
+  const norm = normalizeModelId(candidate);
   const index = litellmNormalIndex();
   const exactNorm = index.get(norm);
   if (exactNorm !== undefined) return exactNorm;
@@ -189,7 +198,7 @@ export function resolveModelContextWindowTokens(agentId: string, model?: string 
     if (direct) return direct;
   }
   if (model) {
-    const override = CONTEXT_WINDOW_OVERRIDES[normalizeModelId(model)];
+    const override = CONTEXT_WINDOW_OVERRIDES[normalizeModelId(bareModelId(model))];
     if (override) return override;
     const litellm = lookupLitellmContextWindow(model);
     if (litellm !== undefined) return litellm;

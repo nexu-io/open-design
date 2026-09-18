@@ -86,8 +86,17 @@ describe('resolveModelContextWindowTokens', () => {
     expect(resolveModelContextWindowTokens('google-gemini-api', 'gemini-3-flash')).toBe(1_048_576);
     // Ids the catalog does not track fall through to the prefix table.
     expect(resolveModelContextWindowTokens('google-gemini-api', 'gemini-9-future')).toBe(1_000_000);
-    // Local override beats the catalog (LiteLLM lists 1M for DeepSeek v4).
-    expect(resolveModelContextWindowTokens('byok-opencode', 'deepseek-v4-pro')).toBe(393_216);
+    // Provider-prefixed gateway ids resolve through the bare model id: the
+    // catalog tracks the whole DeepSeek v4 line at 1M behind other providers.
+    expect(resolveModelContextWindowTokens('deepseek-harness', 'xdf/deepseek-v4.1-flash')).toBe(
+      1_048_576,
+    );
+    expect(resolveModelContextWindowTokens('deepseek-harness', 'xdf/deepseek-v4-flash')).toBe(
+      1_000_000,
+    );
+    expect(resolveModelContextWindowTokens('deepseek-harness', 'xdf/deepseek-v4-pro')).toBe(
+      1_000_000,
+    );
   });
 
   it('falls back for unknown ids', () => {
