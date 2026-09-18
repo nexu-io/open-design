@@ -18,7 +18,7 @@ overrides:
   undici@^6: 6.28.0
   undici@^7: 7.29.0
   yaml: 2.9.0
-  '@powerformer/vela-cli-darwin-arm64': file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz
+  '@powerformer/vela-cli-darwin-arm64': file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.harness-align.g615dd7e.tgz
   '@deepseek-ai/dsh-llm-pi-ai>@earendil-works/pi-ai': 0.85.1
   '@deepseek-ai/dsh-subprocess-local>koffi': 3.2.1
 
@@ -912,8 +912,8 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: file:../../vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz
-        version: file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz(33407bcecf845d02be1d6c6a5c000c56)
+        specifier: file:../../vendor/vela/powerformer-vela-cli-0.0.1-test.harness-align.g615dd7e.tgz
+        version: file:vendor/vela/powerformer-vela-cli-0.0.1-test.harness-align.g615dd7e.tgz(0f46f8ea29f2294a3b32c6575ee9a8cd)
 
   tools/release:
     dependencies:
@@ -4836,6 +4836,16 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
+  '@modelcontextprotocol/sdk@1.30.0':
+    resolution: {integrity: sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@cfworker/json-schema': ^4.1.1
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@cfworker/json-schema':
+        optional: true
+
   '@next/env@16.2.6':
     resolution: {integrity: sha512-gd8HoHN4ufj73WmR3JmVolrpJR47ILK6LouP5xElPglaVxir6e1a7VzvTvDWkOoPXT9rkkTzyCxBu4yeZfZwcw==}
 
@@ -5109,15 +5119,15 @@ packages:
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
 
-  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz':
-    resolution: {integrity: sha512-GB6sybJzkHG5K1fgWb5+IotSRF4cQF6pmVVDB/ynaV/59cKIdPqjMYlXSt7pYAuPzTj0oqW54AwYdaBYnVeaCg==, tarball: file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz}
-    version: 0.0.1-test.latest-frozen.g15b6ad22a2d2
+  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.harness-align.g615dd7e.tgz':
+    resolution: {integrity: sha512-ZIm5vbfXxkwPfpQ6FGuPe9YkVBrF3arJm9OlA8E+c5FJEvZR73fGKm8aGaksf6w+rZVFSBVIPqnDZrpkuSIG2A==, tarball: file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.harness-align.g615dd7e.tgz}
+    version: 0.0.1-test.harness-align.g615dd7e
     cpu: [arm64]
     os: [darwin]
 
-  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz':
-    resolution: {integrity: sha512-CqA8OjlPju/nUgGU+Fr8l6z8pMvCAFIUn+v3k/axDx6jhmhgYQhc4WVxgr4UdfO5MK5OL45nfj6YGLrNNEFObw==, tarball: file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz}
-    version: 0.0.1-test.latest-frozen.g15b6ad22a2d2
+  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.harness-align.g615dd7e.tgz':
+    resolution: {integrity: sha512-FIwEeHp7rrj99k01/pqP04uZFysTDWa6/sMOZTW3VcMbYhWLDhFx7+o8k/mMm421IMS2fksHCEf0tNW9UtVm0A==, tarball: file:vendor/vela/powerformer-vela-cli-0.0.1-test.harness-align.g615dd7e.tgz}
+    version: 0.0.1-test.harness-align.g615dd7e
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -10437,7 +10447,7 @@ snapshots:
       '@deepseek-ai/dsh-llm': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
     optional: true
 
-  '@deepseek-ai/dsh-base@0.1.5-rc.1(15f692cf1da7685da427aa268ddb98f0)':
+  '@deepseek-ai/dsh-base@0.1.5-rc.1(6c2b3e002c44e437464485ea3652b0a8)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/cordis-plugin-hmr': 1.0.17(@deepseek-ai/cordis-plugin-timer@1.1.4(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/cordis@4.0.2)
@@ -10465,7 +10475,7 @@ snapshots:
       '@deepseek-ai/dsh-jobs-local': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-agent@0.1.5-rc.1(011efc65c149ca53f6af28580be53483))(@deepseek-ai/dsh-jobs@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-agent@0.1.5-rc.1(011efc65c149ca53f6af28580be53483))(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)))))(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)))(@deepseek-ai/dsh-timeout@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))
       '@deepseek-ai/dsh-llm': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-llm-deepseek': 0.1.5-rc.1(bd692f53c93e882c16866c9d82b3a28e)
-      '@deepseek-ai/dsh-llm-pi-ai': 0.1.5-rc.1(9115830afca6b1dfcbb92ca0628b5361)
+      '@deepseek-ai/dsh-llm-pi-ai': 0.1.5-rc.1(177258761d4f7d0074dd18557954a87b)
       '@deepseek-ai/dsh-llm-retry': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-agent@0.1.5-rc.1(011efc65c149ca53f6af28580be53483))(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-llm@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session-projection@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-session@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)))))(@deepseek-ai/dsh-session@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))))(@deepseek-ai/dsh-timeout@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))
       '@deepseek-ai/dsh-permission-presets': 0.1.5-rc.1(8564a373e9ae380d9cc6f50a0620053e)
       '@deepseek-ai/dsh-plan-mode': 0.1.5-rc.1(e3aca64664721eb23b78d4da40d60d8a)
@@ -11270,7 +11280,7 @@ snapshots:
       eventsource-parser: 3.1.1
     optional: true
 
-  '@deepseek-ai/dsh-llm-pi-ai@0.1.5-rc.1(9115830afca6b1dfcbb92ca0628b5361)':
+  '@deepseek-ai/dsh-llm-pi-ai@0.1.5-rc.1(177258761d4f7d0074dd18557954a87b)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-attachment': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))
@@ -11284,7 +11294,7 @@ snapshots:
       '@deepseek-ai/dsh-timeout': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-util-values': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/schemastery': 3.18.2
-      '@earendil-works/pi-ai': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
+      '@earendil-works/pi-ai': 0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - bufferutil
@@ -12724,7 +12734,7 @@ snapshots:
       zod: 4.5.4
     optional: true
 
-  '@deepseek-ai/dsh@0.1.5-rc.1(0fab24343e477389f49abf773ef74042)':
+  '@deepseek-ai/dsh@0.1.5-rc.1(c0145e201575867e099a5cf792b67322)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/cordis-plugin-hmr': 1.0.17(@deepseek-ai/cordis-plugin-timer@1.1.4(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/cordis@4.0.2)
@@ -12735,7 +12745,7 @@ snapshots:
       '@deepseek-ai/dsh-agent-instructions': 0.1.5-rc.1(807752f34fd0734d3078862d5272c964)
       '@deepseek-ai/dsh-agent-tool-presentation': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-tools@0.1.5-rc.1(42bef068bdb77cea11b81bec106cd1d1))
       '@deepseek-ai/dsh-app-boot': 0.1.5-rc.1(@deepseek-ai/cordis-plugin-group@1.0.2(@deepseek-ai/cordis-plugin-loader@1.0.3)(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/cordis-plugin-hmr@1.0.17(@deepseek-ai/cordis-plugin-timer@1.1.4(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-home-paths@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-launch-environment@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-system-prompt@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-llm@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))))
-      '@deepseek-ai/dsh-base': 0.1.5-rc.1(15f692cf1da7685da427aa268ddb98f0)
+      '@deepseek-ai/dsh-base': 0.1.5-rc.1(6c2b3e002c44e437464485ea3652b0a8)
       '@deepseek-ai/dsh-client-ui-agent-preset': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-cordis': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-cmdline': 0.1.5-rc.1(@deepseek-ai/cordis-plugin-loader@1.0.3)(@deepseek-ai/cordis@4.0.2)
@@ -12914,10 +12924,10 @@ snapshots:
       esbuild: 0.28.1
     optional: true
 
-  '@earendil-works/pi-agent-core@0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)':
+  '@earendil-works/pi-agent-core@0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)':
     dependencies:
       '@earendil-works/chord': 0.85.1
-      '@earendil-works/pi-ai': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
+      '@earendil-works/pi-ai': 0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
       '@earendil-works/pi-telemetry': 0.85.1
       diff: 8.0.4
       ignore: 7.0.5
@@ -12932,12 +12942,12 @@ snapshots:
       - zod
     optional: true
 
-  '@earendil-works/pi-ai@0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)':
+  '@earendil-works/pi-ai@0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)':
     dependencies:
       '@anthropic-ai/sdk': 0.123.0(zod@4.5.4)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
       '@earendil-works/pi-telemetry': 0.85.1
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))
       '@smithy/node-http-handler': 4.7.3
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
@@ -12953,11 +12963,11 @@ snapshots:
       - zod
     optional: true
 
-  '@earendil-works/pi-coding-agent@0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)':
+  '@earendil-works/pi-coding-agent@0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)':
     dependencies:
       '@earendil-works/chord': 0.85.1
-      '@earendil-works/pi-agent-core': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
-      '@earendil-works/pi-ai': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
+      '@earendil-works/pi-agent-core': 0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
+      '@earendil-works/pi-ai': 0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
       '@earendil-works/pi-tui': 0.85.1
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2
@@ -13582,6 +13592,20 @@ snapshots:
       - utf-8-validate
     optional: true
 
+  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))':
+    dependencies:
+      google-auth-library: 10.9.1
+      p-retry: 4.6.2
+      protobufjs: 8.4.0
+      ws: 8.21.3
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.5.4)
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+    optional: true
+
   '@hono/node-server@1.19.14(hono@4.12.34)':
     dependencies:
       hono: 4.12.34
@@ -14129,6 +14153,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@modelcontextprotocol/sdk@1.30.0(zod@4.5.4)':
+    dependencies:
+      '@hono/node-server': 2.1.1(hono@4.12.34)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.1
+      express: 5.2.1
+      express-rate-limit: 8.4.1(express@5.2.1)
+      hono: 4.12.34
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.5.4
+      zod-to-json-schema: 3.25.2(zod@4.5.4)
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   '@next/env@16.2.6': {}
 
   '@next/swc-darwin-arm64@16.2.6':
@@ -14388,15 +14435,15 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz':
+  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.harness-align.g615dd7e.tgz':
     optional: true
 
-  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz(33407bcecf845d02be1d6c6a5c000c56)':
+  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.harness-align.g615dd7e.tgz(0f46f8ea29f2294a3b32c6575ee9a8cd)':
     dependencies:
       '@anthropic-ai/claude-code': 2.1.267
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/cordis-plugin-loader': 1.0.3(@deepseek-ai/cordis@4.0.2)(node-addon-require-builtin@0.1.5)
-      '@deepseek-ai/dsh': 0.1.5-rc.1(0fab24343e477389f49abf773ef74042)
+      '@deepseek-ai/dsh': 0.1.5-rc.1(c0145e201575867e099a5cf792b67322)
       '@deepseek-ai/dsh-agent': 0.1.5-rc.1(011efc65c149ca53f6af28580be53483)
       '@deepseek-ai/dsh-agent-default-model': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-agent@0.1.5-rc.1(011efc65c149ca53f6af28580be53483))(@deepseek-ai/dsh-llm@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-settings@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))))(@deepseek-ai/schemastery@3.18.2))
       '@deepseek-ai/dsh-agent-loop': 0.1.5-rc.1(18dbf52164179c4e7ef8ea2299bce86a)
@@ -14411,7 +14458,8 @@ snapshots:
       '@deepseek-ai/dsh-invariants': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-jobs': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-agent@0.1.5-rc.1(011efc65c149ca53f6af28580be53483))(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))))
       '@deepseek-ai/dsh-llm': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
-      '@deepseek-ai/dsh-llm-pi-ai': 0.1.5-rc.1(9115830afca6b1dfcbb92ca0628b5361)
+      '@deepseek-ai/dsh-llm-pi-ai': 0.1.5-rc.1(177258761d4f7d0074dd18557954a87b)
+      '@deepseek-ai/dsh-mcp-client': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-attachment@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)))(@deepseek-ai/dsh-llm@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)))(@deepseek-ai/dsh-subprocess@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-http-proxy@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)))(@deepseek-ai/dsh-timeout@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-tools@0.1.5-rc.1(42bef068bdb77cea11b81bec106cd1d1))
       '@deepseek-ai/dsh-output-retention': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-sandbox': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-llm@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))))
       '@deepseek-ai/dsh-sdk-protocol': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-llm@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))))(@deepseek-ai/dsh-subagent@0.1.5-rc.1(47dcfb5e79994ed8e3e500870b7ad9c4))
@@ -14428,10 +14476,11 @@ snapshots:
       '@deepseek-ai/dsh-util-time': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-util-workspace-path': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-workflow': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-agent@0.1.5-rc.1(011efc65c149ca53f6af28580be53483))(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-llm@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))))
-      '@earendil-works/pi-coding-agent': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
+      '@earendil-works/pi-coding-agent': 0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.5.4)
       '@openai/codex': 0.154.0
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz'
+      '@powerformer/vela-cli-darwin-arm64': file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.harness-align.g615dd7e.tgz
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@deepseek-ai/cordis-plugin-group'
@@ -14475,7 +14524,6 @@ snapshots:
       - '@deepseek-ai/dsh-web'
       - '@deepseek-ai/dsh-workspace'
       - '@deepseek-ai/schemastery'
-      - '@modelcontextprotocol/sdk'
       - '@types/node'
       - bufferutil
       - node-addon-require-builtin

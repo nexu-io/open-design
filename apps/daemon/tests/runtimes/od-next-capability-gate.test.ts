@@ -158,7 +158,7 @@ describe('OD Next runtime capability gate', () => {
       'child_success', 'child_failure_parent_recovers',
     ]);
   });
-  it.each(['codex', 'claude', 'dsh'] as const)('admits verified AMR %s continuation without borrowing OpenCode child evidence', (runtime) => {
+  it.each(['codex', 'claude', 'dsh', 'ohmypi'] as const)('admits verified AMR %s continuation without borrowing OpenCode child evidence', (runtime) => {
     const capability = resolveBundledOdNextRuntimeCapability({
       agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.latest-frozen.g0479e8f22dd2',
       runtimeCompanionName: 'opencode', runtimeCompanionVersion: '1.18.18',
@@ -176,14 +176,15 @@ describe('OD Next runtime capability gate', () => {
   it.each([
     { runtime: 'opencode' as const, companionVersion: '1.18.30-powerformer.g92ba6a3b82b5' },
     { runtime: 'pi' as const, companionVersion: '0.85.1' },
-  ])('uses the installed new $runtime tuple with its own simple-only evidence', ({ runtime, companionVersion }) => {
+    { runtime: 'ohmypi' as const, companionVersion: 'omp/18.2.5', velaVersion: '0.0.1-test.harness-align.g3c052d0' },
+  ])('uses the installed new $runtime tuple with its own simple-only evidence', ({ runtime, companionVersion, velaVersion = '0.0.1-test.latest-frozen.g0479e8f22dd2' }) => {
     const capability = resolveBundledOdNextRuntimeCapability({
-      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.latest-frozen.g0479e8f22dd2',
+      agentId: 'amr', amrRuntime: runtime, agentCliVersion: velaVersion,
       runtimeCompanionName: runtime, runtimeCompanionVersion: companionVersion,
     });
     expect(capability.reason).toBe('capability_resolved');
     expect(capability.snapshot).toMatchObject({
-      recordedAgentCliVersion: '0.0.1-test.latest-frozen.g0479e8f22dd2',
+      recordedAgentCliVersion: velaVersion,
       recordedRuntimeCompanionName: runtime, recordedRuntimeCompanionVersion: companionVersion,
       nativeSessionContinuation: { support: 'verified' }, nativeSubagents: { support: 'unknown' },
     });
@@ -191,12 +192,15 @@ describe('OD Next runtime capability gate', () => {
     expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'complex')).toEqual({ eligible: false, reason: 'native_subagents_not_verified' });
     expect(evaluateOdNextAdmissionEligibility({ ...capability.snapshot!, agentId: 'claude' }).eligible).toBe(false);
   });
-  it('keeps direct-model execution outside OD Next until its text-artifact strategy is verified', () => {
+  it('admits direct-model continuation without claiming tools or native children', () => {
     const capability = resolveBundledOdNextRuntimeCapability({ agentId: 'amr', amrRuntime: 'none' });
-    expect(capability.reason).toBe('runtime_out_of_scope');
-    expect(capability.snapshot).toBeNull();
+    expect(capability.reason).toBe('capability_resolved');
+    expect(evaluateOdNextAdmissionEligibility(capability.snapshot!).eligible).toBe(true);
+    expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'complex').eligible).toBe(false);
+    const entry = OD_NEXT_RUNTIME_CAPABILITY_REGISTRY.find((item) => item.runtimePath === 'vela-none')!;
+    expect(entry.evidence.caseResults.find((item) => item.id === 'tool')?.outcome).toBe('unavailable');
   });
-  it.each(['opencode', 'pi', 'codex', 'claude', 'dsh', 'none'] as const)('records actual %s HTTP/ACP observations independently of declared outcomes', (runtime) => {
+  it.each(['opencode', 'pi', 'codex', 'claude', 'dsh', 'ohmypi', 'none'] as const)('records actual %s HTTP/ACP observations independently of declared outcomes', (runtime) => {
     const seed = JSON.parse(readFileSync(join(fixtureDir, `vela-${runtime}-six-local.sanitized-real-seed.json`), 'utf8'));
     const digest = `sha256:${createHash('sha256').update(JSON.stringify(seed.observations)).digest('hex')}`;
     expect(seed.recordingDigest).toBe(digest);
@@ -211,7 +215,7 @@ describe('OD Next runtime capability gate', () => {
     if (manifest) {
       expect(manifest.provenance).toMatchObject({ kind: 'sanitized_real', recordingDigest: digest });
       expect(manifest.agentCliVersion).toBe(seed.velaVersion);
-      expect(manifest.runtimeCompanionVersion).toBe(seed.companionVersion);
+      expect(manifest.runtimeCompanionVersion ?? null).toBe(seed.companionVersion);
       const entry = OD_NEXT_RUNTIME_CAPABILITY_REGISTRY.find((entry) => entry.fixtureVersion === manifest.fixtureVersion)!;
       expect(entry.evidence.caseResults).toEqual(seed.cases.map(({ caseId, outcome }: { caseId: string; outcome: string }) => ({ id: caseId, outcome })));
     }
@@ -223,15 +227,20 @@ describe('OD Next runtime capability gate', () => {
   });
 
   it('registers every reviewed tuple, Vela included', () => {
-    expect(OD_NEXT_RUNTIME_CAPABILITY_REGISTRY).toHaveLength(10);
+    // Harness-evaluation branch: VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST (the
+    // seven-path complex evidence) is excluded from the active registry so AMR
+    // opencode resolves simple-only like the other five AMR harnesses.
+    expect(OD_NEXT_RUNTIME_CAPABILITY_REGISTRY).toHaveLength(11);
     expect(OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS).toEqual([
       CODEX_0_147_0_BEST_EFFORT_MANIFEST,
       CLAUDE_2_1_233_BEST_EFFORT_MANIFEST,
       OPENCODE_1_18_18_BEST_EFFORT_MANIFEST,
-      VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
       VELA_PI_LOCAL_BEST_EFFORT_MANIFEST,
       ...VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS,
     ]);
+    expect(OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS).not.toContain(
+      VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
+    );
     const manifests = fixtureFiles.map(readFixture);
     expect(manifests.map((manifest) => manifest.runtimePath)).toEqual(
       OD_NEXT_RUNTIME_PATH_DESCRIPTORS.filter(descriptor => !('admissionMode' in descriptor)).map((descriptor) => descriptor.runtimePath),
@@ -321,41 +330,43 @@ describe('OD Next runtime capability gate', () => {
     });
   });
 
-  it('admits Vela on the native OpenCode runtime it shares with the registered OpenCode tuple', () => {
-    const seed = JSON.parse(readFileSync(
-      join(fixtureDir, 'vela-opencode-0.0.1-local-opencode-1.18.18.sanitized-real-seed.json'),
-      'utf8',
-    )) as { recordingDigest: string };
-    expect(VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST.provenance).toMatchObject({
-      kind: 'sanitized_real',
-      evidenceReview: 'open_design_best_effort',
-      recordingDigest: seed.recordingDigest,
-    });
-    expect(resolveOdNextRuntimeCapability({
+  it('resolves AMR OpenCode to the six-local simple fixture, not complex', () => {
+    // Harness-evaluation branch: the seven-path complex evidence
+    // (VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST) is defined but excluded from
+    // the active registry, so AMR opencode admits simple-only exactly like the
+    // other five AMR harnesses. This keeps the harness comparison on one
+    // execution mode and matches production, where complex is ~0.3% of tasks.
+    const sixLocalOpencode = VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS.find(
+      (manifest) => manifest.runtimePath === 'vela-opencode',
+    )!;
+    const resolved = resolveOdNextRuntimeCapability({
       agentId: 'amr',
-      agentCliVersion: '0.0.1-od-next-local',
+      agentCliVersion: sixLocalOpencode.agentCliVersion ?? null,
       runtimeCompanionName: 'opencode',
-      runtimeCompanionVersion: '1.18.18',
-      fixtureVersion: VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST.fixtureVersion,
-      fixtureManifest: VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
+      runtimeCompanionVersion: sixLocalOpencode.runtimeCompanionVersion!,
+      fixtureVersion: sixLocalOpencode.fixtureVersion,
+      fixtureManifest: sixLocalOpencode,
       capturedAt: 1,
-    })).toMatchObject({
+    });
+    expect(resolved).toMatchObject({
       includedInInitialRollout: true,
       tupleMatched: true,
-      // Vela drives the same native OpenCode runtime already registered under
-      // `native-opencode`; its Child mechanism is that runtime's, reached over
-      // the ACP extension instead of the CLI stream. Withholding the tuple did
-      // not withhold an unproven capability, it refused complex execution to an
-      // agent whose seven evidence paths all pass. Re-pin `agentCliVersion`
-      // once Vela publishes a build with a stable producer version.
       reason: 'capability_resolved',
       snapshot: {
         runtimePath: 'vela-opencode',
-        agentCliVersion: '0.0.1-od-next-local',
-        runtimeCompanionVersion: '1.18.18',
         nativeSessionContinuation: { support: 'verified' },
-        nativeSubagents: { support: 'verified', evidenceLevel: 'L2' },
+        nativeSubagents: { support: 'unknown' },
       },
+    });
+    // The planner is told complex is unavailable (feeds nativeChildLifecycleVerified).
+    expect(evaluateOdNextExecutionEligibility(resolved.snapshot!, 'complex')).toEqual({
+      eligible: false,
+      reason: 'native_subagents_not_verified',
+    });
+    // But OD Next still admits opencode in simple mode.
+    expect(evaluateOdNextAdmissionEligibility(resolved.snapshot!)).toEqual({
+      eligible: true,
+      reason: 'eligible',
     });
   });
 

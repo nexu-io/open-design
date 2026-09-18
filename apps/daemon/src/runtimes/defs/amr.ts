@@ -697,6 +697,8 @@ export const amrAgentDef = {
   // Once the ACP handshake has completed and session/prompt is waiting on the
   // provider, transport/status heartbeats must not leave the UI in Preparing
   // indefinitely. Two minutes leaves conservative provider-startup headroom
-  // while still bounding the user's wait and one safe same-run retry.
+  // while still bounding the user's wait and one safe same-run retry. This
+  // 2-minute window is the production baseline and applies to every AMR
+  // runtime; other agents keep their own def value (no watchdog when unset).
   firstOutputTimeoutMs: 2 * 60 * 1000,
 } satisfies RuntimeAgentDef;

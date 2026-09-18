@@ -58,6 +58,52 @@ describe('same-run retry orphaned process group', () => {
     restoreEnv(originalEnv);
   });
 
+  it('lets the old process finish shutdown output and release its session before retry', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-retry-session-cleanup-'));
+    const bin = path.join(binDir, 'claude-cleanup');
+    const lease = path.join(binDir, 'session-lease');
+    const attempt = path.join(binDir, 'attempt');
+    await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const lease = ${JSON.stringify(lease)};
+const attempt = ${JSON.stringify(attempt)};
+if (process.argv.includes('--version')) { console.log('claude-code 1.0.0'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('Usage: claude -p'); process.exit(0); }
+if (!process.argv.includes('--session-id') && !process.argv.includes('--resume')) { console.log('{"entries":[]}'); process.exit(0); }
+if (!fs.existsSync(attempt)) {
+  fs.writeFileSync(attempt, '1');
+  fs.writeFileSync(lease, 'held');
+  process.on('SIGTERM', () => {
+    // Real CLIs can flush a final response before deferred session cleanup.
+    // Closing the parent's pipe first turns this into EPIPE/SIGPIPE.
+    fs.writeSync(1, JSON.stringify({ type: 'system', subtype: 'shutdown' }) + '\\n');
+    fs.unlinkSync(lease);
+    process.exit(0);
+  });
+  setInterval(() => {}, 1000);
+} else {
+  if (fs.existsSync(lease)) { console.error('session is still leased'); process.exit(1); }
+  console.log(JSON.stringify({ type: 'assistant', message: { id: 'recovered', content: [{ type: 'text', text: 'Recovered after cleanup.' }], stop_reason: 'end_turn' } }));
+  setTimeout(() => process.exit(0), 20);
+}
+`, 'utf8');
+    await chmod(bin, 0o755);
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '1200';
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude', agentCliEnv: { claude: { CLAUDE_BIN: bin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+    expect((await createAndWaitForRun(started.url)).status).toBe('succeeded');
+  });
+
   it('kills the failed attempt’s descendants when the same-run retry tears it down', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-retry-orphan-bin-'));
     const { bin: fakeClaude, grandchildPidPath } = await writeOrphaningClaude(binDir, 'claude-orphan');
