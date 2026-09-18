@@ -922,3 +922,176 @@ describe("Test campaign realtime controller regressions", () => {
 	});
 
 });
+
+describe("Test runtime context generation", () => {
+	const staleUpdatedAt = "2030-01-01T00:00:00.000Z";
+	const freshUpdatedAt = "2030-01-01T00:00:05.000Z";
+	const contextWith = (updatedAt: string) => ({ ...runtime().testContext, updatedAt });
+	const decisionWith = (updatedAt: string) => ({
+		...runtime(),
+		testContext: { ...runtime().testContext, updatedAt, scheduleState: "active" as const },
+	});
+	const contextRequests = (fetchMock: ReturnType<typeof vi.fn>) =>
+		fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/test-runtime/context")).length;
+	function recordDiagnostics() {
+		const codes: string[] = [];
+		const listener = (event: Event) => codes.push((event as CustomEvent).detail.code);
+		document.addEventListener("touchpointdiagnostic", listener);
+		return { codes, stop: () => document.removeEventListener("touchpointdiagnostic", listener) };
+	}
+	/** The server's context and decisions each follow their own mutable generation. */
+	function serverWith(state: { context: () => Response; decisionUpdatedAt: () => string }) {
+		return vi.fn(async (url: string, init?: RequestInit) => {
+			if (url.includes("deployments")) return fetches()(url);
+			if (init?.method === "POST") return state.context();
+			return new Response(JSON.stringify(decisionWith(state.decisionUpdatedAt())));
+		});
+	}
+	async function selectDeployment() {
+		render(<TestCampaignHarness authenticated />);
+		await screen.findByTestId("touchpoint-test-selector");
+		fireEvent.change(screen.getByLabelText("Test activity"), { target: { value: "deployment-1" } });
+	}
+
+	it("refetches a context the server replaced before the first decision and mounts", async () => {
+		const contexts = [staleUpdatedAt, freshUpdatedAt];
+		const fetchMock = serverWith({
+			context: () => new Response(JSON.stringify(contextWith(contexts.shift() ?? freshUpdatedAt))),
+			decisionUpdatedAt: () => freshUpdatedAt,
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		await selectDeployment();
+		await screen.findByRole("dialog");
+		expect(contextRequests(fetchMock)).toBe(2);
+	});
+
+	it("follows a context generation change while a campaign is displayed", async () => {
+		let generation = staleUpdatedAt;
+		const diagnostics = recordDiagnostics();
+		const fetchMock = serverWith({
+			context: () => new Response(JSON.stringify(contextWith(generation))),
+			decisionUpdatedAt: () => generation,
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		await selectDeployment();
+		await screen.findByRole("dialog");
+		generation = freshUpdatedAt;
+		window.dispatchEvent(new Event("focus"));
+		await waitFor(() => expect(contextRequests(fetchMock)).toBe(2));
+		await act(async () => {});
+		expect(screen.getByRole("dialog")).toBeInTheDocument();
+		expect(diagnostics.codes).not.toContain("touchpoint_decision_mismatch");
+		diagnostics.stop();
+	});
+
+	it("publishes the refreshed context and decisions instead of renewing the stale generation", async () => {
+		let generation = staleUpdatedAt;
+		let published: ReturnType<typeof useTestRuntime> = null;
+		function Probe() {
+			published = useTestRuntime();
+			return null;
+		}
+		const fetchMock = serverWith({
+			context: () => new Response(JSON.stringify(contextWith(generation))),
+			decisionUpdatedAt: () => generation,
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		render(<Probe />);
+		await selectDeployment();
+		await screen.findByRole("dialog");
+		await waitFor(() => expect(published?.context.updatedAt).toBe(staleUpdatedAt));
+		generation = freshUpdatedAt;
+		window.dispatchEvent(new Event("focus"));
+		await waitFor(() => expect(published?.context.updatedAt).toBe(freshUpdatedAt));
+		const decision = published!.decisions.get("opend.home.campaign-modal");
+		expect(decision?.testContext.updatedAt).toBe(freshUpdatedAt);
+		expect(published!.isAuthorized()).toBe(true);
+		expect(screen.getByRole("dialog")).toBeInTheDocument();
+	});
+
+	it("refetches at most once per attempt and stays closed while decisions keep disagreeing", async () => {
+		const diagnostics = recordDiagnostics();
+		const fetchMock = serverWith({
+			context: () => new Response(JSON.stringify(contextWith(staleUpdatedAt))),
+			decisionUpdatedAt: () => freshUpdatedAt,
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		await selectDeployment();
+		await waitFor(() => expect(diagnostics.codes).toContain("touchpoint_decision_mismatch"));
+		expect(contextRequests(fetchMock)).toBe(2);
+		expect(screen.queryByRole("dialog")).toBeNull();
+		diagnostics.stop();
+	});
+
+	it("fails closed when the server refuses the replacement context", async () => {
+		const diagnostics = recordDiagnostics();
+		const responses = [
+			() => new Response(JSON.stringify(contextWith(staleUpdatedAt))),
+			() => new Response(JSON.stringify({ error: "test_deployment_withdrawn" }), { status: 410 }),
+		];
+		const fetchMock = serverWith({
+			context: () => (responses.shift() ?? responses[0]!)(),
+			decisionUpdatedAt: () => freshUpdatedAt,
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		await selectDeployment();
+		await waitFor(() => expect(diagnostics.codes).toContain("realtime_test_runtime_required"));
+		expect(contextRequests(fetchMock)).toBe(2);
+		expect(screen.queryByRole("dialog")).toBeNull();
+		diagnostics.stop();
+	});
+
+	it("does not refetch the context for a mismatch the context cannot explain", async () => {
+		const diagnostics = recordDiagnostics();
+		const fetchMock = fetches({ ...runtime(), deploymentId: "deployment-other" });
+		vi.stubGlobal("fetch", fetchMock);
+		await selectDeployment();
+		await waitFor(() => expect(diagnostics.codes).toContain("touchpoint_decision_mismatch"));
+		expect(contextRequests(fetchMock)).toBe(1);
+		expect(screen.queryByRole("dialog")).toBeNull();
+		diagnostics.stop();
+	});
+
+	it("shares one context refetch across every placement that saw the old generation", async () => {
+		const context = { deploymentId: "deployment-four", scenario: "realtime" as const };
+		const deployment = {
+			id: "deployment-four",
+			activityId: "activity-four",
+			snapshotHash: "sha256:four-snapshot",
+			snapshot: {
+				contentVersionId: "version-four-placement",
+				manifestHash: digest(JSON.stringify(allTestManifest)),
+				artifactHash: "sha256:four-artifact",
+				placementKeys: [...allTestPlacements],
+			},
+		};
+		((globalThis as CampaignHostGlobal).__openDesignCampaignTestHost as { client: { osLocale: string } }).client.osLocale = "zh-CN";
+		const contexts = [staleUpdatedAt, freshUpdatedAt];
+		const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+			if (url.includes("acceptances")) return new Response(JSON.stringify({ id: "acceptance" }), { status: 201 });
+			if (url.includes("/production-runtime")) return new Response(null, { status: 404 });
+			if (init?.method === "POST")
+				return new Response(JSON.stringify({ ...context, updatedAt: contexts.shift() ?? freshUpdatedAt }), { status: 201 });
+			if (url.includes("/deployments")) return new Response(JSON.stringify({ deployments: [deployment] }));
+			const placementKey = new URL(url, "http://127.0.0.1").searchParams.get("placementKey") as (typeof allTestPlacements)[number];
+			return new Response(JSON.stringify({
+				...runtime(fourPlacementContent(placementKey)),
+				deploymentId: deployment.id,
+				placementKey,
+				activityId: deployment.activityId,
+				snapshotHash: deployment.snapshotHash,
+				artifactHash: deployment.snapshot.artifactHash,
+				manifestHash: deployment.snapshot.manifestHash,
+				requiredCapabilities: placementKey === "opend.home.campaign-modal" ? ["close", "static-action"] : placementKey === "opend.home.account-badge" ? ["static-action"] : ["hover", "static-action"],
+				testContext: { ...context, updatedAt: freshUpdatedAt, scheduleState: "active" as const },
+			}));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({ entryUrl: "blob:test-four-placement", resourceUrls: new Map(), dispose: vi.fn() } as never);
+		render(<><TestRuntimeProbe /><TestCampaignHarness authenticated /></>);
+		await screen.findByTestId("touchpoint-test-selector");
+		fireEvent.change(screen.getByLabelText("Test activity"), { target: { value: deployment.id } });
+		await waitFor(() => expect(screen.getByTestId("test-runtime-decision-count")).toHaveTextContent("4"));
+		expect(contextRequests(fetchMock)).toBe(2);
+	});
+});

@@ -123,6 +123,36 @@ export function isSelectedTestCampaignDecision(
 	);
 }
 
+/**
+ * Raised when a decision was issued under a different context generation than
+ * the one this client holds. It keeps the mismatch diagnostic code, so a
+ * context that is still stale after its one refetch reports as before.
+ */
+class StaleTestContextError extends Error {
+	constructor() {
+		super("touchpoint_decision_mismatch");
+	}
+}
+
+/**
+ * A decision that names the selected deployment and scenario under another
+ * context generation proves only that the client's context is out of date, not
+ * that the decision is foreign. Every other disagreement remains a mismatch and
+ * never triggers a context refetch.
+ */
+function isContextGenerationDrift(
+	decision: TestDecision,
+	context: TestContext,
+): boolean {
+	return (
+		decision.deploymentId === context.deploymentId &&
+		decision.testContext?.deploymentId === context.deploymentId &&
+		decision.testContext.scenario === context.scenario &&
+		(decision.testContext.updatedAt !== context.updatedAt ||
+			decision.testContext.testerMemberId !== context.testerMemberId)
+	);
+}
+
 /** Only the current live, authorized Test snapshot can navigate a registered action. */
 export async function dispatchTestCampaignAction(
 	decision: TestDecision,
@@ -472,40 +502,65 @@ export function TestCampaignModal({
 			locale,
 		]);
 		let context: TestContext | null = null;
+		let contextRequest: Promise<TestContext | null> | null = null;
 		let windowBounds: Readonly<{ startsAt: number; endsAt: number }> | null =
 			null;
+		/** Resolves `null` for a context response this selection cannot use. */
+		const fetchContext = async (signal: AbortSignal): Promise<TestContext | null> => {
+			const response = await fetch("/api/touchpoints/test-runtime/context", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					deploymentId: selected.id,
+					scenario: "realtime",
+				}),
+				signal,
+			});
+			if (!response.ok) throw new Error("realtime_test_runtime_required");
+			const next = (await response.json()) as TestContext;
+			return next &&
+				next.deploymentId === selected.id &&
+				next.scenario === "realtime" &&
+				!("simulatedAt" in next) &&
+				validIso(next.updatedAt)
+				? next
+				: null;
+		};
+		/**
+		 * Single-flight: every caller that needs a context while one is being
+		 * fetched shares that request, and only the in-flight request installs
+		 * its result.
+		 */
+		const acquireContext = (signal: AbortSignal): Promise<TestContext | null> => {
+			if (!contextRequest) {
+				const request: Promise<TestContext | null> = fetchContext(signal)
+					.then((next) => {
+						if (contextRequest === request) context = next;
+						return next;
+					})
+					.finally(() => {
+						if (contextRequest === request) contextRequest = null;
+					});
+				contextRequest = request;
+			}
+			return contextRequest;
+		};
 		const load = async (
 			signal: AbortSignal,
 			active: TestRuntimeValue | null,
 		): Promise<TouchpointLifecycleLoad<TestRuntimeValue>> => {
 			const current = () => !signal.aborted;
 			if (!placements.length) return { kind: "clear" };
-			if (!context) {
-				const response = await fetch("/api/touchpoints/test-runtime/context", {
-					method: "POST",
-					headers: { "content-type": "application/json" },
-					body: JSON.stringify({
-						deploymentId: selected.id,
-						scenario: "realtime",
-					}),
-					signal,
-				});
+			// A held context must not add a turn before the placement requests start.
+			let selectedContext: TestContext;
+			if (context) selectedContext = context;
+			else {
+				const acquired = await acquireContext(signal);
 				if (!current()) return { kind: "retain" };
-				if (!response.ok) throw new Error("realtime_test_runtime_required");
-				const next = (await response.json()) as TestContext;
-				if (!current()) return { kind: "retain" };
-				if (
-					!next ||
-					next.deploymentId !== selected.id ||
-					next.scenario !== "realtime" ||
-					"simulatedAt" in next ||
-					!validIso(next.updatedAt)
-				)
-					return { kind: "clear" };
-				context = next;
+				if (!acquired) return { kind: "clear" };
+				selectedContext = acquired;
 			}
-			const selectedContext = context;
-			const loaded = await Promise.all(
+			const loadPlacements = (selectedContext: TestContext) => Promise.all(
 				placements.map(async (placementKey) => {
 					const query = new URLSearchParams({
 						deploymentId: selected.id,
@@ -529,7 +584,9 @@ export function TestCampaignModal({
 							placementKey,
 						)
 					)
-						throw new Error("touchpoint_decision_mismatch");
+						throw isContextGenerationDrift(decision, selectedContext)
+							? new StaleTestContextError()
+							: new Error("touchpoint_decision_mismatch");
 					if (
 						!validIso(decision.serverTime) ||
 						!validIso(decision.startsAt) ||
@@ -584,6 +641,20 @@ export function TestCampaignModal({
 					};
 				}),
 			);
+			let loaded: Awaited<ReturnType<typeof loadPlacements>>;
+			try {
+				loaded = await loadPlacements(selectedContext);
+			} catch (error) {
+				if (!(error instanceof StaleTestContextError) || !current()) throw error;
+				// The server moved to a new context generation. Refetch it once for
+				// this attempt; a server refusal throws and never restores the old one.
+				if (context === selectedContext) context = null;
+				const refreshed = context ?? (await acquireContext(signal));
+				if (!current()) return { kind: "retain" };
+				if (!refreshed) return { kind: "clear" };
+				selectedContext = refreshed;
+				loaded = await loadPlacements(selectedContext);
+			}
 			if (!current()) return { kind: "retain" };
 			const decisions = loaded.filter(
 				(item): item is NonNullable<typeof item> => item !== null,
@@ -623,8 +694,10 @@ export function TestCampaignModal({
 				};
 			const validForMs = Math.min(...decisions.map((item) => item.validForMs));
 			if (validForMs <= 0) return { kind: "clear" };
+			// A refreshed context is a new authorization generation: publish its
+			// decisions under a new lease key instead of renewing the stale session.
 			const session =
-				active?.selectionKey === selectionKey
+				active?.selectionKey === selectionKey && active.context === selectedContext
 					? active
 					: Object.freeze<TestRuntimeValue>({
 							selectionKey,
@@ -637,7 +710,11 @@ export function TestCampaignModal({
 			return {
 				kind: "decision",
 				value: session,
-				key: selectionKey,
+				key: JSON.stringify([
+					selectionKey,
+					selectedContext.updatedAt,
+					selectedContext.testerMemberId ?? null,
+				]),
 				validForMs,
 			};
 		};
