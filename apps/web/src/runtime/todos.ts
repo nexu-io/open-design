@@ -1,10 +1,11 @@
-import { isTodoWriteToolName } from '@open-design/contracts';
+import { isTodoWriteToolName, splitOnOdCards } from '@open-design/contracts';
 import {
   eventsEndedByAskingUser,
   todoStatusIsUnfinished,
   turnEndedByAskingUser,
 } from '@open-design/contracts';
-import type { AgentEvent } from '../types';
+import type { AgentEvent, ChatMessage } from '../types';
+import { assistantMessageNeverHadARun } from './chat/host-authored-message';
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'stopped';
 
@@ -146,8 +147,9 @@ function messageEndedByAskingUser(
 /**
  * The task list the CURRENT turn declared — the plan pill's one source.
  *
- * It stops at the newest assistant message and answers from that message alone:
- * a turn that re-listed nothing returns `[]`, and the pill is gone. That is the
+ * It stops at the newest assistant turn or user request, skipping standalone
+ * host memory notifications only within that request. A turn that re-listed
+ * nothing returns `[]`, and the pill is gone. That is the
  * same rule the transcript card has always followed (D24, every turn shows only
  * its own content), and it is deliberate rather than incidental — recall hands
  * an earlier plan back to the AGENT as a fact it decides about, and the client
@@ -167,15 +169,43 @@ function messageEndedByAskingUser(
  * "which snapshot is this turn's" cannot be answered two ways.
  */
 export function todosDeclaredByLatestTurn(
-  messages: ReadonlyArray<{ role: string; events?: AgentEvent[] | undefined }> | undefined,
+  messages: readonly ChatMessage[] | undefined,
 ): TodoItem[] {
   if (!messages || messages.length === 0) return [];
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
+    // A new request owns its own plan, even before its assistant row arrives.
+    if (message?.role === 'user') return [];
     if (!message || message.role !== 'assistant') continue;
+    if (isStandaloneHostMemoryNotification(message)) continue;
     return latestTodosFromEvents(message.events);
   }
   return [];
+}
+
+/** Only the producer's persisted provenance identifies a host notification.
+ * Unmarked legacy cards remain visible, but cannot prove whose turn they belong
+ * to. Content and event guards keep mixed replies from being skipped even if
+ * a stale marker is present; actual run identity always takes precedence.
+ */
+function isStandaloneHostMemoryNotification(message: ChatMessage): boolean {
+  if (message.messageOrigin !== 'host_memory') return false;
+  if (!assistantMessageNeverHadARun(message)) return false;
+  if (message.events?.some((event) => event.kind !== 'text')) return false;
+  if (!isOnlyMemoryCard(message.content)) return false;
+  // Events can be the rendered reply even when persisted content is stale.
+  // A normal reply or a quoted example must remain a turn boundary in either
+  // representation. Join text chunks before parsing a streamed card.
+  const eventText = (message.events ?? [])
+    .map((event) => event.kind === 'text' ? event.text : '').join('');
+  return eventText.trim().length === 0 || isOnlyMemoryCard(eventText);
+}
+
+function isOnlyMemoryCard(text: string): boolean {
+  const segments = splitOnOdCards(text.trim());
+  return segments.length === 1
+    && segments[0]?.kind === 'card'
+    && segments[0].card.kind === 'memory-applied';
 }
 
 // Walk the conversation in reverse to find the most recent TodoWrite

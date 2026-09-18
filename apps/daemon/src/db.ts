@@ -235,6 +235,7 @@ function migrate(db: SqliteDb): void {
       content TEXT NOT NULL,
       agent_id TEXT,
       agent_name TEXT,
+      message_origin TEXT,
       result_delivery_state TEXT,
       events_json TEXT,
       attachments_json TEXT,
@@ -484,6 +485,10 @@ function migrate(db: SqliteDb): void {
   // honest if it still says the same thing after a reload.
   if (!messageCols.some((c: DbRow) => c.name === 'cancel_origin')) {
     db.exec(`ALTER TABLE messages ADD COLUMN cancel_origin TEXT`);
+  }
+  // Old rows have no recoverable author provenance; leave them NULL.
+  if (!messageCols.some((c: DbRow) => c.name === 'message_origin')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN message_origin TEXT`);
   }
   const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
   if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
@@ -2814,6 +2819,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               forked_into_json AS forkedIntoJson,
               cancel_origin AS cancelOrigin,
+              message_origin AS messageOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
@@ -2879,6 +2885,7 @@ export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               forked_into_json AS forkedIntoJson,
               cancel_origin AS cancelOrigin,
+              message_origin AS messageOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
@@ -2998,12 +3005,24 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
   const existing = db
     .prepare(
       `SELECT position, run_id AS runId, run_status AS runStatus,
+              started_at AS startedAt, ended_at AS endedAt, message_origin AS messageOrigin,
               content, events_json AS eventsJson,
               task_analytics_json AS taskAnalyticsJson,
               ${eventBatchProjection} AS hasEventBatches
          FROM messages WHERE id = ?`,
     )
     .get(m.id) as DbRow | undefined;
+  // Older clients omit this field. Preserve a known origin only on omission;
+  // explicit null/unknown clears it. Neither old nor incoming run ownership
+  // can be reclassified as a host notification by a client snapshot.
+  const nextMessageOrigin = normalizeMessageOrigin({
+    ...m,
+    runId: m.runId ?? existing?.runId,
+    runStatus: m.runStatus ?? existing?.runStatus,
+    startedAt: m.startedAt ?? existing?.startedAt,
+    endedAt: m.endedAt ?? existing?.endedAt,
+    messageOrigin: m.messageOrigin === undefined ? existing?.messageOrigin : m.messageOrigin,
+  }) ?? null;
   const now = Date.now();
   if (existing) {
     // While the daemon owns an active run, its append-only batches are the
@@ -3044,7 +3063,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               pre_turn_file_names_json = ?,
               session_mode = ?, run_context_json = ?, task_analytics_json = ?,
               applied_plugin_snapshot_json = ?, forked_into_json = ?,
-              cancel_origin = ?,
+              cancel_origin = ?, message_origin = ?,
               telemetry_finalized_at = CASE
                 WHEN ? THEN COALESCE(telemetry_finalized_at, ?)
                 ELSE telemetry_finalized_at
@@ -3073,6 +3092,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       normalizeForkedIntoForStorage(m.forkedInto),
       normalizeCancelOriginForStorage(m.cancelOrigin),
+      nextMessageOrigin,
       m.telemetryFinalized === true ? 1 : 0,
       now,
       m.startedAt ?? null,
@@ -3089,12 +3109,12 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
       ? m.createdAt
       : now;
-    // 28 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 29 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
     // task_analytics_json, applied_plugin_snapshot_json, forked_into_json,
-    // cancel_origin, telemetry_finalized_at, started_at, ended_at, position,
+    // cancel_origin, message_origin, telemetry_finalized_at, started_at, ended_at, position,
     // created_at.
     db.prepare(
       `INSERT INTO messages
@@ -3103,9 +3123,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           attachments_json, comment_attachments_json, produced_files_json,
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, task_analytics_json,
-          applied_plugin_snapshot_json, forked_into_json, cancel_origin,
+          applied_plugin_snapshot_json, forked_into_json, cancel_origin, message_origin,
           telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -3130,6 +3150,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       normalizeForkedIntoForStorage(m.forkedInto),
       normalizeCancelOriginForStorage(m.cancelOrigin),
+      nextMessageOrigin,
       m.telemetryFinalized === true ? now : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
@@ -3162,6 +3183,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               forked_into_json AS forkedIntoJson,
               cancel_origin AS cancelOrigin,
+              message_origin AS messageOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
@@ -4542,6 +4564,17 @@ function scheduleNextMessageEventMaintenance(
   immediate.unref?.();
 }
 
+function normalizeMessageOrigin(row: DbRow): ChatMessage['messageOrigin'] {
+  return row.role === 'assistant'
+    && row.messageOrigin === 'host_memory'
+    && row.runId == null
+    && row.runStatus == null
+    && row.startedAt == null
+    && row.endedAt == null
+    ? 'host_memory'
+    : undefined;
+}
+
 function normalizeMessage(
   db: SqliteDb,
   row: DbRow,
@@ -4591,6 +4624,7 @@ function normalizeMessage(
     ),
     agentId: row.agentId ?? undefined,
     agentName: row.agentName ?? undefined,
+    messageOrigin: normalizeMessageOrigin(row),
     runId: row.runId ?? undefined,
     runStatus: row.runStatus ?? undefined,
     resultDeliveryState: normalizeResultDeliveryState(row.resultDeliveryState),

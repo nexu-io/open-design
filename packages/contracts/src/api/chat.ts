@@ -1318,6 +1318,10 @@ export interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
+  /** Explicit provenance for a host-created memory notification. Missing means
+   * unknown (including legacy rows); never infer this from protocol text.
+   * A message with its own run identity remains a run regardless of this hint. */
+  messageOrigin?: 'host_memory';
   agentId?: string;
   agentName?: string;
   events?: PersistedAgentEvent[];
