@@ -106,15 +106,38 @@ function decision(placementKey: (typeof placements)[number]): TestDecision {
 }
 
 describe("Test decisions at the existing host touchpoints", () => {
+	/**
+	 * A host reports no box until React commits `hidden` and the package lays
+	 * out. Pinning this to 1 for every element would assert away the very frame
+	 * the receipt is lost in, so tests drive it and wake the observer by hand.
+	 */
+	let clientRectCount = 1;
+	const resizeObserverCallbacks: Array<() => void> = [];
+	const notifyResizeObservers = () => {
+		for (const trigger of [...resizeObserverCallbacks]) trigger();
+	};
 	beforeEach(() => {
 		localStorage.clear();
+		clientRectCount = 1;
+		resizeObserverCallbacks.length = 0;
 		vi.stubEnv("NEXT_PUBLIC_CMS_HOST_RELEASE", `sha256:${"a".repeat(64)}`);
 		document.documentElement.lang = "zh-CN";
 		vi.stubGlobal(
 			"ResizeObserver",
 			class {
-				observe() {}
-				disconnect() {}
+				private trigger?: () => void;
+				constructor(private readonly callback: ResizeObserverCallback) {}
+				observe() {
+					this.trigger = () =>
+						this.callback([], this as unknown as ResizeObserver);
+					resizeObserverCallbacks.push(this.trigger);
+				}
+				disconnect() {
+					const index = this.trigger
+						? resizeObserverCallbacks.indexOf(this.trigger)
+						: -1;
+					if (index >= 0) resizeObserverCallbacks.splice(index, 1);
+				}
 			},
 		);
 		(globalThis as HostGlobal).__cmsTestHost = {
@@ -133,10 +156,13 @@ describe("Test decisions at the existing host touchpoints", () => {
 					document.createTextNode("Test host content"),
 				);
 			});
-		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({
-			length: 1,
-			item: () => null,
-		} as unknown as DOMRectList);
+		vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(
+			() =>
+				({
+					length: clientRectCount,
+					item: () => null,
+				}) as unknown as DOMRectList,
+		);
 	});
 	afterEach(() => {
 		clearTestRuntimeSession();
@@ -723,5 +749,57 @@ describe("Test decisions at the existing host touchpoints", () => {
 				.getByTestId("production-campaign-badge")
 				.querySelector("opend-touchpoint"),
 		).not.toBeNull();
+	});
+
+	// Delayed visibility itself is covered directly in touchpointVisibility.test.ts:
+	// at this level a re-mount can supply a second sample, which would hide a
+	// regression back to sampling once. What this level can still pin down is
+	// that a host nobody could see never earns a receipt.
+	it("never accepts a hover entry that never gains a box", async () => {
+		clientRectCount = 0;
+		const decisions = new Map(
+			placements.map((placementKey) => [placementKey, decision(placementKey)]),
+		);
+		setTestRuntimeSession({
+			selectionKey: "deployment-four:sha256:four-snapshot:active",
+			deployment: {
+				id: context.deploymentId,
+				activityId: "activity-four",
+				snapshotHash: "sha256:four-snapshot",
+				snapshot: {
+					contentVersionId: "version-four-placement",
+					manifestHash: "sha256:four-manifest",
+					artifactHash: "sha256:four-artifact",
+					placementKeys: [...placements],
+				},
+			},
+			context,
+			decisions,
+			isAuthorized: () => true,
+		});
+		const fetchMock = vi.fn(async (url: string, _init?: RequestInit) =>
+			url.includes("acceptances")
+				? new Response(JSON.stringify({ id: "acceptance" }), { status: 201 })
+				: new Response(JSON.stringify({ error: "production_read_forbidden" }), {
+						status: 404,
+					}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		render(<ProductionCampaignHover authenticated sessionSubject="account-a" />);
+		const entry = (await screen.findByTestId(
+			"cms-hover-overlay-root",
+		)).querySelector("opend-touchpoint");
+		expect(entry).not.toBeNull();
+		await waitFor(() => expect(entry).not.toHaveAttribute("hidden"));
+		const entryAcceptances = () =>
+			fetchMock.mock.calls
+				.filter(([url]) => url.includes("acceptances"))
+				.map(([, init]) => JSON.parse(String(init?.body)))
+				.filter((report) => report.placementKey === "opend.home.hover-entry");
+		notifyResizeObservers();
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		});
+		expect(entryAcceptances()).toHaveLength(0);
 	});
 });

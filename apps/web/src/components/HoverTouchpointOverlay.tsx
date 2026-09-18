@@ -12,6 +12,7 @@ import {
 	webTouchpointContext,
 	verifyWebTouchpoint,
 } from "./touchpoint-component";
+import { watchTouchpointVisibility } from "./touchpoint-lifecycle";
 import styles from "./HoverTouchpointOverlay.module.css";
 
 const ENTRY_PLACEMENT = "opend.home.hover-entry";
@@ -280,11 +281,9 @@ export function HoverTouchpointOverlay({
 					},
 				);
 				if (abandon()) return;
+				// Visibility is decided by the effect below, once React has
+				// committed `hidden`. Sampling it here races that commit.
 				setReady(true);
-				requestAnimationFrame(() => {
-					if (!cancelled && isAuthorized() && !document.hidden && entryElement?.getClientRects().length)
-						onEntryVisible?.();
-				});
 			} catch (error) {
 				dispose();
 				if (!cancelled) {
@@ -301,19 +300,31 @@ export function HoverTouchpointOverlay({
 			setReady(false);
 			dispose();
 		};
-	}, [close, dispatchEntryAction, dispatchLayerAction, elementReady, entry, entryActionIds, isAuthorized, layer, layerActionIds, mode, onDiagnostic, onEntryVisible, onLayerVisible]);
+	}, [close, dispatchEntryAction, dispatchLayerAction, elementReady, entry, entryActionIds, isAuthorized, layer, layerActionIds, mode, onDiagnostic]);
 
 	useLayoutEffect(() => {
 		if (open && ready) refreshPosition();
 	}, [open, ready, refreshPosition]);
 	useEffect(() => {
-		if (!open || !ready) return;
-		const frame = requestAnimationFrame(() => {
-			if (!document.hidden && layerRef.current?.getClientRects().length)
-				onLayerVisible?.();
+		const element = entryRef.current;
+		if (!ready || !element || !onEntryVisible) return;
+		return watchTouchpointVisibility({
+			element,
+			isCurrent: isAuthorized,
+			onVisible: onEntryVisible,
+			onSlow: onDiagnostic,
 		});
-		return () => cancelAnimationFrame(frame);
-	}, [onLayerVisible, open, ready]);
+	}, [isAuthorized, onDiagnostic, onEntryVisible, ready]);
+	useEffect(() => {
+		const element = layerRef.current;
+		if (!open || !ready || !element || !onLayerVisible) return;
+		return watchTouchpointVisibility({
+			element,
+			isCurrent: isAuthorized,
+			onVisible: onLayerVisible,
+			onSlow: onDiagnostic,
+		});
+	}, [isAuthorized, onDiagnostic, onLayerVisible, open, ready]);
 	useEffect(() => {
 		if (!open || !ready) return;
 		const reposition = () => refreshPosition();

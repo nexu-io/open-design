@@ -312,6 +312,87 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 }
 
 
+/**
+ * A host that is laid out but still reports no box has not been committed yet;
+ * one that reports a box while the page is hidden was never shown. Neither can
+ * be decided from a single sample, so the warning only reports, never resolves.
+ */
+export const VISIBILITY_WARNING_MS = 5_000;
+
+export type TouchpointVisibilityWatch = Readonly<{
+	element: HTMLElement;
+	isCurrent: () => boolean;
+	onVisible: () => void;
+	onSlow?: (code: string) => void;
+	slowAfterMs?: number;
+}>;
+
+/**
+ * Resolves the first moment a mounted host is really on screen, then stops.
+ *
+ * Sampling once cannot answer this. `hidden` is bound to React state, and a
+ * frame scheduled in the same continuation as that state update can run before
+ * React commits it — the host is then still `display: none` and reports no box.
+ * Because the old callers never looked again, that one lost sample permanently
+ * suppressed the receipt for the whole session. Three sources can change the
+ * answer, so all three re-check: layout (`ResizeObserver`, which also fires the
+ * initial observation), page visibility, and the caller's own re-mount.
+ */
+export function watchTouchpointVisibility({
+	element,
+	isCurrent,
+	onVisible,
+	onSlow,
+	slowAfterMs = VISIBILITY_WARNING_MS,
+}: TouchpointVisibilityWatch): () => void {
+	let recorded = false;
+	let stopped = false;
+	let frame: number | undefined;
+	let observer: ResizeObserver | undefined;
+	let slowTimer: ReturnType<typeof setTimeout> | undefined;
+	const stop = () => {
+		if (stopped) return;
+		stopped = true;
+		if (frame !== undefined) cancelAnimationFrame(frame);
+		frame = undefined;
+		observer?.disconnect();
+		if (slowTimer !== undefined) clearTimeout(slowTimer);
+		document.removeEventListener("visibilitychange", check);
+	};
+	function check() {
+		if (stopped || recorded || frame !== undefined) return;
+		frame = requestAnimationFrame(() => {
+			frame = undefined;
+			if (stopped || recorded) return;
+			if (
+				!isCurrent() ||
+				document.hidden ||
+				!element.isConnected ||
+				element.hidden ||
+				element.getClientRects().length === 0
+			)
+				return;
+			recorded = true;
+			stop();
+			onVisible();
+		});
+	}
+	// Layout is the strongest signal but the only optional one: a host without
+	// `ResizeObserver` must still mount and still report, so its absence costs
+	// this watch a wake-up source and never the display itself.
+	observer =
+		typeof ResizeObserver === "function" ? new ResizeObserver(check) : undefined;
+	observer?.observe(element);
+	document.addEventListener("visibilitychange", check);
+	// A slow host is reported but keeps its watch: a late box still earns its
+	// receipt, and dropping the watch here would recreate the lost-sample bug.
+	slowTimer = setTimeout(() => {
+		if (!recorded && !stopped) onSlow?.("touchpoint_visibility_slow");
+	}, slowAfterMs);
+	check();
+	return stop;
+}
+
 type MountAdapter = Readonly<{
 	content: WebTouchpointContent;
 	placementKey: string;
@@ -342,9 +423,7 @@ export function mountTouchpoint(
 		elementDisposed = false,
 		verifiedDisposed = false;
 	let verified: Awaited<ReturnType<typeof verifyWebTouchpoint>> | undefined;
-	let frame: number | undefined;
-	let mounted = false,
-		recorded = false;
+	let stopVisibilityWatch: (() => void) | undefined;
 	let observer: MutationObserver | undefined;
 	const current = () => !cancelled && adapter.isCurrent();
 	const dispose = () => {
@@ -357,23 +436,6 @@ export function mountTouchpoint(
 			verified.dispose();
 		}
 	};
-	const recordWhenVisible = () => {
-		if (!mounted || recorded || frame !== undefined || !adapter.onVisible)
-			return;
-		frame = requestAnimationFrame(() => {
-			frame = undefined;
-			if (
-				!current() ||
-				document.hidden ||
-				!element.isConnected ||
-				element.hidden ||
-				element.getClientRects().length === 0
-			)
-				return;
-			recorded = true;
-			adapter.onVisible?.();
-		});
-	};
 	const fail = (code: string) => {
 		emitWebTouchpointDiagnostic({ code });
 		adapter.onCloseControlChange?.(false);
@@ -381,7 +443,6 @@ export function mountTouchpoint(
 	};
 	adapter.onCloseControlChange?.(null);
 	container.replaceChildren(element);
-	document.addEventListener("visibilitychange", recordWhenVisible);
 	void (async () => {
 		try {
 			verified = await verifyWebTouchpoint(adapter.content);
@@ -440,7 +501,14 @@ export function mountTouchpoint(
 				dispose();
 				return;
 			}
-			mounted = true;
+			const onVisible = adapter.onVisible;
+			if (onVisible)
+				stopVisibilityWatch = watchTouchpointVisibility({
+					element,
+					isCurrent: current,
+					onVisible,
+					onSlow: (code) => emitWebTouchpointDiagnostic({ code }),
+				});
 			if (adapter.onCloseControlChange) {
 				const update = () => {
 					if (current())
@@ -471,7 +539,6 @@ export function mountTouchpoint(
 				if (dialog) observer.observe(dialog, options);
 			}
 			adapter.onReady?.();
-			recordWhenVisible();
 		} catch (error) {
 			if (current())
 				fail(error instanceof Error ? error.message : "touchpoint_load_failed");
@@ -481,8 +548,7 @@ export function mountTouchpoint(
 	return () => {
 		cancelled = true;
 		observer?.disconnect();
-		document.removeEventListener("visibilitychange", recordWhenVisible);
-		if (frame !== undefined) cancelAnimationFrame(frame);
+		stopVisibilityWatch?.();
 		adapter.onCloseControlChange?.(null);
 		dispose();
 		if (element.parentNode === container) container.replaceChildren();
