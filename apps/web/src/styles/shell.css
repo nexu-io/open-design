@@ -2361,6 +2361,14 @@ a.avatar-item:visited {
 .split.is-resizing-chat iframe {
   pointer-events: none;
 }
+.split.split-settling {
+  /* A surface's first measured width write (`writeProjectSplitLayout`,
+     `animate: false`): the `clientWidth` read that fed it already forced a
+     style pass with the provisional width, so the transition above would
+     otherwise run from that value on every mount (OPEND-3207). The class is
+     on for exactly that write and comes off in the same task. */
+  transition: none;
+}
 .split.is-resizing-chat .workspace,
 .split.is-resizing-chat .viewer,
 .split.split-focus .workspace,

@@ -9,7 +9,6 @@ import {
   useState,
   useSyncExternalStore,
   useLayoutEffect,
-  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
@@ -361,6 +360,21 @@ import {
 import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 import { CenteredLoader } from './Loading';
 import { ProjectCreationPendingChat } from './ProjectCreationPendingView';
+import {
+  FALLBACK_MAX_CHAT_PANEL_WIDTH,
+  MIN_CHAT_PANEL_WIDTH,
+  MIN_WORKSPACE_PANEL_WIDTH,
+  SPLIT_RESIZE_HANDLE_WIDTH,
+  clampChatPanelWidth,
+  clampPreferredChatPanelWidth,
+  projectSplitClassName,
+  projectSplitStyle,
+  readSavedChatPanelWidth,
+  resolveProjectSplitLayout,
+  saveChatPanelWidth,
+  workspacePanelTrackForMinWidth,
+  writeProjectSplitLayout,
+} from './project-split-layout';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
 import { FirstArtifactHint } from './FirstArtifactHint';
@@ -951,18 +965,20 @@ interface QueuedChatSendUpdate {
   meta?: ProjectChatSendMeta;
 }
 
+// Split geometry lives in `project-split-layout.ts` (shared with the
+// creation frame, OPEND-3207); re-exported here for existing importers.
+export {
+  defaultChatPanelWidthForSplit,
+  projectSplitClassName,
+  projectSplitStyle,
+} from './project-split-layout';
+
 let liveArtifactEventSequence = 0;
 // The brand-extraction project's design-system (brand kit) preview tab. Mirrors
 // the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
 // local literal to respect the web↔daemon boundary.
 const BRAND_KIT_FILE = 'brand.html';
 const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
-const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
-const DEFAULT_CHAT_PANEL_WIDTH = 460;
-const MIN_CHAT_PANEL_WIDTH = 345;
-const FALLBACK_MAX_CHAT_PANEL_WIDTH = 720;
-const MIN_WORKSPACE_PANEL_WIDTH = 400;
-const SPLIT_RESIZE_HANDLE_WIDTH = 4;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
 const BYOK_PROVIDER_REQUIRED_MESSAGE =
@@ -1113,50 +1129,12 @@ const reattachReplayGate = createBoundedConcurrency(REATTACH_REPLAY_CONCURRENCY,
   maxHoldMs: REATTACH_REPLAY_MAX_HOLD_MS,
 });
 
-const MIN_NORMAL_SPLIT_WIDTH =
-  MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
 type DesignSystemReviewAgentTask = NonNullable<DesignSystemReviewEntry['agentTask']>;
 interface DesignSystemReviewDetails {
   feedback?: string;
   files?: string[];
   agentTask?: DesignSystemReviewAgentTask;
-}
-
-function workspacePanelMinWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MIN_WORKSPACE_PANEL_WIDTH;
-  return splitWidth < MIN_NORMAL_SPLIT_WIDTH ? 0 : MIN_WORKSPACE_PANEL_WIDTH;
-}
-
-function maxChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return FALLBACK_MAX_CHAT_PANEL_WIDTH;
-  const workspaceMinWidth = workspacePanelMinWidthForSplit(splitWidth);
-  const viewportAwareMax = splitWidth - SPLIT_RESIZE_HANDLE_WIDTH - workspaceMinWidth;
-  // Keep the established 720px drag ceiling on ordinary windows, widening it
-  // only as far as the equal split on larger project workspaces. That makes
-  // 1:1 reachable without letting the chat drag past and dominate preview.
-  const equalSplitWidth = Math.floor((splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2);
-  const responsiveMax = Math.max(FALLBACK_MAX_CHAT_PANEL_WIDTH, equalSplitWidth);
-  return Math.max(0, Math.min(responsiveMax, Math.floor(viewportAwareMax)));
-}
-
-function clampPreferredChatPanelWidth(width: number): number {
-  return Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width));
-}
-
-function clampChatPanelWidth(
-  width: number,
-  maxWidth = FALLBACK_MAX_CHAT_PANEL_WIDTH,
-): number {
-  const effectiveMax = Math.max(0, Math.floor(maxWidth));
-  const effectiveMin = Math.min(MIN_CHAT_PANEL_WIDTH, effectiveMax);
-  return Math.min(effectiveMax, Math.max(effectiveMin, Math.round(width)));
-}
-
-export function defaultChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return DEFAULT_CHAT_PANEL_WIDTH;
-  const equalHalf = (splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2;
-  return clampChatPanelWidth(equalHalf, maxChatPanelWidthForSplit(splitWidth));
 }
 
 function designSystemFeedbackAttachments(
@@ -1385,33 +1363,6 @@ function designSystemNeedsWorkPrompt(
     'Revise the design-system project files directly. Keep DESIGN.md, tokens, previews, UI kit examples, and assets consistent with the feedback. ' +
     'After editing, summarize what changed and which files should be reviewed again.'
   );
-}
-
-function readSavedChatPanelWidth(): { width: number; customized: boolean } {
-  if (typeof window === 'undefined') {
-    return { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  }
-  try {
-    const raw = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
-    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-    return Number.isFinite(parsed)
-      ? { width: clampPreferredChatPanelWidth(parsed), customized: true }
-      : { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  } catch {
-    return { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  }
-}
-
-function saveChatPanelWidth(width: number): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      CHAT_PANEL_WIDTH_STORAGE_KEY,
-      String(clampPreferredChatPanelWidth(width)),
-    );
-  } catch {
-    // localStorage can be unavailable in hardened browser contexts.
-  }
 }
 
 function autoSendFirstMessageKey(projectId: string): string {
@@ -1808,10 +1759,6 @@ function appendLiveArtifactEventItem(
   return next.length > 50 ? next.slice(next.length - 50) : next;
 }
 
-export function projectSplitClassName(workspaceFocused: boolean): string {
-  return workspaceFocused ? 'split split-focus' : 'split';
-}
-
 /**
  * Whether a project open should start with the chat pane collapsed (workspace
  * focus mode). Uses `useProjectCollab`'s confirmed shared-non-owner signal
@@ -1860,37 +1807,17 @@ export function buildQuestionFormKey(
     : null;
 }
 
-type ProjectSplitStyle = CSSProperties & {
-  '--project-chat-panel-width': string;
-  '--project-chat-handle-width': string;
-  '--project-workspace-panel-track': string;
-};
-
-export function projectSplitStyle(
-  workspaceFocused: boolean,
-  chatPanelWidth: number,
-  workspacePanelTrack: string,
-): ProjectSplitStyle | undefined {
-  if (workspaceFocused) return undefined;
-  return {
-    '--project-chat-panel-width': `${chatPanelWidth}px`,
-    '--project-chat-handle-width': `${SPLIT_RESIZE_HANDLE_WIDTH}px`,
-    '--project-workspace-panel-track': workspacePanelTrack,
-  };
-}
-
-// Writes the two animatable width custom properties directly (see the
-// `@property` registrations + `.split` / `.split.split-focus` transition
-// rules in shell.css) instead of composing a `gridTemplateColumns` string —
-// the grid layout is always driven by
-// `var(--project-chat-panel-width) var(--project-chat-handle-width) var(--project-workspace-panel-track)`
-// declared once on `.split`, so a plain custom-property write is all a
-// collapse/expand or a live resize needs to animate or track the cursor.
+// The split's three grid custom properties are written directly (see
+// `writeProjectSplitLayout` and the `@property` registrations + `.split` /
+// `.split.split-focus` transition rules in shell.css) instead of composing a
+// `gridTemplateColumns` string, so a collapse/expand or a live resize is a
+// plain custom-property write.
 function applySplitChatPanelWidth(
   split: HTMLDivElement | null,
   width: number,
   workspacePanelTrack: string,
   workspaceFocused: boolean,
+  options: { animate?: boolean } = {},
 ): void {
   if (!split) return;
   if (workspaceFocused) {
@@ -1907,9 +1834,7 @@ function applySplitChatPanelWidth(
     split.style.removeProperty('--project-workspace-panel-track');
     return;
   }
-  split.style.setProperty('--project-chat-panel-width', `${width}px`);
-  split.style.setProperty('--project-chat-handle-width', `${SPLIT_RESIZE_HANDLE_WIDTH}px`);
-  split.style.setProperty('--project-workspace-panel-track', workspacePanelTrack);
+  writeProjectSplitLayout(split, width, workspacePanelTrack, options);
 }
 
 // The media model the user picked in the New Project → Media dialog, keyed by
@@ -12285,10 +12210,7 @@ export function ProjectView({
     [skills, designTemplates, project.skillId],
   );
   const chatResizeLabel = t('project.resizeChatPanel');
-  const workspacePanelTrack =
-    workspacePanelMinWidth === 0
-      ? 'minmax(0, 1fr)'
-      : `minmax(${workspacePanelMinWidth}px, 1fr)`;
+  const workspacePanelTrack = workspacePanelTrackForMinWidth(workspacePanelMinWidth);
   // The comment panel floats over the workspace now, so opening it must not
   // touch the split at all: the chat column keeps the width the user set.
   // (It used to take over this column at COMMENT_INSPECTOR_PANEL_WIDTH.)
@@ -12314,11 +12236,17 @@ export function ProjectView({
   const renderPreferredChatPanelWidth = useCallback((
     preferredWidth: number,
     maxWidth = chatPanelMaxWidthRef.current,
-    options: { commitState?: boolean } = {},
+    options: { commitState?: boolean; animate?: boolean } = {},
   ): number => {
     const next = clampChatPanelWidth(preferredWidth, maxWidth);
     chatPanelWidthRef.current = next;
-    applySplitChatPanelWidth(splitRef.current, next, workspacePanelTrack, workspaceFocusedRef.current);
+    applySplitChatPanelWidth(
+      splitRef.current,
+      next,
+      workspacePanelTrack,
+      workspaceFocusedRef.current,
+      { animate: options.animate },
+    );
     if (options.commitState !== false) setChatPanelWidth(next);
     return next;
   }, [workspacePanelTrack]);
@@ -12375,29 +12303,34 @@ export function ProjectView({
     const split = splitRef.current;
     if (!split) return undefined;
 
-    const updateAllowedWidth = () => {
-      const splitWidth = split.clientWidth;
-      const nextWorkspaceMin = workspacePanelMinWidthForSplit(splitWidth);
-      const nextMax = maxChatPanelWidthForSplit(splitWidth);
-      chatPanelMaxWidthRef.current = nextMax;
-      setWorkspacePanelMinWidth(nextWorkspaceMin);
-      setChatPanelMaxWidth(nextMax);
-      const preferredWidth = chatPanelWidthCustomizedRef.current
-        ? preferredChatPanelWidthRef.current
-        : defaultChatPanelWidthForSplit(splitWidth);
-      renderPreferredChatPanelWidth(preferredWidth, nextMax);
+    const updateAllowedWidth = (options: { animate?: boolean } = {}) => {
+      // Same resolver as the creation frame that may have preceded this view
+      // (OPEND-3207): a saved width, else the equal split of the container.
+      const layout = resolveProjectSplitLayout(split.clientWidth, {
+        width: preferredChatPanelWidthRef.current,
+        customized: chatPanelWidthCustomizedRef.current,
+      });
+      chatPanelMaxWidthRef.current = layout.chatPanelMaxWidth;
+      setWorkspacePanelMinWidth(layout.workspacePanelMinWidth);
+      setChatPanelMaxWidth(layout.chatPanelMaxWidth);
+      renderPreferredChatPanelWidth(layout.chatPanelWidth, layout.chatPanelMaxWidth, options);
     };
 
-    updateAllowedWidth();
+    // The first write settles the column without the `.split` transition:
+    // the `clientWidth` read above has already forced a style pass with the
+    // provisional inline width, so an animated write here would be seen
+    // sliding from that value on every mount.
+    updateAllowedWidth({ animate: false });
 
     if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(updateAllowedWidth);
+      const observer = new ResizeObserver(() => updateAllowedWidth());
       observer.observe(split);
       return () => observer.disconnect();
     }
 
-    window.addEventListener('resize', updateAllowedWidth);
-    return () => window.removeEventListener('resize', updateAllowedWidth);
+    const onWindowResize = () => updateAllowedWidth();
+    window.addEventListener('resize', onWindowResize);
+    return () => window.removeEventListener('resize', onWindowResize);
   }, [renderPreferredChatPanelWidth]);
 
   useEffect(() => () => finishChatPanelResize(false), [finishChatPanelResize]);
