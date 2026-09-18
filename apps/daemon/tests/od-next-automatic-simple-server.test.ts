@@ -1202,7 +1202,7 @@ describe('OD Next automatic production through the real server', () => {
     const promptBundleText = activeTask?.promptBundle.text ?? '';
     const doneKey = /<od-done key="([a-f0-9]{16})"\/>/.exec(promptBundleText)?.[1];
     expect(doneKey).toMatch(/^[a-f0-9]{16}$/);
-    expect(promptBundleText).toContain('route=direct_edit');
+    expect(promptBundleText).toContain('executionMode=simple (Direct Edit, or a simple Full Plan');
     expect(promptBundleText).toContain(`<od-next key="${doneKey}" value="Add an orders list page"/>`);
     expect(promptBundleText).toContain(`<od-focus key="${doneKey}"`);
     expect(promptBundleText.slice(
