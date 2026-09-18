@@ -13,7 +13,7 @@ import type {
 } from '@open-design/sidecar-proto';
 import { createProjectFileVersion } from '../src/project-file-versions.js';
 import { startServer } from '../src/server.js';
-import { installImportTokenAutoMint } from './import-token-shim.js';
+import { installImportTokenAutoMint, uninstallImportTokenAutoMint } from './import-token-shim.js';
 
 // ---------------------------------------------------------------------------
 // Screenshot export — desktop renderer file handoff.
@@ -107,7 +107,10 @@ describe('screenshot export desktop renderer file handoff', () => {
     await writeFile(path.join(dir, 'versioned.html'), '<html><body><main>Current file content</main></body></html>');
   });
 
-  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  afterAll(() => {
+    uninstallImportTokenAutoMint();
+    return new Promise<void>((resolve) => server.close(() => resolve()));
+  });
 
   it('hands the renderer an outputDir under the data root and returns the image', async () => {
     const res = await exportImage();

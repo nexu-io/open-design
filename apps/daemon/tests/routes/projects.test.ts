@@ -19,7 +19,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../../src/server.js';
-import { installImportTokenAutoMint } from '../import-token-shim.js';
+import { installImportTokenAutoMint, uninstallImportTokenAutoMint } from '../import-token-shim.js';
 
 describe('GET /api/projects/:id resolvedDir', () => {
   let server: http.Server;
@@ -43,6 +43,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
   });
 
   afterAll(() => {
+    uninstallImportTokenAutoMint();
     return new Promise<void>((resolve) => server.close(() => resolve()));
   });
 

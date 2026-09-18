@@ -162,11 +162,14 @@ describe('a created project is bound only to an explicit Workspace', () => {
           expect(plainScope.workspaceId).toBeNull();
 
           // --- SOURCE 2: folder import. Same shared helper, its own route.
-          // issue #5480: folder import now requires an HMAC token. The E2E
-          // tools-dev daemon has no desktop secret registered, so this will
-          // 403. Wrap in try/catch to keep the spec alive — the assertion
-          // below checks the scope of ANY created project, and a 403 means
-          // no project was created, which satisfies the unbound invariant.
+          // issue #5480: directory binding gates on a desktop-signed import
+          // token when the desktop gate is active, and on browser origin in
+          // dormant pure-web mode. The E2E tools-dev daemon registers no
+          // desktop secret, so the same-origin import may legitimately
+          // SUCCEED (the scope assertions below then cover it) or fail with
+          // the explicit 403 gate. Only that 403 may be absorbed here — any
+          // other failure must fail the spec rather than silently satisfy
+          // the unbound invariant.
           const importedDir = join(suite.scratchDir, 'imported-folder');
           await mkdir(importedDir, { recursive: true });
           let importedProjectId: string | null = null;
@@ -176,8 +179,11 @@ describe('a created project is bound only to an explicit Workspace', () => {
               method: 'POST',
             });
             importedProjectId = imported.project.id;
-          } catch {
-            // 403 expected — no import token in E2E mode
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!/^HTTP 403\b/.test(message)) {
+              throw error;
+            }
           }
           if (importedProjectId) {
             const importedScope = await readScope(webUrl, importedProjectId);

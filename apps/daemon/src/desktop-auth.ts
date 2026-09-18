@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 let desktopAuthSecret: Buffer | null = null;
 let desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
@@ -27,12 +27,15 @@ export function isDesktopAuthGateActive(): boolean {
 }
 
 export function resetDesktopAuthForTests(): void {
-  // issue #5480: directory-binding routes always require an HMAC token.
-  // Set a default test secret so functional suites that exercise folder
-  // import don't need per-test setup. Tests that explicitly need the
-  // "no secret" state call setDesktopAuthSecret(null) after reset.
-  desktopAuthSecret = randomBytes(32);
-  desktopAuthEverRegistered = true;
+  // Restore the dormant pre-registration baseline: no secret, gate inactive
+  // (unless the suite explicitly opts into the always-on gate via
+  // OD_REQUIRE_DESKTOP_AUTH), no consumed nonces. Suites that exercise the
+  // desktop-gated import flow register a secret explicitly via
+  // setDesktopAuthSecret(); the daemon's supported pure-web mode must be the
+  // default reset state so suites like sidecar-status-snapshot,
+  // sidecar-startup, and cli-phase2c observe DESKTOP_AUTH_INACTIVE here.
+  desktopAuthSecret = null;
+  desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
   consumedImportNonces.clear();
 }
 

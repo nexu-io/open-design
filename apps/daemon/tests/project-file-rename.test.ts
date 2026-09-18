@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { projectFileRenameTestHooks } from '../src/projects.js';
 import { startServer } from '../src/server.js';
-import { installImportTokenAutoMint } from './import-token-shim.js';
+import { installImportTokenAutoMint, uninstallImportTokenAutoMint } from './import-token-shim.js';
 
 describe('project file rename route', () => {
   let server: http.Server;
@@ -31,7 +31,10 @@ describe('project file rename route', () => {
     }
   });
 
-  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  afterAll(() => {
+    uninstallImportTokenAutoMint();
+    return new Promise<void>((resolve) => server.close(() => resolve()));
+  });
 
   async function createProject() {
     const id = `rename-${Date.now()}-${Math.random().toString(36).slice(2)}`;

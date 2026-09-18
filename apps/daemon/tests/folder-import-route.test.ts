@@ -13,13 +13,11 @@ import {
   signDesktopImportToken,
   startServer,
 } from '../src/server.js';
-import { getDesktopAuthSecret } from '../src/desktop-auth.js';
 
 describe('POST /api/import/folder', () => {
   let server: http.Server;
   let baseUrl: string;
   const tempDirs: string[] = [];
-  let realFetch: typeof fetch | undefined;
 
   beforeAll(async () => {
     const started = (await startServer({ port: 0, returnServer: true })) as {
@@ -28,36 +26,11 @@ describe('POST /api/import/folder', () => {
     };
     baseUrl = started.url;
     server = started.server;
-    // issue #5480: directory-binding routes now always require an import
-    // token. Shim global fetch to auto-mint a token for functional tests
-    // that POST a baseDir, so they exercise the real authenticated path.
-    realFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-      const url = String(input);
-      const initObj: RequestInit = init ?? {};
-      if (
-        !(initObj.headers as Record<string, string> | undefined)?.['x-od-desktop-import-token'] &&
-        (url.includes('/api/import/folder') || url.includes('/working-dir'))
-      ) {
-        try {
-          const body = typeof initObj.body === 'string' ? JSON.parse(initObj.body) : initObj.body;
-          const baseDir = (body as { baseDir?: string } | undefined)?.baseDir;
-          const secret = getDesktopAuthSecret();
-          if (secret != null && typeof baseDir === 'string') {
-            const now = Date.now();
-            const nonce = randomBytes(16).toString('base64url');
-            const exp = new Date(now + 50_000).toISOString();
-            initObj.headers = {
-              ...(initObj.headers as Record<string, string> | undefined),
-              'x-od-desktop-import-token': signDesktopImportToken(secret, baseDir, { nonce, exp }),
-            };
-          }
-        } catch {
-          // Leave headers untouched on parse errors
-        }
-      }
-      return realFetch(input, initObj);
-    }) as typeof fetch;
+    // issue #5480: no fetch shim in this suite. In dormant pure-web mode
+    // the directory-binding gate falls back to the same-origin origin
+    // check, which same-process test fetches satisfy, and tests that
+    // exercise the desktop-gated HMAC path register a secret and sign
+    // tokens explicitly (see the sandbox provenance tests below).
   });
 
   afterEach(() => {
@@ -68,7 +41,6 @@ describe('POST /api/import/folder', () => {
   });
 
   afterAll(() => {
-    if (realFetch) globalThis.fetch = realFetch;
     return new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
