@@ -4,7 +4,9 @@ import {
 } from 'react';
 import styles from './QueuedSendStack.module.css';
 
-type Banner = { id: string; content: ReactNode };
+/** Which side of a card the dragged message would be dropped on (OPEND-3203). */
+export type QueuedSendDropEdge = 'before' | 'after';
+type Banner = { id: string; content: ReactNode; dropEdge?: QueuedSendDropEdge | null };
 type DisplayBanner = Banner & { phase: 'enter' | 'ready' | 'exit'; depth: number };
 const CLOSE_MS = 250;
 const SPREAD_GAP = 4;
@@ -149,6 +151,7 @@ export function QueuedSendStack({ items, label, containerRef, dragging, onDragLe
 
   if (!mounted) return null;
   const currentItems = new Map(items.map((item) => [item.id, item.content]));
+  const dropIndicator = queuedDropIndicator(items, bannerHeight, fullHeight);
   return (
     <div
       ref={(node) => { rootRef.current = node; if (containerRef) containerRef.current = node; }}
@@ -189,8 +192,43 @@ export function QueuedSendStack({ items, label, containerRef, dragging, onDragLe
               </div>
             );
           })}
+          {dropIndicator ? (
+            <div
+              className={styles.dropIndicator}
+              data-testid="chat-queued-send-drop-indicator"
+              data-edge={dropIndicator.edge}
+              aria-hidden
+              style={{ bottom: `${dropIndicator.bottom}px` }}
+            />
+          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+/**
+ * Where the drag-reorder insertion bar sits: in the GAP between two cards,
+ * as a sibling of the cards in the column (OPEND-3203). It used to be a
+ * pseudo-element on the row inside the card, which the row's own
+ * `overflow: hidden` clipped — only its halo leaked back inside the card. The
+ * column stacks cards bottom-up (`depth` 0 is the newest, at the bottom), so
+ * "before" a card is the gap above it and "after" is the gap below; the bar is
+ * kept inside the column so the expanded viewport never scrolls it away.
+ */
+function queuedDropIndicator(
+  items: Banner[],
+  bannerHeight: number,
+  fullHeight: number,
+): { edge: QueuedSendDropEdge; bottom: number } | null {
+  const index = items.findIndex((item) => item.dropEdge);
+  const edge = index < 0 ? null : items[index]?.dropEdge ?? null;
+  if (!edge) return null;
+  const depth = items.length - 1 - index;
+  const cardBottom = depth * (bannerHeight + SPREAD_GAP);
+  const centre = edge === 'before'
+    ? cardBottom + bannerHeight + SPREAD_GAP / 2
+    : cardBottom - SPREAD_GAP / 2;
+  const bottom = Math.min(Math.max(Math.round(centre - 1), 0), Math.max(fullHeight - 2, 0));
+  return { edge, bottom };
 }

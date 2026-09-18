@@ -89,3 +89,28 @@ it('preserves queue reordering when dragging between expanded cards', () => {
   fireEvent.drop(rows[2]!, { dataTransfer, clientY: 10 });
   expect(handlers.onReorder).toHaveBeenCalledWith(['two', 'three', 'one']);
 });
+
+// OPEND-3203: while a queued message is dragged over another, the insertion
+// bar has to sit in the gap BETWEEN the cards. It used to be a pseudo-element
+// on the row inside the card (`top: -2px` / `bottom: -2px`), which the row's
+// own `overflow: hidden` clipped — all that showed was its soft halo leaking
+// back inside the card near its bottom edge, so the drop target read as
+// "somewhere inside the first card".
+it('draws the drop indicator between cards, outside every card, while dragging over a row', () => {
+  const handlers = callbacks();
+  render(view([one, two, three], handlers));
+  fireEvent.focus(screen.getByRole('region'));
+  const rows = screen.getAllByTestId('chat-queued-send-row');
+  const dataTransfer = { effectAllowed: '', setData: vi.fn(), getData: () => three.id, dropEffect: '' };
+  fireEvent.dragStart(within(rows[2]!).getByRole('button', { name: '拖动调整顺序' }), { dataTransfer });
+  // jsdom rects are all zero: clientY 5 lands in the lower half of row one.
+  fireEvent.dragOver(rows[0]!, { dataTransfer, clientY: 5 });
+  const indicator = screen.getByTestId('chat-queued-send-drop-indicator');
+  expect(indicator.getAttribute('data-edge')).toBe('after');
+  expect(indicator.closest('[data-testid="queued-send-banner"]')).toBeNull();
+  expect(indicator.closest('[data-testid="chat-queued-send-row"]')).toBeNull();
+  expect(screen.getByRole('region').contains(indicator)).toBe(true);
+  // Leaving the stack takes the indicator with it.
+  fireEvent.dragEnd(within(rows[2]!).getByRole('button', { name: '拖动调整顺序' }));
+  expect(screen.queryByTestId('chat-queued-send-drop-indicator')).toBeNull();
+});

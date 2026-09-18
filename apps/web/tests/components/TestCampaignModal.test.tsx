@@ -329,6 +329,34 @@ describe("CMS modal host cleanup", () => {
 });
 
 describe("TestCampaignModal host guards", () => {
+	it("closes a recorded open modal on a direct replacement deployment of the same activity", async () => {
+		const subject = "direct-redeployment-account";
+		const storageKey = `touchpoint-displayed:v1:${subject}:activity-1`;
+		localStorage.removeItem(storageKey);
+		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({
+			length: 1,
+		} as DOMRectList);
+		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({
+			entryUrl: "blob:test-campaign",
+			resourceUrls: new Map(),
+			dispose: vi.fn(),
+		} as never);
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockResolvedValue();
+		const firstDecision = runtime() as TestDecision;
+		authorizeMount(firstDecision);
+		render(<ProductionCampaignModal authenticated sessionSubject={subject} />);
+		await screen.findByRole("dialog");
+		await waitFor(() => expect(localStorage.getItem(storageKey)).toBe("1"));
+
+		act(() => authorizeMount({
+			...firstDecision,
+			deploymentId: "deployment-2",
+			testContext: { ...firstDecision.testContext, deploymentId: "deployment-2" },
+		}));
+		expect(screen.queryByRole("dialog")).toBeNull();
+		localStorage.removeItem(storageKey);
+	});
+
 	it("refreshes close-control availability when a shadow control becomes enabled", async () => {
 		let closeControl!: HTMLButtonElement;
 		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({

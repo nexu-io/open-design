@@ -2063,6 +2063,39 @@ describe('WorkspaceTabsBar dock dropdown project actions', () => {
     return screen.getByRole('menu');
   }
 
+  // OPEND-3283: the row menu closed the moment ANYTHING on the page scrolled —
+  // the listener was a capturing document `scroll`, and a running turn's
+  // transcript auto-scrolls every few hundred milliseconds — so on a project
+  // whose agent was mid-stream the menu could not be used at all. Only a
+  // scroll that actually moves the trigger (its own scroll ancestors, or the
+  // document) may dismiss it.
+  it('stays open while an unrelated scroll container scrolls, closes when its own ancestor does', async () => {
+    const transcript = document.createElement('div');
+    transcript.className = 'chat-log';
+    document.body.append(transcript);
+    try {
+      render(
+        <WorkspaceTabsBar
+          route={projectRoute}
+          projects={[project]}
+          workspaceContext={teamContext}
+          onRenameProject={vi.fn()}
+          onDuplicateProject={vi.fn()}
+          onDeleteProject={vi.fn()}
+        />,
+      );
+      await openRowMenu();
+      // The transcript scrolling under a streaming run is not the menu's business.
+      fireEvent.scroll(transcript);
+      expect(screen.queryByRole('menu')).not.toBeNull();
+      // A scroll that moves the trigger itself (here: the document) still closes it.
+      fireEvent.scroll(document);
+      expect(screen.queryByRole('menu')).toBeNull();
+    } finally {
+      transcript.remove();
+    }
+  });
+
   it('offers rename, duplicate, move-to-team and delete on a team workspace row', async () => {
     render(
       <WorkspaceTabsBar

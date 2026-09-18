@@ -419,6 +419,14 @@ describe("Test decisions at the existing host touchpoints", () => {
 					.map((r) => r.placement)
 					.sort(),
 			).toEqual([...placements].sort());
+		// The presentation has been on screen long enough to be recorded as
+		// displayed (the visibility frame has run). A recorded activity must still
+		// follow a language switch: the runtime's reload is not a new offer.
+		await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+		await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+		expect(
+			localStorage.getItem("touchpoint-displayed:v1:account-a:activity-four"),
+		).toBe("1");
 		// A late previous-language response must not restore any stale placement.
 		holdJapanese = true;
 		fireEvent.click(screen.getByText("Japanese"));

@@ -259,14 +259,10 @@
     transform: none;
   }
 }
-.recent-projects__card.is-selected {
-  /* Selection ring floats 4px outside the card on all sides (outline follows
-     the border-radius), instead of hugging the card edge. Hairline light
-     gray, not the near-black accent — the check badge already carries the
-     selected state. */
-  outline: 1px solid var(--border-strong);
-  outline-offset: 4px;
-}
+/* A selected card draws NO ring around itself (OPEND-3284): the filled check
+   badge in the corner is the whole selected state. The hairline outline that
+   used to float 4px outside the card (and sit 4px inside a list row) is gone;
+   `.is-selected` stays on the card for the interaction gating in the JSX. */
 /* Read-only shared projects stay surfaceless like every other card — the
    "共享" badge already signals the state, so no extra border or desaturation
    (that edge was a merge artifact against the borderless home design). The
@@ -1071,11 +1067,6 @@
 }
 .recent-projects__row--list .recent-projects__card:last-child::after {
   display: none;
-}
-/* List rows pad their content 8px, so pulling the ring 4px inside the card
-   edge leaves exactly 4px between the stroke and the content. */
-.recent-projects__row--list .recent-projects__card.is-selected {
-  outline-offset: -4px;
 }
 .recent-projects__row--list .recent-projects__card-main {
   flex-direction: row;

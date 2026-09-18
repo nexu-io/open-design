@@ -108,3 +108,18 @@
   /* Keep the layout transforms: removing them would overlap the expanded cards. */
   .banner[data-phase='enter'] { transform: none; opacity: 1; }
 }
+
+/* The drag-reorder insertion bar (OPEND-3203): a sibling of the cards in the
+   column, laid over the gap between two cards — never inside one. Same stroke
+   the row-level bar used to draw; it just could not be seen there. */
+.dropIndicator {
+  position: absolute;
+  left: 28px;
+  right: 8px;
+  height: 2px;
+  border-radius: var(--chat-radius-pill);
+  background: var(--chat-selected);
+  box-shadow: 0 0 0 2px var(--chat-selected-soft);
+  z-index: 40;
+  pointer-events: none;
+}
