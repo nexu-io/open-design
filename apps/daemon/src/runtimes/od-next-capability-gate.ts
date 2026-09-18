@@ -65,7 +65,7 @@ export const OD_NEXT_RUNTIME_PATH_DESCRIPTORS = [
     runtimeAdapterVersion: 'od-vela-none-acp/v1',
     admissionMode: 'simple',
   },
-  ...(['codex', 'claude', 'dsh'] as const).map((runtime) => ({
+  ...(['codex', 'claude', 'dsh', 'ohmypi'] as const).map((runtime) => ({
     runtimePath: `vela-${runtime}`,
     agentId: 'amr',
     runtimeAdapterVersion: `od-vela-${runtime}-acp/v1`,
@@ -241,12 +241,14 @@ export const VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS = [
   { runtime: 'claude', companionVersion: '2.1.267 (Claude Code)', recordingDigest: 'sha256:7f6f0a16788b764b46c158a0810c8f21b00d320e8ad8bd9386c81ead2378ade4' },
   { runtime: 'dsh', companionVersion: '0.1.5-rc.1', recordingDigest: 'sha256:d810b966ca329b4f2c2a6cc85ccb9b9b546e4042837851b6475fc957e057974a' },
   { runtime: 'none', companionVersion: undefined, recordingDigest: 'sha256:ea2984aa588abe825d1324d0212001e3b813d3f01f717e168d3d62735919e195' },
-].map(({ runtime, companionVersion, recordingDigest }) => RuntimeCapabilityFixtureManifestV1Schema.parse({
+  // Oh My Pi joined on the harness-evaluation build; recorded with that Vela.
+  { runtime: 'ohmypi', companionVersion: 'omp/18.2.5', recordingDigest: 'sha256:087c8806612d7cd7fd623f179cf1d807d24119ecef400185a81294d099f2a4c8', agentCliVersion: '0.0.1-test.harness-align.g3c052d0' },
+].map(({ runtime, companionVersion, recordingDigest, agentCliVersion }: { runtime: string; companionVersion: string | undefined; recordingDigest: string; agentCliVersion?: string }) => RuntimeCapabilityFixtureManifestV1Schema.parse({
   schema: OD_NEXT_RUNTIME_FIXTURE_MANIFEST_V1_SCHEMA,
   fixtureVersion: `vela-${runtime}-six-local-continuation/v1`,
   runtimePath: `vela-${runtime}`,
   agentId: 'amr',
-  agentCliVersion: '0.0.1-test.latest-frozen.g0479e8f22dd2',
+  agentCliVersion: agentCliVersion ?? '0.0.1-test.latest-frozen.g0479e8f22dd2',
   runtimeAdapterVersion: `od-vela-${runtime}-acp/v1`,
   ...(companionVersion ? { runtimeCompanionName: runtime, runtimeCompanionVersion: companionVersion } : {}),
   provenance: {
@@ -262,7 +264,13 @@ export const OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS:
     CODEX_0_147_0_BEST_EFFORT_MANIFEST,
     CLAUDE_2_1_233_BEST_EFFORT_MANIFEST,
     OPENCODE_1_18_18_BEST_EFFORT_MANIFEST,
-    VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
+    // Harness-evaluation branch: VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST (its
+    // seven-path complex evidence) is intentionally excluded from the active
+    // registry so AMR opencode resolves to the six-local SIMPLE fixture, the
+    // same simple-only admission the other five AMR harnesses get. This keeps
+    // the harness comparison on one execution mode and matches production,
+    // where complex is ~0.3% of OD Next tasks. The const stays defined as
+    // recorded evidence; re-add it here only to re-enable complex for opencode.
     VELA_PI_LOCAL_BEST_EFFORT_MANIFEST,
     ...VELA_SINGLE_AGENT_BEST_EFFORT_MANIFESTS,
   ];

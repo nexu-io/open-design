@@ -13235,6 +13235,7 @@ export function ProjectView({
             <option value="codex">Codex</option>
             <option value="claude">Claude Code</option>
             <option value="dsh">DSH</option>
+            <option value="ohmypi">Oh My Pi</option>
             <option value="none">{t('amr.harness.none')}</option>
           </select>
         </label>

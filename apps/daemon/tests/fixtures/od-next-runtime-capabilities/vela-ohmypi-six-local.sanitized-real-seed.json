@@ -1,0 +1,143 @@
+{
+  "fixtureKind": "sanitized_real_best_effort",
+  "runtime": "vela-ohmypi",
+  "velaVersion": "0.0.1-test.harness-align.g3c052d0",
+  "companionVersion": "omp/18.2.5",
+  "modelEndpoint": "loopback_fixture",
+  "executionSemantics": "agent_cli",
+  "recordingDigest": "sha256:087c8806612d7cd7fd623f179cf1d807d24119ecef400185a81294d099f2a4c8",
+  "observations": [
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:cb46f11a9e00c04c512dad3c7af93ba4b7ac0c5ce04a27b394dbeb5cfe1949c1"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:589fcbbf274a2c4a33d9e63c691d9b75d1742638a32ceb3f9887f1d37e214207"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:a846584cf4709db5d11e016961100a9e8be14865aa07f5ab4ec25139054c0a24"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:627c3b6bd8e78d4ea47b0305c9d248ef6e7b44d4837c352c05fafc715000514b"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:97533222b9079124d5754e5db25eb3df13cb306131d293e137a349841ea86f39"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:40750e34fb15611ce5eb06178ae661835af46590c1e63823154ce4d53680d187"
+    },
+    {
+      "channel": "http_request",
+      "stage": "initial",
+      "digest": "sha256:e3c43fe1b3951b698a4d7ad991ae3744ec5a2fdea53edc4fe787a7dcdf9c92b7"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "initial",
+      "digest": "sha256:bf28235f26650c4d3f969d7255c6d7d80bff9d53bb26f61c3b7d69f791152af9"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "initial",
+      "digest": "sha256:992aa945662110413d7ca69b5a560d56355afa45df26b0081028a8d1a5c9bf93"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:cb46f11a9e00c04c512dad3c7af93ba4b7ac0c5ce04a27b394dbeb5cfe1949c1"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:589fcbbf274a2c4a33d9e63c691d9b75d1742638a32ceb3f9887f1d37e214207"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:a846584cf4709db5d11e016961100a9e8be14865aa07f5ab4ec25139054c0a24"
+    },
+    {
+      "channel": "http_request",
+      "stage": "resume",
+      "digest": "sha256:1fbccfb1523802028dfd6be7831a151ca205e80632b86a9849544071013f7b38"
+    },
+    {
+      "channel": "acp_update",
+      "stage": "resume",
+      "digest": "sha256:bf28235f26650c4d3f969d7255c6d7d80bff9d53bb26f61c3b7d69f791152af9"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "resume",
+      "digest": "sha256:323f6024e089c2c667bd70cdda2a55b76a28f4774ade8465b03078e390054fa6"
+    },
+    {
+      "channel": "http_request",
+      "stage": "cancel",
+      "digest": "sha256:9b58da4ffbf7e9573ba8ca58b1c3eeadd28aa9c76be250d5371096afdc995cba"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "cancel",
+      "digest": "sha256:25f1e2eda8b208078eb93e20a287611dd76c841173b9fee625a38f7a0af8cc07"
+    },
+    {
+      "channel": "http_request",
+      "stage": "timeout",
+      "digest": "sha256:b7c36a6edaa7b0c4304727341eeb62c904ad3c402bc71a32b3f3b6e388d2efb8"
+    },
+    {
+      "channel": "acp_response",
+      "stage": "timeout",
+      "digest": "sha256:1ad8ff0ed6077800ff73c90a74f30027e7719bcb98baccd811cd7c4ec20a4669"
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "main_run",
+      "outcome": "passed",
+      "evidence": "real_ohmypi_acp_end_turn"
+    },
+    {
+      "caseId": "tool",
+      "outcome": "passed",
+      "evidence": "real_ohmypi_tool_and_file_bytes"
+    },
+    {
+      "caseId": "child_success",
+      "outcome": "unavailable",
+      "evidence": "no_child_lifecycle_claim"
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "outcome": "unavailable",
+      "evidence": "no_child_lifecycle_claim"
+    },
+    {
+      "caseId": "cancel",
+      "outcome": "passed",
+      "evidence": "real_ohmypi_session_cancel"
+    },
+    {
+      "caseId": "timeout",
+      "outcome": "passed",
+      "evidence": "host_deadline_session_cancel"
+    },
+    {
+      "caseId": "resume",
+      "outcome": "passed",
+      "evidence": "new_vela_process_loads_ohmypi_tool_history"
+    }
+  ]
+}

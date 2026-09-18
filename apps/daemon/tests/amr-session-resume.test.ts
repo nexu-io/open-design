@@ -67,7 +67,7 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     restoreEnv(originalEnv);
   });
 
-  it.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('resumes %s turns and safely reseeds after a different harness advances the conversation', async (selectedRuntime) => {
+  it.each(['pi', 'codex', 'claude', 'dsh', 'ohmypi', 'none'] as const)('resumes %s turns and safely reseeds after a different harness advances the conversation', async (selectedRuntime) => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-pi-resume-'));
     const logPath = path.join(binDir, 'invocations.jsonl');
     const bin = await writeVelaWrapper(binDir, 'vela-pi', { logPath });
@@ -451,8 +451,11 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     expect(events.slice(0, textIndex).some((entry) => entry.data?.type === 'thinking_delta')).toBe(false);
   });
 
-  it('does not automatically repeat a direct-model request after an upstream failure', async () => {
-    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-direct-no-retry-'));
+  // `none` (direct model) is no longer special-cased with maxAttempts:0. On a
+  // retryable upstream error it takes the same one same-run retry every other
+  // AMR runtime gets — a fresh model call, since there is no session to resume.
+  it('retries a direct-model run once on a retryable upstream error, like every AMR runtime', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-direct-retry-'));
     const logPath = path.join(binDir, 'invocations.jsonl');
     const bin = await writeVelaWrapper(binDir, 'vela-direct-error', { logPath, promptError: 'direct AMR model request failed with HTTP 503' });
     clearTelemetryEnv();
@@ -464,9 +467,11 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     const conversationId = await createConversation(started.url);
     const run = await sendRunAndWait(started.url, conversationId, 'Build a page', 'deepseek-v4-flash', 'none');
     expect(run.status).toBe('failed');
-    expect(await readInvocations(logPath)).toEqual(['new']);
+    // No maxAttempts:0 cap: the retryable 503 drives one host retry, so the
+    // model is invoked a second time (a fresh `new`, direct model has no resume).
+    expect(await readInvocations(logPath)).toEqual(['new', 'new']);
     const events = await readRunEvents(run.eventsLogPath);
-    expect(events.some((entry) => entry.event === 'run_retry_attempted')).toBe(false);
+    expect(events.some((entry) => entry.event === 'run_retry_attempted')).toBe(true);
   });
 
   it('reseeds a fresh session (no resume) when the model changes between turns', async () => {
@@ -683,7 +688,7 @@ async function sendRunAndWait(
   encoded: string,
   message: string,
   model?: string,
-  amrRuntime?: 'opencode' | 'pi' | 'codex' | 'claude' | 'dsh' | 'none',
+  amrRuntime?: 'opencode' | 'pi' | 'codex' | 'claude' | 'dsh' | 'ohmypi' | 'none',
 ): Promise<RunStatus> {
   const [projectId, conversationId, workspaceId, workspaceMemberId] =
     encoded.split('::');

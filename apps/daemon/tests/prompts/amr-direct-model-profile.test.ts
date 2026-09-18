@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { executionProfileForRuntime } from '@open-design/contracts';
 import { composeSystemPrompt } from '../../src/prompts/system.js';
-import { resolveBundledOdNextRuntimeCapability } from '../../src/runtimes/od-next-capability-gate.js';
+import { evaluateOdNextExecutionEligibility, resolveBundledOdNextRuntimeCapability } from '../../src/runtimes/od-next-capability-gate.js';
 
 describe('AMR direct model prompt delivery', () => {
   it.each(['classic', 'slim'] as const)('uses the existing text artifact delivery in the %s legacy composer', (promptCoreVariant) => {
@@ -33,11 +33,21 @@ describe('AMR direct model prompt delivery', () => {
     expect(prompt.indexOf('# API mode — no tools available')).toBeLessThan(prompt.indexOf('Ask mode'));
   });
 
-  it('refuses OD Next admission for direct models instead of borrowing Vela/OpenCode native-child evidence', () => {
+  it('resolves direct-model capability from its own replay instead of borrowing Vela/OpenCode native-child evidence', () => {
+    // `vela-none` gained its own fixture so the text-artifact path can be
+    // evaluated under OD Next. The guard that still matters is that it must not
+    // inherit OpenCode's verified child evidence just because a run reports
+    // OpenCode as its companion: a direct model has no tool loop at all.
     const capability = resolveBundledOdNextRuntimeCapability({
       agentId: 'amr', amrRuntime: 'none', agentCliVersion: '0.0.1-od-next-local',
       runtimeCompanionName: 'opencode', runtimeCompanionVersion: '1.18.18',
     });
-    expect(capability.reason).toBe('runtime_out_of_scope');
+    expect(capability.reason).toBe('capability_resolved');
+    const snapshot = capability.snapshot!;
+    expect(snapshot.runtimePath).toBe('vela-none');
+    expect(snapshot.nativeSubagents.support).not.toBe('verified');
+    expect(evaluateOdNextExecutionEligibility(snapshot, 'complex')).toEqual({
+      eligible: false, reason: 'native_subagents_not_verified',
+    });
   });
 });
