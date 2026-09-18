@@ -1,4 +1,6 @@
-import type { AgentInfo, AgentModelChoice } from '../types';
+import type { AgentInfo, AgentModelChoice, AppConfig } from '../types';
+import { agentModelDisplayName } from '../utils/agentLabels';
+import { apiProtocolAgentId, apiProtocolModelLabel } from '../utils/apiProtocol';
 
 type AgentModelSource =
   | {
@@ -91,4 +93,31 @@ export function agentModelIsSelectable(
   if (models.length === 0) return true;
   const option = models.find((model) => model.id === modelId) ?? null;
   return option !== null && option.enabled !== false;
+}
+
+/**
+ * Who a turn sent right now would be answered by: the identity stamped on the
+ * assistant placeholder of a real turn and of the optimistic first turn a
+ * Home send draws (OPEND-3334). One resolution, so the role row reads the
+ * same on both sides of that hand-off.
+ */
+export function selectedAssistantIdentity(
+  config: AppConfig,
+  agents: readonly AgentInfo[],
+): { agentId: string | undefined; agentName: string | undefined } {
+  if (config.mode === 'daemon') {
+    const selectedAgent = config.agentId
+      ? agents.find((agent) => agent.id === config.agentId) ?? null
+      : null;
+    const selectedChoice = config.agentId ? config.agentModels?.[config.agentId] : undefined;
+    const effectiveChoice = effectiveAgentModelChoice(selectedAgent, selectedChoice);
+    return {
+      agentId: config.agentId ?? undefined,
+      agentName: agentModelDisplayName(config.agentId, selectedAgent?.name, effectiveChoice?.model),
+    };
+  }
+  return {
+    agentId: apiProtocolAgentId(config.apiProtocol),
+    agentName: apiProtocolModelLabel(config.apiProtocol, config.model),
+  };
 }

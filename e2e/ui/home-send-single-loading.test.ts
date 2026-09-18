@@ -154,6 +154,14 @@ async function expectSingleLoadingSequence(page: Page): Promise<void> {
   expect(handoffGoneAt, `the hand-off frame was released:\n${readable}`).not.toBeNull();
   expect(handoffGoneAt!, `hand-off frame left before the user turn was painted:\n${readable}`)
     .toBeGreaterThanOrEqual(firstUserMessage!.at);
+  // OPEND-3334: the hand-off frame already draws the user turn (the real
+  // ChatPane on the optimistic first turn), so the turn is on screen from the
+  // first frame — and it must never leave: not when ProjectView takes over,
+  // not when the real transcript replaces the optimistic one.
+  expect(
+    after.some((entry) => entry.key === 'userMessage' && !entry.present && entry.at > firstUserMessage!.at),
+    `the user turn left the screen during the hand-off:\n${readable}`,
+  ).toBe(false);
   for (const key of ['chatPaneSpinner', 'chatSkeleton', 'designFilesReloading'] as const) {
     expect(
       after.some((entry) => entry.key === key && entry.present),

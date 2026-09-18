@@ -1319,11 +1319,6 @@
   contain: layout style;
   transform: translateZ(0);
 }
-/* OPEND-2170: the pane underneath the creation hand-off card is hidden; its
-   body-portaled composer layer has to follow (see ChatPane `composerLayerHidden`). */
-.chat-composer-fixed-layer[data-composer-layer-hidden] {
-  visibility: hidden;
-}
 body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   /* Manual edit elevates the workspace above a body-portaled survey. The
      composer is portaled separately, so keep it one layer above that shell or
