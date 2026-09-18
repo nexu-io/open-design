@@ -2,6 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 
 import {
+  AMR_PERSONAL_WORKSPACE_CONTEXT,
   gotoEntryHome,
   mockAmrPersonalWorkspace,
   seedBrowserConfig,
@@ -28,8 +29,13 @@ import { T } from '@/timeouts';
  * These cases pin the ORDER, not a stopwatch: the pending frame must be on
  * screen while the billing gate is still in flight, within one animation
  * frame of the click. The gate's verdict still lands before any project is
- * created — the blocked case below proves the dialog now sits over the
- * pending frame and a dismiss hands the draft back to Home.
+ * created.
+ *
+ * OPEND-3300 / 3309 refined the empty-wallet case: a wallet the shell already
+ * shows as $0 (the rail's 额度 pill) is answered on the click tick, on Home,
+ * with no frame and no request — the dialog no longer sits over a "准备中"
+ * frame the user reads as a run. One background confirmation still runs; only
+ * a fundable answer moves the send onto the frame.
  */
 
 declare global {
@@ -221,26 +227,99 @@ test('[P0] AMR send from Home enters the pending frame before the balance gate a
   await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.medium });
 });
 
-test('[P0] blocked AMR send shows the balance dialog over the pending frame and hands the draft back', async ({ page }) => {
+test('[P0] an empty wallet the shell already shows blocks on Home: no frame, no create, draft kept', async ({ page }) => {
   await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
+  const billing = await holdAmrBillingGate(page);
   const create = await holdProjectCreate(page);
   const prompt = 'Design a pricing page for an empty wallet.';
 
   await gotoEntryHome(page);
+  // The rail already shows $0 for this workspace before the send.
+  await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await sendFromHome(page, prompt);
 
   const pending = page.getByTestId('project-creation-pending-view');
   const dialog = page.getByTestId('amr-balance-dialog');
-  await expect(pending).toBeVisible({ timeout: T.short });
-  await expect(dialog).toBeVisible({ timeout: T.medium });
-  await expect(pending).toBeVisible();
+  await expect(dialog).toBeVisible({ timeout: T.short });
+  await expect(pending).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
   expect(create.requested(), 'a blocked send creates nothing').toBe(false);
+  // The background confirmation is in flight behind the dialog; it must not
+  // move the user anywhere while the wallet is still empty.
+  await expect.poll(() => billing.held(), { timeout: T.medium }).toBe(true);
+  billing.release();
+  await page.waitForTimeout(300);
+  await expect(dialog).toBeVisible();
+  await expect(pending).toHaveCount(0);
 
   await dialog.getByRole('button', { name: /later|not now|稍后|暂不/i }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('home-hero-input')).toHaveText(prompt);
+  await expect(pending).toHaveCount(0);
   expect(create.requested()).toBe(false);
+});
+
+test('[P0] a stale $0 projection: the confirmation reads a fundable wallet and the send continues into the frame', async ({ page }) => {
+  await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
+  // The shell's projection says $0, but the authoritative confirmation the
+  // dialog runs behind itself reads a recharged wallet.
+  await page.route('**/api/workspace/billing**', async (route) => {
+    const url = new URL(route.request().url());
+    if (
+      route.request().method() !== 'GET'
+      || url.pathname !== '/api/workspace/billing'
+      || url.searchParams.get('freshness') !== 'authoritative'
+    ) {
+      await route.fallback();
+      return;
+    }
+    const workspaceId = url.searchParams.get('workspaceId') ?? '';
+    const observedAt = '2026-09-17T00:00:00.000Z';
+    const workspaceMemberId = AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId;
+    await route.fulfill({
+      json: {
+        summary: null,
+        workspaceBalance: {
+          workspaceId,
+          workspaceMemberId,
+          balanceUsd: '20.00',
+          billingScopeVersion: 2,
+          expiresAt: null,
+          updatedAt: observedAt,
+        },
+        workspaceRuntime: {
+          workspaceId,
+          workspaceMemberId,
+          status: 'fresh',
+          revision: '2',
+          observedAt,
+          softExpiresAt: '2099-07-26T00:00:30.000Z',
+          hardExpiresAt: '2099-07-26T00:02:00.000Z',
+          retryAt: null,
+          errorCode: null,
+          reason: 'authoritative-action-read',
+          sourceGapDetected: false,
+        },
+        authoritativeWorkspaceRead: { workspaceId, workspaceMemberId, observedAt },
+      },
+    });
+  });
+  const create = await holdProjectCreate(page);
+  const runRequests = await routeSuccessfulRuns(page, { runId: 'home-amr-stale-zero-run' });
+
+  await gotoEntryHome(page);
+  await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
+  await sendFromHome(page, 'Draft a landing page after a recharge.');
+
+  const pending = page.getByTestId('project-creation-pending-view');
+  // The dialog may be visible only for the confirmation's round trip; what
+  // must hold is that the send ends up on the frame with a create in flight.
+  await expect(pending).toBeVisible({ timeout: T.medium });
+  await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
+  await expect.poll(() => create.requested(), { timeout: T.medium }).toBe(true);
+  create.release();
+  await runRequests.expectCount(1);
 });
 
 test('[P1] local-agent send from Home still enters the pending frame within a frame', async ({ page }) => {

@@ -546,10 +546,17 @@ function chooseWorkspaceForTab(
   return chosen;
 }
 
-function explicitWorkspaceHeaders(selection: WorkspaceSelection): Record<string, string> {
+// Local/dev context reads derive authority from these assertions. The chosen
+// directory row already has them; sending only ids defaults a Team member to
+// `personal/member` on this endpoint.
+function explicitWorkspaceHeaders(selection: WorkspaceDirectoryItem): Record<string, string> {
   return {
     'x-od-workspace-id': selection.workspaceId,
     'x-od-workspace-member-id': selection.workspaceMemberId,
+    'x-od-workspace-type': selection.workspaceType,
+    'x-od-workspace-role': selection.role,
+    'x-od-workspace-lifecycle-state': selection.lifecycleState,
+    'x-od-workspace-member-status': selection.memberStatus,
   };
 }
 
@@ -770,10 +777,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
         }
         const res = await fetch('/api/workspace/context', {
           cache: 'no-store',
-          headers: explicitWorkspaceHeaders({
-            workspaceId: selected.workspaceId,
-            workspaceMemberId: selected.workspaceMemberId,
-          }),
+          headers: explicitWorkspaceHeaders(selected),
         });
         if (!res.ok) {
           const error = new Error(`workspace-context ${res.status}`) as Error & {
