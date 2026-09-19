@@ -792,6 +792,34 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('forwards the history hotkey from the canvas but leaves native undo to editable fields', () => {
+    const posts: Array<{ type?: string; op?: string }> = [];
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><h1 data-od-source-path="path-0-0">Plain title</h1><input data-od-source-path="path-0-1" /></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; op?: string });
+    }) as typeof dom.window.parent.postMessage;
+    const press = (from: Element, init: { shiftKey?: boolean } = {}) =>
+      from.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+        key: 'z', code: 'KeyZ', metaKey: true, bubbles: true, ...init,
+      }));
+    const ops = () => posts.filter((message) => message.type === 'od-edit-history').map((message) => message.op);
+
+    press(dom.window.document.body);
+    expect(ops()).toEqual(['undo']);
+
+    press(dom.window.document.body, { shiftKey: true });
+    expect(ops()).toEqual(['undo', 'redo']);
+
+    // A focused field owns its own undo stack — the host must never steal it.
+    press(dom.window.document.querySelector('input')!);
+    expect(ops()).toEqual(['undo', 'redo']);
+
+    dom.window.close();
+  });
+
   it('posts the screenshot hotkey on a double Command tap but not on the both-Metas chord', () => {
     const posts: Array<{ type?: string }> = [];
     const dom = new JSDOM(
