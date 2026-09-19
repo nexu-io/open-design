@@ -24,6 +24,7 @@ import {
 } from "./production-touchpoint-loader";
 import {
 	resolveAuthorizationDeadline,
+	touchpointWithdrawsDisplay,
 	useTouchpointLifecycle,
 	type TouchpointLifecycleLoad,
 } from "./touchpoint-lifecycle";
@@ -247,11 +248,17 @@ export function ProductionCampaignModal({
 			const loaded = await loadProductionTouchpointDecision(PLACEMENT, locale, signal, active?.touchpointDecisionId);
 			if (signal.aborted) return { kind: "clear" };
 			if (loaded.kind === "revoked") {
-				clearOpenPresentation();
-				return active && loaded.receipt.touchpointDecisionId === active.touchpointDecisionId && loaded.receipt.deploymentId === active.deploymentId && loaded.receipt.activityId === active.activityId && loaded.receipt.contentVersionId === active.content.id ? { kind: "clear" } : { kind: "retain" };
+				const revokesActive =
+					active !== null &&
+					loaded.receipt.touchpointDecisionId === active.touchpointDecisionId &&
+					loaded.receipt.deploymentId === active.deploymentId &&
+					loaded.receipt.activityId === active.activityId &&
+					loaded.receipt.contentVersionId === active.content.id;
+				if (!active || revokesActive) clearOpenPresentation();
+				return revokesActive ? { kind: "clear" } : { kind: "retain" };
 			}
 			if (loaded.kind === "no-decision") {
-				clearOpenPresentation();
+				if (!active) clearOpenPresentation();
 				return active ? { kind: "retain" } : { kind: "clear" };
 			}
 			const next = loaded.value as Decision;
@@ -280,20 +287,35 @@ export function ProductionCampaignModal({
 				(presentation.sessionSubject !== sessionSubject || presentation.deadline <= Date.now())
 			)
 				clearOpenPresentation();
-			// Only this mounted activity may cross a locale transition. A stored impression
-			// never overrides a fresh authorization, expiry, revocation, or account fence.
+			// Only the presentation still on screen may cross a locale transition or a
+			// lease renewal. `active` is not that test: a lease revoked by the page
+			// fence stays behind as the revalidation subject, so keying the exemption
+			// on its activity let every wake re-offer an activity this device had
+			// already been shown. A stored impression never overrides a fresh
+			// authorization, expiry, revocation, or account fence.
 			const continuesOpenPresentation =
 				openPresentation.current === presentation &&
 				presentation?.sessionSubject === sessionSubject &&
 				presentation.activityId === next.activityId &&
 				presentation.deadline > Date.now();
-			if (!continuesOpenPresentation && active?.activityId !== next.activityId && wasDisplayed(sessionSubject, next.activityId)) return { kind: "retain" };
+			// A recorded activity that is not the open presentation may not be
+			// published. Retaining is only for an offer arriving BESIDE a live
+			// presentation, which keeps its mount; with nothing on screen a retain
+			// would republish the very lease the page fence just withdrew, so the
+			// suppressed offer has to clear instead.
+			if (!continuesOpenPresentation && wasDisplayed(sessionSubject, next.activityId))
+				return openPresentation.current ? { kind: "retain" } : { kind: "clear" };
 			return { kind: "decision", value: { ...next, sessionSubject }, key: next.touchpointDecisionId + ":" + next.deploymentId + ":" + next.activityId + ":" + next.content.id, validForMs: deadline - serverTime };
 		},
 		[clearOpenPresentation, locale, sessionSubject],
 	);
 	const onError = useCallback((error: unknown) => {
-		clearOpenPresentation();
+		// The lifecycle keeps display authority through a transport failure and
+		// ends it only for the server's own withdrawal; the presentation on screen
+		// has to follow the same rule. Releasing it on every error told the
+		// impression gate the modal was gone while it was still mounted, so the
+		// recovering poll suppressed the activity it was still showing.
+		if (touchpointWithdrawsDisplay(error)) clearOpenPresentation();
 		const diagnostic = emitProductionTouchpointLoadDiagnostic(error);
 		if (diagnostic) emitWebTouchpointDiagnostic(diagnostic);
 	}, [clearOpenPresentation]);
@@ -307,6 +329,19 @@ export function ProductionCampaignModal({
 		if (!authenticated || !sessionSubject || openPresentation.current?.sessionSubject !== sessionSubject)
 			clearOpenPresentation();
 	}, [authenticated, clearOpenPresentation, sessionSubject]);
+	/**
+	 * A hidden page (screen sleep, an occluded window) withdraws the lease and
+	 * takes this modal down with it. That presentation is over, so it may not
+	 * continue into the refresh that follows on wake: the device impression
+	 * decides that new offer like any other.
+	 */
+	useEffect(() => {
+		const fence = () => {
+			if (document.hidden) clearOpenPresentation();
+		};
+		document.addEventListener("visibilitychange", fence);
+		return () => document.removeEventListener("visibilitychange", fence);
+	}, [clearOpenPresentation]);
 	useEffect(() => {
 		ensureWebTouchpointElement();
 	}, []);

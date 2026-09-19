@@ -70,7 +70,7 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 export const RETRY_BACKOFF_MS = [1_000, 3_000] as const;
 const MAX_TIMER_MS = 2_147_483_647;
 /** Only a failure carrying the server's own withdrawal may end a live lease. */
-const withdrawsDisplay = (error: unknown) =>
+export const touchpointWithdrawsDisplay = (error: unknown) =>
 	typeof error === "object" && error !== null && (error as { touchpointWithdrawal?: unknown }).touchpointWithdrawal === true;
 
 /**
@@ -134,7 +134,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 		 */
 		const abandonAttempt = (error: unknown) => {
 			cancelRequest();
-			if (withdrawsDisplay(error) || !lease.current || elapsed(lease.current.start) >= lease.current.validForMs) {
+			if (touchpointWithdrawsDisplay(error) || !lease.current || elapsed(lease.current.start) >= lease.current.validForMs) {
 				revalidationLease = null;
 				status = "error";
 				revoke();
@@ -152,7 +152,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 			const delay = RETRY_BACKOFF_MS[retryIndex] ?? 0;
 			const remainingInCycle = cycleStart === null ? 0 : POLL_MS - elapsed(cycleStart);
 			if (
-				!withdrawsDisplay(error) &&
+				!touchpointWithdrawsDisplay(error) &&
 				retryIndex < RETRY_BACKOFF_MS.length &&
 				delay + REQUEST_TIMEOUT_MS <= remainingInCycle
 			) {

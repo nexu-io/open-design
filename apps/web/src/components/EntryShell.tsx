@@ -771,6 +771,10 @@ export function EntryShell({
     deepSeekV4FlashCampaignAudience === 'unknown'
       ? null
       : deepSeekV4FlashCampaignAudience;
+  // The CMS touchpoints this rail hosts are home placements (`opend.home.*`).
+  // The rail itself rides every entry view, so the home view — not the rail —
+  // is what decides whether they may be on screen.
+  const homeCampaignHostsVisible = view === 'home';
   const workspaceBalanceUsd = workspaceBillingBalanceUsd(
     workspaceBillingResponse,
     workspaceContext,
@@ -1841,7 +1845,7 @@ export function EntryShell({
           }}
           onOpenSearch={() => setProjectSearchOpen(true)}
           open={railOpen}
-          topRightSlot={topRightCampaignAudience || amrLoggedIn === true ? (
+          topRightSlot={topRightCampaignAudience || (homeCampaignHostsVisible && amrLoggedIn === true) ? (
             <>
               {topRightCampaignAudience ? (
                 <WorkbenchCampaignBadge
@@ -1852,13 +1856,16 @@ export function EntryShell({
                   loggedIn={amrLoggedIn}
                 />
               ) : null}
-              {canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? <ProductionCampaignBadge authenticated sessionSubject={amrAccountId} /> : null}
+              {homeCampaignHostsVisible
+                && canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? <ProductionCampaignBadge authenticated sessionSubject={amrAccountId} /> : null}
               {/* The requirements-specific hover entry is its own authorized
                   touchpoint, beside—not renamed from—the account badge. */}
-              <ProductionCampaignHover
-                authenticated={amrLoggedIn === true}
-                sessionSubject={amrAccountId}
-              />
+              {homeCampaignHostsVisible ? (
+                <ProductionCampaignHover
+                  authenticated={amrLoggedIn === true}
+                  sessionSubject={amrAccountId}
+                />
+              ) : null}
             </>
           ) : null}
           context={railWorkspaceContext}

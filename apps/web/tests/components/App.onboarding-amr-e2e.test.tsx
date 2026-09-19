@@ -11,6 +11,7 @@
 // the first agent probe — the exact window in which the bug surfaces.
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -42,6 +43,18 @@ vi.mock('../../src/components/TestCampaignModal', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/components/TestCampaignModal')>()),
   TestCampaignModal: ({ authenticated }: { authenticated: boolean }) =>
     authenticated ? <div role="dialog" aria-label="Test campaign witness" /> : null,
+}));
+
+// The badge and the hover entry are the top-right CMS touchpoints. Their own
+// suites cover authorization and content; here they only report whether App's
+// route gating lets either one on screen.
+vi.mock('../../src/components/ProductionCampaignBadge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/ProductionCampaignBadge')>()),
+  ProductionCampaignBadge: () => <div data-testid="production-campaign-badge-witness" />,
+}));
+vi.mock('../../src/components/ProductionCampaignHover', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/ProductionCampaignHover')>()),
+  ProductionCampaignHover: () => <div data-testid="production-campaign-hover-witness" />,
 }));
 
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
@@ -276,6 +289,70 @@ describe('CMS campaigns during onboarding', () => {
     await act(async () => navigate({ kind: 'home', view: 'home' }));
     await screen.findByRole('dialog', { name: 'Production campaign witness' });
     await screen.findByRole('dialog', { name: 'Test campaign witness' });
+  });
+});
+
+describe('CMS campaigns outside the home view', () => {
+  // The top-right hosts are desktop-only, so the route assertions need a host
+  // bridge in place before they can say anything about gating.
+  let restoreHost: (() => void) | undefined;
+  beforeEach(() => {
+    restoreHost = installMockOpenDesignHost();
+  });
+  afterEach(() => {
+    restoreHost?.();
+    restoreHost = undefined;
+  });
+  // Every campaign placement this app authorizes is a HOME placement
+  // (`opend.home.*`). The hosts follow: the modal and the top-right entries
+  // belong to the home view, not to a project workbench or another entry tab.
+  const witnesses = () => ({
+    modals: [
+      screen.queryByRole('dialog', { name: 'Production campaign witness' }),
+      screen.queryByRole('dialog', { name: 'Test campaign witness' }),
+    ],
+    topRight: [
+      screen.queryByTestId('production-campaign-badge-witness'),
+      screen.queryByTestId('production-campaign-hover-witness'),
+    ],
+  });
+  async function arriveOnHome() {
+    window.history.replaceState(null, '', '/onboarding');
+    render(<App />);
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByTestId('production-campaign-badge-witness');
+    await screen.findByTestId('production-campaign-hover-witness');
+  }
+
+  it('withdraws every host on another entry view and restores them on home', async () => {
+    await arriveOnHome();
+
+    await act(async () => navigate({ kind: 'home', view: 'projects' }));
+    const away = witnesses();
+    expect(away.modals).toEqual([null, null]);
+    expect(away.topRight).toEqual([null, null]);
+
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByTestId('production-campaign-badge-witness');
+  });
+
+  it('withdraws every host on an open project', async () => {
+    await arriveOnHome();
+
+    await act(async () =>
+      navigate({
+        kind: 'project',
+        projectId: 'project-1',
+        conversationId: null,
+        fileName: null,
+      }),
+    );
+    const inProject = witnesses();
+    expect(inProject.modals).toEqual([null, null]);
+    expect(inProject.topRight).toEqual([null, null]);
   });
 });
 

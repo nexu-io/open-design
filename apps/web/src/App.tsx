@@ -5779,9 +5779,11 @@ function AppInner() {
           dockLine
         />
       )}
-      {/* Account restoration can finish while login/onboarding is still visible.
-          Keep campaign hosts out of that flow, independently of authentication. */}
-      {!(route.kind === 'home' && route.view === 'onboarding') && (
+      {/* Every placement these hosts may render is a home placement
+          (`opend.home.*`), so the home view is where they belong: not over a
+          project workbench, not over another entry tab, and — since account
+          restoration can finish while login is still up — not over onboarding. */}
+      {route.kind === 'home' && route.view === 'home' && (
         <>
           <TestCampaignModal
             authenticated={isAmrSessionAuthenticated(amrLoginStatus)}

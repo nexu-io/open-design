@@ -1432,6 +1432,116 @@ describe("ProductionCampaignModal device impressions", () => {
 		await screen.findByRole("dialog");
 		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
 	});
+	it("does not re-present a displayed campaign after the page is hidden and shown again", async () => {
+		// Screen sleep hides the page, which withdraws the lease and takes the
+		// modal down. Waking is a NEW presentation, not a renewal: the recorded
+		// impression has to close it even though the server still offers the
+		// same activity.
+		let hidden = false;
+		vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await screen.findByRole("dialog");
+		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
+		hidden = true;
+		await act(async () => {
+			fireEvent(document, new Event("visibilitychange"));
+		});
+		expect(screen.queryByRole("dialog")).toBeNull();
+		hidden = false;
+		await act(async () => {
+			fireEvent(document, new Event("visibilitychange"));
+		});
+		await act(async () => {});
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+	it("keeps the displayed campaign on screen when a poll fails and its retry recovers", async () => {
+		// A transport failure is not a withdrawal: the lifecycle keeps the lease
+		// and retries inside the same cycle. The presentation has to survive with
+		// it, or the recovering poll reads the device impression and closes the
+		// activity that never left the screen.
+		vi.useFakeTimers({
+			toFake: [
+				"Date",
+				"performance",
+				"setTimeout",
+				"clearTimeout",
+				"setInterval",
+				"clearInterval",
+			],
+		});
+		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		let calls = 0;
+		const fetchMock = vi.fn(async () => {
+			calls += 1;
+			if (calls === 2) throw new TypeError("Failed to fetch");
+			return new Response(JSON.stringify(decision()), { status: 200 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(10);
+		});
+		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		// Fake timers do not drive jsdom's animation frames, so record the
+		// impression the paint would have recorded.
+		localStorage.setItem(marker(), "1");
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1_500);
+		});
+		expect(calls).toBeGreaterThanOrEqual(3);
+		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		expect(screen.queryByRole("dialog")).not.toBeNull();
+	});
+	it.each(["no-decision", "stale-revocation"] as const)(
+		"keeps the displayed campaign on screen when a retained %s poll recovers",
+		async (interim) => {
+			const active = decision();
+			let calls = 0;
+			const fetchMock = vi.fn(async () => {
+				calls += 1;
+				if (calls !== 2)
+					return new Response(JSON.stringify(active), { status: 200 });
+				if (interim === "no-decision")
+					return new Response(null, { status: 404 });
+				return new Response(
+					JSON.stringify({
+						error: "production_runtime_revoked",
+						receipt: {
+							touchpointDecisionId: active.touchpointDecisionId,
+							deploymentId: "stale-deployment",
+							activityId: active.activityId,
+							contentVersionId: active.content.id,
+						},
+					}),
+					{ status: 410 },
+				);
+			});
+			vi.stubGlobal("fetch", fetchMock);
+			render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+			await waitFor(() => expect(calls).toBe(1));
+			const host = document.querySelector("opend-touchpoint");
+			expect(host).not.toBeNull();
+			// The host is inserted before its asynchronous mount finishes. Wait for
+			// the visibility record so this test cannot race a focus refresh against
+			// creation of the open-presentation guard it is meant to exercise.
+			await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
+			await act(async () => {
+				fireEvent(window, new Event("focus"));
+			});
+			await waitFor(() => expect(calls).toBe(2));
+			expect(document.querySelector("opend-touchpoint")).toBe(host);
+			await act(async () => {
+				fireEvent(window, new Event("focus"));
+			});
+			await waitFor(() => expect(calls).toBe(3));
+			expect(document.querySelector("opend-touchpoint")).toBe(host);
+			expect(screen.queryByRole("dialog")).not.toBeNull();
+		},
+	);
 	it("keeps the existing badge and its manual static action usable after automatic suppression", async () => {
 		localStorage.setItem(marker(), "1");
 		const placementKey = "opend.home.account-badge";
