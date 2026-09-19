@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "agenti-v-praxi",
+  "name": "Agenti v praxi",
+  "category": "Brands",
+  "description": "Practical Czech AI-agent education and workflow operating language.",
+  "source": {
+    "type": "bundled",
+    "origin": "hand-authored from local Open Design seed"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css"
+  },
+  "usage": "USAGE.md",
+  "importMode": "normalized",
+  "craft": {
+    "applies": [],
+    "suggested": [
+      "color",
+      "accessibility-baseline"
+    ],
+    "exemptions": []
+  }
+}
