@@ -334,4 +334,80 @@ describe('@open-design/dsh-runtime protocol', () => {
     assert.equal(frames.at(-1)?.status, 'cancelled');
     assert.equal(frames.at(-1)?.error, undefined);
   });
+
+  test('reads the visible text of a completed assistant message', () => {
+    assert.equal(internals.assistantMessageText({
+      content: [
+        { type: 'reasoning', text: 'thinking out loud' },
+        { type: 'text', text: 'done' },
+        { type: 'tool-call', id: 'call-1', name: 'bash', input: {} },
+        { type: 'text', text: ' and verified' },
+      ],
+    } as never), 'done and verified');
+    assert.equal(internals.assistantMessageText(undefined), '');
+  });
+
+  test('forwards completed-message text when no deltas were streamed', async () => {
+    let sessionId = '';
+    let emit: ((session: { id: string }, event: unknown) => void) | undefined;
+    const handle = {
+      agent: {
+        session: { seq: 0 },
+        whenIdle: async () => {},
+        followup: async () => {
+          emit?.({ id: sessionId }, {
+            type: 'assistant/message',
+            seq: 2,
+            data: {
+              turn: 1,
+              step: 1,
+              message: { role: 'assistant', content: [{ type: 'text', text: 'finished the work' }] },
+              usage: { inputTokens: 12, outputTokens: 4 },
+            },
+          });
+          emit?.({ id: sessionId }, {
+            type: 'turn/end',
+            seq: 3,
+            data: { turn: 1, reason: { kind: 'completed' } },
+          });
+        },
+      },
+      dispose: async () => {},
+    };
+    const ctx = {
+      agentDefaultModel: {
+        currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      },
+      agents: {
+        create: async ({ sessionId: created }: { sessionId: string }) => {
+          sessionId = String(created);
+          return handle;
+        },
+      },
+      on: (_name: string, handler: (session: { id: string }, event: unknown) => void) => {
+        emit = handler;
+        return () => {};
+      },
+      sessions: { flush: async () => {} },
+    };
+    const chunks: string[] = [];
+    await internals.execute(ctx as never, {
+      v: 1,
+      type: 'execute',
+      request_id: 'run-message-text',
+      cwd: '/project',
+      prompt: 'finish the work',
+      mcp_servers: [],
+    }, { write: (chunk: string) => chunks.push(chunk) }, () => {}, new AbortController().signal);
+
+    const frames = chunks.map((chunk) =>
+      JSON.parse(chunk) as { type: string; content?: string; output?: string; status?: string },
+    );
+    assert.deepEqual(
+      frames.filter((frame) => frame.type === 'text').map((frame) => frame.content),
+      ['finished the work'],
+    );
+    assert.equal(frames.at(-1)?.status, 'completed');
+    assert.equal(frames.at(-1)?.output, 'finished the work');
+  });
 });
