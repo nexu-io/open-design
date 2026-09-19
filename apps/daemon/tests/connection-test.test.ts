@@ -322,6 +322,141 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  // AI/ML API's real /v1/models is a mixed catalog (chat, embeddings,
+  // image/video/audio generation, OCR, Anthropic-native), each row tagged
+  // by a structured `type` rather than an id-substring pattern. The shared
+  // id-blacklist extractor (openai/senseaudio, tested above) is neither
+  // sufficient nor safe here: live-verified against api.aimlapi.com, it
+  // leaks ~150 non-chat models whose ids don't match any blacklisted
+  // substring (video: openai/sora-2; embeddings: anthropic/voyage-*;
+  // audio: elevenlabs/eleven_*; Responses-only: openai/gpt-5.5-pro) into
+  // the chat picker, where Test connection then fails them — AND would
+  // wrongly drop real chat models like openai/gpt-5-image (chat with
+  // image OUTPUT) purely because "image" appears in the id. Fixture below
+  // mirrors that real shape: obvious ids, ambiguous ids in both
+  // directions, and duplicate listings across endpoint types for one id.
+  it("filters AI/ML API's mixed catalog to genuine chat-completions models by type, not id substrings", async () => {
+    let capturedUrl = '';
+    let capturedHeaders: Record<string, string> = {};
+    const fetchMock = passThroughOrUpstream((url, init) => {
+      capturedUrl = url;
+      capturedHeaders = init?.headers as Record<string, string>;
+      return jsonResponse({
+        data: [
+          { id: 'openai/gpt-4o', type: 'openai/chat-completions' },
+          // Listed twice — once per endpoint it supports. Must dedupe to
+          // one entry, kept via its chat-completions row.
+          { id: 'openai/gpt-4o', type: 'openai/responses/submit' },
+          // Responses-only: no chat-completions row anywhere for this id.
+          { id: 'openai/gpt-5.5-pro', type: 'openai/responses/submit' },
+          // Obvious non-chat types the id-blacklist would also catch.
+          { id: 'openai/sora-2', type: 'internal/video-generations/submit' },
+          { id: 'openai/text-embedding-3-large', type: 'openai/embeddings' },
+          // Ambiguous ids the id-blacklist misses (#7461 review finding):
+          // no blacklisted substring, but genuinely not a chat model.
+          { id: 'anthropic/voyage-large-2-instruct', type: 'openai/embeddings' },
+          { id: 'elevenlabs/eleven_music', type: 'internal/audio-generations/submit' },
+          {
+            id: 'bytedance/seedance-1-0-pro',
+            type: 'internal/video-generations/submit',
+          },
+          // False-positive check: a real chat model whose id contains
+          // "image" only because it supports image OUTPUT via chat — the
+          // id-blacklist would have wrongly excluded this one.
+          { id: 'openai/gpt-5-image', type: 'openai/chat-completions' },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'aimlapi',
+        baseUrl: 'https://api.aimlapi.com/v1',
+        apiKey: 'test-aimlapi-key',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      kind: 'success',
+      models: [
+        { id: 'openai/gpt-4o', label: 'openai/gpt-4o' },
+        { id: 'openai/gpt-5-image', label: 'openai/gpt-5-image' },
+      ],
+    });
+    expect(capturedUrl).toBe('https://api.aimlapi.com/v1/models');
+    expect(capturedHeaders.authorization).toBe('Bearer test-aimlapi-key');
+    expect(capturedHeaders['X-AIMLAPI-Source']).toBeTruthy();
+    expect(capturedHeaders['X-AIMLAPI-Partner-ID']).toBeTruthy();
+  });
+
+  it("routes a legacy 'openai' protocol config pointed at api.aimlapi.com through aimlapi attribution headers and catalog filtering (#7461 review finding)", async () => {
+    let capturedUrl = '';
+    let capturedHeaders: Record<string, string> = {};
+    const fetchMock = passThroughOrUpstream((url, init) => {
+      capturedUrl = url;
+      capturedHeaders = init?.headers as Record<string, string>;
+      return jsonResponse({
+        data: [
+          { id: 'openai/gpt-4o', type: 'openai/chat-completions' },
+          { id: 'openai/sora-2', type: 'internal/video-generations/submit' },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        // Pre-dates the 'aimlapi' protocol: saved configs stay 'openai' with
+        // a hand-typed base URL and must keep working unchanged.
+        protocol: 'openai',
+        baseUrl: 'https://api.aimlapi.com/v1',
+        apiKey: 'test-legacy-aimlapi-key',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      kind: 'success',
+      models: [{ id: 'openai/gpt-4o', label: 'openai/gpt-4o' }],
+    });
+    expect(capturedUrl).toBe('https://api.aimlapi.com/v1/models');
+    expect(capturedHeaders.authorization).toBe('Bearer test-legacy-aimlapi-key');
+    expect(capturedHeaders['X-AIMLAPI-Source']).toBeTruthy();
+    expect(capturedHeaders['X-AIMLAPI-Partner-ID']).toBeTruthy();
+  });
+
+  it("does not leak aimlapi attribution headers to an ordinary OpenAI-compatible host under the 'openai' protocol", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const fetchMock = passThroughOrUpstream((_url, init) => {
+      capturedHeaders = init?.headers as Record<string, string>;
+      return jsonResponse({ data: [{ id: 'm' }] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'openai',
+        baseUrl: 'https://api.deepinfra.com/v1',
+        apiKey: 'sk-unrelated',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(capturedHeaders.authorization).toBe('Bearer sk-unrelated');
+    expect(capturedHeaders['X-AIMLAPI-Source']).toBeUndefined();
+    expect(capturedHeaders['X-AIMLAPI-Partner-ID']).toBeUndefined();
+  });
+
   it('routes provider model discovery through the live proxy dispatcher', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
       HTTP_PROXY: 'http://proxy.example.test:8080',
@@ -798,6 +933,69 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.detail).toContain('selected NVIDIA model instance');
     expect(body.detail).toContain('Try a different model');
     expect(body.detail).not.toContain('function id');
+  });
+
+  it("sends the aimlapi attribution pair for a legacy 'openai' protocol config pointed at api.aimlapi.com (#7461 review finding)", async () => {
+    let capturedUrl = '';
+    let capturedHeaders: Record<string, string> = {};
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url, init) => {
+        capturedUrl = url;
+        capturedHeaders = init?.headers as Record<string, string>;
+        return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        // Pre-dates the 'aimlapi' protocol: saved configs stay 'openai' with
+        // a hand-typed base URL and must keep working unchanged.
+        protocol: 'openai',
+        baseUrl: 'https://api.aimlapi.com/v1',
+        apiKey: 'test-legacy-aimlapi-key',
+        model: 'openai/gpt-4o',
+      }),
+    });
+
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.sample).toBe('ok');
+    expect(capturedUrl).toBe('https://api.aimlapi.com/v1/chat/completions');
+    expect(capturedHeaders.authorization).toBe('Bearer test-legacy-aimlapi-key');
+    expect(capturedHeaders['X-AIMLAPI-Source']).toBeTruthy();
+    expect(capturedHeaders['X-AIMLAPI-Partner-ID']).toBeTruthy();
+  });
+
+  it("does not send aimlapi attribution headers for an ordinary OpenAI-compatible host under the 'openai' protocol", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((_url, init) => {
+        capturedHeaders = init?.headers as Record<string, string>;
+        return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.deepinfra.com/v1',
+        apiKey: 'sk-unrelated',
+        model: 'm',
+      }),
+    });
+
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(capturedHeaders['X-AIMLAPI-Source']).toBeUndefined();
+    expect(capturedHeaders['X-AIMLAPI-Partner-ID']).toBeUndefined();
   });
 
   it('does not add a duplicate version segment for versioned OpenAI-compatible subpaths', async () => {
