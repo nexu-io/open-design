@@ -5,6 +5,10 @@ import { AnalyticsProvider } from '../src/analytics/provider';
 import '@excalidraw/excalidraw/index.css';
 import '../src/index.css';
 import '../src/styles/home/index.css';
+import '../src/components/DesignSystemsTab.module.css';
+import '../src/components/DesignSystemDetailTabs.module.css';
+import '../src/components/DesignSystemTheme.module.css';
+import '../src/components/DesignSystemFoundations.module.css';
 
 export const metadata: Metadata = {
   title: 'Open Design',

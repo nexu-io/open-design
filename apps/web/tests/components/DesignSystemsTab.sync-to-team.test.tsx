@@ -16,12 +16,13 @@
 // the real owner's shared entry.
 
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary, WorkspaceCollabContext } from '@open-design/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
 import { I18nProvider } from '../../src/i18n';
+import { DESIGN_SYSTEM_FOCUS_KEY, setDesignSystemFocus } from '../../src/runtime/brands';
 import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import { workspaceContextFixture } from '../helpers/workspace-context';
 
@@ -199,6 +200,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  sessionStorage.removeItem(DESIGN_SYSTEM_FOCUS_KEY);
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -228,13 +230,42 @@ function renderTab(
   );
 }
 
-async function openTeamTabAndSelect(id = 'user:teammate-ds') {
-  await waitFor(() => expect(screen.getByRole('tab', { name: /Team/i })).toBeTruthy());
-  fireEvent.click(screen.getByRole('tab', { name: /Team/i }));
+function collection(name: 'Team' | 'Your systems') {
+  return within(screen.getByRole('region', { name }));
+}
+
+async function openTeamSystem(id = 'user:teammate-ds') {
+  fireEvent.click(await collection('Team').findByTestId(`design-system-card-${id}`));
   await screen.findByTestId(`design-kit-view-${id}`);
 }
 
 describe('DesignSystemsTab — repeat share reads as "sync" once already team-shared', () => {
+  it('shows separate official, personal and Team sections while search filters all three', async () => {
+    mockFetch(false, TEAMMATE_PULLED_SYSTEM.id);
+    renderTab([
+      { ...MY_SHARED_SYSTEM, surface: 'image' },
+      { ...TEAMMATE_PULLED_SYSTEM, surface: 'image' },
+      { id: 'official', title: 'Official Starter', summary: 'Official library system.', category: 'Starter', surface: 'web' },
+    ]);
+    await collection('Team').findByTestId('design-system-card-user:teammate-ds');
+    expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label')))
+      .toEqual(['Official presets', 'Your systems', 'Team']);
+    expect(collection('Your systems').getByTestId('design-system-card-user:my-ds')).toBeVisible();
+
+    const category = screen.getByRole('combobox', { name: 'Category: All 1' });
+    fireEvent.click(category);
+    fireEvent.click(screen.getByRole('option', { name: 'Starter 1' }));
+    expect(screen.queryByTestId('design-systems-surface-web')).toBeNull();
+    expect(collection('Your systems').getByTestId('design-system-card-user:my-ds')).toBeVisible();
+    expect(collection('Team').getByTestId('design-system-card-user:teammate-ds')).toBeVisible();
+
+    fireEvent.change(screen.getByTestId('design-systems-search'), { target: { value: 'Teammate' } });
+    expect(collection('Team').getByTestId('design-system-card-user:teammate-ds')).toBeVisible();
+    expect(collection('Your systems').queryByTestId('design-system-card-user:my-ds')).toBeNull();
+    expect(screen.queryByTestId('design-system-card-official')).toBeNull();
+    expect(category).toHaveAccessibleName('Category: Starter 0');
+  });
+
   it('refreshes a missing parent catalog entry from the same materialized Team snapshot', async () => {
     workspaceInvalidationHarness.autoActivate = false;
     mockFetch(true, TEAMMATE_PULLED_SYSTEM.id);
@@ -263,13 +294,37 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     render(<CatalogHarness />);
 
     await waitFor(() => expect(teamReadHeaders).toHaveLength(1));
-    const teamTab = screen.getByRole('tab', { name: /Team/i });
-    await waitFor(() => expect(teamTab.textContent).toContain('1'));
-    fireEvent.click(teamTab);
+    await waitFor(() => expect(collection('Team').getByRole('heading', { name: /Team/ })).toHaveTextContent('1'));
+    fireEvent.click(await collection('Team').findByTestId('design-system-card-user:teammate-ds'));
     expect(await screen.findByTestId('design-kit-view-user:teammate-ds')).toBeTruthy();
     expect(refreshOptions).toEqual([{
       materializedTeamIds: [TEAMMATE_PULLED_SYSTEM.id],
     }]);
+  });
+
+  it('opens a pending Team focus after its delayed membership snapshot resolves', async () => {
+    workspaceInvalidationHarness.autoActivate = false;
+    const teamIndex = deferred<Response>();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      return url.includes('/api/workspace/design-systems/team')
+        ? teamIndex.promise
+        : jsonResponse({});
+    }) as typeof fetch;
+    setDesignSystemFocus(TEAMMATE_PULLED_SYSTEM.id);
+
+    renderTab([TEAMMATE_PULLED_SYSTEM]);
+    await act(async () => Promise.resolve());
+    expect(screen.queryByTestId('design-kit-view-user:teammate-ds')).toBeNull();
+
+    await act(async () => teamIndex.resolve(jsonResponse({
+      ids: [TEAMMATE_PULLED_SYSTEM.id],
+      resources: [{ id: TEAMMATE_PULLED_SYSTEM.id, canUnshare: false }],
+    })));
+    expect(await screen.findByTestId('design-kit-view-user:teammate-ds')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Team' })).toBeNull();
+    fireEvent.click(screen.getByTestId('design-systems-back'));
+    expect(collection('Team').getByTestId('design-system-card-user:teammate-ds')).toBeVisible();
   });
 
   it('starts one exact Team-index read on first active mount without waiting for SSE or the poll timer', async () => {
@@ -302,7 +357,7 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     await act(async () => Promise.resolve());
 
     expect(teamReadHeaders).toHaveLength(0);
-    expect(screen.queryByRole('tab', { name: /Team/i })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Team' })).toBeNull();
   });
 
   it('does not commit an older Workspace A Team index after switching to B', async () => {
@@ -341,7 +396,8 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     }));
     await act(async () => Promise.resolve());
 
-    fireEvent.click(screen.getByRole('tab', { name: /Team/i }));
+    expect(collection('Team').queryByTestId('design-system-card-user:my-ds')).toBeNull();
+    expect(collection('Your systems').getByTestId('design-system-card-user:my-ds')).toBeVisible();
     expect(screen.queryByTestId('design-kit-view-user:my-ds')).toBeNull();
     expect(teamReadHeaders.map((headers) => headers.get('x-od-workspace-id')))
       .toEqual(['ws-team', 'ws-second']);
@@ -398,19 +454,21 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     const view = renderTab([MY_SHARED_SYSTEM]);
 
     await waitFor(() => {
+      expect(collection('Your systems').queryByTestId('design-system-card-user:my-ds')).toBeNull();
       expect(screen.queryByTestId('design-kit-view-user:my-ds')).toBeNull();
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: /Team/i }));
+    fireEvent.click(await collection('Team').findByTestId('design-system-card-user:my-ds'));
     expect(await screen.findByTestId('design-kit-view-user:my-ds')).toBeTruthy();
     expect(screen.getAllByTestId('design-kit-view-user:my-ds')).toHaveLength(1);
 
     view.unmount();
     renderTab([MY_SHARED_SYSTEM]);
     await waitFor(() => {
+      expect(collection('Your systems').queryByTestId('design-system-card-user:my-ds')).toBeNull();
       expect(screen.queryByTestId('design-kit-view-user:my-ds')).toBeNull();
     });
-    await openTeamTabAndSelect('user:my-ds');
+    await openTeamSystem('user:my-ds');
     expect(screen.getAllByTestId('design-kit-view-user:my-ds')).toHaveLength(1);
   });
 
@@ -418,15 +476,23 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     mockFetch(true, 'user:my-ds', false);
     renderTab([MY_SHARED_SYSTEM]);
 
+    fireEvent.click(await screen.findByTestId('design-system-card-user:my-ds'));
     const actions = await screen.findByTestId('design-kit-more-actions');
     fireEvent.click(actions);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Share to team' }));
 
     await waitFor(() => expect(shareCalls).toHaveLength(1));
+    // The same system remains open while its card moves to the Team section.
+    await screen.findByText('Done');
+    expect(screen.getAllByTestId('design-kit-view-user:my-ds')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('design-systems-back'));
     await waitFor(() => {
+      expect(collection('Your systems').queryByTestId('design-system-card-user:my-ds')).toBeNull();
       expect(screen.queryByTestId('design-kit-view-user:my-ds')).toBeNull();
     });
-    await openTeamTabAndSelect('user:my-ds');
+    expect(collection('Team').getByTestId('design-system-card-user:my-ds')).toBeVisible();
+    expect(screen.getAllByTestId('design-system-card-user:my-ds')).toHaveLength(1);
+    await openTeamSystem('user:my-ds');
     expect(screen.getAllByTestId('design-kit-view-user:my-ds')).toHaveLength(1);
     expect(teamReadHeaders).toHaveLength(2);
   });
@@ -457,7 +523,7 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
       ids: [MY_SHARED_SYSTEM.id],
       resources: [{ id: MY_SHARED_SYSTEM.id, canUnshare: true }],
     }));
-    fireEvent.click(screen.getByRole('tab', { name: /Team/i }));
+    fireEvent.click(await collection('Team').findByTestId('design-system-card-user:my-ds'));
     expect(await screen.findByTestId('design-kit-view-user:my-ds')).toBeTruthy();
 
     initial.resolve(jsonResponse({ ids: [], resources: [] }));
@@ -499,7 +565,7 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
       ids: [MY_SHARED_SYSTEM.id],
       resources: [{ id: MY_SHARED_SYSTEM.id, canUnshare: true }],
     }));
-    fireEvent.click(screen.getByRole('tab', { name: /Team/i }));
+    fireEvent.click(await collection('Team').findByTestId('design-system-card-user:my-ds'));
     expect(await screen.findByTestId('design-kit-view-user:my-ds')).toBeTruthy();
 
     mutationA.resolve(jsonResponse({ ids: [], resources: [] }));
@@ -511,7 +577,7 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     mockFetch(true);
     renderTab([MY_SHARED_SYSTEM]);
 
-    await openTeamTabAndSelect('user:my-ds');
+    await openTeamSystem('user:my-ds');
     expect(teamReadHeaders[0]?.get('x-od-workspace-id')).toBe('ws-team');
     expect(teamReadHeaders[0]?.get('x-od-workspace-member-id')).toBe('mem-owner');
     fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
@@ -530,7 +596,7 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     mockFetch(true);
     renderTab([MY_SHARED_SYSTEM]);
 
-    await openTeamTabAndSelect('user:my-ds');
+    await openTeamSystem('user:my-ds');
     fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove from team' }));
 
@@ -540,9 +606,14 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     );
     expect(unshareCalls[0]?.headers.get('x-od-workspace-id')).toBe('ws-team');
     expect(unshareCalls[0]?.headers.get('x-od-workspace-member-id')).toBe('mem-owner');
-    fireEvent.click(screen.getByRole('tab', { name: /Your systems/i }));
+    await screen.findByText('Done');
+    expect(screen.getAllByTestId('design-kit-view-user:my-ds')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('design-systems-back'));
+    await waitFor(() => expect(collection('Team').getByRole('heading', { name: /Team/ })).toHaveTextContent('0'));
+    expect(collection('Team').queryByTestId('design-system-card-user:my-ds')).toBeNull();
+    expect(screen.getAllByTestId('design-system-card-user:my-ds')).toHaveLength(1);
+    fireEvent.click(await collection('Your systems').findByTestId('design-system-card-user:my-ds'));
     expect(await screen.findByTestId('design-kit-view-user:my-ds')).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /Team/i }).textContent).toContain('0');
   });
 
   it('hides both "share" and "sync" for a teammate-pulled copy the caller may not manage', async () => {
@@ -552,11 +623,12 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     // let a non-managing member overwrite the real owner's shared copy.
     mockFetch(false, 'user:teammate-ds');
     renderTab([TEAMMATE_PULLED_SYSTEM]);
-    await openTeamTabAndSelect();
+    await openTeamSystem();
 
-    fireEvent.click(screen.getByRole('tab', { name: /Your systems/i }));
+    fireEvent.click(screen.getByTestId('design-systems-back'));
     expect(screen.queryByTestId('design-kit-view-user:teammate-ds')).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: /Team/i }));
+    expect(collection('Your systems').queryByTestId('design-system-card-user:teammate-ds')).toBeNull();
+    fireEvent.click(await collection('Team').findByTestId('design-system-card-user:teammate-ds'));
     await screen.findByTestId('design-kit-view-user:teammate-ds');
     fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
     expect(screen.queryByRole('menuitem', { name: 'Sync to team' })).toBeNull();
@@ -579,9 +651,10 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     const view = renderTab([MY_SHARED_SYSTEM]);
 
     await waitFor(() => {
+      expect(collection('Your systems').queryByTestId('design-system-card-user:my-ds')).toBeNull();
       expect(screen.queryByTestId('design-kit-view-user:my-ds')).toBeNull();
     });
-    await openTeamTabAndSelect('user:my-ds');
+    await openTeamSystem('user:my-ds');
 
     workspaceContext = SECOND_TEAM_CONTEXT;
     view.rerender(
@@ -597,8 +670,9 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
       </I18nProvider>,
     );
 
+    expect(collection('Team').queryByTestId('design-system-card-user:my-ds')).toBeNull();
     expect(screen.queryByTestId('design-kit-view-user:my-ds')).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: /Your systems/i }));
+    fireEvent.click(await collection('Your systems').findByTestId('design-system-card-user:my-ds'));
     expect(await screen.findByTestId('design-kit-view-user:my-ds')).toBeTruthy();
     await waitFor(() => {
       expect(teamReadHeaders.some((headers) => (

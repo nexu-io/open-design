@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
+import { DESIGN_SYSTEM_FOCUS_KEY, setDesignSystemFocus } from '../../src/runtime/brands';
 import {
   deleteDesignSystemDraft,
   DesignSystemDeleteError,
@@ -37,8 +38,13 @@ vi.mock('../../src/providers/registry', async () => {
 
 vi.mock('../../src/runtime/exports', () => exportMocks);
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 afterEach(() => {
   cleanup();
+  sessionStorage.removeItem(DESIGN_SYSTEM_FOCUS_KEY);
   exportMocks.downloadDesignSystemArchive.mockReset();
   exportMocks.downloadDesignSystemArchive.mockResolvedValue(true);
   exportMocks.downloadProjectArchive.mockReset();
@@ -70,18 +76,17 @@ const systems: DesignSystemSummary[] = [
   },
 ];
 
-// The active scope's first row auto-selects into the detail pane, so a title
-// can appear twice (row + detail). Scope row lookups to the sidebar list.
-function list() {
-  return within(screen.getByTestId('design-systems-list'));
+// The gallery remains visible until a card is explicitly opened.
+function collection(name = 'Official presets') {
+  return within(screen.getByRole('region', { name }));
 }
 
-function openOfficialPresets() {
-  fireEvent.click(screen.getByRole('tab', { name: 'Official presets' }));
+function list() {
+  return collection();
 }
 
 describe('DesignSystemsTab', () => {
-  it('renders structured list and preview skeletons while design systems load', () => {
+  it('renders gallery skeletons without an unopened detail pane while systems load', () => {
     const { container } = render(
       <DesignSystemsTab
         loading
@@ -93,11 +98,66 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
-    expect(screen.getByTestId('design-systems-sidebar-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('design-systems-preview-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('design-systems-gallery-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('design-systems-preview-skeleton')).toBeNull();
     expect(screen.getByTestId('design-systems-loading-row-0')).toBeTruthy();
     expect(screen.getByText('Loading design systems…')).toBeTruthy();
     expect(container.querySelector('.loading-spinner')).toBeNull();
+  });
+
+  it('starts in the gallery without fetching details or changing the saved default', () => {
+    const onSelect = vi.fn();
+    const { rerender } = render(
+      <DesignSystemsTab loading systems={[]} selectedId="user:acme" onSelect={onSelect} />,
+    );
+
+    rerender(<DesignSystemsTab systems={systems} selectedId="user:acme" onSelect={onSelect} />);
+
+    expect(screen.getByTestId('design-system-card-user:acme')).toBeTruthy();
+    expect(screen.queryByTestId('design-kit-view-user:acme')).toBeNull();
+    expect(screen.queryByTestId('design-systems-preview')).toBeNull();
+    expect(fetchDesignSystem).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    expect(screen.getByTestId('design-system-card-linear')).toBeTruthy();
+    expect(screen.queryByTestId('design-kit-view-linear')).toBeNull();
+    expect(fetchDesignSystem).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('opens a requested cross-route focus directly without changing the default', async () => {
+    const onSelect = vi.fn();
+    setDesignSystemFocus('linear');
+    render(<DesignSystemsTab systems={systems} selectedId="user:acme" onSelect={onSelect} />);
+
+    expect(await screen.findByTestId('design-kit-view-linear')).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Official presets' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Official presets' })).toBeNull();
+    expect(sessionStorage.getItem(DESIGN_SYSTEM_FOCUS_KEY)).toBeNull();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('design-systems-back'));
+    expect(screen.getByRole('region', { name: 'Official presets' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Your systems' })).toBeVisible();
+    expect(screen.getByTestId('design-system-card-linear')).toBeTruthy();
+    expect(screen.queryByTestId('design-kit-view-linear')).toBeNull();
+  });
+
+  it('restores both collections on return without reopening detail', async () => {
+    render(<DesignSystemsTab systems={systems} selectedId="user:acme" onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('design-system-card-user:acme'));
+    expect(await screen.findByTestId('design-kit-view-user:acme')).toBeTruthy();
+
+    expect(screen.queryByRole('region', { name: 'Your systems' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Official presets' })).toBeNull();
+    expect(screen.queryByTestId('design-systems-create')).toBeNull();
+    fireEvent.click(screen.getByTestId('design-systems-back'));
+    expect(screen.queryByTestId('design-kit-view-user:acme')).toBeNull();
+    expect(screen.queryByTestId('design-kit-view-linear')).toBeNull();
+    expect(screen.getByTestId('design-system-card-linear')).toBeTruthy();
+
+    expect(screen.getByTestId('design-system-card-user:acme')).toBeTruthy();
+    expect(screen.queryByTestId('design-kit-view-user:acme')).toBeNull();
   });
 
   it('keeps the summary-derived kit visible while the selected system detail resolves', async () => {
@@ -117,6 +177,7 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
+    fireEvent.click(screen.getByTestId('design-system-card-user:acme'));
     expect(screen.getByTestId('design-kit-view-user:acme')).toBeTruthy();
     expect(screen.queryByTestId('design-system-detail-loading-user:acme')).toBeNull();
     expect(container.querySelector('.loading-spinner')).toBeNull();
@@ -131,7 +192,7 @@ describe('DesignSystemsTab', () => {
     await screen.findByTestId('design-kit-view-user:acme');
   });
 
-  it('uses design-system scopes directly instead of a design-system/template switcher', () => {
+  it('shows official and personal collections in order with counts instead of source tabs', () => {
     render(
       <DesignSystemsTab
         systems={systems}
@@ -144,9 +205,13 @@ describe('DesignSystemsTab', () => {
 
     expect(screen.queryByRole('tab', { name: 'Design system' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Template' })).toBeNull();
-    expect(screen.getByRole('tab', { name: 'Your systems' }).textContent).toContain('1');
-    expect(screen.getByRole('tab', { name: 'Official presets' }).textContent).toContain('1');
-    // #5517 ships three scopes; the Enterprise "coming soon" placeholder is gone.
+    expect(screen.queryByRole('tab', { name: 'Your systems' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Official presets' })).toBeNull();
+    const regions = screen.getAllByRole('region');
+    expect(regions.map((region) => region.getAttribute('aria-label')))
+      .toEqual(['Official presets', 'Your systems']);
+    expect(collection().getByRole('heading', { name: /Official presets/ })).toHaveTextContent(/^Official presets$/);
+    expect(collection('Your systems').getByRole('heading', { name: /Your systems/ })).toHaveTextContent('1');
     expect(screen.queryByRole('tab', { name: 'Enterprise' })).toBeNull();
   });
 
@@ -161,14 +226,11 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
-    // "Your systems" is the default scope: Acme shows, Linear (a preset) does not.
     expect(screen.getByTestId('design-systems-create').textContent).toContain('Create');
-    expect(screen.getByTestId('design-system-card-user:acme')).toBeTruthy();
-    expect(screen.queryByTestId('design-system-card-linear')).toBeNull();
-
-    openOfficialPresets();
-    expect(screen.getByTestId('design-system-card-linear')).toBeTruthy();
-    expect(list().queryByText('Acme Design System')).toBeNull();
+    expect(collection('Your systems').getByTestId('design-system-card-user:acme')).toBeVisible();
+    expect(collection('Your systems').queryByTestId('design-system-card-linear')).toBeNull();
+    expect(collection().getByTestId('design-system-card-linear')).toBeVisible();
+    expect(collection().queryByTestId('design-system-card-user:acme')).toBeNull();
   });
 
   it('shows the user system scenario (summary) as the row subtitle, not a generic placeholder', () => {
@@ -205,8 +267,7 @@ describe('DesignSystemsTab', () => {
     fireEvent.click(screen.getByTestId('design-systems-create'));
     expect(onCreate).toHaveBeenCalledOnce();
 
-    // Acme is the only user system, so it auto-selects into the detail pane,
-    // exposing the agent edit action that routes back into the authoring flow.
+    fireEvent.click(screen.getByTestId('design-system-card-user:acme'));
     fireEvent.click(await screen.findByRole('button', { name: /Edit with agent/i }));
     expect(onOpenSystem).toHaveBeenCalledWith('user:acme');
   });
@@ -223,8 +284,7 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
-    openOfficialPresets();
-    // Linear auto-selects into the read-only detail pane.
+    fireEvent.click(screen.getByTestId('design-system-card-linear'));
     await screen.findByTestId('design-kit-view-linear');
     // A built-in preset is browse-only: no agent edit affordance, and the
     // redundant top showcase cover (with its preview button) has been removed.
@@ -245,8 +305,8 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
-    openOfficialPresets();
-    // "Make default" now lives in the detail's ⋯ overflow menu.
+    fireEvent.click(screen.getByTestId('design-system-card-linear'));
+    // "Make default" lives in the detail's ⋯ overflow menu.
     fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Default for new chats' }));
     expect(onSelect).toHaveBeenCalledWith('linear');
@@ -269,6 +329,7 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
+    fireEvent.click(screen.getByTestId('design-system-card-user:acme'));
     const toggle = await screen.findByRole('button', { name: 'Draft' });
     fireEvent.click(toggle);
 
@@ -304,6 +365,7 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
+    fireEvent.click(screen.getByTestId('design-system-card-user:acme'));
     fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Download design system (.zip + SKILLS.md)' }));
 
@@ -332,6 +394,7 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
+    fireEvent.click(screen.getByTestId('design-system-card-user:acme'));
     fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Acme Design System' }));
 
@@ -380,101 +443,167 @@ function renderTab(items: DesignSystemSummary[] = librarySystems) {
   );
 }
 
-// The surface pill renders its label and a `.filter-pill-count` span; read
-// the count back by the visible label so assertions describe the UI.
-function surfacePillCount(label: string): string | null {
-  for (const pill of screen.getAllByRole('tab')) {
-    const countEl = pill.querySelector('.filter-pill-count');
-    if (!countEl) continue;
-    const labelText = (pill.textContent ?? '').replace(countEl.textContent ?? '', '');
-    if (labelText === label) return countEl.textContent ?? null;
-  }
-  return null;
+function selectCategory(value: string, count: number) {
+  fireEvent.click(screen.getByRole('combobox', { name: /^Category:/ }));
+  fireEvent.click(within(screen.getByRole('listbox', { name: 'Category' })).getByRole('option', { name: `${value} ${count}` }));
 }
 
-function selectCategory(value: string) {
-  fireEvent.change(screen.getByTestId('design-systems-category-select'), {
-    target: { value },
-  });
-}
+describe('DesignSystemsTab category filtering', () => {
+  it('keeps the search before official filters and applies only search to personal systems', () => {
+    renderTab([
+      ...librarySystems,
+      { ...systems[0]!, title: 'Personal Image One', surface: 'image' },
+    ]);
+    const official = screen.getByRole('region', { name: 'Official presets' });
+    const search = within(official).getByTestId('design-systems-header-search');
+    const categorySelect = within(official).getByRole('combobox');
+    expect(within(official).queryByRole('tablist')).toBeNull();
+    expect(search.compareDocumentPosition(categorySelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-describe('DesignSystemsTab surface filtering', () => {
-  it('scopes surface pill counts to the selected style category', () => {
-    // Regression: nexu-io/open-design#2062 — surface chips kept showing the
-    // unfiltered totals after a style category was applied. The counts must
-    // describe the filtered result set, otherwise "All 149 / Web 149" is a
-    // lie about what the user is looking at.
+    selectCategory('Retro', 3);
+    const personal = collection('Your systems');
+    expect(personal.getByTestId('design-system-card-user:acme')).toBeVisible();
+    expect(personal.getByRole('heading', { name: /Your systems/ })).toHaveTextContent('1');
+    expect(list().getByTestId('design-system-card-retro-img-1')).toBeVisible();
+
+    fireEvent.change(screen.getByTestId('design-systems-search'), { target: { value: 'Personal' } });
+    expect(personal.getByTestId('design-system-card-user:acme')).toBeVisible();
+    expect(list().queryByTestId('design-system-card-retro-web-1')).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Category: Retro 0' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('design-systems-search'), { target: { value: 'Retro' } });
+    expect(personal.queryByTestId('design-system-card-user:acme')).toBeNull();
+    expect(personal.getByRole('heading', { name: /Your systems/ })).toHaveTextContent('0');
+    expect(list().getByTestId('design-system-card-retro-web-1')).toBeVisible();
+  });
+
+  it('shows category result counts for the current search and refreshed catalog', () => {
+    const { rerender } = renderTab();
+    const trigger = screen.getByRole('combobox', { name: 'Category: All 5' });
+    fireEvent.click(trigger);
+    expect(screen.getByRole('option', { name: 'All 5' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: 'Social 2' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Retro 3' }));
+    expect(trigger).toHaveAccessibleName('Category: Retro 3');
+
+    expect(trigger).toHaveAccessibleName('Category: Retro 3');
+    fireEvent.click(trigger);
+    // Other categories must still advertise their own results, even while
+    // Retro is selected and excludes them from the visible gallery.
+    expect(screen.getByRole('option', { name: 'All 5' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Social 2' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Retro 3' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+
+    fireEvent.change(screen.getByTestId('design-systems-search'), { target: { value: 'Social Web' } });
+    expect(trigger).toHaveAccessibleName('Category: Retro 0');
+    expect(screen.queryByTestId('design-system-card-retro-web-1')).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('option', { name: 'All 1' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Retro 0' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('option', { name: 'Social 1' }));
+    expect(trigger).toHaveAccessibleName('Category: Social 1');
+    expect(screen.getByTestId('design-system-card-social-web-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('design-system-card-social-img-1')).not.toBeInTheDocument();
+
+    rerender(<DesignSystemsTab systems={[
+      ...librarySystems,
+      ds({ id: 'social-web-2', title: 'Social Web Two', category: 'Social', surface: 'web' }),
+    ]} selectedId={null} onSelect={vi.fn()} />);
+    expect(trigger).toHaveAccessibleName('Category: Social 2');
+    expect(screen.getByTestId('design-system-card-social-web-2')).toBeInTheDocument();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('option', { name: 'All 2' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Social 2' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: 'Retro 0' })).toBeInTheDocument();
+  });
+
+  it('opens the category menu, selects a category and returns focus with the filtered gallery', () => {
     renderTab();
-    openOfficialPresets();
+    const trigger = screen.getByRole('combobox', { name: 'Category: All 5' });
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const menu = screen.getByRole('listbox', { name: 'Category' });
+    expect(within(menu).getByRole('option', { name: 'All 5' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(within(menu).getByRole('option', { name: 'Retro 3' }));
 
-    expect(surfacePillCount('All')).toBe('5');
-    expect(surfacePillCount('Web')).toBe('3');
-    expect(surfacePillCount('Image')).toBe('2');
-
-    selectCategory('Retro');
-
-    expect(surfacePillCount('All')).toBe('3');
-    expect(surfacePillCount('Web')).toBe('2');
-    expect(surfacePillCount('Image')).toBe('1');
+    expect(screen.queryByRole('listbox', { name: 'Category' })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Category: Retro 3' })).toHaveFocus();
+    expect(list().getByText('Retro Web One')).toBeInTheDocument();
+    expect(list().getByText('Retro Image One')).toBeInTheDocument();
+    expect(list().queryByText('Social Web One')).not.toBeInTheDocument();
+    expect(list().queryByText('Social Image One')).not.toBeInTheDocument();
   });
 
-  it('keeps the style category when a surface chip refines within it', () => {
-    // Regression: nexu-io/open-design#2062 — clicking a surface chip reset
-    // the style category to "All", discarding the user's filter instead of
-    // refining inside it. The category survives when it still has matches
-    // for the chosen surface.
+  it('closes categories with Escape or an outside click without changing the selected filter', () => {
     renderTab();
-    openOfficialPresets();
-    selectCategory('Retro');
+    selectCategory('Retro', 3);
+    const trigger = screen.getByRole('combobox', { name: 'Category: Retro 3' });
+    fireEvent.click(trigger);
+    expect(screen.getByRole('option', { name: 'Retro 3' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(screen.queryByRole('listbox', { name: 'Category' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Web/ }));
-
-    expect(
-      (screen.getByTestId('design-systems-category-select') as HTMLSelectElement).value,
-    ).toBe('Retro');
-    expect(list().getByText('Retro Web One')).toBeTruthy();
-    expect(list().getByText('Retro Web Two')).toBeTruthy();
-    // A web system from a different category must not leak back in.
-    expect(list().queryByText('Social Web One')).toBeNull();
+    fireEvent.click(trigger);
+    const outside = screen.getByTestId('design-systems-search');
+    outside.focus();
+    fireEvent.mouseDown(outside);
+    expect(screen.queryByRole('listbox', { name: 'Category' })).not.toBeInTheDocument();
+    expect(outside).toHaveFocus();
+    expect(trigger).toHaveAccessibleName('Category: Retro 3');
+    expect(list().queryByText('Social Web One')).not.toBeInTheDocument();
   });
 
-  it('hides a surface chip that has no systems in the selected style category', () => {
-    // Consequence of the #2062 fix: a chip whose count drops to zero for the
-    // active style category falls away, the same way a globally-empty
-    // surface already does — so a chip never advertises an empty result set.
-    const webOnlyCategory: DesignSystemSummary[] = [
-      ds({ id: 'tools-web-1', title: 'Tools Web One', category: 'Tools', surface: 'web' }),
-      ds({ id: 'retro-web-1', title: 'Retro Web One', category: 'Retro', surface: 'web' }),
-      ds({ id: 'retro-img-1', title: 'Retro Image One', category: 'Retro', surface: 'image' }),
-    ];
-    renderTab(webOnlyCategory);
-    openOfficialPresets();
-    expect(screen.queryByRole('tab', { name: /^Image/ })).not.toBeNull();
+  it('restores filters, the official rail and vertical position when returning from either collection', async () => {
+    const onSelect = vi.fn();
+    render(
+      <div className="entry-main--scroll" data-testid="catalog-scroll-pane">
+        <DesignSystemsTab systems={[
+          ...librarySystems,
+          { ...systems[0]!, title: 'Personal One' },
+        ]} selectedId="social-web-1" onSelect={onSelect} />
+      </div>,
+    );
+    selectCategory('Retro', 3);
+    fireEvent.change(screen.getByTestId('design-systems-search'), { target: { value: 'One' } });
 
-    selectCategory('Tools');
+    expect(screen.getByTestId('design-system-card-retro-web-1')).toBeTruthy();
+    expect(screen.queryByTestId('design-system-card-retro-web-2')).toBeNull();
+    const rail = collection().getByTestId('design-systems-list');
+    rail.scrollLeft = 144;
+    expect(collection('Your systems').queryByTestId('design-systems-previous')).toBeNull();
+    expect(collection('Your systems').queryByTestId('design-systems-next')).toBeNull();
+    const scrollPane = screen.getByTestId('catalog-scroll-pane');
+    scrollPane.scrollTop = 37;
+    const openedCard = screen.getByTestId('design-system-card-retro-web-1');
+    fireEvent.click(openedCard);
+    expect(await screen.findByTestId('design-kit-view-retro-web-1')).toBeTruthy();
+    expect(scrollPane.scrollTop).toBe(0);
+    expect(screen.queryByRole('region', { name: 'Official presets' })).toBeNull();
+    expect(screen.getByTestId('design-systems-back')).toHaveFocus();
 
-    // Tools has only web systems, so the Image chip no longer applies.
-    expect(screen.queryByRole('tab', { name: /^Image/ })).toBeNull();
-    expect(surfacePillCount('Web')).toBe('1');
+    fireEvent.click(screen.getByTestId('design-systems-back'));
+    expect(openedCard).toHaveFocus();
+    expect(scrollPane.scrollTop).toBe(37);
+    expect(collection().getByTestId('design-systems-list').scrollLeft).toBe(144);
+    expect(screen.getByTestId('design-systems-search')).toHaveValue('One');
+    expect(screen.getByRole('combobox', { name: 'Category: Retro 2' })).toBeInTheDocument();
+    expect(screen.getByTestId('design-system-card-retro-web-1')).toBeTruthy();
+    expect(screen.queryByTestId('design-system-card-retro-web-2')).toBeNull();
+    expect(screen.queryByTestId('design-system-card-social-web-1')).toBeNull();
+    expect(screen.queryByTestId('design-kit-view-retro-web-1')).toBeNull();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    scrollPane.scrollTop = 280;
+    const personalCard = collection('Your systems').getByTestId('design-system-card-user:acme');
+    fireEvent.click(personalCard);
+    expect(await screen.findByTestId('design-kit-view-user:acme')).toBeTruthy();
+    expect(scrollPane.scrollTop).toBe(0);
+    fireEvent.click(screen.getByTestId('design-systems-back'));
+    expect(personalCard).toHaveFocus();
+    expect(scrollPane.scrollTop).toBe(280);
+    expect(collection().getByTestId('design-systems-list').scrollLeft).toBe(144);
   });
 
-  it('keeps the active surface chip visible when a search filters out all of its results', () => {
-    // PR #2141 review (Looper): the scoped-count hide rule must never remove
-    // the chip the user is currently on. Select Image, then search for text
-    // only web systems match — the Image chip must stay, and stay selected,
-    // so the active filter is visible instead of an empty list with no chip.
-    renderTab();
-    openOfficialPresets();
-    fireEvent.click(screen.getByRole('tab', { name: /^Image/ }));
-
-    fireEvent.change(screen.getByTestId('design-systems-search'), {
-      target: { value: 'Web' },
-    });
-
-    const imageTab = screen.queryByRole('tab', { name: /^Image/ });
-    expect(imageTab).not.toBeNull();
-    expect(imageTab?.getAttribute('aria-selected')).toBe('true');
-    // ...and it honestly reports zero matches for the current search.
-    expect(surfacePillCount('Image')).toBe('0');
-  });
 });

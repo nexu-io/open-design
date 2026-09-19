@@ -2621,6 +2621,16 @@ export interface Dict {
   'ds.emptyNoMatch': string;
   'ds.badgeDefault': string;
   'ds.preview': string;
+  'ds.detailTheme': string;
+  'ds.detailComponents': string;
+  'ds.detailGraphics': string;
+  'ds.detailGuidelines': string;
+  'ds.detailNavigation': string;
+  'ds.detailEmpty': string;
+  'ds.foundationFont': string;
+  'ds.foundationShadow': string;
+  'ds.foundationRadius': string;
+  'ds.foundationSpacing': string;
   'ds.kitVisualize': string;
   'ds.kitEdit': string;
   'ds.kitSource': string;

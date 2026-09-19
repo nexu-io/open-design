@@ -49,6 +49,9 @@ import {
 import type { KitUploadModule } from '../runtime/kit-upload';
 import { Icon, type IconName } from './Icon';
 import { KitErrorBoundary } from './KitErrorBoundary';
+import { ContentHeightFrame } from './ContentHeightFrame';
+import { DesignSystemFoundations, hasDesignSystemFoundations } from './DesignSystemFoundations';
+import type { DesignSystemToken } from './useDesignSystemTokens';
 import styles from './BrandPreviewCard.module.css';
 
 const IMAGE_CAP = 8;
@@ -256,6 +259,7 @@ export interface HeaderMenuAction {
 }
 
 export type DesignKitActionFeedbackTone = 'success' | 'error' | 'loading';
+export type DesignKitModule = 'identity' | 'logo' | 'typography' | 'palette' | 'voice' | 'imageryLayout' | 'images' | 'designSystem' | 'assets';
 
 export interface DesignKitViewProps {
   kit: DesignKit;
@@ -282,6 +286,11 @@ export interface DesignKitViewProps {
    * read-only Design Systems manager hides it as redundant.
    */
   showCover?: boolean;
+  /** A detail browser can supply its own title and show one group of modules. */
+  showHeader?: boolean;
+  modules?: readonly DesignKitModule[];
+  /** Use the theme detail's shared tokens for its font and foundation cards. */
+  foundationTokens?: readonly DesignSystemToken[];
   /**
    * Opens a full, scrollable preview when the user clicks the hover button
    * over the showcase cover. When omitted, the cover falls back to a built-in
@@ -322,6 +331,9 @@ function DesignKitViewInner({
   topSlot,
   stickyHeader = false,
   showCover = true,
+  showHeader = true,
+  modules,
+  foundationTokens,
   onPreviewCover,
   designMd,
   onUploadModule,
@@ -342,6 +354,7 @@ function DesignKitViewInner({
 }: DesignKitViewProps) {
   const t = useT();
   const compact = variant === 'compact';
+  const showsModule = (module: DesignKitModule) => !modules || modules.includes(module);
   const [coverPreviewOpen, setCoverPreviewOpen] = useState(false);
   const [tokens, setTokens] = useState<BrandTokenSubset | null>(null);
   const [dsTheme, setDsTheme] = useState<'light' | 'dark'>('light');
@@ -463,7 +476,7 @@ function DesignKitViewInner({
   // Engine token chips, when the system dir exists.
   useEffect(() => {
     const url = kit.system?.tokensUrl;
-    if (!url) {
+    if (!url || (modules && !modules.includes('designSystem'))) {
       setTokens(null);
       return;
     }
@@ -489,7 +502,7 @@ function DesignKitViewInner({
     return () => {
       cancelled = true;
     };
-  }, [kit.system?.tokensUrl]);
+  }, [kit.system?.tokensUrl, modules]);
 
   const colors = useMemo(
     () => kit.colors.map((color, index) => ({
@@ -1135,7 +1148,7 @@ function DesignKitViewInner({
       </div>
       ) : null}
 
-      <header
+      {showHeader ? <header
         ref={stickyHeader ? stickyHeaderRef : undefined}
         className={[
           styles.previewHead,
@@ -1192,13 +1205,13 @@ function DesignKitViewInner({
             {actionsSlot}
           </div>
         ) : null}
-      </header>
+      </header> : null}
 
       {noticeSlot}
       {topSlot}
 
       <>
-          {kit.description ? (
+          {showsModule('identity') && kit.description ? (
             <section className={styles.section} aria-label={t('brandDetail.identity')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.identity')}</h3>
@@ -1208,7 +1221,7 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {!compact ? (
+          {showsModule('logo') && !compact ? (
             <section
               ref={logoSectionRef}
               className={[
@@ -1289,14 +1302,16 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {fonts.length > 0 ? (
+          {showsModule('typography') && (foundationTokens !== undefined
+            ? hasDesignSystemFoundations(foundationTokens) : fonts.length > 0) ? (
             <section
-              className={styles.section}
+              className={`${styles.section} ${foundationTokens !== undefined ? styles.foundationSection : ''}`}
+              data-foundations={foundationTokens !== undefined ? '' : undefined}
               aria-label={t('brandDetail.typography')}
               onDragOver={handleModuleDragOver}
               onDrop={(event) => handleModuleDrop('font', event)}
             >
-              <div className={styles.dsHead}>
+              {foundationTokens === undefined || canUpload || designMd ? <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.typography')}</h3>
                 {moduleActions(
                   <>
@@ -1304,7 +1319,8 @@ function DesignKitViewInner({
                     {designMdModuleActionButtons(designMdModules.typography)}
                   </>,
                 )}
-              </div>
+              </div> : null}
+              {foundationTokens !== undefined ? <DesignSystemFoundations tokens={foundationTokens} /> : <>
               <div className={styles.fontTiles}>
                 {fonts.map(({ font, label }) => (
                   <div key={`tile-${label}-${font.family}`} className={styles.fontTile}>
@@ -1338,8 +1354,9 @@ function DesignKitViewInner({
                   ))}
                 </div>
               )}
+              </>}
             </section>
-          ) : !compact && canUpload ? (
+          ) : showsModule('typography') && foundationTokens === undefined && !compact && canUpload ? (
             <section
               className={styles.section}
               aria-label={t('brandDetail.typography')}
@@ -1354,7 +1371,7 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {colors.length > 0 ? (
+          {showsModule('palette') && colors.length > 0 ? (
             <section className={styles.section} aria-label={t('brandDetail.palette')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.palette')}</h3>
@@ -1393,7 +1410,7 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {!compact && voice ? (
+          {showsModule('voice') && !compact && voice ? (
             <section className={styles.section} aria-label={t('brandDetail.voiceTone')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.voiceTone')}</h3>
@@ -1435,7 +1452,7 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {!compact && (imagery || layout) ? (
+          {showsModule('imageryLayout') && !compact && (imagery || layout) ? (
             <section className={styles.section} aria-label={t('brandDetail.imageryLayout')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.imageryLayout')}</h3>
@@ -1473,7 +1490,7 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {!compact && (samples.length > 0 || canUpload) ? (
+          {showsModule('images') && !compact && (samples.length > 0 || canUpload) ? (
             <section
               className={styles.section}
               aria-label={t('brandDetail.images')}
@@ -1556,7 +1573,7 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {!compact && kit.system && dsKitUrl ? (
+          {showsModule('designSystem') && !compact && kit.system && dsKitUrl ? (
             <section className={styles.section} aria-label={t('brandDetail.designSystem')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.designSystem')}</h3>
@@ -1614,12 +1631,10 @@ function DesignKitViewInner({
                   </div>
                   <span className={styles.dsCap}>{kit.system.kitLabel ?? 'system/kit.html'}</span>
                 </div>
-                <iframe
+                <ContentHeightFrame
                   key={dsKitUrl}
                   className={styles.dsFrame}
                   src={dsKitUrl}
-                  loading="lazy"
-                  sandbox={DESIGN_KIT_PREVIEW_SANDBOX}
                   title={t('brandDetail.designSystem')}
                 />
               </div>
@@ -1642,7 +1657,7 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {!compact && kit.assets && kit.assets.length > 0 ? (
+          {showsModule('assets') && !compact && kit.assets && kit.assets.length > 0 ? (
             <section className={styles.section} aria-label={t('brandDetail.brandAssets')}>
               <h3 className={styles.sectionTitle}>{t('brandDetail.brandAssets')}</h3>
               <div className={styles.assets}>

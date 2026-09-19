@@ -458,6 +458,12 @@
   background: transparent;
 }
 
+.section.foundationSection {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
 .sectionEditFocus {
   border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
   background:
@@ -1078,7 +1084,7 @@
 .dsFrameWrap {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 16px;
   background: var(--bg);
 }
 
@@ -1147,14 +1153,14 @@
   gap: 8px;
   padding: 5px 11px 5px 5px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
 }
 
 .tokSwatch {
   width: 26px;
   height: 26px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-pill);
   border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
@@ -1183,7 +1189,7 @@
   min-width: 26px;
   height: 26px;
   padding: 0 6px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-pill);
   background: var(--accent-tint);
   color: var(--accent);
   font-size: 12px;
@@ -1205,7 +1211,7 @@
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 16px;
   background: var(--bg-panel);
   color: inherit;
   font: inherit;

@@ -1,0 +1,131 @@
+.root {
+  --foundation-border: #f7f7f7;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.fonts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--foundation-border);
+  border-radius: 16px;
+  background: var(--bg);
+}
+
+.fontSample {
+  display: flex;
+  align-items: center;
+  height: 104px;
+  padding: 12px 16px;
+  color: var(--text-strong);
+  font-size: 72px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.fontMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 72px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--foundation-border);
+}
+
+.label, .groupLabel {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.fontName {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.samples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 20px 24px;
+  min-height: 116px;
+  padding: 20px 24px;
+}
+
+.sample {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 66px;
+  max-width: 160px;
+  text-align: center;
+}
+
+.sampleStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+}
+
+.shadowSample, .radiusSample {
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--foundation-border);
+  background: var(--bg);
+}
+
+.shadowSample { border-radius: 8px; }
+.radiusSample { background: var(--bg-subtle); }
+
+.spacingSample {
+  min-width: 1px;
+  max-width: 120px;
+  height: 48px;
+  border-inline: 1px solid var(--foundation-border);
+  background: var(--bg-subtle);
+}
+
+.sampleName {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.tokenName {
+  margin-top: -5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.groupLabel {
+  margin: 0;
+  padding: 16px;
+  border-top: 1px solid var(--foundation-border);
+}
+
+@container (max-width: 560px) {
+  .fonts { grid-template-columns: minmax(0, 1fr); }
+  .samples { gap: 20px; padding-inline: 16px; }
+}

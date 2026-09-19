@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
-// recvqb6mfyqXLD: viewing a teammate's shared design system in the 团队 tab
+// recvqb6mfyqXLD: viewing a teammate's shared design system in the 团队 collection
 // showed a fully-live "Edit with agent" button, a clickable "已发布" toggle,
 // and a "删除" menu item — none of which a plain member (not the sharer, not
 // a workspace owner/admin) may actually use. `canManageTeamSynced` in
 // DesignSystemsTab.tsx gates all three off the same signal the daemon already
 // uses for "who can unshare" (`canManageSharedResource`).
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
@@ -120,9 +120,9 @@ function renderTab() {
   );
 }
 
-async function openTeamTabAndSelect() {
-  await waitFor(() => expect(screen.getByRole('tab', { name: /Team/i })).toBeTruthy());
-  fireEvent.click(screen.getByRole('tab', { name: /Team/i }));
+async function openTeamSystem() {
+  const team = within(screen.getByRole('region', { name: 'Team' }));
+  fireEvent.click(await team.findByTestId('design-system-card-user:teammate-ds'));
   await screen.findByTestId('design-kit-view-user:teammate-ds');
 }
 
@@ -130,7 +130,7 @@ describe('DesignSystemsTab team-synced permission gating', () => {
   it('hides edit/publish/delete for a teammate-shared system the caller may not manage', async () => {
     mockTeamFetch(false);
     renderTab();
-    await openTeamTabAndSelect();
+    await openTeamSystem();
 
     // Edit with agent is a real write surface into the authoring flow — fully
     // hidden, not just disabled.
@@ -150,7 +150,7 @@ describe('DesignSystemsTab team-synced permission gating', () => {
   it('keeps edit/publish/delete live for the original sharer or a workspace owner/admin', async () => {
     mockTeamFetch(true);
     renderTab();
-    await openTeamTabAndSelect();
+    await openTeamSystem();
 
     expect(screen.getByRole('button', { name: /Edit with agent/i })).toBeTruthy();
 
