@@ -11,6 +11,7 @@
  * proxy-config tools; owns no other sibling dependency.
  */
 import { execFileSync } from "node:child_process";
+import { isIP } from "node:net";
 
 export type SystemProxyCommandRunner = (command: string, args: string[]) => string;
 
@@ -140,22 +141,39 @@ function addProxyEnvValue(
   if (platform !== "win32") env[key.toLowerCase()] = trimmed;
 }
 
-/** @internal Expand a single NO_PROXY bypass token into its normalized forms (e.g. `<local>`, `*.foo`, `::1`). */
-function normalizeBypassToken(token: string): string[] {
+type Ipv6BypassFormat = "node" | "httpx";
+
+/** @internal Format an IPv6 bypass literal for the target env-proxy parser. */
+function formatIpv6Bypass(address: string, format: Ipv6BypassFormat): string {
+  return format === "node" ? `[${address}]` : address;
+}
+
+/** @internal Expand a NO_PROXY token for one env-proxy parser, omitting incompatible IPv6 CIDR ranges. */
+function normalizeBypassToken(token: string, format: Ipv6BypassFormat): string[] {
   const trimmed = token.trim();
   if (!trimmed) return [];
-  if (trimmed === "<local>") return ["<local>", "localhost", "127.0.0.1", "[::1]", ".local"];
-  if (trimmed === "::1") return ["[::1]"];
+  if (trimmed.includes(":") && trimmed.includes("/")) return [];
+  if (trimmed === "<local>") {
+    return ["<local>", "localhost", "127.0.0.1", formatIpv6Bypass("::1", format), ".local"];
+  }
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    const address = trimmed.slice(1, -1);
+    if (isIP(address) === 6) return [formatIpv6Bypass(address, format)];
+  }
+  if (isIP(trimmed) === 6) return [formatIpv6Bypass(trimmed, format)];
   if (trimmed.startsWith("*.")) return [`.${trimmed.slice(2)}`];
   return [trimmed];
 }
 
 /** @internal Build a de-duplicated, comma-joined NO_PROXY value from bypass tokens, or `null` when empty. */
-function buildNoProxyValue(tokens: Iterable<string>): string | null {
+function buildNoProxyValue(
+  tokens: Iterable<string>,
+  format: Ipv6BypassFormat = "node",
+): string | null {
   const seen = new Set<string>();
   const values: string[] = [];
   for (const token of tokens) {
-    for (const normalized of normalizeBypassToken(token)) {
+    for (const normalized of normalizeBypassToken(token, format)) {
       if (!seen.has(normalized)) {
         seen.add(normalized);
         values.push(normalized);
@@ -168,6 +186,11 @@ function buildNoProxyValue(tokens: Iterable<string>): string | null {
 /** @internal Preserve a wildcard (`*`) NO_PROXY bypass verbatim, since it disables proxying entirely. */
 function preserveWildcardNoProxyValue(noProxy: string | null | undefined): string | undefined {
   return noProxy?.split(",").some((token) => token.trim() === "*") ? "*" : undefined;
+}
+
+/** Normalize a NO_PROXY value for Python/httpx without changing valid IPv4 CIDR policy. */
+export function normalizeNoProxyForHttpx(noProxy: string): string | null {
+  return preserveWildcardNoProxyValue(noProxy) ?? buildNoProxyValue(noProxy.split(/[;,]/), "httpx");
 }
 
 /** @internal Ensure a proxy URL has a scheme, defaulting to the supplied scheme when only an authority is given. */
@@ -229,7 +252,7 @@ function finalizeSystemProxyEnv(
         ...(values.noProxy ? values.noProxy.split(",") : []),
         "localhost",
         "127.0.0.1",
-        "[::1]",
+        "::1",
       ])
     : null;
   const env: NodeJS.ProcessEnv = {};

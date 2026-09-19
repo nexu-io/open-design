@@ -269,6 +269,44 @@ test('spawnEnvForAgent applies system proxy env to all agent runtimes before bas
   assert.equal(env.PATH, '/usr/bin');
 });
 
+test('spawnEnvForAgent preserves Node-compatible IPv6 bypasses for Node runtimes', () => {
+  const env = spawnEnvForAgent(
+    'opencode',
+    { PATH: '/usr/bin' },
+    {},
+    {
+      HTTP_PROXY: 'http://system-http:7890',
+      NO_PROXY: 'localhost,127.0.0.1,[::1]',
+      NODE_USE_ENV_PROXY: '1',
+    },
+  );
+
+  assert.equal(env.NO_PROXY, 'localhost,127.0.0.1,[::1]');
+  if (process.platform !== 'win32') {
+    assert.equal(env.no_proxy, 'localhost,127.0.0.1,[::1]');
+  }
+});
+
+test('spawnEnvForAgent emits httpx-compatible bypasses for Python runtimes', () => {
+  for (const agentId of ['aider', 'hermes', 'kimi']) {
+    const env = spawnEnvForAgent(
+      agentId,
+      { PATH: '/usr/bin' },
+      {},
+      {
+        HTTP_PROXY: 'http://system-http:7890',
+        NO_PROXY: 'localhost,127.0.0.1,[::1],fe80::/10,10.0.0.0/8',
+        NODE_USE_ENV_PROXY: '1',
+      },
+    );
+
+    assert.equal(env.NO_PROXY, 'localhost,127.0.0.1,::1,10.0.0.0/8');
+    if (process.platform !== 'win32') {
+      assert.equal(env.no_proxy, 'localhost,127.0.0.1,::1,10.0.0.0/8');
+    }
+  }
+});
+
 test('spawnEnvForAgent resolves system proxy env for each default agent launch', () => {
   const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
     HTTPS_PROXY: 'http://system-https:7891',
