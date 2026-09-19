@@ -18,7 +18,9 @@ spec:
     metadata:
       annotations:
           checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.authProxy.enabled }}
           checksum/proxy-config: {{ include (print $.Template.BasePath "/proxy-configmap.yaml") . | sha256sum }}
+        {{- end }}
           checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
       labels:
         {{- include "open-design.selectorLabels" . | nindent 8 }}
@@ -31,6 +33,7 @@ spec:
         {{- if .Values.initContainers }}
         {{- toYaml .Values.initContainers | nindent 8 }}
         {{- end }}
+        {{- if .Values.authProxy.enabled }}
         - name: auth-proxy-init
           image: {{ .Values.authProxy.image }}
           securityContext:
@@ -54,6 +57,7 @@ spec:
               mountPath: /etc/nginx/conf.d
             - name: proxy-tmp
               mountPath: /tmp
+        {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -67,12 +71,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "open-design.fullname" . }}
+          {{- if .Values.authProxy.enabled }}
           env:
             - name: OD_API_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "open-design.fullname" . }}
                   key: OD_API_TOKEN
+          {{- end }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             exec:
@@ -98,6 +104,7 @@ spec:
               mountPath: /app/.od
             - name: tmp
               mountPath: /tmp
+        {{- if .Values.authProxy.enabled }}
         - name: auth-proxy
           image: {{ .Values.authProxy.image }}
           securityContext:
@@ -128,6 +135,7 @@ spec:
               readOnly: true
             - name: proxy-tmp
               mountPath: /tmp
+        {{- end }}
         {{- if .Values.sidecars }}
         {{- toYaml .Values.sidecars | nindent 8 }}
         {{- end }}
@@ -141,6 +149,7 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.authProxy.enabled }}
         - name: proxy-template
           configMap:
             name: {{ include "open-design.fullname" . }}-proxy
@@ -148,6 +157,7 @@ spec:
           emptyDir: {}
         - name: proxy-tmp
           emptyDir: {}
+        {{- end }}
 {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
