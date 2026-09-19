@@ -186,9 +186,11 @@ export function handleCritiqueArtifact(
           "default-src 'none'; img-src data:; style-src 'unsafe-inline'",
         );
       }
-      // Artifacts are content-addressed by runId; the row never re-points
-      // to a different file once written, so a long cache lifetime is safe.
-      res.setHeader('Cache-Control', 'private, max-age=3600');
+      // Already persisted on the daemon artifact store and served over
+      // loopback. `max-age` made Chromium SimpleCache write each HTML/SVG
+      // body to the packaged Helper disk cache (#8284). no-store avoids
+      // that duplicate.
+      res.setHeader('Cache-Control', 'no-store');
 
       // createReadStream({ autoClose: true }) is the FileHandle method that
       // closes the underlying fd when the stream ends or errors, so we do
