@@ -1803,19 +1803,95 @@ function mcpDeliveryFacts(
   };
 }
 
-export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
-  const daemonTarget = createMcpDaemonTarget(options);
-  const briefStore = createLocalMcpBriefStore();
-  let observabilityPromise: Promise<McpObservabilitySession> | null = null;
-  let closeTransportForIdle: (() => void) | null = null;
-  const idleExit = _createMcpIdleExitController({
-    idleMs: _resolveMcpStdioIdleExitMs(),
-    onIdle: () => closeTransportForIdle?.(),
+export function _installMcpFatalErrorHandlers(options: {
+  writeStderr?: (message: string) => void;
+  exit?: (code: number) => void;
+} = {}): () => void {
+  const writeStderr = options.writeStderr ?? ((message: string) => {
+    process.stderr.write(message);
   });
-  const withMcpActivity =
-    <Args extends unknown[], Result>(handler: (...args: Args) => Result | Promise<Result>) =>
-      (...args: Args) =>
-        idleExit.trackRequest(() => handler(...args));
+  const exit = options.exit ?? ((code: number) => {
+    process.exit(code);
+  });
+  let exiting = false;
+  const finish = () => {
+    try {
+      exit(1);
+    } catch {
+      process.exitCode = 1;
+    }
+  };
+  // process.exit() does not wait for a pending pipe write, so the diagnostic
+  // can be lost on the MCP client's stderr pipe (see flushStreamsAndExit in
+  // cli.ts). Injected streams are synchronous, so those exit immediately.
+  const flushThenExit = () => {
+    if (options.writeStderr || options.exit) {
+      finish();
+      return;
+    }
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const done = () => {
+      if (timeout) clearTimeout(timeout);
+      finish();
+    };
+    try {
+      timeout = setTimeout(done, 250);
+      timeout.unref?.();
+      process.stderr.write('', done);
+    } catch {
+      done();
+    }
+  };
+  const reportAndExit = (kind: string, reason: unknown) => {
+    if (exiting) return;
+    exiting = true;
+    try {
+      const error = reason instanceof Error ? reason : new Error(String(reason));
+      writeStderr(`[od mcp] ${kind}: ${error.stack ?? error.message}\n`);
+    } catch {
+      // A diagnostic that cannot be written must not block the fatal exit.
+    } finally {
+      flushThenExit();
+    }
+  };
+  const onUncaughtException = (error: Error) => {
+    reportAndExit('uncaught exception', error);
+  };
+  const onUnhandledRejection = (reason: unknown) => {
+    reportAndExit('unhandled rejection', reason);
+  };
+  process.on('uncaughtException', onUncaughtException);
+  process.on('unhandledRejection', onUnhandledRejection);
+  return () => {
+    process.off('uncaughtException', onUncaughtException);
+    process.off('unhandledRejection', onUnhandledRejection);
+  };
+}
+
+export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
+  const disposeFatalErrorHandlers = _installMcpFatalErrorHandlers();
+  try {
+    await runMcpStdioImplementation(options);
+  } finally {
+    disposeFatalErrorHandlers();
+  }
+}
+
+async function runMcpStdioImplementation(options: RunMcpOptions): Promise<void> {
+  let closeTransportForIdle: (() => void) | null = null;
+  let idleExit: ReturnType<typeof _createMcpIdleExitController> | null = null;
+  try {
+    const daemonTarget = createMcpDaemonTarget(options);
+    const briefStore = createLocalMcpBriefStore();
+    let observabilityPromise: Promise<McpObservabilitySession> | null = null;
+    idleExit = _createMcpIdleExitController({
+      idleMs: _resolveMcpStdioIdleExitMs(),
+      onIdle: () => closeTransportForIdle?.(),
+    });
+    const withMcpActivity =
+      <Args extends unknown[], Result>(handler: (...args: Args) => Result | Promise<Result>) =>
+        (...args: Args) =>
+          idleExit!.trackRequest(() => handler(...args));
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -1982,7 +2058,7 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
 
     const sdkOnMessage = transport.onmessage;
     transport.onmessage = (...args) => {
-      idleExit.noteActivity();
+      idleExit!.noteActivity();
       sdkOnMessage?.(...args);
     };
 
@@ -1996,7 +2072,7 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
       const done = () => {
         if (finished) return;
         finished = true;
-        idleExit.dispose();
+        idleExit!.dispose();
         resolve();
       };
       transport.onclose = () => {
@@ -2010,8 +2086,11 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
       process.stdin.once('close', closeTransportForStdin);
     });
   } finally {
-    idleExit.dispose();
+    idleExit?.dispose();
     closeTransportForIdle = null;
+  }
+  } finally {
+    idleExit?.dispose();
   }
 }
 
