@@ -18,10 +18,18 @@ function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
+/**
+ * Runtimes whose resume handle is a path to a session transcript on disk rather
+ * than an opaque id — the `pi-rpc` family (pi and Oh My Pi). Their handle is
+ * discovered by scanning the session directory after a turn, not reported by
+ * the CLI, which is what the `session-file-*` metadata values describe.
+ */
+const SESSION_FILE_PATH_AGENT_IDS = new Set(['pi', 'omp']);
+
 function handleKindForAgent(agentId: string | null): NativeSessionHandleKind {
   if (agentId === 'codex') return 'cli-thread-id';
   if (agentId === 'amr') return 'acp-session-handle';
-  if (agentId === 'pi') return 'session-file-path';
+  if (agentId && SESSION_FILE_PATH_AGENT_IDS.has(agentId)) return 'session-file-path';
   if (agentId) return 'opaque-id';
   return 'unknown';
 }
@@ -31,7 +39,7 @@ function handleKindForRuntime(
 ): NativeSessionHandleKind {
   if (def.resumesSessionViaAcpLoad === true) return 'acp-session-handle';
   if (def.resumesSessionViaProfileStdio === true) return 'profile-session-id';
-  if (def.id === 'pi') return 'session-file-path';
+  if (SESSION_FILE_PATH_AGENT_IDS.has(def.id)) return 'session-file-path';
   if (def.capturesSessionIdFromStream === true) return 'cli-thread-id';
   return handleKindForAgent(def.id);
 }
@@ -60,7 +68,7 @@ function acquisitionForRuntime(
   if (!supported) return 'none';
   if (def.resumesSessionViaAcpLoad === true) return 'acp-session-load';
   if (def.resumesSessionViaProfileStdio === true) return 'profile-session-frame';
-  if (def.id === 'pi') return 'session-file-discovered';
+  if (SESSION_FILE_PATH_AGENT_IDS.has(def.id)) return 'session-file-discovered';
   if (def.capturesSessionIdFromStream === true) return 'stream-captured';
   if (def.resumesSessionViaCli === true) return 'daemon-specified';
   return 'unknown';
@@ -73,7 +81,7 @@ function continuationForRuntime(
   if (!supported) return 'none';
   if (def.resumesSessionViaAcpLoad === true) return 'acp-session-load';
   if (def.resumesSessionViaProfileStdio === true) return 'profile-stdio-resume';
-  if (def.id === 'pi') return 'session-file-resume';
+  if (SESSION_FILE_PATH_AGENT_IDS.has(def.id)) return 'session-file-resume';
   if (runtimeResumesSessionById(def)) return 'native-resume-by-id';
   return 'unknown';
 }
