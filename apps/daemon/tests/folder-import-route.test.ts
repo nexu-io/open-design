@@ -586,6 +586,93 @@ describe('POST /api/import/folder', () => {
     });
   });
 
+  it('promotes a linked folder to baseDir without leaving it read-only', async () => {
+    const originalFolder = makeFolder();
+    await writeFile(path.join(originalFolder, 'index.html'), '<!doctype html>');
+    const importResp = await importFolder({ baseDir: originalFolder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as {
+      project: { id: string; metadata: Record<string, unknown> };
+    };
+
+    const workspaceFolder = makeFolder();
+    const referenceFolder = makeFolder();
+    const aliasParent = makeFolder();
+    const workspaceAlias = path.join(aliasParent, 'workspace-alias');
+    symlinkSync(workspaceFolder, workspaceAlias, 'dir');
+    await writeFile(path.join(workspaceFolder, 'index.html'), '<!doctype html>');
+
+    const secret = randomBytes(32);
+    setDesktopAuthSecret(secret);
+    const initialToken = signDesktopImportToken(secret, originalFolder, {
+      nonce: `initial-${Date.now()}`,
+      exp: new Date(Date.now() + 30_000).toISOString(),
+    });
+    const trustedResp = await fetch(`${baseUrl}/api/projects/${project.id}/working-dir`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-od-desktop-import-token': initialToken,
+      },
+      body: JSON.stringify({ baseDir: originalFolder }),
+    });
+    expect(trustedResp.status).toBe(200);
+    const trustedProject = ((await trustedResp.json()) as {
+      project: { metadata: Record<string, unknown> };
+    }).project;
+
+    const patchResp = await fetch(`${baseUrl}/api/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: {
+          ...trustedProject.metadata,
+          userWorkingDir: workspaceFolder,
+          linkedDirs: [workspaceAlias, referenceFolder],
+        },
+      }),
+    });
+    expect(patchResp.status).toBe(200);
+
+    const promotionToken = signDesktopImportToken(secret, workspaceFolder, {
+      nonce: `promotion-${Date.now()}`,
+      exp: new Date(Date.now() + 30_000).toISOString(),
+    });
+    const replaceResp = await fetch(`${baseUrl}/api/projects/${project.id}/working-dir`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-od-desktop-import-token': promotionToken,
+      },
+      body: JSON.stringify({ baseDir: workspaceFolder }),
+    });
+    expect(replaceResp.status).toBe(200);
+    const replaceBody = (await replaceResp.json()) as {
+      project: {
+        metadata?: {
+          baseDir?: string;
+          fromTrustedPicker?: boolean;
+          linkedDirs?: string[];
+          userWorkingDir?: string;
+        };
+      };
+    };
+    expect(replaceBody.project.metadata?.baseDir).toBe(await realpath(workspaceFolder));
+    expect(replaceBody.project.metadata?.fromTrustedPicker).toBe(true);
+    expect(replaceBody.project.metadata?.linkedDirs).toEqual([await realpath(referenceFolder)]);
+    expect(replaceBody.project.metadata?.userWorkingDir).toBeUndefined();
+
+    const replayResp = await fetch(`${baseUrl}/api/projects/${project.id}/working-dir`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-od-desktop-import-token': promotionToken,
+      },
+      body: JSON.stringify({ baseDir: workspaceFolder }),
+    });
+    expect(replayResp.status).toBe(403);
+  });
+
   it('fails result-package when a folder-backed workspace cannot be enumerated', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
