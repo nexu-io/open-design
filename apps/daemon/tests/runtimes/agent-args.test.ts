@@ -714,7 +714,12 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
   assert.deepEqual(firstTurn, ['-p', 'first']);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
-  assert.equal(antigravity.maxPromptArgBytes, undefined);
+  // No stdin: the prompt rides argv. Cap the argv prompt at 30 KB so the
+  // pre-buildArgs `checkPromptArgvBudget` guard fires before Windows
+  // CreateProcess hits the 32 KB command-line cap and surfaces a raw
+  // `spawn ENAMETOOLONG` instead of the actionable AGENT_PROMPT_TOO_LARGE
+  // error (#7733).
+  assert.equal(antigravity.maxPromptArgBytes, 30_000);
 
   // Picker exposes the synthetic Default + the 8 labels agy's TUI
   // Switch-Model surfaces for consumer-tier accounts. The set is small
