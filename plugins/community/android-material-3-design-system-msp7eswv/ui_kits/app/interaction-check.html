@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material Inbox interaction check</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../../colors_and_type.css">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    html, body, #root { min-height: 100%; }
+    body { margin: 0; background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); }
+    .check-results { position: fixed; z-index: 100; top: 12px; right: 12px; width: min(380px, calc(100% - 24px)); max-height: calc(100vh - 24px); overflow: auto; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 16px; padding: 16px; background: var(--md-sys-color-surface-container-high); box-shadow: var(--md-sys-elevation-3); }
+    .check-results h1 { margin: 0 0 8px; font: var(--md-sys-type-title-large); }
+    .check-results p { margin: 0 0 8px; font: var(--md-sys-type-body-medium); }
+    .check-results li { margin: 4px 0; font: var(--md-sys-type-body-small); }
+    .check-pass { color: #146c2e; }
+    .check-fail { color: var(--md-sys-color-error); }
+    .responsive-check-frame { position: fixed; top: 0; left: -10000px; border: 0; }
+  </style>
+</head>
+<body>
+  <aside class="check-results" aria-live="polite">
+    <h1>Interaction regression check</h1>
+    <p id="check-summary">Running…</p>
+    <ol id="check-log"></ol>
+  </aside>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+  <script type="text/babel" src="components/NavigationRail.jsx"></script>
+  <script type="text/babel" src="components/MailList.jsx"></script>
+  <script type="text/babel" src="components/MessageDetail.jsx"></script>
+  <script type="text/babel" src="components/ComposerDialog.jsx"></script>
+  <script type="text/babel" src="components/Snackbar.jsx"></script>
+  <script type="text/babel" src="components/App.jsx"></script>
+  <script type="text/babel">
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+
+    const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const delay = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+    const log = document.getElementById('check-log');
+    const summary = document.getElementById('check-summary');
+
+    function assert(condition, message) {
+      if (!condition) throw new Error(message);
+    }
+
+    function report(name, passed, detail = '') {
+      const item = document.createElement('li');
+      item.className = passed ? 'check-pass' : 'check-fail';
+      item.textContent = `${passed ? 'PASS' : 'FAIL'} — ${name}${detail ? `: ${detail}` : ''}`;
+      log.append(item);
+    }
+
+    function setControlledValue(element, value) {
+      const view = element.ownerDocument.defaultView;
+      const prototype = element instanceof view.HTMLTextAreaElement ? view.HTMLTextAreaElement.prototype : view.HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, value);
+      element.dispatchEvent(new view.Event('input', { bubbles: true }));
+    }
+
+    const settleWindow = (view) => new Promise((resolve) => view.requestAnimationFrame(() => view.requestAnimationFrame(resolve)));
+
+    async function waitFor(predicate, timeout = 5000) {
+      const startedAt = performance.now();
+      while (!predicate()) {
+        if (performance.now() - startedAt > timeout) throw new Error('Responsive fixture did not become ready.');
+        await delay(25);
+      }
+    }
+
+    async function withResponsiveFrame(width, height, callback) {
+      const frame = document.createElement('iframe');
+      frame.className = 'responsive-check-frame';
+      frame.width = width;
+      frame.height = height;
+      frame.title = `${width} by ${height} responsive fixture`;
+      frame.src = 'index.html';
+      const loaded = new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error(`Responsive fixture ${width}×${height} did not load.`)), 5000);
+        frame.addEventListener('load', () => {
+          window.clearTimeout(timeout);
+          resolve();
+        }, { once: true });
+      });
+      document.body.append(frame);
+      try {
+        await loaded;
+        await waitFor(() => frame.contentDocument?.querySelector('.fab'));
+        await settleWindow(frame.contentWindow);
+        return await callback(frame.contentDocument, frame.contentWindow);
+      } finally {
+        frame.remove();
+      }
+    }
+
+    function assertSeparated(first, second, gap, message) {
+      const firstRect = first.getBoundingClientRect();
+      const secondRect = second.getBoundingClientRect();
+      const separated = firstRect.right + gap <= secondRect.left
+        || secondRect.right + gap <= firstRect.left
+        || firstRect.bottom + gap <= secondRect.top
+        || secondRect.bottom + gap <= firstRect.top;
+      assert(separated, message);
+    }
+
+    async function openComposerIn(documentRoot) {
+      documentRoot.querySelector('.fab').click();
+      await settleWindow(documentRoot.defaultView);
+      return documentRoot.querySelector('[role="dialog"]');
+    }
+
+    async function sendMessageIn(documentRoot, index) {
+      const dialog = await openComposerIn(documentRoot);
+      const fields = dialog.querySelectorAll('input, textarea');
+      setControlledValue(fields[0], `person${index}@example.com`);
+      setControlledValue(fields[1], `Responsive subject ${index}`);
+      setControlledValue(fields[2], `Responsive message ${index}`);
+      await settleWindow(documentRoot.defaultView);
+      dialog.querySelector('button[type="submit"]').click();
+      await settleWindow(documentRoot.defaultView);
+      assert(documentRoot.querySelector('[role="status"]'), 'Sending did not create responsive feedback.');
+    }
+
+    async function typeThroughCurrentFocus(element, text) {
+      element.focus();
+      for (const character of text) {
+        const active = document.activeElement;
+        assert(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement, 'Typing focus escaped to a non-editable element.');
+        setControlledValue(active, `${active.value}${character}`);
+        await settle();
+      }
+    }
+
+    function contrastRatio(foreground, background) {
+      const luminance = (value) => {
+        const channels = value.match(/[\d.]+/g).slice(0, 3).map((channel) => Number(channel) / 255).map((channel) => (
+          channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+        ));
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+      };
+      const foregroundLuminance = luminance(foreground);
+      const backgroundLuminance = luminance(background);
+      return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+    }
+
+    async function openComposer() {
+      const compose = document.querySelector('.fab');
+      compose.focus();
+      compose.click();
+      await settle();
+      return compose;
+    }
+
+    async function sendMessage(index) {
+      await openComposer();
+      const dialog = document.querySelector('[role="dialog"]');
+      const fields = dialog.querySelectorAll('input, textarea');
+      setControlledValue(fields[0], `person${index}@example.com`);
+      setControlledValue(fields[1], `Repeated subject ${index}`);
+      setControlledValue(fields[2], `Repeated message ${index}`);
+      await settle();
+      dialog.querySelector('button[type="submit"]').click();
+      await settle();
+      assert(document.querySelector('[role="status"]'), 'Sending did not create a snackbar.');
+    }
+
+    async function runChecks() {
+      try {
+        await settle();
+        const compose = await openComposer();
+        const dialog = document.querySelector('[role="dialog"]');
+        const [to, subject, message] = dialog.querySelectorAll('input, textarea');
+        assert(document.querySelector('.app-background').inert, 'Background is not inert while the dialog is open.');
+        assert(document.activeElement === to, 'Composer initial focus did not land on To.');
+
+        await typeThroughCurrentFocus(to, 'recipient@example.com');
+        await typeThroughCurrentFocus(message, 'Message body stays here');
+        assert(to.value === 'recipient@example.com', `To changed to "${to.value}".`);
+        assert(subject.value === '', `Subject unexpectedly changed to "${subject.value}".`);
+        assert(message.value === 'Message body stays here', `Message changed to "${message.value}".`);
+        assert(document.activeElement === message, 'Message did not retain focus while typing.');
+        report('Composer initially focuses To and fields retain focus and values', true);
+
+        const send = dialog.querySelector('button[type="submit"]');
+        send.focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        assert(document.activeElement === to, 'Tab escaped past the final dialog control.');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        assert(document.activeElement === send, 'Shift+Tab escaped before the first dialog control.');
+        report('Modal focus wraps in both directions', true);
+
+        dialog.querySelector('button[type="button"]').click();
+        await settle();
+        assert(document.activeElement === compose, 'Closing the dialog did not restore focus to Compose.');
+        assert(!document.querySelector('.app-background').inert, 'Background remained inert after dialog close.');
+        report('Dialog restores focus and background access', true);
+
+        const firstMailItem = document.querySelector('.mail-item');
+        assert(getComputedStyle(firstMailItem.querySelector('.subject')).display === 'block', 'Subject is not a block row.');
+        assert(getComputedStyle(firstMailItem.querySelector('.snippet')).display === 'block', 'Snippet is not a block row.');
+        assert(firstMailItem.getAttribute('aria-label').includes('. Adaptive navigation review. I added'), 'Mail accessible name does not separate subject and snippet.');
+        report('Mail rows separate visual and spoken content', true);
+
+        const disabledDestinations = document.querySelectorAll('.nav-action:disabled');
+        assert(disabledDestinations.length >= 2, 'Unavailable destinations are still actionable.');
+        const star = document.querySelector('[aria-label="Star message"]');
+        star.click();
+        await settle();
+        assert(document.querySelector('[aria-label="Unstar message"]')?.getAttribute('aria-pressed') === 'true', 'Star action did not update message state.');
+        assert(document.querySelector('[aria-label="More actions unavailable"]')?.disabled, 'Unavailable message action is still enabled.');
+        report('Visible actions either work or are disabled', true);
+
+        await sendMessage(1);
+        await delay(3000);
+        await sendMessage(2);
+        await delay(2300);
+        assert(document.querySelector('[role="status"]'), 'A replacement snackbar was dismissed by the previous notification timer.');
+        report('Repeated snackbar owns an independent timer', true);
+        await delay(3000);
+        assert(!document.querySelector('[role="status"]'), 'Replacement snackbar did not dismiss after its own timeout.');
+
+        document.querySelector('[aria-label="Archive message"]').click();
+        await settle();
+        const snackbar = document.querySelector('.snackbar');
+        const undo = snackbar.querySelector('button');
+        const undoStyle = getComputedStyle(undo);
+        const snackbarStyle = getComputedStyle(snackbar);
+        assert(undo.getBoundingClientRect().height >= 48, 'Snackbar action target is shorter than 48px.');
+        assert(contrastRatio(undoStyle.color, snackbarStyle.backgroundColor) >= 4.5, 'Snackbar action contrast is below 4.5:1.');
+        assert(document.querySelector('.filter-chip').getBoundingClientRect().height >= 48, 'Filter chip target is shorter than 48px.');
+        undo.click();
+        await settle();
+        assert(document.querySelectorAll('.mail-item').length === 4, 'Undo did not restore a valid message item.');
+        report('Archive undo, action contrast, and target sizes meet the package contract', true);
+
+        for (const width of [390, 640]) {
+          await withResponsiveFrame(width, 844, async (responsiveDocument) => {
+            await sendMessageIn(responsiveDocument, width);
+            assertSeparated(
+              responsiveDocument.querySelector('.fab'),
+              responsiveDocument.querySelector('.snackbar'),
+              12,
+              `Snackbar collides with Compose at ${width}px.`,
+            );
+          });
+        }
+        report('Responsive feedback preserves the Compose action', true);
+
+        for (const [width, height] of [[390, 844], [600, 900]]) {
+          await withResponsiveFrame(width, height, async (responsiveDocument, responsiveWindow) => {
+            const triggeringMailItem = responsiveDocument.querySelectorAll('.mail-item')[1];
+            triggeringMailItem.focus();
+            triggeringMailItem.click();
+            await settleWindow(responsiveWindow);
+            const back = responsiveDocument.querySelector('[aria-label="Back to messages"]');
+            assert(responsiveDocument.activeElement === back, `Detail focus did not move to Back at ${width}px.`);
+            back.click();
+            await settleWindow(responsiveWindow);
+            assert(responsiveDocument.activeElement === triggeringMailItem, `List focus did not return to the triggering mail row at ${width}px.`);
+          });
+        }
+        report('Compact and medium list-detail transitions preserve focus', true);
+
+        await withResponsiveFrame(667, 375, async (responsiveDocument, responsiveWindow) => {
+          await openComposerIn(responsiveDocument);
+          const dialog = responsiveDocument.querySelector('.dialog');
+          const actions = responsiveDocument.querySelector('.dialog-actions');
+          const dialogRect = dialog.getBoundingClientRect();
+          const actionsRect = actions.getBoundingClientRect();
+          assert(dialogRect.top >= 0 && dialogRect.bottom <= responsiveWindow.innerHeight, 'Composer escapes the short viewport.');
+          assert(actionsRect.top >= 0 && actionsRect.bottom <= responsiveWindow.innerHeight, 'Composer actions are clipped in a short viewport.');
+        });
+        report('Short viewports keep Composer actions reachable', true);
+
+        await withResponsiveFrame(840, 600, async (responsiveDocument) => {
+          responsiveDocument.querySelector('[aria-label="Archive message"]').click();
+          await settleWindow(responsiveDocument.defaultView);
+          assert(responsiveDocument.querySelector('.snackbar'), 'Archive did not create feedback before opening Composer.');
+          await openComposerIn(responsiveDocument);
+          assert(!responsiveDocument.querySelector('.snackbar'), 'Background feedback remains visible over Composer.');
+        });
+        report('Composer does not stack over stale feedback', true);
+
+        for (const [width, height] of [[320, 568], [600, 568], [840, 600]]) {
+          await withResponsiveFrame(width, height, async (responsiveDocument) => {
+            if (width < 840) {
+              responsiveDocument.querySelector('.mail-item').click();
+              await settleWindow(responsiveDocument.defaultView);
+            }
+            const messageRect = responsiveDocument.querySelector('.message').getBoundingClientRect();
+            const fabRect = responsiveDocument.querySelector('.fab').getBoundingClientRect();
+            assert(messageRect.bottom + 12 <= fabRect.top, `Message scrollport enters the FAB safe area at ${width}×${height}.`);
+          });
+        }
+        report('Message content reserves a FAB-safe action area', true);
+
+        await withResponsiveFrame(600, 568, async (responsiveDocument, responsiveWindow) => {
+          responsiveDocument.querySelector('.mail-item').click();
+          await settleWindow(responsiveWindow);
+          const toolbar = responsiveDocument.querySelector('.detail-toolbar');
+          const rail = responsiveDocument.querySelector('.navigation-rail');
+          const messageScroller = responsiveDocument.querySelector('.message');
+          const toolbarTop = toolbar.getBoundingClientRect().top;
+          const railTop = rail.getBoundingClientRect().top;
+          messageScroller.scrollTop = messageScroller.scrollHeight;
+          await settleWindow(responsiveWindow);
+          assert(responsiveWindow.scrollY === 0, 'The document scrolls instead of the detail pane.');
+          assert(toolbar.getBoundingClientRect().top === toolbarTop, 'The detail toolbar scrolls out of view.');
+          assert(rail.getBoundingClientRect().top === railTop, 'The navigation rail scrolls out of view.');
+        });
+        report('Detail scrolling preserves navigation and Back access', true);
+
+        document.body.dataset.result = 'pass';
+        summary.textContent = `${log.children.length} checks passed.`;
+        summary.className = 'check-pass';
+      } catch (error) {
+        document.body.dataset.result = 'fail';
+        summary.textContent = error.message;
+        summary.className = 'check-fail';
+        report('Regression suite', false, error.message);
+        console.error(error);
+      }
+    }
+
+    runChecks();
+  </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "candidateId": "166087e0-842d-423c-b5da-63bf3233dbdc",
+  "projectId": "ds-android-material-3-design-system",
+  "runId": "0f3bc551-3166-47fc-a6c2-a75f97a65ae8",
+  "conversationId": "93b89652-5fa9-4d81-b2c8-fd6685ec2c6c",
+  "provenance": {
+    "summary": "Detected from README.md, SKILL.md, ui_kits/app/README.md, context/source-context.md after a successful run.",
+    "detectedAt": 1786478103156
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 6828,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 3969,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ui_kits/app/README.md",
+      "label": "ui_kits/app/README.md",
+      "size": 3074,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 8381,
+      "copied": true
+    }
+  ]
+}

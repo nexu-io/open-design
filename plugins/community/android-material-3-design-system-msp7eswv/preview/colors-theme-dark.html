@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material 3 dark surface hierarchy</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="preview.css">
+  <style>
+    .workspace { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(280px, 1.3fr); min-height: 420px; overflow: hidden; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 28px; background: var(--md-sys-color-surface-container-low); }
+    nav { padding: 24px 16px; background: var(--md-sys-color-surface-container); }
+    nav h2, article h2 { margin: 0 0 16px; font: var(--md-sys-type-title-medium); }
+    nav a { display: block; margin: 4px 0; padding: 12px 16px; border-radius: 999px; color: var(--md-sys-color-on-surface-variant); text-decoration: none; }
+    nav a[aria-current="page"] { color: var(--md-sys-color-on-secondary-container); background: var(--md-sys-color-secondary-container); }
+    article { padding: 32px; background: var(--md-sys-color-surface-container-high); }
+    article p { color: var(--md-sys-color-on-surface-variant); }
+    .action { display: inline-block; margin-top: 24px; padding: 12px 24px; border-radius: 999px; color: var(--md-sys-color-on-primary); background: var(--md-sys-color-primary); font: var(--md-sys-type-label-large); }
+    @media (max-width: 599px) { .workspace { grid-template-columns: 1fr; } nav { display: none; } }
+  </style>
+</head>
+<body>
+  <main class="preview-shell">
+    <p class="eyebrow">Color / dark theme</p>
+    <h1>Dark mode remaps roles; it does not invert pixels</h1>
+    <p class="lede">Review readable foreground roles, tonal navigation selection, and restrained elevation against the dark surface ladder.</p>
+    <section class="workspace" aria-label="Dark theme workspace example">
+      <nav aria-label="Preview destinations"><h2>Workspace</h2><a aria-current="page" href="#">Inbox</a><a href="#">Starred</a><a href="#">Archive</a></nav>
+      <article><p class="eyebrow">Selected message</p><h2>Quarterly planning notes</h2><p>The on-surface and on-surface-variant roles remain legible without turning secondary text into low-contrast decoration.</p><span class="action">Reply</span></article>
+    </section>
+  </main>
+</body>
+</html>
