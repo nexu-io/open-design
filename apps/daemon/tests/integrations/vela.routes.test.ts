@@ -3248,6 +3248,30 @@ describe('Production touchpoint runtime proxy', () => {
       await new Promise<void>((resolve) => upstream.close(() => resolve()));
     }
   });
+  it('forwards the emptyResponse opt-in query parameter verbatim to the production decision endpoint', async () => {
+    const requests: string[] = [];
+    const upstream = createServer((req, res) => {
+      requests.push(req.url ?? '');
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ decision: null }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const accepted = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.campaign-modal&locale=en-US&emptyResponse=200`,
+      );
+      expect(accepted.status).toBe(200);
+      expect(accepted.body).toEqual({ decision: null });
+      expect(requests).toEqual([
+        '/api/v1/touchpoints/runtime/production?placementKey=opend.home.campaign-modal&locale=en-US&emptyResponse=200',
+      ]);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
 });
 
 describe('POST /api/integrations/vela/logout', () => {
