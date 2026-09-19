@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat.js';
+import type { ProjectCanvasState } from './canvas.js';
 import type { OrchestratorWorkspace } from './workspaces.js';
 import type {
   ProjectContextConnectorRef,
@@ -401,6 +402,8 @@ export interface ProjectTabsState {
   browserTabs?: ProjectBrowserWorkspaceTab[];
   hasSavedState?: boolean;
   updatedAt?: number;
+  /** #8230 自由画布布局：项目平级持有的 artifact 节点与视口。 */
+  canvas?: ProjectCanvasState;
 }
 
 export interface Conversation {

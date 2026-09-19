@@ -229,7 +229,7 @@ import {
   buildDesignSystemPackageAuditRepairPrompt,
   summarizeDesignSystemPackageAudit,
 } from '../runtime/design-system-package-audit';
-import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
+import { isLiveArtifactTabId, liveArtifactTabId, PROJECT_CANVAS_TAB } from '../types';
 import { isDesignSystemWorkspacePrompt } from '../design-system-auto-prompt';
 import {
   createConversation,
@@ -3279,10 +3279,18 @@ export function ProjectView({
   // include a nonce so re-clicking the same name after the user closed the
   // tab still focuses it.
   // `openBatch` carries a whole finished turn's artifacts (OPEND-2588) in one
-  // request. It has to be one request: this is a single state slot, so N
-  // synchronous `requestOpenFile` calls would collapse into the last one.
+  // request. `syncToCanvas` carries the same finished-turn intent across the
+  // workspace boundary so an existing canvas can append those artifacts in the
+  // same persisted state commit. It has to be one request: this is a single
+  // state slot, so N synchronous calls would collapse into the last one.
   const [openRequest, setOpenRequest] = useState<
-    { name: string; nonce: number; openBatch?: readonly string[] } | null
+    {
+      name: string;
+      nonce: number;
+      openBatch?: readonly string[];
+      syncToCanvas?: readonly string[];
+      createCanvasForSync?: boolean;
+    } | null
   >(null);
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
   // Like `openRequest`, but additionally asks the preview workspace to open the
@@ -4777,17 +4785,26 @@ export function ProjectView({
    * the selection heuristic deliberately assigned to `focused`.
    */
   const requestOpenTurnArtifacts = useCallback(
-    (names: readonly string[], focused: string) => {
+    (
+      names: readonly string[],
+      focused: string,
+      options?: { createCanvasForSync?: boolean },
+    ) => {
       if (!focused) return;
       lastHostRequestedOpenRef.current = focused;
       // The batch is the complete, ordered tab list — `focused` included, so
       // the tab strip keeps file-list order instead of pushing the selected
       // artifact to the end.
       const openBatch = names.filter((name) => Boolean(name));
+      const syncToCanvas = openBatch.includes(focused)
+        ? openBatch
+        : [...openBatch, focused];
       setOpenRequest({
         name: focused,
         nonce: Date.now(),
         ...(openBatch.length > 1 ? { openBatch } : {}),
+        syncToCanvas,
+        ...(options?.createCanvasForSync ? { createCanvasForSync: true } : {}),
       });
     },
     [],
@@ -8569,6 +8586,7 @@ export function ProjectView({
        */
       setChatSeed(null);
       const startedAt = Date.now();
+      const runStartedFromCanvas = openTabsState.active === PROJECT_CANVAS_TAB;
       const previousConversation = conversationsRef.current.find(
         (conversation) => conversation.id === runConversationId,
       );
@@ -9762,7 +9780,9 @@ export function ProjectView({
               if (producedArtifactToOpen) {
                 completionSelectedAutoOpen = true;
                 if (shouldOpenCompletedArtifact()) {
-                  requestOpenTurnArtifacts(turnArtifacts.open, producedArtifactToOpen);
+                  requestOpenTurnArtifacts(turnArtifacts.open, producedArtifactToOpen, {
+                    createCanvasForSync: runStartedFromCanvas,
+                  });
                 }
               }
               const deliveryCandidate: ChatMessage = {
@@ -10619,6 +10639,7 @@ export function ProjectView({
       runtimeDesignSystemId,
       project.name,
       projectFiles,
+      openTabsState.active,
       refreshProjectFiles,
       refreshLiveArtifacts,
       readProjectHtml,

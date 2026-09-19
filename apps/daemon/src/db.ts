@@ -19,6 +19,7 @@ import {
   eventsEndedWithUnfinishedWork,
   isTodoWriteToolName,
   latestTodoWriteInputFromEvents,
+  normalizeProjectCanvasState,
   stripArtifactFocusMarkers,
   stripDoneMarkers,
   stripNextStepMarkers,
@@ -5402,6 +5403,8 @@ function normalizeProjectTabsState(value: unknown): ProjectTabsState | null {
     active: typeof record.active === 'string' ? record.active : null,
   };
   if (browserTabs.length > 0) state.browserTabs = browserTabs;
+  const canvas = normalizeProjectCanvasState(record.canvas);
+  if (canvas) state.canvas = canvas;
   return state;
 }
 

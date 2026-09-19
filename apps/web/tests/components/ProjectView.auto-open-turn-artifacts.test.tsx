@@ -3,7 +3,7 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
-import type { ChatMessage } from '../../src/types';
+import { PROJECT_CANVAS_TAB, type ChatMessage } from '../../src/types';
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -46,7 +46,12 @@ const workspaceHarness = vi.hoisted(() => ({
   onTabsStateChange: null as null | ((state: { tabs: string[]; active: string | null }) => void),
   onRefreshFiles: null as null | (() => Promise<unknown>),
   lastRequest: null as unknown,
-  requests: [] as { name: string; batch: string[] }[],
+  requests: [] as {
+    name: string;
+    batch: string[];
+    canvas?: string[];
+    createCanvas?: boolean;
+  }[],
 }));
 
 function openedTabsInOrder(): string[] {
@@ -161,7 +166,12 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     tabsState: typeof workspaceHarness.tabsState;
     onTabsStateChange: NonNullable<typeof workspaceHarness.onTabsStateChange>;
     onRefreshFiles: NonNullable<typeof workspaceHarness.onRefreshFiles>;
-    openRequest?: { name?: string; openBatch?: readonly string[] } | null;
+    openRequest?: {
+      name?: string;
+      openBatch?: readonly string[];
+      syncToCanvas?: readonly string[];
+      createCanvasForSync?: boolean;
+    } | null;
   }) => {
     workspaceHarness.tabsState = tabsState;
     workspaceHarness.onTabsStateChange = onTabsStateChange;
@@ -172,6 +182,10 @@ vi.mock('../../src/components/FileWorkspace', () => ({
         workspaceHarness.requests.push({
           name: openRequest.name,
           batch: [...(openRequest.openBatch ?? [])],
+          ...(openRequest.syncToCanvas
+            ? { canvas: [...openRequest.syncToCanvas] }
+            : {}),
+          ...(openRequest.createCanvasForSync ? { createCanvas: true } : {}),
         });
       }
     }
@@ -235,11 +249,12 @@ async function runTurn(options: {
   afterFiles: unknown[];
   metadata?: unknown;
   doneText?: string;
+  tabsState?: { tabs: string[]; active: string | null };
 }): Promise<void> {
   listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
   listMessages.mockResolvedValue([]);
   fetchPreviewComments.mockResolvedValue([]);
-  loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+  loadTabs.mockResolvedValue(options.tabsState ?? { tabs: [], active: null });
   fetchLiveArtifacts.mockResolvedValue([]);
   fetchSkill.mockResolvedValue(null);
   fetchDesignSystem.mockResolvedValue(null);
@@ -257,6 +272,9 @@ async function runTurn(options: {
   renderProjectView({ resolvedDir: '/tmp/projects/project-1', metadata: options.metadata });
   await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
   await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+  if (options.tabsState) {
+    await waitFor(() => expect(workspaceHarness.tabsState.active).toBe(options.tabsState?.active));
+  }
 
   // Every read after the turn starts sees the finished set of files. The
   // pre-turn snapshot is already captured by the send above.
@@ -313,6 +331,29 @@ describe('ProjectView auto-open of a finished turn (OPEND-2588)', () => {
 
     await waitFor(() => expect(openedTabsInOrder()).toHaveLength(4));
     expect(focusedTab()).toBe('image-04.png');
+  });
+
+  it('marks every primary artifact for synchronization into an existing canvas', async () => {
+    await runTurn({ beforeFiles: [], afterFiles: IMAGE_TURN_FILES });
+
+    await waitFor(() => expect(workspaceHarness.requests).toHaveLength(1));
+    expect(workspaceHarness.requests[0]?.canvas).toEqual([
+      'image-01.png',
+      'image-02.png',
+      'image-03.png',
+      'image-04.png',
+    ]);
+  });
+
+  it('remembers that a finished turn started from an empty canvas', async () => {
+    await runTurn({
+      beforeFiles: [],
+      afterFiles: IMAGE_TURN_FILES,
+      tabsState: { tabs: [], active: PROJECT_CANVAS_TAB },
+    });
+
+    await waitFor(() => expect(workspaceHarness.requests).toHaveLength(1));
+    expect(workspaceHarness.requests[0]?.createCanvas).toBe(true);
   });
 
   it('does not widen the criterion: a lower-ranked support file stays closed', async () => {
