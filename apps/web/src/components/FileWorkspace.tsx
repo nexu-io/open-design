@@ -51,6 +51,7 @@ import {
 } from '../providers/registry';
 import type { Dict } from '../i18n/types';
 import { STAGE_ATTACHMENT_EVENT, type StageAttachmentEventDetail } from './ChatComposer';
+import { TabLabel } from './workspaceTabLabel';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { navigate, registerNavigationGuard } from '../router';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
@@ -4121,7 +4122,8 @@ export function FileWorkspace({
               );
               label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
             } else {
-              label = `${liveArtifact?.title ?? name}${dirtyMark}`;
+              // Keep the filename bare so TabLabel can split its extension.
+              label = liveArtifact?.title ?? name;
             }
             const iconNameOverride: IconName | undefined = isTerminal
               ? 'terminal'
@@ -4141,6 +4143,8 @@ export function FileWorkspace({
               <Tab
                 key={name}
                 label={label}
+                dirtyMark={dirtyMark || undefined}
+                plainLabel={isTerminal || isSideChat}
                 iconNameOverride={iconNameOverride}
                 syncBadge={tabSyncBadge}
                 active={activeTab === name}
@@ -8456,6 +8460,8 @@ interface WorkspaceTabItemHandlers {
 // individual tab only changes when its own label/active/drag props do.
 const Tab = memo(function Tab({
   label,
+  dirtyMark,
+  plainLabel = false,
   meta,
   title,
   active,
@@ -8476,6 +8482,10 @@ const Tab = memo(function Tab({
   onDragEnd,
 }: {
   label: string;
+  /** Optional dirty marker rendered after the filename extension. */
+  dirtyMark?: string;
+  /** Keep arbitrary terminal and side-chat titles unsplit. */
+  plainLabel?: boolean;
   meta?: string;
   title?: string;
   active: boolean;
@@ -8506,7 +8516,8 @@ const Tab = memo(function Tab({
       : t('workspace.fileSyncUploading')
     : null;
   const tabTitle = title ?? (meta ? `${label} ${meta}` : label);
-  const tabTooltip = syncBadgeLabel ? `${tabTitle} · ${syncBadgeLabel}` : tabTitle;
+  const tooltipBase = dirtyMark ? `${tabTitle}${dirtyMark}` : tabTitle;
+  const tabTooltip = syncBadgeLabel ? `${tooltipBase} · ${syncBadgeLabel}` : tooltipBase;
   return (
     <div
       className={[
@@ -8550,7 +8561,11 @@ const Tab = memo(function Tab({
         </span>
       ) : null}
       <span className="ws-tab-text">
-        <span className="ws-tab-label">{label}</span>
+        {kind === 'browser' || plainLabel ? (
+          <span className="ws-tab-label">{label}</span>
+        ) : (
+          <TabLabel title={label} dirtyMark={dirtyMark} />
+        )}
         {meta ? <span className="ws-tab-meta">{meta}</span> : null}
       </span>
       {liveArtifact ? (
