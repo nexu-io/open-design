@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { describe, expect, test } from 'vitest';
+
+import { verifyPackagedThumbnail } from '@/vitest/packaged-thumbnail';
 
 import {
   packagedAppShellExpression,
@@ -750,6 +752,28 @@ winDescribe('packaged windows runtime smoke', () => {
           'daemon did not read the seeded onboardingCompleted config; check that the packaged data root still resolves to the tools-pack runtime namespace root',
         ).toBe(true);
       }
+
+      // OPEND-2809 requires a real desktop renderer. A healthy daemon-only
+      // core fallback cannot witness EXPORT_ARTIFACT or the resulting card.
+      expect(inspect.desktopIpcUnavailable, 'thumbnail binding requires desktop IPC').not.toBe(true);
+      await measureSmokeStep(timings, 'real HTML thumbnail and historical message binding', async () =>
+        verifyPackagedThumbnail({
+          fixtureRoot: join(toolsPackDir, 'fixtures', `thumbnail-${randomUUID()}`),
+          report: report.report,
+          inspect: async (expression) => {
+            const observed = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', expression]);
+            expect(observed.eval?.ok, 'real desktop inspect must execute the API/DOM probe').toBe(true);
+            return observed.eval?.value;
+          },
+          screenshot: async (relpath) => {
+            const imagePath = join(toolsPackDir, 'screenshots', `${namespace}-thumbnail-${randomUUID()}.png`);
+            const captured = await runToolsPackJson<WinInspectResult>('inspect', ['--path', imagePath]);
+            expect(captured.screenshot?.path).toBe(imagePath);
+            await report.report.save(relpath, await readFile(imagePath));
+            await rm(imagePath, { force: true });
+          },
+        }),
+      );
 
       const ptyInspect = await measureSmokeStep(timings, 'packaged PTY capability', async () =>
         runToolsPackJson<WinInspectResult>('inspect', [
