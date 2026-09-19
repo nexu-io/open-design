@@ -8,6 +8,24 @@ import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normaliz
 import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } from '../../src/providers/registry';
 import { emptyManualEditStyles, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 
+const localizedLabelOverride = vi.hoisted(() => ({ enabled: false }));
+
+vi.mock('../../src/i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/i18n')>();
+  return {
+    ...actual,
+    useT: () => {
+      const t = actual.useT();
+      return (key: Parameters<typeof t>[0], vars?: Parameters<typeof t>[1]) => {
+        if (localizedLabelOverride.enabled && key === 'manualEdit.textTransform') return 'Localized transform';
+        if (localizedLabelOverride.enabled && key === 'manualEdit.wordSpacing') return 'Localized word spacing';
+        if (localizedLabelOverride.enabled && key === 'manualEdit.textTransformUppercase') return 'Localized uppercase';
+        return t(key, vars);
+      };
+    },
+  };
+});
+
 // The rewritten panel renders ONE localized "Parameters" list instead of the
 // old hardcoded CONTENT / TYPOGRAPHY / SIZE / LAYOUT / BOX group headers, so
 // tests address controls by their translated row label rather than by group.
@@ -69,13 +87,27 @@ describe('ManualEditPanel', () => {
     // One localized parameters list carries what the old hardcoded English
     // TYPOGRAPHY / SIZE / LAYOUT / BOX headers used to split apart.
     const parameters = sectionByTitle(PARAMETERS);
-    for (const label of ['Text color', 'Background', 'Font', 'Font size', 'Weight', 'Line height', 'Letter spacing', 'Radius', 'Width', 'Height', 'Padding', 'Margin']) {
+    for (const label of ['Text color', 'Background', 'Font', 'Font size', 'Weight', 'Line height', 'Transform', 'Letter spacing', 'Word spacing', 'Radius', 'Width', 'Height', 'Padding', 'Margin']) {
       expect(parameters.textContent).toContain(label);
     }
     for (const legacyHead of ['TYPOGRAPHY', 'SIZE', 'LAYOUT', 'BOX']) {
       expect(sectionHeads()).not.toContain(legacyHead);
     }
     expect(host.textContent).not.toContain('Advanced');
+  });
+
+  it('localizes labels through t', () => {
+    localizedLabelOverride.enabled = true;
+    try {
+      renderPanel();
+
+      const parameters = sectionByTitle(PARAMETERS);
+      expect(parameters.textContent).toContain('Localized transform');
+      expect(parameters.textContent).toContain('Localized word spacing');
+      expect(parameters.textContent).toContain('Localized uppercase');
+    } finally {
+      localizedLabelOverride.enabled = false;
+    }
   });
 
   it('shows a readable selected element name in the titlebar', () => {
@@ -238,6 +270,19 @@ describe('ManualEditPanel', () => {
       expect.objectContaining({ fontSize: '32px', color: '#111111', paddingTop: '8px' }),
       'Style: Hero Title',
     );
+
+    const transformSelect = Array.from(host.querySelectorAll('.cc-row'))
+      .find((row) => row.querySelector('.cc-label')?.textContent === 'Transform')
+      ?.querySelector('select') as HTMLSelectElement | null;
+    if (!transformSelect) throw new Error('Transform select not found');
+    expect(Array.from(transformSelect.options).map((option) => [option.text, option.value])).toEqual([
+      ['-', ''], ['Uppercase', 'uppercase'], ['Lowercase', 'lowercase'], ['Capitalize', 'capitalize'], ['None', 'none'],
+    ]);
+    act(() => {
+      transformSelect.value = 'uppercase';
+      transformSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { textTransform: 'uppercase' }, 'Style: Hero Title');
   });
 
   it('shows px-backed values without px in numeric inputs', () => {
@@ -262,22 +307,26 @@ describe('ManualEditPanel', () => {
         fontSize: '32px',
         lineHeight: '1.4',
         letterSpacing: '1px',
+        wordSpacing: '1px',
       },
     });
 
     const sizeIncrease = stepper('Font size', 'increase');
     const lineIncrease = stepper('Line height', 'increase');
     const trackingDecrease = stepper('Letter spacing', 'decrease');
+    const wordIncrease = stepper('Word spacing', 'increase');
 
     act(() => {
       sizeIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       lineIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       trackingDecrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      wordIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     });
 
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { fontSize: '33px' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { lineHeight: '1.5' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { letterSpacing: '0px' }, 'Style: Hero Title');
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { wordSpacing: '2px' }, 'Style: Hero Title');
     // Box/spacing controls used to live in their own English-headed groups.
     // They now ride in the same localized list, so the port's contract is
     // "exactly one parameters group", not "typography-only".
@@ -321,6 +370,10 @@ describe('ManualEditPanel', () => {
       ok: true,
       styles: { lineHeight: '49px' },
     });
+    expect(normalizeManualEditStyles({ wordSpacing: '-1.5' }, { layoutEnabled: true })).toEqual({
+      ok: true,
+      styles: { wordSpacing: '-1.5px' },
+    });
   });
 
   it('rejects invalid style values before host preview/persistence', () => {
@@ -332,6 +385,8 @@ describe('ManualEditPanel', () => {
       ok: false,
       error: 'Line height must be a positive number or px value.',
     });
+    expect(normalizeManualEditStyles({ textTransform: 'full-width' }, { layoutEnabled: true }))
+      .toEqual({ ok: false, error: 'text transform has an unsupported value.' });
   });
 
   it('treats empty values as inline style clears', () => {
