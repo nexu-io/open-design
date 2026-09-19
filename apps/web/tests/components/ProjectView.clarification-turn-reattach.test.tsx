@@ -54,6 +54,9 @@ const chatPaneHarness = vi.hoisted(() => ({
     meta?: unknown,
   ) => unknown),
   messages: [] as ChatMessage[],
+  activeConversationId: null as string | null,
+  loading: false,
+  sendDisabled: false,
 }));
 
 vi.mock('../../src/i18n', () => ({
@@ -130,12 +133,21 @@ vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
     messages,
     onSend,
+    activeConversationId,
+    loading,
+    sendDisabled,
   }: {
     messages: ChatMessage[];
     onSend: typeof chatPaneHarness.onSend;
+    activeConversationId: string | null;
+    loading?: boolean;
+    sendDisabled?: boolean;
   }) => {
     chatPaneHarness.messages = messages;
     chatPaneHarness.onSend = onSend;
+    chatPaneHarness.activeConversationId = activeConversationId;
+    chatPaneHarness.loading = Boolean(loading);
+    chatPaneHarness.sendDisabled = Boolean(sendDisabled);
     return null;
   },
 }));
@@ -308,6 +320,21 @@ async function settleStatusProbes() {
   await act(async () => {});
 }
 
+/**
+ * Sends only once the composer would let a user send: a conversation is active
+ * and its transcript read has settled. `onSend` is mounted from the first
+ * render, but ProjectView refuses a send issued before that point without
+ * starting a Run, so waiting for the callback alone races the transcript load.
+ */
+async function sendWhenComposerReady(prompt: string) {
+  await waitFor(() => {
+    expect(chatPaneHarness.activeConversationId).not.toBeNull();
+    expect(chatPaneHarness.loading).toBe(false);
+    expect(chatPaneHarness.sendDisabled).toBe(false);
+  });
+  void chatPaneHarness.onSend!(prompt, [], []);
+}
+
 const probedRunIds = () => fetchChatRunStatus.mock.calls.map((call) => call[0]);
 
 /**
@@ -330,6 +357,9 @@ describe('OPEND-3230 a finished OD Next turn whose task waits on the user', () =
     vi.clearAllMocks();
     chatPaneHarness.onSend = null;
     chatPaneHarness.messages = [];
+    chatPaneHarness.activeConversationId = null;
+    chatPaneHarness.loading = false;
+    chatPaneHarness.sendDisabled = false;
     window.sessionStorage.clear();
   });
 
@@ -343,7 +373,12 @@ describe('OPEND-3230 a finished OD Next turn whose task waits on the user', () =
   it('does not clear and replay the clarification turn after its own live stream ends', async () => {
     mockProjectShell();
     saveMessage.mockResolvedValue(undefined);
-    listMessages.mockResolvedValue([]);
+    // The transcript read settles well after the first render, as it does on
+    // a slow runner; the send below must wait for it instead of racing it.
+    listMessages.mockImplementation(async () => {
+      await sleep(200);
+      return [];
+    });
     let sendOptions: any = null;
     const liveStream = deferred<void>();
     streamViaDaemon.mockImplementation(async (options: any) => {
@@ -356,8 +391,7 @@ describe('OPEND-3230 a finished OD Next turn whose task waits on the user', () =
     reattachDaemonRun.mockImplementation(streamUntilAborted);
 
     renderProjectView();
-    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
-    void chatPaneHarness.onSend!('prompt', [], []);
+    await sendWhenComposerReady('prompt');
     await waitFor(() => expect(sendOptions).not.toBeNull());
     sendOptions.handlers.onDelta(FORM_TURN_TEXT);
     sendOptions.handlers.onAgentEvent({ kind: 'text', text: FORM_TURN_TEXT });
@@ -540,8 +574,7 @@ describe('OPEND-3230 a finished OD Next turn whose task waits on the user', () =
       });
 
       renderProjectView();
-      await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
-      void chatPaneHarness.onSend!('prompt', [], []);
+      await sendWhenComposerReady('prompt');
       await waitFor(() => expect(sendOptions).not.toBeNull());
       for (const event of NON_TEXT) sendOptions.handlers.onAgentEvent(event);
       sendOptions.handlers.onDelta(FORM_TURN_TEXT);
