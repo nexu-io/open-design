@@ -3780,6 +3780,8 @@ export function SettingsDialog({
     providerModelsState.cacheKey === providerModelsKey
       ? providerModelsState.result
       : null;
+  const providerConnectionTestSucceeded =
+    providerTestState.status === 'done' && providerTestState.result.ok;
   const loadedAccountModelCount =
     currentProviderModelsResult?.ok && currentProviderModelsResult.models?.length
       ? currentProviderModelsResult.models.length
@@ -3787,8 +3789,14 @@ export function SettingsDialog({
   const apiKeyAuthFailed =
     currentProviderModelsResult?.ok === false &&
     currentProviderModelsResult.kind === 'auth_failed';
+  const staleBaseUrlDiscoveryFailure =
+    providerConnectionTestSucceeded &&
+    currentProviderModelsResult?.ok === false &&
+    currentProviderModelsResult.kind === 'invalid_base_url';
   const providerModelsFailureMessage =
-    currentProviderModelsResult?.ok === false && !apiKeyAuthFailed
+    currentProviderModelsResult?.ok === false &&
+    !apiKeyAuthFailed &&
+    !staleBaseUrlDiscoveryFailure
       ? t('settings.fetchModelsFailed', {
           detail:
             currentProviderModelsResult.detail ||
