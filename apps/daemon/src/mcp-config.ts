@@ -957,6 +957,19 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     url: 'http://localhost:38451/mcp',
   },
   {
+    id: 'recraft',
+    label: 'Recraft (image + vector generation)',
+    description:
+      'Official hosted Recraft MCP over Streamable HTTP. Supports raster/vector generation and editing, custom styles, vectorization, background removal/replacement, and upscaling. Authentication is handled by Recraft OAuth in the browser; no API key is required for the remote server.',
+    transport: 'stdio',
+    category: 'image-generation',
+    homepage: 'https://www.recraft.ai/',
+    example:
+      'Generate a clean SVG illustration for the HYDRAGROW dashboard: botanical hydroponic control-room style, semantic green palette, transparent background, production-ready vector shapes.',
+    command: 'npx',
+    args: ['-y', 'mcp-remote', 'https://mcp.recraft.ai/mcp'],
+  },
+  {
     id: 'aesthetics-wiki',
     label: 'Aesthetics Wiki (moodboard / inspiration)',
     description:

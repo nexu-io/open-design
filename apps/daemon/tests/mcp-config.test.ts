@@ -818,6 +818,21 @@ describe('MCP_TEMPLATES', () => {
     expect(token?.secret).toBe(true);
   });
 
+  it('includes the Recraft stdio bridge template for OAuth-authenticated hosted MCP', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'recraft');
+    expect(tpl).toBeDefined();
+    expect(tpl?.label).toBe('Recraft (image + vector generation)');
+    expect(tpl?.transport).toBe('stdio');
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.homepage).toBe('https://www.recraft.ai/');
+    expect(tpl?.command).toBe('npx');
+    expect(tpl?.args).toEqual(['-y', 'mcp-remote', 'https://mcp.recraft.ai/mcp']);
+    expect(tpl?.envFields ?? []).toEqual([]);
+    expect(tpl?.headerFields ?? []).toEqual([]);
+    expect(tpl?.description).toContain('Recraft OAuth');
+    expect(tpl?.description).toContain('no API key');
+  });
+
   it('uses unique template ids and human labels', () => {
     const ids = MCP_TEMPLATES.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -857,6 +872,7 @@ describe('MCP_TEMPLATES', () => {
       'nanobanana',
       'seedream',
       'fal-ai',
+      'recraft',
     ]);
   });
 

@@ -65,9 +65,15 @@
       "electron",
       "electron-winstaller",
       "esbuild",
+      "node-pty",
       "onnxruntime-node",
       "protobufjs",
       "sharp"
+    ],
+    "ignoredBuiltDependencies": [
+      "@ffmpeg-installer/linux-x64",
+      "@ffprobe-installer/linux-x64",
+      "@google/genai"
     ]
   }
 }
