@@ -234,9 +234,10 @@ export interface WheelWitness {
  * 另外三条候选都不够:
  *
  *  · **落点等于已知的陈旧上限** —— 那个上限只能靠 freeze detector 的连续
- *    stall / snap-back 状态机推出来,而 `runtime/chat-scroll-takeover.ts` 写明
- *    那个检测器的误报率**至今未知**(`client_chat_scroll_frozen` 线上零事件,
- *    而那个零后来查出是上报缺陷)。何况用户完全可以正好停在那个数上。
+ *    stall / snap-back 状态机推出来,而那个检测器的误报率还没有被单独量过
+ *    (`client_chat_scroll_frozen` 线上每天约 1000–1500 个用户上报;
+ *    `runtime/chat-scroll-takeover.ts` 里踢一帧之后「愈合」的那一档正是在量它)。
+ *    何况用户完全可以正好停在那个数上。
  *  · **和 `layoutMax` 的差** —— 用户上滑可以停在 `[0, layoutMax]` 里任何位置,
  *    这一条不携带任何区分信息。
  *  · **紧邻一次 JS 写入** —— 被诊断包本身证伪:夹取发生在写入之后 **3.8 秒**,

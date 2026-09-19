@@ -2,6 +2,7 @@ import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../runtime/chat/conversation-time';
 import { QuoteBar } from './chat/QuoteBar';
 import { chatLogSelfResizeObserveDisabled } from '../runtime/chat-scroll-experiments';
+import { releaseChatScrollTakeover } from '../runtime/chat-scroll-takeover';
 import { shouldShowJumpToLatest } from '../runtime/chat/jump-to-latest';
 import {
   distanceFromBottom,
@@ -2696,6 +2697,25 @@ export function ChatPane({
      * 这一行就是唯一还站着的。
      */
     resetWheelWitness();
+  }, [activeConversationId]);
+
+  /*
+   * 换会话 = 把滚动自愈(踢一帧 / 观察一格 / JS 接管)从这个节点上解下来。
+   *
+   * `.chat-log` 这个 div 不带 conversation key,换会话时 React 复用同一个 DOM 节点,
+   * 所以滚动冻结探针和接管模块在节点层面看不到任何「会话变了」的信号:上一条会话
+   * 里判出来的冻结会一直接管下一条**健康**会话的滚轮和键盘;探针又是「一块 surface
+   * 只报一次」,新会话真冻结了也再发不出信号。这一行两件事一起做:接管解除,探针
+   * 在下一个 scroll 事件上重新挂一块新 surface(新 probe_id、新的上报额度)。
+   * cleanup 里再调一次:面板卸载(切标签页、换路由)会把节点直接拿走而不换会话,
+   * 探针要到下一个 scroll 事件才会发现节点没了 —— 一个不存在的节点永远不会发。
+   * 判据:`tests/components/ChatPane.scroll-takeover-release.test.tsx`。
+   */
+  useEffect(() => {
+    releaseChatScrollTakeover();
+    return () => {
+      releaseChatScrollTakeover();
+    };
   }, [activeConversationId]);
 
   // ChatComposer's internal `seededRef` latches after the first
