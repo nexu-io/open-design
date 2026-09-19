@@ -205,4 +205,46 @@ describe('TasksView routine ordering and focus', () => {
     expect(screen.getByRole('button', { name: 'Hide history' })).toBeTruthy();
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
+
+  // Regression: a /api/projects outage must not discard the routines leg of
+  // the same refresh batch — the failed read is not an authoritative empty
+  // project list, and the routines that arrived fine still render.
+  it('still renders routines when the project-list request fails', async () => {
+    const routine = makeRoutine({ id: 'routine-live', name: 'Live automation' });
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/routines' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ routines: [routine] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ error: 'boom' }), { status: 500 });
+      }
+      if (url === '/api/automation-templates') {
+        return new Response(JSON.stringify({ templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-proposals?status=pending-review') {
+        return new Response(JSON.stringify({ proposals: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-source-packets?limit=3') {
+        return new Response(JSON.stringify({ packets: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    render(<TasksView />);
+
+    expect(await screen.findByText('Live automation')).toBeTruthy();
+  });
 });

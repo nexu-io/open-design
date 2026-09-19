@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -251,6 +251,12 @@ describe('client registration cache', () => {
     );
     expect(cacheFile.clients).toHaveLength(1);
     expect(cacheFile.clients[0].clientId).toBe('fresh-client-id');
+
+    if (process.platform !== 'win32') {
+      // The cache can carry client_secret — same 0600 lockdown as the token store.
+      const s = await stat(path.join(dataDir, 'mcp-oauth-clients.json'));
+      expect(s.mode & 0o777).toBe(0o600);
+    }
   });
 
   it('does not register when the cache file already pins a matching client', async () => {

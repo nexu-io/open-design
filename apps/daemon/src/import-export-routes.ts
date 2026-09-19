@@ -112,7 +112,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       let importedProjectDir: string | null = null;
       try {
         if (!req.file)
-          return res.status(400).json({ error: 'zip file required' });
+          return sendApiError(res, 400, 'BAD_REQUEST', 'zip file required');
         const createWorkspace = await authorizeCreatedProjectWorkspace(
           req,
           ctx.fetchProjectCreationWorkspaceDirectory,
@@ -125,7 +125,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           req.file.originalname || 'Claude Design export.zip';
         if (!/\.zip$/i.test(originalName)) {
           fs.promises.unlink(req.file.path).catch(() => {});
-          return res.status(400).json({ error: 'expected a .zip file' });
+          return sendApiError(res, 400, 'BAD_REQUEST', 'expected a .zip file');
         }
         const id = randomId();
         const now = Date.now();
@@ -182,7 +182,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         if (importedProjectDir) {
           await fs.promises.rm(importedProjectDir, { recursive: true, force: true }).catch(() => {});
         }
-        res.status(400).json({ error: String(err) });
+        sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
       }
     },
   );

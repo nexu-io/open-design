@@ -18,6 +18,7 @@ import {
 import {
   parseCountedReleaseVersion,
   parseReleaseBaseVersion,
+  parseReleaseVersion,
   releaseChannelDescriptor,
   releaseMetadataVersionFields,
   type CountedReleaseChannel,
@@ -61,6 +62,7 @@ type TargetDef = {
 const releaseChannel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
 const countedReleaseChannel = releaseChannel === "stable" ? null : releaseChannel;
 const releaseVersion = required("RELEASE_VERSION");
+parseReleaseVersion(releaseVersion, releaseChannel);
 const publicOrigin = required("RELEASE_PUBLIC_ORIGIN").replace(/\/+$/, "");
 const metadataDir = required("RELEASE_METADATA_DIR");
 const manifestDir = required("RELEASE_MANIFEST_DIR");

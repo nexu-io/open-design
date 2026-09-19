@@ -1776,6 +1776,22 @@ describe('importClaudeDesignZip', () => {
     );
   });
 
+  it('preserves daemon import errors from api-error envelope responses', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'Archive is not a valid zip.' } }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const file = new File(['zip-bytes'], 'claude-design.zip', {
+      type: 'application/zip',
+    });
+
+    await expect(importClaudeDesignZip(file)).rejects.toThrow(
+      'Archive is not a valid zip.',
+    );
+  });
+
   it('sends the exact workspace/member authority with the ZIP import', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(
       JSON.stringify({

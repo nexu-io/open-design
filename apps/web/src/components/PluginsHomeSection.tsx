@@ -195,7 +195,7 @@ export function PluginsHomeSection({
           <div
             className="plugins-home__facets"
             role="group"
-            aria-label="Plugin filters"
+            aria-label={t('plugins.filtersAria')}
           >
             <CategoryRow
               options={catalog.category}

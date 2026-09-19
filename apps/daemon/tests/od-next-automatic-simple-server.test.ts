@@ -216,7 +216,9 @@ function complexCapabilitySnapshot(): OdNextRuntimeCapabilitySnapshotV1 {
   };
 }
 
-describe('OD Next automatic production through the real server', () => {
+// Each test drives a real daemon + agent run end-to-end; on a loaded host
+// they legitimately exceed the 20s default testTimeout.
+describe('OD Next automatic production through the real server', { timeout: 60_000 }, () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
   let sequence = 0;

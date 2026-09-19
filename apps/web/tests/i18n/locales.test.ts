@@ -84,6 +84,41 @@ describe('i18n locales', () => {
     }
   });
 
+  it('localizes the plugin import dialog title in every supported locale', async () => {
+    const expected: Record<Locale, string> = {
+      ar: 'استيراد إضافة',
+      de: 'Plugin importieren',
+      en: 'Import a plugin',
+      'es-ES': 'Importar un plugin',
+      fa: 'وارد کردن افزونه',
+      fr: 'Importer un plugin',
+      hu: 'Bővítmény importálása',
+      id: 'Impor plugin',
+      it: 'Importa un plugin',
+      ja: 'プラグインをインポート',
+      ko: '플러그인 가져오기',
+      pl: 'Importuj wtyczkę',
+      'pt-BR': 'Importar um plugin',
+      ru: 'Импортировать плагин',
+      th: 'นำเข้าปลั๊กอิน',
+      tr: 'Eklenti içe aktar',
+      uk: 'Імпортувати плагін',
+      'zh-CN': '导入插件',
+      'zh-TW': '匯入外掛',
+    };
+
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      expect(dict['plugins.import.title'], `${locale}.plugins.import.title`).toBe(
+        expected[locale],
+      );
+      expect(
+        dict['plugins.import.sourceHelp'],
+        `${locale}.plugins.import.sourceHelp`,
+      ).toMatch(/\{sourceSpec\}.*\{archiveExts\}/);
+    }
+  });
+
   // PR #7303 round 3: the ACP handshake-refusal copy used to be an English
   // paragraph the DAEMON wrote into `run.error`, so a Chinese UI showed a
   // Chinese title over an English body. It is a dictionary entry now — pin the

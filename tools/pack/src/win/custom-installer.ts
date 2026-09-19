@@ -37,7 +37,10 @@ export const WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS = ["-t7z", "-m0=LZMA2", "-mx=1", "-
 const WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS = 15 * 60_000;
 
 function escapeNsisString(value: string): string {
-  return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
+  // "$$" in a replace() replacement string yields a literal "$" — emitting the
+  // two-character `$$` escape NSIS expects takes "$$$$". The previous form was
+  // a silent no-op for `$`.
+  return value.replace(/\$/g, "$$$$").replace(/"/g, '$\\"').replace(/'/g, "$\\'").replace(/\r?\n/g, "$\\r$\\n");
 }
 
 export function createNsisQuotedCommandLiteral(args: readonly string[]): string {

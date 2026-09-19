@@ -8,44 +8,16 @@
 // catch lives in `ErrorBoundary` and the translated fallback is supplied by the
 // functional `KitErrorBoundary` wrapper.
 
-import { Component, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useT } from '../i18n';
-import { reportHandledException } from '../analytics/error-tracking';
+import { ErrorBoundary } from './ErrorBoundary';
 import styles from './KitErrorBoundary.module.css';
-
-interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallback: (retry: () => void) => ReactNode;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-}
-
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false };
-
-  static getDerivedStateFromError(): ErrorBoundaryState {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: unknown) {
-    // Surface to the existing analytics sink; the UI still recovers locally.
-    reportHandledException(error, 'design-kit-view render error');
-  }
-
-  private retry = () => this.setState({ hasError: false });
-
-  render() {
-    if (this.state.hasError) return this.props.fallback(this.retry);
-    return this.props.children;
-  }
-}
 
 export function KitErrorBoundary({ children }: { children: ReactNode }) {
   const t = useT();
   return (
     <ErrorBoundary
+      context="design-kit-view render error"
       fallback={(retry) => (
         <div className={styles.kitError} role="alert" data-testid="kit-error-boundary">
           <p className={styles.kitErrorText}>{t('ds.kitErrorTitle')}</p>

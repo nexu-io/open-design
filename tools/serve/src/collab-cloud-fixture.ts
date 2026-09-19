@@ -7,6 +7,8 @@ import {
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { fixtureServerOrigin } from "./server-origin.js";
+
 // TEMPORARY local collab-cloud fixture. A self-contained, in-memory, infra-free
 // stand-in for the real cross-daemon collaboration hub (C-lane spec §D4, which
 // will live in the vela repo as `services/collab`). It lets teammates develop
@@ -101,11 +103,7 @@ function close(server: Server): Promise<void> {
 }
 
 function serverOrigin(server: Server): string {
-  const address = server.address();
-  if (address == null || typeof address === "string") {
-    throw new Error("collab cloud fixture did not listen on TCP");
-  }
-  return `http://127.0.0.1:${address.port}`;
+  return fixtureServerOrigin(server, "collab cloud fixture");
 }
 
 function readBody(request: IncomingMessage): Promise<Buffer> {

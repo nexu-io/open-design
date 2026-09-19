@@ -172,7 +172,7 @@ describe('BoardComposerPopover keyboard submit', () => {
       bounds: { width: 800, height: 600 },
     });
 
-    const handle = screen.getByLabelText('Move comment box');
+    const handle = screen.getByLabelText('chat.comments.moveBox');
     fireEvent.pointerDown(handle, { clientX: 10, clientY: 10, pointerId: 1 });
     fireEvent.pointerMove(document, { clientX: 2000, clientY: 2000, pointerId: 1 });
     fireEvent.pointerUp(document, { pointerId: 1 });

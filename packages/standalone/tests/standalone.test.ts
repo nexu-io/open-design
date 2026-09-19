@@ -231,6 +231,27 @@ describe("standalone exact lifecycle", () => {
     expect(await store.readState()).toEqual({ schemaVersion: 4, revision: 0, prepared: null, activationIntent: null, activationAttempt: null, active: null, lastHealthy: null });
   });
 
+  it("fails closed on a tampered on-disk generation record", async () => {
+    const root = await mkdtemp(join(tmpdir(), "standalone-record-")); roots.push(root);
+    const bytes = Buffer.from("export default 'fixture';\n");
+    const { generation, store } = await fixtureStore(root, bytes);
+    const recordPath = join(root, "channels", "somechan", "generations", `${generation.id}.json`);
+    const original = await readFile(recordPath, "utf8");
+
+    const tampered = JSON.parse(original) as GenerationRecord;
+    tampered.resources.fixture!.path = join(root, "..", "outside");
+    await writeFile(recordPath, canonicalJson(tampered));
+    await expect(store.readGeneration(generation.id)).rejects.toThrow(`generation record: ${generation.id}`);
+
+    const drifted = JSON.parse(original) as GenerationRecord;
+    drifted.launcher = { ...drifted.launcher, path: join(root, "drifted.mjs") };
+    await writeFile(recordPath, canonicalJson(drifted));
+    await expect(store.readGeneration(generation.id)).rejects.toThrow(`generation record: ${generation.id}`);
+
+    await writeFile(recordPath, original);
+    expect(await store.readGeneration(generation.id)).toEqual(generation);
+  });
+
   it("requires exactly one typed standalone.launcher in every signed content graph", () => {
     const value = metadata(Buffer.from("fixture"));
     expect(() => validateStandaloneMetadata({ ...value, resources: value.resources.filter(({ component }) => component !== "standalone.launcher") }))

@@ -4,6 +4,7 @@ import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
 import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
+import { renderOAuthResultPage } from './http/oauth-result-page.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
 import type { RouteDeps } from './server-context.js';
@@ -89,7 +90,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
   app.get('/api/mcp/install-info', (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     const now = Date.now();
     const webPort = process.env[SIDECAR_ENV.WEB_PORT] ?? null;
@@ -113,7 +114,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
   app.get('/api/mcp/install/codex/status', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     try {
       const status = await probeCodexInstall(CODEX_MCP_NAME);
@@ -125,7 +126,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
   app.post('/api/mcp/install/codex', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     const payload = computeInstallPayload();
     if (!payload.cliExists || !payload.nodeExists) {
@@ -146,7 +147,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
   app.delete('/api/mcp/install/codex', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     try {
       await uninstallCodexMcp(CODEX_MCP_NAME);
@@ -162,29 +163,25 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // can render the "Add MCP server" picker without a second round-trip.
   app.get('/api/mcp/servers', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     try {
       const cfg = await readMcpConfig(RUNTIME_DATA_DIR);
       res.json({ servers: cfg.servers, templates: MCP_TEMPLATES });
     } catch (err: any) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err && err.message ? err.message : err));
     }
   });
 
   app.put('/api/mcp/servers', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     try {
       const cfg = await writeMcpConfig(RUNTIME_DATA_DIR, req.body);
       res.json({ servers: cfg.servers, templates: MCP_TEMPLATES });
     } catch (err: any) {
-      res
-        .status(400)
-        .json({ error: String(err && err.message ? err.message : err) });
+      sendApiError(res, 400, 'BAD_REQUEST', String(err && err.message ? err.message : err));
     }
   });
 
@@ -201,31 +198,27 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
   app.post('/api/mcp/oauth/start', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     const serverId =
       typeof req.body?.serverId === 'string' ? req.body.serverId.trim() : '';
     if (!serverId) {
-      return res.status(400).json({ error: 'serverId is required' });
+      return sendApiError(res, 400, 'BAD_REQUEST', 'serverId is required');
     }
     try {
       const cfg = await readMcpConfig(RUNTIME_DATA_DIR);
       const server = cfg.servers.find((s) => s.id === serverId);
       if (!server) {
-        return res.status(404).json({ error: `unknown serverId ${serverId}` });
+        return sendApiError(res, 404, 'NOT_FOUND', `unknown serverId ${serverId}`);
       }
       if (server.transport !== 'http' && server.transport !== 'sse') {
-        return res
-          .status(400)
-          .json({ error: 'OAuth flow only applies to http/sse transports' });
+        return sendApiError(res, 400, 'BAD_REQUEST', 'OAuth flow only applies to http/sse transports');
       }
       if (!server.url) {
-        return res.status(400).json({ error: 'server has no URL configured' });
+        return sendApiError(res, 400, 'BAD_REQUEST', 'server has no URL configured');
       }
       if (server.authMode === 'none') {
-        return res
-          .status(400)
-          .json({ error: 'server is configured for no managed OAuth' });
+        return sendApiError(res, 400, 'BAD_REQUEST', 'server is configured for no managed OAuth');
       }
       const redirectUri = mcpOAuthCallbackUrl(req);
       console.log(
@@ -250,7 +243,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     } catch (err: any) {
       const msg = err && err.message ? err.message : String(err);
       console.error(`[mcp-oauth] start failed serverId=${serverId}:`, msg);
-      res.status(502).json({ error: msg });
+      sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', msg);
     }
   });
 
@@ -331,11 +324,11 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
   app.get('/api/mcp/oauth/status', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     const serverId =
       typeof req.query.serverId === 'string' ? req.query.serverId.trim() : '';
-    if (!serverId) return res.status(400).json({ error: 'serverId is required' });
+    if (!serverId) return sendApiError(res, 400, 'BAD_REQUEST', 'serverId is required');
     try {
       const tok = await getToken(RUNTIME_DATA_DIR, serverId);
       if (!tok) return res.json({ connected: false });
@@ -346,22 +339,22 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
         savedAt: tok.savedAt,
       });
     } catch (err: any) {
-      res.status(500).json({ error: String(err && err.message ? err.message : err) });
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err && err.message ? err.message : err));
     }
   });
 
   app.post('/api/mcp/oauth/disconnect', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
+      return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
     }
     const serverId =
       typeof req.body?.serverId === 'string' ? req.body.serverId.trim() : '';
-    if (!serverId) return res.status(400).json({ error: 'serverId is required' });
+    if (!serverId) return sendApiError(res, 400, 'BAD_REQUEST', 'serverId is required');
     try {
       await clearToken(RUNTIME_DATA_DIR, serverId);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: String(err && err.message ? err.message : err) });
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err && err.message ? err.message : err));
     }
   });
 
@@ -381,85 +374,4 @@ function getPublicBaseUrl(req: any) {
 
 function mcpOAuthCallbackUrl(req: any) {
   return `${getPublicBaseUrl(req)}/api/mcp/oauth/callback`;
-}
-
-function renderOAuthResultPage(opts: any) {
-  const ok = Boolean(opts.ok);
-  const title = ok ? 'Connected' : 'Authorization failed';
-  const heading = ok ? '✅ Connected' : '⚠️ Authorization failed';
-  const body = ok
-    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to OpenDesign.`
-    : escapeHtml(opts.message ?? 'Authorization could not be completed.');
-  const accent = ok ? '#1a7f37' : '#cf222e';
-  const payload = ok
-    ? { type: 'mcp-oauth', ok: true, serverId: opts.serverId ?? null }
-    : { type: 'mcp-oauth', ok: false, message: opts.message ?? null };
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>${escapeHtml(title)} — OpenDesign</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>
-  :root { color-scheme: light dark; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    display: flex; align-items: center; justify-content: center;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
-    background: #f6f7f9; color: #1f2328; padding: 24px;
-  }
-  @media (prefers-color-scheme: dark) {
-    body { background: #0d1117; color: #e6edf3; }
-    .card { background: #161b22; border-color: #30363d; }
-    code { background: #1f242c; }
-  }
-  .card {
-    max-width: 420px; width: 100%; padding: 28px 28px 22px; border-radius: 12px;
-    background: white; border: 1px solid #d0d7de; box-shadow: 0 8px 24px rgba(0,0,0,.06);
-    text-align: left;
-  }
-  h1 { margin: 0 0 8px; font-size: 18px; color: ${accent}; }
-  p  { margin: 0 0 16px; font-size: 14px; line-height: 1.55; }
-  code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
-  button {
-    appearance: none; border: 1px solid #d0d7de; background: white;
-    border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
-  }
-  button:hover { background: #f6f8fa; }
-  @media (prefers-color-scheme: dark) {
-    button { background: #21262d; border-color: #30363d; color: #e6edf3; }
-    button:hover { background: #30363d; }
-  }
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>${escapeHtml(heading)}</h1>
-    <p>${body}</p>
-    <button type="button" onclick="window.close()">Close this tab</button>
-  </div>
-  <script>
-    try {
-      var payload = ${JSON.stringify(payload)};
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage(payload, '*');
-      }
-      if (window.BroadcastChannel) {
-        var bc = new BroadcastChannel('open-design-mcp-oauth');
-        bc.postMessage(payload);
-        bc.close();
-      }
-    } catch (e) { /* ignore postMessage failures */ }
-  </script>
-</body>
-</html>`;
-}
-
-function escapeHtml(s: any) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }

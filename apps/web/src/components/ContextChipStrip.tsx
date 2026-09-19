@@ -10,6 +10,7 @@
 // ChatComposer uses this to surface details modals for plugin and skill chips.
 
 import type { ContextItem, ContextItemKind } from '@open-design/contracts';
+import { useT } from '../i18n';
 import { Icon } from './Icon';
 
 interface Props {
@@ -54,12 +55,13 @@ const KIND_LABEL: Record<ContextItemKind, string> = {
 };
 
 export function ContextChipStrip(props: Props) {
+  const t = useT();
   const items = props.items ?? [];
   if (items.length === 0 && (props.hideWhenEmpty ?? true)) return null;
   return (
     <div className="context-chip-strip" role="list" data-testid="context-chip-strip">
       {items.length === 0 ? (
-        <div className="context-chip-strip__empty">No active plugin context.</div>
+        <div className="context-chip-strip__empty">{t('plugins.contextChipsEmpty')}</div>
       ) : null}
       {items.map((item, idx) => {
         const iconName = KIND_ICON[item.kind] ?? 'sparkles';
@@ -101,7 +103,7 @@ export function ContextChipStrip(props: Props) {
               <button
                 type="button"
                 className="context-chip-strip__remove"
-                aria-label={`Remove ${kindLabel} ${label}`}
+                aria-label={t('plugins.contextChipsRemove', { kind: kindLabel, label })}
                 onClick={() => props.onRemove?.(item)}
               >
                 ×

@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import {
   APP_KEYS,
@@ -631,7 +631,7 @@ export async function inspectPackedWinApp(
       screenshot: await invokeSidecar<DesktopScreenshotResult>(
         stamp,
         SIDECAR_MESSAGES.SCREENSHOT,
-        { path: options.path },
+        { path: resolve(options.path) },
         { timeoutMs: 10000 },
       ),
     }),

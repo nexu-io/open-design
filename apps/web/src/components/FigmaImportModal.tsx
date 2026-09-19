@@ -7,8 +7,7 @@
 // delegated to the host (`onFigmaUrl`), which routes it through the existing
 // od-figma-migration scenario (OAuth lives in the run pipeline).
 //
-// Copy is intentionally inline (matching LibraryUploadModal); only the "+"
-// menu entry label is i18n-keyed.
+// Copy is i18n-keyed; only the "+" menu entry label was keyed originally.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -18,6 +17,7 @@ import { Button } from '@open-design/components';
 import { Icon } from './Icon';
 import { modalOverlay, modalContent } from '../motion';
 import { importProjectFigma } from '../providers/registry';
+import { useI18n } from '../i18n';
 import styles from './FigmaImportModal.module.css';
 
 interface Props {
@@ -47,6 +47,7 @@ export function FigmaImportModal({
   onImported,
   onFigmaUrl,
 }: Props) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<Mode>('file');
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState('');
@@ -69,7 +70,7 @@ export function FigmaImportModal({
     if (files.length === 0) return;
     const fig = files.find((f) => f.name.toLowerCase().endsWith('.fig'));
     if (!fig) {
-      setError('That isn’t a .fig file. Export your Figma file as .fig (File → Save local copy) and drop it here.');
+      setError(t('figma.import.notFigError'));
       return;
     }
     setMode('file');
@@ -151,13 +152,13 @@ export function FigmaImportModal({
         exit="exit"
         role="dialog"
         aria-modal="true"
-        aria-label="Import from Figma"
+        aria-label={t('figma.import.dialogAria')}
       >
         <header className={styles.head}>
           <span className={styles.headTitle}>
-            <Icon name="import" size={16} /> Import from Figma
+            <Icon name="import" size={16} /> {t('figma.import.dialogAria')}
           </span>
-          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close" disabled={importing}>
+          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label={t('common.close')} disabled={importing}>
             <Icon name="close" size={18} />
           </button>
         </header>
@@ -176,7 +177,7 @@ export function FigmaImportModal({
                   data-active={mode === 'file'}
                   onClick={() => setMode('file')}
                 >
-                  Upload .fig
+                  {t('figma.import.tabFile')}
                 </button>
                 <button
                   type="button"
@@ -216,7 +217,7 @@ export function FigmaImportModal({
                   {file ? file.name : (<>Drop a <code>.fig</code> here, or <span className={styles.dropLink}>browse</span></>)}
                 </p>
                 <p className={styles.dropHint}>
-                  Decoded on your machine — tokens, components &amp; assets. No Figma account.
+                  {t('figma.import.dropHint')}
                 </p>
                 <input
                   ref={inputRef}
@@ -239,14 +240,14 @@ export function FigmaImportModal({
                   onChange={(e) => { setUrl(e.target.value); setError(null); }}
                 />
                 <p className={styles.dropHint}>
-                  Runs through the Figma connector (OAuth) and the migration flow.
+                  {t('figma.import.urlHint')}
                 </p>
               </div>
             )}
 
             <textarea
               className={styles.notes}
-              placeholder="Optional: notes for the build (e.g. 'make it a marketing landing page')"
+              placeholder={t('figma.import.notesPlaceholder')}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -255,13 +256,13 @@ export function FigmaImportModal({
             {error ? <p className={styles.error}>{error}</p> : null}
 
             <footer className={styles.foot}>
-              <Button variant="ghost" onClick={onClose} disabled={importing}>Cancel</Button>
+              <Button variant="ghost" onClick={onClose} disabled={importing}>{t('common.cancel')}</Button>
               {mode === 'file' ? (
                 <Button onClick={() => void runImport()} disabled={!file || importing}>
-                  {importing ? (<><Icon name="spinner" size={14} className={styles.spin} /> Decoding…</>) : 'Import & build'}
+                  {importing ? (<><Icon name="spinner" size={14} className={styles.spin} /> {t('figma.import.decoding')}</>) : t('figma.import.submit')}
                 </Button>
               ) : (
-                <Button onClick={submitUrl} disabled={!url.trim()}>Import & build</Button>
+                <Button onClick={submitUrl} disabled={!url.trim()}>{t('figma.import.submit')}</Button>
               )}
             </footer>
           </>
@@ -275,30 +276,31 @@ export function FigmaImportModal({
 }
 
 function FigmaImportSummary({ result }: { result: FigmaImportResult }) {
+  const { t } = useI18n();
   const inv = result.inventory;
   return (
     <div className={styles.summaryPane}>
       <p className={styles.summaryLead}>
-        <Icon name="check" size={15} /> Imported <strong>{result.label}</strong>
-        {inv.decoded ? '' : ' (assets only — the node tree could not be decoded)'}
+        <Icon name="check" size={15} /> {t('figma.import.importedLabel')} <strong>{result.label}</strong>
+        {inv.decoded ? '' : t('figma.import.assetsOnlySuffix')}
       </p>
       <ul className={styles.summaryStats}>
-        <li><strong>{inv.nodeCount}</strong> nodes</li>
-        <li><strong>{inv.pageCount}</strong> pages</li>
-        <li><strong>{inv.frameCount}</strong> frames</li>
-        <li><strong>{inv.componentCount}</strong> components</li>
-        <li><strong>{inv.colors.length}</strong> colors</li>
-        <li><strong>{inv.fonts.length}</strong> fonts</li>
-        <li><strong>{inv.assetCount}</strong> assets</li>
+        <li><strong>{inv.nodeCount}</strong> {t('figma.import.statNodes')}</li>
+        <li><strong>{inv.pageCount}</strong> {t('figma.import.statPages')}</li>
+        <li><strong>{inv.frameCount}</strong> {t('figma.import.statFrames')}</li>
+        <li><strong>{inv.componentCount}</strong> {t('figma.import.statComponents')}</li>
+        <li><strong>{inv.colors.length}</strong> {t('figma.import.statColors')}</li>
+        <li><strong>{inv.fonts.length}</strong> {t('figma.import.statFonts')}</li>
+        <li><strong>{inv.assetCount}</strong> {t('figma.import.statAssets')}</li>
       </ul>
       {inv.colors.length ? (
-        <div className={styles.swatches} aria-label="Color tokens">
+        <div className={styles.swatches} aria-label={t('figma.import.colorsAria')}>
           {inv.colors.slice(0, 16).map((c) => (
             <span key={c} className={styles.swatch} style={{ background: c }} title={c} />
           ))}
         </div>
       ) : null}
-      <p className={styles.summaryFoot}>The prompt is ready in the composer — review and send to build the page.</p>
+      <p className={styles.summaryFoot}>{t('figma.import.summaryFoot')}</p>
     </div>
   );
 }

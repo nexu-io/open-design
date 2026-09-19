@@ -12,6 +12,12 @@ import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
 import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.js';
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
+import {
+  buildCommandShellCommand,
+  buildLoginShellCommand,
+  execFileBuffered,
+  execGhBuffered,
+} from './services/login-shell.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { runDeliverableSyntaxToolCli } from './tools-deliverable-syntax-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
@@ -3093,47 +3099,6 @@ Shows the GitHub account gh will use for OpenDesign registry publishing.`);
   }
 }
 
-async function execFileBuffered(command, args, opts = {}) {
-  const { execFile } = await import('node:child_process');
-  return new Promise((resolve) => {
-    execFile(command, args, {
-      timeout: 30_000,
-      maxBuffer: 1024 * 1024,
-      ...opts,
-    }, (error, stdout, stderr) => {
-      resolve({
-        ok: !error,
-        code: error?.code,
-        stdout: String(stdout ?? '').trim(),
-        stderr: String(stderr ?? '').trim(),
-        error,
-      });
-    });
-  });
-}
-
-function quotePosixShellArg(value) {
-  const text = String(value ?? '');
-  return `'${text.replace(/'/g, `'\\''`)}'`;
-}
-
-function buildGhShellCommand(args) {
-  return ['gh', ...args].map(quotePosixShellArg).join(' ');
-}
-
-function buildLoginShellCommand(innerCommand) {
-  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
-}
-
-async function execGhBuffered(args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
-  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
-  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
-    env: process.env,
-    ...opts,
-  });
-}
-
 async function spawnPassthrough(command, args, opts = {}) {
   const { spawn } = await import('node:child_process');
   return await new Promise((resolve) => {
@@ -3146,7 +3111,7 @@ async function spawnPassthrough(command, args, opts = {}) {
 async function spawnGhPassthrough(args) {
   if (process.platform === 'win32') return spawnPassthrough('gh', args);
   const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
-  return spawnPassthrough(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
+  return spawnPassthrough(shell, ['-c', buildLoginShellCommand(buildCommandShellCommand('gh', args))], {
     env: process.env,
   });
 }
@@ -5267,7 +5232,7 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
   await run('git add', 'git', ['add', '-A'], { cwd: workdir });
   const status = flags['dry-run']
     ? { stdout: 'dry-run' }
-    : await execFileBuffered('git', ['status', '--porcelain'], { cwd: workdir });
+    : await execFileBuffered('git', ['status', '--porcelain'], { cwd: workdir, timeout: 30_000 });
   if (status.stdout.trim().length > 0 || !exists) {
     const commitMessage = exists
       ? `Update: ${manifest.name} v${manifest.version ?? '0.0.0'}`
@@ -5276,7 +5241,7 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
   }
   const tag = `v${manifest.version ?? '0.0.0'}`;
   if (!flags['dry-run']) {
-    const localTag = await execFileBuffered('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`], { cwd: workdir });
+    const localTag = await execFileBuffered('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`], { cwd: workdir, timeout: 30_000 });
     if (!localTag.ok) await run('git tag', 'git', ['tag', tag], { cwd: workdir });
   }
 

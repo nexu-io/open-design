@@ -345,4 +345,18 @@ describe("updater fixture server", () => {
       await preview.close();
     }
   });
+
+  it("reports a connectable loopback URL when bound to a wildcard host", async () => {
+    const server = await startUpdaterFixtureServer({
+      artifactBody: "fixture artifact",
+      host: "0.0.0.0",
+    });
+    try {
+      expect(server.info.origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+      const response = await fetch(server.info.metadataUrl);
+      expect(response.ok).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
 });

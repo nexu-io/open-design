@@ -3275,8 +3275,8 @@ function AvailablePluginDetailsModal({
             className="plugin-details-modal__close"
             onClick={onClose}
             disabled={pending}
-            aria-label="Close available plugin details"
-            title="Close"
+            aria-label={t('plugins.availableDetails.closeDialog')}
+            title={t('common.close')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -3697,6 +3697,7 @@ function PluginImportModal({
   onUploadFolder: (files: File[]) => Promise<PluginInstallOutcome>;
 }) {
   const analytics = useAnalytics();
+  const { t } = useI18n();
   const importModalViewFiredRef = useRef(false);
   useEffect(() => {
     if (importModalViewFiredRef.current) return;
@@ -3772,39 +3773,39 @@ function PluginImportModal({
       >
         <header className="plugins-import-modal__head">
           <div>
-            <p className="plugins-view__kicker">User plugins</p>
-            <h2 id="plugins-import-title">Import a plugin</h2>
+            <p className="plugins-view__kicker">{t('plugins.import.kicker')}</p>
+            <h2 id="plugins-import-title">{t('plugins.import.title')}</h2>
           </div>
           <button
             type="button"
             className="plugins-import-modal__close"
             onClick={onClose}
-            aria-label="Close import dialog"
+            aria-label={t('plugins.import.closeDialog')}
           >
             <Icon name="close" size={16} />
           </button>
         </header>
 
-        <nav className="plugins-import-modal__tabs" aria-label="Import source">
+        <nav className="plugins-import-modal__tabs" aria-label={t('plugins.import.sourceTabs')}>
           <ImportChoice
             active={kind === 'github'}
             icon="github"
-            title="From GitHub"
-            body="Install github:owner/repo paths."
+            title={t('plugins.import.tabGithub')}
+            body={t('plugins.import.tabGithubBody')}
             onClick={() => selectKind('github')}
           />
           <ImportChoice
             active={kind === 'zip'}
             icon="upload"
-            title="Upload zip"
-            body="Upload a plugin archive."
+            title={t('plugins.import.tabZip')}
+            body={t('plugins.import.tabZipBody')}
             onClick={() => selectKind('zip')}
           />
           <ImportChoice
             active={kind === 'folder'}
             icon="folder"
-            title="Upload folder"
-            body="Upload a plugin directory."
+            title={t('plugins.import.tabFolder')}
+            body={t('plugins.import.tabFolderBody')}
             onClick={() => selectKind('folder')}
           />
         </nav>
@@ -3812,7 +3813,7 @@ function PluginImportModal({
         <div className="plugins-import-modal__body">
           {kind === 'github' ? (
             <div className="plugins-view__install-card">
-              <label htmlFor="plugin-source">GitHub, archive, or marketplace source</label>
+              <label htmlFor="plugin-source">{t('plugins.import.sourceLabel')}</label>
               <div className="plugins-view__source-row">
                 <input
                   id="plugin-source"
@@ -3827,23 +3828,25 @@ function PluginImportModal({
                   onClick={runImport}
                   disabled={working || !canSubmit}
                 >
-                  {working ? 'Importing…' : 'Import'}
+                  {working ? t('plugins.import.submitWorking') : t('plugins.import.submit')}
                 </button>
               </div>
               <div className="plugins-view__source-help">
-                Supports <code>github:owner/repo[@ref][/subpath]</code>, HTTPS{' '}
-                <code>.tar.gz</code>/<code>.tgz</code> archives, or marketplace plugin names.
+                {t('plugins.import.sourceHelp', {
+                  sourceSpec: 'github:owner/repo[@ref][/subpath]',
+                  archiveExts: '.tar.gz/.tgz',
+                })}
               </div>
             </div>
           ) : null}
 
           {kind === 'zip' ? (
             <FileImportPanel
-              title="Upload zip"
-              body="Choose a .zip archive containing open-design.json, SKILL.md, or .claude-plugin/plugin.json."
+              title={t('plugins.import.tabZip')}
+              body={t('plugins.import.zipBody')}
               accept=".zip,application/zip"
               working={working}
-              fileLabel={zipFile?.name ?? 'No zip selected'}
+              fileLabel={zipFile?.name ?? t('plugins.import.noZipSelected')}
               onChange={(files) => setZipFile(files[0] ?? null)}
               onImport={runImport}
               canSubmit={canSubmit}
@@ -3852,13 +3855,13 @@ function PluginImportModal({
 
           {kind === 'folder' ? (
             <FileImportPanel
-              title="Upload folder"
-              body="Choose a plugin folder. Relative paths are preserved and installed into your user plugin registry."
+              title={t('plugins.import.tabFolder')}
+              body={t('plugins.import.folderBody')}
               working={working}
               fileLabel={
                 folderFiles.length > 0
-                  ? `${folderFiles.length} file${folderFiles.length === 1 ? '' : 's'} selected`
-                  : 'No folder selected'
+                  ? t('plugins.import.filesSelected', { count: folderFiles.length })
+                  : t('plugins.import.noFolderSelected')
               }
               folder
               onChange={setFolderFiles}
@@ -3870,10 +3873,7 @@ function PluginImportModal({
         </div>
 
         <footer className="plugins-import-modal__foot">
-          <p>
-            Imported plugins are user plugins and are stored separately from
-            bundled official plugins.
-          </p>
+          <p>{t('plugins.import.footerNote')}</p>
           <button
             type="button"
             className="plugins-view__secondary"
@@ -3886,7 +3886,7 @@ function PluginImportModal({
               onClose();
             }}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </footer>
       </section>
@@ -3945,6 +3945,7 @@ function FileImportPanel({
   onChange: (files: File[]) => void;
   onImport: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <section className="plugins-view__install-card">
       <div>
@@ -3969,7 +3970,7 @@ function FileImportPanel({
         onClick={onImport}
         disabled={working || !canSubmit}
       >
-        {working ? 'Importing…' : 'Import'}
+        {working ? t('plugins.import.submitWorking') : t('plugins.import.submit')}
       </button>
     </section>
   );

@@ -7,6 +7,7 @@
  * acp/rpc, and acp/session-params.
  */
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import { createJsonLineStream } from '../core/index.js';
 import type { JsonRpcId, JsonObject, TimerHandle } from './types.js';
 import { ACP_PROTOCOL_VERSION, DEFAULT_TIMEOUT_MS, MODEL_CONFIG_OPTION_IDS } from './constants.js';
@@ -196,8 +197,9 @@ export function currentModelFromSessionResult(result: JsonObject): string | null
 /**
  * Probes a running ACP binary by spawning it, performing the
  * `initialize` → `session/new` handshake, and reading the model list from the
- * session result. The child is killed with `SIGTERM` once the list is
- * extracted or the timeout expires.
+ * session result. The child is killed once the list is extracted or the
+ * timeout expires — `SIGTERM` first, escalating to `SIGKILL` after a short
+ * grace period so an uncooperative probe cannot linger as an orphan.
  *
  * Used by runtime adapter definitions to populate the model-selection dropdown
  * without waiting for an actual prompt run.
@@ -215,7 +217,12 @@ export function currentModelFromSessionResult(result: JsonObject): string | null
 export async function detectAcpModels({
   bin,
   args,
-  cwd = process.cwd(),
+  // Probes are short read-only metadata calls that never need the caller's
+  // project files. Default to a neutral working directory (same policy as
+  // runtimes/invocation.ts execAgentFile) instead of the daemon process cwd:
+  // bun-based CLIs run `install` on startup in cwd, and `session/new` leaks
+  // whatever path we hand the vendor CLI.
+  cwd = os.tmpdir(),
   env = process.env,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   clientName = 'open-design-detect',
@@ -248,9 +255,23 @@ export async function detectAcpModels({
       fn(value);
     };
 
+    // SIGTERM alone is not a settle guarantee: a CLI that traps it would leak
+    // as an orphan for the daemon's lifetime. Escalate to SIGKILL shortly
+    // after, mirroring execAgentFile's killSignal policy.
+    const terminate = () => {
+      if (child.killed) return;
+      child.kill('SIGTERM');
+      const escalate = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill('SIGKILL');
+        }
+      }, 2_000);
+      escalate.unref();
+    };
+
     const fail = (message: string) => {
       finish(reject, new Error(message));
-      if (!child.killed) child.kill('SIGTERM');
+      terminate();
     };
 
     const writeRpc = (id: JsonRpcId, method: string, params: unknown) => {
@@ -289,7 +310,7 @@ export async function detectAcpModels({
       if (expectedId === 2) {
         const models = normalizeModels(result.models, defaultModelOption, result.configOptions);
         finish(resolve, models);
-        if (!child.killed) child.kill('SIGTERM');
+        terminate();
       }
     });
 

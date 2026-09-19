@@ -95,10 +95,18 @@ export async function startMcpOAuth(
     let detail = '';
     try {
       const body = await res.text();
-      // Try to pull a typed error message out of `{ error: '...' }` payloads.
+      // Try to pull a typed error message out of `{ error: '...' }` or the
+      // `{ error: { code, message } }` envelope the daemon's sendApiError emits.
       try {
         const parsed = JSON.parse(body);
         if (parsed && typeof parsed.error === 'string') detail = parsed.error;
+        else if (
+          parsed?.error &&
+          typeof parsed.error === 'object' &&
+          typeof parsed.error.message === 'string'
+        ) {
+          detail = parsed.error.message;
+        }
       } catch {
         detail = body.slice(0, 240);
       }

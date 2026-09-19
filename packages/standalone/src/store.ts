@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile, type FileHandle } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 import {
+  SHA256_PATTERN,
   canonicalJson,
   compareVersions,
+  validateChannelRelease,
   validateShellIdentity,
   validateStandaloneScope,
   verifyStandaloneMetadata,
@@ -64,6 +66,111 @@ export type GenerationRecord = {
     sync: true;
   }>;
 };
+
+const GENERATION_RECORD_KEYS = "channel,id,launcher,minimumShellVersions,releaseVersion,resources,schemaVersion,sourceCommit,standaloneVersion";
+const LAUNCHER_KEYS = "blobSha256,entrypoint,path,protocol,resourceId";
+const RESOURCE_KEYS = "blobSha256,component,entrypoint,materialization,mediaType,path,size,sync";
+const TOKEN_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
+const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9a-z]+(?:[.-][0-9a-z]+)*)?$/;
+const COMMIT_PATTERN = /^[a-f0-9]{40}$/;
+const MEDIA_TYPE_PATTERN = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i;
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertExactKeys(value: Record<string, unknown>, expected: string, label: string): void {
+  if (Object.keys(value).sort().join(",") !== expected) throw new Error(`invalid ${label}`);
+}
+
+function assertRelativePath(value: unknown, label: string): asserts value is string {
+  if (typeof value !== "string" || value.length === 0 || value.startsWith("/") || value.startsWith("\\") || value.split(/[\\/]/).includes("..")) {
+    throw new Error(`unsafe ${label}`);
+  }
+}
+
+function assertStorePath(value: unknown, root: string, label: string): asserts value is string {
+  if (typeof value !== "string" || !isAbsolute(value)) throw new Error(`invalid ${label}`);
+  const resolved = resolve(value);
+  if (!resolved.startsWith(`${resolve(root)}${sep}`)) throw new Error(`unsafe ${label}`);
+}
+
+function assertMaterialization(value: unknown, label: string): asserts value is StandaloneMaterialization {
+  if (!isPlainRecord(value)) throw new Error(`invalid ${label}`);
+  if (value.type === "file") {
+    assertExactKeys(value, "entrypoint,type", label);
+  } else if (value.type === "zip") {
+    assertExactKeys(value, "entrypoint,treeSha256,type", label);
+    if (typeof value.treeSha256 !== "string" || !SHA256_PATTERN.test(value.treeSha256)) throw new Error(`invalid ${label}`);
+  } else {
+    throw new Error(`invalid ${label}`);
+  }
+  assertRelativePath(value.entrypoint, label);
+}
+
+/**
+ * Validate a generation record read back from disk: exact field set, digest and
+ * version shapes, and store-rooted absolute paths — a record whose resource
+ * paths escape the store root is tampered, so the read fails closed instead of
+ * feeding unchecked paths to materialization or sweeping.
+ */
+export function validateGenerationRecord(value: unknown, expected: Readonly<{ channel: string; id: string; root: string }>): GenerationRecord {
+  const label = `generation record: ${expected.id}`;
+  if (!SHA256_PATTERN.test(expected.id)) throw new Error(`invalid ${label}`);
+  if (!isPlainRecord(value)) throw new Error(`invalid ${label}`);
+  assertExactKeys(value, GENERATION_RECORD_KEYS, label);
+  if (value.schemaVersion !== 4 || value.id !== expected.id || value.channel !== expected.channel) throw new Error(`invalid ${label}`);
+  if (typeof value.releaseVersion !== "string") throw new Error(`invalid ${label}`);
+  validateChannelRelease(expected.channel, value.releaseVersion);
+  if (typeof value.standaloneVersion !== "string" || !VERSION_PATTERN.test(value.standaloneVersion)) throw new Error(`invalid ${label}`);
+  if (typeof value.sourceCommit !== "string" || !COMMIT_PATTERN.test(value.sourceCommit)) throw new Error(`invalid ${label}`);
+
+  const minimumShellVersions = value.minimumShellVersions;
+  if (!isPlainRecord(minimumShellVersions)) throw new Error(`invalid ${label}`);
+  const shellEntries = Object.entries(minimumShellVersions);
+  if (shellEntries.length === 0) throw new Error(`invalid ${label}`);
+  for (const [type, version] of shellEntries) {
+    if (!TOKEN_PATTERN.test(type) || typeof version !== "string" || !VERSION_PATTERN.test(version)) throw new Error(`invalid ${label}`);
+  }
+
+  const launcher = value.launcher;
+  if (!isPlainRecord(launcher)) throw new Error(`invalid ${label}`);
+  assertExactKeys(launcher, LAUNCHER_KEYS, label);
+  if (launcher.protocol !== "standalone-launcher-v1") throw new Error(`invalid ${label}`);
+  if (typeof launcher.resourceId !== "string" || !TOKEN_PATTERN.test(launcher.resourceId)) throw new Error(`invalid ${label}`);
+  if (typeof launcher.blobSha256 !== "string" || !SHA256_PATTERN.test(launcher.blobSha256)) throw new Error(`invalid ${label}`);
+  assertStorePath(launcher.entrypoint, expected.root, label);
+  assertStorePath(launcher.path, expected.root, label);
+
+  const resources = value.resources;
+  if (!isPlainRecord(resources)) throw new Error(`invalid ${label}`);
+  const resourceEntries = Object.entries(resources);
+  if (resourceEntries.length === 0) throw new Error(`invalid ${label}`);
+  let launcherCount = 0;
+  for (const [resourceId, resource] of resourceEntries) {
+    if (!TOKEN_PATTERN.test(resourceId) || !isPlainRecord(resource)) throw new Error(`invalid ${label}`);
+    assertExactKeys(resource, RESOURCE_KEYS, label);
+    if (resource.component === "standalone.launcher") launcherCount += 1;
+    else if (resource.component !== "standalone.resource") throw new Error(`invalid ${label}`);
+    if (typeof resource.blobSha256 !== "string" || !SHA256_PATTERN.test(resource.blobSha256)) throw new Error(`invalid ${label}`);
+    assertStorePath(resource.entrypoint, expected.root, label);
+    assertStorePath(resource.path, expected.root, label);
+    assertMaterialization(resource.materialization, label);
+    if (typeof resource.mediaType !== "string" || !MEDIA_TYPE_PATTERN.test(resource.mediaType)) throw new Error(`invalid ${label}`);
+    if (!Number.isSafeInteger(resource.size) || (resource.size as number) < 0 || resource.sync !== true) throw new Error(`invalid ${label}`);
+  }
+  if (launcherCount !== 1) throw new Error(`invalid ${label}`);
+
+  const launcherResource = resources[launcher.resourceId];
+  if (!isPlainRecord(launcherResource)
+    || launcherResource.component !== "standalone.launcher"
+    || launcherResource.blobSha256 !== launcher.blobSha256
+    || launcherResource.entrypoint !== launcher.entrypoint
+    || launcherResource.path !== launcher.path) {
+    throw new Error(`invalid ${label}`);
+  }
+  return value as unknown as GenerationRecord;
+}
 
 let atomicSequence = 0;
 
@@ -162,9 +269,7 @@ export class StandaloneStore {
   }
 
   async readGeneration(id: string): Promise<GenerationRecord> {
-    const generation = await readJson<GenerationRecord>(this.generationPath(id));
-    if (generation.schemaVersion !== 4 || generation.id !== id || generation.channel !== this.channel) throw new Error(`invalid generation record: ${id}`);
-    return generation;
+    return validateGenerationRecord(await readJson<unknown>(this.generationPath(id)), { channel: this.channel, id, root: this.root });
   }
 
   async prepare(envelope: SignedStandaloneMetadata, trustedKeys: StandaloneTrustedKeyRing, options: StandalonePrepareOptions = {}): Promise<GenerationRecord> {

@@ -6,7 +6,7 @@ import type {
   ProjectFileVersionPromptSource,
   ProjectFileVersionSource,
 } from '@open-design/contracts';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -391,7 +391,12 @@ async function writeVersionManifest(
   if (typeof options.deletedAt === 'number' && Number.isFinite(options.deletedAt)) {
     manifest.deletedAt = options.deletedAt;
   }
-  await writeFile(path.join(root, VERSION_MANIFEST), JSON.stringify(manifest, null, 2));
+  // Atomic write: a torn manifest would orphan every stored version of the
+  // file, so publish through tmp+rename like the other daemon state stores.
+  const manifestPath = path.join(root, VERSION_MANIFEST);
+  const tmpPath = `${manifestPath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  await writeFile(tmpPath, JSON.stringify(manifest, null, 2));
+  await rename(tmpPath, manifestPath);
 }
 
 function publicVersion(entry: VersionEntry, currentId: string | null): ProjectFileVersion {
@@ -552,7 +557,12 @@ async function createProjectFileVersionUnlocked(
     const origin = normalizeArtifactOrigin(options.origin);
     if (origin) entry.origin = origin;
   }
-  await writeFile(path.join(root, contentPath), text);
+  // Atomic write: the manifest references this content by digest, so a torn
+  // write must never be observable as a complete version file.
+  const contentFilePath = path.join(root, contentPath);
+  const contentTmpPath = `${contentFilePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  await writeFile(contentTmpPath, text);
+  await rename(contentTmpPath, contentFilePath);
   const nextEntries = [...entries, entry];
   await writeVersionManifest(projectsRoot, projectId, safeName, nextEntries, {
     currentVersionId: id,

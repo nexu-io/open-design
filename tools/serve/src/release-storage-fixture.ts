@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
+import { fixtureServerOrigin } from "./server-origin.js";
+
 export type ReleaseStorageFixtureOptions = {
   host?: string;
   port?: number;
@@ -45,9 +47,7 @@ function close(server: Server): Promise<void> {
 }
 
 function serverOrigin(server: Server): string {
-  const address = server.address();
-  if (address == null || typeof address === "string") throw new Error("release storage fixture did not listen on TCP");
-  return `http://127.0.0.1:${address.port}`;
+  return fixtureServerOrigin(server, "release storage fixture");
 }
 
 function readBody(request: IncomingMessage): Promise<Buffer> {

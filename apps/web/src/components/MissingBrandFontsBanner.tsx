@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@open-design/components';
 
+import { useT } from '../i18n';
 import { Icon } from './Icon';
 
 // Per-project dismissal of the missing brand font files banner (issue #2814).
@@ -38,6 +39,7 @@ export function MissingBrandFontsBanner({
   className = 'ds-project-warning-card',
   onUploadAssets,
 }: MissingBrandFontsBannerProps) {
+  const t = useT();
   const [dismissed, setDismissed] = useState(() => isFontBannerDismissed(projectId));
   // FileWorkspace renders this banner without a per-project key, so the same
   // instance is reused across projects. useState only reads projectId once, so
@@ -65,18 +67,18 @@ export function MissingBrandFontsBanner({
     <div className={className}>
       <Icon name="help-circle" size={16} />
       <span>
-        <strong>Brand font files missing</strong>
-        <small>Typography previews are using substitute web fonts until brand font files are added.</small>
+        <strong>{t('brand.fontsMissingTitle')}</strong>
+        <small>{t('brand.fontsMissingBody')}</small>
       </span>
       <div className="ds-warning-card-actions">
         {onUploadAssets ? (
           <Button variant="ghost" className="compact" onClick={onUploadAssets}>
             <Icon name="upload" size={14} />
-            Add brand font files
+            {t('brand.fontsAddFiles')}
           </Button>
         ) : null}
         <Button variant="ghost" className="compact" onClick={keepSubstitutes}>
-          Keep substitutes
+          {t('brand.fontsKeepSubstitutes')}
         </Button>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { releaseChannelDescriptor } from "@open-design/release";
+import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
 
 import { optional, required, storageConfigFromEnv, writeJson } from "../storage/common.ts";
 import { getStorageObject, putStorageObjectWithStatus } from "../storage/s3-upload.ts";
@@ -11,6 +11,9 @@ import { parseReleaseNotePlan } from "./source.ts";
 
 const channel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
 const releaseVersion = required("RELEASE_VERSION");
+// Fail fast on a malformed version before it is interpolated into storage
+// prefixes — same guard the storage publish/verify scripts apply.
+parseReleaseVersion(releaseVersion, channel);
 const publicOrigin = required("RELEASE_PUBLIC_ORIGIN");
 const planPath = required("RELEASE_NOTE_PLAN_PATH");
 const publicationPath = required("RELEASE_NOTE_MANIFEST_PATH");

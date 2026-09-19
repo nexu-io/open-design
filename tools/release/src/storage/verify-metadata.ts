@@ -3,7 +3,10 @@ import {
   assertLauncherVersionFloorSatisfiable,
   resolveLauncherVersionFloor,
 } from "./launcher-version-floor.ts";
-import { releaseChannelDescriptor } from "@open-design/release";
+import {
+  parseReleaseVersion,
+  releaseChannelDescriptor,
+} from "@open-design/release";
 import { readFile } from "node:fs/promises";
 import { parseReleaseNotePublication, releaseNoteMetadataFromPublication } from "../release-note/publication.ts";
 
@@ -12,6 +15,7 @@ const releaseChannel = releaseDescriptor.channel;
 const metadataPath = optional("RELEASE_METADATA_PATH");
 const metadataUrl = metadataPath.length > 0 ? optional("RELEASE_METADATA_URL", `file://${metadataPath}`) : required("RELEASE_METADATA_URL");
 const releaseVersion = required("RELEASE_VERSION");
+parseReleaseVersion(releaseVersion, releaseChannel);
 const cacheBuster = optional("RELEASE_CACHE_BUSTER", "local");
 const releaseNoteManifestPath = optional("RELEASE_NOTE_MANIFEST_PATH");
 

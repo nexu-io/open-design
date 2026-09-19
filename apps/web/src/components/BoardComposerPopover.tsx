@@ -651,7 +651,7 @@ export function BoardComposerPopover({
       data-testid="comment-popover"
       role="dialog"
       aria-modal="false"
-      aria-label="Annotation"
+      aria-label={t('chat.comments.annotationAria')}
       style={popoverStyle}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
@@ -665,8 +665,8 @@ export function BoardComposerPopover({
           <button
             type="button"
             className="comment-popover-drag-handle"
-            aria-label="Move comment box"
-            title="Move comment box"
+            aria-label={t('chat.comments.moveBox')}
+            title={t('chat.comments.moveBox')}
             onPointerDown={startPopoverDrag}
           >
             <span aria-hidden />

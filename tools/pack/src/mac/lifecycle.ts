@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -438,7 +438,7 @@ export async function inspectPackedMacApp(config: ToolPackConfig, options: { exp
       screenshot: await invokeSidecar<DesktopScreenshotResult>(
         stamp,
         SIDECAR_MESSAGES.SCREENSHOT,
-        { path: options.path },
+        { path: resolve(options.path) },
         { timeoutMs: 10000 },
       ),
     }),

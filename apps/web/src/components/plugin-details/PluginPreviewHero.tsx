@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { workspaceResourceUrl } from '../../collab/workspace-identity';
+import { useI18n } from '../../i18n';
 import { Icon } from '../Icon';
 
 export interface PluginExampleEntry {
@@ -39,6 +40,7 @@ export function PluginPreviewHero({
   examples,
   workspaceContext = null,
 }: Props) {
+  const { t } = useI18n();
   const items = useMemo<NormalizedExample[]>(
     () => examples.map((e, idx) => normalize(pluginId, e, idx, workspaceContext)),
     [pluginId, examples, workspaceContext],
@@ -59,13 +61,13 @@ export function PluginPreviewHero({
       <div className="plugin-details-modal__hero-head">
         <div className="plugin-details-modal__hero-eyebrow">
           <span className="plugin-details-modal__hero-dot" aria-hidden />
-          What it produces
+          {t('plugins.previewHero.eyebrow')}
         </div>
         {items.length > 1 ? (
           <div
             className="plugin-details-modal__hero-tabs"
             role="tablist"
-            aria-label="Example outputs"
+            aria-label={t('plugins.previewHero.outputsAria')}
           >
             {items.map((it) => {
               const isActive = it.key === active.key;
@@ -112,11 +114,11 @@ export function PluginPreviewHero({
             href={active.href}
             target="_blank"
             rel="noreferrer"
-            title="Open this example in a new tab"
+            title={t('plugins.previewHero.openNewTabTitle')}
             data-testid="plugin-details-hero-popout"
           >
             <Icon name="external-link" size={14} />
-            <span>Open</span>
+            <span>{t('plugins.previewHero.openLabel')}</span>
           </a>
         </div>
         <iframe

@@ -18,7 +18,7 @@
 // this machine.
 
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import type { OdNextRolloutMode } from '@open-design/contracts';
@@ -921,6 +921,17 @@ async function doWrite(
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
   await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
   await rename(tmp, file);
+  // `agentCliEnv` can carry CLI API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY,
+  // ...) — restrict the persisted config to owner-only read/write, same as
+  // the sibling token stores.
+  try {
+    await chmod(file, 0o600);
+  } catch (err: unknown) {
+    const e = err as { code?: string };
+    if (e.code !== 'ENOTSUP' && e.code !== 'EPERM') {
+      console.warn('[app-config] could not chmod 0600', file, e.code ?? 'unknown');
+    }
+  }
   const installationIdWasExplicitlyReset = Object.prototype.hasOwnProperty.call(partial, 'installationId')
     && (partial.installationId == null || (
       typeof existing.installationId === 'string'

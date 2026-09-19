@@ -12,7 +12,8 @@
 // without trusting the client. Uploads run concurrently and the grid refreshes
 // once the batch settles (live clipper-style SSE also refreshes it).
 //
-// Copy is intentionally inline (not yet i18n-keyed), matching LibrarySection.
+// Copy is i18n-keyed; the dropzone title stays inline because it mixes markup
+// (link-styled "choose files") that the flat dictionary cannot express.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -22,6 +23,7 @@ import { Button } from '@open-design/components';
 import { Icon } from './Icon';
 import { modalOverlay, modalContent } from '../motion';
 import { uploadLibraryFile, uploadLibraryText, type LibraryUploadOutcome } from '../providers/registry';
+import { useI18n } from '../i18n';
 import styles from './LibraryUploadModal.module.css';
 
 type ItemStatus = 'uploading' | 'done' | 'deduped' | 'error';
@@ -46,6 +48,7 @@ const nextItemId = () => `upload-${(uploadSeq += 1)}`;
 const maxMb = Math.round(LIBRARY_UPLOAD_MAX_BYTES / 1_000_000);
 
 export function LibraryUploadModal({ seedFiles, onClose, onUploaded }: Props) {
+  const { t } = useI18n();
   const [items, setItems] = useState<UploadItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -173,11 +176,11 @@ export function LibraryUploadModal({ seedFiles, onClose, onUploaded }: Props) {
         exit="exit"
         role="dialog"
         aria-modal="true"
-        aria-label="Upload to Library"
+        aria-label={t('library.upload.title')}
       >
         <header className={styles.head}>
-          <span className={styles.headTitle}>Upload to Library</span>
-          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close upload">
+          <span className={styles.headTitle}>{t('library.upload.title')}</span>
+          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label={t('library.upload.closeAria')}>
             <Icon name="close" size={18} />
           </button>
         </header>
@@ -210,7 +213,7 @@ export function LibraryUploadModal({ seedFiles, onClose, onUploaded }: Props) {
             Drag &amp; drop, paste, or <span className={styles.dropLink}>choose files</span>
           </p>
           <p className={styles.dropHint}>
-            Images, fonts, text, HTML, and JSON / design data · up to {maxMb} MB each
+            {t('library.upload.dropHint', { maxMb })}
           </p>
           <input
             ref={inputRef}
@@ -240,12 +243,12 @@ export function LibraryUploadModal({ seedFiles, onClose, onUploaded }: Props) {
                 </span>
                 <span className={styles.itemStatus}>
                   {it.status === 'uploading'
-                    ? 'Uploading…'
+                    ? t('library.upload.uploading')
                     : it.status === 'deduped'
-                      ? 'Already in Library'
+                      ? t('library.upload.deduped')
                       : it.status === 'done'
-                        ? 'Added'
-                        : (it.message ?? 'Failed')}
+                        ? t('library.upload.added')
+                        : (it.message ?? t('library.upload.failed'))}
                 </span>
               </li>
             ))}
@@ -255,13 +258,13 @@ export function LibraryUploadModal({ seedFiles, onClose, onUploaded }: Props) {
         <footer className={styles.foot}>
           <span className={styles.summary}>
             {items.length === 0
-              ? 'Nothing uploaded yet'
+              ? t('library.upload.empty')
               : pending
-                ? 'Uploading…'
-                : `${okCount} added${errCount ? ` · ${errCount} failed` : ''}`}
+                ? t('library.upload.uploading')
+                : `${t('library.upload.summaryAdded', { count: okCount })}${errCount ? ` · ${t('library.upload.summaryFailed', { count: errCount })}` : ''}`}
           </span>
           <Button variant="ghost" onClick={onClose}>
-            Done
+            {t('library.upload.done')}
           </Button>
         </footer>
       </motion.div>

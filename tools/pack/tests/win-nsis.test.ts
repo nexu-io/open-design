@@ -82,4 +82,43 @@ describe("writeNsisInclude", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("escapes literal $ in path values so NSIS cannot retarget RMDir", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-nsis-"));
+    try {
+      const includePath = join(root, "include", "open-design.nsh");
+      const paths = { nsisIncludePath: includePath } as WinPaths;
+      // A `$TEMP`-looking segment must survive as literal text — unescaped,
+      // NSIS would expand it and the uninstaller's RMDir /r would aim at the
+      // wrong directory.
+      const config = makeConfig("C:\\Tools\\$TEMP\\od");
+
+      await writeNsisInclude(config, paths);
+      const written = await readFile(includePath, "utf8");
+
+      expect(written).toContain('StrCpy $odLocalDataRoot "C:\\Tools\\$$TEMP\\od"');
+      expect(written).not.toContain('StrCpy $odLocalDataRoot "C:\\Tools\\$TEMP\\od"');
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps the portable $APPDATA token expandable while escaping the rest", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-nsis-"));
+    try {
+      const includePath = join(root, "include", "open-design.nsh");
+      const paths = { nsisIncludePath: includePath } as WinPaths;
+      const config = { ...makeConfig("C:\\ignored"), portable: true };
+
+      await writeNsisInclude(config, paths);
+      const written = await readFile(includePath, "utf8");
+
+      // The leading token must stay a live NSIS variable ($APPDATA, not
+      // $$APPDATA) while every later segment is escaped.
+      expect(written).toContain('StrCpy $odLocalDataRoot "$APPDATA\\Open Design"');
+      expect(written).not.toContain('$$APPDATA');
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });

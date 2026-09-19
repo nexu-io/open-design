@@ -16,7 +16,7 @@
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/release": "workspace:*",
     "cac": "6.7.14",
-    "sharp": "0.35.3",
+    "sharp": "0.35.4",
     "yaml": "2.9.0"
   },
   "devDependencies": {

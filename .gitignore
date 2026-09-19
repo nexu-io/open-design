@@ -76,6 +76,11 @@ docs/superpowers/
 .direnv/
 .envrc
 # Local secrets (PostHog keys, BYOK creds for local testing, etc.)
+# tools-dev loads .env / .env.development from the workspace root too — every
+# env tier must stay untracked; only *.example templates are committed.
+.env
+.env.*
+!.env.example
 .env.local
 .env.*.local
 # Local design assistant context

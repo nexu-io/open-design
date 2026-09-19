@@ -502,7 +502,7 @@ async function readLiveArtifactRefreshState(paths: LiveArtifactStorePaths, proje
 }
 
 async function writeLiveArtifactRefreshState(paths: LiveArtifactStorePaths, state: LiveArtifactRefreshState): Promise<void> {
-  await writeFile(paths.refreshStatePath, stableJson(state), 'utf8');
+  await writeFileAtomic(paths.refreshStatePath, stableJson(state));
 }
 
 function normalizeRefreshLockMetadata(value: unknown, lockPath: string): LiveArtifactRefreshLockMetadata {
@@ -556,7 +556,7 @@ async function readPersistedLiveArtifact(paths: LiveArtifactStorePaths): Promise
 async function writePersistedLiveArtifact(paths: LiveArtifactStorePaths, artifact: LiveArtifact): Promise<LiveArtifact> {
   const persisted = validatePersistedLiveArtifact(artifact);
   if (!persisted.ok) throw new LiveArtifactStoreValidationError(persisted.error, persisted.issues);
-  await writeFile(paths.artifactJsonPath, stableJson(persisted.value), 'utf8');
+  await writeFileAtomic(paths.artifactJsonPath, stableJson(persisted.value));
   return persisted.value;
 }
 
@@ -634,11 +634,11 @@ async function writeLiveArtifactFiles(
 
   await mkdir(paths.snapshotsDir, { recursive: true });
   await Promise.all([
-    writeFile(paths.artifactJsonPath, stableJson(artifactForWrite), 'utf8'),
-    writeFile(paths.templateHtmlPath, templateHtml, 'utf8'),
-    writeFile(paths.generatedPreviewHtmlPath, previewHtml, 'utf8'),
-    writeFile(paths.dataJsonPath, stableJson(dataJson), 'utf8'),
-    writeFile(paths.provenanceJsonPath, stableJson(provenanceJson), 'utf8'),
+    writeFileAtomic(paths.artifactJsonPath, stableJson(artifactForWrite)),
+    writeFileAtomic(paths.templateHtmlPath, templateHtml),
+    writeFileAtomic(paths.generatedPreviewHtmlPath, previewHtml),
+    writeFileAtomic(paths.dataJsonPath, stableJson(dataJson)),
+    writeFileAtomic(paths.provenanceJsonPath, stableJson(provenanceJson)),
     writeFile(paths.refreshesJsonlPath, '', { flag: 'a' }),
   ]);
   return artifactForWrite;
@@ -1190,7 +1190,7 @@ export async function regenerateLiveArtifactPreview(options: RegenerateLiveArtif
   assertArtifactMatchesStorage(artifact, options.projectId, artifactId);
 
   const html = await renderLiveArtifactPreviewFromFiles(paths, artifact);
-  await writeFile(paths.generatedPreviewHtmlPath, html, 'utf8');
+  await writeFileAtomic(paths.generatedPreviewHtmlPath, html);
 
   return { artifact, paths, html };
 }
@@ -1217,7 +1217,7 @@ export async function ensureLiveArtifactPreview(options: RegenerateLiveArtifactP
   }
 
   const html = await renderLiveArtifactPreviewFromFiles(paths, artifact);
-  await writeFile(paths.generatedPreviewHtmlPath, html, 'utf8');
+  await writeFileAtomic(paths.generatedPreviewHtmlPath, html);
   return { artifact, paths, html };
 }
 

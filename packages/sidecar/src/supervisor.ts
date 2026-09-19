@@ -6,6 +6,7 @@ import {
 } from "@open-design/platform";
 
 import {
+  normalizeSupervisorHandoffRequest,
   readSidecarLaunchResources,
   sidecarSupervisorProtocol,
   sidecarProtocol,
@@ -75,8 +76,13 @@ function acceptChildMessage(message: unknown): void {
     type?: unknown;
   } | null;
   if (envelope?.type !== sidecarSupervisorProtocol.handoff || typeof envelope.requestId !== "string") return;
-  const request = envelope.request;
-  if (request == null || typeof request.command !== "string" || request.command.length === 0 || pendingHandoff != null) return;
+  let request: SidecarGenerationHandoffRequest;
+  try {
+    request = normalizeSupervisorHandoffRequest(envelope.request);
+  } catch {
+    return;
+  }
+  if (pendingHandoff != null) return;
   pendingHandoff = request;
   child.send?.({ requestId: envelope.requestId, type: sidecarSupervisorProtocol.handoffAccepted });
 }
