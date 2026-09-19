@@ -452,10 +452,42 @@ export const IMAGE_MODELS: MediaModel[] = [
   },
 
   // Nano Banana — Google-compatible generateContent image path.
+  // Google ships four Nano Banana models; the catalogue needs all of them
+  // because the dispatch layer rejects any id that is not registered here, so
+  // a user who pastes a current model id from the Gemini docs would otherwise
+  // get "unknown model" no matter how correct their key is.
   {
     id: 'gemini-3.1-flash-image-preview',
     label: 'nano-banana-2',
     hint: 'Nano Banana · text-to-image',
+    provider: 'nanobanana',
+    caps: ['t2i'],
+  },
+  {
+    id: 'gemini-3.1-flash-lite-image',
+    label: 'nano-banana-2-lite',
+    hint: 'Nano Banana 2 Lite · fastest, 1K',
+    provider: 'nanobanana',
+    caps: ['t2i'],
+  },
+  {
+    id: 'gemini-3.1-flash-image',
+    label: 'nano-banana-2 (stable)',
+    hint: 'Nano Banana 2 · generalist, up to 4K',
+    provider: 'nanobanana',
+    caps: ['t2i'],
+  },
+  {
+    id: 'gemini-3-pro-image',
+    label: 'nano-banana-pro',
+    hint: 'Nano Banana Pro · highest fidelity',
+    provider: 'nanobanana',
+    caps: ['t2i'],
+  },
+  {
+    id: 'gemini-2.5-flash-image',
+    label: 'nano-banana',
+    hint: 'Nano Banana (Gemini 2.5 Flash Image, legacy)',
     provider: 'nanobanana',
     caps: ['t2i'],
   },
