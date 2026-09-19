@@ -452,10 +452,18 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       return;
     }
     const agentCliEnv = config.agentCliEnv ?? {};
+    const queryZcodeAppPath = Array.isArray(req.query.zcodeAppPath)
+      ? req.query.zcodeAppPath[0]
+      : req.query.zcodeAppPath;
+    const agentResolutionOptions = {
+      zcodeAppPath: typeof queryZcodeAppPath === 'string'
+        ? queryZcodeAppPath.trim() || null
+        : config.zcodeAppPath ?? null,
+    };
 
     if (!wantsStream) {
       try {
-        const list = await detectAgents(agentCliEnv);
+        const list = await detectAgents(agentCliEnv, agentResolutionOptions);
         res.json({ agents: list });
       } catch (err: any) {
         res.status(500).json({ error: String(err) });
@@ -478,7 +486,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       aborted = true;
     });
     try {
-      for await (const agent of detectAgentsStream(agentCliEnv)) {
+      for await (const agent of detectAgentsStream(agentCliEnv, agentResolutionOptions)) {
         if (aborted) break;
         res.write(`event: agent\ndata: ${JSON.stringify(agent)}\n\n`);
       }

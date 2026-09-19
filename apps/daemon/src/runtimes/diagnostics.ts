@@ -51,6 +51,28 @@ export function buildExecutableDiagnostic(
   };
 }
 
+export function buildZcodeAppPathDiagnostic(appPath: string): AgentDiagnostic {
+  return {
+    reason: 'configured-app-path-invalid',
+    severity: 'error',
+    message:
+      'The saved ZCode.app path no longer contains a runnable ZCode executable. Choose ZCode.app again or clear the saved selection, then rescan.',
+    detail: appPath,
+    fixActions: [{ kind: 'rescan' }],
+  };
+}
+
+export function buildZcodeSavedConfigDiagnostic(error: unknown): AgentDiagnostic {
+  const detail = error instanceof Error ? error.message : String(error);
+  return {
+    reason: 'saved-config-invalid',
+    severity: 'error',
+    message: 'ZCode is installed but not configured. Add an API key, then rescan.',
+    ...(detail ? { detail } : {}),
+    fixActions: [{ kind: 'openDocs' }, { kind: 'rescan' }],
+  };
+}
+
 export type NotInvocableCause = 'not-executable' | 'missing-target';
 
 // A file matched but `--version` could not spawn it. Permission failures are

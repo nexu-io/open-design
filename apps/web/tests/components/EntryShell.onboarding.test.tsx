@@ -316,6 +316,7 @@ async function openByokRuntimeSetup() {
 
 afterEach(() => {
   cleanup();
+  vi.clearAllTimers();
   globalThis.fetch = originalFetch;
   globalThis.ResizeObserver = originalResizeObserver;
   vi.useRealTimers();
@@ -1712,6 +1713,9 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
         return jsonResponse({ pid: 123 }, 202);
       }
+      if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+        return jsonResponse({ canceled: true, pids: [] });
+      }
       throw new Error(`unexpected fetch: ${url}`);
     });
     globalThis.fetch = fetchMock as typeof fetch;
@@ -1749,6 +1753,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
   });
 
   it('shows daemon startup errors when AMR sign-in fails immediately', async () => {
@@ -1784,12 +1792,16 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
         return jsonResponse({ pid: 123 }, 202);
       }
+      if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+        return jsonResponse({ canceled: true, pids: [] });
+      }
       throw new Error(`unexpected fetch: ${url}`);
     });
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
     const signIn = await findCloudSignInButton();
+    vi.useFakeTimers();
     fireEvent.click(signIn);
     await act(async () => {});
     expect(screen.getByText('Signing in…')).toBeTruthy();
@@ -1798,11 +1810,13 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.queryByRole('button', { name: /Bring Your Own Key/i })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
-    await act(async () => {});
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
 
     expect(screen.queryByText('Signing in…')).toBeNull();
     // The landing CTA returns to its signed-out copy and is enabled again.
-    const cloudButton = await screen.findByRole('button', {
+    const cloudButton = screen.getByRole('button', {
       name: /Sign in to OpenDesign/i,
     });
     expect(cloudButton.hasAttribute('disabled')).toBe(false);
@@ -1821,6 +1835,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
         String(input).endsWith('/api/integrations/vela/login') && init?.method === 'POST',
     );
     expect(loginCalls).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
   });
 
   it('preserves a pre-start cancel when the status refresh rejects', async () => {
