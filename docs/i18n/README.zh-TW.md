@@ -31,7 +31,7 @@
 
 ## 什麼是 OpenDesign
 
-🎨 **本地優先、開源的 Claude Design 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的原生桌面應用程式。** &nbsp;⚡ **100+ 個功能 skills + 獨立渲染範本型錄** · ✨ **151 套品牌級設計系統套件** · 📦 **277 個開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 25 個不同的本地 CLI 可執行檔上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
+🎨 **開源的 Claude Design 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的本地優先原生桌面應用程式。** &nbsp;⚡ **可組合的 skills、品牌級的 `DESIGN.md` 設計系統，以及開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 DeepSeek Harness（`dsh`）· Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity 等 26 個不同的本地 CLI 可執行檔上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
 
 OpenDesign 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 **agent 原生** 迴圈——釐清需求、鎖定方向、串流產出 artifact、評析、交付——不再封閉，而是化為一個由 **功能 skills、渲染設計範本、設計系統與外掛組成的檔案系統**，讓你筆電上既有的編碼 agent 都能讀取、寫入、再混搭。你的 CLI 成為設計引擎，你的筆電成為工作室，而你團隊的 `DESIGN.md` 則成為品牌契約。
 
@@ -108,13 +108,15 @@ OpenDesign 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 
 
 ## 平台相容性
 
-> OpenDesign 以 **skills、CLI 與 MCP server** 的形式發行，主流編碼 agent 都能原生使用。安裝 OD 後，只要一句 `od mcp install <agent>` 就能把 MCP server 接進該 agent 的設定，你便能在任何 agent 內呼叫同一組工具。
+> OpenDesign 以兩種方式接上主流編碼 agent：對「使用 OD」的 agent 提供 **skills、CLI 與 MCP**；對「由 OD 直接啟動」的 agent 提供 **原生 runtime adapter**。DeepSeek Harness 透過官方 `dsh` CLI 成為第一級的原生 runtime，支援結構化串流、模型探索、取消與工作階段恢復。
 
-| 編碼 agent／平台 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 狀態 &nbsp;&nbsp; | 一行指令安裝 MCP server &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+| 編碼 agent／平台 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 狀態 &nbsp;&nbsp; | 快速設定 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 已支援 | `od mcp install claude` |
+| [Claude Desktop](https://claude.ai/download) | ✅ 已支援¹ | `od mcp install claude-desktop` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 已支援 | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 已支援 | `od mcp install reasonix` |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | ✅ 原生 runtime | `od agent setup deepseek-harness` |
 | [Raven](https://github.com/EverMind-AI/Raven) | ✅ 已支援 | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 已支援 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 已支援 | `od mcp install copilot` |
@@ -130,15 +132,17 @@ OpenDesign 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 已支援 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 已支援 | `od mcp install hermes` |
 
-`od mcp install <agent> --print` 可預覽 dry-run · `--uninstall` 可移除 · 完整清單請執行 `od mcp install --help`。
+DeepSeek Harness 請先安裝官方 `dsh` CLI，再到 OpenDesign 中選取它，或執行 `od agent setup deepseek-harness` 安裝／修復 OD 的連接元件。MCP 整合：`od mcp install <agent> --print` 可預覽 dry-run · `--uninstall` 可移除 · 完整清單請執行 `od mcp install --help`。
+
+¹ Claude Desktop 的自動 MCP 設定目前僅支援 macOS 與 Windows。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs OpenDesign supports — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
-**沒有安裝任何 CLI？** 位於 `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理可提供相同的迴圈（不需衍生程序）——貼上 `baseUrl` + `apiKey` + `model` 即可，支援 OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM，或任何相容 OpenAI 的端點。逐目標的 SSRF 防護會在 daemon 邊界阻擋內部 IP／link-local／CGNAT。
+**沒有安裝任何 CLI？** 位於 `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理可提供相同的迴圈（不需衍生程序）——貼上 `baseUrl` + `apiKey` + `model` 即可，內建 OpenAI、Atlas Cloud、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM 等預設，也支援任何相容 OpenAI 的端點。Atlas Cloud 使用 `https://api.atlascloud.ai/v1`，搭配你自己的金鑰與相容 OpenAI 的模型 id，例如 `qwen/qwen3.5-flash`。逐目標的 SSRF 防護會在 daemon 邊界阻擋內部 IP／link-local／CGNAT。
 
-Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/)，並在 `runtimes/registry.ts` 註冊；只有新的 wire format 才需要新增 parser——參見 [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
+Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/)，註冊與共用的串流處理則在 [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) 之下。Adapter 契約請參見 [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
 
 ---
 
@@ -254,7 +258,7 @@ OpenDesign（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 - 🤖 **agent 原生、模型無關。** 我們不附帶 agent。你 `PATH` 上既有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是設計引擎。一鍵即可切換。
 - 🧠 **預設即品牌級。** 每次渲染都把目前套件的 `DESIGN.md` 當作核心品牌契約讀取。儲存庫隨附 151 套設計系統套件；舊套件可以只含 `DESIGN.md`，新套件還可加入 `manifest.json`、`tokens.css`、元件、資產與來源資訊。放進資料夾，選擇器就會找到它。
-- 🖥️ **本地優先、每一層都可 BYOK。** 原生桌面應用程式保持本地優先，不會雲端往返。在描述 daemon 資料路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
+- 🖥️ **本地優先、每一層都可 BYOK。** 提供 macOS（Apple Silicon + Intel）與 Windows（x64）的原生桌面應用程式。Linux 桌面使用者目前可以[從原始碼執行](#-從原始碼執行) OpenDesign；最新的官方 release 尚未包含預先建置的 Linux 產物。產品分析與工作階段重播需要使用者同意才會啟用；經過去識別化的安全性與可靠性遙測則一律開啟。在描述 daemon 資料路徑之前，貢獻者與維運者必須先閱讀 `AGENTS.md` 中的 **Daemon data directory contract**，本 README 不得重述其內容。
 - 🌍 **在四個平面上可組合。** **外掛**承載可執行的工作流程 · 功能 **skills** 承載 agent 行為 · **設計範本**承載渲染藍圖 · **設計系統**承載品牌。四者都採用可攜、可版控的目錄，任何人都能撰寫與發布。
 - 🔁 **翻新既有的程式碼庫。** 把一個 `git` 儲存庫 + `DESIGN.md` 交給 agent，它就會把你真實的元件重構至品牌規格。專屬外掛能把 Figma / Pencil 工作流程遷移成 React / Next.js / Vue 程式碼。
 - 🔒 **出於信念的隱私。** 一切都在你資料所在之處執行——你的筆電、你團隊的伺服器、你的 Vercel 專案。當需要連網時，BYOK 代理具備 SSRF 防護。
@@ -282,7 +286,7 @@ OpenDesign（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 - **macOS**（Apple Silicon · Intel x64）→ [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_macos) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_windows) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
-- **Linux**（AppImage，選用通道）→ [GitHub Releases](https://github.com/nexu-io/open-design/releases)
+- **Linux** → 官方 release 目前未發布預先建置的 Linux 產物。請先[從原始碼執行 OpenDesign](#-從原始碼執行)；Linux release 的進度追蹤於 [#4368](https://github.com/nexu-io/open-design/issues/4368)。
 
 安裝後：應用程式會自動偵測你 `PATH` 上的每一個編碼 agent CLI、載入 100+ 個功能 skills、獨立渲染範本型錄與 151 套設計系統套件，並讓你在入口視圖中輸入需求。
 
@@ -302,9 +306,10 @@ curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 
 `install.sh` 是包在 `od mcp install` 外的輕量 shell wrapper；它的用途是讓 hosted URL 回傳 shell 指令、而非 landing page 的 HTML fallback，並在你的 shell 解析到非 OpenDesign 的 `od` 執行檔時快速失敗。
 
-> **WSL2 使用者：** 若你的編碼 agent CLI 跑在 WSL2 內，請先依照
-> [`WSL2 設定指南`](../../docs/wsl-setup.md) 操作。Linux 的 `/usr/bin/od` 可能會
-> 遮蔽 OpenDesign 的 `od` 指令。
+> **macOS／WSL2 使用者：** `/usr/bin/od` 是系統內建的 octal-dump 指令，可能會
+> 遮蔽 OpenDesign 的 `od` 指令。桌面應用程式使用者請優先使用
+> **Settings → MCP server** 裡的片段；WSL2 使用者請先依照
+> [`WSL2 設定指南`](../../docs/wsl-setup.md) 操作。
 
 接著，在 agent 內：
 
@@ -376,9 +381,11 @@ od skills list --json
 
 **為什麼用 MCP？** 每次迭代都匯出再重新附上一個 zip 會打斷心流。MCP 直接揭露設計來源——agent 看到的永遠是即時檔案。
 
-**對於從零開始的 agent，** 安裝程式會放置 `~/.config/<agent>/open-design.json`（或對應平台的等價檔案），外加一段可複製貼上的 MCP 片段。Cursor 會得到一鍵 deeplink；Claude Code 會得到一行 `claude mcp add-json`；其餘每一個 agent 都會得到符合其設定所需 schema 的 JSON。完整的各 agent 流程 → 桌面應用程式中的 **Settings → MCP server**，或 [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
+**對於從零開始的 agent，** 安裝程式會放置 `~/.config/<agent>/open-design.json`（或對應平台的等價檔案），外加一段可複製貼上的 MCP 片段。Cursor 會得到一鍵 deeplink；Claude Code 會得到一行 `claude mcp add-json`；其餘每一個 agent 都會得到符合其設定所需 schema 的 JSON。在 macOS 桌面版安裝上，請優先使用 Settings 裡的那段片段，而不是在 Terminal 直接輸入 `od mcp install <agent>`，因為 PATH 上的 `/usr/bin/od` 可能會搶先。完整的各 agent 流程 → 桌面應用程式中的 **Settings → MCP server**，或 [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
 
 **安全模型。** 預設唯讀，daemon 綁定於 `127.0.0.1`，SSRF 在代理邊界被阻擋。要在區域網路曝露，需明確設定 `OD_BIND_HOST` 加上 `OD_ALLOWED_ORIGINS`。連接器憑證與即時 artifact 預覽路由無論如何都僅限 loopback。
+
+**內部自架的模型端點。** 為了防範 SSRF，daemon 預設會阻擋解析到私有／內部位址範圍（RFC1918、link-local、CGNAT 與雲端 metadata IP）的供應商 base URL，並顯示 `Internal IPs blocked`。若你自架了內部閘道（例如只在 VPN 內可達的 `10.x`／`192.168.x` 位址上的 LiteLLM 或 Ollama），可用 `OD_ALLOWED_INTERNAL_HOSTS=<host1>,<host2>,...` 將該主機排除在外——以逗號或空白分隔的純主機名稱或 IP 清單（`10.0.0.5`、`litellm.internal.corp`；可接受 `host:port` 或完整 URL，會被化簡為主機名稱；IPv6 必須加方括號，例如 `[fd00::1]`）。這份允許清單是嚴格的選擇加入（預設為空）、精確比對主機（不做子網域／子字串比對），且**只**適用於你自行設定的供應商端點（連線測試、模型探索、BYOK 對話）。它刻意**不會**放寬對上游回應中夾帶的下載 URL 的防護，那些仍會被阻擋。格式錯誤的項目——或不支援的 CIDR 表示法——會連同警告一起被丟棄，而非被默默信任，因此一個錯字不會悄悄放寬（或未能放寬）防護。將主機名稱列入允許清單等於信任它解析出的任何位址（與 `OD_ALLOWED_ORIGINS` 相同）；若你希望重新檢查 DNS 解析後的位址，請改列入解析後的 IP。
 
 ---
 
@@ -549,8 +556,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  Local runtime definitions come from runtimes/registry.ts;                 │
-   │  the base registry has 26 definitions (including byok-opencode),           │
-   │  backed by 25 distinct local CLI executables because byok-opencode shares │
+   │  the base registry has 27 definitions (including byok-opencode),           │
+   │  backed by 26 distinct local CLI executables because byok-opencode shares │
    │  the OpenCode executable. See docs/agent-adapters.md.                     │
    │  composes a functional skill or design template + DESIGN.md; writes files │
    └──────────────────────────────────────────────────────────────────┘
@@ -572,17 +579,22 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 藍圖
 
-- [x] Daemon + 25 個不同 CLI 可執行檔上的 26 個 runtime 定義 + skill／設計範本 registry + 設計系統型錄
+- [x] Daemon + 26 個不同 CLI 可執行檔上的 27 個 runtime 定義 + skill／設計範本 registry + 設計系統型錄
 - [x] Web 應用程式 + chat + 提問表單 + 5 方向選擇器 + todo 進度 + 沙箱化預覽
 - [x] 100+ 個功能 skills · 獨立渲染範本型錄 · 151 套設計系統套件 · 5 種視覺方向 · 5 種裝置外框
 - [x] 以 SQLite 為後援的專案 · 對話 · 訊息 · 分頁 · 範本
-- [x] 多供應商 BYOK 代理（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF 防護
+- [x] 多供應商 BYOK 代理（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`），含 Atlas Cloud 等相容 OpenAI 的預設 + SSRF 防護
 - [x] Claude Design ZIP 匯入（`/api/import/claude-design`）
 - [x] Sidecar 協定 + Electron 桌面 + IPC 自動化
 - [x] Artifact lint API + 5 維自我評析的發出前閘門
 - [x] **0.8.0**——外掛市集基礎建設（261 個官方外掛、manifest 規格、各 agent 安裝腳本）
-- [x] **0.9.0**——OpenDesign Cloud（內建於應用程式的官方 Model Router：零設定、一鍵登入）
-- [x] 打包的 Electron 建置——macOS（Apple Silicon + Intel）+ Windows（x64）+ Linux AppImage（選用通道）
+- [x] **0.9.0**——OpenDesign Cloud（內建於應用程式的官方模型服務：零設定、一鍵登入）
+- [x] **0.10.0**——一體化設計工作區：整個 craft 迴圈在同一個視窗完成（參考資料 → 素材 → 互動編輯 → 動態 → 交接）
+- [x] **0.11.0**——_The Bazaar_：公開共建——一個任何人都能挑選與貢獻的外掛與設計系統社群市集
+- [x] **0.12.0**——_Brand-backed Design System_：把你既有的品牌變成可重複使用、可攜的 `DESIGN.md` 系統
+- [x] **0.13.0**——_Stay in Flow_：原生工作階段恢復、更快的模型挑選，以及直接匯出為截圖支援的 PPTX／PDF
+- [x] 已發布的桌面 release——macOS（Apple Silicon + Intel）+ Windows（x64）
+- [ ] 已發布的 Linux 桌面 release（選用通道）——追蹤於 [#4368](https://github.com/nexu-io/open-design/issues/4368)
 - [ ] 註解模式的精準編輯——部分完成；可靠的定點修補開發中
 - [ ] AI 發出的 tweaks 面板 UX——尚未實作
 - [ ] `npx od init` 以 `DESIGN.md` 搭建專案骨架
@@ -615,7 +627,8 @@ OpenDesign 之所以能持續前進，是因為貢獻者——設計師、工程
 
 | 想交付… | 怎麼做 | 在哪裡 |
 |---|---|---|
-| 一個新的 **skill** | 放進一個含 `SKILL.md` + `assets/` + `references/` 的資料夾 | [`skills/`](../../skills/) · 規格見 [`docs/skills-protocol.md`](../../docs/skills-protocol.md) |
+| 一個新的功能 **skill** | 放進一個含 `SKILL.md` + 選用的 `assets/` + `references/` 的資料夾 | [`skills/`](../../skills/) · 規格見 [`docs/skills-protocol.md`](../../docs/skills-protocol.md) |
+| 一個新的渲染 **設計範本** | 加入一個可渲染的 `SKILL.md` bundle | [`design-templates/`](../../design-templates/) |
 | 一套新的 **設計系統** | 放進以 `DESIGN.md` 為核心的套件；按需加入 `manifest.json`、`tokens.css`、元件、資產或來源資訊 | [`design-systems/<brand>/`](../../design-systems/) |
 | 一個新的 **外掛** | 在某個分類資料夾下放進 `open-design.json` + 對應類型的 payload | [`plugins/community/`](../../plugins/community/) · 規格見 [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md) · agent 開發指南見 [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md) |
 | 支援一個新的 **編碼 agent CLI** | Runtime 定義 + registry 項目；僅新 wire format 需要 parser | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) |
@@ -644,7 +657,7 @@ pnpm --filter @open-design/<package> test
 gh pr create --fill
 ```
 
-完整的 agent 友善貢獻流程、程式碼風格與 PR 標準 → [`CONTRIBUTING.md`](../../CONTRIBUTING.md)（[Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)）。
+完整的 agent 友善貢獻流程、程式碼風格與 PR 標準 → [`CONTRIBUTING.md`](../../CONTRIBUTING.md)（[Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [한국어](CONTRIBUTING.ko.md) · [Português](CONTRIBUTING.pt-BR.md) · [ภาษาไทย](CONTRIBUTING.th.md)）。
 
 ### 🏅 OpenDesign Fellow 計畫
 
@@ -672,10 +685,17 @@ gh pr create --fill
       </a><br/>
       <sub>維護者</sub>
     </td>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/YOMXXX">
+        <img src="https://github.com/YOMXXX.png" width="96" alt="@YOMXXX" /><br/>
+        <sub><b>@YOMXXX</b></sub>
+      </a><br/>
+      <sub>維護者</sub>
+    </td>
   </tr>
 </table>
 
-維護者規則、升任標準與退出流程 → [`MAINTAINERS.md`](../../MAINTAINERS.md)（亦有 [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [Português](MAINTAINERS.pt-BR.md)）。
+維護者規則、升任標準與退出流程 → [`MAINTAINERS.md`](../../MAINTAINERS.md)（亦有 [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [한국어](MAINTAINERS.ko.md) · [Português](MAINTAINERS.pt-BR.md) · [ภาษาไทย](MAINTAINERS.th.md)）。
 
 ## 貢獻者
 
@@ -736,4 +756,4 @@ gh pr create --fill
 
 ## 授權
 
-Apache-2.0。內建的 `design-templates/guizang-ppt/` 保留其原始 [LICENSE](../../design-templates/guizang-ppt/LICENSE)（MIT，[@op7418](https://github.com/op7418)）。內建的 `design-templates/html-ppt/` 保留其原始 [LICENSE](../../design-templates/html-ppt/LICENSE)（MIT，[@lewislulu](https://github.com/lewislulu)）。
+Apache-2.0。附有自己 `LICENSE` 檔案的內建 skills 與範本保留其原始授權，包括 `design-templates/guizang-ppt/`（MIT，[@op7418](https://github.com/op7418)）、`design-templates/html-ppt/`（MIT，[@lewislulu](https://github.com/lewislulu)）與 `skills/web-clone/`（MIT，[@Jane-xiaoer](https://github.com/Jane-xiaoer)）。
