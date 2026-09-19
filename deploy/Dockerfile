@@ -1,5 +1,13 @@
-ARG NODE_IMAGE=docker.io/library/node:24-alpine
-ARG RUNTIME_IMAGE=docker.io/library/node:24-alpine
+# Pin the Node minor rather than tracking the floating `node:24-alpine`, so an
+# image rebuilt from unchanged sources keeps the runtime it was validated on.
+# Under the floating tag the Node version is decided by the build date: a
+# rebuild on 2026-08-04 picked up 24.19.0 (released 08-03) and the daemon began
+# aborting mid-run with a native assertion, while nothing in the error pointed
+# at Node (see #6462). The daemon loads NAN-style `ObjectWrap` addons
+# (better-sqlite3, node-pty), so a Node change can break it without any change
+# here. Bump deliberately and re-validate.
+ARG NODE_IMAGE=docker.io/library/node:24.18.0-alpine
+ARG RUNTIME_IMAGE=docker.io/library/node:24.18.0-alpine
 
 FROM ${NODE_IMAGE} AS build
 
