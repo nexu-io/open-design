@@ -58,6 +58,7 @@ import {
   upsertMessage,
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
+import { readRunRequestLedger } from '../integrations/vela-request-ledger.js';
 import {
   ensureDetectedRuntimeCapabilities,
   ensureDetectedRuntimeVersions,
@@ -3464,7 +3465,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     if (!await authorizeRunProject(req, res, run, { mode: 'read' })) return;
-    const status = statusWithStrategyTask(run);
+    // Recovery/status probes must never wait for the external ledger CLI.
+    // Evaluation consumers explicitly expand the receipt after authorization.
+    const status = {
+      ...statusWithStrategyTask(run),
+      ...(req.query.include === 'requestLedger'
+        ? { requestLedger: await readRunRequestLedger(run, RUNTIME_DATA_DIR) }
+        : {}),
+    };
     if (!design.runs.isTerminal(run.status)) {
       res.json(status);
       return;

@@ -7795,7 +7795,7 @@ async function runRun(args) {
                                             RUN_STEERING_UNSUPPORTED.
   od run continue <runId> [--follow]        Continue a resumable failed run.
   od run list   [--project <id>]            List recent runs.
-  od run info   <runId>                     One run's status.
+  od run info   <runId>                     One run's status and request ledger.
   od run result-package <runId> [--json]    Inspect run outputs and workspace
                                             provenance without applying them.
 
@@ -7836,7 +7836,7 @@ Common options:
         console.error('Usage: od run info <runId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}`, {
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}?include=requestLedger`, {
         headers: workspaceHeaders,
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');

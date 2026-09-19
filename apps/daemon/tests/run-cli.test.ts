@@ -55,7 +55,7 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
       requests.push(captured);
       res.setHeader('content-type', 'application/json');
 
-      if (captured.method === 'GET' && captured.url === '/api/runs/run-1') {
+      if (captured.method === 'GET' && (captured.url === '/api/runs/run-1' || captured.url === '/api/runs/run-1?include=requestLedger')) {
         res.statusCode = 200;
         res.end(JSON.stringify({
           id: 'run-1',
@@ -64,6 +64,9 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
           agentId: 'claude',
           status: 'failed',
           resumable,
+          ...(captured.url.endsWith('?include=requestLedger')
+            ? { requestLedger: { complete: false, incompleteReasons: ['provider_usage_incomplete'] } }
+            : {}),
         }));
         return;
       }
@@ -188,6 +191,16 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od run CLI', () => {
+  it('requests and preserves the ledger in run info JSON for evaluation consumers', async () => {
+    stub = await startRunStubServer(false);
+    const result = await runCli(['run', 'info', 'run-1', '--json', '--daemon-url', stub.baseUrl]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(stub.requests.map(request => request.url)).toEqual(['/api/runs/run-1?include=requestLedger']);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      id: 'run-1', requestLedger: { complete: false, incompleteReasons: ['provider_usage_incomplete'] },
+    });
+  });
+
   it('keeps one --skill backward compatible and sends multiple ids canonically', async () => {
     stub = await startRunStubServer(true);
     const single = await runCli([
@@ -302,7 +315,7 @@ describe('od run CLI', () => {
     {
       label: 'info',
       args: ['run', 'info', 'run-1'],
-      requests: ['GET /api/runs/run-1'],
+      requests: ['GET /api/runs/run-1?include=requestLedger'],
     },
     {
       label: 'result package',
