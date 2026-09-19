@@ -25,6 +25,7 @@ export type ChatRunStatusBody = {
   assistantMessageId: string | null;
   conversationId: string | null;
   createdAt: number;
+  errorCode?: string | null;
   exitCode?: number | null;
   failureAction?: string | null;
   id: string;
