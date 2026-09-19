@@ -584,6 +584,24 @@ describe('OD-owned Codex thread visibility', () => {
     expect(h.session.getDurableSessionId()).toBe('owned-1');
   });
 
+  it.each(['completed', 'failed', 'interrupted'])('archives a spaced-originator owned thread after %s', (status) => {
+    const h = harness({ manageThreadVisibility: true });
+    h.child.say({ id: h.child.sent('initialize')!.id, result: {
+      userAgent: 'Codex Desktop/0.146.0 (Mac OS 15.0; arm64) open-design/0.22.1',
+    } });
+    const start = h.child.sent('thread/start')!;
+    expect(start.params.historyMode).toBe('paginated');
+    h.child.say({ id: start.id, result: { thread: { id: 'owned-1', historyMode: 'paginated' } } });
+    if (status === 'interrupted') h.session.abort();
+    completed(h.child, status);
+    const archive = h.child.sent('thread/archive');
+    expect(archive?.params).toEqual({ threadId: 'owned-1' });
+    h.child.say({ id: archive!.id, result: {} });
+    expect(h.child.stdinEnded).toBe(1);
+    expect(h.session.completedSuccessfully()).toBe(status !== 'failed');
+    expect(h.session.getDurableSessionId()).toBe('owned-1');
+  });
+
   it('does not overwrite a successful result when another process owns the writer lock', () => {
     const h = ready(); opened(h); completed(h.child);
     h.child.say({ id: h.child.sent('thread/archive')!.id,
