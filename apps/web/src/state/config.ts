@@ -151,10 +151,15 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'anthropic',
     baseUrl: 'https://api.deepseek.com/anthropic',
     preferredModels: [
-      'deepseek-v4-flash',
+      'deepseek-flash',
       'deepseek-v4-pro',
     ],
-    retiredModels: ['deepseek-chat', 'deepseek-reasoner'],
+    retiredModels: [
+      'deepseek-v4-flash',
+      'deepseek-v4-flash-vision-exp',
+      'deepseek-chat',
+      'deepseek-reasoner',
+    ],
   },
   {
     label: 'MiniMax — Anthropic',
@@ -310,10 +315,15 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'openai',
     baseUrl: 'https://api.deepseek.com',
     preferredModels: [
-      'deepseek-v4-flash',
+      'deepseek-flash',
       'deepseek-v4-pro',
     ],
-    retiredModels: ['deepseek-chat', 'deepseek-reasoner'],
+    retiredModels: [
+      'deepseek-v4-flash',
+      'deepseek-v4-flash-vision-exp',
+      'deepseek-chat',
+      'deepseek-reasoner',
+    ],
   },
   {
     label: 'Mistral AI',
