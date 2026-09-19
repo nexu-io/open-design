@@ -4,6 +4,10 @@
       "type": "stdio",
       "command": "od",
       "args": ["mcp", "--daemon-url", "http://127.0.0.1:7456"]
+    },
+    "recraft": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.recraft.ai/mcp"]
     }
   }
 }
