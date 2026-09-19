@@ -121,6 +121,7 @@ import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { useWorkspaceSnapshotActivation } from '../collab/workspace-snapshot-activation';
 import {
   buildHomeMediaComposer,
+  homeMediaInputsAfterTemplateChange,
   homeMediaSurfaceForChipId,
   metadataForHomeMediaComposer,
   normalizeHomeMediaInputs,
@@ -295,6 +296,10 @@ interface Props {
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
+  promptTemplatesLoaded?: boolean;
+  promptTemplatesLoadFailed?: boolean;
+  onPromptTemplatesRetry?: () => void;
+  promptTemplatesLoading?: boolean;
   // Personalized first-run starting point (spec §7). Null unless the user just
   // finished the About-you survey this session; EntryShell owns the state.
   // Accepted for API compatibility but no longer rendered — see
@@ -342,10 +347,12 @@ const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 // system vanish when the user steps away and comes back. Persist those two
 // serializable, user-visible fields to localStorage so they survive the
 // unmount/remount, mirroring ChatComposer's draft persistence. Object-valued
-// selections (active template, skill, staged files, working directory) are
-// intentionally NOT persisted here — they reference live catalogue records /
-// File handles / a desktop auth token that cannot round-trip through JSON
-// safely.
+// selections (skill, staged files, working directory) are intentionally NOT
+// persisted here — they reference live catalogue records / File handles / a
+// desktop auth token that cannot round-trip through JSON safely. Media chips
+// are the narrow exception: persist only their visible scalar
+// template/model/aspect ids so a rejected optimistic create can remount Home
+// without silently changing the retry payload.
 const HOME_COMPOSER_PROMPT_KEY = 'open-design:home-composer:prompt';
 const HOME_COMPOSER_DESIGN_SYSTEM_KEY = 'open-design:home-composer:design-system';
 const HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY = 'open-design:home-composer:design-system-scope';
@@ -373,6 +380,11 @@ interface HomeComposerChipDraft {
   // identity, so it is persisted with it.
   explicitPick?: boolean;
   examplePick?: boolean;
+  mediaSelection?: {
+    template?: string;
+    model?: string;
+    aspect?: string;
+  };
 }
 // `EntryShell` keeps `HomeView` permanently mounted and toggles it with CSS
 // visibility instead of unmounting it on every Home/Community/... view
@@ -446,6 +458,20 @@ function readHomeComposerChipDraft(): HomeComposerChipDraft | null {
       typeof parsed.prototypeSubtypeId === 'string'
         ? prototypeSubChipForSlug(parsed.prototypeSubtypeId)
         : null;
+    const parsedMediaSelection = parsed.mediaSelection;
+    const mediaSelection = parsedMediaSelection && typeof parsedMediaSelection === 'object'
+      ? {
+          ...(typeof parsedMediaSelection.template === 'string'
+            ? { template: parsedMediaSelection.template }
+            : {}),
+          ...(typeof parsedMediaSelection.model === 'string'
+            ? { model: parsedMediaSelection.model }
+            : {}),
+          ...(typeof parsedMediaSelection.aspect === 'string'
+            ? { aspect: parsedMediaSelection.aspect }
+            : {}),
+        }
+      : undefined;
     return {
       chipId: legacyPrototypeSubtype ? 'prototype' : parsedChipId,
       pluginId: parsed.pluginId,
@@ -455,6 +481,7 @@ function readHomeComposerChipDraft(): HomeComposerChipDraft | null {
       // they restore as the plain type-chip binding they always did.
       explicitPick: parsed.explicitPick === true,
       examplePick: parsed.examplePick === true,
+      ...(mediaSelection && Object.keys(mediaSelection).length > 0 ? { mediaSelection } : {}),
     };
   } catch {
     return null;
@@ -513,6 +540,10 @@ export function HomeView({
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
   promptTemplates = EMPTY_PROMPT_TEMPLATES,
+  promptTemplatesLoaded = true,
+  promptTemplatesLoadFailed = false,
+  onPromptTemplatesRetry,
+  promptTemplatesLoading = false,
   recommendation = null,
   onRecommendationStart,
   onRecommendationDismiss,
@@ -747,7 +778,11 @@ export function HomeView({
   // Clearing on `active === null` covers the explicit-clear (×) and the
   // Ask-mode / skill-pick paths that reset `active` to null directly.
   useEffect(() => {
-    if (!ownsComposerDraft) return;
+    // A media restore can wait across multiple renders for the prompt-template
+    // catalog. Keep its serialized identity intact during that window; writing
+    // `active === null` here would erase the only remount-safe copy before the
+    // restore effect below can hydrate it.
+    if (!ownsComposerDraft || pendingChipRestore) return;
     writeHomeComposerChipDraft(
       active
         ? {
@@ -759,10 +794,27 @@ export function HomeView({
               : {}),
             ...(active.explicitPick ? { explicitPick: true } : {}),
             ...(active.examplePick ? { examplePick: true } : {}),
+            ...(active.mediaSurface
+              ? {
+                  mediaSelection: {
+                    ...(typeof active.inputs.template === 'string'
+                      ? { template: active.inputs.template }
+                      : {}),
+                    ...(typeof active.inputs.model === 'string'
+                      ? { model: active.inputs.model }
+                      : {}),
+                    ...(typeof active.inputs.aspect === 'string'
+                      ? { aspect: active.inputs.aspect }
+                      : typeof active.inputs.ratio === 'string'
+                        ? { aspect: active.inputs.ratio }
+                        : {}),
+                  },
+                }
+              : {}),
           }
         : null,
     );
-  }, [active, ownsComposerDraft]);
+  }, [active, ownsComposerDraft, pendingChipRestore]);
   // Live counterpart to the draft-key restore above (see the
   // `HOME_COMPOSER_SEED_EVENT` module note) — picks up a `seedHomeComposerPrompt`
   // call that fires while this HomeView instance is already mounted, which is
@@ -1902,6 +1954,23 @@ export function HomeView({
   useEffect(() => {
     if (!pendingChipRestore || pluginsLoading) return;
     const restore = pendingChipRestore;
+    // The draft reader already folded any retired top-level id onto its parent,
+    // so `restore.chipId` names a live task type and the scene is a refinement
+    // of it — never a chip of its own to look up instead.
+    const restoredChip = restore.chipId ? findChip(restore.chipId) : null;
+    const restoredSubtype = restoredChip?.id === 'prototype'
+      ? prototypeSubChipForSlug(restore.prototypeSubtypeId ?? null)
+      : null;
+    const restoredAction = restoredChip?.action;
+    const restoredMediaSurface = homeMediaSurfaceForChipId(restore.chipId ?? '');
+    // App loads prompt templates asynchronously. Restoring a persisted media
+    // id against the initial empty list would normalize it to `No template`,
+    // overwrite the saved draft, and make a retry submit the wrong metadata.
+    // Keep the restore pending (which also keeps Send disabled) until the
+    // parent confirms the catalog has settled.
+    if (restoredMediaSurface && restore.mediaSelection?.template && !promptTemplatesLoaded) {
+      return;
+    }
     setPendingChipRestore(null);
     if (active || pendingPluginUseHandoff) return;
     const record = plugins.find((plugin) => plugin.id === restore.pluginId);
@@ -1912,25 +1981,56 @@ export function HomeView({
       if (ownsComposerDraft) writeHomeComposerChipDraft(null);
       return;
     }
-    // The draft reader already folded any retired top-level id onto its parent,
-    // so `restore.chipId` names a live task type and the scene is a refinement
-    // of it — never a chip of its own to look up instead.
-    const restoredChip = restore.chipId ? findChip(restore.chipId) : null;
-    const restoredSubtype = restoredChip?.id === 'prototype'
-      ? prototypeSubChipForSlug(restore.prototypeSubtypeId ?? null)
-      : null;
-    const restoredAction = restoredChip?.action;
+    const restoredMediaComposer = restoredMediaSurface
+      && (restoredAction?.kind === 'apply-scenario' || restoredAction?.kind === 'apply-figma-migration')
+      ? buildHomeMediaComposer(
+          restoredMediaSurface,
+          promptTemplates,
+          {
+            ...restoredAction.inputs,
+            ...(restore.mediaSelection?.template
+              ? { template: restore.mediaSelection.template }
+              : {}),
+            ...(restore.mediaSelection?.model
+              ? { model: restore.mediaSelection.model }
+              : {}),
+            ...(restore.mediaSelection?.aspect
+              ? {
+                  aspect: restore.mediaSelection.aspect,
+                  ratio: restore.mediaSelection.aspect,
+                }
+              : {}),
+          },
+          elevenLabsVoices,
+          {
+            elevenLabsVoiceWarning,
+            elevenLabsVoicesLoading,
+            imageModels: composerImageModels,
+          },
+         )
+       : null;
     requestActivePlugin(record, undefined, {
       chipId: restore.chipId ?? undefined,
       prototypeSubtypeId: restoredSubtype?.slug ?? null,
       projectKind: restore.projectKind ?? undefined,
-      inputs:
-        restoredAction?.kind === 'apply-scenario' || restoredAction?.kind === 'apply-figma-migration'
+      inputs: restoredMediaComposer?.inputs
+        ?? (restoredAction?.kind === 'apply-scenario' || restoredAction?.kind === 'apply-figma-migration'
           ? restoredAction.inputs
-          : undefined,
-      projectMetadata: restoredChip
-        ? prototypeSceneProjectMetadata(restoredChip, restoredSubtype)
-        : null,
+          : undefined),
+      inputFields: restoredMediaComposer?.fields,
+      queryTemplate: restoredMediaComposer?.queryTemplate,
+      mediaSurface: restoredMediaComposer?.surface,
+      projectMetadata: restoredMediaComposer
+        ? metadataForHomeMediaComposer(
+            restoredMediaComposer.surface,
+            restoredMediaComposer.inputs,
+            promptTemplates,
+          )
+        : restoredChip
+          ? prototypeSceneProjectMetadata(restoredChip, restoredSubtype)
+          : null,
+      editableInputNames: restoredMediaComposer?.editableFieldNames,
+      preserveInputFields: Boolean(restoredMediaComposer),
       replaceWithoutConfirmation: true,
       suppressPromptUpdate: true,
       deferApply: true,
@@ -1942,7 +2042,15 @@ export function HomeView({
       examplePick: restore.examplePick === true,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
+  }, [
+    pendingChipRestore,
+    pluginsLoading,
+    plugins,
+    active,
+    pendingPluginUseHandoff,
+    promptTemplatesLoaded,
+    promptTemplates,
+  ]);
 
   // No default creation type (per product): a cold Home starts with nothing
   // picked, so the type row below the composer is the only thing on screen and
@@ -2193,9 +2301,24 @@ export function HomeView({
 
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
-    const normalized = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, composerImageModels)
+    const templateAwareNext = active.mediaSurface
+      ? homeMediaInputsAfterTemplateChange(
+          active.mediaSurface,
+          active.inputs,
+          next,
+          promptTemplates,
+          composerImageModels,
+        )
       : next;
+    const normalized = active.mediaSurface
+      ? normalizeHomeMediaInputs(
+          active.mediaSurface,
+          templateAwareNext,
+          promptTemplates,
+          elevenLabsVoices,
+          composerImageModels,
+        )
+      : templateAwareNext;
     const mediaComposer = active.mediaSurface
       ? buildHomeMediaComposer(active.mediaSurface, promptTemplates, normalized, elevenLabsVoices, {
           elevenLabsVoiceWarning,
@@ -2860,7 +2983,11 @@ export function HomeView({
           );
           return;
         }
-        submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
+        // The applied snapshot intentionally uses the run-facing inputs with
+        // hidden footer fields stripped, but the composer must retain its full
+        // model/aspect state so a rejected or blocked create can retry with the
+        // same project metadata.
+        submittedActive = { ...submittedActive, result };
         setActive(submittedActive);
       }
       // Reconcile each selected context against the serialized prompt text before
@@ -2918,7 +3045,11 @@ export function HomeView({
       const submittedProjectKind =
         submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
       const submittedProjectMetadata = submittedActive?.mediaSurface
-        ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
+        ? metadataForHomeMediaComposer(
+            submittedActive.mediaSurface,
+            submittedApplyInputs,
+            promptTemplates,
+          )
         : homeCreateProjectMetadata(
             submittedProjectKind,
             submittedActive?.inputs ?? null,
@@ -3069,6 +3200,14 @@ export function HomeView({
   // #5517: with no projects yet the home (logo + heading + composer) centers
   // vertically instead of hugging the top.
   const recentProjectsEmpty = !projectsLoading && projects.length === 0;
+  const mediaRestoreWaitingForCatalog = Boolean(
+    pendingChipRestore?.mediaSelection?.template
+    && homeMediaSurfaceForChipId(pendingChipRestore.chipId ?? ''),
+  );
+  const promptTemplateRestoreError = mediaRestoreWaitingForCatalog
+    && promptTemplatesLoadFailed
+    ? t('promptTemplates.fetchError')
+    : null;
 
   return (
     <div
@@ -3182,7 +3321,10 @@ export function HomeView({
         onPickConnector={useConnector}
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
-        error={error}
+        error={promptTemplateRestoreError ?? error}
+        errorActionLabel={promptTemplateRestoreError ? t('promptTemplates.retry') : null}
+        errorActionDisabled={promptTemplatesLoading}
+        onErrorAction={promptTemplateRestoreError ? onPromptTemplatesRetry : undefined}
         workingDir={workingDir}
         recentDirs={recentDirs}
         onPickWorkingDir={handlePickWorkingDir}

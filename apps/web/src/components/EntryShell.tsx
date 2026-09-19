@@ -473,6 +473,10 @@ interface Props {
   templates: ProjectTemplate[];
   onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
+  promptTemplatesLoaded?: boolean;
+  promptTemplatesLoadFailed?: boolean;
+  onPromptTemplatesRetry?: () => void;
+  promptTemplatesLoading?: boolean;
   defaultDesignSystemId: string | null;
   connectors: ConnectorDetail[];
   connectorsLoading: boolean;
@@ -630,6 +634,10 @@ export function EntryShell({
   templates,
   onDeleteTemplate,
   promptTemplates,
+  promptTemplatesLoaded = true,
+  promptTemplatesLoadFailed = false,
+  onPromptTemplatesRetry,
+  promptTemplatesLoading = false,
   defaultDesignSystemId,
   connectors,
   connectorsLoading,
@@ -1813,6 +1821,10 @@ export function EntryShell({
     skillsLoading,
     connectors,
     promptTemplates,
+    promptTemplatesLoaded,
+    promptTemplatesLoadFailed,
+    onPromptTemplatesRetry,
+    promptTemplatesLoading,
     artifactUpgradeSlot,
     deepSeekV4FlashCampaignAudience,
     onDeepSeekV4FlashCampaignUseNow: applyDeepSeekCampaignModel,

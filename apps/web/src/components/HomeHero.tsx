@@ -231,6 +231,9 @@ interface Props {
   onPickChip: (chip: HomeHeroChip) => void;
   contextItemCount: number;
   error: string | null;
+  errorActionLabel?: string | null;
+  errorActionDisabled?: boolean;
+  onErrorAction?: () => void;
   showActivePluginChip?: boolean;
   workingDir?: string | null;
   recentDirs?: string[];
@@ -409,6 +412,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     activePrototypeSubtypeId,
     contextItemCount,
     error,
+    errorActionLabel = null,
+    errorActionDisabled = false,
+    onErrorAction,
     showActivePluginChip = true,
     workingDir = null,
     recentDirs = [],
@@ -2654,7 +2660,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
       {error ? (
         <div role="alert" className="home-hero__error">
-          {error}
+          <span className="home-hero__error-message">{error}</span>
+          {errorActionLabel && onErrorAction ? (
+            <button
+              type="button"
+              className="home-hero__error-action"
+              data-testid="home-hero-error-action"
+              onClick={onErrorAction}
+              disabled={errorActionDisabled}
+            >
+              {errorActionLabel}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {previewHomeFile && previewHomeFileUrl ? createPortal(

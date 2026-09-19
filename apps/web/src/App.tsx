@@ -1375,6 +1375,25 @@ function AppInner() {
   const [dsLoading, setDsLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true);
+  const [promptTemplatesLoaded, setPromptTemplatesLoaded] = useState(false);
+  const [promptTemplatesLoadFailed, setPromptTemplatesLoadFailed] = useState(false);
+  const promptTemplatesRequestGenerationRef = useRef(0);
+  const refreshPromptTemplates = useCallback(() => {
+    const requestGeneration = promptTemplatesRequestGenerationRef.current + 1;
+    promptTemplatesRequestGenerationRef.current = requestGeneration;
+    setPromptTemplatesLoading(true);
+    setPromptTemplatesLoadFailed(false);
+    void fetchPromptTemplates().then((list) => {
+      if (promptTemplatesRequestGenerationRef.current !== requestGeneration) return;
+      setPromptTemplatesLoading(false);
+      if (list === null) {
+        setPromptTemplatesLoadFailed(true);
+        return;
+      }
+      setPromptTemplates(list);
+      setPromptTemplatesLoaded(true);
+    });
+  }, []);
   // Goes true once the daemon-persisted config (agentId/designSystemId/etc.)
   // has merged into local state. Auto-selection effects below wait on this
   // so they don't race ahead of the daemon-stored choice and overwrite it
@@ -2099,6 +2118,7 @@ function AppInner() {
         setDsLoading(false);
         setProjectsLoading(false);
         setPromptTemplatesLoading(false);
+        setPromptTemplatesLoadFailed(true);
         setDaemonConfigLoaded(true);
         setDaemonAppConfigReady(false);
         // Composio hydration also depends on the daemon. With no daemon
@@ -2215,11 +2235,7 @@ function AppInner() {
         setTemplates(list);
       });
 
-      void fetchPromptTemplates().then((list) => {
-        if (cancelled) return;
-        setPromptTemplates(list);
-        setPromptTemplatesLoading(false);
-      });
+      refreshPromptTemplates();
 
       void fetchAppVersionInfo().then((info) => {
         if (cancelled) return;
@@ -2327,6 +2343,7 @@ function AppInner() {
     })();
     return () => {
       cancelled = true;
+      promptTemplatesRequestGenerationRef.current += 1;
       effectAgentStreamAbort?.abort();
     };
     // `workspaceProjectView` is intentionally absent: it is route-derived, and
@@ -2339,6 +2356,7 @@ function AppInner() {
     isCurrentAgentStreamRequest,
     listCurrentWorkspaceProjects,
     reconcileFetchedProjects,
+    refreshPromptTemplates,
   ]);
 
   // Keep the active projection's last-good display in sync with optimistic
@@ -5603,6 +5621,9 @@ function AppInner() {
         templates={templates}
         onDeleteTemplate={handleDeleteTemplate}
         promptTemplates={promptTemplates}
+        promptTemplatesLoaded={promptTemplatesLoaded}
+        promptTemplatesLoadFailed={promptTemplatesLoadFailed}
+        onPromptTemplatesRetry={refreshPromptTemplates}
         defaultDesignSystemId={config.designSystemId}
         agents={agents}
         agentsLoading={agentsLoading}
