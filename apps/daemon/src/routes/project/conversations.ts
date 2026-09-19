@@ -15,9 +15,53 @@ import {
   compactAdjacentMessageAgentEvents,
   countMessages,
   deleteConversationAndRepairTeamCommentAnchor,
+  getAgentSessionRecord,
+  getConversationCompaction,
   isProjectCommentAnchorConversationId,
   listSiblingRunDoneKeys,
+  upsertConversationCompaction,
 } from '../../db.js';
+import { defaultMediaExecutionPolicy } from '../../media/policy.js';
+import {
+  collectCompactionLedgerCandidatesFromMessages,
+  washCompactionLedgerEntries,
+} from '../../runtimes/compaction-ledger.js';
+import {
+  buildCompactionSummaryPrompt,
+  extractCompactionSummaryText,
+  renderCompactionSpanTranscript,
+} from '../../runtimes/compaction-summary.js';
+import type {
+  InternalPhysicalRun,
+  InternalRunCreateInput,
+  InternalRunCreationService,
+} from '../../services/internal-run-service.js';
+
+/**
+ * API/BYOK-mode compaction eligibility (#5991). Must stay in sync with the
+ * web replay/UI gate `COMPACTION_ELIGIBLE_AGENT_IDS` in
+ * apps/web/src/providers/daemon.ts — the review contract requires the
+ * creation gate (here), the UI availability gate (ChatPane), and the replay
+ * gate (`streamViaDaemon`) to all use the same classification.
+ */
+export const COMPACTION_ELIGIBLE_AGENT_IDS: ReadonlySet<string> = new Set([
+  // The eight direct API adapters, whose turns are sent through the family
+  // head below. Message rows may carry either id.
+  'anthropic-api',
+  'openai-api',
+  'azure-openai-api',
+  'google-gemini-api',
+  'ollama-cloud-api',
+  'senseaudio-api',
+  'aihubmix-api',
+  'bedrock-api',
+  // The stateless BYOK adapter: `agy` re-sends the full transcript every
+  // turn, so a compaction checkpoint is the only way to bound growth.
+  'antigravity',
+  // The family head used by the direct API execution path (web sends every
+  // direct-API turn with this agentId regardless of the concrete adapter).
+  'byok-opencode',
+]);
 
 export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {
   /**
@@ -38,6 +82,24 @@ export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 
    * isolation, are not forced to stub unrelated HTTP helpers.
    */
   sendApiError?: (res: any, status: number, code: string, message: string) => unknown;
+  /**
+   * The server-level chat-run starter, threaded in lazily by `registerProjectRoutes`
+   * (server.ts declares `startChatRun` below its `registerProjectRoutes` call, so the
+   * caller must hand over a deferred wrapper, not the bare binding). Powers the
+   * `POST …/compact` internal summary run — see #5991.
+   */
+  startChatRun?: (chatBody: Record<string, unknown>, run: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * Choke-pointed internal Run starter for the `POST …/compact` summary run.
+   * `design.runs.start` must not be called from route code (AGENTS.md ->
+   * Starting a physical Run); `server.ts` hands down the same
+   * `internalRunCreation` service the continuation paths use, and the summary
+   * run goes through it so the Run analytics lifecycle is installed.
+   */
+  internalRuns?: InternalRunCreationService<
+    InternalRunCreateInput,
+    InternalPhysicalRun
+  >;
 }
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
@@ -733,6 +795,202 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       conversationId: req.params.cid,
     });
     res.json({ message: saved });
+  });
+
+  // ---- Manual compaction (#5991) -------------------------------------------
+  // API/BYOK-mode conversations may carry a compaction checkpoint: a model
+  // summary plus a machine-washed workspace ledger with the cut boundary.
+  // `GET` is the read surface web uses when assembling the next turn's
+  // transcript; `POST` (below) is the SSE run that produces the checkpoint.
+
+  app.get('/api/projects/:id/conversations/:cid/compaction', async (req, res) => {
+    if (!getProject(db, req.params.id)) {
+      return res.status(404).json({ error: 'project not found' });
+    }
+    if (!await authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    if (!conv) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    const compaction = getConversationCompaction(db, req.params.cid);
+    if (!compaction) {
+      return res.status(404).json({ error: 'compaction not found' });
+    }
+    res.json({ compaction });
+  });
+
+  app.post('/api/projects/:id/conversations/:cid/compact', async (req, res) => {
+    if (!getProject(db, req.params.id)) {
+      return res.status(404).json({ error: 'project not found' });
+    }
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    if (!conv) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    if (typeof ctx.startChatRun !== 'function' || !ctx.internalRuns) {
+      return sendApiError(
+        res,
+        501,
+        'COMPACTION_UNAVAILABLE',
+        'compaction is not available in this daemon build',
+      );
+    }
+    // API/BYOK-only (#5991): the checkpoint feeds the API-mode transcript
+    // assembly (web `streamViaDaemon`). API/BYOK spans the stateless
+    // Antigravity adapter, the direct API execution path — whose turns are
+    // sent with `agentId: 'byok-opencode'` regardless of which of the eight
+    // API adapters the conversation uses — and the eight adapter ids
+    // themselves (message rows may carry either the family head or the
+    // concrete adapter id). Runs may not leave an `agent_sessions` row, so
+    // the authoritative "is this an API-mode conversation" test is message
+    // rows carrying one of the eligible ids, with the session record as a
+    // fallback for conversations whose messages have not landed yet. Every
+    // other runtime compacts its own context; refuse instead of writing a
+    // checkpoint nothing will consume. This classification must stay in sync
+    // with `COMPACTION_ELIGIBLE_AGENT_IDS` in
+    // apps/web/src/providers/daemon.ts (review contract: creation gate, UI
+    // availability gate, and replay gate all use the same classification).
+    const messages = listMessages(db, req.params.cid);
+    const hasCompactionEligibleTurns = messages.some(
+      (m: { agentId?: unknown }) => (
+        typeof m.agentId === 'string'
+        && COMPACTION_ELIGIBLE_AGENT_IDS.has(m.agentId)
+      ),
+    );
+    const session = [...COMPACTION_ELIGIBLE_AGENT_IDS]
+      .map((agentId) => getAgentSessionRecord(db, req.params.cid, agentId))
+      .find((record) => record != null) ?? null;
+    if (!hasCompactionEligibleTurns && !session) {
+      return sendApiError(
+        res,
+        409,
+        'COMPACTION_UNAVAILABLE',
+        'conversation has no API-mode agent turns or session',
+      );
+    }
+    const rawCutAt = (req.body && typeof req.body === 'object'
+      ? (req.body as { cutAtMessageId?: unknown }).cutAtMessageId
+      : undefined) as unknown;
+    let cutIndex = messages.length - 1;
+    if (typeof rawCutAt === 'string' && rawCutAt) {
+      const found = messages.findIndex(
+        (m: { id?: unknown }) => m.id === rawCutAt,
+      );
+      if (found === -1) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'cutAtMessageId does not exist in this conversation',
+        );
+      }
+      cutIndex = found;
+    }
+    if (cutIndex < 0) {
+      return sendApiError(
+        res,
+        409,
+        'COMPACTION_UNAVAILABLE',
+        'conversation has no messages to compact',
+      );
+    }
+    const span = messages.slice(0, cutIndex + 1);
+    const cutAtMessageId = span[span.length - 1].id;
+    const ledger = washCompactionLedgerEntries(
+      collectCompactionLedgerCandidatesFromMessages(span),
+    );
+    const prompt = buildCompactionSummaryPrompt({
+      transcript: renderCompactionSpanTranscript(span),
+      ledgerLines: ledger.map(
+        (entry) => `- ${entry.identifier}: ${entry.description}`,
+      ),
+    });
+
+    const sse = ctx.http.createSseResponse(res);
+    const sendProgress = (stage: string, message?: string) => {
+      sse.send('progress', { stage, ...(typeof message === 'string' ? { message } : {}) });
+    };
+    try {
+      sendProgress('summarizing', 'running the compaction summary');
+      const agentDef = getAgentDef('antigravity');
+      const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
+      const modelPrefs = config?.agentModels?.['antigravity'] ?? {};
+      const model = session?.model ?? modelPrefs.model ?? null;
+      const run = design.runs.create({
+        conversationId: req.params.cid,
+        agentId: 'antigravity',
+        clientRequestId: `compact-${randomId()}`,
+        mediaExecution: defaultMediaExecutionPolicy(),
+        context: { kind: 'summary-round' },
+      });
+      const chatBody = {
+        agentId: 'antigravity',
+        conversationId: req.params.cid,
+        message: prompt,
+        ...(typeof model === 'string' && model ? { model } : {}),
+        reasoning: null,
+        serviceTier: null,
+      };
+      ctx.internalRuns.start(
+        run,
+        {
+          body: chatBody,
+          // The summary round is composed by the daemon, not requested by a
+          // user; the analytics lifecycle stays silent instead of inventing
+          // a caller (run-analytics-lifecycle.ts documents `null` as the
+          // answer for background runs).
+          requestAnalyticsContext: null,
+          creationKind: 'created',
+          resumed: false,
+        },
+        () => ctx.startChatRun!(chatBody, run),
+      );
+      const finalStatus = await design.runs.wait(run);
+      if (finalStatus.status !== 'succeeded') {
+        sse.send('error', {
+          message: finalStatus.error
+            ?? `compaction summary run ended with status ${finalStatus.status}`,
+        });
+        return;
+      }
+      const summaryText = extractCompactionSummaryText(run.events);
+      if (!summaryText) {
+        sse.send('error', {
+          message: 'compaction summary run produced no text',
+        });
+        return;
+      }
+      const now = Date.now();
+      const compaction = upsertConversationCompaction(db, {
+        conversationId: req.params.cid,
+        cutAtMessageId,
+        summaryText,
+        ledger,
+        modelId: typeof model === 'string' ? model : null,
+        modelLabel: agentDef?.name ?? 'Antigravity',
+        createdAt: now,
+        updatedAt: now,
+      });
+      if (!compaction) {
+        sse.send('error', {
+          message: 'failed to persist the compaction checkpoint',
+        });
+        return;
+      }
+      sse.send('compaction', { compaction });
+    } catch (caught) {
+      sse.send('error', {
+        message: caught instanceof Error ? caught.message : String(caught),
+      });
+    } finally {
+      sse.end();
+    }
   });
 
   registerProjectCommentRoutes(app, ctx);

@@ -36,6 +36,11 @@ vi.mock('../../src/providers/daemon', () => ({
   publishDaemonRunFinishedEvent: vi.fn(),
   reattachDaemonRun: vi.fn(),
   streamViaDaemon: vi.fn(),
+  // #5991: ChatPane mount 时会拉取压缩 checkpoint;未压缩的会话返回 null。
+  // 集合为字面量占位:资格细节由 daemon/测试自身覆盖,这里只保证模块形状完整。
+  COMPACTION_ELIGIBLE_AGENT_IDS: new Set(['anthropic-api','openai-api','azure-openai-api','google-gemini-api','ollama-cloud-api','senseaudio-api','aihubmix-api','bedrock-api','antigravity','byok-opencode']),
+  fetchConversationCompaction: vi.fn().mockResolvedValue(null),
+  compactConversation: vi.fn(),
 }));
 vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.fn() }));
 vi.mock('../../src/runtime/amr-balance-gate', async (importOriginal) => ({

@@ -8606,6 +8606,14 @@ export async function startServer({
     verifyWorkspaceRequestAuthority,
     verifyPersonalProjectDeleteLeaseAuthority,
     authorizeProjectRequest,
+    // Deferred wrapper: `startChatRun` is declared below this call site, so
+    // the bare binding would be a TDZ reference here. The wrapper only reads
+    // it at request time (POST …/compact summary run, #5991).
+    startChatRun: (chatBody, run) => startChatRun(chatBody, run),
+    // Same choke-pointed starter the continuation paths use; the #5991
+    // summary run must start through it so the Run analytics lifecycle is
+    // installed (AGENTS.md -> Starting a physical Run).
+    internalRuns: internalRunCreation,
     isProjectRevoked: (projectId) =>
       revokedTeamProjectMirrors.has(projectId),
     isProjectUnmaterializedPlaceholder: (projectId) =>
