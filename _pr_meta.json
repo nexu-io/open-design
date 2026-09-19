@@ -1,0 +1,10 @@
+{
+  "repo": "nexu-io/open-design",
+  "number": 7748,
+  "base": "main",
+  "head": "fix/dsh-runtime-prepare-git-install",
+  "fork": "VedantMadane/open-design",
+  "title": "fix(dsh-runtime): include sources and build config in files field",
+  "url": "https://github.com/nexu-io/open-design/pull/7748",
+  "rebased": true
+}
