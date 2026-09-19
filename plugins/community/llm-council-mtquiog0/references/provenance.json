@@ -1,0 +1,19 @@
+{
+  "candidateId": "4bd2bd88-6c04-4f30-b868-56dfa10d7a93",
+  "projectId": "4676e51d-54b5-4e1f-814f-34307251caea",
+  "runId": "effa0180-9fce-44ef-87e3-010a73c00c12",
+  "conversationId": "a8ef0057-d28b-4490-8de9-bae0ec200f14",
+  "provenance": {
+    "summary": "Detected from SKILL.md after a successful run.",
+    "detectedAt": 1788761543985
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 16759,
+      "copied": true
+    }
+  ]
+}
