@@ -423,52 +423,51 @@ test('pi fetchModels reads the model table from stdout', async () => {
   }
 });
 
-test('pi args forward extraAllowedDirs as --append-system-prompt flags', () => {
+test('pi args pass skill dirs through --skill and design-system dirs through --append-system-prompt', () => {
   const args = pi.buildArgs(
     '',
     [],
     ['/tmp/skills', '/tmp/design-systems'],
     {},
-    {},
+    { skillDirs: ['/tmp/skills'] },
   );
 
   assert.deepEqual(args, [
     '--mode',
     'rpc',
-    '--append-system-prompt',
+    '--skill',
     '/tmp/skills',
     '--append-system-prompt',
     '/tmp/design-systems',
   ]);
 });
 
-test('pi args filter relative paths from extraAllowedDirs', () => {
+test('pi args filter relative paths from skill and extra allowed dirs', () => {
   const args = pi.buildArgs(
     '',
     [],
     ['/tmp/skills', 'relative/path', '/tmp/design-systems'],
     {},
-    {},
+    { skillDirs: ['/tmp/skills', 'relative/skill'] },
   );
 
-  // Relative paths should be filtered out.
   assert.deepEqual(args, [
     '--mode',
     'rpc',
-    '--append-system-prompt',
+    '--skill',
     '/tmp/skills',
     '--append-system-prompt',
     '/tmp/design-systems',
   ]);
 });
 
-test('pi args combine model, thinking, and extraAllowedDirs', () => {
+test('pi args combine model, thinking, skill dirs, and design-system dirs', () => {
   const args = pi.buildArgs(
     '',
     [],
-    ['/tmp/skills'],
+    ['/tmp/skills', '/tmp/design-systems'],
     { model: 'openai/gpt-5', reasoning: 'medium' },
-    {},
+    { skillDirs: ['/tmp/skills'] },
   );
 
   assert.deepEqual(args, [
@@ -478,8 +477,10 @@ test('pi args combine model, thinking, and extraAllowedDirs', () => {
     'openai/gpt-5',
     '--thinking',
     'medium',
-    '--append-system-prompt',
+    '--skill',
     '/tmp/skills',
+    '--append-system-prompt',
+    '/tmp/design-systems',
   ]);
 });
 
