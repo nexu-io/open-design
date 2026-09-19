@@ -11016,13 +11016,18 @@ export async function startServer({
     // disk and a marker inside this turn's message is reflected in this
     // turn's prompt. Failures are swallowed — memory is best-effort and
     // must never block the agent run.
+    const memoryUserMessage = resolveOdNextRequestUserPrompt({
+      message,
+      currentPrompt,
+      hasCurrentPrompt: hasExplicitCurrentPrompt,
+    });
     if (
       (run.retryAttemptCount ?? 0) === 0 &&
-      typeof message === 'string' &&
-      message.trim().length > 0
+      typeof memoryUserMessage === 'string' &&
+      memoryUserMessage.trim().length > 0
     ) {
       try {
-        await extractFromMessage(RUNTIME_DATA_DIR, message);
+        await extractFromMessage(RUNTIME_DATA_DIR, memoryUserMessage);
       } catch (err) {
         console.warn('[memory] extractFromMessage failed', err);
       }
@@ -14509,7 +14514,7 @@ export async function startServer({
     // produced empty extractions that, near-identical across a build's re-fires,
     // caused the same turn to be re-analyzed dozens of times.
     child.on('close', () => {
-      const userMsg = typeof message === 'string' ? message : '';
+      const userMsg = memoryUserMessage;
       // Forward the chat agent id so memory-llm.pickProvider can
       // constrain its auto-pick to the chat protocol's family — keeps
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
