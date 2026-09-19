@@ -74,14 +74,30 @@ describe('desktop-import-token gate', () => {
     });
   }
 
-  it('accepts unauthenticated imports when no secret is registered (web mode)', async () => {
+  it('allows same-origin imports when no secret is registered (web mode)', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '');
+    // issue #5480: in dormant web mode no desktop secret exists to sign an
+    // HMAC token with, so the directory-binding gate falls back to the
+    // browser-origin check. Same-origin callers (web app, localhost CLI)
+    // must keep working — this is the supported pure-web import path.
+    setDesktopAuthSecret(null); // explicitly clear to test the no-secret path
     const resp = await importFolder({ baseDir: folder });
     expect(resp.status).toBe(200);
-    const body = (await resp.json()) as { project: { metadata?: { fromTrustedPicker?: boolean } } };
-    // PR #974: no secret registered → no `fromTrustedPicker` marker.
-    expect(body.project.metadata?.fromTrustedPicker).toBeUndefined();
+  });
+
+  it('rejects cross-origin imports when no secret is registered (web mode)', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '');
+    setDesktopAuthSecret(null);
+    const resp = await importFolder(
+      { baseDir: folder },
+      { origin: 'https://evil.example' },
+    );
+    expect(resp.status).toBe(403);
+    // Note: the cross-origin rejection may come from either the app-level
+    // /api origin middleware or the route's directory-binding origin gate;
+    // both are correct outcomes, so only pin the status here.
   });
 
   it('rejects imports with no token when a secret is registered', async () => {
