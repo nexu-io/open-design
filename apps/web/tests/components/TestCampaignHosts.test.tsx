@@ -408,6 +408,14 @@ describe("Test decisions at the existing host touchpoints", () => {
 		const expected = (locale: string) =>
 			placements.map((key) => `${key}:${locale}`).sort();
 		await waitFor(() => expect(mountedTexts()).toEqual(expected("en")));
+		// The modal records its impression one frame after it becomes visible. A
+		// language switch after that point continues the same presentation; it is
+		// not a new offer of an already-displayed activity.
+		await waitFor(() =>
+			expect(
+				localStorage.getItem("touchpoint-displayed:v1:account-a:activity-four"),
+			).toBe("1"),
+		);
 		fireEvent.click(screen.getByText("Japanese"));
 		await waitFor(() => expect(mountedTexts()).toEqual(expected("ja")));
 		fireEvent.click(screen.getByText("Chinese"));

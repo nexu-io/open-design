@@ -179,6 +179,26 @@ export async function dispatchProductionCampaignAction(
 		return false;
 	}
 }
+/**
+ * The Test presentation currently open in this modal. It is released when the
+ * user dismisses it, the account changes, or another Test deployment (or
+ * snapshot) is selected. Reloading the same selected deployment publishes a
+ * session without decisions until the new ones arrive (a locale swap, a lease
+ * renewal); that gap continues the open presentation instead of re-offering an
+ * activity this account already saw.
+ */
+type OpenTestPresentation = Readonly<{
+	campaignKey: string;
+	selectionKey: string;
+}>;
+function testSelectionKeyOf(
+	runtime: NonNullable<ReturnType<typeof useTestRuntime>>,
+): string {
+	return JSON.stringify([
+		runtime.deployment.id,
+		runtime.deployment.snapshotHash ?? "",
+	]);
+}
 /** Production v2 modal shares the Test adapter; it does not fall back to a frame when bytes or runtime identity fail. */
 type AuthorizedDecision = Decision & { sessionSubject: string };
 type OpenPresentation = Readonly<{
@@ -198,14 +218,19 @@ export function ProductionCampaignModal({
 	const testDecision = testRuntime?.decisions.get(PLACEMENT);
 	// Test follows the production rule: one automatic presentation per account,
 	// activity and device. Only the presentation already open may continue (its
-	// own visibility record, lease renewal, redeployment or locale swap); any new
-	// offer of a recorded activity stays closed, as does a dismissed one.
+	// own visibility record, lease renewal or locale swap); any new offer of a
+	// recorded activity stays closed, as does a dismissed one.
 	const [dismissedTestCampaigns, setDismissedTestCampaigns] = useState<ReadonlySet<string>>(() => new Set());
+<<<<<<< HEAD
 	const openTestCampaign = useRef<{ campaign: string; deployment: string } | null>(null);
+=======
+	const openTestCampaign = useRef<OpenTestPresentation | null>(null);
+>>>>>>> e285cca2b3 (fix(cms): keep the open Test modal across a language switch (#8235))
 	const testActivityId = testDecision?.activityId;
 	const testCampaignKey = testDecision
 		? JSON.stringify([sessionSubject, testActivityId])
 		: null;
+<<<<<<< HEAD
 	const testDeploymentKey = testRuntime
 		? JSON.stringify([testRuntime.deployment.id, testRuntime.deployment.snapshotHash])
 		: null;
@@ -225,6 +250,27 @@ export function ProductionCampaignModal({
 		openTestCampaign.current =
 			authenticated && !testClosed
 				? { campaign: testCampaignKey, deployment: testDeploymentKey }
+=======
+	const testSelectionKey = testRuntime ? testSelectionKeyOf(testRuntime) : null;
+	if (
+		openTestCampaign.current &&
+		(!authenticated || openTestCampaign.current.selectionKey !== testSelectionKey)
+	)
+		openTestCampaign.current = null;
+	const continuesOpenTestCampaign =
+		openTestCampaign.current?.campaignKey === testCampaignKey;
+	const testClosed =
+		testCampaignKey === null ||
+		dismissedTestCampaigns.has(testCampaignKey) ||
+		(!continuesOpenTestCampaign &&
+			!!sessionSubject &&
+			!!testActivityId &&
+			wasDisplayed(sessionSubject, testActivityId));
+	if (testCampaignKey !== null && testSelectionKey !== null)
+		openTestCampaign.current =
+			authenticated && !testClosed
+				? { campaignKey: testCampaignKey, selectionKey: testSelectionKey }
+>>>>>>> e285cca2b3 (fix(cms): keep the open Test modal across a language switch (#8235))
 				: null;
 	const closeTestModal = useCallback(() => {
 		if (testCampaignKey !== null) {
