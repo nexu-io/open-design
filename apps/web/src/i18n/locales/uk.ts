@@ -3300,6 +3300,7 @@ export const uk: Dict = {
   'fileViewer.exportSlideEta': 'Слайд {current}/{total} · залишилось ~{seconds}с',
   'fileViewer.exportFailed': 'Не вдалося експортувати. Спробуйте ще раз.',
   'fileViewer.exportDone': 'Експорт завершено',
+  'fileViewer.exportDegradedZip': 'Експорт завершено, але цей ZIP-архів містить лише відрендерену сторінку, а не файли проєкту',
   'fileViewer.exportImageFailed': 'Не вдалося захопити зображення. Спробуйте ще раз або скористайтеся інструментом знімків екрана вашого браузера.',
   'fileViewer.exportImageModalSubtitle': 'Виберіть формат, а потім завантажте поточний попередній перегляд як зображення.',
   'fileViewer.exportImageFormatLabel': 'Формат',
