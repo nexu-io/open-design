@@ -1,0 +1,66 @@
+/* design-systems/terracotta/tokens.css
+ * Structured token bindings for Terracotta.
+ * Sun-baked clay-toned editorial system: warm cream surfaces, ink-brown
+ * headlines in a display serif, single terracotta accent. Derived from
+ * https://github.com/bergside/awesome-design-skills/tree/main/skills/terracotta
+ * (MIT, (c) 2026 Bergside).
+ */
+
+:root {
+  --bg: #faf5eb;
+  --surface: #ffffff;
+  --surface-warm: #f3e9d8;
+  --fg: #2a1e17;
+  --fg-2: #5c4a3c;
+  --muted: #75604f;
+  --meta: #6f5d4d;
+  --border: #e0d2bd;
+  --border-soft: #ece0cd;
+  --accent: #9a4f2b;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #d97706;
+  --danger: #dc2626;
+  --font-display: "DM Serif Display", Georgia, serif;
+  --font-body: "DM Serif Display", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 40px;
+  --text-4xl: 56px;
+  --leading-body: 1.7;
+  --leading-tight: 1.1;
+  --tracking-display: -0.01em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 104px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 48px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 18px 44px rgba(42, 30, 23, 0.12);
+  --focus-ring: 0 0 0 3px rgba(154, 79, 43, 0.28);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1140px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

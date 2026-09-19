@@ -18,6 +18,8 @@ type LocalizedContentModule = {
     template: PromptTemplateResource,
   ) => PromptTemplateResource;
   localizeSkillDescription: (locale: string, skill: SkillResource) => string;
+  LOCALIZED_CONTENT_IDS: Record<string, { designSystems: string[] }>;
+  DIRECT_LOCALE_DESIGN_SYSTEM_IDS: Record<string, string[]>;
 };
 
 type SkillResource = { id: string; description: string };
@@ -36,6 +38,8 @@ if (localizedContentModule == null) {
 }
 
 const {
+  DIRECT_LOCALE_DESIGN_SYSTEM_IDS,
+  LOCALIZED_CONTENT_IDS,
   localizeDesignSystemCategory,
   localizeDesignSystemSummary,
   localizePromptTemplateSummary,
@@ -364,6 +368,30 @@ describe('localized display content coverage', () => {
           normalizeText(localized.summary),
           `${locale} should display a prompt-template summary for ${template.id}`,
         ).not.toEqual('');
+      }
+    }
+  });
+  it('[P2] covers riso and terracotta in every direct designSystemSummaries dictionary', async () => {
+    // The requested regression coverage: the prior head passed the generic
+    // fallback test while every localized picker showed English for these two
+    // systems, because localizeDesignSystemSummary falls back to
+    // system.summary on a missing key. Assert through the all-locales id view
+    // (not the three-entry legacy LOCALIZED_CONTENT_IDS) while the fallback
+    // test below keeps covering genuinely untranslated external systems.
+    const systems = await readDesignSystemResources();
+    const ids = uniqueSorted(systems.map((system) => system.id));
+    expect(ids).toContain('riso');
+    expect(ids).toContain('terracotta');
+    const locales = uniqueSorted(Object.keys(DIRECT_LOCALE_DESIGN_SYSTEM_IDS));
+    expect(locales.length).toBeGreaterThanOrEqual(17);
+    for (const locale of locales) {
+      const dictionary = DIRECT_LOCALE_DESIGN_SYSTEM_IDS[locale] ?? [];
+      expect(dictionary, `expected ${locale} designSystemSummaries to be readable`).not.toEqual([]);
+      for (const id of ['riso', 'terracotta']) {
+        expect(
+          dictionary,
+          `${locale} designSystemSummaries is missing bundled design system ${id} (picker would show English fallback)`,
+        ).toContain(id);
       }
     }
   });
