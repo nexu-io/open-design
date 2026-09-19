@@ -561,6 +561,24 @@ describe('od:// proxy fails fast on local resource exhaustion', () => {
     expect(body.message).toContain('ERR_INSUFFICIENT_RESOURCES');
   });
 
+  it('does not double a net::ERR_NO_BUFFER_SPACE failure through the undici fallback', async () => {
+    vi.mocked(net.fetch).mockRejectedValue(new Error('net::ERR_NO_BUFFER_SPACE'));
+    const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
+      new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', undiciFetch);
+
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const handler = registeredHandler();
+    const response = await handler(new Request('od://app/agent-icons/opencode.svg'));
+
+    expect(undiciFetch).not.toHaveBeenCalled();
+    expect(vi.mocked(net.fetch)).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(502);
+    const body = (await response.json()) as { error: string; message: string };
+    expect(body.error).toBe('OD_PROTOCOL_PROXY_FAILED');
+    expect(body.message).toContain('ERR_NO_BUFFER_SPACE');
+  });
+
   it('does not burn the retry budget when only the message carries net::ERR_INSUFFICIENT_RESOURCES', async () => {
     let calls = 0;
     const waits: number[] = [];
@@ -585,7 +603,7 @@ describe('od:// proxy fails fast on local resource exhaustion', () => {
     expect(response.status).toBe(502);
   });
 
-  it.each(['EMFILE', 'ENFILE', 'EADDRNOTAVAIL', 'ENOBUFS'])(
+  it.each(['EMFILE', 'ENFILE', 'EADDRNOTAVAIL', 'ENOBUFS', 'ERR_NO_BUFFER_SPACE'])(
     'does not burn the retry budget on %s',
     async (code) => {
       let calls = 0;
