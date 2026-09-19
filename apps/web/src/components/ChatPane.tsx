@@ -342,7 +342,7 @@ const VIDEO_SEEDANCE_STARTERS: StarterPrompt[] = [
 // into a WebGL texture and runs shader effects on top. References:
 // https://www.remotion.dev/docs/html-in-canvas (concept), the seven
 // vfx-* catalog blocks shipped via `npx hyperframes add vfx-*`, and
-// skills/hyperframes/references/html-in-canvas.md.
+// design-templates/hyperframes/references/html-in-canvas.md.
 const VIDEO_HYPERFRAMES_STARTERS: StarterPrompt[] = [
   {
     icon: '◉',
