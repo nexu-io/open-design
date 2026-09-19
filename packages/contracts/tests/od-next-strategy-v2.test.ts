@@ -437,6 +437,17 @@ describe('OD Next V2 capability, Child, and task projection contracts', () => {
       terminal: false,
     };
     expect(StrategyTaskProjectionV2Schema.parse(projection)).toEqual(projection);
+    const mapped = { ...projection, runMappings: [
+      { runId: 'run-plan', taskRunIndex: 0 },
+      { runId: 'run-production', taskRunIndex: 1 },
+    ] };
+    expect(StrategyTaskProjectionV2Schema.parse(mapped)).toEqual(mapped);
+    for (const taskRunIndex of [-1, 0.5]) {
+      expect(() => StrategyTaskProjectionV2Schema.parse({
+        ...projection, runMappings: [{ runId: 'run-plan', taskRunIndex }],
+      })).toThrow();
+    }
+
     expect(() => StrategyTaskProjectionV2Schema.parse({
       ...projection,
       outcome: 'completed',

@@ -1381,8 +1381,15 @@ describe('OD Next planning coordinator', () => {
       taskExecutionId: 'task-1',
       activeRunId: 'run-production',
       nextRunId: 'run-production',
+      runMappings: [
+        { runId: 'run-request', taskRunIndex: 0 },
+        { runId: 'run-production', taskRunIndex: 1 },
+      ],
       terminal: false,
     });
+    expect(projectStrategyTask(production, 'run-production').runMappings).toEqual([
+      { runId: 'run-production', taskRunIndex: 1 },
+    ]);
 
     expect(() => beginAutomaticSimpleProduction(db, {
       task: planned.task,
