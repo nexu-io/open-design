@@ -445,7 +445,8 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
   if (protocolCodes.length > 0) {
     const inferred = inferClarificationRuntimeState(current, parsed)
       ?? inferDirectEditCompletionRuntimeState(current, parsed, input.completionEvidence)
-      ?? inferProductionCompletionRuntimeState(current, parsed, input.completionEvidence);
+      ?? inferProductionCompletionRuntimeState(current, parsed, input.completionEvidence)
+      ?? acceptSameRunCompletionWithoutPlan(current, parsed, input.completionEvidence);
     if (inferred) {
       console.info('[od-next-task] runtime state inferred', {
         taskExecutionId: current.taskExecutionId,
@@ -522,8 +523,10 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       ? { outcome: 'completed' as const }
       : {}),
   };
+  const planContractUnrecorded = state.reasonCodes.includes(OD_NEXT_SAME_RUN_PLAN_UNRECORDED);
   const reasonCodes = validateAcceptedTurn(db, current, state, parsed.planContract, parsed.visibleText, {
     toolUseCount: input.toolUseCount ?? 0,
+    ...(planContractUnrecorded ? { planContractUnrecorded } : {}),
     ...(input.executionPreflight ? { executionPreflight: input.executionPreflight } : {}),
     ...(input.completionEvidence ? { completionEvidence: input.completionEvidence } : {}),
     ...(input.productionEnforcementReasonCodes
@@ -606,8 +609,8 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
  *
  * Deliberately stricter than the clarification inference: it requires an
  * entirely unrouted first turn (`route === null`). Once `full_plan` is locked
- * the request stage is planning-only, so build output there is a violation to
- * report, never a completion to infer.
+ * a request-stage completion must declare its frozen plan, so undeclared build
+ * output there is never a completion to infer.
  */
 /**
  * Did the turn emit NO machine block at all — as opposed to emitting one badly?
@@ -819,6 +822,62 @@ function inferProductionCompletionRuntimeState(
   };
 }
 
+const OD_NEXT_SAME_RUN_PLAN_UNRECORDED = 'od_next_same_run_plan_contract_unrecorded';
+const PLAN_CONTRACT_SERIALIZATION_CODES = new Set([
+  'od_next_protocol_plan_contract_duplicate',
+  'od_next_protocol_plan_contract_invalid_json',
+  'od_next_protocol_plan_contract_invalid_schema',
+]);
+
+export function isSameRunProductionState(state: {
+  route: string;
+  inputStage: string;
+  outcome: string;
+  executionIntent?: string | undefined;
+}): boolean {
+  return state.route === 'full_plan'
+    && ['request', 'clarification'].includes(state.inputStage)
+    && state.outcome === 'completed'
+    && state.executionIntent !== 'plan_only';
+}
+
+/**
+ * Keep verified same-run delivery when only its Plan Contract serialization
+ * failed. The separate-Run flow repairs that block before Production; here
+ * Production already happened in this Run, so a repair Run could only rebuild.
+ * The strict Runtime State must still declare the completion, and Open Design
+ * must have verified the canonical deliverable itself.
+ */
+function acceptSameRunCompletionWithoutPlan(
+  current: StrategyTaskExecutionRecord,
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+  completionEvidence: {
+    physicalStatus: 'succeeded' | 'failed' | 'canceled';
+    deliverableValid: boolean;
+  } | undefined,
+): StrategyRuntimeStateV2 | null {
+  const state = parsed.runtimeState;
+  if (
+    !state
+    || !isSameRunProductionState(state)
+    || (current.route !== null && current.route !== 'full_plan')
+    || !['request', 'clarification'].includes(current.inputStage)
+    || current.executionIntent === 'plan_only'
+    || parsed.issues.length === 0
+    || parsed.issues.some((issue) => !PLAN_CONTRACT_SERIALIZATION_CODES.has(issue.code))
+    || completionEvidence?.physicalStatus !== 'succeeded'
+    || completionEvidence.deliverableValid !== true
+  ) return null;
+  return {
+    ...state,
+    reasonCodes: uniqueReasonCodes([
+      ...state.reasonCodes,
+      OD_NEXT_SAME_RUN_PLAN_UNRECORDED,
+      ...parsed.issues.map((issue) => issue.code),
+    ]),
+  };
+}
+
 function inferDirectEditCompletionRuntimeState(
   current: StrategyTaskExecutionRecord,
   parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
@@ -957,6 +1016,7 @@ function validateAcceptedTurn(
     filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
     };
     productionEnforcementReasonCodes?: readonly string[];
+    planContractUnrecorded?: boolean;
   },
 ): string[] {
   const reasonCodes: string[] = [];
@@ -998,14 +1058,23 @@ function validateAcceptedTurn(
     );
   }
 
-  if (state.outcome === 'plan_ready') {
-    if (!plan) reasonCodes.push('od_next_protocol_plan_contract_missing');
+  // A simple Full Plan builds in the Run that froze it, so its completion owes
+  // the same Plan Contract and Execution Preflight a plan_ready handoff does.
+  const sameRunProduction = isSameRunProductionState(state);
+  if (state.outcome === 'plan_ready' || sameRunProduction) {
+    if (!plan && !input.planContractUnrecorded) {
+      reasonCodes.push('od_next_protocol_plan_contract_missing');
+    }
     if (!input.executionPreflight) {
-      reasonCodes.push('od_next_preflight_execution_facts_missing');
+      if (!input.planContractUnrecorded) {
+        reasonCodes.push('od_next_preflight_execution_facts_missing');
+      }
     } else {
       reasonCodes.push(...runExecutionPreflight(input.executionPreflight).reasonCodes);
     }
-    reasonCodes.push(...(input.productionEnforcementReasonCodes ?? []));
+    if (state.outcome === 'plan_ready') {
+      reasonCodes.push(...(input.productionEnforcementReasonCodes ?? []));
+    }
   } else if (plan && !(planningOnly && state.outcome === 'completed')) {
     reasonCodes.push('od_next_protocol_plan_contract_unexpected');
   }

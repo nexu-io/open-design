@@ -2009,6 +2009,143 @@ describe('OD Next planning coordinator', () => {
     });
   });
 
+  describe('simple Full Plan built in the Run that froze it', () => {
+    const delivered = { physicalStatus: 'succeeded' as const, deliverableValid: true };
+    const prepareFullPlan = () => prepareStrategyRequest(db, {
+      taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
+      intake: intakePassed, updatedAt: 110,
+    });
+    const sameRunTurn = (plan: unknown) => protocol([
+      'Plan frozen, building now.',
+      ...(plan ? [block('open-design-plan-contract', plan)] : []),
+      'Built index.html.',
+      block('open-design-runtime-state', runtimeState({
+        outcome: 'completed', executionMode: 'simple',
+      })),
+    ].join('\n'));
+
+    it('completes the request Run and keeps its Plan Contract', () => {
+      prepareFullPlan();
+      const plan = planContract(snapshot);
+      const result = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: 'task-1', runId: 'run-request',
+        protocol: sameRunTurn(plan),
+        executionPreflight: executionPassed,
+        completionEvidence: delivered,
+        updatedAt: 120,
+      });
+      expect(result).toMatchObject({
+        action: 'completed',
+        reasonCodes: [],
+        task: {
+          route: 'full_plan', inputStage: 'request', outcome: 'completed',
+          executionMode: 'simple', planContract: plan,
+          terminalRunId: 'run-request', activeRunId: null,
+        },
+      });
+      expect(getStrategyTaskExecution(db, 'task-1')?.runs).toHaveLength(1);
+    });
+
+    it.each([
+      {
+        name: 'the canonical deliverable',
+        plan: true, preflight: true,
+        evidence: { physicalStatus: 'succeeded' as const, deliverableValid: false },
+        reason: 'od_next_canonical_deliverable_invalid',
+      },
+      {
+        name: 'the Plan Contract',
+        plan: false, preflight: true, evidence: delivered,
+        reason: 'od_next_protocol_plan_contract_missing',
+      },
+      {
+        name: 'Execution Preflight',
+        plan: true, preflight: false, evidence: delivered,
+        reason: 'od_next_preflight_execution_facts_missing',
+      },
+    ])('still owes $name', ({ plan, preflight, evidence, reason }) => {
+      prepareFullPlan();
+      expect(finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: 'task-1', runId: 'run-request',
+        protocol: sameRunTurn(plan ? planContract(snapshot) : null),
+        ...(preflight ? { executionPreflight: executionPassed } : {}),
+        completionEvidence: evidence,
+        updatedAt: 120,
+      })).toMatchObject({ action: 'blocked', reasonCodes: [reason] });
+    });
+
+    it('keeps a complex plan on the separate production Run', () => {
+      prepareFullPlan();
+      const result = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: 'task-1', runId: 'run-request',
+        protocol: protocol(block('open-design-runtime-state', {
+          ...runtimeState({ outcome: 'completed', executionMode: 'simple' }),
+          executionMode: 'complex',
+        })),
+        executionPreflight: executionPassed,
+        completionEvidence: delivered,
+        updatedAt: 120,
+      });
+      expect(result).toMatchObject({ action: 'blocked', task: { outcome: 'blocked' } });
+    });
+
+    it('keeps verified delivery when only the Plan Contract serialization failed', () => {
+      prepareFullPlan();
+      const result = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: 'task-1', runId: 'run-request',
+        protocol: sameRunTurn({ ...planContract(snapshot), unexpected: true }),
+        completionEvidence: delivered,
+        updatedAt: 120,
+      });
+      expect(result).toMatchObject({
+        action: 'completed',
+        reasonCodes: expect.arrayContaining([
+          'od_next_same_run_plan_contract_unrecorded',
+          'od_next_protocol_plan_contract_invalid_schema',
+        ]),
+        task: { inputStage: 'request', outcome: 'completed', executionMode: 'simple' },
+      });
+    });
+
+    it('blocks an unrecorded Plan Contract when the delivery is not verified', () => {
+      prepareFullPlan();
+      expect(finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: 'task-1', runId: 'run-request',
+        protocol: sameRunTurn({ ...planContract(snapshot), unexpected: true }),
+        completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+        updatedAt: 120,
+      })).toMatchObject({ action: 'blocked', task: { outcome: 'blocked' } });
+    });
+
+    it('does not claim a repair or production Run after a same-run completion', () => {
+      prepareFullPlan();
+      let prepared = 0;
+      const transition = prepareAutomaticStrategyContinuation({
+        db,
+        task: getStrategyTaskExecution(db, 'task-1')!,
+        parsed: sameRunTurn({ ...planContract(snapshot), unexpected: true }).finish(),
+        executionPreflight: executionPassed,
+        completionEvidence: delivered,
+        service: {
+          prepare(input) {
+            prepared += 1;
+            const run = { id: 'must-not-exist', status: 'queued' };
+            db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+            return { kind: 'ready', run, creationKind: 'created', resumed: false };
+          },
+          start(run) { return run; },
+        },
+        createMeta: () => ({}),
+        updatedAt: 120,
+      });
+      expect(prepared).toBe(0);
+      expect(transition).toMatchObject({
+        start: false,
+        result: { action: 'completed', task: { outcome: 'completed', latestRunId: 'run-request' } },
+      });
+    });
+  });
+
   it('blocks Direct Edit completion without physical success and canonical delivery', () => {
     prepareStrategyRequest(db, {
       taskExecutionId: 'task-1', preference: 'auto', directEdit: directEligible,

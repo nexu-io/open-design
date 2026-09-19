@@ -1,4 +1,4 @@
-# OD Next Core Strategy v2.2.1
+# OD Next Core Strategy v2.3.0
 
 ## Role
 
@@ -120,8 +120,10 @@ the remaining frozen decisions.
 - Full Plan may use request, clarification, contract_repair, and production.
   It must freeze the resolved Task Profile and Full Plan before entering
   Build.
-- Full Plan request and clarification are planning-only. They may read bounded
-  inputs, but they do not create, edit, render, or dispatch deliverables;
+- A simple Full Plan builds in the same response that freezes it: after the
+  plan and Execution Preflight are frozen on the request or clarification
+  stage, perform the Build immediately and report completed. Never Build
+  before the plan is frozen. A complex Full Plan stops at plan_ready, and
   Build starts only in the production continuation.
 - Complete the Preflight matching the current route before Build.
 - Full Plan asks at most one clarification round containing one to three
@@ -131,9 +133,10 @@ the remaining frozen decisions.
 - Contract repair only serializes the already-frozen semantic plan into the
   V2 machine shape. It uses no tools and changes no goal, route, execution
   mode, Build Package, or design decision.
-- Production reuses the frozen plan and existing native session. It does not
-  select a new route, create a new plan, or ask another question; after the
-  production continuation arrives, execute exactly what was frozen.
+- Building a frozen plan, in the same response or in a production
+  continuation, reuses that plan and the existing native session. It does not
+  select a new route, create a new plan, or ask another question; execute
+  exactly what was frozen.
 - Complex mode requires at least two independent Build Packages and verified
   structured native Child lifecycle support. Otherwise select simple before
   locking the plan, or report blocked after complex is locked.

@@ -451,6 +451,23 @@ export type OpenDesignPlanContractV2 = z.infer<typeof OpenDesignPlanContractV2Sc
 export const StrategyExecutionIntentV2Schema = z.enum(['produce', 'plan_only']);
 export type StrategyExecutionIntentV2 = z.infer<typeof StrategyExecutionIntentV2Schema>;
 
+/**
+ * A simple Full Plan builds in the same physical Run that froze it, so the
+ * request or clarification turn may itself report completion. Complex plans
+ * still hand off to a separate production Run for native Child bindings.
+ */
+function requireSameRunSimpleProduction(
+  executionMode: StrategyExecutionModeV2 | null,
+  context: z.RefinementCtx,
+): void {
+  if (executionMode === 'simple') return;
+  context.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ['executionMode'],
+    message: 'Only a simple Full Plan can complete in the Run that froze it.',
+  });
+}
+
 export const StrategyRuntimeStateV2Schema = z.object({
   schema: z.literal(OD_NEXT_RUNTIME_STATE_SCHEMA),
   executionIntent: StrategyExecutionIntentV2Schema.optional(),
@@ -514,7 +531,9 @@ export const StrategyRuntimeStateV2Schema = z.object({
       });
     }
   } else if (value.inputStage === 'clarification') {
-    if (!['plan_ready', 'blocked', 'canceled'].includes(value.outcome)) {
+    if (value.outcome === 'completed') {
+      requireSameRunSimpleProduction(value.executionMode, context);
+    } else if (!['plan_ready', 'blocked', 'canceled'].includes(value.outcome)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['outcome'],
@@ -537,7 +556,9 @@ export const StrategyRuntimeStateV2Schema = z.object({
       });
     }
   } else {
-    if (!['clarification_required', 'plan_ready', 'blocked', 'canceled'].includes(value.outcome)) {
+    if (value.outcome === 'completed') {
+      requireSameRunSimpleProduction(value.executionMode, context);
+    } else if (!['clarification_required', 'plan_ready', 'blocked', 'canceled'].includes(value.outcome)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['outcome'],
@@ -833,7 +854,12 @@ export const StrategyTaskProjectionV2Schema = z.object({
       message: 'Production projections require a locked execution mode.',
     });
   }
-  if (value.outcome === 'completed' && value.inputStage !== 'production' && value.executionIntent !== 'plan_only') {
+  if (
+    value.outcome === 'completed'
+    && value.inputStage !== 'production'
+    && value.executionIntent !== 'plan_only'
+    && value.executionMode !== 'simple'
+  ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['outcome'],

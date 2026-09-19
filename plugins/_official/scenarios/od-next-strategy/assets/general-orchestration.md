@@ -1,4 +1,4 @@
-# OD Next General Orchestration v2.0.2
+# OD Next General Orchestration v2.1.0
 
 ## Contract ownership
 
@@ -116,7 +116,8 @@ Use the stage supplied by Open Design:
 - `clarification`: questions were asked last turn; merge the user's one
   allowed answer round into the Full Plan.
 - `contract_repair`: serialize the frozen plan once into the required shape.
-- `production`: execute the frozen Full Plan in the continued native session.
+- `production`: execute a frozen complex Full Plan in the continued native
+  session.
 
 Only `request` chooses a route. Later stages preserve the route and any locked
 execution mode:
@@ -125,6 +126,9 @@ execution mode:
   affected Preflight work, and freeze.
 - `production` reuses the existing resolved Task Profile, Full Plan, and
   RunManifest decision snapshot; it does not re-plan or ask again.
+
+A simple Full Plan does not use `production`: the request or clarification
+turn that freezes it continues straight into its Build.
 
 A task chain means one `request` plus its subsequent `clarification`,
 `contract_repair`, and `production` turns.
@@ -229,12 +233,16 @@ For a Full Plan request, proceed in this order:
 9. Run Execution Preflight for every declared production route, dependency,
    input, renderer, exporter, template, and required output owned by the
    Agent.
-10. Emit a strict Plan Contract and Runtime State for Open Design to parse.
+10. Emit a strict Plan Contract for Open Design to parse.
+11. Simple: perform the Build in this same response, per the Production rules
+    below, then emit the Runtime State with outcome `completed`. Complex: emit
+    the Runtime State with outcome `plan_ready` and stop.
 
-The request and clarification turns stop after this planning output. They may
-inspect bounded references needed by the contract, but must not mutate or
-dispatch deliverables. Open Design starts Build by continuing the same native
-session into `production`; the user does not resubmit the request.
+Steps 1–10 are planning. They may inspect bounded references needed by the
+contract, but must not mutate or dispatch deliverables; Build starts only
+after the plan and Execution Preflight are frozen. For a complex plan, Open
+Design starts Build by continuing the same native session into `production`;
+the user does not resubmit the request.
 
 ### Drafting the Task Profile
 
@@ -425,14 +433,15 @@ cannot be produced, report blocked.
 
 ## Production
 
-In simple mode, the main Agent reads the frozen Task Profile, Design Spec,
-Full Plan, and RunManifest, performs the ordered Build against the current
-task-type profile, and produces every required deliverable. The moment every
+In simple mode, the main Agent, in the same response that froze the plan,
+follows the frozen Task Profile, Design Spec, Full Plan, and RunManifest,
+performs the ordered Build against the current task-type profile, and
+produces every required deliverable. The moment every
 required deliverable is written, deliver — no post-generation check,
 acceptance, or repair.
 
-In complex mode, the main Agent starts native Child work for dependency-ready
-Build Packages. Each Child receives only its package, necessary inputs, frozen
+In complex mode, in the production continuation, the main Agent starts native
+Child work for dependency-ready Build Packages. Each Child receives only its package, necessary inputs, frozen
 shared constraints (including the Design Spec), dependencies, expected
 outputs, and allowed resources — the asset and artifact locations it may
 read. Independent packages may run in parallel; dependent packages run in
@@ -443,8 +452,9 @@ deliverable is written, deliver. A locked complex task reports blocked if
 native Child start or structured terminal lifecycle fails — never fake
 completed parallel orchestration; return the capability blocker explicitly.
 
-Production never selects a different route or execution mode, never creates a
-replacement semantic plan, and never asks another question.
+Once Build begins, the Agent never selects a different route or execution
+mode, never creates a replacement semantic plan, and never asks another
+question.
 
 ### Build discipline
 
@@ -515,8 +525,9 @@ vocabulary:
 
 - `clarification_required` after the initial Full Plan request needs its one
   answer round;
-- `plan_ready` when a valid Full Plan and locked execution mode can continue;
-- `completed` when Direct Edit or Production produced all required outputs —
+- `plan_ready` when a valid complex Full Plan can continue into production;
+- `completed` when Direct Edit, a simple Full Plan built in the same response,
+  or Production produced all required outputs —
   assumptions, asset substitutions, and other non-blocking risks do not
   change the outcome; disclose them in the prose summary;
 - `blocked` when a required dependency or locked execution path cannot
@@ -537,7 +548,7 @@ vocabulary:
 - Retain every hard field and triggered conditional field of the current
   TaskProfileVersion.
 
-### When the outcome is plan_ready
+### When a Full Plan is frozen (plan_ready, or completed in the same response)
 
 - Emit the complete Task Profile, Full Plan, and completion standards in the
   hidden structured blocks the V2 machine contract specifies; machine

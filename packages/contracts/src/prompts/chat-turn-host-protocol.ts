@@ -23,8 +23,8 @@ function odNextStageGate(policy: ChatTurnHostProtocolPolicy): string {
   if (policy === 'od_next_request') {
     return [
       'OD Next host handoff gate:',
-      'Use the three keyed host protocols below only when this request-stage response declares route=direct_edit, inputStage=request, and outcome=completed.',
-      'For full_plan, plan_ready, clarification_required, blocked, failed, or canceled responses, omit all three protocols.',
+      'Use the three keyed host protocols below only when this request-stage response declares inputStage=request and outcome=completed with executionMode=simple (Direct Edit, or a simple Full Plan built in this same response).',
+      'For plan_ready, clarification_required, blocked, failed, or canceled responses, omit all three protocols.',
     ].join('\n');
   }
   if (policy === 'od_next_production') {
