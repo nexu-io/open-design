@@ -2474,6 +2474,62 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     });
   });
 
+  it('persists the Bedrock auth mode and AWS profile from the onboarding panel', async () => {
+    globalThis.fetch = vi.fn(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          user: { id: 'u', email: 'user@example.com' },
+          configPath: '/x',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'bedrock',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        apiProviderBaseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+      }),
+    });
+
+    await openByokRuntimeSetup();
+
+    expect(screen.getByRole('tab', { name: 'Amazon Bedrock' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByLabelText('API key')).toBeTruthy();
+    expect(screen.queryByLabelText('AWS profile name')).toBeNull();
+
+    // The toggle must reach AppConfig, not only the per-protocol shadow copy:
+    // the panel reads its mode back from `config.awsAuthMode`, so a dropped
+    // projection leaves the button inert and the profile field never appears.
+    fireEvent.click(screen.getByRole('button', { name: 'AWS profile' }));
+    expect(await screen.findByLabelText('AWS profile name')).toBeTruthy();
+    expect(screen.queryByLabelText('API key')).toBeNull();
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'bedrock',
+      awsAuthMode: 'profile',
+      apiProtocolConfigs: { bedrock: expect.objectContaining({ awsAuthMode: 'profile' }) },
+    });
+
+    fireEvent.change(screen.getByLabelText('AWS profile name'), { target: { value: 'team-dev' } });
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      awsAuthMode: 'profile',
+      awsProfile: 'team-dev',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bedrock API key' }));
+    expect(await screen.findByLabelText('API key')).toBeTruthy();
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      awsAuthMode: 'api_key',
+    });
+  });
+
   it('keeps the cloud sign-in landing stable while AMR detection is still in flight', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),

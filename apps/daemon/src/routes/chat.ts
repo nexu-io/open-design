@@ -252,6 +252,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           apiKey: body.apiKey,
           apiVersion:
             typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+          ...(protocol === 'bedrock' && typeof body.awsProfile === 'string' && body.awsProfile.trim()
+            ? { awsProfile: body.awsProfile.trim() }
+            : {}),
           signal: controller.signal,
           requestInit: proxyDispatcher.requestInit,
         });
@@ -297,7 +300,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
           );
         }
-        const apiKeyRequired = protocol !== 'bedrock';
+        // Bedrock authenticates with either a long-term API key (bearer) or
+        // a named AWS profile; one of the two must be present.
+        const awsProfile =
+          protocol === 'bedrock' && typeof body.awsProfile === 'string'
+            ? body.awsProfile.trim()
+            : '';
+        const apiKeyRequired = protocol !== 'bedrock' || !awsProfile;
         if (
           typeof body.baseUrl !== 'string' ||
           typeof body.apiKey !== 'string' ||
@@ -310,9 +319,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             res,
             400,
             'BAD_REQUEST',
-            apiKeyRequired
-              ? 'baseUrl, apiKey, and model are required'
-              : 'baseUrl and model are required',
+            protocol === 'bedrock'
+              ? 'baseUrl, model, and either apiKey or awsProfile are required'
+              : 'baseUrl, apiKey, and model are required',
           );
         }
         const reasoningDenial = authorizeReasoningEgress({
@@ -331,6 +340,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             model: body.model,
             apiVersion:
               typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+            ...(awsProfile ? { awsProfile } : {}),
+            ...(awsProfile && body.awsSsoLogin === true ? { awsSsoLogin: true } : {}),
             signal: controller.signal,
           });
           return res.json(result);

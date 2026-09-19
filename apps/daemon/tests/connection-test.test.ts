@@ -856,7 +856,10 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.models).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          id: 'global.anthropic.claude-sonnet-5',
+        }),
+        expect.objectContaining({
+          id: 'amazon.nova-lite-v1:0',
         }),
       ]),
     );
@@ -1016,8 +1019,24 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
-  it('reports AWS Bedrock connection tests as unsupported without calling upstream fetch', async () => {
-    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+  it('runs the Bedrock API-key smoke test as a bearer Converse call on the regional inference id', async () => {
+    const fetchMock = passThroughOrUpstream((url, init) => {
+      expect(url).toBe(
+        'https://bedrock-runtime.eu-west-1.amazonaws.com/model/eu.anthropic.claude-sonnet-5/converse',
+      );
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers.authorization).toBe('Bearer ABSKbedrock-key');
+      const body = JSON.parse(String(init?.body)) as {
+        messages: Array<{ role: string; content: Array<{ text: string }> }>;
+        inferenceConfig: { maxTokens: number };
+      };
+      expect(body.messages[0]?.content[0]?.text).toContain('ok');
+      expect(body.inferenceConfig.maxTokens).toBeGreaterThan(0);
+      return jsonResponse({
+        output: { message: { role: 'assistant', content: [{ text: 'ok' }] } },
+        stopReason: 'end_turn',
+      });
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     const res = await realFetch(`${baseUrl}/api/test/connection`, {
@@ -1026,24 +1045,62 @@ describe('POST /api/test/connection provider mode', () => {
       body: JSON.stringify({
         mode: 'provider',
         protocol: 'bedrock',
-        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
-        apiKey: '',
-        model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
+        apiKey: 'ABSKbedrock-key',
+        model: 'anthropic.claude-sonnet-5',
       }),
     });
     const body = (await res.json()) as Record<string, unknown>;
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
-      ok: false,
-      kind: 'unknown',
-      model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      ok: true,
+      kind: 'success',
+      model: 'anthropic.claude-sonnet-5',
+      sample: 'ok',
     });
-    expect(String(body.detail)).toContain('AWS Bedrock BYOK requires AWS credential signing');
-    expect(
-      fetchMock.mock.calls.some(
-        ([input]) => !String(input).startsWith(baseUrl),
+  });
+
+  it('classifies a rejected Bedrock bearer token as auth_failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse(
+          { message: 'The security token included in the request is invalid.' },
+          { status: 403 },
+        ),
       ),
-    ).toBe(false);
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'bedrock',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        apiKey: 'ABSKwrong',
+        model: 'global.anthropic.claude-sonnet-5',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ ok: false, kind: 'auth_failed', status: 403 });
+  });
+
+  it('rejects a Bedrock connection test that has neither an API key nor an AWS profile', async () => {
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'bedrock',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        apiKey: '',
+        model: 'amazon.nova-lite-v1:0',
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: { message?: string } };
+    expect(String(body.error?.message ?? JSON.stringify(body))).toContain('awsProfile');
   });
 
   it('maps a 404 to not_found_model', async () => {

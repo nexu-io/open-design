@@ -3370,15 +3370,16 @@ describe('ProjectView conversation run isolation', () => {
     }));
   });
 
-  it('keeps Bedrock BYOK chats on the client-side unsupported path', async () => {
+  it('routes Bedrock BYOK chats through the daemon OpenCode runtime with the Bedrock API key', async () => {
     listMessages.mockResolvedValue([]);
 
     renderProjectView({
       ...config,
       mode: 'api',
       apiProtocol: 'bedrock',
-      apiKey: '',
-      model: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+      apiKey: 'ABSKbedrock-key',
+      baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
+      model: 'global.anthropic.claude-sonnet-5',
     });
 
     await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
@@ -3386,12 +3387,48 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    await waitFor(() =>
-      expect(screen.getByTestId('chat-error').textContent).toBe(
-        'AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.',
-      ),
-    );
-    expect(streamViaDaemon).not.toHaveBeenCalled();
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      byokProvider: expect.objectContaining({
+        protocol: 'bedrock',
+        apiKey: 'ABSKbedrock-key',
+        baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
+        model: 'global.anthropic.claude-sonnet-5',
+        requiresApiKey: true,
+      }),
+    }));
+    expect(streamViaDaemon.mock.calls[0]?.[0]?.byokProvider?.awsProfile).toBeUndefined();
+  });
+
+  it('forwards the AWS profile and drops the key for Bedrock BYOK chats in profile mode', async () => {
+    listMessages.mockResolvedValue([]);
+
+    renderProjectView({
+      ...config,
+      mode: 'api',
+      apiProtocol: 'bedrock',
+      apiKey: 'stale-bearer',
+      awsAuthMode: 'profile',
+      awsProfile: 'sandbox',
+      baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
+      model: 'amazon.nova-lite-v1:0',
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      byokProvider: expect.objectContaining({
+        protocol: 'bedrock',
+        apiKey: '',
+        awsProfile: 'sandbox',
+        model: 'amazon.nova-lite-v1:0',
+        requiresApiKey: false,
+      }),
+    }));
   });
 
   it('converges a daemon chat back to idle when the first AMR run fails authentication', async () => {

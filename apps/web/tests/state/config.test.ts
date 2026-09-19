@@ -1115,10 +1115,11 @@ describe('loadConfig', () => {
     expect(config.configMigrationVersion).toBe(3);
   });
 
-  it('keeps the parsed config when re-persisting a downgraded protocol fails', () => {
-    // A stored `bedrock` protocol is downgraded on load, which re-persists via
-    // saveConfig(). If that localStorage write throws (quota / private mode),
-    // the valid parsed config must survive rather than being reset to defaults.
+  it('keeps the parsed config when re-persisting a migrated config fails', () => {
+    // A stored config below the current migration version is migrated on load,
+    // which re-persists via saveConfig(). If that localStorage write throws
+    // (quota / private mode), the valid parsed config must survive rather than
+    // being reset to defaults.
     const persisted: Partial<AppConfig> = {
       mode: 'api',
       apiProtocol: 'bedrock',
@@ -1136,10 +1137,11 @@ describe('loadConfig', () => {
     });
     try {
       const config = loadConfig();
-      // the unsupported protocol was still downgraded ...
-      expect(config.apiProtocol).toBe(DEFAULT_CONFIG.apiProtocol);
-      // ... but the rest of the user's config was NOT discarded to defaults
+      // the migration still ran ...
+      expect(config.configMigrationVersion).toBe(3);
+      // ... and the user's config was NOT discarded to defaults
       expect(config.mode).toBe('api');
+      expect(config.apiProtocol).toBe('bedrock');
     } finally {
       setItem.mockRestore();
     }
@@ -1230,7 +1232,7 @@ describe('loadConfig', () => {
     expect(config.apiProtocol).toBe('anthropic');
   });
 
-  it('downgrades legacy Bedrock Runtime configs to the default chat protocol', () => {
+  it('infers the bedrock protocol from a legacy Bedrock Runtime endpoint', () => {
     const legacyConfig: Partial<AppConfig> = {
       mode: 'api',
       apiKey: 'bedrock-secret',
@@ -1245,28 +1247,28 @@ describe('loadConfig', () => {
 
     const config = loadConfig();
 
-    expect(config.apiProtocol).toBe('anthropic');
-    expect(config.apiKey).toBe('');
-    expect(config.apiVersion).toBe('');
-    expect(config.baseUrl).toBe(DEFAULT_CONFIG.baseUrl);
-    expect(config.model).toBe(DEFAULT_CONFIG.model);
-    expect(config.apiProviderBaseUrl).toBe(DEFAULT_CONFIG.apiProviderBaseUrl);
+    expect(config.apiProtocol).toBe('bedrock');
+    expect(config.apiKey).toBe('bedrock-secret');
+    expect(config.baseUrl).toBe('https://bedrock-runtime.us-east-1.amazonaws.com');
+    expect(config.model).toBe('anthropic.claude-3-5-sonnet-20241022-v2:0');
   });
 
-  it('downgrades explicitly persisted Bedrock configs to the default chat protocol', () => {
+  it('keeps explicitly persisted Bedrock configs, including the AWS profile auth mode', () => {
     const savedConfig: Partial<AppConfig> = {
       mode: 'api',
       apiProtocol: 'bedrock',
-      apiKey: 'bedrock-secret',
-      apiVersion: 'bedrock-2023-05-31',
-      baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+      apiKey: '',
+      awsAuthMode: 'profile',
+      awsProfile: 'sandbox',
+      baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
       model: 'amazon.nova-lite-v1:0',
-      configMigrationVersion: 1,
+      configMigrationVersion: 3,
       apiProtocolConfigs: {
         bedrock: {
-          apiKey: 'nested-bedrock-secret',
-          apiVersion: 'bedrock-2023-05-31',
-          baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+          apiKey: '',
+          awsAuthMode: 'profile',
+          awsProfile: 'sandbox',
+          baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
           model: 'amazon.nova-lite-v1:0',
         },
         openai: {
@@ -1283,28 +1285,16 @@ describe('loadConfig', () => {
 
     const config = loadConfig();
 
-    expect(config.apiProtocol).toBe('anthropic');
-    expect(config.apiKey).toBe('');
-    expect(config.apiVersion).toBe('');
-    expect(config.baseUrl).toBe(DEFAULT_CONFIG.baseUrl);
-    expect(config.model).toBe(DEFAULT_CONFIG.model);
-    expect(config.apiProviderBaseUrl).toBe(DEFAULT_CONFIG.apiProviderBaseUrl);
-    expect(config.apiProtocolConfigs?.bedrock).toBeUndefined();
-    expect(config.apiProtocolConfigs?.openai).toEqual({
-      apiKey: 'sk-openai',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+    expect(config.apiProtocol).toBe('bedrock');
+    expect(config.awsAuthMode).toBe('profile');
+    expect(config.awsProfile).toBe('sandbox');
+    expect(config.baseUrl).toBe('https://bedrock-runtime.eu-west-1.amazonaws.com');
+    expect(config.model).toBe('amazon.nova-lite-v1:0');
+    expect(config.apiProtocolConfigs?.bedrock).toMatchObject({
+      awsAuthMode: 'profile',
+      awsProfile: 'sandbox',
     });
-
-    const persisted = JSON.parse(
-      store.get('open-design:config') ?? '{}',
-    ) as Partial<AppConfig>;
-    expect(persisted.apiProtocol).toBe('anthropic');
-    expect(persisted.apiKey).toBe('');
-    expect(persisted.apiVersion).toBe('');
-    expect(persisted.baseUrl).toBe(DEFAULT_CONFIG.baseUrl);
-    expect(persisted.apiProtocolConfigs?.bedrock).toBeUndefined();
-    expect(persisted.apiProtocolConfigs?.openai).toEqual({
+    expect(config.apiProtocolConfigs?.openai).toEqual({
       apiKey: 'sk-openai',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o',

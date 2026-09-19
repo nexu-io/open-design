@@ -315,6 +315,99 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('classifies Bedrock "does not support the document field" as a switch-model capability failure', () => {
+    const message =
+      "undefined: This model doesn't support the document field for user messages. Remove document and try again.";
+
+    expect(
+      classifyForAgent(
+        'byok-opencode',
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'model_document_unsupported',
+      failure_stage: 'model_select',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+  });
+
+  it('classifies Bedrock "doesn\'t support the image content block" as a switch-model failure', () => {
+    // Measured on bedrock-runtime Converse with Nova Micro, Qwen3 and DeepSeek R1
+    // (2026-09-15) when the read tool returns an image to a text-only model.
+    const message =
+      "undefined: This model doesn't support the image content block that you provided. Update the content block and try again.";
+
+    expect(
+      classifyForAgent(
+        'byok-opencode',
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'model_not_supported',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+  });
+
+  it('classifies Bedrock "doesn\'t support tool use in streaming mode" as a switch-model failure', () => {
+    // Measured on bedrock-runtime with Llama 3.3 70B under OpenCode (2026-09-15).
+    const message = "undefined: This model doesn't support tool use in streaming mode.";
+
+    expect(
+      classifyForAgent(
+        'byok-opencode',
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'model_not_supported',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+  });
+
+  it('classifies the current Bedrock wording "This model doesn\'t support documents." the same way', () => {
+    // Measured on bedrock-runtime Converse with Nova Micro, Qwen3 and DeepSeek V3
+    // (2026-09-15); the older "document field" wording is kept above.
+    const message = "undefined: This model doesn't support documents.";
+
+    expect(
+      classifyForAgent(
+        'byok-opencode',
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'model_document_unsupported',
+      failure_stage: 'model_select',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+  });
+
   it('classifies provider "Unsupported model" responses before stream-close fallback', () => {
     const message = [
       'Bad Request: {',
