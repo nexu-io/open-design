@@ -657,6 +657,28 @@ function localBlockedTurnVerdictUnknownToServer(
   return { runStatus: local.runStatus, errorEvent };
 }
 
+/** Keep a live thinking suffix when an older snapshot has the same event count. */
+function localThinkingExtendsServerSnapshot(server: ChatMessage, local: ChatMessage): boolean {
+  if (!server.runId || server.runId !== local.runId || !isActiveRunStatus(server.runStatus)) {
+    return false;
+  }
+  const serverEvents = server.events ?? [];
+  const localEvents = local.events ?? [];
+  if (serverEvents.length === 0 || serverEvents.length !== localEvents.length) return false;
+  const lastIndex = serverEvents.length - 1;
+  const serverTail = serverEvents[lastIndex];
+  const localTail = localEvents[lastIndex];
+  if (
+    serverTail?.kind !== 'thinking'
+    || localTail?.kind !== 'thinking'
+    || localTail.text.length <= serverTail.text.length
+    || !localTail.text.startsWith(serverTail.text)
+  ) return false;
+  return serverEvents.slice(0, lastIndex).every((event, index) =>
+    JSON.stringify(event) === JSON.stringify(localEvents[index]),
+  );
+}
+
 function mergeServerMessageWithLocal(
   server: ChatMessage,
   local?: ChatMessage,
@@ -669,7 +691,10 @@ function mergeServerMessageWithLocal(
     if ((local.content?.length ?? 0) > (server.content?.length ?? 0)) {
       merged.content = local.content;
     }
-    if ((local.events?.length ?? 0) > (server.events?.length ?? 0)) {
+    if (
+      (local.events?.length ?? 0) > (server.events?.length ?? 0)
+      || localThinkingExtendsServerSnapshot(server, local)
+    ) {
       merged.events = local.events;
     }
   }
