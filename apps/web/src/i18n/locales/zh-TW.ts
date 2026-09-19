@@ -3042,6 +3042,9 @@ export const zhTW: Dict = {
   "workspace.newTerminal": "新增終端機",
   "workspace.newTerminalDescription": "在新分頁中開啟專案目錄的終端機",
   "workspace.newBrowser": "新增瀏覽器",
+  "workspace.newCanvas": "新增畫布",
+  "workspace.newCanvasDescription": "在自由畫布上擺放多個 artifact，並排比較",
+  "workspace.canvasAddArtifact": "新增 artifact",
   "workspace.newBrowserDescription":
     "在新分頁中開啟內建瀏覽器，用於參考網站與設計研究",
   "workspace.newSketchDescription": "繪製粗略版面與標註，作為 agent 的設計脈絡",

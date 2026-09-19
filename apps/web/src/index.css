@@ -17,6 +17,7 @@
 @import './styles/workspace/drawer.css';
 @import './styles/workspace/design-files.css';
 @import './styles/workspace/design-browser.css';
+@import './styles/workspace/canvas.css';
 @import './styles/viewer/core.css';
 @import './styles/viewer/code.css';
 @import './styles/viewer/tools.css';
