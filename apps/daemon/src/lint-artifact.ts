@@ -114,7 +114,7 @@ const DISPLAY_SANS_RE =
  * findings. The checks are intentionally independent so adding a new
  * one only means appending to this function.
  *
- * @param {string} html
+ * @param {unknown} rawHtml
  * @returns {LintFinding[]}
  */
 export function lintArtifact(rawHtml: unknown): LintFinding[] {
