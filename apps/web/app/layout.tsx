@@ -15,6 +15,10 @@ import '../src/components/AnimatedNumberInput.module.css';
 import '../src/components/AnimateDigits.module.css';
 import '../src/components/ExportFilenameField.module.css';
 import '../src/components/FileViewerPresentationTools.module.css';
+import '../src/components/DesignSystemsTab.module.css';
+import '../src/components/DesignSystemDetailTabs.module.css';
+import '../src/components/DesignSystemTheme.module.css';
+import '../src/components/DesignSystemFoundations.module.css';
 
 export const metadata: Metadata = {
   title: 'Open Design',

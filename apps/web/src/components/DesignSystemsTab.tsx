@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { Button, VisuallyHidden } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
@@ -44,17 +44,19 @@ import {
   deleteDesignSystemDraft,
   DesignSystemDeleteError,
   fetchDesignSystem,
-  fetchProjectFileText,
-  projectRawUrl,
   updateDesignSystemDraft,
 } from '../providers/registry';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
 import { useDesignKit } from '../runtime/design-kit';
-import { DesignKitView, HeaderActionsMenu, type DesignKitActionFeedbackTone, type HeaderMenuAction } from './DesignKitView';
+import { HeaderActionsMenu, type DesignKitActionFeedbackTone, type HeaderMenuAction } from './DesignKitView';
 import { designSystemLogoHost, isUserSystem } from './design-system-metadata';
 import { Icon } from './Icon';
+import { CustomSelect } from './CustomSelect';
+import { DesignSystemGalleryCard } from './DesignSystemGalleryCard';
+import { DesignSystemGalleryRail } from './DesignSystemGalleryRail';
+import { DesignSystemDetailTabs } from './DesignSystemDetailTabs';
 import { Toast } from './Toast';
-import type { DesignSystemDetail, DesignSystemSummary, ProjectTemplate, Surface } from '../types';
+import type { DesignSystemDetail, DesignSystemSummary, ProjectTemplate } from '../types';
 import styles from './DesignSystemsTab.module.css';
 import { workspaceAnalyticsDimensions } from '../analytics/workspace';
 import type { TrackingWorkspaceScope } from '@open-design/contracts/analytics';
@@ -87,23 +89,12 @@ const CATEGORY_ORDER = [
   'Automotive',
 ];
 
-type SurfaceFilter = 'all' | Surface;
-type DesignSystemCollection = 'mine' | 'team' | 'official' | 'enterprise';
+type DesignSystemCollection = 'mine' | 'team' | 'official';
 const EMPTY_TEAM_SHARED_IDS: ReadonlySet<string> = new Set();
 const EMPTY_TEAM_SHARED_META: ReadonlyMap<string, { canUnshare?: boolean }> = new Map();
 type DesignSystemActionKind = 'edit' | 'publish' | 'default' | 'delete';
 
-const SURFACE_PILLS: { value: SurfaceFilter; labelKey: 'examples.modeAll' | 'ds.surfaceWeb' | 'ds.surfaceImage' | 'ds.surfaceVideo' | 'ds.surfaceAudio' }[] = [
-  { value: 'all', labelKey: 'examples.modeAll' },
-  { value: 'web', labelKey: 'ds.surfaceWeb' },
-  { value: 'image', labelKey: 'ds.surfaceImage' },
-  { value: 'video', labelKey: 'ds.surfaceVideo' },
-  { value: 'audio', labelKey: 'ds.surfaceAudio' },
-];
 
-function surfaceOf(system: DesignSystemSummary): Surface {
-  return system.surface ?? 'web';
-}
 
 // `system.status` is the DesignSystemSummary status string from the
 // daemon; map it onto the tracking enum used by
@@ -210,10 +201,6 @@ export function DesignSystemsTab({
       : t('common.loading');
     notifyAction('loading', message);
   };
-  const [designSystemCollection, setDesignSystemCollection] = useState<DesignSystemCollection>('mine');
-  // The 团队 collection is a team-workspace surface (B's resource plane is
-  // team-only): signed-out / personal-workspace users get no team tab, and a
-  // sign-out while on it falls back to 你的体系 (#5517 signed-out form).
   const workspaceState = useWorkspaceContext();
   const { context: workspaceContext } = workspaceState;
   const resourceReadIdentity = resolveWorkspaceResourceReadIdentity(workspaceState);
@@ -232,11 +219,8 @@ export function DesignSystemsTab({
   // yet resolved) still has a real team resource plane with shared design
   // systems; gating on the plan hid the collection from those teams even though
   // the daemon serves and shares their resources. Personal / signed-out sessions
-  // have no team plane and correctly get no team tab.
+  // have no team plane and correctly get no team section.
   const hasTeamWorkspace = workspaceContextHasTeamIdentity(workspaceContext);
-  useEffect(() => {
-    if (designSystemCollection === 'team' && !hasTeamWorkspace) setDesignSystemCollection('mine');
-  }, [designSystemCollection, hasTeamWorkspace]);
   // Ids of the caller's design systems shared into the team scope. The daemon is
   // the source of truth (it publishes them to the resource hub); we mirror the
   // list here so the "team" collection and the per-system share action stay in
@@ -251,6 +235,7 @@ export function DesignSystemsTab({
     meta: new Map(),
   }));
   const teamSharedRequestGenerationRef = useRef(0);
+  const [teamSharedResolvedIdentity, setTeamSharedResolvedIdentity] = useState<string | null>(null);
   // Never render a previous Workspace's Team index while the next scoped read
   // is still in flight. The cached response is partitioned by Workspace too,
   // but React state survives the context switch itself.
@@ -272,11 +257,36 @@ export function DesignSystemsTab({
         : 'official';
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [unsharingId, setUnsharingId] = useState<string | null>(null);
-  const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [category, setCategory] = useState<string>('All');
-  // The master-detail selection — which row renders in the right preview pane.
-  // Distinct from `selectedId`, which is the global *default* design system.
+  // Details open only on an explicit card/deep-link action. selectedId is the
+  // global default system and does not control gallery navigation.
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const galleryRef = useRef<HTMLDivElement | null>(null);
+  const detailBackRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocusId = useRef<string | null>(null);
+  const galleryScrollTopRef = useRef(0);
+  const previewWorkspaceRef = useRef(workspaceIdentity);
+  useEffect(() => {
+    if (previewWorkspaceRef.current === workspaceIdentity) return;
+    previewWorkspaceRef.current = workspaceIdentity;
+    returnFocusId.current = null;
+    galleryScrollTopRef.current = 0;
+    setPreviewId(null);
+  }, [workspaceIdentity]);
+  useEffect(() => {
+    if (previewId) {
+      const scrollPane = galleryRef.current?.closest<HTMLElement>('.entry-main--scroll');
+      if (scrollPane) scrollPane.scrollTop = 0;
+      detailBackRef.current?.focus({ preventScroll: true });
+    } else if (returnFocusId.current) {
+      const scrollPane = galleryRef.current?.closest<HTMLElement>('.entry-main--scroll');
+      if (scrollPane) scrollPane.scrollTop = galleryScrollTopRef.current;
+      const card = Array.from(galleryRef.current?.querySelectorAll<HTMLButtonElement>('[data-system-id]') ?? [])
+        .find((node) => node.dataset.systemId === returnFocusId.current);
+      card?.focus({ preventScroll: true });
+      returnFocusId.current = null;
+    }
+  }, [previewId]);
   // A one-shot design-system id another surface asked us to preselect (e.g. the
   // brand-extraction "ready" prompt navigating here). Read+cleared from
   // sessionStorage exactly once; applied by the effect below once the system
@@ -316,47 +326,32 @@ export function DesignSystemsTab({
     [teamSystems, locale, q],
   );
 
-  const surfaceScoped = useMemo(
-    () => surfaceFilter === 'all'
-      ? librarySystems
-      : librarySystems.filter((s) => surfaceOf(s) === surfaceFilter),
-    [librarySystems, surfaceFilter],
-  );
-
-  // Total systems per surface, ignoring every active filter. Drives the
-  // "this surface is now empty" fallback below — that guard must react to
-  // the catalog itself, not to a transient style/search filter.
-  const surfaceTotals = useMemo(() => {
-    const counts: Record<SurfaceFilter, number> = { all: librarySystems.length, web: 0, image: 0, video: 0, audio: 0 };
-    for (const s of librarySystems) counts[surfaceOf(s)]++;
-    return counts;
-  }, [librarySystems]);
-
   const categories = useMemo(() => {
     const cats = new Set<string>();
-    for (const s of surfaceScoped) cats.add(s.category || 'Uncategorized');
+    for (const s of librarySystems) cats.add(s.category || 'Uncategorized');
     const ordered: string[] = [];
     for (const c of CATEGORY_ORDER) if (cats.has(c)) ordered.push(c);
     for (const c of [...cats].sort()) if (!ordered.includes(c)) ordered.push(c);
     return ['All', ...ordered];
-  }, [surfaceScoped]);
+  }, [librarySystems]);
 
-  // Keep surfaceFilter and category in sync when systems changes dynamically.
-  // If the currently selected surface has zero items, fall back to 'all'.
-  // If the current category is no longer present in the filtered list, fall back to 'All'.
-  useEffect(() => {
-    if (surfaceFilter !== 'all' && surfaceTotals[surfaceFilter] === 0) {
-      setSurfaceFilter('all');
-      setCategory('All');
-    } else if (category !== 'All' && !categories.includes(category)) {
-      setCategory('All');
+  // Each category reports the results it would show under the current search, without restricting the counts to the selected category.
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>([['All', 0]]);
+    for (const system of librarySystems) {
+      if (!systemMatchesQuery(locale, system, q)) continue;
+      const key = system.category || 'Uncategorized';
+      counts.set('All', (counts.get('All') ?? 0) + 1);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
-  }, [systems, surfaceFilter, surfaceTotals, category, categories]);
+    return counts;
+  }, [librarySystems, locale, q]);
 
-  // Systems matching the active style category and search text, before the
-  // surface filter is applied. Both the surface pill counts and the visible
-  // list derive from this so a surface chip always reports its own result
-  // set rather than the unfiltered catalog total.
+  // Reset a category only when it disappears from the catalog.
+  useEffect(() => {
+    if (category !== 'All' && !categories.includes(category)) setCategory('All');
+  }, [category, categories]);
+
   const queryScoped = useMemo(() => {
     return librarySystems.filter((s) => {
       if (category !== 'All' && (s.category || 'Uncategorized') !== category) return false;
@@ -364,58 +359,41 @@ export function DesignSystemsTab({
     });
   }, [librarySystems, q, category, locale]);
 
-  const surfaceCounts = useMemo(() => {
-    const counts: Record<SurfaceFilter, number> = {
-      all: queryScoped.length, web: 0, image: 0, video: 0, audio: 0,
-    };
-    for (const s of queryScoped) counts[surfaceOf(s)]++;
-    return counts;
-  }, [queryScoped]);
+  const filtered = queryScoped;
 
-  const filtered = useMemo(
-    () => surfaceFilter === 'all'
-      ? queryScoped
-      : queryScoped.filter((s) => surfaceOf(s) === surfaceFilter),
-    [queryScoped, surfaceFilter],
-  );
-
-  // The list backing the active scope. Design-system scopes carry summaries;
-  const activeSystems = useMemo<DesignSystemSummary[]>(() => {
-    if (designSystemCollection === 'mine') return userSearched;
-    if (designSystemCollection === 'team') return teamSearched;
-    if (designSystemCollection === 'official') return filtered;
-    return [];
-  }, [designSystemCollection, userSearched, teamSearched, filtered]);
+  // Details resolve only against the visible, authorized sections. A shared
+  // system can move between personal and team without closing its open detail.
+  const activeSystems = useMemo<DesignSystemSummary[]>(() => [
+    ...filtered,
+    ...userSearched,
+    ...(hasTeamWorkspace ? teamSearched : []),
+  ], [filtered, userSearched, hasTeamWorkspace, teamSearched]);
 
   const activeIds = useMemo(() => {
     return activeSystems.map((s) => s.id);
   }, [activeSystems]);
 
-  // Keep the previewed row valid as scopes / filters change: hold the current
-  // pick when it still exists, otherwise fall back to the first row (mirrors
-  // the Brand Kit master-detail). Empty scopes clear the selection.
+  // A removed/filtered system returns to the gallery without opening a neighbor.
   useEffect(() => {
-    if (activeIds.length === 0) {
-      setPreviewId(null);
-      return;
-    }
-    setPreviewId((cur) => (cur && activeIds.includes(cur) ? cur : activeIds[0] ?? null));
+    setPreviewId((cur) => (cur && activeIds.includes(cur) ? cur : null));
   }, [activeIds]);
 
   // Apply a pending focus once the requested system is present in the catalog.
   // Runs again whenever `systems` changes, so a focus that arrived before the
   // freshly-finalized brand design system loaded still lands after the refresh.
-  // Brand systems are user systems, so make sure the "mine" scope is active.
   useEffect(() => {
     if (!pendingFocus) return;
     const sys = systems.find((s) => s.id === pendingFocus);
     if (!sys) return; // not in the loaded list yet — wait for the next refresh
-    if (isUserSystem(sys)) {
-      setDesignSystemCollection(teamSharedIds.has(sys.id) ? 'team' : 'mine');
-    }
+    // Team membership arrives independently of the catalog. Wait before
+    // consuming the deep link so a shared system cannot land in "mine".
+    if (hasTeamWorkspace && isUserSystem(sys) && teamSharedResolvedIdentity !== workspaceIdentity) return;
+    if (sys.teamSynced && !teamSharedIds.has(sys.id)) return;
+    setFilter('');
+    setCategory('All');
     setPreviewId(pendingFocus);
     setPendingFocus(null);
-  }, [pendingFocus, systems, teamSharedIds]);
+  }, [pendingFocus, systems, teamSharedIds, hasTeamWorkspace, teamSharedResolvedIdentity, workspaceIdentity]);
 
   const selectedSystem = useMemo(() => {
     if (!previewId) return null;
@@ -503,6 +481,7 @@ export function DesignSystemsTab({
             ? prev
             : { workspaceIdentity: scopedWorkspaceIdentity, ids: next, meta }
         ));
+        setTeamSharedResolvedIdentity(scopedWorkspaceIdentity);
         if (shouldRefreshSystems) {
           // `/team` has already materialized this exact Workspace snapshot.
           // Pass its ids through so the parent catalog refresh does not repeat
@@ -896,21 +875,19 @@ export function DesignSystemsTab({
   }
 
   function handleSelectSystem(system: DesignSystemSummary): void {
+    returnFocusId.current = system.id;
+    galleryScrollTopRef.current = galleryRef.current?.closest<HTMLElement>('.entry-main--scroll')?.scrollTop ?? 0;
     setPreviewId(system.id);
     trackCardClick(system);
   }
 
-  const scopeTabs = [
-    { value: 'mine' as const, label: t('dsManager.yourSystems'), count: userSearched.length },
+  const gallerySections = [
+    { value: 'official' as const, label: t('dsManager.officialPresets'), systems: filtered },
+    { value: 'mine' as const, label: t('dsManager.yourSystems'), systems: userSearched },
     ...(hasTeamWorkspace
-      ? [{ value: 'team' as const, label: t('pluginsView.tab.team'), count: teamSearched.length }]
+      ? [{ value: 'team' as const, label: t('pluginsView.tab.team'), systems: teamSearched }]
       : []),
-    // #5517 ships three scopes only. The enterprise placeholder tab advertised a
-    // surface that does not exist yet, so it leaves the row.
-    { value: 'official' as const, label: t('dsManager.officialPresets'), count: queryScoped.length },
   ];
-
-  const showPresetFilters = designSystemCollection === 'official';
 
   if (loading) {
     return (
@@ -934,39 +911,14 @@ export function DesignSystemsTab({
         aria-busy="true"
       >
         <VisuallyHidden role="status">{t('designSystemPicker.loading')}</VisuallyHidden>
-        <aside className={styles.sidebar} data-testid="design-systems-sidebar-skeleton">
-          <div className={styles.scopes} aria-hidden>
-            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChipWide}`} />
-            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChip}`} />
-            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChipWide}`} />
-          </div>
-
-          <div className={styles.list} data-testid="design-systems-list" aria-hidden>
-            {Array.from({ length: 7 }, (_, index) => (
-              <div
-                key={index}
-                className={`${styles.item} ${index === 0 ? styles.skeletonRowActive : styles.skeletonRow}`}
-                data-testid={`design-systems-loading-row-${index}`}
-              >
-                <span className={styles.itemThumb}>
-                  <SkeletonBlock className={styles.skeletonThumb} />
-                </span>
-                <span className={styles.itemMeta}>
-                  <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonLineTitle}`} />
-                  <SkeletonBlock className={`${styles.skeletonLine} ${index % 3 === 0 ? styles.skeletonLineShort : styles.skeletonLineMedium}`} />
-                </span>
-                <SkeletonBlock className={styles.skeletonStatusDot} />
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        <section className={styles.preview} data-testid="design-systems-preview">
-          <DesignSystemDetailSkeleton
-            label={t('designSystemPicker.loadingPreview')}
-            dataTestId="design-systems-preview-skeleton"
-          />
-        </section>
+        <div className={styles.galleryRail} data-testid="design-systems-gallery-skeleton" aria-hidden>
+          {Array.from({ length: 4 }, (_, index) => (
+            <div className={styles.galleryCard} key={index} data-testid={`design-systems-loading-row-${index}`}>
+              <SkeletonBlock className={styles.galleryCoverSkeleton} />
+              <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonLineTitle}`} />
+            </div>
+          ))}
+        </div>
       </div>
       </>
     );
@@ -991,193 +943,153 @@ export function DesignSystemsTab({
           />
         </div>
       ) : null}
-      {/* #5517 page header: title left, create action right — the create
-          button leaves the sidebar so the list column starts at the tabs. */}
-      <header className={styles.pageHeader} data-testid="design-systems-page-header">
-        <div className={styles.pageTitleBlock}>
-          <h1 className={styles.pageTitle}>{t('entry.navDesignSystems')}</h1>
-        </div>
-        <div className={styles.headerTools} data-testid="design-systems-header-tools">
-          {onCreate ? (
-            <Button
-              variant="primary"
-              className={`${styles.newBtn} ${styles.headerCreate}`}
-              onClick={() => {
-                trackDesignSystemsTopClick(analytics.track, {
-                  page_name: 'design_systems',
-                  area: 'design_systems',
-                  element: 'create',
-                  resource_scope: 'personal',
-                });
-                onCreate();
-              }}
-              data-testid="design-systems-create"
-            >
-              <Icon name="plus" />
-              {t('dsManager.createAction')}
-            </Button>
-          ) : null}
-        </div>
-      </header>
-      <div className="ds-top-scopes" role="tablist" aria-label={t('dsManager.sourceAria')}>
-        {scopeTabs.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            aria-selected={designSystemCollection === tab.value}
-            className={`ds-top-scope-chip${designSystemCollection === tab.value ? ' is-active' : ''}`}
-            onClick={() => setDesignSystemCollection(tab.value)}
-          >
-            <span>{tab.label}</span>
-            <span className="ds-top-scope-count" aria-hidden>{tab.count}</span>
-          </button>
-        ))}
-        <div
-          className={`${styles.searchWrap} ${styles.headerSearch}${searchExpanded || filter ? ` ${styles.headerSearchOpen}` : ''} ds-top-scopes__search`}
-          data-testid="design-systems-header-search"
-          onBlur={(event) => {
-            if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-            if (!filter) setSearchExpanded(false);
-          }}
-        >
-          <button
-            type="button"
-            className={styles.searchToggle}
-            aria-label={t('ds.searchPlaceholder')}
-            onClick={() => {
-              setSearchExpanded(true);
-              requestAnimationFrame(() => searchInputRef.current?.focus());
-            }}
-          >
-            <SearchGlyph />
-          </button>
-          <input
-            ref={searchInputRef}
-            type="search"
-            data-testid="design-systems-search"
-            className={styles.search}
-            tabIndex={searchExpanded || filter ? 0 : -1}
-            placeholder={t('ds.searchPlaceholder')}
-            value={filter}
-            onFocus={() => {
-              setSearchExpanded(true);
-              if (searchTrackedRef.current) return;
-              searchTrackedRef.current = true;
-              trackDesignSystemsTopClick(analytics.track, {
-                page_name: 'design_systems',
-                area: 'design_systems',
-                element: 'search_input',
-              });
-            }}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-        </div>
-      </div>
-      <div className={styles.root} data-testid="design-systems-tab">
-      <aside className={styles.sidebar}>
-        {showPresetFilters ? (
-          <div className={styles.presetFilters}>
-            <div className={styles.surfaceRow} role="tablist" aria-label={t('ds.surfaceLabel')}>
-              {/* Hide chips with no items in the active style/search filter, but
-                  always keep "all" and the currently selected surface — otherwise a
-                  transient search could remove the active chip and leave the list
-                  filtered with no chip showing aria-selected. */}
-              {SURFACE_PILLS.filter(
-                (p) => p.value === surfaceFilter || p.value === 'all' || surfaceCounts[p.value] > 0,
-              ).map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  role="tab"
-                  aria-selected={surfaceFilter === p.value}
-                  data-testid={`design-systems-surface-${p.value}`}
-                  className={`${styles.surfacePill} ${surfaceFilter === p.value ? styles.surfacePillActive : ''}`}
-                  onClick={() => {
-                    trackDesignSystemsTopClick(analytics.track, {
-                      page_name: 'design_systems',
-                      area: 'design_systems',
-                      element: 'filter_chip',
-                      filter_name: p.value,
-                    });
-                    setSurfaceFilter(p.value);
-                  }}
-                >
-                  {t(p.labelKey)}
-                  <span className={`filter-pill-count ${styles.surfaceCount}`}>{surfaceCounts[p.value]}</span>
-                </button>
-              ))}
-            </div>
-            <select
-              data-testid="design-systems-category-select"
-              className={styles.categorySelect}
-              value={category}
-              onFocus={() => {
-                if (categoryTrackedRef.current) return;
-                categoryTrackedRef.current = true;
-                trackDesignSystemsTopClick(analytics.track, {
-                  page_name: 'design_systems',
-                  area: 'design_systems',
-                  element: 'search_dropdown',
-                });
-              }}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {renderCategory(c)}
-                </option>
-              ))}
-            </select>
+      {/* The official catalog leads, followed by personal and team sections. */}
+      {!selectedSystem ? (
+        <header className={styles.pageHeader} data-testid="design-systems-page-header">
+          <div className={styles.pageTitleBlock}>
+            <h1 className={styles.pageTitle}>{t('entry.navDesignSystems')}</h1>
           </div>
-        ) : null}
-
-        <div className={styles.list} data-testid="design-systems-list">
-          {renderSidebarList()}
+          <div className={styles.headerTools} data-testid="design-systems-header-tools">
+            {onCreate ? (
+              <Button
+                variant="primary"
+                className={`${styles.newBtn} ${styles.headerCreate}`}
+                onClick={() => {
+                  trackDesignSystemsTopClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'design_systems',
+                    element: 'create',
+                    resource_scope: 'personal',
+                  });
+                  onCreate();
+                }}
+                data-testid="design-systems-create"
+              >
+                {t('dsManager.createAction')}
+              </Button>
+            ) : null}
+          </div>
+        </header>
+      ) : null}
+      <div className={styles.root} data-testid="design-systems-tab"
+        data-detail-active={Boolean(isActive && selectedSystem)}>
+        <div ref={galleryRef} className={styles.gallery} hidden={Boolean(selectedSystem)}>
+          {gallerySections.map((section) => (
+            <section key={section.value} className={styles.catalogSection}
+              aria-label={section.label} data-testid={`design-systems-section-${section.value}`}>
+              <div className={styles.galleryHeader}>
+                <h2 className={styles.galleryTitle}>
+                  {section.label}
+                  {section.value !== 'official' ? (
+                    <span className={styles.galleryCount} aria-hidden>{section.systems.length}</span>
+                  ) : null}
+                </h2>
+                {section.value === 'official' ? (
+                  <div className={styles.presetFilters}>
+                    <div
+                      className={`${styles.searchWrap} ${styles.headerSearch}${searchExpanded || filter ? ` ${styles.headerSearchOpen}` : ''}`}
+                      data-testid="design-systems-header-search"
+                      onBlur={(event) => {
+                        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+                        if (!filter) setSearchExpanded(false);
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className={styles.searchToggle}
+                        aria-label={t('ds.searchPlaceholder')}
+                        onClick={() => {
+                          setSearchExpanded(true);
+                          requestAnimationFrame(() => searchInputRef.current?.focus());
+                        }}
+                      >
+                        <SearchGlyph />
+                      </button>
+                      <input
+                        ref={searchInputRef}
+                        type="search"
+                        data-testid="design-systems-search"
+                        className={styles.search}
+                        tabIndex={searchExpanded || filter ? 0 : -1}
+                        placeholder={t('ds.searchPlaceholder')}
+                        value={filter}
+                        onFocus={() => {
+                          setSearchExpanded(true);
+                          if (searchTrackedRef.current) return;
+                          searchTrackedRef.current = true;
+                          trackDesignSystemsTopClick(analytics.track, {
+                            page_name: 'design_systems',
+                            area: 'design_systems',
+                            element: 'search_input',
+                          });
+                        }}
+                        onChange={(e) => setFilter(e.target.value)}
+                      />
+                    </div>
+                    <CustomSelect
+                      className={styles.categoryMenuWrap}
+                      triggerClassName={styles.categorySelect}
+                      menuClassName={styles.categoryMenu}
+                      menuMinWidth={180}
+                      ariaLabel={t('settings.designSystemsCategory')}
+                      value={category}
+                      options={categories.map((c) => ({
+                        value: c, label: `${renderCategory(c)} ${categoryCounts.get(c) ?? 0}`,
+                      }))}
+                      onFocus={() => {
+                        if (categoryTrackedRef.current) return;
+                        categoryTrackedRef.current = true;
+                        trackDesignSystemsTopClick(analytics.track, {
+                          page_name: 'design_systems',
+                          area: 'design_systems',
+                          element: 'search_dropdown',
+                        });
+                      }}
+                      onChange={setCategory}
+                    />
+                  </div>
+                ) : null}
+              </div>
+              {section.value === 'mine' ? (
+                <div className={styles.personalGrid} data-testid="design-systems-list">
+                  {renderGallery(section.systems, section.value)}
+                </div>
+              ) : (
+                <DesignSystemGalleryRail enabled={isActive && !selectedSystem}>
+                  {renderGallery(section.systems, section.value)}
+                </DesignSystemGalleryRail>
+              )}
+            </section>
+          ))}
         </div>
-      </aside>
 
-      <section className={styles.preview} data-testid="design-systems-preview">
-        {renderPreview()}
-      </section>
+        {selectedSystem ? (
+          <section className={styles.preview} data-testid="design-systems-preview">
+            {renderPreview()}
+          </section>
+        ) : null}
       </div>
     </>
   );
 
-  function renderSidebarList() {
-    if (designSystemCollection === 'enterprise') {
+  function renderGallery(items: DesignSystemSummary[], collection: DesignSystemCollection) {
+    if (items.length === 0) {
+      const emptyText = collection === 'official' || q
+        ? t('ds.emptyNoMatch')
+        : collection === 'mine' ? t('dsManager.emptyMine') : t('ds.detailEmpty');
       return (
-        <div className={styles.sidebarEmpty}>
-          <p className={styles.sidebarEmptyText}>{t('dsManager.enterpriseDsBody')}</p>
+        <div className={styles.sidebarEmpty}
+          data-testid={collection === 'official' ? 'design-systems-empty' : undefined}>
+          <p className={styles.sidebarEmptyText}>{emptyText}</p>
         </div>
       );
     }
-    if (activeSystems.length === 0) {
-      // `.root`'s grid always reserves a fixed 304px sidebar column (see
-      // DesignSystemsTab.module.css) whether or not this list has content. An
-      // empty `null` here leaves that column visibly blank, which reads as the
-      // detail pane's centered empty-state card sitting off-axis rather than
-      // page-centered. A short placeholder message gives the column real
-      // content so the two-pane split still looks intentional.
-      if (designSystemCollection === 'official') {
-        return (
-          <div className={styles.sidebarEmpty} data-testid="design-systems-empty">
-            <p className={styles.sidebarEmptyText}>{t('ds.emptyNoMatch')}</p>
-          </div>
-        );
-      }
-      return (
-        <div className={styles.sidebarEmpty}>
-          <p className={styles.sidebarEmptyText}>{t('dsManager.emptyMine')}</p>
-        </div>
-      );
-    }
-    return activeSystems.map((system) => (
-      <SystemRow
+    return items.map((system) => (
+      <DesignSystemGalleryCard
         key={system.id}
         system={system}
         resourceReadIdentity={resourceReadIdentity}
-        active={system.id === previewId}
+        enabled={isActive && !selectedSystem}
         isDefault={system.id === selectedId}
         subtitle={
           // User systems: prefer the scenario (summary), then the source link
@@ -1191,63 +1103,40 @@ export function DesignSystemsTab({
         }
         statusLabel={(system.status ?? 'draft') === 'published' ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}
         onSelect={() => handleSelectSystem(system)}
+        onMakeDefault={() => void handleMakeDefaultClick(system)}
+        busy={Boolean(busyAction)}
       />
     ));
   }
 
   function renderPreview() {
-    if (designSystemCollection === 'enterprise') {
-      return (
-        <ComingSoon
-          title={t('dsManager.enterpriseDsTitle')}
-          body={t('dsManager.enterpriseDsBody')}
-          comingSoonLabel={t('dsManager.comingSoonBadge')}
-        />
-      );
-    }
-
-    if (selectedSystem) {
-      return (
-        <DesignSystemDetail
-          key={selectedSystem.id}
-          system={selectedSystem}
-          workspaceContext={workspaceContext}
-          resourceReadIdentity={resourceReadIdentity}
-          isDefault={selectedSystem.id === selectedId}
-          busy={busyId === selectedSystem.id}
-          actionBusy={busyAction?.systemId === selectedSystem.id ? busyAction.action : null}
-          t={t}
-          onEdit={handleEditSystem}
-          onMakeDefault={handleMakeDefaultClick}
-          onTogglePublished={togglePublished}
-          onDelete={deleteSystem}
-          onSystemsRefresh={onSystemsRefresh}
-          onActionFeedback={notifyAction}
-          onShareToTeam={handleShareToTeam}
-          isTeamShared={teamSharedIds.has(selectedSystem.id)}
-          sharing={sharingId === selectedSystem.id}
-          onUnshareFromTeam={handleUnshareFromTeam}
-          canUnshareFromTeam={teamSharedMeta.get(selectedSystem.id)?.canUnshare === true}
-          unsharing={unsharingId === selectedSystem.id}
-        />
-      );
-    }
-
-    // Empty scope — invite the relevant next action. The official scope only
-    // runs dry behind a search, and the list column already says so, so this
-    // pane stays a quiet placeholder instead of echoing that sentence.
-    const emptyText = designSystemCollection === 'official' ? null : t('dsManager.emptyMine');
-    const emptyTitle = designSystemCollection === 'mine'
-      ? t('dsManager.createTitle')
-      : null;
+    if (!selectedSystem) return null;
     return (
-      <div className={styles.previewEmpty}>
-        <span className={styles.previewEmptyMark} aria-hidden>
-          <SparkGlyph />
-        </span>
-        {emptyTitle ? <p className={styles.previewEmptyTitle}>{emptyTitle}</p> : null}
-        {emptyText ? <p className={styles.previewEmptyText}>{emptyText}</p> : null}
-      </div>
+      <DesignSystemDetail
+        key={selectedSystem.id}
+        system={selectedSystem}
+        backSlot={<Button ref={detailBackRef} variant="ghost"
+          data-testid="design-systems-back" aria-label={t('brandDetail.back')}
+          onClick={() => setPreviewId(null)}><Icon name="arrow-left" size={18} /></Button>}
+        workspaceContext={workspaceContext}
+        resourceReadIdentity={resourceReadIdentity}
+        isDefault={selectedSystem.id === selectedId}
+        busy={busyId === selectedSystem.id}
+        actionBusy={busyAction?.systemId === selectedSystem.id ? busyAction.action : null}
+        t={t}
+        onEdit={handleEditSystem}
+        onMakeDefault={handleMakeDefaultClick}
+        onTogglePublished={togglePublished}
+        onDelete={deleteSystem}
+        onSystemsRefresh={onSystemsRefresh}
+        onActionFeedback={notifyAction}
+        onShareToTeam={handleShareToTeam}
+        isTeamShared={teamSharedIds.has(selectedSystem.id)}
+        sharing={sharingId === selectedSystem.id}
+        onUnshareFromTeam={handleUnshareFromTeam}
+        canUnshareFromTeam={teamSharedMeta.get(selectedSystem.id)?.canUnshare === true}
+        unsharing={unsharingId === selectedSystem.id}
+      />
     );
   }
 }
@@ -1260,182 +1149,9 @@ function SkeletonBlock({
   return <span className={`${styles.skeletonBlock}${className ? ` ${className}` : ''}`} aria-hidden />;
 }
 
-interface SystemRowProps {
-  system: DesignSystemSummary;
-  resourceReadIdentity: WorkspaceResourceReadIdentity | null;
-  active: boolean;
-  isDefault: boolean;
-  subtitle: string;
-  statusLabel: string;
-  onSelect: () => void;
-}
-
-function fallbackSwatches(seed: string): string[] {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const base = h % 360;
-  return [
-    `hsl(${base}, 24%, 94%)`,
-    `hsl(${(base + 90) % 360}, 34%, 74%)`,
-    `hsl(${(base + 180) % 360}, 42%, 34%)`,
-    `hsl(${(base + 28) % 360}, 76%, 54%)`,
-  ];
-}
-
-function SystemRowPaletteLogo({ system }: { system: DesignSystemSummary }) {
-  const swatches = system.swatches && system.swatches.length > 0
-    ? system.swatches.slice(0, 4)
-    : fallbackSwatches(system.title || system.id);
-  return (
-    <span className={styles.itemSwatches} aria-hidden>
-      {swatches.map((color, index) => (
-        <span key={`${color}-${index}`} style={{ background: color }} />
-      ))}
-    </span>
-  );
-}
-
-// Resolve a system's own logo from its backing project's brand.json
-// (`logo.primary`), exactly mirroring how the detail kit loads it via
-// `useDesignKit`. The list row can't use `/api/brands/:id/logo` because the row
-// only knows the *design-system* id, which differs from the brand id the brands
-// route expects. Returns `undefined` while the fetch is in flight, `null` when
-// the project has no logo, or the raw URL string.
-function useProjectLogoSrc(
-  projectId: string | undefined,
-  resourceReadIdentity: WorkspaceResourceReadIdentity | null,
-): string | null | undefined {
-  const resourceReadIdentityKey = workspaceResourceReadIdentityKey(resourceReadIdentity);
-  const resourceReadIdentityRef = useRef(resourceReadIdentity);
-  resourceReadIdentityRef.current = resourceReadIdentity;
-  const [src, setSrc] = useState<string | null | undefined>(projectId ? undefined : null);
-  useEffect(() => {
-    if (!projectId) {
-      setSrc(null);
-      return;
-    }
-    let cancelled = false;
-    const read = beginWorkspaceResourceScopedRead(resourceReadIdentityRef.current);
-    setSrc(undefined);
-    void fetchProjectFileText(projectId, 'brand.json', {
-      cache: 'no-store',
-      workspaceContext: read.context,
-    }).then((raw) => {
-      if (cancelled || !read.isStillCurrent(resourceReadIdentityRef.current)) return;
-      let primary: string | null = null;
-      if (raw) {
-        try {
-          const data = JSON.parse(raw) as { logo?: { primary?: unknown } };
-          const candidate = data?.logo?.primary;
-          if (typeof candidate === 'string' && candidate.trim()) primary = candidate.trim();
-        } catch {
-          // Not a valid brand.json (e.g. a non-brand "Create"d system) — no logo.
-        }
-      }
-      setSrc(primary ? projectRawUrl(projectId, primary, read.context) : null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, resourceReadIdentityKey]);
-  return src;
-}
-
-// Row thumbnail. Prefer the system's real logo (resolved from the backing
-// project's brand.json), then a site favicon (captured source URL, reference
-// brand, or curated official-preset domain), falling back to the palette stripe
-// when neither resolves. The palette also holds the slot while a user system's
-// logo is still loading, so the thumbnail never flashes a broken image first.
-function SystemRowLogo({
-  system,
-  resourceReadIdentity,
-}: {
-  system: DesignSystemSummary;
-  resourceReadIdentity: WorkspaceResourceReadIdentity | null;
-}) {
-  const host = designSystemLogoHost(system);
-  const projectLogo = useProjectLogoSrc(
-    isUserSystem(system) ? system.projectId : undefined,
-    resourceReadIdentity,
-  );
-
-  // Candidate srcs in priority order, skipping empties; `onError` advances to
-  // the next, and exhausting them collapses to the palette stripe.
-  const candidates = useMemo(() => {
-    const list: string[] = [];
-    if (typeof projectLogo === 'string') list.push(projectLogo);
-    if (host) list.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`);
-    return list;
-  }, [projectLogo, host]);
-
-  const [failedCount, setFailedCount] = useState(0);
-  useEffect(() => setFailedCount(0), [candidates]);
-
-  const resolving = projectLogo === undefined;
-  const src = !resolving && failedCount < candidates.length ? candidates[failedCount] : null;
-
-  if (!src) return <SystemRowPaletteLogo system={system} />;
-  return (
-    <img
-      className={styles.itemLogo}
-      src={src}
-      alt=""
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => setFailedCount((n) => n + 1)}
-    />
-  );
-}
-
-function SystemRow({
-  system,
-  resourceReadIdentity,
-  active,
-  isDefault,
-  subtitle,
-  statusLabel,
-  onSelect,
-}: SystemRowProps) {
-  const { t } = useI18n();
-  const status = system.status ?? 'draft';
-  const isUser = isUserSystem(system);
-  return (
-    // The row chrome (padding, hover wash, selected outline) lives on
-    // .itemRow/.itemRowActive in the shared module CSS — the #5517 reference
-    // wraps the button in it, and rendering the bare button leaves every row
-    // flat and the selection invisible (acceptance #97).
-    <div className={`${styles.itemRow} ${active ? styles.itemRowActive : ''}`}>
-    <button
-      type="button"
-      data-testid={`design-system-card-${system.id}`}
-      className={`${styles.item} ${active ? styles.itemActive : ''}`}
-      aria-pressed={active}
-      onClick={onSelect}
-    >
-      <span className={styles.itemThumb}>
-        <SystemRowLogo system={system} resourceReadIdentity={resourceReadIdentity} />
-      </span>
-      <span className={styles.itemMeta}>
-        <span className={styles.itemNameRow}>
-          <span className={styles.itemName}>{system.title}</span>
-          {isDefault ? <span className={styles.badgeDefault}>{t('dsManager.badgeDefault')}</span> : null}
-        </span>
-        <span className={styles.itemSub}>{subtitle}</span>
-      </span>
-      {isUser ? (
-        <span
-          className={`${styles.statusDot} ${status === 'published' ? styles.statusDotPublished : styles.statusDotDraft}`}
-          title={statusLabel}
-          aria-label={statusLabel}
-        />
-      ) : null}
-    </button>
-    </div>
-  );
-}
-
 interface DetailProps {
   system: DesignSystemSummary;
+  backSlot: ReactNode;
   /** Fully verified authority retained for every mutation in this pane. */
   workspaceContext: WorkspaceCollabContext | null;
   /** May be provisional, and is only used by read-only detail/project loads. */
@@ -1469,6 +1185,7 @@ interface DetailProps {
 
 function DesignSystemDetail({
   system,
+  backSlot,
   workspaceContext,
   resourceReadIdentity,
   isDefault,
@@ -1769,28 +1486,25 @@ function DesignSystemDetail({
 
   return (
     <div className={styles.detail} data-testid={`design-system-detail-${system.id}`}>
-      {kit ? (
-        <DesignKitView
+        <DesignSystemDetailTabs
+          system={system}
           kit={kit}
-          workspaceContext={resourceReadContext}
-          workspaceReadGeneration={resourceReadIdentityKey}
+          packageInfo={detail?.packageInfo}
+          body={detail?.body}
+          resourceReadIdentity={resourceReadIdentity}
+          backSlot={backSlot}
           badgeSlot={badgeSlot}
           actionsSlot={actionsSlot}
-          showCover={false}
           onEditClick={emitEditClick}
           noticeSlot={
             downloadFailed ? (
               <div className={styles.missingProjectNotice}>{t('dsManager.downloadFailed')}</div>
             ) : null
           }
-          dataTestId={`design-kit-view-${system.id}`}
+          loadingSlot={<DesignSystemDetailSkeleton
+            label={detailResolved ? t('common.loading') : t('designSystemPicker.loadingPreview')}
+            dataTestId={`design-system-detail-loading-${system.id}`} />}
         />
-      ) : (
-        <DesignSystemDetailSkeleton
-          label={detailResolved ? t('common.loading') : t('designSystemPicker.loadingPreview')}
-          dataTestId={`design-system-detail-loading-${system.id}`}
-        />
-      )}
     </div>
   );
 }
@@ -1855,42 +1569,11 @@ function DesignSystemDetailSkeleton({
   );
 }
 
-function ComingSoon({
-  title,
-  body,
-  comingSoonLabel,
-}: {
-  title: string;
-  body: string;
-  comingSoonLabel: string;
-}) {
-  return (
-    <div className={styles.previewEmpty}>
-      <span className={styles.comingSoonBadge}>{comingSoonLabel}</span>
-      <p className={styles.previewEmptyTitle}>{title}</p>
-      <p className={styles.previewEmptyText}>{body}</p>
-    </div>
-  );
-}
-
 function SearchGlyph({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden>
       <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5" />
       <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function SparkGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" aria-hidden>
-      <path
-        d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7l4.9-1.8z"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
     </svg>
   );
 }

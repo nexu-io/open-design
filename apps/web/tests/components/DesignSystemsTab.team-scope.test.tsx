@@ -2,7 +2,7 @@
 
 // Sibling of ExtensionsMarketplace.team-scope for the workspace-team P0 (飞书
 // rec recvq3NXctqR6L): the 团队 collection on 设计体系 disappeared for a real
-// team workspace on a free/unpaid tier. Same root cause and same fix — the tab
+// team workspace on a free/unpaid tier. Same root cause and same fix — the collection
 // is gated on team IDENTITY (`workspaceContextHasTeamIdentity`), the predicate
 // the daemon uses to accept a hub share, not on the billing plan.
 
@@ -19,7 +19,7 @@ vi.mock('../../src/analytics/provider', async (importOriginal) => {
 });
 
 // A real team workspace on a FREE tier (see the extensions sibling for the shape
-// rationale). billingState 'free' / planId null must NOT hide the team tab.
+// rationale). billingState 'free' / planId null must NOT hide the team collection.
 const FREE_TEAM_CONTEXT = {
   workspaceId: 'ws-team',
   workspaceType: 'team',
@@ -124,26 +124,26 @@ describe('DesignSystemsTab 团队 collection visibility', () => {
   it('offers the Team collection for a real team workspace even on a free tier', async () => {
     renderTab();
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Your systems' })).toBeTruthy();
+      expect(screen.getByRole('region', { name: 'Your systems' })).toBeTruthy();
     });
-    expect(screen.queryByRole('tab', { name: 'Team' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Team' })).toBeTruthy();
   });
 
   it('does not offer the Team collection for a personal workspace', async () => {
     workspaceContext = PERSONAL_CONTEXT;
     renderTab();
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Your systems' })).toBeTruthy();
+      expect(screen.getByRole('region', { name: 'Your systems' })).toBeTruthy();
     });
-    expect(screen.queryByRole('tab', { name: 'Team' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Team' })).toBeNull();
   });
 
   it('does not offer the Team collection when signed out', async () => {
     workspaceContext = null;
     renderTab();
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Your systems' })).toBeTruthy();
+      expect(screen.getByRole('region', { name: 'Your systems' })).toBeTruthy();
     });
-    expect(screen.queryByRole('tab', { name: 'Team' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Team' })).toBeNull();
   });
 });

@@ -1,15 +1,434 @@
-/* Master-detail Design systems layout, adapted from the Brand Kit presentation:
-   a compact list of systems on the left (scoped to Your systems / Official
-   presets / Enterprise) and a live preview of the selected system on the right.
-   The page uses a single scroll context (the entry scroll container); the left
-   sidebar stays pinned via `position: sticky`. */
+/* A horizontal catalog opens the existing full design kit on demand. */
 
 .root {
-  display: grid;
-  grid-template-columns: 304px minmax(0, 1fr);
-  align-items: start;
-  gap: 20px;
+  min-width: 0;
   width: 100%;
+}
+
+/* The active detail owns its scroll area; catalog and other entry views keep
+   the shell's normal page scrolling, including when a detail stays mounted. */
+:global(.entry-main--scroll):has(.root[data-detail-active='true']) {
+  overflow: hidden;
+}
+
+:global(.entry-main__inner):has(.root[data-detail-active='true']) {
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 24px;
+}
+
+:global(.entry-main__inner > div):has(.root[data-detail-active='true']),
+:global(.entry-section):has(> .root[data-detail-active='true']),
+.root[data-detail-active='true'],
+.root[data-detail-active='true'] > .preview,
+.root[data-detail-active='true'] > .preview > .detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.root[data-detail-active='true'] > .preview > .detail {
+  padding: 0;
+}
+
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-width: 0;
+}
+
+.catalogSection {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.gallery[hidden] {
+  display: none;
+}
+
+.galleryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-bottom: 20px;
+}
+
+.gallery .presetFilters {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  max-width: 100%;
+  margin-inline-start: auto;
+}
+
+.galleryTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.galleryCount {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery .headerSearch {
+  flex: 0 0 auto;
+}
+
+.galleryCarousel {
+  position: relative;
+  min-width: 0;
+}
+
+.galleryRail {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 0 14px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+
+.personalGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+  padding: 8px 0 14px;
+}
+
+.personalGrid > .galleryCard {
+  width: 100%;
+  max-width: none;
+}
+
+.personalGrid > .sidebarEmpty {
+  grid-column: 1 / -1;
+}
+
+@container (max-width: 900px) {
+  .personalGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@container (max-width: 660px) {
+  .personalGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container (max-width: 420px) {
+  .personalGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.galleryEdge {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  bottom: 54px;
+  display: flex;
+  align-items: center;
+  width: 60px;
+  pointer-events: none;
+}
+
+.galleryEdge[hidden] {
+  display: none;
+}
+
+.galleryEdge::before {
+  position: absolute;
+  inset: -8px 0;
+  content: '';
+  background: color-mix(in srgb, var(--bg) 65%, transparent);
+  backdrop-filter: blur(4px);
+  mask-image: linear-gradient(to right, #000, transparent);
+  opacity: 0;
+  transition: opacity var(--dur-quick) var(--ease-out);
+}
+
+.galleryEdge[data-active='true']::before {
+  opacity: 1;
+}
+
+.galleryEdgePrevious {
+  inset-inline-start: 0;
+  justify-content: flex-start;
+}
+
+.galleryEdgeNext {
+  inset-inline-end: 0;
+  justify-content: flex-end;
+}
+
+.galleryEdgeNext::before {
+  transform: scaleX(-1);
+}
+
+.galleryEdge .galleryArrow {
+  position: relative;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  color: var(--text-strong);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.galleryArrow:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+
+.galleryArrow:disabled {
+  opacity: 0.35;
+}
+
+:global([dir='rtl']) .galleryEdgePrevious::before,
+:global([dir='rtl']) .galleryArrow > svg {
+  transform: scaleX(-1);
+}
+
+:global([dir='rtl']) .galleryEdgeNext::before {
+  transform: none;
+}
+
+.galleryCard {
+  position: relative;
+  /* Five full cards, five gaps, and half of the next card on desktop. */
+  flex: 0 0 max(160px, calc((100% - 140px) / 5.5));
+  min-width: 0;
+  max-width: calc(100% - 24px);
+  scroll-snap-align: start;
+}
+
+.galleryCard:first-child .galleryCover {
+  transform-origin: left center;
+}
+
+.galleryCard:last-child .galleryCover {
+  transform-origin: right center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .galleryCardButton:hover .galleryCover {
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .galleryCard .galleryCover,
+  .galleryEdge::before {
+    transition: none;
+  }
+}
+
+.galleryCardButton {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.galleryCardButton:hover:not(:disabled),
+.galleryCardButton:active:not(:disabled),
+.galleryCardButton:focus-visible {
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+.galleryCardButton:focus-visible,
+.galleryMenuTrigger:focus-visible {
+  outline: 2px solid var(--border-selected);
+  outline-offset: 2px;
+}
+
+.galleryCover {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1000 / 640;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-subtle);
+  transform-origin: center;
+  transition: border-color var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-out);
+  pointer-events: none;
+}
+
+.galleryCardButton:hover .galleryCover {
+  border-color: var(--border-strong);
+}
+
+.galleryFrame {
+  display: block;
+  width: 1000px;
+  height: 640px;
+  border: 0;
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+.galleryCoverSkeleton {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1000 / 640;
+  border-radius: 16px;
+}
+
+.galleryCard > .skeletonLine {
+  margin-top: 16px;
+}
+
+.galleryCardLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 12px 32px 0 4px;
+}
+
+.galleryPalette {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.galleryPalette > svg {
+  grid-area: 1 / 1 / -1 / -1;
+}
+
+.galleryLogo {
+  grid-area: 1 / 1 / -1 / -1;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: contain;
+}
+
+.galleryCardName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.galleryMenuTrigger {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.galleryMenuTrigger:hover,
+.galleryMenuTrigger[aria-expanded='true'] {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.galleryMenu {
+  position: fixed;
+  z-index: var(--z-menu, 1000);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  width: 180px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.galleryMenu button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: start;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.galleryMenu button > svg {
+  flex-shrink: 0;
+}
+
+.galleryMenu button:hover:not(:disabled),
+.galleryMenu button:focus {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.galleryMenu button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.galleryBack {
+  margin-bottom: 24px;
 }
 
 .pageHeader {
@@ -320,20 +739,23 @@
 
 .categoryMenuWrap {
   position: relative;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
 }
 
-.categorySelect {
+.categoryMenuWrap .categorySelect {
   appearance: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
+  height: 32px;
   min-height: 32px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text);
   font-size: 12px;
@@ -344,44 +766,33 @@
     background-color var(--dur-quick) var(--ease-out);
 }
 
-.categorySelect:hover,
-.categorySelect[aria-expanded='true'] {
+.categorySelect > svg {
+  flex-shrink: 0;
+}
+
+.categoryMenuWrap .categorySelect:hover,
+.categoryMenuWrap .categorySelect[aria-expanded='true'] {
   border-color: var(--border);
   background: transparent;
 }
 
-.categorySelect:focus-visible {
-  outline: none;
-  border-color: var(--border);
+.categoryMenuWrap .categorySelect:focus-visible {
+  outline: 2px solid var(--border-selected);
+  outline-offset: 2px;
 }
 
-.categoryChevron {
-  flex: 0 0 auto;
-  color: var(--text-muted);
-  transition: transform var(--dur-quick) var(--ease-out);
-}
-
-.categorySelect[aria-expanded='true'] .categoryChevron {
-  transform: rotate(180deg);
-}
-
-.categoryMenu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 4px);
-  right: 0;
-  left: 0;
+.categoryMenu:global(.od-select-menu) {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
-  max-height: min(360px, calc(100dvh - 252px));
-  padding: var(--spacing-6) var(--spacing-8);
+  padding: 6px;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-md, 0 12px 30px rgba(0, 0, 0, 0.12));
+  border-radius: 16px;
+  background: #fff;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--shadow-md);
 }
 
 .categoryMenu::-webkit-scrollbar {
@@ -393,44 +804,54 @@
 }
 
 .categoryMenu::-webkit-scrollbar-thumb {
-  border: 2px solid var(--bg-panel);
+  border: 2px solid #fff;
   border-radius: var(--radius-pill);
   background: var(--border-strong);
 }
 
-.categoryOption {
+.categoryMenu :global(.od-select-option) {
   appearance: none;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   width: 100%;
   box-sizing: border-box;
-  min-height: 32px;
+  height: auto;
+  min-height: 30px;
+  flex-shrink: 0;
   padding: 0 var(--spacing-10);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }
 
-.categoryOption:hover,
-.categoryOption:focus-visible {
+.categoryMenu :global(.od-select-option:hover:not(:disabled)),
+.categoryMenu :global(.od-select-option.active:not(:disabled)) {
   outline: none;
   background: var(--bg-subtle);
   color: var(--text-strong);
 }
 
-.categoryOptionActive,
-.categoryOptionActive:hover,
-.categoryOptionActive:focus-visible {
+.categoryMenu :global(.od-select-option.selected),
+.categoryMenu :global(.od-select-option.selected:hover:not(:disabled)),
+.categoryMenu :global(.od-select-option.selected.active:not(:disabled)) {
   background: var(--bg-subtle);
-  color: var(--text-strong);
-  font-weight: 600;
+  color: var(--accent);
+}
+
+.categoryMenu :global(.od-select-option-check) {
+  display: none;
+}
+
+.categoryMenu :global(.od-select-option-label) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* List */
@@ -835,7 +1256,7 @@
   padding: 0 0 48px;
 }
 
-.detail :global([data-testid^='design-kit-view-'] > section) {
+.detail :global([data-testid^='design-kit-view-'] > section:where(:not([data-foundations]))) {
   border: 0;
   gap: var(--spacing-8);
   padding: var(--spacing-12);
@@ -1800,8 +2221,7 @@
     flex-direction: column;
     gap: 14px;
   }
-  .headerTools,
-  .headerSearch {
+  .headerTools {
     width: 100%;
   }
   .headerCreate {

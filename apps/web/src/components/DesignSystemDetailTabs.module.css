@@ -1,0 +1,160 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.header {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px 20px;
+  min-height: 56px;
+  padding: 8px 0 12px;
+  background: transparent;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.identity > button {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+}
+
+.name {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.tabs .tab {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.tabs .tab:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.tabs .tab[aria-selected='true'] {
+  background: var(--bg-muted);
+  color: var(--text-strong);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.actions button[aria-haspopup='menu'] {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 28px;
+  min-height: 0;
+  padding: 20px 0 28px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
+}
+
+.panel > * {
+  flex-shrink: 0;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--border-selected);
+  outline-offset: 3px;
+}
+
+.root .panel :global([data-testid^='design-kit-view-']) {
+  max-width: none;
+  padding: 0;
+  animation: none;
+}
+
+.empty {
+  margin: auto;
+  padding: 48px 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.guidelines {
+  width: min(100%, 960px);
+  margin: 0 auto;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.guidelines h1, .guidelines h2, .guidelines h3 {
+  color: var(--text-strong);
+  line-height: 1.35;
+}
+
+.guidelines h1 { font-size: 28px; }
+.guidelines > hr:first-child { display: none; }
+.guidelines h2 { margin-top: 32px; font-size: 21px; }
+.guidelines h3 { font-size: 17px; }
+.guidelines img { max-width: 100%; }
+.guidelines :global(.md-table-wrap), .guidelines pre { overflow-x: auto; }
+.guidelines table { width: 100%; border-collapse: collapse; }
+.guidelines th, .guidelines td { padding: 10px 14px; border: 1px solid var(--border); text-align: start; }
+.guidelines pre { padding: 16px; border-radius: var(--radius-md); background: var(--bg-subtle); }
+
+@media (max-width: 1000px) {
+  .header { grid-template-columns: minmax(0, 1fr) auto; }
+  .tabs { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
+  .actions { grid-column: 2; grid-row: 1; }
+}

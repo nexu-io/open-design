@@ -113,7 +113,25 @@ function renderTab() {
   );
 }
 
+let galleryObservers: IntersectionObserverCallback[];
+
+function revealGalleryCard() {
+  act(() => {
+    for (const callback of galleryObservers) {
+      callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+    }
+  });
+}
+
 beforeEach(() => {
+  galleryObservers = [];
+  vi.stubGlobal('IntersectionObserver', class {
+    observe = vi.fn();
+    disconnect = vi.fn();
+    constructor(callback: IntersectionObserverCallback) {
+      galleryObservers.push(callback);
+    }
+  });
   setWorkspaceGeneration('generation-a');
   registryMocks.fetchDesignSystem.mockReset();
   registryMocks.fetchDesignSystemPreview.mockReset();
@@ -126,6 +144,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('design-system resource read identity', () => {
@@ -191,19 +210,10 @@ describe('design-system resource read identity', () => {
     expect(registryMocks.fetchDesignSystem.mock.calls.every((call) => call[1] === CONTEXT)).toBe(true);
   });
 
-  it('re-reads tab detail and row logo on generation change and keeps the late A logo out', async () => {
-    const generationADetails: Array<ReturnType<typeof deferred<DesignSystemDetail | null>>> = [];
+  it('re-reads the visible gallery logo on generation change and keeps the late A logo out', async () => {
     const generationAAssets: Array<ReturnType<typeof deferred<string | null>>> = [];
     let issuingGeneration = 'generation-a';
 
-    registryMocks.fetchDesignSystem.mockImplementation(() => {
-      if (issuingGeneration === 'generation-b') {
-        return Promise.resolve({ ...SYSTEM, body: '# Generation B\n\nTab B detail' });
-      }
-      const pending = deferred<DesignSystemDetail | null>();
-      generationADetails.push(pending);
-      return pending.promise;
-    });
     registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, fileName: string) => {
       if (issuingGeneration === 'generation-b') {
         return Promise.resolve(fileName === 'brand.json'
@@ -216,7 +226,10 @@ describe('design-system resource read identity', () => {
     });
 
     const view = renderTab();
-    await waitFor(() => expect(registryMocks.fetchDesignSystem).toHaveBeenCalledTimes(1));
+    expect(registryMocks.fetchProjectFileText).not.toHaveBeenCalled();
+    revealGalleryCard();
+    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledOnce();
+    expect(registryMocks.fetchDesignSystem).not.toHaveBeenCalled();
     const generationAAssetCount = registryMocks.fetchProjectFileText.mock.calls.length;
 
     issuingGeneration = 'generation-b';
@@ -234,16 +247,13 @@ describe('design-system resource read identity', () => {
     );
 
     await waitFor(() => {
-      expect(registryMocks.fetchDesignSystem).toHaveBeenCalledTimes(2);
+      expect(registryMocks.fetchDesignSystem).not.toHaveBeenCalled();
       expect(registryMocks.fetchProjectFileText.mock.calls.length).toBeGreaterThan(generationAAssetCount);
       const logo = screen.getByTestId(`design-system-card-${SYSTEM.id}`).querySelector('img');
       expect(logo?.getAttribute('src')).toContain('generation-b.svg');
     });
 
     await act(async () => {
-      for (const pending of generationADetails) {
-        pending.resolve({ ...SYSTEM, body: '# Generation A\n\nTab A detail arrived late' });
-      }
       for (const pending of generationAAssets) {
         pending.resolve(JSON.stringify({ logo: { primary: 'generation-a.svg' } }));
       }
@@ -253,6 +263,34 @@ describe('design-system resource read identity', () => {
     const logo = screen.getByTestId(`design-system-card-${SYSTEM.id}`).querySelector('img');
     expect(logo?.getAttribute('src')).toContain('generation-b.svg');
     expect(logo?.getAttribute('src')).not.toContain('generation-a.svg');
+  });
+
+  it('re-reads an explicitly opened tab detail on generation change and drops late A', async () => {
+    const generationA = deferred<DesignSystemDetail | null>();
+    registryMocks.fetchDesignSystem.mockReturnValueOnce(generationA.promise)
+      .mockResolvedValue({ ...SYSTEM, body: '# Generation B\n\nTab B detail' });
+    registryMocks.fetchProjectFileText.mockResolvedValue(null);
+    const view = renderTab();
+    expect(registryMocks.fetchDesignSystem).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId(`design-system-card-${SYSTEM.id}`));
+    expect(registryMocks.fetchDesignSystem).toHaveBeenCalledTimes(1);
+
+    setWorkspaceGeneration('generation-b');
+    view.rerender(
+      <I18nProvider initial="en">
+        <DesignSystemsTab systems={[SYSTEM]} selectedId={null} onSelect={() => {}} />
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Design guidelines' }));
+    await screen.findByText('Tab B detail');
+    expect(registryMocks.fetchDesignSystem).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      generationA.resolve({ ...SYSTEM, body: '# Generation A\n\nTab A detail arrived late' });
+      await generationA.promise;
+    });
+    expect(screen.getByText('Tab B detail')).toBeTruthy();
+    expect(screen.queryByText('Tab A detail arrived late')).toBeNull();
+    expect(registryMocks.fetchDesignSystem.mock.calls.every((call) => call[1] === CONTEXT)).toBe(true);
   });
 
   it.each([
@@ -343,6 +381,7 @@ describe('design-system resource read identity', () => {
     registryMocks.fetchProjectFileText.mockResolvedValue(null);
 
     renderTab();
+    fireEvent.click(screen.getByTestId(`design-system-card-${SYSTEM.id}`));
     fireEvent.click(await screen.findByRole('button', { name: 'Draft' }));
 
     expect(registryMocks.updateDesignSystemDraft).toHaveBeenCalledWith(

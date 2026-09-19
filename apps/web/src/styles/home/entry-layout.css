@@ -7514,22 +7514,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
    quantity, not part of the tab's name. */
 .ds-top-scope-chip.is-active .ds-top-scope-count { color: var(--text-muted); }
 
-/* ── Design-systems layout fallback ──────────────────────────────────
-   The DesignSystemsTab styling lives in a CSS Module. Next.js dev Fast
-   Refresh can occasionally desync that module's hashed class names after
-   an HMR cycle, dropping the two-column grid and the row logo size cap
-   (the logo then renders at its full intrinsic size). These rules key off
-   stable data-testid hooks — not hashed class names — so the layout stays
-   sane even when the module briefly fails to apply. They mirror the module
-   defaults, so they are harmless no-ops when the module is healthy. */
-[data-testid="design-systems-tab"] {
-  display: grid;
-  grid-template-columns: 304px minmax(0, 1fr);
-  align-items: start;
-  gap: 20px;
-  width: 100%;
-}
-
+/* Design-system header/detail chrome. Gallery geometry lives in its CSS module. */
 [data-testid="design-systems-page-header"] {
   display: flex;
   align-items: center;
@@ -7635,22 +7620,6 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   padding-inline: 18px;
 }
 
-[data-testid="design-systems-tab"] > aside {
-  position: sticky;
-  top: var(--entry-topbar-h, 44px);
-  display: flex;
-  flex-direction: column;
-  height: calc(100dvh - 184px - var(--spacing-16));
-  max-height: calc(100dvh - 184px - var(--spacing-16));
-  min-height: 0;
-  gap: 12px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
 [data-testid="design-systems-preview"] {
   min-width: 0;
   border: 0;
@@ -7671,83 +7640,6 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   margin-left: 0;
   gap: var(--spacing-12);
   padding: 0 0 48px;
-}
-
-[data-testid^="design-system-card-"] {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-12);
-  width: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-}
-
-[data-testid^="design-system-card-"]:hover,
-[data-testid^="design-system-card-"]:active,
-[data-testid^="design-system-card-"]:focus,
-[data-testid^="design-system-card-"]:focus-visible,
-[data-testid^="design-system-card-"][aria-pressed="true"] {
-  outline: none;
-  background: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-}
-
-[data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"]) {
-  padding: var(--spacing-8) var(--spacing-6);
-  border: var(--stroke-thin) solid transparent;
-  border-radius: var(--radius);
-}
-
-[data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"][aria-pressed="true"]) {
-  border-color: #dbdbdb;
-  background: #ffffff;
-}
-
-[data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"]):hover > [data-testid^="design-system-card-"],
-[data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"][aria-pressed="true"]) > [data-testid^="design-system-card-"] {
-  background: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-}
-
-[data-testid^="design-system-card-"] > span:first-child {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-}
-
-[data-testid^="design-system-card-"] > span:nth-child(2) {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 2px;
-}
-
-[data-testid^="design-system-card-"] > span:nth-child(2) span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-testid^="design-system-card-"] > span:last-child[aria-label] {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  background: var(--green, #3d7a4f);
 }
 
 /* 设计体系 / 插件 are absent on purpose: their titles keep the same 16px to the
@@ -7864,7 +7756,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   text-align: left;
 }
 
-[data-testid^="design-kit-view-"][data-variant="panel"] > section {
+[data-testid^="design-kit-view-"][data-variant="panel"] > section:where(:not([data-foundations])) {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -7875,13 +7767,13 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   background: transparent;
 }
 
-[data-testid^="design-system-detail-"] [data-testid^="design-kit-view-"][data-variant="panel"] > section {
+[data-testid^="design-system-detail-"] [data-testid^="design-kit-view-"][data-variant="panel"] > section:where(:not([data-foundations])) {
   border: 0;
   gap: var(--spacing-8);
   padding: var(--spacing-12);
 }
 
-[data-testid^="design-kit-view-"][data-variant="panel"] > section h3 {
+[data-testid^="design-kit-view-"][data-variant="panel"] > section:where(:not([data-foundations])) h3 {
   margin: 0;
   color: var(--text-muted);
   font-size: 12px;
@@ -8044,22 +7936,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   [data-testid="design-systems-header-search"] {
     width: 100%;
   }
-  [data-testid="design-systems-tab"] {
-    grid-template-columns: 1fr;
-  }
-  [data-testid="design-systems-tab"] > aside {
-    position: static;
-    height: auto;
-    max-height: none;
-  }
 }
-/* Cap the sidebar row logos; never touches the preview pane's large logo. */
-[data-testid="design-systems-list"] img {
-  max-width: 40px;
-  max-height: 40px;
-  object-fit: contain;
-}
-
 /* ============================================================
    Invite-colleagues dialog (team space). Opened from the team
    switcher's "邀请同事" item. Demo-only: email + role + share link

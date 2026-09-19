@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
@@ -25,6 +25,7 @@ interface Props {
   className?: string;
   triggerClassName?: string;
   menuClassName?: string;
+  menuMinWidth?: number;
   disabled?: boolean;
   placeholder?: string;
   portal?: boolean;
@@ -64,6 +65,7 @@ export function CustomSelect({
   className,
   triggerClassName,
   menuClassName,
+  menuMinWidth = 0,
   disabled = false,
   placeholder,
   portal = true,
@@ -76,6 +78,7 @@ export function CustomSelect({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const wasOpenRef = useRef(false);
   const activeSourceValueRef = useRef(value);
+  const keyboardActiveRef = useRef(true);
   const [open, setOpen] = useState(false);
   const [activeValue, setActiveValue] = useState(value);
   const [position, setPosition] = useState<MenuPosition | null>(null);
@@ -97,11 +100,34 @@ export function CustomSelect({
   );
   const activeOptionId = open && activeValue ? optionIdByValue.get(activeValue) : undefined;
 
+  const scrollOptionIntoMenuView = useCallback((optionId: string | undefined) => {
+    const menu = menuRef.current;
+    const option = optionId ? document.getElementById(optionId) : null;
+    if (!menu || !option || !menu.contains(option)) return;
+    const menuBounds = menu.getBoundingClientRect();
+    const optionBounds = option.getBoundingClientRect();
+    const visibleTop = menuBounds.top + menu.clientTop;
+    const visibleBottom = visibleTop + menu.clientHeight;
+    // Update this scroll container alone; scrollIntoView may also move the
+    // workspace behind a portaled menu.
+    if (optionBounds.top < visibleTop) {
+      menu.scrollTop += optionBounds.top - visibleTop;
+    } else if (optionBounds.bottom > visibleBottom) {
+      menu.scrollTop += optionBounds.bottom - visibleBottom;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open && keyboardActiveRef.current) scrollOptionIntoMenuView(activeOptionId);
+    // A portal mounts after its first position measurement, so retry then.
+  }, [open, activeOptionId, position, scrollOptionIntoMenuView]);
+
   const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const gap = 4;
     const viewportPad = 12;
+    const menuWidth = Math.min(Math.max(rect.width, menuMinWidth), window.innerWidth - viewportPad * 2);
     const below = window.innerHeight - rect.bottom - viewportPad;
     const above = rect.top - viewportPad;
     const maxHeight = Math.max(160, Math.min(300, Math.max(below, above) - gap));
@@ -110,12 +136,12 @@ export function CustomSelect({
       top: openAbove ? Math.max(viewportPad, rect.top - maxHeight - gap) : rect.bottom + gap,
       left: Math.min(
         Math.max(viewportPad, rect.left),
-        Math.max(viewportPad, window.innerWidth - rect.width - viewportPad),
+        Math.max(viewportPad, window.innerWidth - menuWidth - viewportPad),
       ),
-      width: rect.width,
+      width: menuWidth,
       maxHeight,
     });
-  }, []);
+  }, [menuMinWidth]);
 
   useEffect(() => {
     if (!portal) return;
@@ -134,6 +160,7 @@ export function CustomSelect({
     }
     if (wasOpenRef.current && activeSourceValueRef.current === value) return;
     const selectedOption = flatOptionsRef.current.find((option) => option.value === value && !option.disabled);
+    keyboardActiveRef.current = true;
     setActiveValue(selectedOption?.value ?? enabledOptionsRef.current[0]?.value ?? '');
     wasOpenRef.current = true;
     activeSourceValueRef.current = value;
@@ -174,12 +201,15 @@ export function CustomSelect({
       currentIndex < 0
         ? 0
         : (currentIndex + direction + enabledOptions.length) % enabledOptions.length;
-    setActiveValue(enabledOptions[nextIndex]!.value);
+    const nextValue = enabledOptions[nextIndex]!.value;
+    setActiveValue(nextValue);
+    if (nextValue === activeValue) scrollOptionIntoMenuView(optionIdByValue.get(nextValue));
   };
 
   const onButtonKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
+      keyboardActiveRef.current = true;
       if (!open) {
         setOpen(true);
         return;
@@ -187,8 +217,19 @@ export function CustomSelect({
       moveActive(event.key === 'ArrowDown' ? 1 : -1);
       return;
     }
+    if (open && (event.key === 'Home' || event.key === 'End')) {
+      event.preventDefault();
+      keyboardActiveRef.current = true;
+      const next = event.key === 'Home' ? enabledOptions[0] : enabledOptions[enabledOptions.length - 1];
+      if (next) {
+        setActiveValue(next.value);
+        if (next.value === activeValue) scrollOptionIntoMenuView(optionIdByValue.get(next.value));
+      }
+      return;
+    }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
+      keyboardActiveRef.current = true;
       if (open) {
         choose(activeValue || value);
       } else {
@@ -196,11 +237,20 @@ export function CustomSelect({
       }
       return;
     }
+    if (event.key === 'Tab' && open) {
+      setOpen(false);
+      return;
+    }
     if (event.key === 'Escape' && open) {
       event.preventDefault();
       event.stopPropagation();
       setOpen(false);
     }
+  };
+
+  const onPointerActive = (nextValue: string) => {
+    keyboardActiveRef.current = false;
+    setActiveValue(nextValue);
   };
 
   const menu = (
@@ -238,7 +288,7 @@ export function CustomSelect({
                   active={option.value === activeValue}
                   id={optionIdByValue.get(option.value)}
                   onChoose={choose}
-                  onActive={setActiveValue}
+                  onActive={onPointerActive}
                 />
               ))}
             </div>
@@ -252,7 +302,7 @@ export function CustomSelect({
             active={item.value === activeValue}
             id={optionIdByValue.get(item.value)}
             onChoose={choose}
-            onActive={setActiveValue}
+            onActive={onPointerActive}
           />
         );
       })}
@@ -275,7 +325,10 @@ export function CustomSelect({
         aria-label={`${ariaLabel}: ${selectedLabel}`}
         disabled={disabled}
         title={title}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          keyboardActiveRef.current = true;
+          setOpen((current) => !current);
+        }}
         onKeyDown={onButtonKeyDown}
         onFocus={onFocus}
       >

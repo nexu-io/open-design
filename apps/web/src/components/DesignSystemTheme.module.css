@@ -1,0 +1,60 @@
+.theme {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0 24px;
+}
+
+.band {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-subtle);
+}
+
+.stateBand { grid-column: auto; }
+
+.bandHeader {
+  display: flex;
+  align-items: flex-start;
+  min-height: 112px;
+  margin: 0;
+  padding: 20px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.swatches {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.swatches:focus-visible { outline: 2px solid var(--border-selected); outline-offset: -2px; }
+
+.swatch {
+  display: flex;
+  flex: 1 0 132px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 80px;
+  padding: 16px 20px;
+}
+
+.tokenName { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.tokenValue { font-size: 13px; line-height: 1.4; opacity: .76; overflow-wrap: anywhere; }
+.empty { grid-column: 1 / -1; color: var(--text-muted); font-size: 14px; }
+
+@media (max-width: 720px) {
+  .theme { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .bandHeader { min-height: 96px; }
+}
