@@ -1,4 +1,8 @@
 import type { Express, Request, Response } from 'express';
+import type {
+  TestRuntimeAcceptanceRequest,
+  TestRuntimeContextRequest,
+} from '@open-design/contracts/api/touchpointTestRuntime';
 import { randomUUID } from 'node:crypto';
 import dns from 'node:dns';
 import http from 'node:http';
@@ -73,6 +77,35 @@ const PROXY_HOP_BY_HOP_HEADERS = new Set([
   'upgrade',
 ]);
 const VELA_WORKSPACE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+function isRealtimeTestRuntimePayload(
+  payload: unknown,
+): payload is (TestRuntimeContextRequest | TestRuntimeAcceptanceRequest) & Record<string, unknown> {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    !Array.isArray(payload) &&
+    'scenario' in payload &&
+    payload.scenario === 'realtime'
+  );
+}
+
+function hasLegacySimulatedRuntimeInput(req: Request): boolean {
+  const runtimePath = req.path.replace(/^\/api\/touchpoints\/test-runtime/u, '') || '/';
+  if (req.method === 'POST' && runtimePath === '/context') {
+    const payload = req.body;
+    return !(
+      isRealtimeTestRuntimePayload(payload) &&
+      typeof payload.deploymentId === 'string' &&
+      Object.keys(payload).length === 2
+    );
+  }
+  if (req.method === 'POST' && /\/acceptances$/u.test(runtimePath)) {
+    return !isRealtimeTestRuntimePayload(req.body);
+  }
+  const scenario = req.query.scenario;
+  return 'simulatedAt' in req.query || (scenario !== undefined && scenario !== 'realtime');
+}
 
 /**
  * Upper bound, in ms, on how long a cold-cache `/status` read waits for the
@@ -403,6 +436,93 @@ function proxyVelaMessageCenterRequest(
   upstream.end();
 }
 
+function proxyTouchpointRuntimeRequest(
+  req: Request,
+  res: Response,
+  context: { apiUrl: string; controlKey?: string },
+  runtime: 'test' | 'production',
+): void {
+  // Express retains the mounted path for these route patterns, so normalize
+  // it before applying the strict suffix allowlist.
+  const runtimePath =
+    req.path.replace(new RegExp(`^/api/touchpoints/${runtime}-runtime`), '') || '/';
+  // Production has one deliberately narrow read-only decision endpoint. Test
+  // keeps its separately enumerated context/deployment routes; neither proxy
+  // forwards a browser-supplied Vela credential or arbitrary path.
+  let suffix: string | null = null;
+  if (runtime === 'production') {
+    if (req.method === 'GET' && runtimePath === '/') suffix = '/production';
+    else if (req.method === 'POST' && runtimePath === '/events') suffix = '/events';
+  } else if (
+    req.method === 'POST' &&
+    /^\/test-deployments\/[A-Za-z0-9_-]{1,128}\/acceptances$/u.test(runtimePath)
+  ) {
+    suffix = runtimePath;
+  } else if (req.method === 'GET' && runtimePath === '/deployments') {
+    suffix = '/test-deployments';
+  } else if (req.method === 'GET' && runtimePath === '/') {
+    suffix = '/test';
+  } else if (req.method === 'POST' && runtimePath === '/context') {
+    suffix = '/test-context';
+  }
+  if (!suffix || !context.controlKey) {
+    res.status(context.controlKey ? 404 : 401).json({
+      error: context.controlKey ? 'unknown_touchpoint_runtime_path' : 'vela_control_key_required',
+    });
+    return;
+  }
+  const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  const targetPath = suffix.startsWith('/test-deployments/')
+    ? `/api/v1/touchpoints${suffix}`
+    : `/api/v1/touchpoints/runtime${suffix}`;
+  const target = new URL(`${targetPath}${query}`, context.apiUrl);
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    res.status(500).json({ error: 'invalid_vela_api_url' });
+    return;
+  }
+  const body = req.method === 'POST' ? velaProxyRequestBody(req) : null;
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    authorization: `Bearer ${context.controlKey}`,
+  };
+  // Touchpoint decisions carry base64 content and run to megabytes, and this
+  // proxy pipes the upstream body through verbatim. Building the request
+  // headers from scratch dropped the caller's `accept-encoding`, so every
+  // refresh pulled the payload uncompressed — measured at 383KB against 214KB
+  // for the same decision. Forward the caller's preference and hand its
+  // `content-encoding` back, so the body stays labelled the way it is framed.
+  const acceptEncoding = req.headers['accept-encoding'];
+  if (typeof acceptEncoding === 'string' && acceptEncoding)
+    headers['accept-encoding'] = acceptEncoding;
+  if (body) {
+    headers['content-type'] =
+      typeof req.headers['content-type'] === 'string'
+        ? req.headers['content-type']
+        : 'application/json';
+    headers['content-length'] = String(body.length);
+  }
+  const transport = target.protocol === 'https:' ? https : http;
+  const upstream = transport.request(target, { method: req.method, headers }, (upstreamRes) => {
+    res.status(upstreamRes.statusCode ?? 502);
+    res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+    // Without this the client would decode gzip bytes as JSON. It is set only
+    // when upstream actually encoded, so an unencoded reply is unaffected.
+    const contentEncoding = upstreamRes.headers['content-encoding'];
+    if (typeof contentEncoding === 'string' && contentEncoding)
+      res.setHeader('content-encoding', contentEncoding);
+    pipeProxyStreamWithGuard(upstreamRes, res, () => res.destroy());
+  });
+  upstream.setTimeout(30_000, () =>
+    upstream.destroy(new Error('Touchpoint runtime request timed out')),
+  );
+  upstream.on('error', () => {
+    if (!res.headersSent) res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+    else res.end();
+  });
+  if (body) upstream.write(body);
+  upstream.end();
+}
+
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): void {
   const env = deps.env ?? process.env;
   const onCredentialStateObserved =
@@ -623,6 +743,84 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   });
 
   app.all('/api/integrations/vela/api-proxy/*splat', proxyAmrApiRequest);
+
+  // The helper is a strict method/path allowlist; register it for POST so the
+  // authenticated Test context selection can reach Vela, while unknown paths
+  // and methods remain default-deny.
+  app.all(
+    ['/api/touchpoints/production-runtime', '/api/touchpoints/production-runtime/*splat'],
+    async (req, res) => {
+      try {
+        const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+        const context = readVelaControlApiContext(
+          env,
+          agentCliEnvForAgent(appConfig.agentCliEnv, 'amr'),
+        );
+        if (!context) {
+          res.status(401).json({ error: 'vela_control_key_required' });
+          return;
+        }
+        // Local end-to-end runs may keep their login/Test origin while
+        // exercising a separately owned publish-side API. Never forward a
+        // stored credential to an arbitrary remote origin through this knob.
+        const localPublishOrigin = env.OPEN_DESIGN_CMS_PRODUCTION_API_URL?.trim();
+        if (localPublishOrigin) {
+          const target = new URL(localPublishOrigin);
+          const login = new URL(context.apiUrl);
+          const loopback = new Set(['127.0.0.1', '[::1]']);
+          if (
+            context.profile !== 'local' ||
+            target.protocol !== 'http:' ||
+            login.protocol !== 'http:' ||
+            !loopback.has(target.hostname) ||
+            !loopback.has(login.hostname) ||
+            target.username ||
+            target.password ||
+            target.pathname !== '/' ||
+            target.search ||
+            target.hash
+          ) {
+            res.status(400).json({ error: 'invalid_local_cms_production_origin' });
+            return;
+          }
+          proxyTouchpointRuntimeRequest(
+            req,
+            res,
+            { ...context, apiUrl: target.origin },
+            'production',
+          );
+          return;
+        }
+        proxyTouchpointRuntimeRequest(req, res, context, 'production');
+      } catch {
+        res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+      }
+    },
+  );
+
+  app.all(
+    ['/api/touchpoints/test-runtime', '/api/touchpoints/test-runtime/*splat'],
+    async (req, res) => {
+      if (hasLegacySimulatedRuntimeInput(req)) {
+        res.status(400).json({ error: 'realtime_test_runtime_required' });
+        return;
+      }
+      try {
+        const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+        const context = readVelaControlApiContext(
+          env,
+          agentCliEnvForAgent(appConfig.agentCliEnv, 'amr'),
+        );
+        if (!context) {
+          res.status(401).json({ error: 'vela_control_key_required' });
+          return;
+        }
+        proxyTouchpointRuntimeRequest(req, res, context, 'test');
+      } catch {
+        res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+      }
+    },
+  );
 
   app.get('/api/integrations/vela/message-center-public/messages', async (req, res) => {
     try {

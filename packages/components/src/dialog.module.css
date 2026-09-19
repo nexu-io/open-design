@@ -1,9 +1,12 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, #202020 42%, transparent);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  /* The app's one scrim material (apps/web styles/material.css). Read as
+     tokens, like every other value in this file — this is the base every
+     `<Dialog>` mounts into, so it is where the shared look has to live. */
+  background: var(--scrim-tint);
+  backdrop-filter: var(--scrim-backdrop);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;

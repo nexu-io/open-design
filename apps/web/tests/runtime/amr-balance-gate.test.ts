@@ -10,6 +10,7 @@ import {
   amrWalletBalanceUsd,
   checkAmrBalanceGate,
   retryUnavailableAmrBalanceGate,
+  amrBalanceGateFromMemory,
 } from '../../src/runtime/amr-balance-gate';
 import {
   fetchAmrWalletSnapshot,
@@ -1024,5 +1025,29 @@ describe('retryUnavailableAmrBalanceGate', () => {
 
     await expect(result).resolves.toEqual({ kind: 'unavailable' });
     expect(check).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('amrBalanceGateFromMemory', () => {
+  // OPEND-3300 / 3309: the rail's own $0 reading answers the send on the
+  // click tick; anything that is not a definitive empty wallet has no opinion.
+  it('hard-blocks a definitive empty reading with a snapshot the dialog can show', () => {
+    const verdict = amrBalanceGateFromMemory('0.00', { profile: 'prod', updatedAt: '2026-09-17T00:00:00.000Z' });
+    expect(verdict).toMatchObject({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: { status: 'available', balanceUsd: '0.00', profile: 'prod', stale: false },
+    });
+    expect(amrBalanceGateFromMemory(' -0.25 ')).toMatchObject({ kind: 'hard' });
+  });
+
+  it('has no opinion on a positive, missing, or unparseable reading', () => {
+    expect(amrBalanceGateFromMemory('12.50')).toBeNull();
+    expect(amrBalanceGateFromMemory('0.01')).toBeNull();
+    expect(amrBalanceGateFromMemory(null)).toBeNull();
+    expect(amrBalanceGateFromMemory(undefined)).toBeNull();
+    expect(amrBalanceGateFromMemory('')).toBeNull();
+    expect(amrBalanceGateFromMemory('   ')).toBeNull();
+    expect(amrBalanceGateFromMemory('n/a')).toBeNull();
   });
 });

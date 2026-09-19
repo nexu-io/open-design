@@ -2,8 +2,8 @@
 // when the left nav rail's "Home" tab is active.
 //
 // Owns the prompt state + active plugin lifecycle and stitches
-// together the smaller pieces (HomeHero, RecentProjectsStrip,
-// PluginsHomeSection). Replaces the older left-side `PluginLoopHome`
+// together the smaller pieces (HomeHero, PluginsHomeSection; the recent
+// projects live in the entry rail, not here). Replaces the older left-side `PluginLoopHome`
 // surface by lifting its plugin orchestration up here so the prompt
 // textarea can live centered in the hero.
 
@@ -20,7 +20,6 @@ import type {
   LocalCatalogScope,
   ProjectKind,
   WorkspaceCollabContext,
-  WorkspaceProjectSummary,
   AudioVoiceOption,
   WorkspaceContextItem,
 } from '@open-design/contracts';
@@ -28,7 +27,6 @@ import {
   automaticStrategyTaskProfileForRouteId,
   DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
 } from '@open-design/contracts';
-import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackCommunityGalleryClick,
@@ -40,7 +38,6 @@ import {
   trackPluginReplacementModalClick,
   trackPluginReplacementModalSurfaceView,
   trackPluginReplacementResult,
-  trackRecentProjectsClick,
 } from '../analytics/events';
 import {
   applyPlugin,
@@ -56,6 +53,11 @@ import {
   renderPluginBriefTemplate,
   resolvePluginQueryFallback,
 } from '../state/projects';
+import {
+  HOME_COMPOSER_ATTACHMENTS_EVENT,
+  clearHomeComposerAttachments,
+  peekHomeComposerAttachments,
+} from '../state/home-composer-stash';
 import { FigmaImportModal } from './FigmaImportModal';
 import { fetchMcpServers } from '../state/mcp';
 import { takeHomeComposerAssetSeed } from '../state/libraryHandoff';
@@ -97,7 +99,6 @@ import {
   requiredInputsAreUserFillable,
 } from '../utils/pluginRequiredInputs';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
-import { AppWashKineticGrid } from './AppWashKineticGrid';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   legacyPrototypeSceneForChipId,
@@ -113,7 +114,6 @@ import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry'
 import { workspaceContextLinkedDirs } from './workspace-context';
 import {
   currentWorkspaceAccountGeneration,
-  useTeamProjects,
   useWorkspaceContext,
   workspaceResourceReadContext,
 } from '../collab/useWorkspaceContext';
@@ -142,12 +142,10 @@ import {
 } from './CommunityTemplatePreview';
 import { SkillDetailsModal } from './SkillDetailsModal';
 import type { PluginLoopSubmit } from './PluginLoopHome';
-import { localizePluginTitle } from './plugins-home/localization';
+import { localizeHomePresetTitle, localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
 import { localizePluginDescription } from './plugins-home/localization';
-import type { SharedProjectPredicate } from '../collab/all-projects-list';
-import { RecentProjectsStrip } from './RecentProjectsStrip';
 import type { Recommendation } from '../onboarding/recommendation';
 import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import { AnimatePresence } from 'motion/react';
@@ -280,10 +278,6 @@ interface Props {
     payload: PluginLoopSubmit,
   ) => Promise<boolean | 'blocked' | void> | boolean | 'blocked' | void;
   onOpenProject: (id: string, fileName?: string) => void;
-  onViewAllProjects: () => void;
-  onDeleteProject?: (id: string) => Promise<boolean | void> | boolean | void;
-  onDuplicateProject?: (id: string) => Promise<void> | void;
-  onRenameProject?: (id: string, name: string) => void;
   onBrowseRegistry?: () => void;
   onOpenIntegrations?: () => void;
   onOpenMcp?: () => void;
@@ -293,15 +287,10 @@ interface Props {
   onOpenNewProject?: (tab: 'template') => void;
   onStartBlankProject?: () => Promise<void> | void;
   promptHandoff?: HomePromptHandoff | null;
-  /** The one shared-state answer for the home strip's cards. Owned by EntryShell
-   *  because the SAME answer partitions its 全部项目 / 草稿 grids — a home share
-   *  must move the project between those grids too, without a refetch. */
-  isSharedProject?: SharedProjectPredicate;
-  onProjectShared?: (project: WorkspaceProjectSummary) => void;
-  onProjectShareFailed?: (projectId: string) => void;
-  onProjectUnshared?: (projectId: string) => void;
-  /** Authoritative catalog owners plus any exact successful-move witness. */
-  projectOwnerMemberIds?: ReadonlyMap<string, string>;
+  /** Dock only, straight through to HomeHero: bump to fold the docked composer
+   *  back to its collapsed default (the community view raises it on every tab
+   *  change). */
+  collapseSignal?: number;
   skills?: SkillSummary[];
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
@@ -329,6 +318,15 @@ interface Props {
    *  attribution — EntryShell reads them off config, HomeView threads. */
   deepSeekV4FlashCampaignMetricsConsent?: boolean;
   deepSeekV4FlashCampaignInstallationId?: string | null;
+  /**
+   * `page` is Home itself. `dock` renders the composer ALONE — no campaign
+   * modal, no recent-projects strip — for hosts that want Home's input bar
+   * somewhere else (the community view docks one at the bottom). The submit
+   * path, the mention pickers and every prop below are shared: a docked
+   * instance is a second HomeView, so it keeps its own draft rather than
+   * fighting Home's over one piece of state.
+   */
+  variant?: 'page' | 'dock';
 }
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
@@ -483,10 +481,15 @@ function clearHomeComposerDraft(): void {
  * live event (covers the common case where `HomeView` is already mounted and
  * just gets toggled visible — see the `HOME_COMPOSER_SEED_EVENT` note above).
  */
-export function seedHomeComposerPrompt(prompt: string): void {
-  writeHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY, prompt);
+export function seedHomeComposerPrompt(
+  prompt: string,
+  target: 'page' | 'dock' = 'page',
+): void {
+  if (target === 'page') writeHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY, prompt);
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(HOME_COMPOSER_SEED_EVENT, { detail: { prompt } }));
+    window.dispatchEvent(
+      new CustomEvent(HOME_COMPOSER_SEED_EVENT, { detail: { prompt, target } }),
+    );
   }
 }
 
@@ -499,21 +502,13 @@ export function HomeView({
   defaultDesignSystemId = null,
   onSubmit,
   onOpenProject,
-  onViewAllProjects,
-  onDeleteProject,
-  onDuplicateProject,
-  onRenameProject,
   onBrowseRegistry,
   onOpenIntegrations,
   onOpenMcp,
   onOpenNewProject,
   onStartBlankProject,
   promptHandoff,
-  isSharedProject,
-  onProjectShared,
-  onProjectShareFailed,
-  onProjectUnshared,
-  projectOwnerMemberIds,
+  collapseSignal,
   skills = EMPTY_SKILLS,
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
@@ -527,9 +522,16 @@ export function HomeView({
   onDeepSeekV4FlashCampaignUseNow,
   deepSeekV4FlashCampaignMetricsConsent = false,
   deepSeekV4FlashCampaignInstallationId = null,
+  variant = 'page',
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
+  // The localStorage draft is keyed per surface, not per instance, so only ONE
+  // HomeView may own it. Home does; a docked composer keeps its text in memory
+  // for as long as its host view is up. Sharing the key would have the two
+  // clobbering each other on every keystroke, and a send from either would
+  // wipe the other's half-written prompt.
+  const ownsComposerDraft = variant === 'page';
   const workspaceContextState = useWorkspaceContext();
   const { context: workspaceContext } = workspaceContextState;
   const pluginCatalogWorkspaceContext = workspaceResourceReadContext(workspaceContextState);
@@ -553,23 +555,6 @@ export function HomeView({
   const desiredPluginCatalogKey = workspaceContextState.identityChangePending
     ? null
     : pluginCatalogCacheKey(pluginCatalogOptions);
-  // Team-wide catalog from the resource hub via the daemon; empty off-team / when
-  // the hub is unconfigured. Only the creator attribution is derived here — the
-  // shared/not-shared answer arrives as `isSharedProject` from EntryShell, which
-  // owns the optimistic layer the 全部项目 / 草稿 grids read from too.
-  const homeTeamProjects = useTeamProjects();
-  // projectId → sharing member id, so the strip can resolve "{creator}创建" for a
-  // teammate's shared project (a project absent here is the member's own local
-  // project → "我创建").
-  const homeProjectOwnerMemberIds = useMemo(
-    () => projectOwnerMemberIds ?? new Map(
-      homeTeamProjects.projects.map((teamProject) => [
-        teamProject.projectId,
-        teamProject.ownerMemberId,
-      ]),
-    ),
-    [homeTeamProjects.projects, projectOwnerMemberIds],
-  );
   // P0 page_view page_name=home — fire once on mount. ref-keyed to survive
   // re-renders that flip parent state without remounting HomeView.
   const homePageViewFiredRef = useRef(false);
@@ -621,7 +606,7 @@ export function HomeView({
   // system draft). Resolved into a full `active` binding by the restore
   // effect further down once the plugin catalog has loaded, then cleared.
   const [pendingChipRestore, setPendingChipRestore] = useState<HomeComposerChipDraft | null>(
-    () => readHomeComposerChipDraft(),
+    () => (ownsComposerDraft ? readHomeComposerChipDraft() : null),
   );
   const [fallbackProjectKind, setFallbackProjectKind] = useState<ProjectKind | null>(null);
   const [fallbackProjectMetadata, setFallbackProjectMetadata] =
@@ -636,7 +621,10 @@ export function HomeView({
     text: string;
     chipId: string | null;
   } | null>(null);
-  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
+  // The Home composer no longer exposes a mode picker (the 「设计」 pill was
+  // removed), so every Home create runs in the default design mode; the
+  // per-conversation picker still lives in the project chat composer.
+  const sessionMode: ChatSessionMode = 'design';
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [activeSkillCatalogScope, setActiveSkillCatalogScope] =
     useState<LocalCatalogScope | null>(null);
@@ -644,7 +632,17 @@ export function HomeView({
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [contextWorkspaceItems, setContextWorkspaceItems] = useState<WorkspaceContextItem[]>([]);
-  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  // A failed optimistic create hands the staged attachments back through the
+  // stash (App owns the rollback); a plain mount starts empty. `peek` is
+  // side-effect free on purpose: StrictMode invokes this initializer twice and
+  // keeps only one result, so consuming here would hand the files to the
+  // discarded call. The effect below clears the slot once they are in state.
+  const [stagedFiles, setStagedFiles] = useState<File[]>(() =>
+    ownsComposerDraft ? peekHomeComposerAttachments() : [],
+  );
+  useEffect(() => {
+    if (ownsComposerDraft) clearHomeComposerAttachments();
+  }, [ownsComposerDraft]);
   const [workingDir, setWorkingDir] = useState<string | null>(null);
   // Token paired with `workingDir` when picked through the desktop host's
   // native dialog. Spent on the post-creation working-dir POST so the
@@ -666,13 +664,15 @@ export function HomeView({
     designSystemCatalogScope: LocalCatalogScope | null;
   } | null>(null);
   if (restoredDraftRef.current === null) {
-    restoredDraftRef.current = {
-      prompt: readHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY) ?? '',
-      designSystemId: readHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_KEY),
-      designSystemCatalogScope: readLocalCatalogScopeDraft(
-        HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY,
-      ),
-    };
+    restoredDraftRef.current = ownsComposerDraft
+      ? {
+          prompt: readHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY) ?? '',
+          designSystemId: readHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_KEY),
+          designSystemCatalogScope: readLocalCatalogScopeDraft(
+            HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY,
+          ),
+        }
+      : { prompt: '', designSystemId: null, designSystemCatalogScope: null };
   }
   const restoredDraft = restoredDraftRef.current;
   const [designSystemId, setDesignSystemId] = useState<string | null>(() =>
@@ -726,24 +726,28 @@ export function HomeView({
   // a tab switch triggers (see the module note above). Empty values clear the
   // key rather than storing "".
   useEffect(() => {
+    if (!ownsComposerDraft) return;
     writeHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY, prompt);
-  }, [prompt]);
+  }, [ownsComposerDraft, prompt]);
   useEffect(() => {
+    if (!ownsComposerDraft) return;
     writeHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_KEY, designSystemId);
-  }, [designSystemId]);
+  }, [designSystemId, ownsComposerDraft]);
   useEffect(() => {
+    if (!ownsComposerDraft) return;
     writeHomeComposerDraft(
       HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY,
       designSystemId && designSystemCatalogScope
         ? JSON.stringify(designSystemCatalogScope)
         : null,
     );
-  }, [designSystemCatalogScope, designSystemId]);
+  }, [designSystemCatalogScope, designSystemId, ownsComposerDraft]);
   // Persist the active chip/plugin identity the same way — only the
   // serializable fields, not `active` itself (see the module note above).
   // Clearing on `active === null` covers the explicit-clear (×) and the
   // Ask-mode / skill-pick paths that reset `active` to null directly.
   useEffect(() => {
+    if (!ownsComposerDraft) return;
     writeHomeComposerChipDraft(
       active
         ? {
@@ -758,7 +762,7 @@ export function HomeView({
           }
         : null,
     );
-  }, [active]);
+  }, [active, ownsComposerDraft]);
   // Live counterpart to the draft-key restore above (see the
   // `HOME_COMPOSER_SEED_EVENT` module note) — picks up a `seedHomeComposerPrompt`
   // call that fires while this HomeView instance is already mounted, which is
@@ -766,14 +770,33 @@ export function HomeView({
   // switches instead of tearing it down.
   useEffect(() => {
     function onSeed(event: Event) {
-      const prompt = (event as CustomEvent<{ prompt: string }>).detail?.prompt;
-      if (typeof prompt !== 'string') return;
-      setPrompt(prompt);
-      setPromptEditedByUser(prompt.trim().length > 0);
+      const detail = (event as CustomEvent<{ prompt: string; target?: 'page' | 'dock' }>)
+        .detail;
+      // Addressed, not broadcast: with a docked composer on screen alongside
+      // Home's, an unaddressed seed would land the same text in both.
+      if ((detail?.target ?? 'page') !== variant) return;
+      if (typeof detail?.prompt !== 'string') return;
+      setPrompt(detail.prompt);
+      setPromptEditedByUser(detail.prompt.trim().length > 0);
     }
     window.addEventListener(HOME_COMPOSER_SEED_EVENT, onSeed);
     return () => window.removeEventListener(HOME_COMPOSER_SEED_EVENT, onSeed);
-  }, []);
+  }, [variant]);
+  // The attachment hand-off's second consumer: a failed optimistic create that
+  // lands while this page composer is already mounted (the user pressed Back on
+  // the pending frame mid-create) cannot rely on the mount initializer above,
+  // so take the stash on the event instead. Page variant only, like the draft.
+  useEffect(() => {
+    if (!ownsComposerDraft) return;
+    function onAttachmentsHandedBack() {
+      const files = peekHomeComposerAttachments();
+      if (files.length === 0) return;
+      clearHomeComposerAttachments();
+      setStagedFiles((current) => [...current, ...files]);
+    }
+    window.addEventListener(HOME_COMPOSER_ATTACHMENTS_EVENT, onAttachmentsHandedBack);
+    return () => window.removeEventListener(HOME_COMPOSER_ATTACHMENTS_EVENT, onAttachmentsHandedBack);
+  }, [ownsComposerDraft]);
   const [figmaModalOpen, setFigmaModalOpen] = useState(false);
   const examplePromptInfoRef = useRef<ExamplePromptInfo | null>(null);
   const handleExamplePromptStatusChange = useCallback((info: ExamplePromptInfo | null) => {
@@ -904,12 +927,16 @@ export function HomeView({
   const desiredPluginCatalogKeyRef = useRef(desiredPluginCatalogKey);
   desiredPluginCatalogKeyRef.current = desiredPluginCatalogKey;
   const scrollHomeToTop = useCallback(() => {
+    // Only the page composer lives at the top of its column. A docked one is
+    // pinned in view already, so scrolling its host would yank the grid the
+    // user is reading out from under them for no gain.
+    if (variant === 'dock') return;
     requestAnimationFrame(() => {
       const scrollContainer = homeViewRef.current?.closest('.entry-main--scroll');
       if (!(scrollContainer instanceof HTMLElement)) return;
       smoothScrollToTop(scrollContainer);
     });
-  }, []);
+  }, [variant]);
   useEffect(() => {
     if (!desiredPluginCatalogKey) return;
     let cancelled = false;
@@ -1218,7 +1245,7 @@ export function HomeView({
       }
     }
     return {
-      title: localizePluginTitle(locale, active.record),
+      title: localizeHomePresetTitle(locale, active.record),
       isExplicitPlugin: true,
     };
   }, [active, locale, t]);
@@ -1388,7 +1415,19 @@ export function HomeView({
     });
   }, [workspaceContext?.workspaceName]);
 
+  /* Applying a chip focuses the composer — right for a chip the USER picked,
+     wrong for one the HOST bound. The community gallery binds a chip into the
+     docked composer on mount and on every type-tab change, and that focus
+     unfolded a bar that is supposed to be collapsed on entry to every tab (per
+     product: 用户进入每个 tab 的时候是收起来的): HomeHero clears its fold on
+     focus, so the caret arriving reads as the user opening the bar.
+     Set only around the host's own chip application below — `usePlugin`
+     reaches this function with no `await` in front of it, so a synchronous
+     bracket covers the whole apply. */
+  const hostChipApplyRef = useRef(false);
+
   function focusPromptAtEnd() {
+    if (hostChipApplyRef.current) return;
     requestAnimationFrame(() => {
       inputRef.current?.focusEnd();
     });
@@ -1870,7 +1909,7 @@ export function HomeView({
       // The persisted plugin was uninstalled/removed since the last visit —
       // drop the stale pointer rather than surfacing an error for a background
       // restore the user never explicitly asked to retry.
-      writeHomeComposerChipDraft(null);
+      if (ownsComposerDraft) writeHomeComposerChipDraft(null);
       return;
     }
     // The draft reader already folded any retired top-level id onto its parent,
@@ -1905,59 +1944,13 @@ export function HomeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
 
-  // Default creation type (per product): a fresh Home composer starts on
-  // 原型 (the `prototype` chip) instead of typeless. One-shot per mount, decided
-  // from the MOUNT-time draft state — if a persisted chip draft exists, the
-  // restore effect above owns the composer and this seed must never race its
-  // async resolution, so it is skipped outright. Explicitly clearing the chip
-  // (×) also stays cleared: the ref flips on first seed.
-  //
-  // The seed uses the same silent, deferred-apply path as a user pick on a
-  // create chip (no daemon apply until submit, textarea untouched) but skips
-  // `pickChip` itself so no synthetic chat_composer click lands in analytics.
-  const defaultChipSeededRef = useRef(pendingChipRestore !== null);
-  // Keep Send locked during the one effect turn between a cold plugin-catalog
-  // load and the default prototype binding. The heavier Home chrome can otherwise
-  // make that turn user-visible: the composer accepts a click while `active`
-  // is still null and routes the prompt through the generic fallback even
-  // though Prototype becomes selected immediately afterwards.
-  const [defaultChipSeedPending, setDefaultChipSeedPending] = useState(
-    pendingChipRestore === null,
-  );
-  useEffect(() => {
-    if (defaultChipSeededRef.current) return;
-    if (pluginsLoading || pendingPluginUseHandoff || pendingChipRestore) return;
-    // A live hand-off or another explicit intent may have bound a plugin in
-    // the same catalog-resolution turn. It supersedes the default prototype and is
-    // just as ready to submit.
-    if (active) {
-      defaultChipSeededRef.current = true;
-      setDefaultChipSeedPending(false);
-      return;
-    }
-    defaultChipSeededRef.current = true;
-    const prototypeChip = findChip('prototype');
-    const prototypeAction = prototypeChip?.action;
-    if (!prototypeChip || !prototypeAction || prototypeAction.kind !== 'apply-scenario') {
-      setDefaultChipSeedPending(false);
-      return;
-    }
-    const record = plugins.find((plugin) => plugin.id === prototypeAction.pluginId);
-    if (!record) {
-      setDefaultChipSeedPending(false);
-      return;
-    }
-    void usePlugin(record, undefined, {
-      projectKind: prototypeAction.projectKind,
-      chipId: prototypeChip.id,
-      inputs: prototypeAction.inputs,
-      projectMetadata: prototypeAction.projectMetadata ?? null,
-      suppressPromptUpdate: true,
-      deferApply: true,
-    });
-    setDefaultChipSeedPending(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pluginsLoading, active, pendingPluginUseHandoff, pendingChipRestore, plugins]);
+  // No default creation type (per product): a cold Home starts with nothing
+  // picked, so the type row below the composer is the only thing on screen and
+  // the composer carries no pill. This used to silently bind the Prototype
+  // chip on the first catalog-resolution turn — which also meant Send had to
+  // stay locked for that turn (`defaultChipSeedPending`). Neither is needed
+  // now: a naked prompt routes through the daemon's own scenario-default table
+  // exactly as it does when the user clears the type with the pill's ×.
 
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
@@ -2681,18 +2674,27 @@ export function HomeView({
     // bundled plugin — and re-run when `plugins` arrives so an intent queued
     // before the catalog loaded is still honored once it does.
     if (plugins.length === 0) return;
-    const chipId = consumePendingHomeChip();
+    // Only this composer's own queue — the community type tabs address the
+    // dock, the Brands tab addresses the page.
+    const chipId = consumePendingHomeChip(variant);
     if (!chipId) return;
-    // A queued intent is a bare string from another surface, so it can still
-    // name a retired top-level id; select the scene it became instead of
-    // failing the lookup and silently dropping the hand-off.
-    const legacyScene = legacyPrototypeSceneForChipId(chipId);
-    if (legacyScene) {
-      pickPrototypeSubtype(legacyScene);
-      return;
+    // Docked only: Home's composer IS its page's subject, so a chip routed
+    // there (the Brands tab's "use in new chat") still earns the caret.
+    hostChipApplyRef.current = variant === 'dock';
+    try {
+      // A queued intent is a bare string from another surface, so it can still
+      // name a retired top-level id; select the scene it became instead of
+      // failing the lookup and silently dropping the hand-off.
+      const legacyScene = legacyPrototypeSceneForChipId(chipId);
+      if (legacyScene) {
+        pickPrototypeSubtype(legacyScene);
+        return;
+      }
+      const chip = findChip(chipId);
+      if (chip) pickChip(chip);
+    } finally {
+      hostChipApplyRef.current = false;
     }
-    const chip = findChip(chipId);
-    if (chip) pickChip(chip);
     // pickChip / selectedDesignSystemTitle are recreated each render; this effect
     // runs after the commit that bumped the tick, so the closure it captures
     // already reflects the latest default design system.
@@ -3015,7 +3017,7 @@ export function HomeView({
       // The draft has become a real run; drop it synchronously (before the
       // navigation unmounts us) so the sent prompt + pick don't reappear the
       // next time the Home tab mounts.
-      clearHomeComposerDraft();
+      if (ownsComposerDraft) clearHomeComposerDraft();
       // Only drop the staged contexts once the run actually started — a
       // rejected creation keeps them so the retry sends the same payload.
       setSelectedPluginContexts([]);
@@ -3064,42 +3066,36 @@ export function HomeView({
     }
   }
 
-  // #5517: with no recent projects the home (logo + heading + composer)
-  // centers vertically instead of hugging the top, and the strip is skipped.
+  // #5517: with no projects yet the home (logo + heading + composer) centers
+  // vertically instead of hugging the top.
   const recentProjectsEmpty = !projectsLoading && projects.length === 0;
-  // A deliberate resource/plugin selection already gives submit an exact
-  // route, so it must not remain behind the fresh-home default-prototype barrier.
-  // Keep the barrier for a plain prompt: that is the only lane where sending
-  // before the catalog settles could incorrectly fall back to the generic
-  // scenario immediately before Prototype binds.
-  const hasExplicitSubmitRoute = Boolean(
-    active
-    || activeSkill
-    || selectedPluginContexts.length > 0
-    || selectedMcpContexts.length > 0
-    || selectedConnectorContexts.length > 0
-    || contextWorkspaceItems.length > 0
-    || stagedFiles.length > 0
-  );
 
   return (
     <div
-      className={`home-view${recentProjectsEmpty ? ' home-view--centered' : ''}`}
+      className={`home-view${recentProjectsEmpty ? ' home-view--centered' : ''}${
+        variant === 'dock' ? ' home-view--dock' : ''
+      }`}
       data-testid="home-view"
+      data-variant={variant}
       ref={homeViewRef}
     >
       {/* `active` gates the portal-escaping campaign dialog to the ACTIVE home
           view: EntryShell only hides inactive views with display:none, which a
-          document.body portal ignores. */}
-      <DeepSeekV4FlashCampaign
-        audience={deepSeekV4FlashCampaignAudience}
-        active={isActive}
-        onUseCampaignModel={onDeepSeekV4FlashCampaignUseNow}
-        metricsConsent={deepSeekV4FlashCampaignMetricsConsent}
-        installationId={deepSeekV4FlashCampaignInstallationId}
-      />
-      {isActive ? <AppWashKineticGrid clipBottomTo=".home-hero" /> : null}
+          document.body portal ignores. A docked composer never runs it at all —
+          it is a Home-page moment, and a second copy of the modal would fight
+          the page one over the same dismissal state. */}
+      {variant === 'dock' ? null : (
+        <DeepSeekV4FlashCampaign
+          audience={deepSeekV4FlashCampaignAudience}
+          active={isActive}
+          onUseCampaignModel={onDeepSeekV4FlashCampaignUseNow}
+          metricsConsent={deepSeekV4FlashCampaignMetricsConsent}
+          installationId={deepSeekV4FlashCampaignInstallationId}
+        />
+      )}
       <HomeHero
+        variant={variant}
+        collapseSignal={collapseSignal}
         workspaceContext={workspaceContext}
         ref={inputRef}
         active={isActive}
@@ -3108,8 +3104,6 @@ export function HomeView({
         onPromptChange={handlePromptChange}
         onSubmit={submit}
         onSubmitScenario={submitScenario}
-        sessionMode={sessionMode}
-        onSessionModeChange={setSessionMode}
         submitting={sending}
         activePluginTitle={activeBadgeTitle}
         activePluginIsExplicit={activePluginIsExplicit}
@@ -3172,7 +3166,6 @@ export function HomeView({
         pendingPluginId={pendingApplyId}
         pendingChipId={pendingChipId}
         submitDisabled={
-          (defaultChipSeedPending && !hasExplicitSubmitRoute) ||
           Boolean(pendingChipRestore) ||
           Boolean(pendingPluginUseHandoff) ||
           Boolean(pendingApplyId) ||
@@ -3188,7 +3181,6 @@ export function HomeView({
         onPickMcp={useMcpServer}
         onPickConnector={useConnector}
         onPickChip={pickChip}
-        onPickPrototypeSubtype={pickPrototypeSubtype}
         contextItemCount={contextItemCount}
         error={error}
         workingDir={workingDir}
@@ -3222,47 +3214,12 @@ export function HomeView({
         recommendationSlot={artifactUpgradeSlot}
       />
 
-      {recentProjectsEmpty ? null : (
-      <RecentProjectsStrip
-        isActive={isActive}
-        projects={projects}
-        designSystems={designSystems}
-        heading={t('recentProjects.title')}
-        {...(isSharedProject ? { isSharedProject } : {})}
-        {...(onProjectShared ? { onProjectShared } : {})}
-        {...(onProjectShareFailed ? { onProjectShareFailed } : {})}
-        {...(onProjectUnshared ? { onProjectUnshared } : {})}
-        projectOwnerMemberIds={homeProjectOwnerMemberIds}
-        limit={1000}
-        {...(projectsLoading !== undefined ? { loading: projectsLoading } : {})}
-        onOpen={(id) => {
-          // P0 ui_click area=recent_projects element=project_card — emit
-          // before navigation so the event isn't lost when the host
-          // re-renders into the project view.
-          const project = projects.find((p) => p.id === id);
-          const projectKind = projectKindFromMetadataToTracking(project?.metadata);
-          trackRecentProjectsClick(analytics.track, {
-            page_name: 'home',
-            area: 'recent_projects',
-            element: 'project_card',
-            project_id: id,
-            ...(projectKind ? { project_kind: projectKind } : {}),
-          });
-          onOpenProject(id);
-        }}
-        onViewAll={() => {
-          trackRecentProjectsClick(analytics.track, {
-            page_name: 'home',
-            area: 'recent_projects',
-            element: 'view_all',
-          });
-          onViewAllProjects();
-        }}
-        {...(onDeleteProject ? { onDelete: onDeleteProject } : {})}
-        {...(onDuplicateProject ? { onDuplicate: onDuplicateProject } : {})}
-        {...(onRenameProject ? { onRename: onRenameProject } : {})}
-      />
-      )}
+      {/* No 最近项目 grid under the hero on EITHER branch (OPEND-2683, per
+          product: 最近项目统一在左侧栏展示; OPEND-3140 closed the local half):
+          the rail's 最近项目 section (EntryNavRail → RailRecentSection) is the
+          one recent-projects entry, with the status glyphs and hover preview
+          the grid used to carry, and 项目 / 全部项目 keep RecentProjectsStrip
+          for the browsable catalogue with its filter / sort / view controls. */}
 
       <AnimatePresence>
         {detailsRecord && detailsTemplate ? (

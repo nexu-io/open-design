@@ -56,6 +56,9 @@ StrategyTaskExecutionRecord {
     inputStage: 'production',
     outcome,
     executionMode: 'simple',
+    // This historical production fixture predates the intent-resolution policy.
+    executionIntent: 'produce',
+    intentResolution: null,
     planContractHash: 'sha256:plan-fixture',
     clarificationCount: 0,
     planContractRepairAttempts: 0,

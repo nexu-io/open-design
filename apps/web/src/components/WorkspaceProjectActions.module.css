@@ -1,0 +1,110 @@
+/* The ⋮ on a docked project-switcher row and the menu it opens (OPEND-2686 /
+   OPEND-3128): 重命名 / 复制项目 / 转入团队空间 / 删除, the rail's 最近项目 row
+   menu brought to the chat header's switcher. Material per the reference:
+   `--bg` panel, `--border-soft` hairline, `--shadow-md`. */
+
+.row {
+  position: relative;
+}
+
+/* Trailing ⋮. Hidden until the row is hovered or focused so the list reads as
+   names first; stays up while its menu is open so the affordance and the menu
+   cannot disagree about which row owns it. */
+.more {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+.row:hover .more,
+.row:focus-within .more,
+.more[aria-expanded='true'] {
+  opacity: 1;
+}
+.more:hover,
+.more[aria-expanded='true'] {
+  background: var(--vibrancy-fill-tertiary);
+  color: var(--text);
+}
+
+/* 重命名 edits the name in place, in the row's own slot — the rail row does the
+   same — so the switcher never has to leave the list to rename an entry. */
+.rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  margin: 2px 4px 2px 0;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+/* Portalled beside the dropdown (see `dockActionsAnchorFor` in
+   WorkspaceTabsBar.tsx), in the slot the hover preview would take — which is
+   why opening it suppresses that preview. */
+.menu {
+  position: fixed;
+  z-index: 1200;
+  width: 160px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--shadow-md);
+}
+.menu button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.menu button:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+.menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.menu button.danger {
+  color: var(--red, #f04142);
+}
+.menu button.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red, #f04142) 12%, transparent);
+}
+/* A failed request is reported under the item that asked for it, the way the
+   rail row menu and the project cards report theirs. */
+.error {
+  padding: 2px 10px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--red, #f04142);
+}

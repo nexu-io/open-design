@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
+
+import { navigate } from '../../src/router';
 import {
   buildWorkspacePermissions,
   type ProjectWorkspaceScope,
@@ -46,7 +49,13 @@ import {
   listProjects,
   listTemplates,
   patchProject,
+  ProjectCreateError,
 } from '../../src/state/projects';
+import {
+  HOME_COMPOSER_ATTACHMENTS_EVENT,
+  clearHomeComposerAttachments,
+  peekHomeComposerAttachments,
+} from '../../src/state/home-composer-stash';
 import {
   WORKSPACE_CONTEXT_REFRESH_EVENT,
   notifyWorkspaceContextRefresh,
@@ -398,6 +407,7 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenAmrSettings,
     onOpenSettings,
     workspaceContextOverride,
+    onCreationHandoffSettled,
   }: {
     onBack: () => void;
     onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
@@ -434,7 +444,13 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenAmrSettings?: () => void;
     onOpenSettings?: () => void;
     workspaceContextOverride?: WorkspaceCollabContext | null;
+    onCreationHandoffSettled?: (projectId: string) => void;
   }) => {
+    // The real view releases the hand-off card once its first transcript
+    // settles; the stand-in has no transcript, so it settles on mount.
+    useEffect(() => {
+      onCreationHandoffSettled?.(project.id);
+    }, [onCreationHandoffSettled, project.id]);
     projectViewRetryScopeHarness.latest = {
       context: workspaceContextOverride ?? null,
       continuation: amrAuthRetryContinuation ?? null,
@@ -1481,6 +1497,117 @@ describe('App project creation routing', () => {
     expect(screen.queryByTestId(`entry-project-${requestedProjectId}`)).toBeNull();
     expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(false);
     expect(screen.getByRole('alert').textContent).toContain('Could not create project');
+  });
+
+  it('shows the staged attachment and an inert composer on the pending frame', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    mockedCreateProject.mockImplementation(() => creation.promise);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+
+    // Synchronous on purpose: the optimistic hand-off is flushed inside the
+    // click, so the frame exists before the create request can even settle.
+    const pending = screen.getByTestId('project-creation-pending-view');
+    expect(pending.querySelector('[data-testid="pending-attachment-row"]')?.textContent)
+      .toContain('brief.txt');
+    const composerShell = screen.getByTestId('pending-chat-composer-shell');
+    expect(composerShell.hasAttribute('inert')).toBe(true);
+    expect(composerShell.querySelector('[data-testid="chat-composer"]')).toBeTruthy();
+    expect((screen.getByTestId('chat-send') as HTMLButtonElement).disabled).toBe(true);
+
+    creation.reject(new Error('Could not create project'));
+    await screen.findByTestId('entry-home-surface');
+  });
+
+  it('maps a create preparation timeout to a localized retry toast and hands attachments back', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    let requestedProjectId: string | undefined;
+    mockedCreateProject.mockImplementation((input) => {
+      requestedProjectId = (input as typeof input & { id?: string }).id;
+      return creation.promise;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-creation-pending-view');
+
+    creation.reject(new ProjectCreateError(
+      'Project preparation timed out while validating the selected design system. Please try again.',
+      504,
+      'PROJECT_CREATE_PREPARATION_TIMEOUT',
+      true,
+      null,
+    ));
+
+    await screen.findByTestId('entry-home-surface');
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
+    expect(screen.queryByTestId(`entry-project-${requestedProjectId}`)).toBeNull();
+    expect(screen.getByRole('alert').textContent)
+      .toContain('Project setup timed out before it could start. Try sending again.');
+    // Home remounts on the way back; the staged File objects ride the stash
+    // so the retry can resend the same payload.
+    expect(peekHomeComposerAttachments().map((file) => file.name)).toEqual(['brief.txt']);
+    clearHomeComposerAttachments();
+  });
+
+  it('hands attachments to an already-mounted Home when the user backed out before the create failed', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    mockedCreateProject.mockImplementation(() => creation.promise);
+    // Stands in for the mounted page HomeView (EntryView is mocked here): the
+    // real listener in HomeView.attachment-stash.test.tsx takes the slot on
+    // this event and appends the files to its staged band.
+    const handedBack: string[] = [];
+    const onHandedBack = () => {
+      handedBack.push(...peekHomeComposerAttachments().map((file) => file.name));
+      clearHomeComposerAttachments();
+    };
+    window.addEventListener(HOME_COMPOSER_ATTACHMENTS_EVENT, onHandedBack);
+    try {
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+      await screen.findByTestId('project-creation-pending-view');
+
+      // Back during the in-flight create: Home is on screen before the 504.
+      // The pending frame carries no back control of its own (it mirrors the
+      // project frame's chrome), so the user leaves through the entry rail —
+      // here, the same router navigation that rail click performs.
+      act(() => {
+        navigate({ kind: 'home', view: 'home' });
+      });
+      await screen.findByTestId('entry-home-surface');
+      expect(handedBack).toEqual([]);
+
+      creation.reject(new ProjectCreateError(
+        'Project preparation timed out while loading plugin resources. Please try again.',
+        504,
+        'PROJECT_CREATE_PREPARATION_TIMEOUT',
+        true,
+        null,
+      ));
+
+      await waitFor(() => expect(handedBack).toEqual(['brief.txt']));
+      expect(window.location.pathname).toBe('/');
+      expect(screen.getByRole('alert').textContent)
+        .toContain('Project setup timed out before it could start. Try sending again.');
+      // Consumed by the mounted composer, so nothing is left for a later mount.
+      expect(peekHomeComposerAttachments()).toEqual([]);
+    } finally {
+      window.removeEventListener(HOME_COMPOSER_ATTACHMENTS_EVENT, onHandedBack);
+    }
   });
 
   it('releases a persisted project when attachment setup fails after creation', async () => {

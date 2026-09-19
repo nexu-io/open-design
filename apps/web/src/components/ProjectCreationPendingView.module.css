@@ -9,6 +9,12 @@
   background: var(--veil-panel);
 }
 
+.pendingComposer {
+  min-width: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
 .workspace {
   grid-column: 3;
 }

@@ -99,7 +99,7 @@ afterEach(() => {
 
 const USER_IDS = ['u1', 'u2', 'u3', 'u4'];
 
-/** 四条用户消息 + 一条正在流的助手消息 —— 导轨要 >= 2 条用户消息才渲染。 */
+/** 四条用户消息 + 一条正在流的助手消息 —— 多条短横,活动点才有得跳。 */
 function buildMessages(streamedChars: number): ChatMessage[] {
   const out: ChatMessage[] = [];
   USER_IDS.forEach((id, index) => {

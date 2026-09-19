@@ -2705,8 +2705,8 @@ export function feedbackReasonOptions(
       : [
           "missed_request",
           "weak_visual",
-          "could_not_run",
-          "too_slow",
+          "incomplete_output",
+          "hard_to_use",
         ];
   return codes.map((code) => ({ code, label: feedbackReasonLabel(code, t) }));
 }

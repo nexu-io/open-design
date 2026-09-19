@@ -7222,6 +7222,23 @@ Common options:
             data:    data.error.data,
           });
         }
+        // The daemon bounds create preparation (15s by default) and answers
+        // 504 PROJECT_CREATE_PREPARATION_TIMEOUT without committing anything.
+        // Surface that code the same way the Web does so an embedding agent
+        // can retry the identical request instead of parsing a log line.
+        if (flags.json && typeof data?.error?.code === 'string') {
+          return exitWithStructuredError({
+            code:    data.error.code,
+            message: typeof data.error.message === 'string'
+              ? data.error.message
+              : `POST /api/projects failed: ${resp.status}`,
+            data:    {
+              status:    resp.status,
+              retryable: data.error.retryable === true,
+              ...(data.error.details !== undefined ? { details: data.error.details } : {}),
+            },
+          });
+        }
         console.error(`POST /api/projects failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
       }

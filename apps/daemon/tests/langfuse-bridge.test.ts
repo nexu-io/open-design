@@ -9,11 +9,13 @@ import {
   reportRunCompletedFromDaemon,
 } from '../src/langfuse-bridge.js';
 import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
+import { readObjectEvidence } from '../src/services/evidence-delivery.js';
 
 interface FakeMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  resultDeliveryState?: string;
   attachments?: Array<Record<string, unknown>>;
   producedFiles?: Array<Record<string, unknown>>;
   traceObjectFiles?: Array<Record<string, unknown>>;
@@ -602,12 +604,17 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(serialized).not.toContain('sk-test-');
     expect(serialized).not.toContain('private body');
 
-    expect(await buildSafeRunQualityProjectionFromDaemon({
+    const metricsOnly = await buildSafeRunQualityProjectionFromDaemon({
       db: makeDb(),
       dataDir,
       run,
       prefs: { metrics: true, content: false, artifactManifest: true },
-    })).toBeUndefined();
+    });
+    expect(metricsOnly?.result?.error?.code).toBe('AGENT_EXIT');
+    expect(metricsOnly?.result?.output).toBeUndefined();
+    expect(metricsOnly?.tools).toBeUndefined();
+    expect(metricsOnly?.manifests).toBeUndefined();
+    expect(JSON.stringify(metricsOnly)).not.toMatch(/sk-test-|\/Users\/alice|private body/);
   });
 
   afterEach(async () => {
@@ -623,6 +630,48 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
   async function writeAppCfg(cfg: Record<string, unknown>) {
     await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify(cfg));
   }
+
+  it('still reports a legacy Run trace when the enabled object outbox has no objects', async () => {
+    await writeAppCfg({ installationId: 'synthetic', telemetry: { metrics: true, content: true } });
+    enableTestVelaTelemetry();
+    vi.stubEnv('OPEN_DESIGN_OBJECT_OUTBOX_MODE', 'send');
+    vi.stubEnv('OPEN_DESIGN_TELEMETRY_RELAY_URL', 'https://telemetry.open-design.ai/api/langfuse');
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { status: 202 }));
+    const result = await reportRunCompletedFromDaemon({
+      db: makeDbWithListMessages({ 'conv-1': [{ id: 'msg-1', role: 'assistant', content: 'done' }] }),
+      dataDir, run: makeRun(), fetchImpl: fetchSpy,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(velaTraceBody(fetchSpy.mock.calls[0] as [string, RequestInit]).id).toBe('run-id-1');
+    expect(result).toMatchObject({ langfuse_delivery_status: 'accepted' });
+  });
+
+  it('A-01/A-11 reads persisted delivery outcome and observe adds no network payload', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    await writeAppCfg({ installationId: 'synthetic', telemetry: { metrics: true, content: true } });
+    vi.stubEnv('OPEN_DESIGN_TELEMETRY_RELAY_URL', 'https://synthetic.invalid/ingest');
+    vi.stubEnv('OPEN_DESIGN_OBJECT_OUTBOX_MODE', 'off');
+    const run = makeRun();
+    const db = makeDbWithListMessages({ 'conv-1': [
+      { id: 'u1', role: 'user', content: 'synthetic' },
+      { id: 'msg-1', role: 'assistant', content: 'synthetic', resultDeliveryState: 'no_result' },
+    ] });
+    const batches: unknown[][] = [];
+    for (const mode of ['off', 'observe', 'send']) {
+      vi.stubEnv('OPEN_DESIGN_EVAL_CONTRACT_V2_MODE', mode);
+      const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { status: 202 }));
+      await reportRunCompletedFromDaemon({ db, dataDir, run, fetchImpl: fetchSpy });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const payload = JSON.parse(fetchSpy.mock.calls[0]![1].body);
+      batches.push(payload.batch);
+    }
+    const metadata = (batch: any[]) => batch.find(event => event.type === 'trace-create').body.metadata;
+    expect(metadata(batches[0]!)).not.toHaveProperty('eval_context_v2');
+    expect(metadata(batches[1]!)).toEqual(metadata(batches[0]!));
+    expect(metadata(batches[2]!).eval_context_v2).toMatchObject({
+      productOutcome: { runStatus: 'succeeded', resultDeliveryState: 'no_result' }, evaluationOutcome: 'failed',
+    });
+  });
 
   it('does nothing when telemetry.metrics is off', async () => {
     await writeAppCfg({
@@ -1404,6 +1453,131 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       stored_in_open_design: true,
       size_bytes: '<!doctype html><h1>private artifact</h1>'.length,
     });
+  });
+
+  it.each([false, true])('Task takeover freezes and retries without rereading live files (offline=%s)', async (offline) => {
+    await writeAppCfg({ installationId: 'install-uuid-1', telemetry: { metrics: true, content: true, artifactManifest: true } });
+    enableTestVelaTelemetry();
+    vi.stubEnv('OPEN_DESIGN_OBJECT_OUTBOX_MODE', 'send');
+    vi.stubEnv('OPEN_DESIGN_TELEMETRY_RELAY_URL', 'https://telemetry.open-design.ai/api/langfuse');
+    const projectDir = path.join(dataDir, 'projects', 'proj-1');
+    await mkdir(projectDir, { recursive: true });
+    const original = '<!doctype html><h1>frozen original</h1>';
+    await writeFile(path.join(projectDir, 'index.html'), original);
+    let authorizationOffline = offline;
+    const fetchSpy = vi.fn(async (url: string, init: RequestInit) => {
+      if (url === TEST_VELA_TELEMETRY_URL) return new Response('{}', { status: 202 });
+      if (url.includes('/authorize') && authorizationOffline) return new Response('{}', { status: 403 });
+      if (url.includes('/authorize')) return new Response(JSON.stringify({ upload_token: 'test-token' }), { status: 200 });
+      if (url.includes('/batch')) {
+        const request = JSON.parse(init.body as string);
+        expect(Buffer.from(request.objects[0].content_base64, 'base64').toString()).toBe(original);
+        return new Response(JSON.stringify({ objects: request.objects.map((o: Record<string, unknown>) => ({
+          storage_ref: o.storage_ref, sha256: o.sha256, size_bytes: o.size_bytes, status: 'available',
+        })) }), { status: 200 });
+      }
+      if (url.endsWith('/api/langfuse')) {
+        const batch = JSON.parse(init.body as string).batch;
+        expect(batch[0].body.id).toBe('strategy-task:test');
+        return new Response('{}', { status: 202 });
+      }
+      throw new Error('Unexpected endpoint');
+    });
+    const options = {
+      db: makeDbWithListMessages({ 'conv-1': [{ id: 'msg-1', role: 'assistant' as const, content: 'done', producedFiles: [{ name: 'index.html', kind: 'html', size: original.length }] }] }),
+      dataDir, run: makeRun(), prefs: { metrics: true, content: true, artifactManifest: true },
+      installationId: 'install-uuid-1', taskTraceId: 'strategy-task:test', fetchImpl: fetchSpy as unknown as typeof fetch,
+    };
+    let first = await buildSafeRunQualityProjectionFromDaemon(options);
+    if (offline) {
+      expect(first?.manifests?.artifacts?.[0]?.status).toBe('unavailable');
+      await writeFile(path.join(projectDir, 'index.html'), 'changed while upload was offline');
+      authorizationOffline = false;
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+      first = await buildSafeRunQualityProjectionFromDaemon(options);
+    }
+    expect(first?.manifests?.artifacts?.[0]).toMatchObject({ status: 'ok', stored_in_open_design: true, size_bytes: original.length });
+    expect(fetchSpy).toHaveBeenCalledTimes(offline ? 7 : 4);
+    expect(velaTraceBody(fetchSpy.mock.calls[0] as [string, RequestInit]).metadata.registration_only).toBe(true);
+    await writeFile(path.join(projectDir, 'index.html'), 'a later turn changed this file');
+    const second = await buildSafeRunQualityProjectionFromDaemon(options);
+    expect(second?.manifests).toEqual(first?.manifests);
+    expect(fetchSpy).toHaveBeenCalledTimes(offline ? 7 : 4);
+  });
+
+  it('does not attribute the visible Task result to a request Run that produced no files', async () => {
+    await writeAppCfg({ installationId: 'install-uuid-1', telemetry: { metrics: true, content: true, artifactManifest: true } });
+    enableTestVelaTelemetry();
+    vi.stubEnv('OPEN_DESIGN_OBJECT_OUTBOX_MODE', 'send');
+    vi.stubEnv('OPEN_DESIGN_TELEMETRY_RELAY_URL', 'https://telemetry.open-design.ai/api/langfuse');
+    const fetchSpy = vi.fn();
+    const quality = await buildSafeRunQualityProjectionFromDaemon({
+      db: makeDbWithListMessages({ 'conv-1': [{ id: 'msg-1', role: 'assistant' as const, content: 'done', producedFiles: [{ name: 'index.html', kind: 'html', size: 42 }] }] }),
+      dataDir, run: { ...makeRun(), artifactPaths: [] }, prefs: { metrics: true, content: true, artifactManifest: true },
+      installationId: 'install-uuid-1', taskTraceId: 'strategy-task:test', fetchImpl: fetchSpy as unknown as typeof fetch,
+    });
+    expect(quality?.manifests?.artifacts ?? []).toEqual([]);
+    const frozen = await readObjectEvidence(dataDir, 'run-id-1');
+    expect(frozen?.sources).toHaveLength(1);
+    expect(frozen?.sources[0]?.objectClass).toBe('input_text_snapshot');
+    expect(JSON.parse(frozen!.sources[0]!.body!.toString())).toMatchObject({
+      schema: 'open-design.run-evidence/v1', runId: 'run-id-1', taskTraceId: 'strategy-task:test',
+    });
+    expect(fetchSpy).toHaveBeenCalled();
+    for (const call of fetchSpy.mock.calls) {
+      expect(velaTraceBody(call as [string, RequestInit]).metadata.artifact_manifest ?? []).toEqual([]);
+    }
+  });
+
+  it('checkpoints a successful artifact even when its sibling attachment is missing', async () => {
+    await writeAppCfg({ installationId: 'install-uuid-1', telemetry: { metrics: true, content: true, artifactManifest: true } });
+    enableTestVelaTelemetry();
+    vi.stubEnv('OPEN_DESIGN_OBJECT_OUTBOX_MODE', 'send');
+    vi.stubEnv('OPEN_DESIGN_TELEMETRY_RELAY_URL', 'https://telemetry.open-design.ai/api/langfuse');
+    const projectDir = path.join(dataDir, 'projects', 'proj-1');
+    await mkdir(projectDir, { recursive: true });
+    const original = '<!doctype html><h1>frozen original</h1>';
+    await writeFile(path.join(projectDir, 'index.html'), original);
+    const authorizationOffline = false;
+    let uploads = 0;
+    const fetchSpy = vi.fn(async (url: string, init: RequestInit) => {
+      if (url === TEST_VELA_TELEMETRY_URL) return new Response('{}', { status: 202 });
+      if (url.includes('/authorize') && authorizationOffline) return new Response('{}', { status: 403 });
+      if (url.includes('/authorize')) return new Response(JSON.stringify({ upload_token: 'test-token' }), { status: 200 });
+      if (url.includes('/batch')) {
+        uploads++;
+        const request = JSON.parse(init.body as string);
+        expect(Buffer.from(request.objects[0].content_base64, 'base64').toString()).toBe(original);
+        return new Response(JSON.stringify({ objects: request.objects.map((o: Record<string, unknown>) => ({
+          storage_ref: o.storage_ref, sha256: o.sha256, size_bytes: o.size_bytes, status: 'available',
+        })) }), { status: 200 });
+      }
+      if (url.endsWith('/api/langfuse')) {
+        const batch = JSON.parse(init.body as string).batch;
+        expect(batch[0].body.id).toBe('strategy-task:test');
+        return new Response('{}', { status: 202 });
+      }
+      throw new Error('Unexpected endpoint');
+    });
+    const options = {
+      db: makeDbWithListMessages({ 'conv-1': [{ id: 'msg-1', role: 'assistant' as const, content: 'done', producedFiles: [{ name: 'index.html', kind: 'html', size: original.length }] }] }),
+      dataDir, run: { ...makeRun(), projectAttachmentPaths: ['missing.txt'] }, prefs: { metrics: true, content: true, artifactManifest: true },
+      installationId: 'install-uuid-1', taskTraceId: 'strategy-task:test', fetchImpl: fetchSpy as unknown as typeof fetch,
+    };
+    let first = await buildSafeRunQualityProjectionFromDaemon(options);
+    expect(first?.manifests?.artifacts?.[0]).toMatchObject({ status: 'ok', stored_in_open_design: true, size_bytes: original.length });
+    expect(first?.manifests?.attachments?.[0]?.status).toBe('unavailable');
+    expect(uploads).toBe(1);
+    await writeFile(path.join(projectDir, 'index.html'), 'changed after capture');
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+    const retry = await buildSafeRunQualityProjectionFromDaemon(options);
+    expect(retry?.manifests?.artifacts?.[0]).toEqual(first?.manifests?.artifacts?.[0]);
+    expect(uploads).toBe(1);
+    expect(velaTraceBody(fetchSpy.mock.calls[0] as [string, RequestInit]).metadata.registration_only).toBe(true);
+    await writeFile(path.join(projectDir, 'index.html'), 'a later turn changed this file');
+    const second = await buildSafeRunQualityProjectionFromDaemon(options);
+    expect(second?.manifests).toEqual(first?.manifests);
+
   });
 
   it('uploads trace objects with Vela-issued authority before reporting final manifests', async () => {
@@ -3193,6 +3367,7 @@ function makeDbWithListMessages(messagesByConvo: Record<string, FakeMessage[]>) 
             id: m.id,
             role: m.role,
             content: m.content,
+            resultDeliveryState: m.resultDeliveryState ?? null,
             agentId: null,
             agentName: null,
             runId: null,

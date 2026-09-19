@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { shell } from "electron";
+import { BrowserWindow, app, clipboard, dialog, shell } from "electron";
 
 const execFileAsync = promisify(execFile);
 
@@ -161,22 +161,97 @@ export async function readDefaultMailtoHandlerBundleId(
   }
 }
 
+// The address a first-party mailto is addressed to, for the "copied to your
+// clipboard" fallback. `mailto:support@open-design.ai?subject=…` → the
+// support address; anything unparseable yields null and the caller skips the
+// notice rather than copying garbage.
+export function mailtoAddress(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "mailto:") return null;
+    const address = decodeURIComponent(parsed.pathname).trim();
+    return address.length > 0 ? address : null;
+  } catch {
+    return null;
+  }
+}
+
+// Whether the OS has ANY application registered for a URL scheme.
+// `app.getApplicationNameForProtocol` answers with the handler's display name
+// on every platform and with an empty string when nothing is registered — the
+// Windows machine of OPEND-2799, where `shell.openExternal(mailto:)` resolves
+// fine and opens nothing. A lookup that throws is treated as "unknown", so the
+// launch is still attempted and only its own failure triggers the fallback.
+export function hasProtocolHandler(
+  scheme: string,
+  readProtocolHandlerName: (scheme: string) => string,
+): boolean {
+  try {
+    return readProtocolHandlerName(scheme).trim().length > 0;
+  } catch {
+    return true;
+  }
+}
+
+export interface NoMailClientNotice {
+  message: string;
+  detail: string;
+  button: string;
+}
+
+// Copy for the fallback dialog. The main process has no i18n layer; the OS
+// locale picks Chinese or English, the two languages the product ships its
+// support flow in.
+export function noMailClientNotice(address: string, locale: string): NoMailClientNotice {
+  if (locale.trim().toLowerCase().startsWith("zh")) {
+    return {
+      message: "未找到可用的邮件应用",
+      detail: `已复制 ${address} 到剪贴板，粘贴到任意邮件客户端或网页邮箱即可联系我们。`,
+      button: "好",
+    };
+  }
+  return {
+    message: "No email app is set up on this computer",
+    detail: `${address} has been copied to your clipboard — paste it into any mail client or webmail to reach us.`,
+    button: "OK",
+  };
+}
+
 export interface OpenFirstPartyMailtoDeps {
   platform: NodeJS.Platform;
   readHandlerBundleId: () => Promise<string | null>;
+  /** `app.getApplicationNameForProtocol`: "" when no handler is registered. */
+  readProtocolHandlerName: (scheme: string) => string;
   openWithAppleMail: (url: string) => Promise<void>;
   openExternal: (url: string) => Promise<void>;
+  /** The click must never be dead: copy the address and tell the user. */
+  notifyNoMailClient: (address: string) => Promise<void>;
 }
 
 const defaultDeps: OpenFirstPartyMailtoDeps = {
   platform: process.platform,
   readHandlerBundleId: () => readDefaultMailtoHandlerBundleId(),
+  readProtocolHandlerName: (scheme) => app.getApplicationNameForProtocol(scheme),
   openWithAppleMail: async (url) => {
     await execFileAsync("open", ["-b", "com.apple.mail", url], {
       timeout: HANDLER_LOOKUP_TIMEOUT_MS,
     });
   },
   openExternal: (url) => shell.openExternal(url),
+  notifyNoMailClient: async (address) => {
+    clipboard.writeText(address);
+    const notice = noMailClientNotice(address, app.getLocale());
+    const options = {
+      type: "info" as const,
+      title: "OpenDesign",
+      message: notice.message,
+      detail: notice.detail,
+      buttons: [notice.button],
+      noLink: true,
+    };
+    const parent = BrowserWindow.getFocusedWindow();
+    await (parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options));
+  },
 };
 
 // Open a first-party mailto in the user's LOCAL mail client. Callers must have
@@ -187,18 +262,39 @@ const defaultDeps: OpenFirstPartyMailtoDeps = {
 // On macOS, when the OS-level mailto handler is a web browser, the URL is
 // handed to Apple Mail directly (see `resolveMailtoLaunch`); every failure path
 // degrades to plain `shell.openExternal`, which is the pre-existing behavior.
+//
+// On Windows and Linux there is no built-in mail client to fall back to, so
+// the handler is checked FIRST (`hasProtocolHandler`): with none registered —
+// or when the registered one refuses the launch — the address is copied to
+// the clipboard and a dialog says so (OPEND-2799). Resolves false in that case:
+// nothing was opened, but the user has been told what to do instead.
 export async function openFirstPartyMailto(
   url: string,
   deps: Partial<OpenFirstPartyMailtoDeps> = {},
 ): Promise<boolean> {
-  const { platform, readHandlerBundleId, openWithAppleMail, openExternal } = {
+  const {
+    platform,
+    readHandlerBundleId,
+    readProtocolHandlerName,
+    openWithAppleMail,
+    openExternal,
+    notifyNoMailClient,
+  } = {
     ...defaultDeps,
     ...deps,
   };
-  try {
-    if (new URL(url).protocol !== "mailto:") return false;
-  } catch {
+  const address = mailtoAddress(url);
+  if (address === null) return false;
+  const fallBackToClipboard = async (): Promise<false> => {
+    try {
+      await notifyNoMailClient(address);
+    } catch {
+      // The notice is best-effort; a failed dialog must not surface as a crash.
+    }
     return false;
+  };
+  if (platform !== "darwin" && !hasProtocolHandler("mailto:", readProtocolHandlerName)) {
+    return fallBackToClipboard();
   }
   if (platform === "darwin") {
     const launch = resolveMailtoLaunch(await readHandlerBundleId());
@@ -215,6 +311,6 @@ export async function openFirstPartyMailto(
     await openExternal(url);
     return true;
   } catch {
-    return false;
+    return fallBackToClipboard();
   }
 }

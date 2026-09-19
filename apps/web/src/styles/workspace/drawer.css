@@ -10,7 +10,7 @@
      在产品里看不出变化 —— 它修的是「抽屉独立挂载」那条契约的档位。
      守护:`tests/styles/app-scrim-layer.test.ts`。 */
   z-index: 1000;
-  background: color-mix(in srgb, #111827 18%, transparent);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   display: flex;
@@ -62,7 +62,7 @@
   flex-wrap: wrap;
   gap: 6px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -151,7 +151,7 @@
   padding: 4px 9px;
   border-radius: var(--radius);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
 }
 .connector-drawer-count {
@@ -198,7 +198,7 @@
   margin: 0;
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .connector-drawer-details dd {
   margin: 0;
@@ -413,7 +413,7 @@
   padding: 5px 16px;
   font-size: 12px;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
 }
 .subtab-pill button:hover:not(.active) { background: var(--bg-muted); border-color: transparent; color: var(--text); }
@@ -543,7 +543,7 @@
   color: var(--accent);
 }
 .design-card-status {
-  font-weight: 500;
+  font-weight: 600;
 }
 .design-card-status-running {
   color: var(--accent);
@@ -988,7 +988,7 @@
   justify-content: space-between;
   gap: 8px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-strong);
   padding-left: 2px;
   /* Prevent long status labels from pushing the count chip out of the column. */
@@ -1084,7 +1084,7 @@
 
 .design-kanban-card-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
@@ -1101,7 +1101,7 @@
 }
 .design-kanban-card-meta .ds {
   color: var(--text-strong);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* Honor user motion preferences for the new hover transform / transitions
@@ -1343,7 +1343,7 @@
 .ds-row.active { background: var(--accent-tint); border-color: var(--accent); }
 .ds-row-body { flex: 1; min-width: 0; }
 .ds-row-title {
-  font-weight: 500;
+  font-weight: 600;
   font-size: 14px;
   display: flex;
   align-items: center;
@@ -1778,7 +1778,7 @@
   white-space: nowrap;
   color: var(--text-faint);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .ws-tab-meta::before {
   content: "/";
@@ -1841,7 +1841,9 @@
   display: grid;
   place-items: center;
   padding: 28px;
-  background: color-mix(in srgb, #111827 38%, transparent);
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   animation: page-creator-fade 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .page-creator-modal {
@@ -1884,7 +1886,7 @@
   margin: 0;
   color: var(--text);
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.15;
   letter-spacing: -0.01em;
 }
@@ -1933,7 +1935,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 12.5px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.25;
   text-align: left;
   cursor: pointer;
@@ -1951,7 +1953,7 @@
   background: color-mix(in srgb, var(--bg-subtle) 86%, transparent);
   color: var(--text-faint);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
   text-align: center;
 }
@@ -2043,7 +2045,7 @@
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12.5px;
-  font-weight: 400;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -2065,7 +2067,7 @@
   border-color: var(--text-strong);
   background: var(--text-strong);
   color: var(--brand, #87ea5c);
-  font-weight: 550;
+  font-weight: 600;
 }
 .page-creator-subcat.active:hover {
   border-color: var(--text-strong);
@@ -2272,7 +2274,7 @@
 .page-creator-blank-title {
   color: var(--text);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
 }
 .page-creator-blank-hint {
@@ -2425,7 +2427,9 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: color-mix(in srgb, #111827 46%, transparent);
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 .page-template-preview-modal {
   width: min(980px, calc(100vw - 48px));
@@ -2638,7 +2642,7 @@
   background: var(--text);
   color: var(--bg);
   border-color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 .ws-tab-action.share:hover:not(:disabled) {
   background: #000;
@@ -2710,7 +2714,7 @@
   gap: 8px;
   padding: 8px 18px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: var(--radius-pill);
   cursor: pointer;
   box-shadow: 

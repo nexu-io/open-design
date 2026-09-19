@@ -12,6 +12,11 @@ export const RAIL_OPEN_STORAGE_KEY = 'od.entry.railOpen';
 // tab's sidebar toggle in WorkspaceTabsBar) to expand/collapse the entry rail.
 export const ENTRY_RAIL_TOGGLE_EVENT = 'od:entry-rail-toggle';
 
+// Window event dispatched by chrome outside the entry tree (the search button
+// that now sits in the chrome row beside the rail toggle) to open the ⌘K
+// project search palette, which EntryShell owns.
+export const ENTRY_SEARCH_OPEN_EVENT = 'od:entry-search-open';
+
 // Window event dispatched by EntryShell whenever the rail open state changes,
 // with `detail: { open: boolean }`, so outside chrome can mirror the state
 // (the pinned toggle's `aria-expanded`).

@@ -27,7 +27,7 @@
  * 两边都 `<unset>` 时 `toBe` 真空通过)。所以这里一律读属性,取不到就抛。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
 import { forwardRef, type ReactElement } from 'react';
 
 import { I18nProvider } from '../../../src/i18n';
@@ -60,11 +60,9 @@ import { zhTW } from '../../../src/i18n/locales/zh-TW';
 /* ── 稿子里那几段字节。改这里 = 改判据,请先回 `729fa43ce7` 核对 ────────── */
 
 /** `src/body-scene.html:7` —— 描边时钟 + 回退箭头 */
-const DESIGN_HISTORY_PATHS = [
-  'M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8',
-  'M3 4v4h4',
-  'M12 7v5l3 2',
-];
+/* OPEND-3087(Demo #8113):「历史」换成实心 discuss-line,一条 path。 */
+const DEMO_HISTORY_PATH =
+  'M14 22.5L11.2 19H6C5.44772 19 5 18.5523 5 18V7.10256C5 6.55028 5.44772 6.10256 6 6.10256H22C22.5523 6.10256 23 6.55028 23 7.10256V18C23 18.5523 22.5523 19 22 19H16.8L14 22.5ZM15.8387 17H21V8.10256H7V17H11.2H12.1613L14 19.2984L15.8387 17ZM2 2H19V4H3V15H1V3C1 2.44772 1.44772 2 2 2Z';
 /** `src/body-scene.html:8` —— 描边十字(一条 path 走两笔) */
 const DESIGN_NEW_SESSION_PATH = 'M12 5v14M5 12h14';
 
@@ -239,24 +237,31 @@ describe('② 面板头「历史」—— 稿子 body-scene.html:7', () => {
     expect(attr(trigger, 'data-tooltip-placement')).toBe('bottom');
   });
 
-  it('字形换成稿子那枚描边时钟(不是实心对话气泡)', () => {
+  it('字形是 Demo #8113 那枚 16px 实心 discuss-line', () => {
     renderChat();
     const trigger = screen.getByTestId('conversation-history-trigger');
     const svg = trigger.querySelector('svg');
     if (!svg) throw new Error('「历史」按钮里没有 svg');
 
-    expect(attr(svg, 'fill')).toBe('none');
-    expect(attr(svg, 'stroke')).toBe('currentColor');
+    expect(attr(svg, 'fill')).toBe('currentColor');
+    expect(attr(svg, 'stroke')).toBe('none');
+    expect(attr(svg, 'width')).toBe('16');
+    expect(attr(svg, 'height')).toBe('16');
 
     const ds = Array.from(svg.querySelectorAll('path')).map((p) => attr(p, 'd'));
-    expect(ds, '「历史」的三条 path 和稿子 body-scene.html:7 对不上').toEqual(DESIGN_HISTORY_PATHS);
+    expect(ds, '「历史」的 path 和 Demo 的 discuss-line 对不上').toEqual([DEMO_HISTORY_PATH]);
   });
 });
 
-describe('③ 面板头「新会话」—— 稿子 body-scene.html:8', () => {
-  it('面板头有第二颗图标键,带可见提示、气泡朝下', () => {
+describe('③ 「新会话」—— 稿子 body-scene.html:8,OPEND-3087 挪进历史下拉', () => {
+  function openMenu() {
+    fireEvent.click(screen.getByTestId('conversation-history-trigger'));
+    return screen.getByTestId('conversation-history-menu');
+  }
+
+  it('下拉里那枚图标键带可见提示、气泡朝下', () => {
     renderChat();
-    const button = screen.getByTestId('chat-new-conversation');
+    const button = within(openMenu()).getByTestId('chat-new-conversation');
 
     expect(classList(button)).toContain('od-tooltip');
     expect(attr(button, 'data-tooltip')).toBe('新会话');
@@ -266,7 +271,7 @@ describe('③ 面板头「新会话」—— 稿子 body-scene.html:8', () => {
 
   it('字形是稿子那枚描边十字', () => {
     renderChat();
-    const svg = screen.getByTestId('chat-new-conversation').querySelector('svg');
+    const svg = within(openMenu()).getByTestId('chat-new-conversation').querySelector('svg');
     if (!svg) throw new Error('「新会话」按钮里没有 svg');
 
     expect(attr(svg, 'fill')).toBe('none');
@@ -279,22 +284,21 @@ describe('③ 面板头「新会话」—— 稿子 body-scene.html:8', () => {
     const onNewConversation = vi.fn();
     renderChat({ onNewConversation });
 
-    fireEvent.click(screen.getByTestId('chat-new-conversation'));
+    fireEvent.click(within(openMenu()).getByTestId('chat-new-conversation'));
     expect(onNewConversation).toHaveBeenCalledTimes(1);
   });
 
   /*
-   * W124 这一条原来钉的是「历史下拉里那颗『新建』照旧在」—— 那是 W124 当时
-   * 有意留下的两入口并存状态,**已经被产品裁决推翻**(2026-09-03:新建入口只留
-   * 面板头这一枚)。下拉那颗连同 `chat.new` 一起删了,这里改成反向守卫:
-   * 谁把第二个入口加回来,这里就红。完整的 ③ 判据(含所有入口路径下仍可达)
-   * 在 `w129-new-session-single-entry.test.tsx`。
+   * 产品裁决 2026-09-03 收敛成一个入口;OPEND-3087(Demo #8113)把这唯一一个
+   * 从面板头挪进历史下拉。这里守两头:面板头没有、下拉里有且只有一枚。
+   * 完整的 ③ 判据在 `w129-new-session-single-entry.test.tsx`。
    */
-  it('历史下拉里不再有第二颗「新建」—— 入口只此一个', () => {
+  it('面板头没有新建按钮,历史下拉里有且只有一枚', () => {
     renderChat();
-    fireEvent.click(screen.getByTestId('conversation-history-trigger'));
-    /* 真空探针:下拉确实展开了,下面的 toBeNull 才不是「组件没渲染」 */
-    expect(screen.getByTestId('conversation-history-menu')).toBeTruthy();
+    expect(screen.queryByTestId('chat-new-conversation')).toBeNull();
+    const menu = openMenu();
+    expect(within(menu).getByTestId('chat-new-conversation')).toBeTruthy();
+    expect(screen.queryAllByTestId('chat-new-conversation').length).toBe(1);
     expect(screen.queryByTestId('conversation-history-new')).toBeNull();
   });
 });

@@ -411,7 +411,9 @@ export const playwrightUiScenarios: UiScenario[] = [
     title: 'Deleting the active conversation falls back cleanly',
     kind: 'workspace',
     flow: 'conversation-delete-recovery',
-    automated: true,
+    // Parked (OPEND-3087): the history dropdown lost its per-row delete
+    // button with the toolbar dock port, so the flow has no UI entry point.
+    automated: false,
     description:
       'Creates multiple conversations, deletes the active one, and verifies the UI falls back to the remaining thread instead of getting stuck.',
     create: {

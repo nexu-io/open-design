@@ -34,7 +34,10 @@
   --chat-bg-fill-tertiary: var(--bg-fill-tertiary);
   /* 「需要你确认」那类卡的卡头底色。产品单独指定,与 --bg-panel 同值但独立成档 */
   --chat-confirm-surface: #fafafa;
-  /* 消息轨道的悬浮预览必须完全遮住后面的会话内容,不能再用玻璃材质。 */
+  /* 消息轨道的悬浮预览必须完全遮住后面的会话内容,不能再用玻璃材质。
+     同一枚也给 composer 外壳和队列卡(K1 #8185);透明面板上的**内容**容器
+     (思考窗 / Confirmed / 终端块 / question-form)不读它 —— 它们直接落在面板上
+     (OPEND-3177 / 3178,设计定稿 2026-09-16)。 */
   --chat-floating-card-bg: #fff;
   --chat-floating-card-text: #202020;
 
@@ -69,6 +72,8 @@
    * 逐字节就是这个式子在亮色下的结果。
    */
   --chat-accent: var(--accent);
+  --chat-selected: var(--selected);
+  --chat-selected-soft: var(--selected-soft);
 
   /* ── 设计稿单独指定的色号(全局 token 里没有) ── */
   /*
@@ -208,6 +213,7 @@
   --chat-radius-sm: var(--radius-sm);
   --chat-radius: var(--radius);
   --chat-radius-lg: var(--radius-lg);
+  --chat-radius-xl: var(--radius-xl);
   /* 卡片外壳那一档(16px)。`RunErrorCard` / `UpgradeCard` / `SupportDialog`
      三处都写成 `var(--chat-radius-2xl, var(--radius-2xl))` 等这条落地 ——
      别名缺席时 `var()` 静静走 fallback,画面一模一样,所以缺了也没人红。 */
@@ -280,6 +286,8 @@
   --chat-brand-text: var(--brand-text);
   /* 映射到全局 token,暗色里 `--accent` 自己会翻成 #ededed —— 写法不变。 */
   --chat-accent: var(--accent);
+  --chat-selected: var(--selected);
+  --chat-selected-soft: var(--selected-soft);
   /* 插画横幅的垫底色,和亮色作用域同值(被图片盖住,稿子也没给暗色覆盖)。 */
   --chat-banner-ground: #082f69;
 
@@ -337,6 +345,7 @@
   --chat-radius-sm: var(--radius-sm);
   --chat-radius: var(--radius);
   --chat-radius-lg: var(--radius-lg);
+  --chat-radius-xl: var(--radius-xl);
   --chat-radius-2xl: var(--radius-2xl);
   --chat-radius-pill: var(--radius-pill);
   --chat-shadow-sm: var(--shadow-sm);

@@ -345,8 +345,9 @@ describe('workspace tabs chrome styles', () => {
 
     // Home never shrinks (flex-shrink 0) in either chrome…
     expect(ruleValue(pinnedShared, 'flex')).toBe('0 0 52px');
-    // Round-4 skin: the pinned tab is a single-icon pill (~half a project tab).
-    expect(ruleValue(pinnedProject, 'flex')).toBe('0 0 78px');
+    // Round-4 skin: the pinned tab is a single-icon pill. 64px (per product,
+    // #7635) puts its glyph on the rail's 首页 icon axis.
+    expect(ruleValue(pinnedProject, 'flex')).toBe('0 0 64px');
     // …and stays stuck to the left edge with an opaque background so scrolled
     // project tabs pass behind it instead of squeezing it.
     expect(ruleValue(pinnedShared, 'position')).toBe('sticky');
@@ -413,6 +414,37 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(projectDragging, 'box-shadow')).toContain('0 14px 30px');
     expect(shellCss).not.toContain('.workspace-tab.is-drag-over-before::after');
     expect(shellCss).not.toContain('.workspace-tab.is-drag-over-after::after');
+  });
+
+  it('hides the pinned Home pill in the entry chrome — the search/toggle cluster owns that corner', () => {
+    // #7635: 顶部去掉 home icon，只有 chat 里才显示. The pill stays in the DOM
+    // as the tab machinery's anchor; the chrome-scoped rule hides it, and
+    // must out-rank the `:has(.workspace-tab__rail-toggle)` display rule.
+    const hidden = cssDeclarations(
+      routinesCss,
+      '.workspace-shell .workspace-tabs-chrome .workspace-tab.is-pinned:has(.workspace-tab__rail-toggle)',
+    );
+    expect(ruleValue(hidden, 'display')).toBe('none');
+    const cluster = cssDeclarations(entryLayoutCss, '.workspace-tabs-rail-actions');
+    expect(ruleValue(cluster, 'gap')).toBe('4px');
+    expect(ruleValue(cluster, 'margin')).toBe('0 0 0 14.8px');
+  });
+
+  it('cross-fades the rail toggle glyphs on the ease-out curve (enter 200ms, exit 140ms)', () => {
+    // OPEND-2685: both glyphs stay mounted; the swap is a fade + settle from
+    // scale(0.9), never a pop or a scale(0) start (AGENTS.md animation rules).
+    const glyph = cssDeclarations(entryLayoutCss, '.entry-nav-rail__collapse-glyph');
+    const current = cssDeclarations(entryLayoutCss, '.entry-nav-rail__collapse-glyph.is-current');
+    expect(ruleValue(glyph, 'position')).toBe('absolute');
+    expect(ruleValue(glyph, 'opacity')).toBe('0');
+    expect(ruleValue(glyph, 'transform')).toBe('scale(0.9)');
+    expect(ruleValue(glyph, 'transition')).toContain('opacity 140ms cubic-bezier(0.23, 1, 0.32, 1)');
+    expect(ruleValue(glyph, 'transition')).toContain('transform 140ms cubic-bezier(0.23, 1, 0.32, 1)');
+    expect(ruleValue(current, 'opacity')).toBe('1');
+    expect(ruleValue(current, 'transform')).toBe('none');
+    expect(ruleValue(current, 'transition-duration')).toBe('200ms, 200ms');
+    const toggle = cssDeclarations(entryLayoutCss, '.entry-nav-rail__collapse');
+    expect(ruleValue(toggle, 'position')).toBe('relative');
   });
 
   it('caps the docked tab dropdown at six rows and scrolls the rest', () => {

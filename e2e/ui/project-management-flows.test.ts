@@ -32,7 +32,7 @@ const STORAGE_KEY = 'open-design:config';
 function projectDesignSystemTrigger(page: Page): Locator {
   return page
     .getByTestId('chat-composer')
-    .getByTestId('composer-design-system-trigger');
+    .getByTestId('home-hero-design-system-trigger');
 }
 const AGENTS = [
   {
@@ -624,7 +624,7 @@ test('[P1] project detail composer design system picker switches the active proj
   await expectWorkspaceReady(page);
 
   const trigger = projectDesignSystemTrigger(page);
-  await expect(trigger).toHaveAccessibleName(/No design system/i);
+  await expect(trigger).toHaveAccessibleName(/^Design system$/i);
 
   await trigger.click();
   const popover = page.getByTestId('project-ds-picker-popover');
@@ -686,7 +686,7 @@ test('[P0] @critical project detail composer design system switch carries into t
   await expectWorkspaceReady(page);
 
   const trigger = projectDesignSystemTrigger(page);
-  await expect(trigger).toHaveAccessibleName(/No design system/i);
+  await expect(trigger).toHaveAccessibleName(/^Design system$/i);
   await trigger.click();
   await page.getByTestId('project-ds-picker-search').fill('editorial');
   const editorialOption = page.getByRole('option', { name: /^Editorial Noir$/ });
@@ -720,8 +720,8 @@ test('[P1] project detail design system picker stays inside the composer control
 
   const composer = page.getByTestId('chat-composer');
   await expect(
-    composer.getByTestId('composer-design-system-trigger'),
-  ).toHaveAccessibleName(/No design system/i);
+    composer.getByTestId('home-hero-design-system-trigger'),
+  ).toHaveAccessibleName(/^Design system$/i);
 });
 
 test('[P1] project detail composer working directory picker opens without leaving chat', async ({ page }) => {
@@ -736,7 +736,7 @@ test('[P1] project detail composer working directory picker opens without leavin
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] project detail composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
+test('[P1] project detail composer plus menu exposes the attachment entry and no resource submenus', async ({ page }) => {
   await routeComposerPlusFixtures(page);
   await page.goto('/');
   await createProject(page, 'Composer plus context menu');
@@ -745,18 +745,11 @@ test('[P1] project detail composer plus menu exposes attachment, connector, plug
   const composer = page.getByTestId('chat-composer');
   await composer.getByTestId('chat-plus-trigger').click();
   await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-connectors')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-plugins')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-mcp')).toBeVisible();
-
-  await page.getByTestId('composer-plus-connectors').click();
-  await expect(page.getByRole('menuitem', { name: /Figma Connector/i })).toBeVisible();
-
-  await page.getByTestId('composer-plus-plugins').click();
-  await expect(page.getByRole('menuitem', { name: /Composer Context Plugin/i })).toBeVisible();
-
-  await page.getByTestId('composer-plus-mcp').click();
-  await expect(page.getByRole('menuitem', { name: /Design Docs MCP/i })).toBeVisible();
+  // Plugins, connectors and MCP were removed from this menu; they stay
+  // reachable from their own surfaces.
+  await expect(page.getByTestId('composer-plus-plugins')).toHaveCount(0);
+  await expect(page.getByTestId('composer-plus-connectors')).toHaveCount(0);
+  await expect(page.getByTestId('composer-plus-mcp')).toHaveCount(0);
 });
 
 test('[P1] project detail composer plus menu opens project, local code, Figma help, and design system context actions', async ({ page }) => {
@@ -846,7 +839,7 @@ test('[P1] project detail composer plus menu opens project, local code, Figma he
   await expect(page.getByTestId('composer-plus-figma-help')).toHaveCount(0);
 
   await page.keyboard.press('Escape');
-  await composer.getByTestId('composer-design-system-trigger').click();
+  await composer.getByTestId('home-hero-design-system-trigger').click();
   await expect(page.getByTestId('project-ds-picker-popover')).toBeVisible();
 });
 
@@ -1743,7 +1736,8 @@ test('[P0] @critical project detail composer agent menu lets the user switch the
   ).toContainText(/GPT 5\.5/i);
 });
 
-test('[P0] project detail composer model switch carries into the next daemon run request', async ({ page }) => {  test.setTimeout(60_000);
+test('[P0] project detail composer model switch carries into the next daemon run request', async ({ page }) => {
+  test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runId: 'agent-model-run' });
   await mockWritablePersonalProjectScope(page);
@@ -1759,6 +1753,7 @@ test('[P0] project detail composer model switch carries into the next daemon run
   // The composer no longer carries a session-mode picker (#7635): every turn
   // runs in the conversation's stored mode, which is design for a new project.
   await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
+
   const input = page.getByTestId('chat-composer-input');
   await input.fill('Use the selected local agent for this design run.');
   await Promise.all([
@@ -1807,12 +1802,14 @@ test('[P1] GPT 5.5 Fast service tier carries into the next Codex daemon run requ
     serviceTier: 'priority',
   });
 });
-test('[P1] project detail composer keeps design mode across consecutive turns without a mode picker', async ({ page }) => {  test.setTimeout(60_000);
+test('[P1] project detail composer keeps design mode across consecutive turns without a mode picker', async ({ page }) => {
+  test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'fixed-design-mode-run' });
 
   await page.goto('/');
-  await createProject(page, 'Composer session mode contract');  await expectWorkspaceReady(page);
+  await createProject(page, 'Composer session mode contract');
+  await expectWorkspaceReady(page);
 
   async function sendTurn(prompt: string) {
     const input = page.getByTestId('chat-composer-input');
@@ -1833,6 +1830,7 @@ test('[P1] project detail composer keeps design mode across consecutive turns wi
 
   await sendTurn('Design the first iteration.');
   await sendTurn('Design the second iteration without touching any mode control.');
+
   expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['design', 'design']);
 });
 
@@ -2006,7 +2004,7 @@ test('[P0] clearing the project design system removes designSystemId from the ne
   await expectWorkspaceReady(page);
 
   const trigger = projectDesignSystemTrigger(page);
-  await expect(trigger).toHaveAccessibleName(/No design system/i);
+  await expect(trigger).toHaveAccessibleName(/^Design system$/i);
   await trigger.click();
   await page.getByTestId('project-ds-picker-search').fill('editorial');
   const editorialOption = page.getByRole('option', { name: /^Editorial Noir$/ });
@@ -2016,7 +2014,7 @@ test('[P0] clearing the project design system removes designSystemId from the ne
 
   await trigger.click();
   await page.locator('.project-ds-picker-option').first().click();
-  await expect(trigger).toHaveAccessibleName(/No design system/i);
+  await expect(trigger).toHaveAccessibleName(/^Design system$/i);
 
   expect(patchBodies.some((body) => Object.prototype.hasOwnProperty.call(body, 'designSystemId') && body.designSystemId === null)).toBe(true);
 
@@ -2088,23 +2086,25 @@ test('[P1] a disabled project design system is omitted from the next run request
   expect(runRequestBodies[0]?.designSystemId).toBeNull();
 });
 
-test('[P1] project title rename persists after reload and ignores blank titles', async ({ page }) => {
+test('[P1] project rename from the switcher persists after reload and ignores blank titles', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Original rename title');
   await expectWorkspaceReady(page);
 
-  const title = page.getByTestId('project-title');
-  await renameProjectTitle(page, title, 'Renamed persistent title');
-  await expect(title).toContainText('Renamed persistent title');
+  // The chat card carries no inline title any more (OPEND-3128); the project
+  // is renamed through the switcher's row menu (K2 #8183).
+  const switcher = page.getByTestId('workspace-tabs-dropdown-trigger');
+  await renameProjectFromSwitcher(page, 'Original rename title', 'Renamed persistent title');
+  await expect(switcher).toContainText('Renamed persistent title');
 
   await page.reload();
   await expectWorkspaceReady(page);
-  await expect(page.getByTestId('project-title')).toContainText('Renamed persistent title');
+  await expect(switcher).toContainText('Renamed persistent title');
 
-  await renameProjectTitle(page, page.getByTestId('project-title'), '   ');
+  await renameProjectFromSwitcher(page, 'Renamed persistent title', '   ');
   await page.reload();
   await expectWorkspaceReady(page);
-  await expect(page.getByTestId('project-title')).toContainText('Renamed persistent title');
+  await expect(switcher).toContainText('Renamed persistent title');
 
   const project = await fetchCurrentProject(page);
   expect(project.name).toBe('Renamed persistent title');
@@ -2482,7 +2482,8 @@ test('[P1] project detail active file context is sent with the run but hidden on
   await expect(page.getByTestId('msg-workspace-context-chip')).toHaveCount(0);
 });
 
-test('[P1] project detail active file context survives reload in message history', async ({ page }) => {  const runRequestBodies: Array<Record<string, unknown>> = [];
+test('[P1] project detail active file context survives reload in message history', async ({ page }) => {
+  const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-reload-run' });
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -2512,7 +2513,8 @@ test('[P1] project detail active file context survives reload in message history
   await page.reload();
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
-  await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);});
+  await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
+});
 
 test('[P1] active project API defaults to the selected project file from the real workspace', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -2921,7 +2923,7 @@ test('[P1] read-only project viewers do not see conversation fork actions', asyn
   await expect(page.getByTestId('assistant-fork-button')).toHaveCount(0);
 });
 
-test('[P1] project detail conversations menu supports new chat, search, counts, and run duration metadata', async ({ page }) => {
+test('[P1] project detail conversations menu supports new chat, search, and recency metadata', async ({ page }) => {
   const { projectId, conversations } = await seedProjectConversationHistory(page);
   await routeConversationHistoryFixtures(page, projectId, conversations);
 
@@ -2931,15 +2933,21 @@ test('[P1] project detail conversations menu supports new chat, search, counts, 
   await page.getByTestId('conversation-history-trigger').click();
   const menu = page.getByTestId('conversation-history-menu');
   await expect(menu).toBeVisible();
-  await expect(page.getByTestId('conversation-history-count')).toHaveText('3');
-
+  // The dropdown no longer shows a heading, a count, per-row message counts
+  // or run durations (OPEND-3087, Demo #8113): rows carry only the title and
+  // the time since the last update. The fixtures are 30s / 2m / 7m old at
+  // seed time, so allow one minute of drift while the page loads.
+  const rows = page.getByTestId('conversation-list').locator('.chat-conv-item');
+  await expect(rows).toHaveCount(3);
   await expect(page.getByTestId(`conversation-select-${conversations[0]!.id}`)).toContainText('Runway final polish');
-  await expect(page.getByTestId(`conversation-meta-${conversations[0]!.id}`)).toHaveText('8 msg · 5m 42s');
-  await expect(page.getByTestId(`conversation-meta-${conversations[1]!.id}`)).toHaveText('6 msg · 19m 00s');
-  await expect(page.getByTestId(`conversation-meta-${conversations[2]!.id}`)).toContainText('6 msg ·');
+  await expect(page.getByTestId(`conversation-meta-${conversations[0]!.id}`)).toHaveText(/^(now|1m)$/);
+  await expect(page.getByTestId(`conversation-meta-${conversations[1]!.id}`)).toHaveText(/^[23]m$/);
+  await expect(page.getByTestId(`conversation-meta-${conversations[2]!.id}`)).toHaveText(/^[78]m$/);
+  await expect(page.getByTestId('conversation-history-count')).toHaveCount(0);
+  await expect(menu.getByTestId(/^conversation-delete-/)).toHaveCount(0);
 
   await page.getByTestId('conversation-history-search').fill('font audit');
-  await expect(page.getByTestId('conversation-history-count')).toHaveText('1 / 3');
+  await expect(rows).toHaveCount(1);
   await expect(page.getByTestId(`conversation-item-${conversations[1]!.id}`)).toBeVisible();
   await expect(page.getByTestId(`conversation-item-${conversations[0]!.id}`)).toHaveCount(0);
 
@@ -2948,18 +2956,17 @@ test('[P1] project detail conversations menu supports new chat, search, counts, 
     return request.method() === 'POST'
       && request.url().endsWith(`/api/projects/${projectId}/conversations`);
   });
-  // The "new conversation" control lives in the panel header, not in the open
-  // dropdown — the dropdown's duplicate was removed (product ruling
-  // 2026-09-03: one entry point only). Clicking it still dismisses the menu,
-  // which is what the count assertion below pins.
-  await page.getByTestId('chat-new-conversation').click();
+  // The single "new conversation" control sits inside the dropdown beside the
+  // search field. Clicking it still dismisses the menu, which is what the
+  // count assertion below pins.
+  await menu.getByTestId('chat-new-conversation').click();
   await newConversationRequestPromise;
   await expect(page.getByTestId('conversation-history-menu')).toHaveCount(0);
 
   await page.getByTestId('conversation-history-trigger').click();
-  await expect(page.getByTestId('conversation-history-count')).toHaveText('4');
+  await expect(rows).toHaveCount(4);
   await expect(page.getByTestId('conversation-select-conv-new-history')).toContainText('Untitled');
-  await expect(page.getByTestId('conversation-meta-conv-new-history')).toHaveText('0 msg · now');
+  await expect(page.getByTestId('conversation-meta-conv-new-history')).toHaveText(/^(now|1m)$/);
 });
 
 test('[P0] project detail share menu copies the current share link for uploaded html artifacts', async ({ page }) => {
@@ -3406,7 +3413,7 @@ test('[P1] projects kanban cards open projects and support delete cancel and con
 
   await kanbanCard.click();
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}(/conversations/[^/]+)?$`));
-  await expect(page.getByTestId('project-title')).toContainText(projectName);
+  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toContainText(projectName);
   const openedProject = await fetchCurrentProject(page);
   expect(openedProject.name).toBe(projectName);
 
@@ -3694,7 +3701,7 @@ test('[P1] projects page shows live artifact cards, supports search, and opens t
 
   await liveCard.click();
   await expect(page).toHaveURL(/\/projects\/proj-live\/files\/live%3Aartifact-1$/);
-  await expect(page.getByTestId('project-title')).toContainText('Orbit Daily Digest');
+  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toContainText('Orbit Daily Digest');
 });
 
 test('[P2] General settings updates the custom companion draft', async ({ page }) => {
@@ -4255,7 +4262,7 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
   await dismissPrivacyDialog(page);
-  await expect(page.getByTestId('project-title')).toBeVisible();
+  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toBeVisible();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.locator('.chat-loading-state')).toHaveCount(0, { timeout: T.medium });
@@ -4308,19 +4315,31 @@ async function dismissPrivacyDialog(page: Page) {
   }
 }
 
-async function renameProjectTitle(
+/**
+ * Renames a project through the switcher's row menu (K2 #8183): open the
+ * dropdown, ⋮ on the project's row, 重命名, type, Enter. The chat card carries
+ * no inline title to edit any more (OPEND-3128).
+ */
+async function renameProjectFromSwitcher(
   page: Page,
-  title: Locator,
+  currentName: string,
   nextName: string,
 ) {
-  await title.click();
-  await page.keyboard.press('Meta+A');
-  const selected = await page.evaluate(() => window.getSelection()?.toString() ?? '');
-  if (selected.length === 0) {
-    await page.keyboard.press('Control+A');
-  }
-  await page.keyboard.type(nextName);
-  await page.keyboard.press('Enter');
+  await page.getByTestId('workspace-tabs-dropdown-trigger').click();
+  const row = page
+    .locator('.workspace-tabs-dropdown__row')
+    .filter({ hasText: currentName })
+    .first();
+  await row.hover();
+  await row.getByTestId('workspace-tabs-dropdown-row-more').click();
+  await page
+    .getByTestId('workspace-tabs-dropdown-row-menu')
+    .getByRole('menuitem', { name: 'Rename' })
+    .click();
+  const input = page.getByRole('textbox', { name: 'Rename' });
+  await input.fill(nextName);
+  await input.press('Enter');
+  await page.locator('.workspace-tabs-dropdown__backdrop').click({ position: { x: 4, y: 4 } });
 }
 
 async function uploadTinyHtml(

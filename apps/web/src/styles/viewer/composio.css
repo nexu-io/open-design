@@ -256,7 +256,7 @@
 }
 .deploy-result-url {
   min-width: 0;
-  font-weight: 500;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 .deploy-result-actions {
@@ -305,6 +305,9 @@
   cursor: not-allowed;
 }
 
+/* DELIBERATE exception to the app's one scrim (styles/material.css):
+   presentation mode blacks the room out on purpose, same reasoning as the
+   image lightboxes — a light scrim would defeat it. */
 .present-overlay {
   position: fixed;
   top: 0;
@@ -523,7 +526,7 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 .op-waiting-label {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .op-waiting-detail {
@@ -667,7 +670,7 @@
   margin: 6px 10px 6px 0;
   padding: 2px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   border: 1px solid var(--green-border);
   padding: 2px 10px;
   border: 1px solid var(--border-strong);
@@ -716,14 +719,24 @@
   /* 稿子 `.card` 不带外距也不带投影 —— 上下间距由 `.assistant-flow` 的 gap:12px 给
      (稿子 `scene-shell.css` 的 `.flow { gap: 12px }`,轮次**内部**那一档)。
      自己再加 margin 就是 12+8,比稿子松一档。 */
-  border: 1px solid var(--border);
+  /* OPEND-3282 (2026-09-16): every region that asks the user to type or
+     choose keeps an opaque white card so it never melts into the transparent
+     pane (OPEND-3090). The same `--chat-floating-card-bg` / `--chat-border-soft`
+     pair the composer shell and the queued-send cards read (K1 #8185) — no
+     blur, no shadow. This narrows the OPEND-3177 reading P3 (#8199) applied
+     to the whole form: the read-only Confirmed block, the thoughts window and
+     the terminal block stay bare; only the input surface keeps its card.
+     Dark follows the tokens. */
+  border: 1px solid var(--chat-border-soft);
   border-radius: var(--radius-lg);
-  background: var(--bg-panel);
+  background: var(--chat-floating-card-bg);
   overflow: hidden;
 }
-/* 稿子 `.card:has(.foot):has(.opts)`:带底栏又带选项的卡换一层确认底色 */
+/* 稿子 `.card:has(.foot):has(.opts)`:带底栏又带选项的卡换一层确认底色 ——
+   the confirm surface was an opaque #fafafa; it now shares the form's one
+   floating card (OPEND-3282) instead of switching surface. */
 .question-form:has(.question-form-foot):has(.qf-options) {
-  background: var(--chat-confirm-surface, var(--bg-panel));
+  background: var(--chat-floating-card-bg);
 }
 /* 稿子 `.card:has(.foot) > .h`:有底栏的卡,头不再有分隔线和底色 */
 .question-form:has(.question-form-foot) > .question-form-head {
@@ -753,7 +766,8 @@
   gap: 7px;
   padding: 9px 11px;
   border-bottom: 1px solid var(--border-soft, var(--border));
-  background: var(--bg-panel);
+  /* The shell's card is the only surface; the head paints nothing over it. */
+  background: transparent;
   font-size: var(--font-size-14);
   font-weight: 600;
   line-height: 1.5;
@@ -825,7 +839,7 @@
   text-transform: uppercase;
   padding: 3px 8px;
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
+  background: transparent;
   border: 1px solid var(--border);
   color: var(--text-muted);
 }
@@ -838,7 +852,9 @@
   flex-direction: column;
   border: 0;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  background: var(--bg);
+  /* Was the white block from the question down to the footer; on the
+     transparent pane the shell's card is the only surface (OPEND-3177). */
+  background: transparent;
 }
 /* 稿子 `.card > .h .n { margin-left: auto; font-variant-numeric: tabular-nums }`
    + PR #7170 把计数拆成两档字色:
@@ -1174,7 +1190,7 @@
 .qf-chip-desc {
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .qf-chip-on .qf-chip-desc {
   color: inherit;
@@ -2759,7 +2775,7 @@ legend.qf-color-legend {
 .question-form-summary-visual-label {
   color: var(--text-muted);
   font-size: 10px;
-  font-weight: 550;
+  font-weight: 600;
 }
 .question-form-summary-visual-cards {
   display: flex;
@@ -2785,7 +2801,7 @@ legend.qf-color-legend {
   padding: 4px 5px 5px;
   color: var(--text);
   font-size: 10px;
-  font-weight: 550;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2809,7 +2825,7 @@ legend.qf-color-legend {
 .question-form-summary-item strong {
   overflow: hidden;
   color: var(--text);
-  font-weight: 550;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3047,7 +3063,11 @@ legend.qf-color-legend {
   position: fixed;
   inset: 0;
   z-index: 1700;
-  background: rgba(28, 27, 26, 0.42);
+  /* The app's one scrim material (styles/material.css). This is the SHARED
+     modal scrim — PreviewModal and every ds-* modal mount into it. Read as
+     tokens rather than literals: the literals bypassed the accessibility
+     contract, where `--scrim-backdrop` goes to `none`. */
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   -webkit-app-region: no-drag;
@@ -3151,7 +3171,7 @@ legend.qf-color-legend {
   border-radius: var(--radius-pill);
   padding: 6px 16px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
 }
@@ -3850,7 +3870,7 @@ legend.qf-color-legend {
   letter-spacing: 0.06em;
   color: var(--text-muted);
   margin-right: 6px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .filter-pill {
   background: var(--bg-panel);
@@ -3935,7 +3955,7 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
   right: 10px;
   padding: 5px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: white;
   background: rgba(28, 27, 26, 0.78);
   border-radius: var(--radius-pill);
@@ -4127,49 +4147,23 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   max-height: min(360px, calc(100vh - 160px));
   display: flex;
   flex-direction: column;
-  /* Solid panel, not glass: this menu lives inside .chat-project-header,
-     whose own backdrop-filter makes it a backdrop root — a descendant's
-     backdrop-filter cannot sample the chat content behind the header, so a
-     translucent fill just lets un-blurred text bleed through. Solid matches
-     the app's other anchored menus (working-dir picker, plus menu). */
-  background: var(--bg-panel);
-  border: 1px solid var(--border-soft, var(--border));
+  /* OPEND-3175: the same recipe as the project switcher's action menu —
+     plain `--bg` ground, soft edge, md shadow — instead of H1's liquid glass.
+     A popover covers the transcript; a frost let the un-blurred text under it
+     read through, and the `--bg-panel` grey it replaced read as a slab. */
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, #000 4%, transparent),
-    0 12px 32px -12px color-mix(in srgb, #000 22%, transparent);
+  box-shadow: var(--shadow-md);
   z-index: 30;
   overflow: hidden;
   transform-origin: top right;
   animation: pop-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-history-menu-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  /* No divider, no tinted band — the header shares one continuous surface
-     with the search field and list so the popover reads as a single clean
-     sheet, matching the app's other anchored menus. */
-  padding: 8px 8px 4px;
-}
-.chat-history-menu-title {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-.chat-history-menu-count {
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-  margin-left: 6px;
-}
 .chat-history-search {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   /* Matches the app's standard control height (primitives.css `button`); at
      28px this field read as a cramped slot against the list rows below it.
      The inner input stays 20px and is centered by `align-items`. */
@@ -4193,13 +4187,15 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
 }
 .chat-history-search svg {
-  width: 11px;
-  height: 11px;
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
 }
 .chat-history-search input {
   min-width: 0;
   flex: 1;
+  padding: 0;
+  margin: 0;
   height: 20px;
   border: none;
   outline: none;
@@ -4228,9 +4224,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-subtle);
   color: var(--text);
 }
-/* `.chat-history-new` 那一组(下拉里的「新建」按钮)已随按钮删除 ——
-   产品裁决 2026-09-03:新建入口只留面板头那枚图标键,见
-   `components/ChatPane.tsx` 的 `.chat-history-menu-head` 处注释。 */
+/* The "new session" button now sits beside the search field; its row and
+   button styles live in components/chat/ConversationHistoryDock.module.css. */
 .chat-history-list {
   display: flex;
   flex-direction: column;
@@ -4270,8 +4265,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  /* Roomier left inset so the title has breathing room from the card edge;
-     right keeps room for the hover delete button. */
+  /* Roomier left inset so the title has breathing room from the card edge. */
   padding: 4px 6px 4px 12px;
   border-radius: var(--radius);
   background: transparent;
@@ -4287,12 +4281,11 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
     border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-conv-item:hover {
+.chat-conv-item:hover,
+.chat-conv-item.active {
   background: color-mix(in srgb, var(--bg-subtle) 72%, transparent);
 }
 .chat-conv-item.active {
-  background: color-mix(in srgb, var(--accent-tint) 76%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--text-strong);
 }
 .chat-conv-item:focus-within {
@@ -4334,25 +4327,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   width: 10px;
   height: 10px;
 }
-.chat-conv-item-del {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-faint);
-  border-radius: var(--radius-sm);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition:
-    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.chat-conv-item:hover .chat-conv-item-del { opacity: 1; }
-.chat-conv-item-del:hover { background: var(--red-bg); color: var(--red); }
 
 /* ============================================================
    Scroll-to-bottom button (chat)
@@ -4599,7 +4573,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   width: fit-content;
   max-width: 100%;
   padding: var(--answered-padding);
-  background: var(--bg-panel);
+  /* OPEND-3177 (2026-09-16 design): the Confirmed block sits directly on the
+     transparent pane like the form it answers — no ground of its own (the
+     draft's #fafafa, H1's frost and K1's floating card are all withdrawn).
+     The radius / padding properties stay so the visual-answer variant keeps
+     its own inset. */
+  background: transparent;
   border-radius: var(--answered-radius);
   font-size: var(--font-size-12);
   line-height: 1.5;

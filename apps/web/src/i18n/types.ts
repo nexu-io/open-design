@@ -1129,6 +1129,7 @@ export interface Dict {
   'entry.discordOnlineLabel': string;
   'entry.xAria': string;
   'entry.mailAria': string;
+  /** Label beside the mail glyph in the rail's account dock social row. */
   'entry.accountSettings': string;
   'chat.collapsePane': string;
   'collabPresence.ariaOne': string;
@@ -1165,6 +1166,8 @@ export interface Dict {
   'entry.billingTierTeam': string;
   'entry.billingTierFree': string;
   'entry.billingTierPro': string;
+  'entry.billingTierPlus': string;
+  'entry.billingTierMax': string;
   'entry.billingFamilyCreator': string;
   'entry.creditsAria': string;
   'entry.creditsAriaWithBalance': string;
@@ -1182,6 +1185,8 @@ export interface Dict {
   'entry.accountLanguageMeta': string;
   'entry.accountGithubHelp': string;
   'entry.accountFeatureRequest': string;
+  /** Account menu row that opens the workspace's billing console. */
+  'entry.accountBilling': string;
   'entry.accountAddAccount': string;
   'entry.accountSignOut': string;
   // Sign-out confirmation dialog (recvqgMWpJZqhL) — shared by every logout
@@ -1225,8 +1230,13 @@ export interface Dict {
   'entry.authExpiredBody': string;
   'home.createFailed': string;
   'home.daemonRecovering': string;
+  /** Toast after POST /api/projects answered PROJECT_CREATE_PREPARATION_TIMEOUT. */
+  'home.createTimedOut': string;
+  'home.amrGateUnavailable': string;
   'home.bundledScenarioMissing': string;
   'entry.cloudCalloutBody': string;
+  /** Name of the identity row on the local (signed-out) account dock. */
+  'entry.localAccountName': string;
   'entry.cloudCalloutDismissAria': string;
   'entry.workspaceLockedNote': string;
   'entry.workspaceLockedRecover': string;
@@ -1242,6 +1252,10 @@ export interface Dict {
   'messageCenter.emptyAllTitle': string;
   'messageCenter.emptyUnreadTitle': string;
   'messageCenter.emptyReadTitle': string;
+  'messageCenter.archive': string;
+  'messageCenter.unarchive': string;
+  'messageCenter.archivedTitle': string;
+  'messageCenter.emptyArchivedTitle': string;
   'messageCenter.emptyBody': string;
   'messageCenter.close': string;
   'messageCenter.desktopSettings': string;
@@ -1265,6 +1279,8 @@ export interface Dict {
 
   // Entry home
   'homeHero.title': string;
+  'homeHero.titleWords': string;
+  'homeHero.subtitle': string;
   'homeHero.startWithTemplate': string;
   'homeHero.startBlankProject': string;
   'homeHero.templatePicker.label': string;
@@ -1305,6 +1321,8 @@ export interface Dict {
   'homeHero.clearActivePlugin': string;
   'homeHero.clearActiveSkill': string;
   'homeHero.contextItemsResolved': string;
+  'homeHero.attachmentsScrollPrev': string;
+  'homeHero.attachmentsScrollNext': string;
   'homeHero.removeFile': string;
   'homeHero.contextSearchResults': string;
   'homeHero.contextSurfaces': string;
@@ -1389,7 +1407,6 @@ export interface Dict {
   'homeWorkingDir.pick': string;
   'homeWorkingDir.replace': string;
   'homeWorkingDir.recent': string;
-  'homeWorkingDir.recentEmpty': string;
   'homeWorkingDir.clear': string;
   'homeWorkingDir.hint': string;
   'homeWorkingDir.missing': string;
@@ -1475,6 +1492,8 @@ export interface Dict {
   'recentProjects.kindAll': string;
   'recentProjects.kindPrototype': string;
   'recentProjects.kindSlides': string;
+  'recentProjects.kindDocument': string;
+  'recentProjects.kindImage': string;
   'recentProjects.kindMedia': string;
   'recentProjects.kindOther': string;
   'recentProjects.inviteTeammates': string;
@@ -1483,6 +1502,10 @@ export interface Dict {
   'recentProjects.sortNewest': string;
   'recentProjects.sortOldest': string;
   'recentProjects.sortName': string;
+  /** Heading of the rail's recent-projects disclosure (最近浏览过). */
+  'recentProjects.collectionRecent': string;
+  'recentProjects.collectionPersonalProjects': string;
+  'recentProjects.collectionTeamProjects': string;
   'recentProjects.viewList': string;
   'recentProjects.sharedBadge': string;
   'recentProjects.sharedProjectFallbackName': string;
@@ -1491,6 +1514,7 @@ export interface Dict {
   'recentProjects.teamMemberCreator': string;
   'recentProjects.ownOnlyMutation': string;
   'recentProjects.shareInProgress': string;
+  'recentProjects.duplicateInProgress': string;
   'recentProjects.sharedInTeam': string;
   'recentProjects.moveToTeam': string;
   'recentProjects.moveToTeamDescPre': string;
@@ -3554,6 +3578,7 @@ export interface Dict {
   'chat.queuedCancel': string;
   'chat.queuedReorder': string;
   'chat.queuedEdit': string;
+  'chat.queuedHeader': string;
   /** B11: visible label on the queue row's third button. */
   'chat.queuedSteer': string;
   /**
@@ -3725,6 +3750,7 @@ export interface Dict {
   'designFiles.newDocument': string;
   'designFiles.newDocumentTitle': string;
   'designFiles.empty': string;
+  'designFiles.buildingPreview': string;
   'designFiles.syncing': string;
   'designFiles.refresh': string;
   'designFiles.delete': string;
@@ -4385,6 +4411,8 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  /** Run title while the last turn's question form is still unanswered (OPEND-2744). */
+  'assistant.awaitingReplyLabel': string;
   'assistant.canceledLabel': string;
   'assistant.copyMarkdown': string;
   /**
@@ -5022,11 +5050,16 @@ export interface Dict {
   'community.typePrototype': string;
   'community.typeLiveArtifact': string;
   'community.typeSlides': string;
+  'community.typeDocument': string;
   'community.typeImage': string;
   'community.typeVideo': string;
   'community.typeHyperFrames': string;
   'community.typeAudio': string;
+  'community.typeWebGL': string;
   'community.usePrompt': string;
+  /** Empty gallery tab; `{type}` is the tab's own label. */
+  'community.emptyTitle': string;
+  'community.emptyBody': string;
   'marketplace.title': string;
   'marketplace.filterTrusted': string;
   'marketplace.filterRestricted': string;

@@ -215,6 +215,18 @@ describe('GET /api/projects/:id resolvedDir', () => {
         runId: 'source-run-1',
         runStatus: 'succeeded',
         lastRunEventId: 'evt-1',
+        events: [
+          { kind: 'status', label: 'completed', detail: 'first version' },
+          { kind: 'artifact_focus', show: ['pangu-kaitian-lesson.html'] },
+        ],
+        producedFiles: [
+          { name: 'pangu-kaitian-lesson.html', size: 1, mtime: 1, kind: 'html' },
+          { name: 'pangu-kaitian-cover.png', size: 1, mtime: 1, kind: 'image' },
+          { name: 'pangu-kaitian-slide-01.png', size: 1, mtime: 1, kind: 'image' },
+          { name: 'pangu-kaitian-slide-02.png', size: 1, mtime: 1, kind: 'image' },
+          { name: 'pangu-kaitian-slide-03.png', size: 1, mtime: 1, kind: 'image' },
+          { name: 'pangu-kaitian-slide-04.png', size: 1, mtime: 1, kind: 'image' },
+        ],
       },
       { id: 'fork-user-2', role: 'user', content: 'second ask' },
       { id: 'fork-assistant-2', role: 'assistant', content: 'second answer' },
@@ -259,6 +271,8 @@ describe('GET /api/projects/:id resolvedDir', () => {
         runId?: string;
         runStatus?: string;
         lastRunEventId?: string;
+        events?: unknown[];
+        producedFiles?: unknown[];
       }>;
     };
     expect(forkMessagesBody.messages.map((message) => message.content)).toEqual([
@@ -277,6 +291,10 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(forkMessagesBody.messages[1]?.runId).toBeUndefined();
     expect(forkMessagesBody.messages[1]?.runStatus).toBe('succeeded');
     expect(forkMessagesBody.messages[1]?.lastRunEventId).toBeUndefined();
+    // Historical deliveries and execution records survive the fork. Only
+    // their source run pointers are cleared; supporting files remain reachable.
+    expect(forkMessagesBody.messages[1]?.events).toEqual(seedMessages[1]?.events);
+    expect(forkMessagesBody.messages[1]?.producedFiles).toEqual(seedMessages[1]?.producedFiles);
 
     /*
      * 分叉分界线落在**新会话**里(2026-08-26 用户真机指认两次:

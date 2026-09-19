@@ -294,6 +294,21 @@ describe('OD Next V2 runtime state and transitions', () => {
     })).toMatchObject(state);
   });
 
+  it.each(['request', 'clarification'] as const)('accepts an explicit planning completion on %s only', (inputStage) => {
+    const state = { schema: OD_NEXT_RUNTIME_STATE_SCHEMA, route: 'full_plan', inputStage,
+      outcome: 'completed', executionMode: null, reasonCodes: [], executionIntent: 'plan_only' };
+    expect(StrategyRuntimeStateV2Schema.parse(state).outcome).toBe('completed');
+    expect(StrategyRuntimeStateV2Schema.safeParse({ ...state, executionIntent: 'produce' }).success).toBe(false);
+    expect(StrategyRuntimeStateV2Schema.safeParse({ ...state, executionIntent: undefined }).success).toBe(false);
+  });
+
+  it.each(['production', 'contract_repair'] as const)('never admits planning-only intent on %s', (inputStage) => {
+    expect(StrategyRuntimeStateV2Schema.safeParse({
+      schema: OD_NEXT_RUNTIME_STATE_SCHEMA, route: 'full_plan', inputStage,
+      outcome: 'completed', executionMode: 'simple', reasonCodes: [], executionIntent: 'plan_only',
+    }).success).toBe(false);
+  });
+
   it('rejects Direct Edit continuation, route switching, mode switching, and reverse stages', () => {
     expect(() => StrategyRuntimeStateV2Schema.parse({
       schema: OD_NEXT_RUNTIME_STATE_SCHEMA,

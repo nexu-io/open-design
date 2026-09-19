@@ -8,6 +8,8 @@
 import { Buffer } from 'node:buffer';
 import { StringDecoder } from 'node:string_decoder';
 
+import { boundedRawAgentEvent } from './run-event-payload-budget.js';
+
 type JsonRecord = Record<string, unknown>;
 type QoderEvent = Record<string, unknown>;
 type QoderEventSink = (event: QoderEvent) => void;
@@ -158,14 +160,17 @@ export function createQoderStreamHandler(onEvent: QoderEventSink) {
       return;
     }
 
-    onEvent({ type: 'raw', line: rawLine });
+    // An unrecognised record (e.g. the `user` echo carrying tool results):
+    // bounded at the source so the live stream, the run buffer and the
+    // transcript all carry the same line (see run-event-payload-budget.ts).
+    onEvent(boundedRawAgentEvent(rawLine, obj));
   }
 
   function handleLine(line: string) {
     try {
       handleObject(JSON.parse(line), line);
     } catch {
-      onEvent({ type: 'raw', line });
+      onEvent(boundedRawAgentEvent(line));
     }
   }
 

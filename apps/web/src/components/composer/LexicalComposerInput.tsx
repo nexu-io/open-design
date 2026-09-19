@@ -166,6 +166,12 @@ export interface LexicalComposerInputProps {
   // Optional combobox a11y. When set, the ContentEditable announces the active
   // mention row (id lives in the portaled listbox) without moving DOM focus.
   comboboxAria?: { activeId: string | null; expanded: boolean };
+  // Backspace with the caret before every character in the editor. The host
+  // owns whatever leads the prompt text (HomeHero's template chip, which sits
+  // outside the editor) and returns true when it consumed the key by clearing
+  // it — the keyboard equivalent of that chip's ×, and what a token field does
+  // with the chip before the caret. Left unhandled, Backspace there is a no-op.
+  onBackspaceAtStart?: () => boolean;
   // Read-only mode (team-shared project viewer). Makes the Lexical editor
   // non-editable so the caret/typing is blocked, applies a muted read-only
   // visual state, and hard-stops Enter from firing a send (belt-and-suspenders
@@ -465,8 +471,29 @@ function KeyboardPlugin({
   return null;
 }
 
-function MentionAtomicNavigationPlugin() {
+// True when the collapsed caret sits before every character in the editor —
+// the point where Backspace has nothing of its own left to delete.
+function $caretAtEditorStart(selection: RangeSelection): boolean {
+  const { anchor } = selection;
+  if (anchor.offset !== 0) return false;
+  const first = $getRoot().getFirstDescendant();
+  // Empty editor: the anchor is the root or its lone empty paragraph.
+  if (first === null) return true;
+  const node = anchor.getNode();
+  // Text point on the first descendant, or an element point on its parent
+  // (Lexical anchors on the block when the caret precedes an atomic node).
+  return node.is(first) || node.is(first.getParent());
+}
+
+function MentionAtomicNavigationPlugin({
+  onBackspaceAtStart,
+}: {
+  onBackspaceAtStart?: () => boolean;
+}) {
   const [editor] = useLexicalComposerContext();
+  // Ref so the command registration below stays stable yet sees fresh state.
+  const onBackspaceAtStartRef = useRef(onBackspaceAtStart);
+  onBackspaceAtStartRef.current = onBackspaceAtStart;
   useEffect(() => {
     return mergeRegister(
       editor.registerCommand(
@@ -524,9 +551,20 @@ function MentionAtomicNavigationPlugin() {
           ) {
             return false;
           }
-          if (!removeMentionAtCaret(selection, true)) return false;
-          event.preventDefault();
-          return true;
+          if (removeMentionAtCaret(selection, true)) {
+            event.preventDefault();
+            return true;
+          }
+          // Nothing of the editor's own left to delete — offer the key to
+          // whatever the host renders ahead of the text.
+          if (
+            $caretAtEditorStart(selection) &&
+            onBackspaceAtStartRef.current?.() === true
+          ) {
+            event.preventDefault();
+            return true;
+          }
+          return false;
         },
         COMMAND_PRIORITY_HIGH,
       ),
@@ -687,6 +725,7 @@ export const LexicalComposerInput = forwardRef<
     onTrigger,
     onEnterSend,
     onPasteFiles,
+    onBackspaceAtStart,
     popoverOpen,
     onPopoverKey,
     comboboxAria,
@@ -838,7 +877,7 @@ export const LexicalComposerInput = forwardRef<
       <EditorRefPlugin editorRef={editorRef} />
       <OnChangePlugin onChange={onChange} knownEntities={knownEntities} />
       <TriggerPlugin onTrigger={onTrigger} />
-      <MentionAtomicNavigationPlugin />
+      <MentionAtomicNavigationPlugin onBackspaceAtStart={onBackspaceAtStart} />
       <KeyboardPlugin
         popoverOpen={popoverOpen}
         onEnterSend={onEnterSend}

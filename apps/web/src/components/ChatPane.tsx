@@ -1,3 +1,5 @@
+import { conversationMetaLabel } from '../runtime/chat/conversation-time';
+export { conversationMetaLabel } from '../runtime/chat/conversation-time';
 import { QuoteBar } from './chat/QuoteBar';
 import { chatLogSelfResizeObserveDisabled } from '../runtime/chat-scroll-experiments';
 import { shouldShowJumpToLatest } from '../runtime/chat/jump-to-latest';
@@ -49,6 +51,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import historyStyles from './chat/ConversationHistoryDock.module.css';
 import { hasOdCard, OD_NEXT_STRATEGY_ID, type ProjectMediaTask } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
@@ -123,6 +126,8 @@ import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } 
 import { AssistantMessage, type QuestionFormSubmitHandler } from './AssistantMessage';
 import { chatSeam } from './chat/ChatRoot';
 import { PlanPill } from './chat/PlanPill';
+import { QueuedSendStack, type QueuedSendDropEdge } from './chat/QueuedSendStack';
+import { ChatScrollEdge } from './chat/ChatScrollEdge';
 import { planPillState } from '../runtime/chat/plan-pill';
 import {
   assistantMessageNeverHadARun,
@@ -247,7 +252,7 @@ const DEFAULT_STARTER_KEYS: Array<{
 
 const IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT = 5;
 const IMPORTED_ARTIFACTS_REVEAL_COUNT = 5;
-const CHAT_RAIL_MIN_USER_MESSAGES = 2;
+const CHAT_RAIL_MIN_USER_MESSAGES = 1;
 // Above this the rail becomes a compact rolling wheel with faded extremes;
 // at or below it the full column shows with no mask occlusion.
 const CHAT_RAIL_WHEEL_MIN_USER_MESSAGES = 40;
@@ -267,7 +272,7 @@ const CHAT_RAIL_WHEEL_LISTENER_OPTIONS = { passive: false } as const;
 // Dock-style proximity effect: every dash rests at the same base length;
 // the hovered dash grows to the full module width and only its 4 neighbors
 // on each side are pulled along, easing off with distance.
-const CHAT_RAIL_DASH_BASE_PX = 8;
+const CHAT_RAIL_DASH_BASE_PX = 6;
 const CHAT_RAIL_DASH_HOVER_PX = 16;
 const CHAT_RAIL_DASH_NEIGHBOR_SPAN = 4;
 
@@ -754,12 +759,7 @@ interface Props {
   conversations: Conversation[];
   activeConversationId: string | null;
   // The conversation whose history the live `messages` array currently
-  // reflects. Null while a switch is mid-flight (or after a load failure),
-  // which is exactly when `messages.length` must NOT be trusted as the active
-  // conversation's count — see `conversationMessageCount`. Callers that do not
-  // track this (mounts whose loader resets/retags `messages` asynchronously)
-  // leave it undefined and fall back to the persisted `conversation.messageCount`
-  // for a stable list count.
+  // reflects. Null while a switch is mid-flight (or after a load failure).
   messagesConversationId?: string | null;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
@@ -965,7 +965,19 @@ interface Props {
    *  the tabs dock row) — suppresses the header's collapse/back slot. */
   collapseControlLifted?: boolean;
   backLabel?: string;
-  projectHeader?: ReactNode;
+  // Host element for the conversation history control. When set (the project
+  // route's toolbar dock) the trigger + dropdown portal there and the card
+  // renders NO header row of its own — the project name lives once, in the
+  // switcher above the card (OPEND-3128 / OPEND-3258). Otherwise the control
+  // renders in a title-less row at the top of the card.
+  historyPortalTarget?: HTMLElement | null;
+  /**
+   * The pane is laid out but parked out of sight under the creation hand-off
+   * card (ProjectView `creationHandoff`, OPEND-2170). The composer normally
+   * portals into a body-level fixed layer that `visibility: hidden` on the
+   * pane cannot reach, so the layer hides itself on this flag.
+   */
+  composerLayerHidden?: boolean;
   designSystemPicker?: ReactNode;
   config?: AppConfig;
 }
@@ -1254,26 +1266,7 @@ function byMediaTaskCreationOrder(a: ProjectMediaTask, b: ProjectMediaTask): num
   return 0;
 }
 
-/**
- * 面板头那两枚字形。**路径逐字节取自稿子** `729fa43ce7` 的
- * `docs/design/chat-panel/src/body-scene.html:7-8`,不手抄、不换库。
- *
- * ## 为什么不走共享的 `<Icon name=…>`
- *
- * 稿子这两枚都是**描边**(`fill="none" stroke="currentColor"`,吃
- * `src/components.css:159` 的全局 `stroke-width: 1.75px` + round/round)。
- * 而 `components/Icon.tsx` 里凡是命中 `REMIX_ICON` 映射表的名字一律走**实心**
- * remix 路径 —— `history` / `plus` 两个名字都在表里,拿不到描边形。
- * 把名字从那张表里摘掉是**全站**行为(`arrow-up` 一个名字就有 6 处调用,
- * 其中两处在聊天面板之外),属于要单独拍板的改动;这里只把影响锁在面板头内,
- * 按仓库既有的做法(`ChatPane` 里的 `.msg-att-eye`、`RunErrorCard` 的
- * `AlertIcon`)直接内联稿子的路径。
- *
- * 1.75 是**用户单位**,跟着 viewBox 缩放 —— 与 `chat/primitives/icons.tsx` 的
- * `STROKE_ICON` 同一条约定,那里有完整推导。尺寸维持面板头现有的 16(稿子
- * `src/scene-shell.css:32` 是 15,但盒子也是 26 而不是产品的 28;
- * 那一组尺寸差不在本轮范围内)。
- */
+/** The new-session glyph keeps the design draft's stroke form at 16px. */
 const HEAD_GLYPH = {
   width: 16,
   height: 16,
@@ -1286,13 +1279,11 @@ const HEAD_GLYPH = {
   'aria-hidden': true,
 } as const;
 
-/** 描边时钟 + 回退箭头(`src/body-scene.html:7`)—— 不是实心对话气泡 */
+/** Filled discuss-line glyph (Demo #8113), sized like the other head icons. */
 function ChatHistoryGlyph(): ReactElement {
   return (
-    <svg {...HEAD_GLYPH}>
-      <path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8" />
-      <path d="M3 4v4h4" />
-      <path d="M12 7v5l3 2" />
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+      <path d="M14 22.5L11.2 19H6C5.44772 19 5 18.5523 5 18V7.10256C5 6.55028 5.44772 6.10256 6 6.10256H22C22.5523 6.10256 23 6.55028 23 7.10256V18C23 18.5523 22.5523 19 22 19H16.8L14 22.5ZM15.8387 17H21V8.10256H7V17H11.2H12.1613L14 19.2984L15.8387 17ZM2 2H19V4H3V15H1V3C1 2.44772 1.44772 2 2 2Z" />
     </svg>
   );
 }
@@ -1443,7 +1434,8 @@ export function ChatPane({
   onCollapse,
   collapseControlLifted,
   backLabel,
-  projectHeader,
+  historyPortalTarget,
+  composerLayerHidden = false,
   designSystemPicker,
   config,
 }: Props) {
@@ -1611,6 +1603,8 @@ export function ChatPane({
   const composerSlotRef = useRef<HTMLDivElement | null>(null);
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
   const queuedSendStripRef = useRef<HTMLDivElement | null>(null);
+  /** The queued-send stack is spread open over the transcript (see `QueuedSendStack.onExpandedChange`). */
+  const [queuedSendExpanded, setQueuedSendExpanded] = useState(false);
   const didInitialScrollRef = useRef(false);
   const runFailedToastSurfaceKeysRef = useRef<Set<string>>(new Set());
   const runRecoverySurfaceKeysRef = useRef<Set<string>>(new Set());
@@ -2057,8 +2051,11 @@ export function ChatPane({
    * 按位置分工才对:人在上面时他要的是回到最新 —— 那一刻「跑到第几步了」既不紧急、
    * 也不是他伸手要够的东西;人贴着底时他已经在最新上,回底按钮无事可做,
    * 位置该让给进度。两者因此天然不同时出现,不需要谁给谁让一档。
+   *
+   * 队列展开时是第三个例外(K1,参照 #8165):展开的队列叠在 transcript 底部
+   * 同一角上,「回到最新」这时候让位,队列收起后回来。
    */
-  const showJumpToLatest = scrolledFromBottom;
+  const showJumpToLatest = scrolledFromBottom && !queuedSendExpanded;
   const planPillVisible = planPillEligible && !scrolledFromBottom;
   // Historical messages remain intact. Only their current recovery surface is
   // replaced, by identity rather than diagnostic text (the next run may fail alike).
@@ -4125,6 +4122,127 @@ export function ChatPane({
     ? { minHeight: composerSlotHeight > 0 ? composerSlotHeight : undefined }
     : undefined;
 
+  const historyControl = (
+    <div
+      className={`chat-history-wrap chat-session-switcher${showConvList ? ' open' : ''}`}
+      ref={historyWrapRef}
+    >
+      {/*
+        * 面板头第一颗图标键。稿子 `729fa43ce7`:
+        * `docs/design/chat-panel/src/body-scene.html:7`
+        *   `<button class="mod-tip-b" aria-label="历史会话" data-tip="历史会话">`
+        *
+        * **不再用原生 `title`** —— 稿子 `src/components.css:2684-2686` 点名反对:
+        * 「原生 tip 要等半秒到两秒(各家浏览器不一,不可控),等到时手已经点下去了,
+        * 起不到『先告诉你再点』的作用;而且原生样式跟不上这套配色。」
+        * 换成产品统一的 `od-tooltip` + `data-tooltip`(`TooltipLayer`)。
+        *
+        * `mod-tip-b` = 气泡翻到按钮**下方**(`src/components.css:2720-2721`:
+        * 面板头贴着面板顶边,朝上的气泡会顶出去),对应 `data-tooltip-placement="bottom"`。
+        */}
+      <button
+        type="button"
+        className="chat-session-trigger icon-only od-tooltip"
+        data-testid="conversation-history-trigger"
+        data-tooltip={t('chat.conversationsTitle')}
+        data-tooltip-placement="bottom"
+        aria-label={t('chat.conversationsAria')}
+        aria-haspopup="menu"
+        aria-expanded={showConvList}
+        onClick={() => {
+          setShowConvList((v) => {
+            const next = !v;
+            if (next) {
+              trackChatPanelClick(analytics.track, {
+                page_name: 'chat_panel',
+                area: 'chat_panel',
+                element: 'history',
+              });
+            }
+            return next;
+          });
+        }}
+      >
+        <ChatHistoryGlyph />
+      </button>
+      {showConvList ? (
+        <div className="chat-history-menu" role="menu" data-testid="conversation-history-menu">
+          {/* Search and "new session" share one row (Demo #8113): the new
+              session entry moved out of the card header into the dropdown. */}
+          <div className={historyStyles.searchRow}>
+            <label className="chat-history-search">
+              <Icon name="search" size={14} />
+              <input
+                type="search"
+                value={conversationSearch}
+                onChange={(event) => setConversationSearch(event.currentTarget.value)}
+                placeholder={t('chat.conversationsSearchPlaceholder')}
+                data-testid="conversation-history-search"
+              />
+              {conversationSearch ? (
+                <button
+                  type="button"
+                  className="chat-history-search-clear"
+                  onClick={() => setConversationSearch('')}
+                  aria-label={t('chat.comments.clear')}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              ) : null}
+            </label>
+            {onNewConversation ? (
+              <button
+                type="button"
+                className="chat-session-trigger chat-new-conversation od-tooltip"
+                data-testid="chat-new-conversation"
+                data-tooltip={t('chat.newSession')}
+                data-tooltip-placement="bottom"
+                aria-label={t('chat.newSession')}
+                disabled={newConversationDisabled}
+                onClick={() => {
+                  if (newConversationDisabled) return;
+                  trackChatPanelClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'chat_panel',
+                    element: 'new_chat',
+                  });
+                  onNewConversation();
+                  setShowConvList(false);
+                }}
+              >
+                <NewSessionGlyph />
+              </button>
+            ) : null}
+          </div>
+          <div className="chat-history-list" data-testid="conversation-list">
+            {conversations.length === 0 ? (
+              <div className="chat-history-empty">
+                {t('chat.emptyConversations')}
+              </div>
+            ) : filteredConversations.length === 0 ? (
+              <div className="chat-history-empty">
+                {t('chat.conversationsNoMatches')}
+              </div>
+            ) : (
+              filteredConversations.map((c) => (
+                <ConversationRow
+                  key={c.id}
+                  conversation={c}
+                  active={c.id === activeConversationId}
+                  onSelect={() => {
+                    onSelectConversation(c.id);
+                    setShowConvList(false);
+                  }}
+                  t={t}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     /* `chatSeam` 是 --chat-* 的唯一定义处。少了它,聊天树里所有 var(--chat-…) 静默落空 ——
        比如壳头「进行中」那句用 background-clip: text 上色,渐变一失效字就成透明的,
@@ -4132,197 +4250,46 @@ export function ChatPane({
        抹在 .pane 自己身上、**不另外包一层**:包一层会打断 `.split-chat-slot > .pane`
        这类子选择器(全仓 11 条),聊天卡的圆角 / 白底 / backdrop-filter 会集体失效。 */
     <div {...chatSeam('pane')}>
-        <div className="chat-project-header">
-          {collapseControlLifted ? null : onCollapse ? (
-            <button
-              type="button"
-              className="chat-project-back od-tooltip"
-              onClick={onCollapse}
-              title={t('chat.collapsePane')}
-              aria-label={t('chat.collapsePane')}
-              data-tooltip={t('chat.collapsePane')}
-              data-tooltip-placement="bottom"
-              data-testid="chat-collapse-toggle"
-            >
-              <Icon name="panel-left" size={16} />
-            </button>
-          ) : onBack ? (
-            <button
-              type="button"
-              className="chat-project-back"
-              onClick={onBack}
-              title={backLabel}
-              aria-label={backLabel}
-            >
-              <Icon name="arrow-left" size={16} />
-            </button>
-          ) : null}
-          {projectHeader ? (
-            <span className="chat-project-header-title">{projectHeader}</span>
-          ) : null}
-          <div
-            className={`chat-history-wrap chat-session-switcher${showConvList ? ' open' : ''}`}
-            ref={historyWrapRef}
-          >
-            {/*
-              * 面板头第一颗图标键。稿子 `729fa43ce7`:
-              * `docs/design/chat-panel/src/body-scene.html:7`
-              *   `<button class="mod-tip-b" aria-label="历史会话" data-tip="历史会话">`
-              *
-              * **不再用原生 `title`** —— 稿子 `src/components.css:2684-2686` 点名反对:
-              * 「原生 tip 要等半秒到两秒(各家浏览器不一,不可控),等到时手已经点下去了,
-              * 起不到『先告诉你再点』的作用;而且原生样式跟不上这套配色。」
-              * 换成产品统一的 `od-tooltip` + `data-tooltip`(`TooltipLayer`)。
-              *
-              * `mod-tip-b` = 气泡翻到按钮**下方**(`src/components.css:2720-2721`:
-              * 面板头贴着面板顶边,朝上的气泡会顶出去),对应 `data-tooltip-placement="bottom"`。
-              *
-              * ⚠️ 原来的 `title` 还把当前会话标题拼在后面(`… · {activeConversation.title}`)。
-              * 稿子的 tip 是**常量**,所以这里跟稿子走;那半句要不要找地方安置,待产品拍。
-              */}
-            <button
-              type="button"
-              className="chat-session-trigger icon-only od-tooltip"
-              data-testid="conversation-history-trigger"
-              data-tooltip={t('chat.conversationsTitle')}
-              data-tooltip-placement="bottom"
-              aria-label={t('chat.conversationsAria')}
-              aria-haspopup="menu"
-              aria-expanded={showConvList}
-              onClick={() => {
-                setShowConvList((v) => {
-                  const next = !v;
-                  if (next) {
-                    trackChatPanelClick(analytics.track, {
-                      page_name: 'chat_panel',
-                      area: 'chat_panel',
-                      element: 'history',
-                    });
-                  }
-                  return next;
-                });
-              }}
-            >
-              <ChatHistoryGlyph />
-            </button>
-            {showConvList ? (
-              <div className="chat-history-menu" role="menu" data-testid="conversation-history-menu">
-                <div className="chat-history-menu-head">
-                  <span className="chat-history-menu-title">
-                    {t('chat.conversationsHeading')}
-                    <span className="chat-history-menu-count">
-                      <span data-testid="conversation-history-count">
-                      {filteredConversations.length === conversations.length
-                        ? compactCount(conversations.length)
-                        : `${compactCount(filteredConversations.length)} / ${compactCount(conversations.length)}`}
-                      </span>
-                    </span>
-                  </span>
-                  {/*
-                    * 这里原来还有一颗「新建」。**产品裁决 2026-09-03:新建入口只留
-                    * 面板头那枚图标键**(`data-testid="chat-new-conversation"`,
-                    * 稿子 `729fa43ce7:docs/design/chat-panel/src/body-scene.html:8`)——
-                    * 同一个动作不该有两个口子。
-                    *
-                    * 删掉不影响可达性:两颗本来就同一个 `onNewConversation` 门槛
-                    * (`onNewConversation ? … : null`)、同一个 `newConversationDisabled`,
-                    * 面板头那枚在侧边聊天(`workspace/SideChatTab.tsx`)与只读项目下
-                    * 一样渲染。这一行只剩标题 + 计数,`.chat-history-menu-head` 本来就
-                    * 不画分隔线,不会留下空分区。 */}
-                </div>
-                <label className="chat-history-search">
-                  <Icon name="search" size={12} />
-                  <input
-                    type="search"
-                    value={conversationSearch}
-                    onChange={(event) => setConversationSearch(event.currentTarget.value)}
-                    placeholder={t('chat.conversationsSearchPlaceholder')}
-                    data-testid="conversation-history-search"
-                  />
-                  {conversationSearch ? (
-                    <button
-                      type="button"
-                      className="chat-history-search-clear"
-                      onClick={() => setConversationSearch('')}
-                      aria-label={t('chat.comments.clear')}
-                    >
-                      <Icon name="close" size={10} />
-                    </button>
-                  ) : null}
-                </label>
-                <div className="chat-history-list" data-testid="conversation-list">
-                  {conversations.length === 0 ? (
-                    <div className="chat-history-empty">
-                      {t('chat.emptyConversations')}
-                    </div>
-                  ) : filteredConversations.length === 0 ? (
-                    <div className="chat-history-empty">
-                      {t('chat.conversationsNoMatches')}
-                    </div>
-                  ) : (
-                    filteredConversations.map((c) => (
-                      <ConversationRow
-                        key={c.id}
-                        conversation={c}
-                        active={c.id === activeConversationId}
-                        messageCount={conversationMessageCount(c, activeConversationId, messagesConversationId, messages.length)}
-                        onSelect={() => {
-                          onSelectConversation(c.id);
-                          setShowConvList(false);
-                        }}
-                        onDelete={() => onDeleteConversation(c.id)}
-                        t={t}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
+        {historyPortalTarget ? (
+          /* The dock host lives outside the chat tree, so the portal
+             re-applies the --chat-* seam for the control's own styles. No
+             header row here: the project name is shown once, in the
+             switcher docked above the card (OPEND-3128 / OPEND-3258). */
+          createPortal(<div {...chatSeam()}>{historyControl}</div>, historyPortalTarget)
+        ) : (
+          <div className="chat-project-header">
+            {collapseControlLifted ? null : onCollapse ? (
+              <button
+                type="button"
+                className="chat-project-back od-tooltip"
+                onClick={onCollapse}
+                title={t('chat.collapsePane')}
+                aria-label={t('chat.collapsePane')}
+                data-tooltip={t('chat.collapsePane')}
+                data-tooltip-placement="bottom"
+                data-testid="chat-collapse-toggle"
+              >
+                <Icon name="panel-left" size={16} />
+              </button>
+            ) : onBack ? (
+              <button
+                type="button"
+                className="chat-project-back"
+                onClick={onBack}
+                title={backLabel}
+                aria-label={backLabel}
+              >
+                <Icon name="arrow-left" size={16} />
+              </button>
             ) : null}
+            {historyControl}
           </div>
-          {/*
-            * 面板头第二颗图标键「新会话」。稿子 `729fa43ce7`:
-            * `docs/design/chat-panel/src/body-scene.html:8`
-            *   `<button class="mod-tip-b" aria-label="新会话" data-tip="新会话">
-            *      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            *        <path d="M12 5v14M5 12h14"/></svg></button>`
-            * —— 紧挨着「历史会话」,同样 `mod-tip-b` ⇒ 气泡朝下。
-            *
-            * 行为**不新开一条**:走的就是既有的 `onNewConversation`,连
-            * `newConversationDisabled` 一起沿用。
-            *
-            * **产品裁决 2026-09-03:这是新建会话的唯一入口** —— 历史下拉里那颗
-            * 「新建」(`conversation-history-new`)已经删了,理由见上面那段注释。
-            * e2e 的定位器一并改到这颗:`e2e/ui/app.test.ts`、
-            * `e2e/ui/app-restoration.test.ts`、`e2e/ui/project-management-flows.test.ts`。
-            */}
-          {onNewConversation ? (
-            <button
-              type="button"
-              className="chat-session-trigger chat-new-conversation od-tooltip"
-              data-testid="chat-new-conversation"
-              data-tooltip={t('chat.newSession')}
-              data-tooltip-placement="bottom"
-              aria-label={t('chat.newSession')}
-              disabled={newConversationDisabled}
-              onClick={() => {
-                if (newConversationDisabled) return;
-                trackChatPanelClick(analytics.track, {
-                  page_name: 'chat_panel',
-                  area: 'chat_panel',
-                  element: 'new_chat',
-                });
-                onNewConversation();
-                setShowConvList(false);
-              }}
-            >
-              <NewSessionGlyph />
-            </button>
-          ) : null}
-        </div>
+        )}
         {tab === 'chat' ? (
           <>
             <div className={`chat-log-wrap${chatLogTray ? ' has-chat-log-tray' : ''}`}>
               <div className="chat-log-viewport">
+                <ChatScrollEdge scrollRef={logRef} />
                 <ChatMessageRail
                   items={chatRenderItems}
                   loading={loading}
@@ -4690,7 +4657,9 @@ export function ChatPane({
               {chatLogTray}
             </div>
             <QueuedSendStrip
+              key={activeConversationId ?? projectId ?? 'draft'}
               containerRef={queuedSendStripRef}
+              onExpandedChange={setQueuedSendExpanded}
               items={queuedItems}
               editingId={editingQueuedSendId}
               onEdit={(item) => {
@@ -4757,6 +4726,7 @@ export function ChatPane({
                    */
                   <div
                     {...chatSeam('chat-composer-fixed-layer')}
+                    data-composer-layer-hidden={composerLayerHidden ? '' : undefined}
                     ref={composerLayerRef}
                     data-chat-panel-top={composerPortalRect.top}
                     style={{
@@ -4894,9 +4864,6 @@ function ChatMessageRail({
   );
   const [preview, setPreview] = useState<{ id: string; y: number } | null>(null);
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
-  // Picking a message retracts the module until the pointer leaves it, so the
-  // jump lands without the rail lingering over the destination.
-  const [retracted, setRetracted] = useState(false);
   const navRef = useRef<HTMLElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
 
@@ -4910,7 +4877,6 @@ function ChatMessageRail({
    */
   useEffect(() => {
     setPreview(null);
-    setRetracted(false);
     setActiveMessageId(null);
   }, [activeConversationKey]);
 
@@ -4940,7 +4906,6 @@ function ChatMessageRail({
   // The track scrolls, so the preview anchor is measured from the marker's
   // on-screen position at hover time instead of derived from its index.
   const showPreview = (id: string, marker: HTMLElement) => {
-    if (retracted) return;
     const nav = navRef.current;
     const y = nav
       ? marker.getBoundingClientRect().top - nav.getBoundingClientRect().top + 4
@@ -5057,40 +5022,6 @@ function ChatMessageRail({
     return () => nav.removeEventListener('wheel', onWheel);
   }, [logRef, railVisible]);
 
-  /**
-   * 退避态的解除不能只靠 nav 自己的 `mouseleave`。
-   *
-   * 隐形的东西不该继续吃输入,所以 `.is-retracted` 现在连 `pointer-events`
-   * 一起关掉(`chat.css`)。可 `mouseleave` 的前提是这个元素还在命中测试里 ——
-   * 一个刚被设成 `pointer-events: none` 的元素会不会补发一次 `mouseleave`,
-   * 规范没有要求,各浏览器实现也不一致。赌输了 `retracted` 就永远解不掉,
-   * 导轨从此再也不亮,比原来的缺陷更糟。
-   *
-   * 所以解除条件自己拿:退避期间在 document 上听指针移动,指针一旦离开导轨的
-   * 矩形就解除 —— 和 `mouseleave` 同一个语义,但不依赖导轨能不能被命中。
-   * `onMouseLeave` 一并保留:指针在样式落下之前就滑出去时它更早一步,而且它
-   * 顺手清 `preview`。
-   */
-  useEffect(() => {
-    if (!retracted) return;
-    const release = (ev: MouseEvent) => {
-      const nav = navRef.current;
-      if (!nav) {
-        setRetracted(false);
-        return;
-      }
-      const rect = nav.getBoundingClientRect();
-      const inside =
-        ev.clientX >= rect.left
-        && ev.clientX <= rect.right
-        && ev.clientY >= rect.top
-        && ev.clientY <= rect.bottom;
-      if (!inside) setRetracted(false);
-    };
-    document.addEventListener('pointermove', release, { passive: true });
-    return () => document.removeEventListener('pointermove', release);
-  }, [retracted]);
-
   if (!railVisible) {
     return null;
   }
@@ -5098,7 +5029,7 @@ function ChatMessageRail({
   const previewItem =
     userMessages.find((item) => item.message.id === preview?.id) ?? null;
   const hoverIndex =
-    !retracted && preview
+    preview
       ? userMessages.findIndex((item) => item.message.id === preview.id)
       : -1;
 
@@ -5108,11 +5039,10 @@ function ChatMessageRail({
        非 passive 监听,见 `CHAT_RAIL_WHEEL_LISTENER_OPTIONS`。 */
     <nav
       ref={navRef}
-      className={`chat-message-rail${retracted ? ' is-retracted' : ''}`}
+      className="chat-message-rail"
       aria-label={t('chat.messageRail.aria')}
       onMouseLeave={() => {
         setPreview(null);
-        setRetracted(false);
       }}
       data-wheel={userMessages.length > CHAT_RAIL_WHEEL_MIN_USER_MESSAGES ? 'true' : 'false'}
       data-testid="chat-message-rail"
@@ -5145,7 +5075,6 @@ function ChatMessageRail({
               onBlur={() => setPreview(null)}
               onClick={() => {
                 setPreview(null);
-                setRetracted(true);
                 onNavigate(item.message, item.messageIndex);
               }}
             >
@@ -6018,10 +5947,13 @@ function queuedTipPlacement(
   onReorder,
   onSendNow,
   steerBlockedReason,
+  onExpandedChange,
 }: {
   containerRef?: MutableRefObject<HTMLDivElement | null>;
   editingId?: string | null;
   items: QueuedSendItem[];
+  /** Forwarded to `QueuedSendStack`: the stack is spread open over the transcript. */
+  onExpandedChange?: (expanded: boolean) => void;
   onEdit?: (item: QueuedSendItem) => void;
   onRemove?: (id: string) => void;
   onReorder?: (orderedIds: string[]) => void;
@@ -6046,7 +5978,6 @@ function queuedTipPlacement(
 }) {
   const t = useT();
   const [dragState, setDragState] = useState<QueuedSendDragState | null>(null);
-  if (items.length === 0) return null;
   const canReorder = Boolean(onReorder && items.length > 1);
 
   const handleDragStart = (
@@ -6110,26 +6041,23 @@ function queuedTipPlacement(
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="chat-queued-send-strip"
-      data-testid="chat-queued-send-strip"
+    <QueuedSendStack
+      containerRef={containerRef}
+      onExpandedChange={onExpandedChange}
+      label={`${t('chat.queuedHeader')} · ${items.length}`}
+      dragging={Boolean(dragState)}
       onDragLeave={(event) => {
         const related = event.relatedTarget;
         if (related instanceof Node && event.currentTarget.contains(related)) return;
         setDragState(null);
       }}
-    >
-      {/* 稿子没有卡头:队列就贴在输入框底下,是什么一目了然,不用再单起一行说「排队中 · N 条」 */}
-      <div className="chat-queued-send-list">
-        {items.map((item, index) => {
+      items={items.map((item, index) => {
           const isDragging = dragState?.draggingId === item.id;
-          const dropClass = dragState?.overId === item.id
-            && dragState.draggingId !== item.id
-            && dragState.edge
-            ? ` chat-queued-send-row-drop-${dragState.edge}`
-            : '';
-          return (
+          // The insertion bar is the stack's to draw, between cards (OPEND-3203).
+          const dropEdge = dragState?.overId === item.id && dragState.draggingId !== item.id
+            ? dragState.edge
+            : null;
+          return { id: item.id, dropEdge, content: (
             <div
               /* 首行**不换任何样式**:稿子 `.queue .q:first-child`
                  (`361b78253e:docs/design/chat-panel/src/components.css:2898`)
@@ -6138,14 +6066,15 @@ function queuedTipPlacement(
                  留着就是一个没有任何规则消费、却在 diff 里长得像「首行有特殊态」的钩子。 */
               className={`chat-queued-send-row${
                 editingId === item.id ? ' chat-queued-send-row-editing' : ''
-              }${isDragging ? ' chat-queued-send-row-dragging' : ''}${dropClass}`}
+              }${isDragging ? ' chat-queued-send-row-dragging' : ''}`}
               data-testid="chat-queued-send-row"
               key={item.id}
               onDragOver={(event) => handleDragOver(event, item.id)}
               onDrop={(event) => handleDrop(event, item.id)}
             >
-              {/* 稿子这一行是 `grip → ix → tx → qops`:**拖动手柄在最左**,序号跟在它右边。
-                  原来这两个是反的(序号在最左),整行的起手就和稿子对不上。 */}
+              {/* 稿子这一行是 `grip → ix → tx → qops`:**拖动手柄在最左**。
+                  序号(`ix`)K1 起不再渲染(参照 #8165 提交 1):每条是一张独立的
+                  浮动卡,卡的顺序就是队列顺序,出队重排后位置一目了然。 */}
               <button
                 type="button"
                 className="chat-queued-send-drag-handle chat-queued-send-tooltip od-tooltip"
@@ -6160,8 +6089,6 @@ function queuedTipPlacement(
               >
                 <Icon name="grip-vertical" size={14} />
               </button>
-              {/* 序号:出队后重排是数组下标的自然结果,不用另外维护 */}
-              <span className="chat-queued-send-index" data-testid="chat-queued-send-index" aria-hidden>{index + 1}</span>
               <div className="chat-queued-send-main">
                 <span className="chat-queued-send-title">{summarizeQueuedPrompt(item, t)}</span>
               </div>
@@ -6251,16 +6178,13 @@ function queuedTipPlacement(
 
               </div>
             </div>
-          );
+          ) };
         })}
-      </div>
-    </div>
+    />
   );
 }
 
   const QUEUED_SEND_DRAG_MIME = 'application/x-open-design-queued-send';
-
-type QueuedSendDropEdge = 'before' | 'after';
 
 interface QueuedSendDragState {
   draggingId: string;
@@ -6621,47 +6545,15 @@ function filterConversations(
   });
 }
 
-function conversationMessageCount(
-  conversation: Conversation,
-  activeConversationId: string | null,
-  messagesConversationId: string | null,
-  activeMessageCount: number,
-): number | null {
-  // The live `messages` array is authoritative for the active conversation —
-  // it stays fresh as a run streams new turns in — but ONLY once it has
-  // actually loaded for that conversation. While a switch is mid-flight (or a
-  // load failed) `messages` is reset to [] and `messagesConversationId` no
-  // longer matches the active id; trusting `messages.length` there renders a
-  // phantom "0 msg". Fall back to the persisted server count until the live
-  // array catches up.
-  if (
-    conversation.id === activeConversationId &&
-    messagesConversationId === activeConversationId
-  ) {
-    return activeMessageCount;
-  }
-  return typeof conversation.messageCount === 'number' ? conversation.messageCount : null;
-}
-
-function compactCount(value: number): string {
-  if (value < 1000) return String(value);
-  const compact = Math.floor(value / 100) / 10;
-  return `${compact}k`;
-}
-
 function ConversationRow({
   conversation,
   active,
-  messageCount,
   onSelect,
-  onDelete,
   t,
 }: {
   conversation: Conversation;
   active: boolean;
-  messageCount: number | null;
   onSelect: () => void;
-  onDelete: () => void;
   t: TranslateFn;
 }) {
   const displayTitle =
@@ -6685,25 +6577,8 @@ function ConversationRow({
         className="chat-conv-item-meta"
         data-testid={`conversation-meta-${conversation.id}`}
       >
-        {messageCount !== null ? `${compactCount(messageCount)} msg · ` : ''}
         {conversationMetaLabel(conversation, t)}
       </span>
-      <button
-        type="button"
-        className="chat-conv-item-del"
-        data-testid={`conversation-delete-${conversation.id}`}
-        title={t('chat.deleteConversation')}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (
-            confirm(t('chat.deleteConversationConfirm', { title: displayTitle }))
-          ) {
-            onDelete();
-          }
-        }}
-      >
-        <Icon name="close" size={12} />
-      </button>
     </div>
   );
 }
@@ -7304,50 +7179,3 @@ function isProgrammaticBrandAssistantMessage(message: ChatMessage | null | undef
   );
 }
 
-function relTime(ts: number, t: TranslateFn): string {
-  const diff = Date.now() - ts;
-  const min = 60_000;
-  const hr = 60 * min;
-  const day = 24 * hr;
-  if (diff < min) return t('common.now');
-  if (diff < hr) return t('common.minutesShort', { n: Math.floor(diff / min) });
-  if (diff < day) return t('common.hoursShort', { n: Math.floor(diff / hr) });
-  if (diff < 7 * day) return t('common.daysShort', { n: Math.floor(diff / day) });
-  return new Date(ts).toLocaleDateString();
-}
-
-export function conversationMetaLabel(
-  conversation: Conversation,
-  t: TranslateFn,
-): string {
-  const latestRun = conversation.latestRun;
-  if (
-    latestRun &&
-    (latestRun.status === 'succeeded' ||
-      latestRun.status === 'failed' ||
-      latestRun.status === 'canceled') &&
-    typeof conversation.totalDurationMs === 'number' &&
-    Number.isFinite(conversation.totalDurationMs)
-  ) {
-    return formatDurationShort(conversation.totalDurationMs);
-  }
-  if (
-    latestRun &&
-    (latestRun.status === 'succeeded' ||
-      latestRun.status === 'failed' ||
-      latestRun.status === 'canceled') &&
-    typeof latestRun.durationMs === 'number' &&
-    Number.isFinite(latestRun.durationMs)
-  ) {
-    return formatDurationShort(latestRun.durationMs);
-  }
-  return relTime(conversation.updatedAt, t);
-}
-
-function formatDurationShort(ms: number): string {
-  const s = Math.max(0, ms) / 1000;
-  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
-  const m = Math.floor(s / 60);
-  const rem = Math.floor(s - m * 60);
-  return `${m}m ${rem.toString().padStart(2, '0')}s`;
-}

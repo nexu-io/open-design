@@ -276,24 +276,16 @@ describe('ChatPane streaming state', () => {
   it('keeps queued-send strip styles compact above the composer', () => {
     const css = readExpandedIndexCss();
 
-    expect(css).toContain('.chat-queued-send-strip');
-    expect(css).toContain('display: flex;');
-    expect(css).toContain('.chat-queued-send-list');
-    expect(css).toContain('overflow-y: auto;');
     expect(css).toContain('.chat-queued-send-row');
     expect(css).toContain('display: grid;');
     expect(css).toContain('grid-template-columns: 24px minmax(0, 1fr) max-content;');
     expect(css).toContain('.chat-queued-send-title');
     expect(css).toContain('text-overflow: ellipsis;');
     expect(css).toContain('.chat-queued-send-drag-handle');
-    expect(css).toContain('align-self: auto;');
     expect(css).toContain('.pane {');
     expect(css).toContain('--chat-composer-inline-inset: 16px;');
     expect(css).toContain('.split-chat-slot > .pane');
     expect(css).toContain('--chat-composer-inline-inset: 10px;');
-    expect(css).toContain('width: calc(100% - (var(--chat-composer-inline-inset, 16px) * 2));');
-    expect(css).toContain('margin: 0 var(--chat-composer-inline-inset, 16px) 2px;');
-    expect(css).toContain('max-width: none;');
     expect(css).toContain('.chat-queued-send-action');
     expect(css).toContain('width: 24px;');
     expect(css).toContain('height: 24px;');
@@ -1417,12 +1409,11 @@ Expected output:
 
     const strip = screen.getByTestId('chat-queued-send-strip');
     // 稿子里队列**没有卡头**:它贴在输入框底下,是什么一目了然,
-    // 不再单起一行写「排队中 · N 条」。行首改成序号。
+    // 不再单起一行写「排队中 · N 条」。行首也不再带序号(K1,参照 #8165):
+    // 队列行紧凑成 grip → 正文 → 动作三段。
     expect(strip?.textContent).not.toContain('Queued');
     expect(strip?.textContent).not.toContain('Start Multitasking');
-    expect(
-      screen.getAllByTestId('chat-queued-send-index').map((el) => el.textContent),
-    ).toEqual(['1', '2', '3', '4', '5']);
+    expect(screen.queryAllByTestId('chat-queued-send-index')).toHaveLength(0);
     expect(screen.getAllByTestId('chat-queued-send-row')).toHaveLength(5);
     expect(strip?.textContent).toContain('Make the export button larger and use a warmer accent');
     expect(strip?.textContent).toContain('Then adjust the title spacing');
@@ -1433,6 +1424,9 @@ Expected output:
     // 这条**故意**还按类名查:它钉的是「那段 DOM 已经删掉了」,类名就是被删的东西本身,
     // 换成 testid 反而钉不住(删掉的元素不会有 testid)。
     expect(container.querySelector('.chat-queued-send-overflow')).toBeNull();
+    // Collapsed, the stack only exposes the newest card; the older ones are
+    // `inert` until the region is hovered or focused.
+    fireEvent.focus(strip);
     expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(5);
 
     // 领头那颗如今只有一副面孔,永远叫「引导对话」(`chat.queuedSteer`);
@@ -1513,6 +1507,7 @@ Expected output:
       />,
     );
 
+    fireEvent.focus(screen.getByTestId('chat-queued-send-strip'));
     const rows = screen.getAllByTestId('chat-queued-send-row');
     const handles = screen.getAllByRole('button', { name: 'Drag to reorder' });
     const dataTransfer = mockDataTransfer();

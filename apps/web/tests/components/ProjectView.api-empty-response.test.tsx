@@ -664,7 +664,7 @@ describe('ProjectView API empty response handling', () => {
   it('does not expose the project instructions editor from the project header', async () => {
     const view = renderProjectView();
 
-    await screen.findByTestId('project-title');
+    await screen.findByTestId('file-workspace');
 
     expect(screen.queryByTestId('project-instructions-add')).toBeNull();
     expect(view.container.querySelector('.project-instructions-chip')).toBeNull();

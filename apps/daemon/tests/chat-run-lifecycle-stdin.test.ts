@@ -1,54 +1,52 @@
 import { describe, expect, it } from 'vitest';
 
-import { writePromptAndEndStdin } from '../src/runtimes/chat-run-lifecycle.js';
+import {
+  recordPromptDeliveredAtSpawn,
+  runtimeReadsPlainTextPromptFromStdin,
+} from '../src/runtimes/chat-run-lifecycle.js';
+import { claudeAgentDef } from '../src/runtimes/defs/claude.js';
+import { codexAgentDef, withCodexTransport } from '../src/runtimes/defs/codex.js';
+import { cursorAgentDef } from '../src/runtimes/defs/cursor-agent.js';
+import { piAgentDef } from '../src/runtimes/defs/pi.js';
 
-// Regression guard for `run_finished.stdin_backpressure`.
-//
-// The first cut wrote the prompt with `child.stdin.end(composed, ...)` and then
-// read `child.stdin.writableNeedDrain`. That reports nothing: `end(chunk)`
-// returns the stream rather than a boolean, and `writableNeedDrain` is already
-// back to false by the time it returns — even for a chunk `write(chunk)` would
-// have rejected. Every runtime except Claude takes this path, so the field was
-// permanently false on exactly the runs whose `stdin_write` stalls it exists to
-// attribute.
-describe('writePromptAndEndStdin', () => {
-  function fakeStdin(writeReturns: boolean) {
-    const calls: { chunk: string; encoding: string }[] = [];
-    const state = { ended: false, flushCb: null as null | ((err?: Error | null) => void) };
-    return {
-      calls,
-      state,
-      write(chunk: string, encoding: BufferEncoding, cb: (err?: Error | null) => void) {
-        calls.push({ chunk, encoding });
-        state.flushCb = cb;
-        return writeReturns;
-      },
-      end() {
-        state.ended = true;
-      },
-    };
-  }
-
-  it('reports backpressure when the pipe rejected the chunk, and still closes stdin', () => {
-    const stdin = fakeStdin(false);
-    expect(writePromptAndEndStdin(stdin, 'prompt body', () => {})).toBe(true);
-    expect(stdin.state.ended).toBe(true);
-    expect(stdin.calls).toEqual([{ chunk: 'prompt body', encoding: 'utf8' }]);
+// Plain-text stdin prompts are delivered as a complete file-backed stdin at
+// spawn (see agent-process.ts). These specs pin WHICH runtimes take that
+// path and what the stdin telemetry reports for it.
+describe('runtimeReadsPlainTextPromptFromStdin', () => {
+  it('selects runtimes that read a plain-text prompt from stdin until EOF', () => {
+    // cursor-agent is the 2026-09-14 incident runtime.
+    expect(runtimeReadsPlainTextPromptFromStdin(cursorAgentDef)).toBe(true);
+    expect(runtimeReadsPlainTextPromptFromStdin(withCodexTransport(codexAgentDef, 'exec-json'))).toBe(true);
   });
 
-  it('reports no backpressure when the chunk was accepted', () => {
-    const stdin = fakeStdin(true);
-    expect(writePromptAndEndStdin(stdin, 'prompt body', () => {})).toBe(false);
-    expect(stdin.state.ended).toBe(true);
+  it('leaves framed stdin protocols on the pipe', () => {
+    // stream-json keeps stdin open for mid-turn messages (B11 steering).
+    expect(runtimeReadsPlainTextPromptFromStdin(claudeAgentDef)).toBe(false);
+    expect(runtimeReadsPlainTextPromptFromStdin(piAgentDef)).toBe(false);
+    expect(runtimeReadsPlainTextPromptFromStdin(withCodexTransport(codexAgentDef, 'app-server'))).toBe(false);
+    expect(runtimeReadsPlainTextPromptFromStdin({ promptViaStdin: true, streamFormat: 'dsh-profile-jsonl' })).toBe(false);
   });
 
-  it('forwards the flush callback so the stdin_write lifecycle mark still fires', () => {
-    const stdin = fakeStdin(true);
-    let flushed = 0;
-    writePromptAndEndStdin(stdin, 'prompt body', () => {
-      flushed += 1;
-    });
-    stdin.state.flushCb?.();
-    expect(flushed).toBe(1);
+  it('ignores argv/file prompt runtimes', () => {
+    expect(runtimeReadsPlainTextPromptFromStdin({ promptViaStdin: false })).toBe(false);
+    expect(runtimeReadsPlainTextPromptFromStdin({})).toBe(false);
+  });
+});
+
+// Regression guard for `run_finished.stdin_backpressure` and the `stdin_write`
+// phase once the prompt no longer travels through a pipe the daemon pumps.
+describe('recordPromptDeliveredAtSpawn', () => {
+  it('marks the prompt handed over in the historical phase order', () => {
+    const marks: string[] = [];
+    const run: { stdinBackpressure?: boolean } = {};
+    recordPromptDeliveredAtSpawn(run, { mark: (mark) => marks.push(mark) });
+    expect(marks).toEqual(['model_call_start', 'stdin_write_start', 'stdin_write_end']);
+    expect(run.stdinBackpressure).toBe(false);
+  });
+
+  it('reports no backpressure: a file-backed stdin cannot stall the daemon write', () => {
+    const run = { stdinBackpressure: true };
+    recordPromptDeliveredAtSpawn(run, { mark: () => {} });
+    expect(run.stdinBackpressure).toBe(false);
   });
 });

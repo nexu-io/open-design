@@ -3,6 +3,7 @@ import {
   type OpenCodeTaskTerminalCandidate,
 } from './opencode-child-evidence.js';
 import { OpenCodeToolEvents } from './opencode-tool-events.js';
+import { boundedRawAgentEvent } from './run-event-payload-budget.js';
 
 type JsonObject = Record<string, unknown>;
 type StreamEvent = Record<string, unknown>;
@@ -1394,12 +1395,17 @@ export function createJsonEventStreamHandler(
     ? createOpenCodeRootTaskEvidenceCollector(options.openCodeChildEvidence)
     : null;
 
+  // Unrecognised lines are streamed to the browser and persisted as `raw`
+  // events that nothing renders. They are bounded here, at the source, so the
+  // live SSE fan-out, the daemon's run event buffer and the stored transcript
+  // all carry the same bounded line — a cursor-agent `editToolCall` completion
+  // alone repeats the edited file twice (see run-event-payload-budget.ts).
   function handleLine(line: string): void {
     let obj: unknown;
     try {
       obj = JSON.parse(line);
     } catch {
-      onEvent({ type: 'raw', line });
+      onEvent(boundedRawAgentEvent(line, null));
       return;
     }
 
@@ -1411,7 +1417,7 @@ export function createJsonEventStreamHandler(
     if (kind === 'cursor-agent' && handleCursorEvent(obj, onEvent, state)) return;
     if (kind === 'codex' && handleCodexEvent(obj, onEvent, state)) return;
 
-    onEvent({ type: 'raw', line });
+    onEvent(boundedRawAgentEvent(line, obj));
   }
 
   function feed(chunk: string): void {

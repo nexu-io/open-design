@@ -79,6 +79,47 @@ export type AmrBalanceGateResult =
 export const HOME_AMR_BALANCE_RETRY_DELAYS_MS = [400, 1_200] as const;
 
 /**
+ * Verdict from a wallet reading the shell ALREADY HOLDS — the same number the
+ * rail's 额度 pill is showing — so an empty wallet can be answered on the
+ * click tick, before the optimistic project frame opens and before any
+ * request leaves the page (OPEND-3300 / OPEND-3309).
+ *
+ * Only a definitive `<= $0` reading produces a verdict. A positive, missing,
+ * or unparseable reading returns null: the send takes the ordinary path
+ * (frame first, then the network gate), which is where a "just topped up"
+ * wallet and a workspace with no projection yet are decided.
+ *
+ * The caller must pass the reading for the EXACT scope the send will run in
+ * (see `workspaceBillingBalanceUsd`), never an account number for a team send.
+ * The in-memory verdict is a first answer, not the last one: the caller keeps
+ * one background confirmation in flight and lets only a non-blocking
+ * confirmation move the user forward.
+ */
+export function amrBalanceGateFromMemory(
+  balanceUsd: string | null | undefined,
+  options: { profile?: string | null; updatedAt?: string | null } = {},
+): Extract<AmrBalanceGateResult, { kind: 'hard'; reason: 'insufficient' }> | null {
+  const raw = balanceUsd?.trim();
+  if (raw == null || raw === '') return null;
+  const balance = Number(raw);
+  if (!Number.isFinite(balance) || balance > AMR_HARD_BLOCK_BALANCE_USD) return null;
+  return {
+    kind: 'hard',
+    reason: 'insufficient',
+    snapshot: {
+      status: 'available',
+      profile: options.profile?.trim() || 'default',
+      user: null,
+      balanceUsd: raw,
+      updatedAt: options.updatedAt ?? null,
+      fetchedAt: new Date().toISOString(),
+      stale: false,
+      source: 'vela_api',
+    },
+  };
+}
+
+/**
  * Home has no project queue to hold a send while a cold Workspace billing
  * projection catches up. Give that transient state a small, bounded recovery
  * window before returning control to the composer. Only `unavailable` is

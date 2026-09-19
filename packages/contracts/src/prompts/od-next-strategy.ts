@@ -7,6 +7,7 @@ import {
   OD_NEXT_STRATEGY_ID,
   type OpenDesignPlanContractV2,
   type StrategyRuntimeStateV2,
+  type StrategyExecutionIntentV2,
   type StrategyInputStageV2,
   type StrategyTaskTypeV2,
 } from '../plugins/strategy-v2.js';
@@ -166,6 +167,7 @@ export interface OdNextStrategyStableRequestContextV2 {
 export type OdNextStrategyContinuationV2 =
   | {
       stage: 'clarification';
+      executionIntent?: StrategyExecutionIntentV2;
       nativeSessionResume: true;
       taskExecutionId: string;
       taskRunIndex: number;
@@ -746,6 +748,7 @@ export function renderOdNextOutputContractV2(
     inputStage: 'request',
     outcome: 'plan_ready',
     executionMode: 'simple',
+    executionIntent: 'produce',
     reasonCodes: [],
   } satisfies StrategyRuntimeStateV2;
   const clarificationStateExample = {
@@ -754,6 +757,7 @@ export function renderOdNextOutputContractV2(
     inputStage: 'request',
     outcome: 'clarification_required',
     executionMode: null,
+    executionIntent: 'produce',
     reasonCodes: [],
   } satisfies StrategyRuntimeStateV2;
   const blockedStateExample = {
@@ -765,7 +769,7 @@ export function renderOdNextOutputContractV2(
     reasonCodes: [],
   } satisfies StrategyRuntimeStateV2;
 
-  return `The JSON field sets below are the exact V2 contract shapes. Replace example values with resolved run values; do not add fields. Every value named \`copy-…\`, plus the all-zero capabilitySnapshotHash, is a placeholder: copy the real value byte-for-byte from the <recipe_identity> attributes or the <runtime_facts> block in <context>, and never invent one. Every buildRequirements entry is an object with exactly id and text; every readinessArtifacts entry is an object with exactly id, version, and a 64-character lowercase-hex digest. Every buildPackages entry is an object with exactly id, objective, inputs, outputs, sharedConstraints, dependsOn, and allowedResources, where inputs, dependsOn, and allowedResources are string arrays that may be empty, outputs and sharedConstraints are non-empty string arrays, and dependsOn lists ids of other Build Packages in this same plan. A simple plan leaves buildPackages empty; a complex plan needs at least two Build Packages, an acyclic dependsOn graph, and exactly one owning Build Package per output. Ids must be unique within requiredDeliverables and within buildRequirements, and taskProfile.canonicalDeliverable.id must itself appear as one of the requiredDeliverables ids: when a plan declares several deliverables, list the canonical one among them rather than alongside them. designSpec.source is exactly existing-artifact, brand, or resolved-baseline. Emit JSON only between the matching tags, without Markdown fences or a second copy. Write every machine block as plain text in the response body, between the exact tags shown below. Emit exactly one Runtime State block on every response. Emit at most one Plan Contract block, only when a complete Full Plan is ready. On the production stage emit no Plan Contract and exactly one Runtime State block, with inputStage production, the executionMode locked by the accepted Plan Contract, and a terminal outcome: completed once every required deliverable is written, otherwise blocked or canceled. Keep machine blocks separate from visible prose.
+  return `Resolve executionIntent from the user's original request and frozen sessionMode before asking questions. Use plan_only when the user restricts this task to a response in chat without creating or modifying files, including an explicit no-write request. Session mode alone never implies plan_only: Plan mode requires editable Markdown documents, and Chat mode permits explicitly requested trivial file changes. Those authorized file tasks use produce and retain their existing mode-specific scope and delivery checks. A form answer supplies the requested information and does not grant permission to produce files. Once plan_only is declared it stays locked for this task. Use the full_plan route, answer or plan in visible prose, and emit outcome completed with executionIntent plan_only on the request or clarification stage when that response is complete; emit no Plan Contract unless already serializing a plan. executionMode may remain null. Do not enter production or perform Build work for plan_only. Normal produce tasks retain every existing delivery and native-child requirement.\n\nThe JSON field sets below are the exact V2 contract shapes. Replace example values with resolved run values; do not add fields. Every value named \`copy-…\`, plus the all-zero capabilitySnapshotHash, is a placeholder: copy the real value byte-for-byte from the <recipe_identity> attributes or the <runtime_facts> block in <context>, and never invent one. Every buildRequirements entry is an object with exactly id and text; every readinessArtifacts entry is an object with exactly id, version, and a 64-character lowercase-hex digest. Every buildPackages entry is an object with exactly id, objective, inputs, outputs, sharedConstraints, dependsOn, and allowedResources, where inputs, dependsOn, and allowedResources are string arrays that may be empty, outputs and sharedConstraints are non-empty string arrays, and dependsOn lists ids of other Build Packages in this same plan. A simple plan leaves buildPackages empty; a complex plan needs at least two Build Packages, an acyclic dependsOn graph, and exactly one owning Build Package per output. Ids must be unique within requiredDeliverables and within buildRequirements, and taskProfile.canonicalDeliverable.id must itself appear as one of the requiredDeliverables ids: when a plan declares several deliverables, list the canonical one among them rather than alongside them. designSpec.source is exactly existing-artifact, brand, or resolved-baseline. Emit JSON only between the matching tags, without Markdown fences or a second copy. Write every machine block as plain text in the response body, between the exact tags shown below. Emit exactly one Runtime State block on every response. Emit at most one Plan Contract block, only when a complete Full Plan is ready. On the production stage emit no Plan Contract and exactly one Runtime State block, with inputStage production, the executionMode locked by the accepted Plan Contract, and a terminal outcome: completed once every required deliverable is written, otherwise blocked or canceled. Keep machine blocks separate from visible prose.
 
 Plan Contract wrapper and exact shape:
 
@@ -1003,7 +1007,10 @@ export function composeOdNextStrategyContinuationV2(
   }
   let payload: string;
   if (input.stage === 'clarification') {
-    payload = `# OD Next native continuation — clarification\n\nMerge the user's answer below into the existing Full Plan context. Preserve the locked route, ask no second question round, rerun only affected resolution and Preflight work, and emit the updated V2 machine structures. This turn runs at the clarification stage: the Runtime State reports inputStage clarification (not request) with outcome plan_ready once the Full Plan is frozen, otherwise blocked or canceled.\n\n## Clarification answer\n\n${requireText(input.answer, 'answer')}`;
+    const intent = input.executionIntent === 'plan_only'
+      ? ' The task is locked to executionIntent plan_only: retain the original no-write constraint, answer in visible prose, and finish with outcome completed without creating or modifying files.'
+      : '';
+    payload = `# OD Next native continuation — clarification\n\nMerge the user's answer below into the existing Full Plan context.${intent} Preserve the locked route, ask no second question round, rerun only affected resolution and Preflight work, and emit the updated V2 machine structures. This turn runs at the clarification stage: the Runtime State reports inputStage clarification (not request), with outcome completed for an executionIntent plan_only answer without file writes, or outcome plan_ready once the Full Plan is frozen for production; otherwise blocked or canceled.\n\n## Clarification answer\n\n${requireText(input.answer, 'answer')}`;
   } else if (input.stage === 'contract_repair') {
     payload = `# OD Next native continuation — contract_repair\n\nThe semantic plan in this native session is frozen. Make one serialization-only attempt that addresses the issue below. Use no tools, do not re-plan, and preserve the locked route, execution mode, Design Spec, steps, and Build Packages.\n\n## Serialization issue\n\n${requireText(input.serializationIssue, 'serializationIssue')}`;
   } else {

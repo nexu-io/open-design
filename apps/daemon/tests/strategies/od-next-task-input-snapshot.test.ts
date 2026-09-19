@@ -26,6 +26,8 @@ import {
   removeOdNextRunInputProjection,
 } from '../../src/strategies/od-next/task-input-snapshot.js';
 
+import { freezeTraceObjectSources } from '../../src/trace-object-manifest.js';
+
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const roots: string[] = [];
 
@@ -574,4 +576,23 @@ describe('OD Next task-scoped input snapshots', () => {
     expect(() => loadOdNextTaskInputSnapshot(descriptor, f.snapshotsRoot))
       .toThrow(/manifest digest mismatch/);
   });
+});
+
+it('telemetry freezes validated task-input bytes after the original attachment changes', async () => {
+  const f = fixture();
+  writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'frozen original');
+  const descriptor = createOdNextTaskInputSnapshot({ ...f, taskExecutionId: 'odnext_telemetry', projectAttachments: ['brief.txt'] });
+  writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'later mutation');
+  const loaded = loadOdNextTaskInputSnapshot(descriptor, f.snapshotsRoot);
+  const options = { installationId: null, projectId: 'project', runId: 'run-a', projectsRoot: f.root,
+    prompt: '', prefs: { metrics: true, content: true, artifactManifest: true },
+    attachmentPaths: loaded.attachmentReferences, taskInputSnapshot: { descriptor, snapshotsRoot: f.snapshotsRoot },
+    runScopedIds: true, env: { OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse' } };
+  const sources = await freezeTraceObjectSources(options);
+  expect(sources[0]?.body?.toString()).toBe('frozen original');
+  const other = await freezeTraceObjectSources({ ...options, runId: 'run-b' });
+  expect(other[0]?.id).not.toBe(sources[0]?.id);
+  const invalid = await freezeTraceObjectSources({ ...options, taskInputSnapshot: { descriptor: { ...descriptor, manifestSha256: '0'.repeat(64) }, snapshotsRoot: f.snapshotsRoot } });
+  expect(invalid[0]?.body).toBeUndefined();
+  expect(invalid[0]?.reason).toBe('task_input_snapshot_invalid');
 });

@@ -742,7 +742,7 @@ export const STRATEGY_TASK_BLOCKED_MESSAGE =
  * resolver, and the error analytics can all name the gate. A projection from a
  * daemon too old to send `blockedContext` still fails, just anonymously.
  */
-function createStrategyTaskBlockedError(
+export function createStrategyTaskBlockedError(
   strategyTask: StrategyTaskProjectionV2,
 ): Error & { code?: string } {
   const error = new Error(STRATEGY_TASK_BLOCKED_MESSAGE) as Error & { code?: string };
@@ -1303,6 +1303,20 @@ export function formatVelaBalanceUsd(raw?: string | null): string | null {
   return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
+/**
+ * Format a raw wallet `balanceUsd` string into the bare amount (e.g. "12.30")
+ * for surfaces that already name the currency some other way — the top-right
+ * credits pill leads with the plan wordmark and shows the number beside it.
+ * Same null contract as `formatVelaBalanceUsd`.
+ */
+export function formatVelaBalanceAmount(raw?: string | null): string | null {
+  if (raw == null || raw === '') return null;
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return null;
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}${Math.abs(amount).toFixed(2)}`;
+}
+
 /** Top subscription tier — no upgrade affordance is shown at/above this. */
 export const VELA_TOP_PLAN_TIER = 'max';
 
@@ -1679,6 +1693,47 @@ export async function listProjectRuns(
     return body.runs ?? [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * One project's runs plus the awaiting-input flag the run bodies cannot carry.
+ *
+ * Scoped to a single project ON PURPOSE. The catalogue-wide `listProjectRuns`
+ * above 400s (`PROJECT_SCOPE_REQUIRED`) the moment any run belongs to a
+ * workspace-bound project — which, in a workspace session, is all of them — so
+ * it silently returns `[]` there. Asking per project id takes the route's
+ * authorized branch instead and actually works.
+ *
+ * Without a workspace context the request carries no Workspace headers: that
+ * is the local CLI / BYOK shell asking about an unbound local project, which
+ * the route serves through its headerless branch (OPEND-3140). A bound
+ * project asked about headerlessly is filtered to its non-AMR runs by the
+ * daemon, never refused, so a local row can only under-report, not error.
+ *
+ * Returns `null` when the project is unreadable or the daemon is unreachable,
+ * so a caller can tell "no runs" apart from "could not ask".
+ */
+export async function listRunsForProject(
+  projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<{ runs: ChatRunStatusResponse[]; awaitingInputProjectIds: string[] } | null> {
+  try {
+    const resp = await fetch(`/api/runs?projectId=${encodeURIComponent(projectId)}`, {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
+    if (!resp.ok) return null;
+    const body = (await resp.json()) as ChatRunListResponse;
+    return {
+      runs: body.runs ?? [],
+      // Absent on daemons older than this field; treat as "no pending
+      // question" rather than failing the whole read.
+      awaitingInputProjectIds: body.awaitingInputProjectIds ?? [],
+    };
+  } catch {
+    return null;
   }
 }
 

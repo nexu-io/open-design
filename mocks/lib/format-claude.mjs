@@ -112,6 +112,25 @@ export async function renderAsClaude(events, opts = {}) {
       }) + '\n');
     } else if (e.type === 'report') {
       const messageId = `msg_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+      // `OD_MOCKS_TEXT_DELTAS=1`: also stream the text as `stream_event`
+      // token deltas (`OD_MOCKS_DELTA_CHARS` chars every `OD_MOCKS_DELTA_MS`
+      // ms) before the finalized wrapper, so a web client sees per-frame
+      // content growth like a real `--include-partial-messages` run. The
+      // parser dedupes the wrapper by message id (`textStreamed`). Added for
+      // the chat-scroll-freeze investigation; off by default.
+      if (process.env.OD_MOCKS_TEXT_DELTAS === '1') {
+        const chunk = Number(process.env.OD_MOCKS_DELTA_CHARS || 6);
+        const gap = Number(process.env.OD_MOCKS_DELTA_MS || 30);
+        const se = (event) => emit(JSON.stringify({ type: 'stream_event', event, session_id: sessionId }) + '\n');
+        se({ type: 'message_start', message: { id: messageId, role: 'assistant', content: [] } });
+        se({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
+        for (let i = 0; i < e.content.length; i += chunk) {
+          se({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: e.content.slice(i, i + chunk) } });
+          if (!opts.noDelay && gap > 0) await sleep(gap);
+        }
+        se({ type: 'content_block_stop', index: 0 });
+        se({ type: 'message_delta', delta: { stop_reason: 'end_turn' } });
+      }
       emit(JSON.stringify({
         type: 'assistant',
         message: {

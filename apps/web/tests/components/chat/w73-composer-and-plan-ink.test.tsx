@@ -262,7 +262,7 @@ const mountChatComposer = (): HTMLElement =>
               </div>
               <div className="composer-row">
                 <div className="plus-menu">
-                  <button type="button" className="icon-btn plus-menu__trigger od-tooltip" />
+                  <button type="button" className="plus-menu__trigger od-tooltip" />
                 </div>
               </div>
             </div>
@@ -371,15 +371,33 @@ describe('①-1 输入区正文与占位符的行高 —— 稿子 `.composer .t
   });
 });
 
-describe('①-2 底栏图标的静止墨色 —— 稿子 `.composer .bar button`(729fa43ce7:3112)', () => {
-  it('是最深的一档 #202020,不是次一档的静音灰', () => {
+/* ⚠️ ①-2 / ①-3 **翻过面**(OPEND-3085,2026-09-14)。原来钉的是稿子
+ * `729fa43ce7` 的 `.composer .bar button`:静止 #202020、hover 只换底色为
+ * `--bg-fill-secondary`。产品拍板项目页聊天模块一律按 Demo `877980fb17`(#8113)
+ * 还原,而 Demo 把这颗「+」从 `icon-btn` 上摘下来,让它和首页那颗共用
+ * `plus-menu.css` 的 36px 圆盘:静止 `--bg-panel` 底 + `--text-muted` 字,
+ * hover `--bg-subtle` 底 + `--text-strong` 字,描边始终透明。下面钉的是这一档,
+ * 期望值写 token 表里的字面值,和 Demo 运行时 `getComputedStyle` 读到的一致。 */
+const DEMO_DISC = {
+  /** `--text-muted`  tokens.css —— 圆盘静止字色 */
+  textMuted: '#5c5c5c',
+  /** `--text-strong` tokens.css —— 圆盘 hover 字色 */
+  textStrong: '#202020',
+  /** `--bg-panel`    tokens.css —— 圆盘静止底色 */
+  bgPanel: '#fafafa',
+  /** `--bg-subtle`   tokens.css —— 圆盘 hover 底色 */
+  bgSubtle: '#ededed',
+} as const;
+
+describe('①-2 底栏「+」圆盘的静止墨色 —— Demo `plus-menu.css` 的共用圆盘', () => {
+  it('是 `--text-muted`,和首页那颗同一档', () => {
     const el = pick(mountChatComposer(), '.plus-menu__trigger');
     const color = CSS.resolved(el)['color'];
     expect(color, '量尺没盖到这颗按钮').not.toBe(UNSET);
-    expect(color).toBe(DRAFT.textStrong);
+    expect(color).toBe(DEMO_DISC.textMuted);
   });
 
-  it('反向对照:批注侧栏那一行共用 `.composer-row`,**不跟着变深**', () => {
+  it('反向对照:批注侧栏那一行共用 `.composer-row`,仍走 `icon-btn` 的静音灰', () => {
     const el = pick(mountCommentSide(), '.composer-row .icon-btn');
     const color = CSS.resolved(el)['color'];
     expect(color, '量尺没盖到批注侧栏那颗').not.toBe(UNSET);
@@ -387,23 +405,23 @@ describe('①-2 底栏图标的静止墨色 —— 稿子 `.composer .bar button
   });
 });
 
-describe('①-3 底栏图标的 hover —— 稿子 `.composer .bar button:hover`(729fa43ce7:3116)', () => {
+describe('①-3 底栏「+」圆盘的 hover —— Demo `plus-menu.css` 的共用圆盘', () => {
   const hovered = (): Element => pick(mountChatComposer(), '.plus-menu__trigger');
 
-  it('hover 只换底色', () => {
-    expect(state(hovered(), 'background', [':hover'])).toBe(DRAFT.fillSecondary);
+  it('hover 换成 `--bg-subtle` 底', () => {
+    expect(state(hovered(), 'background', [':hover'])).toBe(DEMO_DISC.bgSubtle);
   });
 
-  it('hover 不动字色 —— 静止已经是最深的一档,再变只会变浅', () => {
-    expect(state(hovered(), 'color', [':hover'])).toBe(DRAFT.textStrong);
+  it('hover 字色提到 `--text-strong`', () => {
+    expect(state(hovered(), 'color', [':hover'])).toBe(DEMO_DISC.textStrong);
   });
 
-  it('hover 不长描边 —— 稿子那颗按钮 hover 时边框一条都不写', () => {
+  it('hover 不长描边 —— 边框始终透明', () => {
     expect(state(hovered(), 'border-color', [':hover'])).toBe('transparent');
   });
 
-  it('反向对照:静止态的底是透明的 —— 底色是 hover 唯一说的那句话', () => {
-    expect(state(hovered(), 'background')).toBe('transparent');
+  it('静止态的底是 `--bg-panel` —— 圆盘在底栏上自带一层浅底', () => {
+    expect(state(hovered(), 'background')).toBe(DEMO_DISC.bgPanel);
   });
 });
 
@@ -486,18 +504,19 @@ describe('② 当前这一步 / 收起药丸的墨色 —— 稿子 `--plan-curr
 /* ══ 结构对照:夹具的类名链条来自源码,不是我编的 ═══════════════════════ */
 
 describe('结构对照 —— 手搭的那两处夹具必须跟着源码走', () => {
-  it('底栏那颗 `+` 在源码里就是 `icon-btn plus-menu__trigger`', () => {
+  it('底栏那颗 `+` 在源码里就是 `plus-menu__trigger`,不再挂 `icon-btn`', () => {
     /*
-     * 合并 main(2026-09-05)之后这串类名不再是一个字面量:首页那一侧多了
-     * `triggerLabel`,于是拼接变成
-     *   `icon-btn plus-menu__trigger${label ? ' --labeled' : ' od-tooltip'}${open ? ' is-active' : ''}`
-     * 聊天面板不传 label,**运行时拼出来仍然是** `icon-btn plus-menu__trigger
-     * od-tooltip` —— 上面那份手搭夹具没有过时。过时的是「按整段字面量搜源码」
-     * 这个查法,它现在只是在钉排版。改成分别钉两件事:基础类名还在,以及
-     * 「不带标签时挂 od-tooltip」这条分支还在。
+     * 类名是拼接的:
+     *   `plus-menu__trigger${label ? ' --labeled' : ' od-tooltip'}${open ? ' is-active' : ''}`
+     * 聊天面板不传 label,**运行时拼出来是** `plus-menu__trigger od-tooltip` ——
+     * 上面那份手搭夹具照这个写。OPEND-3085 按 Demo 去掉了 `icon-btn`:触发键的
+     * 几何(36px 圆盘)由 `plus-menu.css` 自己给,不再借聊天工具栏那条通用
+     * `.composer-row .icon-btn` 的 28px。分别钉两件事:基础类名在最前面且不带
+     * `icon-btn`,以及「不带标签时挂 od-tooltip」这条分支还在。
      */
     const plusMenu = read('src/components/ComposerPlusMenu.tsx');
-    expect(plusMenu).toContain('icon-btn plus-menu__trigger');
+    expect(plusMenu).toContain('className={`plus-menu__trigger${');
+    expect(plusMenu).not.toContain('icon-btn plus-menu__trigger');
     expect(plusMenu).toMatch(/triggerLabel \?[^:]*:\s*' od-tooltip'/);
   });
 

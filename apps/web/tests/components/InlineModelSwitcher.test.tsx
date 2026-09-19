@@ -234,7 +234,7 @@ describe('InlineModelSwitcher AMR row', () => {
     resetWorkspaceContextCache();
   });
 
-  it('shows the AMR reminder dot once when another CLI is selected', async () => {
+  it('keeps the AMR reminder inside the picker without marking the chip', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -257,7 +257,7 @@ describe('InlineModelSwitcher AMR row', () => {
       [amrAgent, codexAgent],
     );
 
-    expect(screen.getByTestId('inline-model-switcher-amr-reminder')).toBeTruthy();
+    expect(screen.queryByTestId('inline-model-switcher-amr-reminder')).toBeNull();
 
     fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
 

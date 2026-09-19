@@ -738,7 +738,8 @@ test('[P1] plan-document daemon run creates, opens, and restores an editable mar
   // The composer has no session-mode picker any more (#7635); the plan
   // document flow is driven by the prompt (the fake runtime keys on it), and
   // the run carries the conversation's stored design mode.
-  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
   await sendPrompt(page, 'Create a deterministic plan document');
   const runRequest = await runRequestPromise;
   expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('design');
@@ -795,7 +796,8 @@ test('[P1] media-only turn auto-opens the generated image file', async ({ page }
 // generated HTML instead of staying on the markdown plan.
 test('[P1] plan-document generation turn auto-opens the generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await createProject(page, 'Plan document html auto-open smoke', 'claude');  await expectWorkspaceReady(page);
+  await createProject(page, 'Plan document html auto-open smoke', 'claude');
+  await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a deterministic plan document');
   const { projectId } = await currentProjectContext(page);
@@ -829,7 +831,8 @@ test('[P1] plan-document generation turn auto-opens the generated HTML file', as
 // auto-open path cannot mask the turn-end selection.
 test('[P1] plan-document regeneration re-opens the existing generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await createProject(page, 'Plan document html regen smoke');  await expectWorkspaceReady(page);
+  await createProject(page, 'Plan document html regen smoke');
+  await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a deterministic plan document');
   const { projectId, conversationId } = await currentProjectContext(page);
@@ -1547,8 +1550,8 @@ async function leaveProjectForEntry(page: Page) {
 
 async function gotoEntryHome(page: Page) {
   // Hold until the async projects list settles: its late resolution re-renders
-  // the home hero (recent-projects strip mounting), which keeps controls like
-  // the shortcuts trigger unstable under CI timing. Arm before navigating.
+  // the home hero (the rail's 最近项目 rows mounting), which keeps controls
+  // like the shortcuts trigger unstable under CI timing. Arm before navigating.
   const projectsSettled = page
     .waitForResponse(
       (response) =>

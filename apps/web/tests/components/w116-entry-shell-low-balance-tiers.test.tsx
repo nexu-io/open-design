@@ -29,7 +29,7 @@ import {
 } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { EntryShell } from '../../src/components/EntryShell';
+import { EntryShellWithGateHost } from '../helpers/entry-shell-gate-host';
 import {
   resetTeamProjectsCache,
   resetWorkspaceBillingCache,
@@ -137,7 +137,7 @@ function lowBalanceSnapshot(): AmrWalletSnapshot {
 function renderHome(onCreateProject: () => Promise<boolean>) {
   return render(
     <I18nProvider initial="en">
-      <EntryShell
+      <EntryShellWithGateHost
         skills={[]}
         designTemplates={[]}
         designSystems={[]}

@@ -49,7 +49,6 @@ const PRODUCT_ROOT_FILES = new Set([
   'app-icon.svg',
   'avatar.png',
   'brand-icon.svg',
-  'composer-matrix-loader.svg',
   'composer-send.mp4',
   'drafts-empty-mark.png',
   'logo-03.svg',

@@ -355,6 +355,61 @@ describe('LexicalComposerInput', () => {
     expect(ref.current?.getText()).not.toContain('@designs/landing.html');
   });
 
+  it('hands Backspace at the very start to the host chip and leaves the text alone', async () => {
+    const onBackspaceAtStart = vi.fn(() => true);
+    const { getByTestId, ref } = setup({
+      draft: 'Deck for the board',
+      onBackspaceAtStart,
+    });
+    const host = getByTestId('chat-composer-input');
+    await waitFor(() => expect(ref.current?.getText()).toBe('Deck for the board'));
+    const editor = liveEditor(host);
+    act(() => {
+      editor.update(
+        () => {
+          const first = $getRoot().getFirstDescendant();
+          if ($isTextNode(first)) first.select(0, 0);
+        },
+        { discrete: true },
+      );
+    });
+    const backspace = keyEvent('Backspace');
+    act(() => {
+      editor.dispatchCommand(KEY_BACKSPACE_COMMAND, backspace);
+    });
+    expect(onBackspaceAtStart).toHaveBeenCalledTimes(1);
+    expect(backspace.preventDefault).toHaveBeenCalledTimes(1);
+    // The chip is the host's, not the editor's: the prompt keeps every char.
+    expect(ref.current?.getText()).toBe('Deck for the board');
+  });
+
+  it('leaves Backspace alone when the caret is not at the very start', async () => {
+    const onBackspaceAtStart = vi.fn(() => true);
+    const { getByTestId, ref } = setup({
+      draft: 'Deck for the board',
+      onBackspaceAtStart,
+    });
+    const host = getByTestId('chat-composer-input');
+    await waitFor(() => expect(ref.current?.getText()).toBe('Deck for the board'));
+    const editor = liveEditor(host);
+    act(() => {
+      editor.update(
+        () => {
+          const first = $getRoot().getFirstDescendant();
+          if ($isTextNode(first)) first.select(4, 4);
+        },
+        { discrete: true },
+      );
+    });
+    const backspace = keyEvent('Backspace');
+    act(() => {
+      editor.dispatchCommand(KEY_BACKSPACE_COMMAND, backspace);
+    });
+    // Not the host's key: it falls through to Lexical's own delete-backward
+    // (whose jsdom-side text effect is Lexical's to test, not this handler's).
+    expect(onBackspaceAtStart).not.toHaveBeenCalled();
+  });
+
   it('removes a whole mention pill with Delete from the boundary before it', async () => {
     const { getByTestId, ref } = setup({
       draft: 'Use @designs/landing.html now',

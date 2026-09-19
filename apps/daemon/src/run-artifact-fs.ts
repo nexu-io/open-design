@@ -73,12 +73,13 @@ export interface ArtifactFingerprint {
 // regenerated wholesale (size changes), so size+mtime suffices for them.
 const HASH_MAX_BYTES = 1024 * 1024;
 
-function fingerprintFile(full: string, size: number, mtimeMs: number): ArtifactFingerprint {
+function fingerprintFile(full: string, size: number, mtimeMs: number, onReadFailure: () => void): ArtifactFingerprint {
   let hash: string | null = null;
   if (size <= HASH_MAX_BYTES) {
     try {
       hash = createHash('sha1').update(fs.readFileSync(full)).digest('hex');
     } catch {
+      onReadFailure();
       hash = null;
     }
   }
@@ -89,12 +90,14 @@ async function fingerprintFileAsync(
   full: string,
   size: number,
   mtimeMs: number,
+  onReadFailure: () => void,
 ): Promise<ArtifactFingerprint> {
   let hash: string | null = null;
   if (size <= HASH_MAX_BYTES) {
     try {
       hash = createHash('sha1').update(await fs.promises.readFile(full)).digest('hex');
     } catch {
+      onReadFailure();
       hash = null;
     }
   }
@@ -103,6 +106,10 @@ async function fingerprintFileAsync(
 
 // path -> fingerprint for every artifact-extension file under the project root.
 export type ArtifactSnapshot = Map<string, ArtifactFingerprint>;
+
+// Coverage is local to an actual scan, not inferred from a zero-sized Map.
+// Keep legacy counters and the existing scan/permission boundaries unchanged.
+const snapshotCoverage = new WeakMap<ArtifactSnapshot, boolean>();
 
 // Directories that never hold user-facing artifacts; skipped so the walk stays
 // cheap and never wanders into dependencies, VCS, or daemon scratch.
@@ -147,42 +154,47 @@ function statOnlyFingerprint(size: number, mtimeMs: number): ArtifactFingerprint
 // exist.
 export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
   const snapshot: ArtifactSnapshot = new Map();
+  let complete = true;
+  const markIncomplete = () => { complete = false; };
   let trackedCount = 0;
   let otherCount = 0;
   const walk = (dir: string): void => {
-    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
+      complete = false;
       return;
     }
     for (const entry of entries) {
-      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         walk(path.join(dir, entry.name));
       } else if (entry.isFile()) {
         const tracked = isTrackedRunFile(entry.name);
-        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
+        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) { complete = false; continue; }
         const full = path.join(dir, entry.name);
         try {
           const stat = fs.statSync(full);
           snapshot.set(
             full,
             tracked
-              ? fingerprintFile(full, stat.size, stat.mtimeMs)
+              ? fingerprintFile(full, stat.size, stat.mtimeMs, markIncomplete)
               : statOnlyFingerprint(stat.size, stat.mtimeMs),
           );
           if (tracked) trackedCount += 1;
           else otherCount += 1;
         } catch {
+          complete = false;
           // Race (file removed mid-walk) or permission error — skip.
         }
       }
     }
   };
   walk(rootDir);
+  snapshotCoverage.set(snapshot, complete);
   return snapshot;
 }
 
@@ -193,25 +205,28 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
 // and SSE traffic while a large project is scanned.
 export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<ArtifactSnapshot> {
   const snapshot: ArtifactSnapshot = new Map();
+  let complete = true;
+  const markIncomplete = () => { complete = false; };
   const files: Array<{ full: string; tracked: boolean }> = [];
   let trackedCount = 0;
   let otherCount = 0;
   const walk = async (dir: string): Promise<void> => {
-    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
     let entries: fs.Dirent[];
     try {
       entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch {
+      complete = false;
       return;
     }
     for (const entry of entries) {
-      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         await walk(path.join(dir, entry.name));
       } else if (entry.isFile()) {
         const tracked = isTrackedRunFile(entry.name);
-        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
+        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) { complete = false; continue; }
         files.push({ full: path.join(dir, entry.name), tracked });
         if (tracked) trackedCount += 1;
         else otherCount += 1;
@@ -238,10 +253,11 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
         fingerprints[index] = [
           full,
           tracked
-            ? await fingerprintFileAsync(full, stat.size, stat.mtimeMs)
+            ? await fingerprintFileAsync(full, stat.size, stat.mtimeMs, markIncomplete)
             : statOnlyFingerprint(stat.size, stat.mtimeMs),
         ];
       } catch {
+        complete = false;
         fingerprints[index] = null;
       }
     }
@@ -255,10 +271,13 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
   for (const fingerprint of fingerprints) {
     if (fingerprint) snapshot.set(fingerprint[0], fingerprint[1]);
   }
+  snapshotCoverage.set(snapshot, complete);
   return snapshot;
 }
 
 export interface RunArtifactDiff {
+  /** A best-effort scan cannot establish zero writes when either side was incomplete. */
+  filesWrittenUnknown?: true;
   // Artifact files (HTML / image / video / audio) present after the run but not
   // before. `DESIGN.md` is NOT an artifact extension and is excluded here.
   created: number;
@@ -376,6 +395,8 @@ export function diffRunArtifacts(
     renderDependencyTouchedPaths,
     supportingMediaTouched,
     filesWritten,
+    ...(snapshotCoverage.get(before) !== true || snapshotCoverage.get(after) !== true
+      ? { filesWrittenUnknown: true as const } : {}),
   };
 }
 

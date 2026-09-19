@@ -617,10 +617,9 @@ async function startNewConversation(page: Page) {
   // the list was on screen to begin with.
   await page.getByTestId('conversation-history-trigger').click();
   await expect(page.getByTestId('conversation-list')).toBeVisible();
-  // The "new conversation" control lives in the panel header, not in the
-  // dropdown — the dropdown's duplicate was removed (product ruling
-  // 2026-09-03: one entry point only).
-  await page.getByTestId('chat-new-conversation').click();
+  // The single "new conversation" control sits inside the history dropdown,
+  // beside the search field (OPEND-3087); creating dismisses the dropdown.
+  await page.getByTestId('conversation-history-menu').getByTestId('chat-new-conversation').click();
   await expect(page.getByTestId('conversation-list')).toHaveCount(0);
 }
 
@@ -669,8 +668,9 @@ async function runExampleUsePromptFlow(
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toHaveText(entry.prompt);
-  await expect(page.getByTestId('project-title')).toContainText('Warm Utility Example');
-  await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
+  // The project is named once, in the switcher docked above the chat card
+  // (OPEND-3128); the card itself carries no title row.
+  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toContainText('Warm Utility Example');
 }
 
 async function runHyperframesProjectRoutingFlow(
@@ -1758,6 +1758,10 @@ async function runFileUploadSendFlow(
   await expectScenarioProjectState(page, entry, projectId);
 }
 
+// Parked: the per-row delete button left the history dropdown with the
+// toolbar dock port (OPEND-3087, Demo #8113), so this flow has no UI entry.
+// Its scenario is registered with `automated: false` until a delete entry
+// point returns; the steps are kept so it can be re-enabled as-is.
 async function runConversationDeleteRecoveryFlow(
   page: Page,
   entry: UiScenario,

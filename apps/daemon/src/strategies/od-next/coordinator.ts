@@ -22,6 +22,7 @@ import {
   type StrategyTaskOutcome,
 } from '../task-store.js';
 import type { OdNextMachineProtocolStream } from './protocol.js';
+import { recordStrategyRunWriteEvidence, readStrategyTaskWriteEvidence } from './intent-resolution-store.js';
 import {
   decideStrategyRequestRoute,
   runExecutionPreflight,
@@ -321,6 +322,7 @@ export function beginStrategyClarification(db: SqliteDb, input: {
     nativeSessionResume: true,
     taskExecutionId: current.taskExecutionId,
     taskRunIndex: current.runs.length,
+    ...(current.executionIntent ? { executionIntent: current.executionIntent } : {}),
     answer,
   });
   const task = compareAndTransitionStrategyTaskExecution(db, {
@@ -354,10 +356,14 @@ export function finalizeStrategyPlanningTurn(db: SqliteDb, input: {
   protocol: OdNextMachineProtocolStream;
   repairRun?: { runId: string; sourceRunId: string; finalText: string };
   toolUseCount?: number;
+  resultSourceRunId?: string;
   executionPreflight?: OdNextExecutionPreflightInput;
   completionEvidence?: {
     physicalStatus: 'succeeded' | 'failed' | 'canceled';
     deliverableValid: boolean;
+    filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
   };
   productionEnforcementReasonCodes?: readonly string[];
   updatedAt?: number;
@@ -374,10 +380,14 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
   parsed: ReturnType<OdNextMachineProtocolStream['finish']>;
   repairRun?: { runId: string; sourceRunId: string; finalText: string };
   toolUseCount?: number;
+  resultSourceRunId?: string;
   executionPreflight?: OdNextExecutionPreflightInput;
   completionEvidence?: {
     physicalStatus: 'succeeded' | 'failed' | 'canceled';
     deliverableValid: boolean;
+    filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
   };
   productionEnforcementReasonCodes?: readonly string[];
   updatedAt?: number;
@@ -396,6 +406,19 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
     );
   }
 
+  if (input.resultSourceRunId !== undefined && (current.intentResolution?.state !== 'resolved'
+    || current.intentResolution.runId !== input.runId || current.intentResolution.sourceRunId !== input.resultSourceRunId)) {
+    throw new OdNextCoordinatorError('Agent output must belong to the latest physical Run.', ['od_next_task_run_mismatch']);
+  }
+  if (current.intentResolution) {
+    const filesWritten = input.completionEvidence?.filesWritten;
+    recordStrategyRunWriteEvidence(db, {
+      taskExecutionId: current.taskExecutionId, runId: input.resultSourceRunId ?? input.runId,
+      filesWritten: filesWritten ?? 0,
+      unknown: filesWritten === undefined || input.completionEvidence?.filesWrittenUnknown === true,
+      source: input.completionEvidence?.filesWrittenSource ?? (filesWritten === undefined ? 'unknown' : 'tool_stream'),
+    });
+  }
   const parsed = input.parsed;
   // Recorded for every turn, blocked or accepted, and never used to decide the
   // verdict — see `questionFormMarkerReasonCodes`.
@@ -480,6 +503,25 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
     });
   }
   state = adopted.state;
+  if (current.executionIntent === 'plan_only' && state.executionIntent === 'produce') {
+    return blockTask(
+      db, current, parsed.visibleText, ['od_next_protocol_execution_intent_mismatch'], input.updatedAt,
+    );
+  }
+  const declaredIntent = state.executionIntent;
+  const executionIntent = current.executionIntent === 'plan_only'
+    ? 'plan_only'
+    : state.executionIntent ?? 'produce';
+  // Older providers may still serialize a valid plan_ready contract. For a
+  // task already constrained to planning, that is the delivered plan, not
+  // authorization for another physical production Run.
+  state = {
+    ...state,
+    executionIntent,
+    ...(executionIntent === 'plan_only' && state.outcome === 'plan_ready'
+      ? { outcome: 'completed' as const }
+      : {}),
+  };
   const reasonCodes = validateAcceptedTurn(db, current, state, parsed.planContract, parsed.visibleText, {
     toolUseCount: input.toolUseCount ?? 0,
     ...(input.executionPreflight ? { executionPreflight: input.executionPreflight } : {}),
@@ -519,6 +561,7 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       inputStage: state.inputStage,
       outcome: state.outcome,
       executionMode: state.executionMode,
+      ...(declaredIntent !== undefined || current.executionIntent !== undefined ? { executionIntent } : {}),
     },
     ...blockedAttribution(
       state.outcome,
@@ -909,6 +952,9 @@ function validateAcceptedTurn(
     completionEvidence?: {
       physicalStatus: 'succeeded' | 'failed' | 'canceled';
       deliverableValid: boolean;
+      filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
     };
     productionEnforcementReasonCodes?: readonly string[];
   },
@@ -929,8 +975,16 @@ function validateAcceptedTurn(
     reasonCodes.push('od_next_protocol_execution_mode_mismatch');
   }
 
+  const planningOnly = state.executionIntent === 'plan_only';
+  if (planningOnly && (state.route !== 'full_plan' || !['request', 'clarification'].includes(state.inputStage))) {
+    reasonCodes.push('od_next_protocol_execution_intent_mismatch');
+  }
   const forms = countRenderableQuestionForms(visibleText);
   if (state.outcome === 'clarification_required') {
+    if (planningOnly && input.completionEvidence?.filesWritten !== undefined
+      && input.completionEvidence.filesWritten !== 0) {
+      reasonCodes.push('od_next_planning_files_changed');
+    }
     if (forms === 0) reasonCodes.push('od_next_clarification_form_missing');
     if (forms > 1) reasonCodes.push('od_next_clarification_form_ambiguous');
     if (task.clarificationCount > 0 || task.inputStage !== 'request') {
@@ -952,7 +1006,7 @@ function validateAcceptedTurn(
       reasonCodes.push(...runExecutionPreflight(input.executionPreflight).reasonCodes);
     }
     reasonCodes.push(...(input.productionEnforcementReasonCodes ?? []));
-  } else if (plan) {
+  } else if (plan && !(planningOnly && state.outcome === 'completed')) {
     reasonCodes.push('od_next_protocol_plan_contract_unexpected');
   }
   if (plan && state.executionMode !== plan.fullPlan.executionMode) {
@@ -977,10 +1031,16 @@ function validateAcceptedTurn(
     if (input.completionEvidence?.physicalStatus !== 'succeeded') {
       reasonCodes.push('od_next_physical_run_not_succeeded');
     }
-    if (input.completionEvidence?.deliverableValid !== true) {
-      reasonCodes.push('od_next_canonical_deliverable_invalid');
+    if (planningOnly) {
+      if (!visibleText.trim()) reasonCodes.push('od_next_planning_answer_missing');
+      if (input.completionEvidence?.filesWritten !== 0
+        || (task.intentResolution && readStrategyTaskWriteEvidence(db, task.taskExecutionId).some(evidence => evidence.unknown || evidence.filesWritten !== 0))) reasonCodes.push('od_next_planning_files_changed');
+    } else {
+      if (input.completionEvidence?.deliverableValid !== true) {
+        reasonCodes.push('od_next_canonical_deliverable_invalid');
+      }
+      reasonCodes.push(...(input.productionEnforcementReasonCodes ?? []));
     }
-    reasonCodes.push(...(input.productionEnforcementReasonCodes ?? []));
   }
   return uniqueReasonCodes(reasonCodes);
 }
@@ -1071,6 +1131,11 @@ function tryBeginSerializationRepair(
     );
     if (stateCodes.length > 0) return null;
   }
+  // A recovered serialization anchor cannot authorize production on its own.
+  // New tasks must have adopted a strict intent or consumed the bounded supplement.
+  const explicitIntent = parsed.runtimeState?.executionIntent;
+  if (current.executionIntent === 'plan_only' || explicitIntent === 'plan_only'
+    || (current.intentResolution?.state !== 'resolved' && current.intentResolution && explicitIntent !== 'produce')) return null;
   const repairRun = input.repairRun;
   if (!repairRun) return null;
   if (repairRun.sourceRunId !== current.latestRunId) return null;
@@ -1089,6 +1154,7 @@ function tryBeginSerializationRepair(
         inputStage: current.inputStage,
         outcome: 'running',
         executionMode: plan.fullPlan.executionMode,
+        ...(explicitIntent ? { executionIntent: explicitIntent } : {}),
       },
       planContract: plan,
       ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
@@ -1179,7 +1245,7 @@ function validatePlanBinding(
   return uniqueReasonCodes(reasonCodes);
 }
 
-function blockTask(
+export function blockTask(
   db: SqliteDb,
   current: StrategyTaskExecutionRecord,
   visibleText: string,

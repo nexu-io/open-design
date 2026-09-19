@@ -391,14 +391,14 @@ describe('chat assistant feedback', () => {
     expect(screen.queryByText(/Discord/i)).toBeNull();
     expect(
       screen.getAllByRole('button').filter((button) =>
-        ['Did not follow my request', 'Visual inconsistency', 'Could not run', 'Too slow']
+        ['Did not follow my request', 'Visual inconsistency', 'Incomplete output', 'Hard to use']
           .includes(button.textContent ?? ''),
       ).map((button) => button.textContent),
     ).toEqual([
       'Did not follow my request',
       'Visual inconsistency',
-      'Could not run',
-      'Too slow',
+      'Incomplete output',
+      'Hard to use',
     ]);
     expect(screen.queryByRole('button', { name: 'Other' })).toBeNull();
   });

@@ -102,8 +102,8 @@ afterEach(() => {
 /**
  * 两轮正常问答 + 一次表单交答案。
  *
- * 三条用户消息,其中最后一条是表单载荷 —— 正文画 2 个气泡。导轨至少要 2 条用户消息
- * 才现身(`CHAT_RAIL_MIN_USER_MESSAGES`),所以过滤之后的 2 条正好还够它出场:
+ * 三条用户消息,其中最后一条是表单载荷 —— 正文画 2 个气泡。过滤之后仍有 2 条,
+ * 导轨照样出场(`CHAT_RAIL_MIN_USER_MESSAGES` 是 1):
  * 「修好 = 导轨整个消失」不能拿来蒙混过关。
  */
 function transcriptWithFormAnswers(): ChatMessage[] {

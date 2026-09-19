@@ -16,6 +16,7 @@ import {
   countMessages,
   deleteConversationAndRepairTeamCommentAnchor,
   isProjectCommentAnchorConversationId,
+  listSiblingRunDoneKeys,
 } from '../../db.js';
 
 export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {
@@ -63,30 +64,6 @@ function isChatSessionMode(value: unknown): value is ChatSessionMode {
  */
 function settledForkVerdict(status: unknown): string | undefined {
   return typeof status === 'string' && TERMINAL_RUN_STATUSES.has(status) ? status : undefined;
-}
-
-/**
- * The `done_key` a Run stamps on its own assistant row, if it has one.
- *
- * Each physical Run mints exactly one key (`mintRunDoneKey`, emitted as the
- * `done_key` agent event before any model output), so the FIRST key in a row's
- * event list is that row's Run identity. Later keys in the same list are not
- * identity — they are the damage this guard exists to stop — which is why only
- * the first one counts.
- */
-function ownDoneKeyOfPersistedEvents(events: unknown): string | null {
-  if (!Array.isArray(events)) return null;
-  for (const event of events) {
-    if (
-      event
-      && typeof event === 'object'
-      && (event as Record<string, unknown>).kind === 'done_key'
-    ) {
-      const key = (event as Record<string, unknown>).key;
-      if (typeof key === 'string' && key) return key;
-    }
-  }
-  return null;
 }
 
 /**
@@ -468,41 +445,6 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   // daemon never persisted events/status there, so the web is the legitimate
   // writer) and lets UI metadata (feedback, comment attachments, telemetry)
   // land on every PUT.
-  /**
-   * The `done_key` every OTHER assistant row in this conversation was recorded
-   * with — i.e. the Run identities this row must never be allowed to absorb.
-   * Only each sibling's FIRST key counts (see `ownDoneKeyOfPersistedEvents`),
-   * so an already-damaged sibling cannot re-export the key it absorbed.
-   */
-  const siblingRunDoneKeys = (
-    conversationId: string,
-    messageId: string,
-  ): ReadonlySet<string> => {
-    const rows = db
-      .prepare(
-        `SELECT events_json AS eventsJson
-           FROM messages
-          WHERE conversation_id = ?
-            AND role = 'assistant'
-            AND id <> ?
-            AND events_json IS NOT NULL
-            AND events_json LIKE '%"done_key"%'`,
-      )
-      .all(conversationId, messageId) as Array<{ eventsJson: string | null }>;
-    const keys = new Set<string>();
-    for (const row of rows) {
-      let parsed: unknown;
-      try {
-        parsed = row.eventsJson ? JSON.parse(row.eventsJson) : null;
-      } catch {
-        continue;
-      }
-      const key = ownDoneKeyOfPersistedEvents(parsed);
-      if (key) keys.add(key);
-    }
-    return keys;
-  };
-
   const mergeMessageWriteForDaemonBacked = (
     stored: ReturnType<typeof getMessage>,
     incoming: Record<string, unknown>,
@@ -521,6 +463,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         runStatus: stored.runStatus,
         events: stored.events ?? [],
         content: stored.content ?? '',
+        producedFiles: stored.producedFiles,
         lastRunEventId: stored.lastRunEventId,
         startedAt: stored.startedAt,
         endedAt: stored.endedAt,
@@ -539,6 +482,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         runStatus: stored.runStatus,
         events: stored.events ?? [],
         content: stored.content ?? '',
+        producedFiles: stored.producedFiles,
         lastRunEventId: stored.lastRunEventId,
         startedAt: stored.startedAt,
         endedAt: stored.endedAt,
@@ -775,7 +719,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       ...mergeMessageWriteForDaemonBacked(
         existing,
         normalizedMessage,
-        siblingRunDoneKeys(req.params.cid, req.params.mid),
+        // Read in SQLite: this runs on every PUT, and a sibling's event log can
+        // hold any amount of tool output (see `listSiblingRunDoneKeys`).
+        listSiblingRunDoneKeys(db, req.params.cid, req.params.mid),
       ),
       id: req.params.mid,
     });

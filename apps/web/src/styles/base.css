@@ -47,6 +47,9 @@ body {
   color: var(--text);
   background: var(--bg-app);
   font-size: var(--font-size-14, 14px);
+  /* The product UI uses a consolidated 500 / 600 / 700 ladder. Unspecified
+     text defaults to 600; 400 is reserved for font metadata. */
+  font-weight: 600;
   line-height: 125%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

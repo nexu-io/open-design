@@ -498,7 +498,7 @@ async function expectProjectSharedLogo(
       height: element.naturalHeight,
       workspaceId: new URL(element.src).searchParams.get('workspaceId'),
       workspaceMemberId: new URL(element.src).searchParams.get('workspaceMemberId'),
-    }), { timeout: T.short }).catch(() => null);
+    }), undefined, { timeout: T.short }).catch(() => null);
     const matches = image?.complete === true
       && image.width === 320
       && image.height === 160

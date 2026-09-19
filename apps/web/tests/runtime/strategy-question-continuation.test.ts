@@ -4,6 +4,7 @@ import {
   resolveQuestionFormStrategyTaskExecutionId,
   strategyBlockedMessageFields,
   strategySettledMessageFields,
+  strategyTaskParkedOnSucceededRun,
 } from '../../src/runtime/strategy-question-continuation';
 
 describe('question-form strategy continuation handle recovery', () => {
@@ -126,5 +127,55 @@ describe('strategySettledMessageFields', () => {
       blockedContext: undefined,
     }))).toBeNull();
     expect(strategySettledMessageFields(undefined)).toBeNull();
+  });
+});
+
+describe('strategyTaskParkedOnSucceededRun', () => {
+  const parked = (overrides: Partial<StrategyTaskProjectionV2> = {}) => blockedProjection({
+    outcome: 'clarification_required',
+    terminal: false,
+    blockedContext: undefined,
+    ...overrides,
+  });
+
+  it.each(['clarification_required', 'plan_ready'] as const)(
+    'is true when a succeeded Run left its task waiting on the user (%s)',
+    (outcome) => {
+      expect(strategyTaskParkedOnSucceededRun(
+        { status: 'succeeded', strategyTask: parked({ outcome }) },
+        'run-1',
+      )).toBe(true);
+    },
+  );
+
+  it('is false while the task still runs, even on the same Run', () => {
+    expect(strategyTaskParkedOnSucceededRun(
+      { status: 'succeeded', strategyTask: parked({ outcome: 'running' }) },
+      'run-1',
+    )).toBe(false);
+  });
+
+  it('is false when the task has moved on to another Run', () => {
+    expect(strategyTaskParkedOnSucceededRun(
+      { status: 'succeeded', strategyTask: parked({ activeRunId: 'run-2' }) },
+      'run-1',
+    )).toBe(false);
+  });
+
+  it('is false while the Run itself has not succeeded', () => {
+    for (const status of ['queued', 'running', 'failed', 'canceled'] as const) {
+      expect(strategyTaskParkedOnSucceededRun(
+        { status, strategyTask: parked() },
+        'run-1',
+      )).toBe(false);
+    }
+  });
+
+  it('leaves terminal tasks and task-less Runs to their own checks', () => {
+    expect(strategyTaskParkedOnSucceededRun(
+      { status: 'succeeded', strategyTask: blockedProjection() },
+      'run-1',
+    )).toBe(false);
+    expect(strategyTaskParkedOnSucceededRun({ status: 'succeeded' }, 'run-1')).toBe(false);
   });
 });

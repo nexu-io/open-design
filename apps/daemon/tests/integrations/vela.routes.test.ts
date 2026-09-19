@@ -13,6 +13,7 @@
 // mirroring real vela's on-disk side-effect without the device-auth loop.
 
 import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { createServer } from 'node:http';
 import https from 'node:https';
 import type { AddressInfo } from 'node:net';
@@ -3016,6 +3017,235 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
       await new Promise<void>((resolve) => {
         captureServer.close(() => resolve());
       });
+    }
+  });
+});
+
+describe('Test touchpoint runtime proxy', () => {
+  it('forwards the caller encoding preference and labels the reply it gets back', async () => {
+    // Decisions carry base64 content and run to megabytes. Building the upstream
+    // headers from scratch dropped `accept-encoding`, so every refresh pulled the
+    // payload uncompressed; the body is piped verbatim, so the reply must also
+    // carry upstream's `content-encoding` or the caller decodes gzip as JSON.
+    let seenAcceptEncoding: string | undefined;
+    const upstream = createServer((req, res) => {
+      seenAcceptEncoding = req.headers['accept-encoding'] as string | undefined;
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('content-encoding', 'gzip');
+      res.statusCode = 200;
+      res.end(gzipSync(Buffer.from(JSON.stringify({ placementKey: 'opend.home.hover-layer' }))));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/touchpoints/test-runtime?deploymentId=deployment-1&placementKey=opend.home.hover-layer&locale=zh-CN`,
+        { headers: { 'accept-encoding': 'gzip' } },
+      );
+      expect(response.status).toBe(200);
+      expect(seenAcceptEncoding).toBe('gzip');
+      // `fetch` decodes transparently, which is only possible when the header survived.
+      expect(await response.json()).toEqual({ placementKey: 'opend.home.hover-layer' });
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('leaves an unencoded reply unlabelled when the caller asks for no encoding', async () => {
+    let seenAcceptEncoding: string | undefined = 'unset';
+    const upstream = createServer((req, res) => {
+      seenAcceptEncoding = req.headers['accept-encoding'] as string | undefined;
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ placementKey: 'opend.home.hover-layer' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/touchpoints/test-runtime?deploymentId=deployment-1&placementKey=opend.home.hover-layer&locale=zh-CN`,
+        { headers: { 'accept-encoding': 'identity' } },
+      );
+      expect(seenAcceptEncoding).toBe('identity');
+      expect(response.headers.get('content-encoding')).toBeNull();
+      expect(await response.json()).toEqual({ placementKey: 'opend.home.hover-layer' });
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('forwards only the registered context POST with daemon-held credentials', async () => {
+    const requests: Array<{
+      url: string;
+      method: string;
+      authorization: string | undefined;
+      body: string;
+    }> = [];
+    const upstream = createServer((req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        requests.push({
+          url: req.url ?? '',
+          method: req.method ?? '',
+          authorization: req.headers.authorization,
+          body,
+        });
+        res.setHeader('content-type', 'application/json');
+        res.statusCode = 201;
+        res.end(JSON.stringify({ deploymentId: 'deployment-1', scenario: 'realtime', updatedAt: '2026-09-14T00:00:00.000Z' }));
+      });
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const accepted = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/context`,
+        { deploymentId: 'deployment-1', scenario: 'realtime' },
+        { authorization: 'Bearer browser-supplied-key' },
+      );
+      expect(accepted.status).toBe(201);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/test-context',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            deploymentId: 'deployment-1',
+            scenario: 'realtime',
+          }),
+        },
+      ]);
+      const acceptance = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/test-deployments/deployment-1/acceptances`,
+        {
+          placementKey: 'opend.home.campaign-modal',
+          hostVersion: '2',
+          locale: 'zh-CN',
+          scenario: 'realtime',
+          evidence: 'http://127.0.0.1:55381/#cms-test',
+        },
+        { authorization: 'Bearer browser-supplied-key' },
+      );
+      expect(acceptance.status).toBe(201);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/test-context',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            deploymentId: 'deployment-1',
+            scenario: 'realtime',
+          }),
+        },
+        {
+          url: '/api/v1/touchpoints/test-deployments/deployment-1/acceptances',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            placementKey: 'opend.home.campaign-modal',
+            hostVersion: '2',
+            locale: 'zh-CN',
+            scenario: 'realtime',
+            evidence: 'http://127.0.0.1:55381/#cms-test',
+          }),
+        },
+      ]);
+      const simulated = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/context`,
+        { deploymentId: 'deployment-1', scenario: 'before' },
+      );
+      expect(simulated.status).toBe(400);
+      expect(simulated.body).toEqual({ error: 'realtime_test_runtime_required' });
+      expect(requests).toHaveLength(2);
+      const rejected = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/unknown`,
+        { deploymentId: 'deployment-1', scenario: 'before' },
+      );
+      expect(rejected.status).toBe(404);
+      expect(rejected.body).toEqual({
+        error: 'unknown_touchpoint_runtime_path',
+      });
+      expect(requests).toHaveLength(2);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+});
+
+describe('Production touchpoint runtime proxy', () => {
+  it('routes a local publish reader separately without changing the stored login or trusting remote overrides', async () => {
+    const requests: string[] = [];
+    const upstream = createServer((req, res) => {
+      requests.push(req.url ?? '');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ activityId: 'published-local' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: 'http://127.0.0.1:1' });
+    try {
+      process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL = `http://127.0.0.1:${address.port}`;
+      const response = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.account-badge&locale=zh-CN`,
+      );
+      expect(response.status).toBe(200);
+      expect(requests).toHaveLength(1);
+      process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL = 'https://example.com';
+      const rejected = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.account-badge&locale=zh-CN`,
+      );
+      expect(rejected.status).toBe(400);
+      expect(requests).toHaveLength(1);
+    } finally {
+      delete process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL;
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+  it('forwards only the exact production decision path with daemon-held credentials', async () => {
+    const requests: Array<{
+      url: string;
+      method: string;
+      authorization: string | undefined;
+    }> = [];
+    const upstream = createServer((req, res) => {
+      requests.push({
+        url: req.url ?? '',
+        method: req.method ?? '',
+        authorization: req.headers.authorization,
+      });
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ activityId: 'activity-1' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const accepted = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.campaign-modal&locale=en-US`,
+      );
+      expect(accepted.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/production?placementKey=opend.home.campaign-modal&locale=en-US',
+          method: 'GET',
+          authorization: 'Bearer ck-seeded-key',
+        },
+      ]);
+      const rejected = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime/deployments`,
+      );
+      expect(rejected.status).toBe(404);
+      expect(requests).toHaveLength(1);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
     }
   });
 });
