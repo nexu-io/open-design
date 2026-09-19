@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate as pickTypePill } from '../helpers/home-template-picker';
 //
 // The Website-clone chip is the one create chip that writes into the composer:
 // an empty composer gets a localized "clone this site:" scaffold, because the
@@ -124,20 +125,7 @@ function renderHome() {
   );
 }
 
-async function pickTypePill(id: string) {
-  // A picked type retires the row; clear first so the row is back.
-  const clear = screen.queryByTestId('home-hero-template-clear');
-  if (clear) fireEvent.click(clear);
-  await screen.findByTestId('home-hero-type-pills');
-  const inline = screen.queryByTestId(`home-hero-type-pill-${id}`);
-  if (inline) {
-    fireEvent.click(inline);
-    return;
-  }
-  // Website clone lives behind the row's 更多 popover.
-  fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
-  fireEvent.click(await screen.findByTestId(`home-hero-type-pill-${id}-more`));
-}
+
 
 function composerText(): string {
   return (screen.getByTestId('home-hero-input').textContent ?? '');

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeTemplateTrigger } from '../helpers/home-template-picker';
 //
 // Home no longer mounts the onboarding "recommended start" strip.
 //
@@ -70,7 +71,7 @@ describe('HomeView — recommended-start strip', () => {
     // The composer is up, so this is a real paint of Home and not an empty
     // render that would pass the negative assertions for the wrong reason.
     await waitFor(() =>
-      expect(screen.getByTestId('home-hero-type-pills')).toBeTruthy(),
+      expect(screen.getByTestId('home-hero-template-picker')).toBeTruthy(),
     );
 
     expect(screen.queryByTestId('home-recommendation-start')).toBeNull();
@@ -85,9 +86,9 @@ describe('HomeView — recommended-start strip', () => {
 
     // 「Start with a template…」 is a DIFFERENT control from the strip and must
     // survive its removal — the strip was the row ABOVE it.
-    const trigger = await screen.findByTestId('home-hero-type-pill-prototype');
+    const trigger = homeTemplateTrigger();
     expect(trigger).toBeTruthy();
-    expect(screen.getByTestId('home-hero-type-pills')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-template-picker')).toBeTruthy();
     await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
   });
 });
