@@ -12,6 +12,7 @@ import {
 } from "@open-design/launcher-proto";
 import {
   bootstrapSidecarProcess,
+  findSidecarProcesses,
   isCurrentSidecarLauncher,
   readCurrentSidecarStamp,
   registerSidecarProcess,
@@ -21,6 +22,7 @@ import {
   type SidecarRuntimeContext,
   type SidecarStamp,
 } from "@open-design/sidecar";
+import { waitForProcessExit } from "@open-design/platform";
 import {
   recordIncomingUpdateLifecycle,
   applyLoopbackConnectionLimitSwitch,
@@ -96,6 +98,16 @@ function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
   if (updateMetadataUrl == null) return;
   if (process.env.OD_UPDATE_METADATA_URL != null && process.env.OD_UPDATE_METADATA_URL.length > 0) return;
   process.env.OD_UPDATE_METADATA_URL = updateMetadataUrl;
+}
+
+const MACOS_LAUNCHER_GUARD_WAIT_SLICE_MS = 30_000;
+
+async function holdMacLauncherForBootstrappedDesktop(stamp: SidecarStamp): Promise<void> {
+  await app.whenReady();
+  app.dock?.hide();
+  const [generation] = await findSidecarProcesses(stamp);
+  if (generation == null) return;
+  while (!await waitForProcessExit(generation.pid, MACOS_LAUNCHER_GUARD_WAIT_SLICE_MS)) {}
 }
 
 async function main(): Promise<void> {
@@ -214,6 +226,9 @@ async function main(): Promise<void> {
     port: 0,
     runtimeRoot: initialPaths.runtimeRoot,
   })) {
+    if (process.platform === "darwin") {
+      await holdMacLauncherForBootstrappedDesktop(launchStamp);
+    }
     app.exit(0);
     return;
   }

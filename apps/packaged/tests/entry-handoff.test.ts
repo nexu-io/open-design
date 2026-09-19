@@ -44,11 +44,11 @@ function evaluate(code: string, modules: Record<string, unknown>, globals: Recor
   return exports;
 }
 
-type Kind = "visible" | "hidden" | "gone" | "duplicate" | "timeout";
+type Kind = "visible" | "hidden" | "gone" | "duplicate" | "timeout" | "bootstrap";
 async function scenario(platform: "darwin" | "win32", channel: "stable" | "prerelease", kind: Kind) {
   const root = await mkdtemp(join(tmpdir(), "od-entry-handoff-"));
   const trace: string[] = [];
-  let alive = kind !== "gone";
+  let alive = kind !== "gone" && kind !== "bootstrap";
   const armed = Promise.withResolvers<void>();
   const exited = Promise.withResolvers<boolean>();
   const quit = () => {
@@ -66,6 +66,10 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
     "@open-design/sidecar-proto": sidecarProto,
     "@open-design/platform": {
       waitForProcessExit: async (pid: number) => {
+        if (pid === 7654) {
+          trace.push("guardian-wait");
+          return true;
+        }
         expect(pid).toBe(4242);
         trace.push("wait-armed"); armed.resolve();
         return kind === "timeout" ? false : exited.promise;
@@ -86,9 +90,10 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
       },
       invokeSidecar: async () => { trace.push("show"); return { accepted: true }; },
       stopSidecar: async () => { quit(); return { remainingPids: [] }; },
-      bootstrapSidecarProcess: async () => { trace.push(`bootstrap:${alive}`); return false; },
+      bootstrapSidecarProcess: async () => { trace.push(`bootstrap:${alive}`); return kind === "bootstrap"; },
+      findSidecarProcesses: async () => { trace.push("guardian-find"); return [{ pid: 7654 }]; },
     },
-    "electron": { app: { commandLine: { appendSwitch() {} }, exit: (code: number) => trace.push(`exit:${code}`) } },
+    "electron": { app: { commandLine: { appendSwitch() {} }, dock: { hide: () => trace.push("dock-hide") }, exit: (code: number) => trace.push(`exit:${code}`), whenReady: async () => { trace.push("outer-ready"); } } },
     "@open-design/desktop/main": { async recordIncomingUpdateLifecycle() {}, applyOsLocaleSwitch() {}, applyLoopbackConnectionLimitSwitch() {} },
     "./config.js": { readPackagedConfig: async () => ({ namespace, appVersion: version }) },
     "./headless-runtime.js": { parsePackagedHeadlessRequest: () => ({ headless: false }), runPackagedMcpActionAgainstExistingDaemon: async () => false },
@@ -102,7 +107,7 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
     } },
   };
   modules["./launcher-after-quit.js"] = evaluate(helperCode, modules);
-  const argv = ["electron", "index.js", ...(kind === "duplicate" ? [] : [
+  const argv = ["electron", "index.js", ...((kind === "duplicate" || kind === "bootstrap") ? [] : [
     ...launcherProto.buildLauncherAfterQuitArgs({ targetPid: 4242, timeoutMs: 1000 }),
     ...launcherProto.buildLauncherDelegatedArgs({ generation: 8, version }),
   ])];
@@ -121,6 +126,24 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
     await rm(root, { recursive: true, force: true });
   }
 }
+
+it("keeps the LaunchServices-owned macOS launcher alive until the bootstrapped desktop generation exits", async () => {
+  const { trace } = await scenario("darwin", "stable", "bootstrap");
+  expect(trace).toContain("outer-ready");
+  expect(trace).toContain("dock-hide");
+  expect(trace).toContain("guardian-find");
+  expect(trace).toContain("guardian-wait");
+  expect(trace.indexOf("guardian-wait")).toBeLessThan(trace.indexOf("exit:0"));
+  expect(trace).not.toContain("select");
+});
+
+it("preserves the immediate post-bootstrap exit path outside macOS", async () => {
+  const { trace } = await scenario("win32", "stable", "bootstrap");
+  expect(trace).toContain("exit:0");
+  expect(trace).not.toContain("dock-hide");
+  expect(trace).not.toContain("guardian-find");
+  expect(trace).not.toContain("guardian-wait");
+});
 
 describe.each(["darwin", "win32"] as const)("%s packaged update entry", platform => {
   it.each(["stable", "prerelease"] as const)("waits for the %s old desktop before instance discovery and bootstrap", async channel => {
