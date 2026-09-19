@@ -201,11 +201,16 @@ export function ProductionCampaignModal({
 	// own visibility record, lease renewal, redeployment or locale swap); any new
 	// offer of a recorded activity stays closed, as does a dismissed one.
 	const [dismissedTestCampaigns, setDismissedTestCampaigns] = useState<ReadonlySet<string>>(() => new Set());
+<<<<<<< HEAD
 	const openTestCampaign = useRef<{ campaign: string; deployment: string } | null>(null);
+=======
+	const openTestCampaign = useRef<string | null>(null);
+>>>>>>> c49e7bba2a (feat(cms): 统一客户端活动点位接入与验收修复 (#7986))
 	const testActivityId = testDecision?.activityId;
 	const testCampaignKey = testDecision
 		? JSON.stringify([sessionSubject, testActivityId])
 		: null;
+<<<<<<< HEAD
 	const testDeploymentKey = testRuntime
 		? JSON.stringify([testRuntime.deployment.id, testRuntime.deployment.snapshotHash])
 		: null;
@@ -226,6 +231,17 @@ export function ProductionCampaignModal({
 			authenticated && !testClosed
 				? { campaign: testCampaignKey, deployment: testDeploymentKey }
 				: null;
+=======
+	const testClosed =
+		testCampaignKey === null ||
+		dismissedTestCampaigns.has(testCampaignKey) ||
+		(openTestCampaign.current !== testCampaignKey &&
+			!!sessionSubject &&
+			!!testActivityId &&
+			wasDisplayed(sessionSubject, testActivityId));
+	openTestCampaign.current =
+		authenticated && testRuntime && !testClosed ? testCampaignKey : null;
+>>>>>>> c49e7bba2a (feat(cms): 统一客户端活动点位接入与验收修复 (#7986))
 	const closeTestModal = useCallback(() => {
 		if (testCampaignKey !== null) {
 			setDismissedTestCampaigns(previous => new Set([...previous, testCampaignKey]));
