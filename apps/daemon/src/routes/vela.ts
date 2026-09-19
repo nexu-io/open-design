@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import dns from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
+import zlib from 'node:zlib';
 
 import {
   applyAgentLaunchEnv,
@@ -60,6 +61,12 @@ import {
   fetchVelaRemoteModelsWithRetry,
 } from '../runtimes/defs/amr.js';
 import { classifyAmrAccountFailure } from '../integrations/vela-errors.js';
+import {
+  createTouchpointContentCache,
+  type HeldContentRef,
+  type TouchpointContentCache,
+  type TouchpointContentKey,
+} from './touchpoint-content-cache.js';
 
 const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
 const VELA_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center';
@@ -436,11 +443,49 @@ function proxyVelaMessageCenterRequest(
   upstream.end();
 }
 
+/**
+ * Decode an upstream body the daemon has to read rather than forward.
+ *
+ * Returns `null` for an encoding this build cannot decode, which the caller
+ * treats as "hand the original bytes back untouched" — reading the body is an
+ * optimization, never a precondition for answering the browser.
+ */
+function decodeProxyBody(body: Buffer, encoding: string | undefined): Buffer | null {
+  const label = (encoding ?? '').trim().toLowerCase();
+  try {
+    if (!label || label === 'identity') return body;
+    if (label === 'gzip' || label === 'x-gzip') return zlib.gunzipSync(body);
+    if (label === 'deflate') return zlib.inflateSync(body);
+    if (label === 'br') return zlib.brotliDecompressSync(body);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** The daemon's own content-assembly parameters, which no browser ever sends. */
+const HELD_CONTENT_PARAMS = ['heldContentId', 'heldContentLocale'] as const;
+
+/**
+ * The (placementKey, locale) a production decision request is about, or `null`
+ * when this request is not one the daemon may assemble content for.
+ *
+ * A caller that already carries either held-content parameter is passed through
+ * untouched: the daemon never rewrites someone else's conditional request.
+ */
+function touchpointContentKeyForRequest(url: URL): TouchpointContentKey | null {
+  if (HELD_CONTENT_PARAMS.some((param) => url.searchParams.has(param))) return null;
+  const placementKey = url.searchParams.get('placementKey');
+  const locale = url.searchParams.get('locale');
+  return placementKey && locale ? { placementKey, locale } : null;
+}
+
 function proxyTouchpointRuntimeRequest(
   req: Request,
   res: Response,
   context: { apiUrl: string; controlKey?: string },
   runtime: 'test' | 'production',
+  contentCache?: TouchpointContentCache,
 ): void {
   // Express retains the mounted path for these route patterns, so normalize
   // it before applying the strict suffix allowlist.
@@ -481,46 +526,139 @@ function proxyTouchpointRuntimeRequest(
     return;
   }
   const body = req.method === 'POST' ? velaProxyRequestBody(req) : null;
-  const headers: Record<string, string> = {
-    accept: 'application/json',
-    authorization: `Bearer ${context.controlKey}`,
+  // Content assembly applies to exactly one route: the read-only production
+  // decision. Everything else keeps the verbatim streaming path.
+  const contentKey =
+    contentCache && runtime === 'production' && req.method === 'GET' && suffix === '/production'
+      ? touchpointContentKeyForRequest(target)
+      : null;
+
+  const controlKey = context.controlKey;
+  /**
+   * `fallback` is the one retry the assembly path is allowed: a trimmed reply
+   * the daemon cannot rebuild is re-asked as today's full request. Clearing it
+   * on that retry is what keeps the guarantee bounded — the daemon can never
+   * loop between a server that trims and a cache that cannot assemble.
+   */
+  const send = (held: HeldContentRef | null, fallback: boolean): void => {
+    const attempt = new URL(target);
+    if (held) {
+      attempt.searchParams.set('heldContentId', held.heldContentId);
+      attempt.searchParams.set('heldContentLocale', held.heldContentLocale);
+    }
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      authorization: `Bearer ${controlKey}`,
+    };
+    // Touchpoint decisions carry base64 content and run to megabytes, and this
+    // proxy pipes the upstream body through verbatim. Building the request
+    // headers from scratch dropped the caller's `accept-encoding`, so every
+    // refresh pulled the payload uncompressed — measured at 383KB against 214KB
+    // for the same decision. Forward the caller's preference and hand its
+    // `content-encoding` back, so the body stays labelled the way it is framed.
+    const acceptEncoding = req.headers['accept-encoding'];
+    if (typeof acceptEncoding === 'string' && acceptEncoding)
+      headers['accept-encoding'] = acceptEncoding;
+    if (body) {
+      headers['content-type'] =
+        typeof req.headers['content-type'] === 'string'
+          ? req.headers['content-type']
+          : 'application/json';
+      headers['content-length'] = String(body.length);
+    }
+    const transport = attempt.protocol === 'https:' ? https : http;
+    const upstream = transport.request(attempt, { method: req.method, headers }, (upstreamRes) => {
+      const passThrough = () => {
+        res.status(upstreamRes.statusCode ?? 502);
+        res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+        // Without this the client would decode gzip bytes as JSON. It is set only
+        // when upstream actually encoded, so an unencoded reply is unaffected.
+        const contentEncoding = upstreamRes.headers['content-encoding'];
+        if (typeof contentEncoding === 'string' && contentEncoding)
+          res.setHeader('content-encoding', contentEncoding);
+        pipeProxyStreamWithGuard(upstreamRes, res, () => res.destroy());
+      };
+      if (!contentKey || !contentCache) {
+        passThrough();
+        return;
+      }
+      // Reading the body is what makes assembly possible, so this route buffers
+      // instead of piping. Whatever the daemon cannot read or rebuild is handed
+      // back exactly as upstream framed it.
+      const chunks: Buffer[] = [];
+      let size = 0;
+      let failed = false;
+      upstreamRes.on('error', () => {
+        failed = true;
+        if (!res.headersSent) res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+        else res.end();
+      });
+      upstreamRes.on('data', (chunk: Buffer) => {
+        chunks.push(chunk);
+        size += chunk.length;
+      });
+      upstreamRes.on('end', () => {
+        if (failed || res.headersSent) return;
+        const raw = Buffer.concat(chunks, size);
+        const echo = () => {
+          res.status(upstreamRes.statusCode ?? 502);
+          res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+          const contentEncoding = upstreamRes.headers['content-encoding'];
+          if (typeof contentEncoding === 'string' && contentEncoding)
+            res.setHeader('content-encoding', contentEncoding);
+          res.end(raw);
+        };
+        const decoded = decodeProxyBody(raw, upstreamRes.headers['content-encoding'] as string | undefined);
+        if (!decoded || upstreamRes.statusCode !== 200) {
+          echo();
+          return;
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(decoded.toString('utf8'));
+        } catch {
+          echo();
+          return;
+        }
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          echo();
+          return;
+        }
+        const decision = parsed as Record<string, unknown>;
+        if (decision.contentOmitted !== true) {
+          contentCache.remember(contentKey, decision);
+          res.status(200);
+          res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+          res.end(decoded);
+          return;
+        }
+        const full = contentCache.reassemble(contentKey, decision);
+        if (full) {
+          res.status(200);
+          res.setHeader('content-type', 'application/json');
+          res.end(Buffer.from(JSON.stringify(full), 'utf8'));
+          return;
+        }
+        // The one thing that must never happen is a campaign that does not show
+        // because a cache went bad. Ask again the way today's daemon asks, with
+        // no held content, and answer from that.
+        if (fallback) send(null, false);
+        else echo();
+      });
+    });
+    upstream.setTimeout(30_000, () =>
+      upstream.destroy(new Error('Touchpoint runtime request timed out')),
+    );
+    upstream.on('error', () => {
+      if (!res.headersSent) res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+      else res.end();
+    });
+    if (body) upstream.write(body);
+    upstream.end();
   };
-  // Touchpoint decisions carry base64 content and run to megabytes, and this
-  // proxy pipes the upstream body through verbatim. Building the request
-  // headers from scratch dropped the caller's `accept-encoding`, so every
-  // refresh pulled the payload uncompressed — measured at 383KB against 214KB
-  // for the same decision. Forward the caller's preference and hand its
-  // `content-encoding` back, so the body stays labelled the way it is framed.
-  const acceptEncoding = req.headers['accept-encoding'];
-  if (typeof acceptEncoding === 'string' && acceptEncoding)
-    headers['accept-encoding'] = acceptEncoding;
-  if (body) {
-    headers['content-type'] =
-      typeof req.headers['content-type'] === 'string'
-        ? req.headers['content-type']
-        : 'application/json';
-    headers['content-length'] = String(body.length);
-  }
-  const transport = target.protocol === 'https:' ? https : http;
-  const upstream = transport.request(target, { method: req.method, headers }, (upstreamRes) => {
-    res.status(upstreamRes.statusCode ?? 502);
-    res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
-    // Without this the client would decode gzip bytes as JSON. It is set only
-    // when upstream actually encoded, so an unencoded reply is unaffected.
-    const contentEncoding = upstreamRes.headers['content-encoding'];
-    if (typeof contentEncoding === 'string' && contentEncoding)
-      res.setHeader('content-encoding', contentEncoding);
-    pipeProxyStreamWithGuard(upstreamRes, res, () => res.destroy());
-  });
-  upstream.setTimeout(30_000, () =>
-    upstream.destroy(new Error('Touchpoint runtime request timed out')),
-  );
-  upstream.on('error', () => {
-    if (!res.headersSent) res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
-    else res.end();
-  });
-  if (body) upstream.write(body);
-  upstream.end();
+
+  const held = contentKey && contentCache ? contentCache.held(contentKey) : null;
+  send(held, held !== null);
 }
 
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): void {
@@ -528,6 +666,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   const onCredentialStateObserved =
     deps.onCredentialStateObserved ?? (() => undefined);
   const { RUNTIME_DATA_DIR } = deps.paths;
+  // Daemon-owned data, so it hangs off the resolved runtime data root like every
+  // other daemon path (AGENTS.md "Daemon data directory contract"). Two
+  // namespaces therefore get two roots and cannot see each other's content.
+  const touchpointContentCache = createTouchpointContentCache(RUNTIME_DATA_DIR);
   const { readAppConfig } = deps.appConfig;
   const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) => {
     const proto = req.protocol || 'http';
@@ -788,10 +930,11 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
             res,
             { ...context, apiUrl: target.origin },
             'production',
+            touchpointContentCache,
           );
           return;
         }
-        proxyTouchpointRuntimeRequest(req, res, context, 'production');
+        proxyTouchpointRuntimeRequest(req, res, context, 'production', touchpointContentCache);
       } catch {
         res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
       }

@@ -28,6 +28,72 @@ export function resolveAuthorizationDeadline(timing: AuthorizationTiming, maximu
 	return Math.min(authorizationExpiresAt, endsAt, serverTime + maximumLeaseMs);
 }
 
+/**
+ * The identity a lease key exists to compare: is this still the same content,
+ * for the same person, from the same deployment?
+ *
+ * `touchpointDecisionId` used to be part of every placement's key. It is not
+ * content identity — it is a one-shot credential the server re-issues whenever
+ * its own sixty-second row lapses. With a thirty-second poll, missing two polls
+ * (a Wi-Fi switch, a tunnel, a closed lid) was enough to get a new one, and a
+ * new key means `++generation`: shadow DOM rebuilt, Blob URLs re-created, entry
+ * animation replayed, scroll lock released and re-taken. Stabilising the id
+ * server-side (OPEND-3369) removed the every-thirty-seconds version of that
+ * churn but left the network-wobble version, which lands on exactly the users
+ * the recovery-lifecycle P1 was about.
+ *
+ * Keeping the credential out of the key means a matching key retains the
+ * previous decision OBJECT, so the client goes on presenting a credential the
+ * server has long since expired. That is safe because the server no longer
+ * ties either use of it to the credential's own window: revocation receipts
+ * answer for aged ids (OPEND-3372) and click settlement is bound to the
+ * deployment's delivery window (OPEND-3364). `validForMs` is always taken from
+ * the new response, so a shortened authorization still applies immediately.
+ *
+ * Shared by all three production placements so their keys cannot drift apart.
+ */
+export const touchpointContentIdentity = (decision: {
+	activityId: string;
+	deploymentId: string;
+	content: { id: string };
+}) => `${decision.activityId}:${decision.deploymentId}:${decision.content.id}`;
+
+/**
+ * A lease carries two things, and they age in opposite directions.
+ *
+ * Its content identity is STABLE: that is what {@link touchpointContentIdentity}
+ * compares, and while it matches, the previous decision object is retained so
+ * the host keeps its mount. Its authorization window is FRESH: `validForMs` is
+ * taken from the newest response every time, so an activity an operator cuts
+ * short still ends on time.
+ *
+ * `serverTime`, `endsAt` and `authorizationExpiresAt` describe the second thing
+ * while living in the object that is retained for the first. A retained value's
+ * copies of them are simply the numbers some earlier response happened to
+ * carry. Nothing reads them today — but that is a fact about who has written
+ * the consumers so far, not about the code, and the day someone adds
+ * `decision.endsAt` to a countdown they will read an end time the operator has
+ * already moved, with nothing failing to tell them.
+ *
+ * So they do not survive into the lease. The type says so, and the value really
+ * does not carry them, which keeps the guarantee true for a consumer that casts
+ * its way around the type.
+ */
+export type TouchpointAuthorizationTimingField =
+	| "serverTime"
+	| "endsAt"
+	| "authorizationExpiresAt";
+export type TouchpointLeaseValue<T> = Omit<T, TouchpointAuthorizationTimingField>;
+const AUTHORIZATION_TIMING_FIELDS: readonly string[] = [
+	"serverTime",
+	"endsAt",
+	"authorizationExpiresAt",
+];
+export const touchpointLeaseValue = <T extends object>(decision: T): TouchpointLeaseValue<T> =>
+	Object.fromEntries(
+		Object.entries(decision).filter(([field]) => !AUTHORIZATION_TIMING_FIELDS.includes(field)),
+	) as TouchpointLeaseValue<T>;
+
 export type TouchpointLifecycleLoad<T> =
 	| Readonly<{ kind: "decision"; value: T; key: string; validForMs: number }>
 	| Readonly<{ kind: "waiting"; retryAfterMs: number }>
@@ -44,7 +110,24 @@ export type TouchpointLifecycleOptions<T> = Readonly<{
 
 type Clock = { monotonic: number; wall: number };
 const clock = (): Clock => ({ monotonic: performance.now(), wall: Date.now() });
-// A backwards wall-clock adjustment cannot grant time; a forward jump can only shorten it.
+/**
+ * How long a lease has been alive, measured against both clocks so that neither
+ * can be used to overstay.
+ *
+ * The monotonic term stops a wall clock that is set BACK from granting time.
+ * The wall term stops a sleeping device from freezing the lease, because
+ * `performance.now()` pauses across sleep on some platforms and a lease would
+ * otherwise survive the night un-aged. Both are load-bearing; dropping either
+ * one re-opens the cheat it closes.
+ *
+ * What `max` does NOT give is monotonicity. A wall clock that steps FORWARD and
+ * is then corrected BACK — an NTP step, a resumed VM, a dual-boot machine —
+ * makes this rise and then fall again. Callers must not assume that "expired"
+ * is a property which, once true, stays true; OPEND-3376 and OPEND-3378 are
+ * both defects that came from assuming it. Each consumer is audited, and the
+ * ones whose answer depends on the direction of the error say so at the call
+ * site.
+ */
 const elapsed = (start: Clock) => Math.max(0, performance.now() - start.monotonic, Date.now() - start.wall);
 const POLL_MS = 30_000;
 /**
@@ -69,6 +152,20 @@ export const REQUEST_TIMEOUT_MS = 15_000;
  */
 export const RETRY_BACKOFF_MS = [1_000, 3_000] as const;
 const MAX_TIMER_MS = 2_147_483_647;
+/**
+ * The client's own bound on production display authority, shared by every
+ * production placement so the three of them can never drift apart.
+ *
+ * It is a backstop against a server clock that grants past the activity, not a
+ * policy: `resolveAuthorizationDeadline` already takes the minimum of the
+ * authorization, `endsAt` and this. A five-minute value made it the binding
+ * term instead, so a long authorization was silently truncated to five minutes
+ * and a client that could not reach the server went blank in the middle of an
+ * activity that was still running. At the longest interval a timer can name it
+ * stops binding, and `endsAt` governs, which is what the server means.
+ * `armExpiry` segments the resulting wait, so no single timer overflows.
+ */
+export const PRODUCTION_MAX_LEASE_MS = MAX_TIMER_MS;
 /** Only a failure carrying the server's own withdrawal may end a live lease. */
 export const touchpointWithdrawsDisplay = (error: unknown) =>
 	typeof error === "object" && error !== null && (error as { touchpointWithdrawal?: unknown }).touchpointWithdrawal === true;
@@ -129,12 +226,20 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 		 * and keep display authority the server already granted; `armExpiry`
 		 * still retires it at its own deadline, so one poll may be missed and a
 		 * second consecutive failure lets the lease lapse on its own. A lease
-		 * already fenced by `wake` stays withdrawn: page recovery has no
-		 * evidence the activity is still live.
+		 * `wake` set aside is judged the same way — by its own window, not by the
+		 * fact that nothing is on screen while it is being revalidated.
 		 */
 		const abandonAttempt = (error: unknown) => {
 			cancelRequest();
-			if (touchpointWithdrawsDisplay(error) || !lease.current || elapsed(lease.current.start) >= lease.current.validForMs) {
+			// Judge the lease that is still recoverable — the active one, or the
+			// one `wake` set aside — by its OWN window. Asking whether there is an
+			// ACTIVE lease and calling "none" expired is what made a single
+			// failure permanent: `wake` empties `lease.current` before it
+			// revalidates, so the next failure met that branch, spent the
+			// set-aside lease too, and the retry that succeeded came back
+			// `{kind:"retain"}` with nothing left to restore.
+			const recoverable = lease.current ?? revalidationLease;
+			if (touchpointWithdrawsDisplay(error) || !recoverable || elapsed(recoverable.start) >= recoverable.validForMs) {
 				revalidationLease = null;
 				status = "error";
 				revoke();
@@ -243,7 +348,22 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 					return;
 				}
 				const previous = lease.current ?? revalidationLease;
-				const same = previous?.key === result.key && previous.identity === identity && elapsed(previous.start) < previous.validForMs;
+				// A lease that is STILL MOUNTED renews; only one that has to be
+				// resumed from the side has to prove it is still inside its window.
+				//
+				// Asking `elapsed` in both cases made a clock step forward count a
+				// renewal as a new presentation — a rebuilt host and a replayed
+				// entry animation for a campaign that never left the screen
+				// (OPEND-3378). It also cannot be right: nothing evaluates `elapsed`
+				// until something asks, so a step alone tears nothing down, and
+				// there is no withdrawal for that re-mount to correspond to. A
+				// mounted lease that has genuinely lapsed is not reachable here
+				// either — `armExpiry` retires it, which empties `lease.current`.
+				const resumed = previous !== null && previous !== lease.current;
+				const same =
+					previous?.key === result.key &&
+					previous.identity === identity &&
+					(!resumed || elapsed(previous.start) < previous.validForMs);
 				if (!same) ++generation.current;
 				lease.current = { identity, key: result.key, value: same ? previous.value : result.value, generation: generation.current, start: started, validForMs: result.validForMs };
 				revalidationLease = null;
@@ -259,6 +379,12 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 				}
 			}
 		};
+		/**
+		 * Withdraw display first and ask afterwards. Reserved for the cases where
+		 * the client already knows the authority is gone — the lease lapsed, the
+		 * identity changed, the content failed verification — never for a page
+		 * that merely came back.
+		 */
 		const wake = () => {
 			if (stopped || ended) return;
 			revalidationLease = lease.current ?? revalidationLease;
@@ -266,35 +392,52 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError }: 
 			revoke();
 			if (!document.hidden) void refresh();
 		};
-		// Ordinary window focus is not page recovery. A still-valid visible lease
-		// keeps its mount while refreshing; hidden/pageshow/online still fence it.
-		const focus = () => {
+		/**
+		 * Returning to the page is not evidence that the activity ended.
+		 *
+		 * `online`, `pageshow` and `visibilitychange` used to run `wake`, which
+		 * revoked synchronously and left nothing on screen while the revalidation
+		 * it started was still in flight — so switching Wi-Fi, waking from sleep
+		 * or tabbing away tore down a campaign the server had authorized. Worse,
+		 * an emptied lease made `abandonAttempt`'s `!lease.current` branch true,
+		 * so one failed revalidation dropped the saved lease too and the activity
+		 * could never be restored for the rest of the session.
+		 *
+		 * A lease that is still inside the window the server granted therefore
+		 * keeps its mount and revalidates in the background. Only a lapsed lease
+		 * falls through to `wake`. A hidden page cancels the attempt in flight,
+		 * because no answer can be acted on while `isCurrent` fences it, and
+		 * leaves the lease exactly as it was: `armExpiry` still retires it on the
+		 * server's own deadline whether the page is watching or not.
+		 */
+		const resume = () => {
 			if (stopped || ended) return;
-			const current = lease.current;
-			if (!document.hidden && current && elapsed(current.start) < current.validForMs) {
-				void refresh();
-			} else {
-				wake();
+			if (document.hidden) {
+				cancelRequest();
+				return;
 			}
+			const current = lease.current;
+			if (current && elapsed(current.start) < current.validForMs) void refresh();
+			else wake();
 		};
 		const offline = () => cancelRequest();
 		void refresh();
 		const interval = setInterval(() => void refresh(), POLL_MS);
-		window.addEventListener("focus", focus);
-		window.addEventListener("online", wake);
-		window.addEventListener("pageshow", wake);
+		window.addEventListener("focus", resume);
+		window.addEventListener("online", resume);
+		window.addEventListener("pageshow", resume);
 		window.addEventListener("offline", offline);
-		document.addEventListener("visibilitychange", wake);
+		document.addEventListener("visibilitychange", resume);
 		return () => {
 			stopped = true;
 			revoke();
 			clearTimeout(retryTimer);
 			clearInterval(interval);
-			window.removeEventListener("focus", focus);
-			window.removeEventListener("online", wake);
-			window.removeEventListener("pageshow", wake);
+			window.removeEventListener("focus", resume);
+			window.removeEventListener("online", resume);
+			window.removeEventListener("pageshow", resume);
 			window.removeEventListener("offline", offline);
-			document.removeEventListener("visibilitychange", wake);
+			document.removeEventListener("visibilitychange", resume);
 		};
 	}, [enabled, identity, load]);
 
