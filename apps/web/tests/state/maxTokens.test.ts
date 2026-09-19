@@ -5,6 +5,7 @@ import {
   effectiveMaxTokens,
   FALLBACK_MAX_TOKENS,
   MAX_MAX_TOKENS,
+  maxTokensUpperBound,
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from '../../src/state/maxTokens';
@@ -45,6 +46,23 @@ describe('modelMaxTokensDefault', () => {
   });
 });
 
+describe('maxTokensUpperBound', () => {
+  // Three shipped defaults sit above the 200000 baseline guard. The
+  // Settings control must be able to express (and re-enter) exactly those
+  // values, so the accepted upper bound is model-aware: the baseline, or
+  // the selected model's own shipped default, whichever is larger.
+  it('returns the baseline for models whose default fits inside it', () => {
+    expect(maxTokensUpperBound('claude-sonnet-4-5')).toBe(MAX_MAX_TOKENS);
+    expect(maxTokensUpperBound('unknown-model')).toBe(MAX_MAX_TOKENS);
+  });
+
+  it('raises to the model default when the default exceeds the baseline', () => {
+    expect(maxTokensUpperBound('deepseek-v4-pro')).toBe(384000);
+    expect(maxTokensUpperBound('deepseek-v4-flash')).toBe(384000);
+    expect(maxTokensUpperBound('qwen3-coder:480b')).toBe(262144);
+  });
+});
+
 describe('effectiveMaxTokens', () => {
   it('honors an explicit user override over the model default', () => {
     expect(effectiveMaxTokens({ maxTokens: 12345, model: 'claude-sonnet-4-5' })).toBe(12345);
@@ -62,9 +80,11 @@ describe('effectiveMaxTokens', () => {
 
 describe('effectiveMaxTokens override validation', () => {
   // Stale localStorage, hand-edited config, or future schema drift can put
-  // anything in cfg.maxTokens. The Settings UI advertises a [1024, 200000]
-  // integer-stepped range, and the daemon proxy already clamps `> 0`, so
-  // we tighten this entry point to match the advertised contract.
+  // anything in cfg.maxTokens. The Settings UI advertises a [1024, bound]
+  // integer-stepped range whose upper bound is model-aware (baseline
+  // 200000, raised to the model's own shipped default when that is
+  // larger), and the daemon proxy already clamps `> 0`, so we tighten
+  // this entry point to match the advertised contract.
 
   it('rejects negative overrides and falls back to the model default', () => {
     expect(effectiveMaxTokens({ maxTokens: -5, model: 'claude-sonnet-4-5' })).toBe(64000);
@@ -92,5 +112,21 @@ describe('effectiveMaxTokens override validation', () => {
   it('accepts the boundary values exactly', () => {
     expect(effectiveMaxTokens({ maxTokens: MIN_MAX_TOKENS, model: 'claude-sonnet-4-5' })).toBe(MIN_MAX_TOKENS);
     expect(effectiveMaxTokens({ maxTokens: MAX_MAX_TOKENS, model: 'claude-sonnet-4-5' })).toBe(MAX_MAX_TOKENS);
+  });
+
+  it('accepts a shipped default above the baseline for its own model (#8048)', () => {
+    expect(effectiveMaxTokens({ maxTokens: 384000, model: 'deepseek-v4-pro' })).toBe(384000);
+    expect(effectiveMaxTokens({ maxTokens: 384000, model: 'deepseek-v4-flash' })).toBe(384000);
+    expect(effectiveMaxTokens({ maxTokens: 262144, model: 'qwen3-coder:480b' })).toBe(262144);
+  });
+
+  it('rejects the same values for models whose default fits the baseline', () => {
+    expect(effectiveMaxTokens({ maxTokens: 384000, model: 'claude-sonnet-4-5' })).toBe(64000);
+    expect(effectiveMaxTokens({ maxTokens: 262144, model: 'claude-sonnet-4-5' })).toBe(64000);
+  });
+
+  it('rejects values above the model-aware bound', () => {
+    expect(effectiveMaxTokens({ maxTokens: 384001, model: 'deepseek-v4-pro' })).toBe(384000);
+    expect(effectiveMaxTokens({ maxTokens: 999_999_999, model: 'deepseek-v4-pro' })).toBe(384000);
   });
 });
