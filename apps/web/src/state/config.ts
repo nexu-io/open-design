@@ -507,6 +507,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'deepseek-reasoner',
     ],
   },
+  {
+    label: 'OpenCode Go',
+    protocol: 'opencode-go',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    preferredModels: [
+      'deepseek-v4-flash',
+      'deepseek-v4-pro',
+      'kimi-k2.7-code',
+      'qwen3.8-flash',
+      'mimo-v2.5',
+      'glm-5.3-flash',
+    ],
+    apiKeyConsoleLink: {
+      host: 'opencode.ai',
+      url: 'https://opencode.ai/zen',
+    },
+  },
 ];
 
 export function defaultKnownProviderModel(
@@ -554,6 +571,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'minimax', title: 'MiniMax', providerLabel: 'MiniMax — Anthropic (CN)' },
   { id: 'moonshot', title: 'Moonshot', providerLabel: 'Moonshot' },
   { id: 'zhipu', title: 'Zhipu AI', providerLabel: 'Zhipu' },
+  { id: 'opencode-go', title: 'OpenCode Go', providerLabel: 'OpenCode Go' },
 ] as const;
 
 export const BYOK_PROVIDER_PRESETS: ReadonlyArray<ByokProviderPresetConfig> =
@@ -648,6 +666,8 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
     // APP-Code attribution header even though the wire shape is
     // OpenAI-compatible.
     if (normalized.includes('aihubmix.com')) return 'aihubmix';
+    // OpenCode Go host routes to its own proxy with x-opencode-session header.
+    if (normalized.includes('opencode.ai')) return 'opencode-go';
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
   } catch {
     // Preserve the rest of the user's settings even if an old saved base URL is
