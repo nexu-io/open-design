@@ -582,6 +582,126 @@ ${createLauncherRuntimeSyncScript(
   launcherRuntimeSyncScriptPath,
 )}
 
+Function AddOdCliToUserPath
+  ; Keep $INSTDIR on the per-user PATH so od.cmd resolves in new shells.
+  ; Rebuilding the value segment-by-segment keeps reinstalls, upgrades, and
+  ; sibling channel installs idempotent without owning shared PATH state.
+  Push $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  Push $R4
+  Push $R5
+  ClearErrors
+  ReadRegStr $R0 HKCU "Environment" "PATH"
+  \${If} \${Errors}
+    StrCpy $R0 ""
+  \${EndIf}
+  StrCpy $R1 ""
+  StrCpy $R2 "$R0;"
+  StrCpy $R5 0
+od_path_scan_segments:
+  StrCpy $R3 ""
+od_path_scan_chars:
+  StrCpy $R4 "$R2" 1
+  StrCpy $R2 "$R2" "" 1
+  \${If} $R4 == ""
+    Goto od_path_emit
+  \${EndIf}
+  \${If} $R4 == ";"
+    Goto od_path_emit
+  \${EndIf}
+  StrCpy $R3 "$R3$R4"
+  Goto od_path_scan_chars
+od_path_emit:
+  \${If} $R3 == "$INSTDIR"
+    StrCpy $R5 1
+  \${EndIf}
+  \${If} $R3 != ""
+    \${If} $R1 == ""
+      StrCpy $R1 "$R3"
+    \${Else}
+      StrCpy $R1 "$R1;$R3"
+    \${EndIf}
+  \${EndIf}
+  \${If} $R4 == ""
+    Goto od_path_finish
+  \${EndIf}
+  Goto od_path_scan_segments
+od_path_finish:
+  \${If} $R5 == 0
+    \${If} $R1 == ""
+      StrCpy $R1 "$INSTDIR"
+    \${Else}
+      StrCpy $R1 "$R1;$INSTDIR"
+    \${EndIf}
+    WriteRegExpandStr HKCU "Environment" "PATH" $R1
+    SendMessage \${HWND_BROADCAST} \${WM_SETTINGCHANGE} 0 "STR:Environment"
+  \${EndIf}
+  Pop $R5
+  Pop $R4
+  Pop $R3
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+Function un.RemoveOdCliFromUserPath
+  ; Drop only PATH segments equal to this install directory; other entries
+  ; (user edits, sibling channels) survive untouched.
+  Push $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  Push $R4
+  ClearErrors
+  ReadRegStr $R0 HKCU "Environment" "PATH"
+  \${If} \${Errors}
+    StrCpy $R0 ""
+  \${EndIf}
+  StrCpy $R1 ""
+  StrCpy $R2 "$R0;"
+od_unpath_scan_segments:
+  StrCpy $R3 ""
+od_unpath_scan_chars:
+  StrCpy $R4 "$R2" 1
+  StrCpy $R2 "$R2" "" 1
+  \${If} $R4 == ""
+    Goto od_unpath_emit
+  \${EndIf}
+  \${If} $R4 == ";"
+    Goto od_unpath_emit
+  \${EndIf}
+  StrCpy $R3 "$R3$R4"
+  Goto od_unpath_scan_chars
+od_unpath_emit:
+  \${If} $R3 != ""
+    \${If} $R3 == "$INSTDIR"
+      Goto od_unpath_next
+    \${EndIf}
+    \${If} $R1 == ""
+      StrCpy $R1 "$R3"
+    \${Else}
+      StrCpy $R1 "$R1;$R3"
+    \${EndIf}
+  \${EndIf}
+od_unpath_next:
+  \${If} $R4 == ""
+    Goto od_unpath_finish
+  \${EndIf}
+  Goto od_unpath_scan_segments
+od_unpath_finish:
+  \${If} $R1 != $R0
+    WriteRegExpandStr HKCU "Environment" "PATH" $R1
+    SendMessage \${HWND_BROADCAST} \${WM_SETTINGCHANGE} 0 "STR:Environment"
+  \${EndIf}
+  Pop $R4
+  Pop $R3
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
 Function un.LogInstallerEvent
   Exch $0
   Push $1
@@ -1002,6 +1122,9 @@ skip_silent_desktop_shortcut:
   Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"
   Call LogInstallerEvent
   Call SyncLauncherRuntime
+  Push "event=od_cli_user_path_updated"
+  Call LogInstallerEvent
+  Call AddOdCliToUserPath
   Push "install section done"
   Call LogInstallerEvent
 SectionEnd
@@ -1034,6 +1157,7 @@ after_desktop_shortcut:
   StrCmp $3 $1 0 preserve_invite_protocol
   DeleteRegKey HKCU "${inviteProtocolKey}"
 preserve_invite_protocol:
+  Call un.RemoveOdCliFromUserPath
   Push "event=registry_after_delete key=${registryKey} appPathsKey=${appPathsKey}"
   Call un.LogInstallerEvent
   \${If} $RemoveCacheDataState == \${BST_CHECKED}

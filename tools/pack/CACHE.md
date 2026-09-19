@@ -122,6 +122,12 @@ version identity reaches it only indirectly through the upstream `sourceKey`;
 the final `win.launcher-payload` archive explicitly carries the
 version-bearing `manifest` and `configBody`.
 
+Every Windows app bundle also stages an `od.cmd` CLI shim beside the
+executable. `win.nsis-payload-base` folds the generated shim text into its
+input hash (`odCmdScript`, together with base payload input hash cache
+version 3), and `win.portable-zip` folds the same field into its key, so any
+change to the shim invalidates both artifacts.
+
 **Requirement.** A value may be a materialization-time parameter only when
 both hold:
 

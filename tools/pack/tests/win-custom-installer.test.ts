@@ -132,3 +132,40 @@ describe("buildCustomWinNsisInstaller logging", () => {
     }
   });
 });
+
+describe("buildCustomWinNsisInstaller od CLI exposure", () => {
+  it("keeps the install directory on the per-user PATH for new shells", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-custom-installer-"));
+    try {
+      const script = await generateInstallerScript(root, false);
+
+      expect(nsisFunction(script, "AddOdCliToUserPath"))
+        .toContain('WriteRegExpandStr HKCU "Environment" "PATH"');
+      expect(nsisFunction(script, "AddOdCliToUserPath")).toContain("${WM_SETTINGCHANGE}");
+      // Dedupe guard: skip when this exact directory is already present.
+      expect(nsisFunction(script, "AddOdCliToUserPath")).toContain('$R3 == "$INSTDIR"');
+      // Install wires the call after the launcher runtime sync.
+      expect(script.indexOf("Call SyncLauncherRuntime"))
+        .toBeLessThan(script.indexOf("Call AddOdCliToUserPath"));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("reverses the PATH entry on uninstall without touching other entries", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-custom-installer-"));
+    try {
+      const script = await generateInstallerScript(root, false);
+      const uninstallSection = script.slice(script.indexOf('Section "Uninstall"'));
+
+      expect(uninstallSection).toContain("Call un.RemoveOdCliFromUserPath");
+      const removeFn = nsisFunction(script, "un.RemoveOdCliFromUserPath");
+      expect(removeFn).toContain('WriteRegExpandStr HKCU "Environment" "PATH"');
+      expect(removeFn).toContain("${WM_SETTINGCHANGE}");
+      // Ownership: only the segment equal to $INSTDIR is dropped.
+      expect(removeFn).toContain('$R3 == "$INSTDIR"');
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
