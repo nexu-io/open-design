@@ -751,6 +751,29 @@ export function createStrategyTaskBlockedError(
   return error;
 }
 
+/**
+ * The code the daemon's finalize step sends when it turns a blocked run
+ * `failed` ahead of the `end` frame (OPEND-2953, `server.ts`
+ * finishWithRetryDecision). It wraps every strategy-gate refusal alike.
+ */
+const DAEMON_BLOCKED_RECONCILE_CODE = 'OD_NEXT_TASK_BLOCKED';
+
+/**
+ * Whether the only failure the stream carried is the daemon's own wrapper for
+ * a blocked strategy verdict — as opposed to an error the run raised itself.
+ *
+ * That wrapper is bookkeeping over the verdict, not a second failure, and it
+ * says nothing the verdict's `blockedContext` does not say better: its code is
+ * the same for every gate, and the daemon classifies it as an unexplained
+ * `execution_failed` because the process exited 0. Reading through it lets the
+ * blocked branch keep answering the question it was written for — did this
+ * turn finish on its own — and lets the gate's reason code, not the wrapper,
+ * be what the failure card names.
+ */
+function isDaemonBlockedReconcile(error: Error | null): boolean {
+  return (error as (Error & { code?: string }) | null)?.code === DAEMON_BLOCKED_RECONCILE_CODE;
+}
+
 function notifyRunsChanged() {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new Event(RUNS_CHANGED_EVENT));
@@ -2343,7 +2366,17 @@ async function consumeDaemonPhysicalRun({
         // wrong answer for the other is not a fix. The stricter field keeps its
         // existing behaviour: a run that wrote the entry delivered, prose or no
         // prose.
-        const blockedRunStatus = endStatus === 'succeeded'
+        //
+        // "Reached the end on its own" is a fact about the physical run. A
+        // daemon that already failed this run over the verdict (OPEND-2953)
+        // still reports the clean exit it observed, so a `failed` status whose
+        // only error is that wrapper counts as the physical run finishing.
+        const failedOnlyByBlockReconcile = endStatus === 'failed'
+          && isDaemonBlockedReconcile(pendingStructuredError)
+          && exitCode === 0
+          && !exitSignal;
+        const physicalRunFinished = endStatus === 'succeeded' || failedOnlyByBlockReconcile;
+        const blockedRunStatus = physicalRunFinished
           ? await fetchChatRunStatus(runId, workspaceContext)
           : null;
         const deliveredDespiteBlock = blockedRunStatus !== null
@@ -2374,12 +2407,24 @@ async function consumeDaemonPhysicalRun({
         // to act on.
         const agentDeclaredBlock = endStrategyTask.blockedContext?.reasonCodes
           .includes(OD_NEXT_AGENT_DECLARED_BLOCK_REASON) === true;
-        const explainedToUser = endStatus === 'succeeded'
+        const explainedToUser = physicalRunFinished
           && agentDeclaredBlock
           && (endStrategyTask.blockedContext?.visibleText?.trim().length ?? 0) > 0;
         if (!deliveredDespiteBlock && !explainedToUser) {
           endStatus = 'failed';
-          pendingStructuredError ??= createStrategyTaskBlockedError(endStrategyTask);
+          // The gate's own reason code is what the card, the diagnostics and
+          // the analytics key on. The daemon's wrapper carries none of it, so
+          // it is replaced rather than kept; an error the run raised itself
+          // (a crash, a provider refusal) still wins over the verdict.
+          if (!pendingStructuredError || isDaemonBlockedReconcile(pendingStructuredError)) {
+            pendingStructuredError = createStrategyTaskBlockedError(endStrategyTask);
+          }
+        } else if (failedOnlyByBlockReconcile) {
+          // The turn finished and the user has either the deliverable or the
+          // agent's explanation. The wrapper was the only thing calling it a
+          // failure, and it is not one.
+          endStatus = 'succeeded';
+          pendingStructuredError = null;
         }
       } else if (endStrategyTask.outcome === 'completed') {
         endStatus = 'succeeded';

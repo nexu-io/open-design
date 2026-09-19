@@ -131,6 +131,9 @@ function fetch(input: Parameters<typeof undiciFetch>[0], init?: Parameters<typeo
   return undiciFetch(input, { ...init, dispatcher: client.dispatcher });
 }
 
+/** What the fixture agent says when it declines a turn as a design request. */
+const DECLARED_BLOCK_REPLY = '已 commit 並推送。settings-r3 領先 main 四個 commit，還沒開 PR。';
+
 type RunStatus = {
   id: string;
   status: string;
@@ -139,11 +142,13 @@ type RunStatus = {
   endedWithUnfinishedWork?: boolean;
   error?: string | null;
   errorCode?: string | null;
+  exitCode?: number | null;
   strategyTask?: {
     taskExecutionId: string;
     inputStage: string;
     outcome: string;
     terminal: boolean;
+    blockedContext?: { reasonCodes: string[]; visibleText: string | null };
   };
 };
 
@@ -2452,6 +2457,52 @@ process.exit(127);
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
   }, 90_000);
 
+  it('keeps a run the agent settled with a declared, explained block out of the failure path (OPEND-2565)', async () => {
+    // The turn behind the field report: a coding request into a design
+    // conversation. The agent does the work, explains in prose, and declares
+    // `outcome: blocked` exactly as the contract instructs for a turn that is
+    // not a design request. The task settles blocked — that verdict stands —
+    // but the physical run finished and the user has their answer, so the
+    // run, its message, and its stream must not report a failure.
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.declared-block`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'commit & push'));
+    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
+    expect(task.blockedContext).toMatchObject({
+      reasonCodes: ['od_next_agent_declared_block'],
+      visibleText: expect.stringContaining(DECLARED_BLOCK_REPLY),
+    });
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: {
+        outcome: 'blocked',
+        terminal: true,
+        blockedContext: { reasonCodes: ['od_next_agent_declared_block'] },
+      },
+    });
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
+      status: 'succeeded', code: 0, strategyTask: { outcome: 'blocked' },
+    });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string; content?: string }>;
+    };
+    const message = messages.find((entry) => entry.runId === task.latestRunId);
+    expect(message?.runStatus).toBe('succeeded');
+    expect(message?.content).toContain(DECLARED_BLOCK_REPLY);
+  }, 90_000);
+
   it('blocks the durable task when the selected agent exits before publishing a session', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.fail-start`, '1');
@@ -3556,8 +3607,8 @@ function planContract(
 function runtimeState(input: {
   route?: 'direct_edit' | 'full_plan';
   inputStage?: 'request' | 'contract_repair' | 'production';
-  outcome: 'plan_ready' | 'completed';
-  executionMode?: 'simple' | 'complex';
+  outcome: 'plan_ready' | 'completed' | 'blocked';
+  executionMode?: 'simple' | 'complex' | null;
 }) {
   return {
     schema: 'open-design.strategy-state/v2',
@@ -3565,7 +3616,7 @@ function runtimeState(input: {
     inputStage: input.inputStage ?? 'request',
     outcome: input.outcome,
     executionIntent: 'produce',
-    executionMode: input.executionMode ?? 'simple',
+    executionMode: input.executionMode === undefined ? 'simple' : input.executionMode,
     reasonCodes: [],
   };
 }
@@ -3605,6 +3656,15 @@ async function writeStrategyCodex(
     route: 'direct_edit',
     outcome: 'completed',
   }));
+  // The agent answered a turn it could not act on as a design request — in
+  // prose, as the contract asks — and declared the block on itself.
+  const declaredBlock = [
+    DECLARED_BLOCK_REPLY,
+    machineBlock('open-design-runtime-state', runtimeState({
+      outcome: 'blocked',
+      executionMode: null,
+    })),
+  ].join('\n');
   const complexPlan = [
     'Prepared a complex plan.',
     machineBlock('open-design-plan-contract', plan),
@@ -3701,6 +3761,8 @@ function finish() {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
     staleTodoList = true;
     text = ${JSON.stringify(production)};
+  } else if (fs.existsSync(logPath + '.declared-block')) {
+    text = ${JSON.stringify(declaredBlock)};
   } else {
     text = ${JSON.stringify(initialRepair)};
   }

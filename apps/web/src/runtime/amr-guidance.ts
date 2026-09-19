@@ -1065,6 +1065,19 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.strategyTaskHalted',
     'chat.runError.strategyTaskStateMismatchMessage',
   ),
+  // The daemon's finalize wrapper for a strategy-gate refusal (OPEND-2953,
+  // `server.ts` finishWithRetryDecision). The provider normally swaps it for
+  // the gate's own reason code before the card sees it; this row is what a
+  // projection that carried no `blockedContext` falls to. It exists so the
+  // code stops falling through to the `execution_failed` detail the daemon
+  // stamps on it — that row is 「任务意外中断」, and the user was being told the
+  // agent had crashed over a reply that exited 0 and was sitting on screen.
+  // Ladder rung 2: the task can be re-requested; the raw message keeps the
+  // reason-code list the daemon put in it.
+  OD_NEXT_TASK_BLOCKED: retryWithGuidance(
+    'chat.runError.title.strategyTaskHalted',
+    null,
+  ),
   // The agent answered — completely, readably, and the reply is already on
   // screen — but the reply carried no usable Runtime State block, and the OD
   // Next clarification stage admits only `plan_ready` (which needs a Plan
