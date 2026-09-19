@@ -25,6 +25,7 @@ import {
   fetchLiveArtifacts,
   fetchProjectFileText,
   fetchProjectPreviewBaseHref,
+  fetchProjectScopedPreviewNavigation,
   fetchProjectFileVersion,
   fetchProjectFiles,
   fetchProjectDeployments,
@@ -161,7 +162,91 @@ describe('persisted project Workspace transport scope', () => {
       href: 'od://app/api/projects/project-1/preview/legacy-scope/pages/',
       expiresAt: Date.now() + 45 * 60 * 1000,
     });
+    await expect(fetchProjectScopedPreviewNavigation(
+      'project-1',
+      'pages/brand.html',
+    )).resolves.toEqual({
+      sessionId: 'legacy-legacy-scope',
+      normalUrl: 'od://app/api/projects/project-1/preview/legacy-scope/pages/brand.html',
+      poweredUrl: 'od://app/api/projects/project-1/preview/legacy-scope/pages/brand.html',
+      documentVersion: 'legacy:pages/brand.html',
+      runtimeProtocol: 'legacy-url',
+      renewalScope: {
+        href: 'od://app/api/projects/project-1/preview/legacy-scope/pages/',
+        expiresAt: Date.now() + 45 * 60 * 1000,
+      },
+    });
     vi.useRealTimers();
+  });
+
+  it('accepts only a same-scope localhost navigation capability', async () => {
+    const expiresAt = Date.now() + 60 * 60 * 1000;
+    vi.stubGlobal('location', { href: 'od://app/projects/project-1' });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      url: '/api/projects/project-1/preview/scope-0001/pages/brand.html',
+      file: 'pages/brand.html',
+      csp: "default-src 'none'",
+      iframeSandbox: 'allow-scripts allow-forms',
+      opaqueOrigin: true,
+      expiresAt,
+      scopedOrigin: {
+        normalUrl: 'http://n-scope-0001.localhost:17456/pages/brand.html',
+        poweredUrl: 'http://p-scope-0001.localhost:17456/pages/brand.html',
+        documentVersion: '120:456.5',
+        previewPolicy: {
+          sandboxProfile: 'powered',
+          guards: { storage: false, focus: false, redirect: false },
+        },
+      },
+    })));
+
+    await expect(fetchProjectScopedPreviewNavigation(
+      'project-1',
+      'pages/brand.html',
+    )).resolves.toEqual({
+      sessionId: 'scope-0001',
+      normalUrl: 'http://n-scope-0001.localhost:17456/pages/brand.html',
+      poweredUrl: 'http://p-scope-0001.localhost:17456/pages/brand.html',
+      documentVersion: '120:456.5',
+      runtimeProtocol: 'universal',
+      previewPolicy: {
+        sandboxProfile: 'powered',
+        guards: { storage: false, focus: false, redirect: false },
+      },
+      renewalScope: {
+        href: 'od://app/api/projects/project-1/preview/scope-0001/pages/',
+        expiresAt,
+      },
+    });
+  });
+
+  it('rejects remote, cross-scope, and path-confused scoped origins', async () => {
+    const variants = [
+      {
+        normalUrl: 'https://preview.example/pages/brand.html',
+        poweredUrl: 'http://p-scope-0001.localhost:17456/pages/brand.html',
+      },
+      {
+        normalUrl: 'http://n-scope-0001.localhost:17456/pages/brand.html',
+        poweredUrl: 'http://p-scope-0002.localhost:17456/pages/brand.html',
+      },
+      {
+        normalUrl: 'http://n-scope-0001.localhost:17456/other.html',
+        poweredUrl: 'http://p-scope-0001.localhost:17456/pages/brand.html',
+      },
+    ];
+
+    for (const scopedOrigin of variants) {
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+        url: '/api/projects/project-1/preview/scope-0001/pages/brand.html',
+        expiresAt: Date.now() + 60_000,
+        scopedOrigin: { ...scopedOrigin, documentVersion: '1:2' },
+      })));
+      await expect(fetchProjectScopedPreviewNavigation(
+        'project-1',
+        'pages/brand.html',
+      )).resolves.toBeNull();
+    }
   });
 
   it('renews only a project-matching preview scope through the host-only route', async () => {

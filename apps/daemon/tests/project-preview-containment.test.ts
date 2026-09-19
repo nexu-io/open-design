@@ -1,4 +1,4 @@
-import type http from 'node:http';
+import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -92,6 +92,30 @@ describe('project preview containment routes', () => {
     cleanupWorkspaceHeaders.set(projectId, workspaceHeaders(workspaceId, workspaceMemberId));
   }
 
+  function scopedHostRequest(
+    requestPath: string,
+    hostHeader: string,
+  ): Promise<{ status: number; body: string }> {
+    const target = new URL(baseUrl);
+    return new Promise((resolve, reject) => {
+      const request = http.request({
+        hostname: target.hostname,
+        port: target.port,
+        path: requestPath,
+        method: 'GET',
+        headers: { Host: hostHeader },
+      }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on('end', () => resolve({
+          status: response.statusCode ?? 0,
+          body: Buffer.concat(chunks).toString('utf8'),
+        }));
+      });
+      request.on('error', reject);
+      request.end();
+    });
+  }
   // OPEND-2283. The web client builds its srcDoc preview from this response.
   // Minting a fresh scope per request makes the SAME artifact serve different
   // bytes every time, so any refetch produces a different srcDoc string, React
@@ -422,7 +446,10 @@ describe('project preview containment routes', () => {
       `${baseUrl}/api/projects/${projectId}/preview-url?file=brand.html`,
     );
     expect(previewUrlResponse.status).toBe(200);
-    const previewUrlBody = await previewUrlResponse.json() as { url?: string };
+    const previewUrlBody = await previewUrlResponse.json() as {
+      url?: string;
+      scopedOrigin?: { normalUrl: string };
+    };
     expect(previewUrlBody.url).toMatch(
       new RegExp(`^/api/projects/${projectId}/preview/[A-Za-z0-9_-]{8,128}/brand\\.html$`, 'u'),
     );
@@ -431,6 +458,15 @@ describe('project preview containment routes', () => {
     );
     expect(headerlessPreviewResponse.status).toBe(200);
     expect(await headerlessPreviewResponse.text()).toContain('<title>Brand</title>');
+
+    const scopedNormalUrl = new URL(previewUrlBody.scopedOrigin!.normalUrl);
+    const scopedHtml = await scopedHostRequest('/brand.html', scopedNormalUrl.host);
+    expect(scopedHtml.status).toBe(200);
+    expect(scopedHtml.body).toContain('<title>Brand</title>');
+    expect(scopedHtml.body).toContain('data-od-preview-runtime');
+    expect(scopedHtml.body).toContain("register('edit'");
+    const scopedLogo = await scopedHostRequest('/logos/mark.png', scopedNormalUrl.host);
+    expect(scopedLogo).toEqual({ status: 200, body: 'brand-logo-bytes' });
 
     scopeQuery.append('odPreviewBridge', 'scroll');
     const rawResponse = await fetch(
@@ -619,6 +655,28 @@ describe('project preview containment routes', () => {
       `${baseUrl}/api/projects/${projectId}/raw/notes.txt?odPreviewBridge=buildfocus`,
     );
     expect(await text.text()).not.toContain('data-od-preview-build-focus');
+  });
+
+  // A multi-megabyte document gets the build-focus bridge exactly as a small
+  // one does, exactly once.
+  it('injects the build-focus bridge into a multi-megabyte HTML file', async () => {
+    const largeDocumentBytes = 2 * 1024 * 1024;
+    const projectId = await createProject();
+    const pad = 'x'.repeat(largeDocumentBytes + 256);
+    await writeProjectFile(
+      projectId,
+      'large.html',
+      `<!doctype html><html><head><title>Large</title></head><body><h1>Studio Nine</h1><!-- ${pad} --></body></html>`,
+    );
+
+    const bridged = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/large.html?odPreviewBridge=buildfocus`,
+    );
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html.length).toBeGreaterThan(largeDocumentBytes);
+    expect(html.split('data-od-preview-build-focus').length - 1).toBe(1);
+    expect(html).toContain(pad);
   });
 
   it('rejects invalid preview scopes and escaping preview-url paths', async () => {

@@ -319,6 +319,7 @@ jobs:
           pnpm --filter @open-design/contracts test
           pnpm --filter @open-design/host test
           pnpm --filter @open-design/platform test
+          pnpm --filter @open-design/preview-runtime test
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
           if [ "${{ fromJSON(needs.plan.outputs.scopes).tools_dev_tests_required }}" = "true" ]; then

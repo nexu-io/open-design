@@ -11,6 +11,7 @@ const repoRoot = resolve(scriptDir, "..");
 const buildTargets = [
   "packages/release",
   "packages/contracts",
+  "packages/preview-runtime",
   "packages/standalone",
   "packages/components",
   "packages/platform",

@@ -16,6 +16,7 @@ import type { SkillSummary } from '../../src/types';
 // re-fires hit /api/skills/{skill-id}/example, not /api/skills/preview/example.
 
 vi.mock('../../src/providers/registry', () => ({
+  skillExampleDocumentUrl: (id: string) => `/api/skills/${encodeURIComponent(id)}/example`,
   fetchSkillExample: vi.fn(),
 }));
 

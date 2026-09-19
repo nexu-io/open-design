@@ -27,6 +27,13 @@ COPY packages ./packages
 COPY tools ./tools
 COPY apps/daemon/package.json ./apps/daemon/package.json
 COPY apps/web/package.json ./apps/web/package.json
+# apps/web has a postinstall that stages the React UMD builds the component
+# preview loads (it cannot borrow the app's React across a sandboxed frame, and
+# a CDN fails offline). pnpm runs it during the install below, so the script has
+# to be in the image before that layer -- the rest of apps/ only arrives later,
+# which is what made this build fail with ERR_MODULE_NOT_FOUND. Copied on its
+# own so the dependency layer still caches on manifests alone.
+COPY apps/web/scripts ./apps/web/scripts
 COPY e2e/package.json ./e2e/package.json
 RUN corepack enable && \
     corepack prepare pnpm@10.33.2 --activate && \
