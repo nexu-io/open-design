@@ -43,6 +43,7 @@ type SnapshotSource = {
 };
 
 export type SnapshotFile = {
+  sourcePathHash?: string;
   id: string;
   relativePath: string;
   kind: 'file' | 'image';
@@ -687,6 +688,7 @@ export function createOdNextTaskInputSnapshot(input: {
         throw new OdNextTaskInputSnapshotError('OD Next frozen attachment failed digest verification.');
       }
       files.push({
+        ...(source.kind === 'file' ? { sourcePathHash: sha256(Buffer.from(path.relative(input.projectRoot, path.resolve(input.projectRoot, source.sourcePath)).replaceAll('\\', '/'))) } : {}),
         id,
         relativePath,
         kind: source.kind,

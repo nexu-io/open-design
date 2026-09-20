@@ -1762,6 +1762,7 @@ export function WorkspaceTopRightAccountCluster({
   workspaceContextLoading,
   amrLoggedIn = null,
   amrAccountPlan = null,
+  amrAccountId = null,
   metricsConsent = false,
   installationId,
 }: {
@@ -1773,6 +1774,7 @@ export function WorkspaceTopRightAccountCluster({
   workspaceContextLoading?: boolean;
   amrLoggedIn?: boolean | null;
   amrAccountPlan?: string | null;
+  amrAccountId?: string | null;
   metricsConsent?: boolean;
   installationId?: string | null;
 }) {
@@ -1817,6 +1819,9 @@ export function WorkspaceTopRightAccountCluster({
       context={context}
       billing={billing}
       balanceUsd={balanceUsd}
+      // No CMS touchpoint here: every placement the app authorizes is a home
+      // placement (`opend.home.*`), and a project workbench is not home. The
+      // built-in campaign pill is product chrome, not a CMS host, and stays.
       leadingSlot={campaignAudience ? (
         <WorkbenchCampaignBadge
           audience={campaignAudience}

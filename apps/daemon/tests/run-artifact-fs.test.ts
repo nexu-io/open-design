@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import {
   createRunArtifactBaselines,
   diffRunArtifacts,
@@ -335,4 +335,47 @@ test('a no-op turn (no file writes) reports zero', () => {
     supportingMediaTouched: 0,
     filesWritten: 0,
   });
+});
+
+for (const mode of ['sync', 'async'] as const) {
+  test(`${mode} missing filesystem snapshots cannot attest to a zero-write run`, async () => {
+    const root = tmpProject();
+    try {
+      const missing = path.join(root, 'does-not-exist');
+      const snapshot = mode === 'sync' ? snapshotProjectArtifacts : snapshotProjectArtifactsAsync;
+      const before = await snapshot(missing);
+      const after = await snapshot(missing);
+      const diff = diffRunArtifacts(before, after);
+      assert.equal(diff.filesWritten, 0); // Legacy counter remains best-effort.
+      assert.equal(diff.filesWrittenUnknown, true);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+}
+
+test('a directory read failure remains unknown even when another directory is measured successfully', () => {
+  const root = tmpProject();
+  try {
+    const unreadable = path.join(root, 'private');
+    fs.mkdirSync(unreadable);
+    fs.writeFileSync(path.join(unreadable, 'draft.html'), '<title>hidden from this scan</title>');
+    const before = snapshotProjectArtifacts(root);
+    const read = fs.readdirSync;
+    const spy = vi.spyOn(fs, 'readdirSync').mockImplementation((...args: Parameters<typeof fs.readdirSync>) => {
+      if (String(args[0]) === unreadable) throw new Error('fixture read failure');
+      return Reflect.apply(read, fs, args);
+    });
+    try { assert.equal(diffRunArtifacts(before, snapshotProjectArtifacts(root)).filesWrittenUnknown, true); }
+    finally { spy.mockRestore(); }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the existing snapshot file budget reports incomplete coverage instead of a known zero', () => {
+  const root = tmpProject();
+  try {
+    for (let i = 0; i < 5001; i += 1) fs.writeFileSync(path.join(root, `note-${i}.txt`), 'x');
+    const before = snapshotProjectArtifacts(root);
+    const after = snapshotProjectArtifacts(root);
+    assert.equal(before.size, 5000);
+    assert.equal(diffRunArtifacts(before, after).filesWrittenUnknown, true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

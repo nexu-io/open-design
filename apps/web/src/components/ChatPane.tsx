@@ -126,7 +126,7 @@ import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } 
 import { AssistantMessage, type QuestionFormSubmitHandler } from './AssistantMessage';
 import { chatSeam } from './chat/ChatRoot';
 import { PlanPill } from './chat/PlanPill';
-import { QueuedSendStack } from './chat/QueuedSendStack';
+import { QueuedSendStack, type QueuedSendDropEdge } from './chat/QueuedSendStack';
 import { ChatScrollEdge } from './chat/ChatScrollEdge';
 import { planPillState } from '../runtime/chat/plan-pill';
 import {
@@ -6053,12 +6053,11 @@ function queuedTipPlacement(
       }}
       items={items.map((item, index) => {
           const isDragging = dragState?.draggingId === item.id;
-          const dropClass = dragState?.overId === item.id
-            && dragState.draggingId !== item.id
-            && dragState.edge
-            ? ` chat-queued-send-row-drop-${dragState.edge}`
-            : '';
-          return { id: item.id, content: (
+          // The insertion bar is the stack's to draw, between cards (OPEND-3203).
+          const dropEdge = dragState?.overId === item.id && dragState.draggingId !== item.id
+            ? dragState.edge
+            : null;
+          return { id: item.id, dropEdge, content: (
             <div
               /* 首行**不换任何样式**:稿子 `.queue .q:first-child`
                  (`361b78253e:docs/design/chat-panel/src/components.css:2898`)
@@ -6067,7 +6066,7 @@ function queuedTipPlacement(
                  留着就是一个没有任何规则消费、却在 diff 里长得像「首行有特殊态」的钩子。 */
               className={`chat-queued-send-row${
                 editingId === item.id ? ' chat-queued-send-row-editing' : ''
-              }${isDragging ? ' chat-queued-send-row-dragging' : ''}${dropClass}`}
+              }${isDragging ? ' chat-queued-send-row-dragging' : ''}`}
               data-testid="chat-queued-send-row"
               key={item.id}
               onDragOver={(event) => handleDragOver(event, item.id)}
@@ -6186,8 +6185,6 @@ function queuedTipPlacement(
 }
 
   const QUEUED_SEND_DRAG_MIME = 'application/x-open-design-queued-send';
-
-type QueuedSendDropEdge = 'before' | 'after';
 
 interface QueuedSendDragState {
   draggingId: string;

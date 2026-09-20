@@ -9,6 +9,7 @@ import {
   OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2,
   OD_NEXT_REQUEST_TURN_SCHEMA_V1,
   serializeCanonicalXml,
+  serializeOdNextIntentResolutionTurnV1,
   serializeOdNextPromptBundleV1,
   type AppliedPluginSnapshot,
   type OpenDesignPlanContractV2,
@@ -17,10 +18,19 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { closeDatabase, openDatabase } from '../../src/db.js';
+import { createStrategyRunWriteEvidenceRecorder, strategyRunWriteEvidence } from '../../src/strategies/od-next/run-write-evidence.js';
+import { createClaudeStreamHandler } from '../../src/runtimes/claude-stream.js';
+import { createRunSideEffectLedger, foldEventIntoRunSideEffectLedger } from '../../src/runtimes/run-lifecycle-analytics.js';
+import { bindOdNextExactSendPromptEvidence, assertOdNextExactSendPromptEvidence, buildPromptStackTelemetry } from '../../src/prompt-telemetry.js';
 import { createSnapshot, getSnapshot, pruneExpiredSnapshots } from '../../src/plugins/snapshots.js';
 import { reconcileDurableRunTerminals } from '../../src/runtimes/run-terminal-reconciliation.js';
 import {
   StrategyTaskTransitionConflictError,
+  InvalidStrategyTaskRecordError,
+  claimStrategyExecutionIntentResolution,
+  consumeStrategyExecutionIntentResolution,
+  isInitialStrategyTaskRun,
+  reconcileStrategyTaskRunTerminal,
   type CompareAndTransitionStrategyTaskInput,
   cancelStrategyTaskExecution,
   compareAndTransitionStrategyTaskExecution as compareAndTransitionStrategyTaskExecutionRaw,
@@ -34,6 +44,11 @@ import {
   strategyTaskCreateIdentityFixture,
   strategyTaskTurnText,
 } from './strategy-task-test-fixtures.js';
+
+import {
+  readIntentResolution, recordStrategyRunWriteEvidence, readStrategyTaskWriteEvidence,
+  intentResolutionDigest, startIntentResolution, captureIntentResolutionReply,
+} from '../../src/strategies/od-next/intent-resolution-store.js';
 
 const AGENT_ID = 'codex';
 
@@ -121,6 +136,7 @@ function compareAndTransitionStrategyTaskExecution(
   const rest: Omit<CompareAndTransitionStrategyTaskInput, 'nextRun'> = restValue;
   return compareAndTransitionStrategyTaskExecutionRaw(db, {
     ...rest,
+    to: { executionIntent: 'produce', ...rest.to },
     ...(nextRun ? { nextRun } : {}),
   });
 }
@@ -266,6 +282,200 @@ describe('durable strategy task store', () => {
     vi.restoreAllMocks();
     closeDatabase();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function claimResolution(task = createTask(db, snapshot)) {
+    const sourceResultJson = JSON.stringify({ runId: task.latestRunId, parsed: { visibleText: 'Original plan', issues: [{ code: 'od_next_protocol_plan_contract_invalid_json', detail: 'Original parser defect' }], normalizations: [] } });
+    const finalText = serializeOdNextIntentResolutionTurnV1({
+      taskExecutionId: task.taskExecutionId, stage: task.inputStage as 'request' | 'clarification',
+      taskRunIndex: task.runs.length, sourceRunId: task.latestRunId,
+      promptBundleSha256: task.promptBundle.sha256, sourceResultSha256: intentResolutionDigest(sourceResultJson),
+      payload: 'Resolve the execution intent of the frozen original request.',
+    });
+    const input = { taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      sourceRunId: task.latestRunId, nextRunId: 'run-intent', sourceResultJson, finalText, updatedAt: Math.max(110, task.updatedAt + 1) };
+    return { task: claimStrategyExecutionIntentResolution(db, input), input };
+  }
+
+  it.each(['request', 'clarification'] as const)('admits exact-send evidence for a durably claimed %s intent turn without treating it as the initial bundle', stage => {
+    let source = createTask(db, snapshot);
+    if (stage === 'clarification') source = compareAndTransitionStrategyTaskExecutionRaw(db, {
+      taskExecutionId: source.taskExecutionId, expectedRevision: source.revision,
+      to: { route: 'full_plan', inputStage: 'clarification', outcome: 'running', executionMode: null },
+      nextRun: { runId: 'run-answer', sourceRunId: source.latestRunId,
+        finalText: strategyTaskTurnText({ taskExecutionId: source.taskExecutionId, inputStage: 'clarification', taskRunIndex: 1 }) },
+    });
+    const claimed = claimResolution(source).task;
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    const task = getStrategyTaskExecution(db, claimed.taskExecutionId)!;
+    const mapping = task.runs.at(-1)!;
+    expect(isInitialStrategyTaskRun(task, mapping.runId)).toBe(false);
+    expect(mapping).toMatchObject({ inputStage: stage, purpose: 'intent_resolution' });
+    const input = {
+      finalText: mapping.finalText.text, persisted: mapping.finalText,
+      stage: mapping.inputStage, purpose: mapping.purpose,
+      telemetry: buildPromptStackTelemetry({ composedPrompt: mapping.finalText.text,
+        sections: [{ kind: 'odNextExactFinalText', content: mapping.finalText.text }] }),
+    };
+    const telemetry = bindOdNextExactSendPromptEvidence(input);
+    expect(telemetry.odNextExactSend).toMatchObject({ kind: 'turn', stage, sha256: mapping.finalText.sha256 });
+    expect(() => assertOdNextExactSendPromptEvidence({ ...input, telemetry })).not.toThrow();
+    expect(() => bindOdNextExactSendPromptEvidence({ ...input, purpose: undefined })).toThrow();
+    expect(() => bindOdNextExactSendPromptEvidence({ ...input, stage: 'production' })).toThrow();
+  });
+
+  it('persists actual streamed Write evidence before close and does not erase it with a later filesystem zero', () => {
+    const task = createTask(db, snapshot);
+    const run = { id: task.latestRunId, sideEffectLedger: createRunSideEffectLedger() };
+    const recorder = createStrategyRunWriteEvidenceRecorder(db);
+    const target = path.join(tempDir, 'draft.html');
+    fs.writeFileSync(target, '<title>Draft</title>');
+    const parser = createClaudeStreamHandler(event => {
+      foldEventIntoRunSideEffectLedger(run.sideEffectLedger, { event: 'agent', data: event });
+      recorder.observeToolStream(run);
+    });
+    parser.feed(`${JSON.stringify({ type: 'assistant', message: { role: 'assistant', id: 'write-message', stop_reason: 'tool_use', content: [
+      { type: 'tool_use', id: 'write-1', name: 'Write', input: { file_path: target, content: '<title>Draft</title>' } },
+    ] } })}\n`);
+    parser.feed(`${JSON.stringify({ type: 'user', message: { role: 'user', content: [
+      { type: 'tool_result', tool_use_id: 'write-1', content: 'File written.', is_error: false },
+    ] } })}\n`);
+    parser.flush();
+    expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)[0]).toMatchObject({ filesWritten: 1, unknown: false, sources: ['tool_stream'] });
+    recorder.finish({ ...run, artifactOutcome: { filesWritten: 0, filesWrittenUnknown: false, filesWrittenSource: 'filesystem' } });
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)[0]).toMatchObject({ filesWritten: 1, sources: ['filesystem', 'tool_stream'] });
+  });
+
+  it('does not let evidence recording prevent terminal persistence for an unreadable task owner', () => {
+    const task = createTask(db, snapshot);
+    db.prepare('UPDATE strategy_task_executions SET intent_resolution_version=99 WHERE task_execution_id=?').run(task.taskExecutionId);
+    const recorder = createStrategyRunWriteEvidenceRecorder(db);
+    expect(() => recorder.finish({ id: task.latestRunId })).not.toThrow();
+    expect(db.prepare('SELECT COUNT(*) AS count FROM strategy_task_run_write_evidence').get()).toEqual({ count: 0 });
+  });
+
+  it('records missing and contended terminal filesystem evidence as unknown, never tool-stream zero proof', () => {
+    const task = createTask(db, snapshot);
+    const run = { id: task.latestRunId, sideEffectLedger: createRunSideEffectLedger() };
+    const recorder = createStrategyRunWriteEvidenceRecorder(db);
+    recorder.observeToolStream(run);
+    expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)[0]).toMatchObject({ filesWritten: null, unknown: true });
+    expect(strategyRunWriteEvidence(run)).toEqual({ filesWritten: 0, filesWrittenUnknown: true, filesWrittenSource: 'unknown' });
+    recorder.finish(run);
+    recorder.finish({ ...run, artifactOutcome: { filesWritten: 0, filesWrittenUnknown: false, filesWrittenSource: 'filesystem' } });
+    expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)[0]).toMatchObject({ filesWritten: 0, unknown: true });
+  });
+
+  it('marks only new tasks as unresolved and does not silently downgrade missing policy data', () => {
+    const task = createTask(db, snapshot);
+    expect(task.intentResolution).toMatchObject({ version: 1, state: 'unresolved', attempts: 0 });
+    db.prepare('DELETE FROM strategy_task_intent_resolution WHERE task_execution_id=?').run(task.taskExecutionId);
+    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow();
+    // A pre-migration row has no policy marker; ordinary production compatibility remains explicit.
+    db.prepare('UPDATE strategy_task_executions SET intent_resolution_version=NULL WHERE task_execution_id=?').run(task.taskExecutionId);
+    migrateStrategyTaskStore(db);
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)).toMatchObject({ intentResolution: null, executionIntent: 'produce' });
+  });
+
+  it.each([null, 99])('rejects policy marker %s when a new policy row remains', version => {
+    const task = createTask(db, snapshot);
+    db.prepare('UPDATE strategy_task_executions SET intent_resolution_version=? WHERE task_execution_id=?').run(version, task.taskExecutionId);
+    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(InvalidStrategyTaskRecordError);
+  });
+
+  it('retains positive and unknown evidence by physical owner across database reopen', () => {
+    const task = createTask(db, snapshot);
+    expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)).toEqual([{ runId: task.latestRunId, filesWritten: null, unknown: true, sources: ['unknown'] }]);
+    recordStrategyRunWriteEvidence(db, { taskExecutionId: task.taskExecutionId, runId: task.latestRunId, filesWritten: 1, unknown: true, source: 'tool_stream' });
+    recordStrategyRunWriteEvidence(db, { taskExecutionId: task.taskExecutionId, runId: task.latestRunId, filesWritten: 0, unknown: false, source: 'filesystem' });
+    expect(() => recordStrategyRunWriteEvidence(db, { taskExecutionId: task.taskExecutionId, runId: 'another-task-run', filesWritten: 0, unknown: false, source: 'filesystem' })).toThrow();
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)).toEqual([{ runId: task.latestRunId, filesWritten: 1, unknown: true, sources: ['filesystem', 'tool_stream'] }]);
+  });
+
+  it('claims one same-request-stage supplemental run without treating it as an initial bundle', () => {
+    const { task, input } = claimResolution();
+    expect(task.inputStage).toBe('request');
+    expect(task.clarificationCount).toBe(0);
+    expect(task.planContractRepairAttempts).toBe(0);
+    expect(task.runs.at(-1)).toMatchObject({ runId: 'run-intent', sourceRunId: 'run-request', purpose: 'intent_resolution', taskRunIndex: 1 });
+    expect(isInitialStrategyTaskRun(task, 'run-request')).toBe(true);
+    expect(isInitialStrategyTaskRun(task, 'run-intent')).toBe(false);
+    expect(() => claimStrategyExecutionIntentResolution(db, input)).toThrow();
+    expect(() => compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: 'full_plan', inputStage: 'request', outcome: 'running', executionMode: null },
+      nextRun: { runId: 'run-second', sourceRunId: 'run-intent', finalText: input.finalText }, updatedAt: 120,
+    })).toThrow();
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)?.intentResolution).toMatchObject({ attempts: 1, state: 'claimed', sourceResultJson: input.sourceResultJson });
+  });
+
+  it('claims and starts at most once, saves reply before consume, and preserves original parser defects', () => {
+    const { task, input } = claimResolution();
+    startIntentResolution(db, task.taskExecutionId, 'run-intent');
+    expect(() => startIntentResolution(db, task.taskExecutionId, 'run-intent')).toThrow();
+    const replyJson = JSON.stringify({ runId: 'run-intent', executionIntent: 'plan_only', physicalStatus: 'succeeded' });
+    captureIntentResolutionReply(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', replyJson });
+    captureIntentResolutionReply(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', replyJson });
+    expect(() => captureIntentResolutionReply(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', replyJson: '{}' })).toThrow();
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    expect(() => startIntentResolution(db, task.taskExecutionId, 'run-intent')).toThrow();
+    expect(() => consumeStrategyExecutionIntentResolution(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', expectedRevision: task.revision - 1, executionIntent: 'plan_only', updatedAt: 120 })).toThrow();
+    const consumed = consumeStrategyExecutionIntentResolution(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', expectedRevision: task.revision, executionIntent: 'plan_only', updatedAt: 120 });
+    expect(consumed.intentResolution).toMatchObject({ state: 'resolved', attempts: 1, sourceResultJson: input.sourceResultJson, replyJson });
+    expect(consumed.executionIntent).toBe('plan_only');
+    expect(consumed.intentResolution?.sourceResultJson).toContain('Original parser defect');
+    expect(() => consumeStrategyExecutionIntentResolution(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', expectedRevision: consumed.revision, executionIntent: 'produce', updatedAt: 121 })).toThrow();
+  });
+
+  it('keeps a supplemental clarification mapping out of the user-answer count', () => {
+    const initial = createTask(db, snapshot);
+    const clarification = compareAndTransitionStrategyTaskExecutionRaw(db, {
+      taskExecutionId: initial.taskExecutionId, expectedRevision: initial.revision,
+      to: { route: 'full_plan', inputStage: 'clarification', outcome: 'running', executionMode: null },
+      nextRun: { runId: 'run-answer', sourceRunId: initial.latestRunId, finalText: strategyTaskTurnText({ taskExecutionId: initial.taskExecutionId, inputStage: 'clarification', taskRunIndex: 1 }) }, updatedAt: 110,
+    });
+    const { task } = claimResolution(clarification);
+    expect(task.runs.map(run => [run.inputStage, run.purpose])).toEqual([
+      ['request', undefined], ['clarification', undefined], ['clarification', 'intent_resolution'],
+    ]);
+    expect(task.clarificationCount).toBe(1);
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)?.clarificationCount).toBe(1);
+  });
+
+  it('rolls the claim back with physical Run admission and refuses a wrong frozen result owner', () => {
+    const initial = createTask(db, snapshot);
+    expect(() => db.transaction(() => {
+      claimResolution(initial);
+      throw new Error('Physical run admission rolled back');
+    }).immediate()).toThrow('Physical run admission rolled back');
+    expect(getStrategyTaskExecution(db, initial.taskExecutionId)).toMatchObject({ latestRunId: initial.latestRunId, revision: initial.revision, intentResolution: { attempts: 0, state: 'unresolved' } });
+    const { input } = claimResolution(initial);
+    db.prepare('UPDATE strategy_task_intent_resolution SET source_result_json=? WHERE task_execution_id=?').run('{}', initial.taskExecutionId);
+    expect(() => getStrategyTaskExecution(db, initial.taskExecutionId)).toThrow(InvalidStrategyTaskRecordError);
+    expect(input.sourceResultJson).toContain('Original parser defect');
+  });
+
+  it.each(['claimed', 'started'] as const)('reconciles a %s crash without granting another provider start', state => {
+    const { task } = claimResolution();
+    if (state === 'started') startIntentResolution(db, task.taskExecutionId, 'run-intent');
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    expect(reconcileStrategyTaskRunTerminal(db, { runId: 'run-request', status: 'failed', updatedAt: 120 })).toBe(false);
+    expect(reconcileStrategyTaskRunTerminal(db, { runId: 'run-intent', status: 'failed', updatedAt: 120 })).toBe(true);
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)).toMatchObject({ outcome: 'blocked', intentResolution: { state: 'failed', attempts: 1 } });
+    expect(() => startIntentResolution(db, task.taskExecutionId, 'run-intent')).toThrow();
+    expect(() => captureIntentResolutionReply(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', replyJson: '{"runId":"run-intent"}' })).toThrow();
+  });
+
+  it('does not admit a claimed supplement after task cancellation', () => {
+    const { task } = claimResolution();
+    const canceled = cancelStrategyTaskExecution(db, { taskExecutionId: task.taskExecutionId, expectedRevision: task.revision, updatedAt: 120 });
+    expect(canceled.outcome).toBe('canceled');
+    expect(() => startIntentResolution(db, task.taskExecutionId, 'run-intent')).toThrow();
+    expect(readIntentResolution(db, task.taskExecutionId)).toMatchObject({ attempts: 1, state: 'failed' });
   });
 
   it('adds nullable/versioned tables without changing ordinary Run queries', () => {

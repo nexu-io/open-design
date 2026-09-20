@@ -17,6 +17,21 @@ import {
 } from '../../src/observability/task-observation-aggregation.js';
 import { createEmptyFrozenSkillPackage } from '../../src/strategies/od-next/frozen-skill-package.js';
 import type { StrategyTaskExecutionRecord } from '../../src/strategies/task-store.js';
+import { buildEvalContext } from '../../src/observability/eval-context.js';
+
+it('exports additive evaluation evidence on the actual Task root and mapped physical Run', () => {
+  const aggregate = aggregateStrategyTaskObservations({ task: task(), observations: RUNS.map(run => runObservation(run)) });
+  const legacy = eventBodies(buildLegacyTaskObservationPayload(aggregate)).find(event => event.type === 'trace-create')!;
+  expect(legacy.body.metadata).not.toHaveProperty('eval_context_v2');
+  const context = buildEvalContext({ runStatus: 'succeeded', resultDeliveryState: 'no_result', toolErrorCount: 0, attachmentManifest: [], artifactManifest: [] });
+  aggregate.evaluation = { context, runs: [{ runId: 'run-production', context }] };
+  const events = eventBodies(buildLegacyTaskObservationPayload(aggregate));
+  const root = events.find(event => event.type === 'trace-create')!;
+  expect(root.body.id).toBe('strategy-task:task-1');
+  expect(root.body.metadata).toMatchObject({ success: false, eval_context_v2: { evaluationOutcome: 'failed', productOutcome: { runStatus: 'succeeded', resultDeliveryState: 'no_result' } } });
+  expect(events.filter(event => event.type === 'trace-create')).toHaveLength(1);
+  expect(events.some(event => JSON.stringify(event.body.metadata).includes('"evaluationOutcome":"failed"') && event.type !== 'trace-create')).toBe(true);
+});
 
 const RUNS = [
   { runId: 'run-request', inputStage: 'request', taskRunIndex: 0 },
@@ -70,6 +85,9 @@ function task(
     inputStage: 'production',
     outcome,
     executionMode: 'simple',
+    // This historical production fixture predates the intent-resolution policy.
+    executionIntent: 'produce',
+    intentResolution: null,
     planContractHash: 'sha256:plan',
     clarificationCount: 1,
     planContractRepairAttempts: 1,

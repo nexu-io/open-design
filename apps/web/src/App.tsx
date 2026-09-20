@@ -95,6 +95,8 @@ import {
   type SettingsHighlight,
 } from './components/SettingsDialog';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
+import { TestCampaignModal } from './components/TestCampaignModal';
+import { ProductionCampaignModal } from './components/ProductionCampaignModal';
 import {
   clearHomeComposerAttachments,
   stashHomeComposerAttachments,
@@ -5632,6 +5634,7 @@ function AppInner() {
           || amrLoginStatus?.user?.plan?.trim()
           || null
         }
+        amrAccountId={amrLoginStatus?.user?.id ?? amrLoginStatus?.credentialRevision ?? null}
         config={config}
         providerModelsCache={providerModelsCache}
         onProviderModelsCacheChange={setProviderModelsCache}
@@ -5775,6 +5778,7 @@ function AppInner() {
               || amrLoginStatus?.user?.plan?.trim()
               || null
             }
+            amrAccountId={amrLoginStatus?.user?.id ?? amrLoginStatus?.credentialRevision ?? null}
             metricsConsent={config.telemetry?.metrics === true}
             installationId={config.installationId}
           />
@@ -5795,6 +5799,22 @@ function AppInner() {
           onOpenProject={handleOpenProject}
           dockLine
         />
+      )}
+      {/* Every placement these hosts may render is a home placement
+          (`opend.home.*`), so the home view is where they belong: not over a
+          project workbench, not over another entry tab, and — since account
+          restoration can finish while login is still up — not over onboarding. */}
+      {route.kind === 'home' && route.view === 'home' && (
+        <>
+          <TestCampaignModal
+            authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
+            sessionSubject={amrLoginStatus?.user?.id ?? null}
+          />
+          <ProductionCampaignModal
+            authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
+            sessionSubject={amrLoginStatus?.user?.id ?? null}
+          />
+        </>
       )}
       <TooltipLayer />
       <UpdateDialog />

@@ -201,6 +201,10 @@ function taskTraceAttributes(
   );
   return attributes([
     ['langfuse.trace.name', 'open-design-strategy-task'],
+    ['langfuse.trace.input', jsonString(aggregate.traceProjection?.input)],
+    ['langfuse.trace.output', jsonString(aggregate.traceProjection?.output)],
+    ...Object.entries(aggregate.traceProjection?.metadata ?? {}).map(([key, value]) =>
+      [`langfuse.trace.metadata.${key}`, typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? value : jsonString(value)] as const),
     ['langfuse.session.id', aggregate.root.conversationId],
     ['user.id', context?.installationId ?? undefined],
     ['langfuse.version', context?.appVersion ?? aggregate.root.strategyVersion],
@@ -217,6 +221,8 @@ function taskTraceAttributes(
     ['langfuse.trace.metadata.execution_mode', aggregate.root.executionMode],
     ['langfuse.trace.metadata.task_type', aggregate.root.taskType],
     ['langfuse.trace.metadata.outcome', aggregate.root.status],
+    ['langfuse.trace.metadata.eval_context_v2', aggregate.evaluation ? jsonString(aggregate.evaluation.context) : undefined],
+    ['langfuse.trace.metadata.eval_context_v2_runs', aggregate.evaluation ? jsonString(aggregate.evaluation.runs) : undefined],
     ['langfuse.trace.metadata.strategy_id', aggregate.root.strategyId],
     ['langfuse.trace.metadata.strategy_package_hash', aggregate.root.strategyPackageHash],
     ['langfuse.trace.metadata.snapshot_id', aggregate.root.snapshotId],

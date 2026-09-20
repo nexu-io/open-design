@@ -67,10 +67,24 @@ describe.skipIf(process.platform === 'win32')('Vela package dependency / daemon 
     expect(result.openCodeRequests.filter(request => request.path.endsWith('/prompt_async'))).toHaveLength(1);
   }, T.long);
 
-  it('[P1] preserves 0.0.35 incomplete protection and never turns committed tools into an automatic full replay', async () => {
+  it('[P1] reports an incomplete continuation without turning committed tools into an automatic full replay', async () => {
     const result = await runVelaContract({ binary, directory: join(root, 'incomplete'), scenario: 'incomplete' });
     expect(result.terminal.result).toBeUndefined();
-    expect(result.terminal.error).toMatchObject({ data: { kind: 'opencode_prompt_error', runtime: 'opencode', phase: 'event_stream', lastToolStatus: 'completed' } });
+    expect(result.terminal.error).toMatchObject({ data: {
+      kind: 'opencode_continuation_incomplete',
+      code: 'OPENCODE_COMPACTION_CONTINUATION_INCOMPLETE',
+      runtime: 'opencode',
+      phase: 'post_tool_resume',
+      lastToolStatus: 'completed',
+      retryable: false,
+      openCodeSessionId: 'oc-contract-session',
+      continuation: {
+        version: 1,
+        userMessageId: 'user-continuation',
+        assistantMessageId: 'assistant-continuation',
+        toolResultsCommitted: true,
+      },
+    } });
     expect(result.terminal.error?.message).toContain('compaction continuation ended before prompt completion');
     const consumed = consume(result);
     expect(consumed.completed).toBe(false);

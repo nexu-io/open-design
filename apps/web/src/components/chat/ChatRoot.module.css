@@ -72,6 +72,8 @@
    * 逐字节就是这个式子在亮色下的结果。
    */
   --chat-accent: var(--accent);
+  --chat-selected: var(--selected);
+  --chat-selected-soft: var(--selected-soft);
 
   /* ── 设计稿单独指定的色号(全局 token 里没有) ── */
   /*
@@ -284,6 +286,8 @@
   --chat-brand-text: var(--brand-text);
   /* 映射到全局 token,暗色里 `--accent` 自己会翻成 #ededed —— 写法不变。 */
   --chat-accent: var(--accent);
+  --chat-selected: var(--selected);
+  --chat-selected-soft: var(--selected-soft);
   /* 插画横幅的垫底色,和亮色作用域同值(被图片盖住,稿子也没给暗色覆盖)。 */
   --chat-banner-ground: #082f69;
 

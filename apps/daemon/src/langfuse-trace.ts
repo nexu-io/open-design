@@ -1,3 +1,4 @@
+import type { EvalContextV2 } from './observability/eval-context.js';
 // Langfuse trace forwarding for completed agent runs.
 //
 // This module is intentionally dependency-free (no `langfuse` SDK). It builds
@@ -243,6 +244,7 @@ export interface TraceSafeObjectManifestBase {
 }
 
 export interface AttachmentManifestEntry extends TraceSafeObjectManifestBase {
+  source_path_hash?: string;
   object_class: 'attachment';
   attachment_id: string;
 }
@@ -349,6 +351,7 @@ export interface TurnInfo {
 }
 
 export interface ReportContext {
+  evalContextV2?: EvalContextV2;
   installationId: string | null;
   projectId: string;
   conversationId: string;
@@ -415,6 +418,8 @@ export interface ReportFeedbackOpts {
  */
 export interface FeedbackReportContext {
   runId: string;
+  /** Server-resolved Task identity; score IDs remain owned by the physical Run. */
+  traceId?: string;
   installationId: string | null;
   prefs: TelemetryPrefs;
   rating: 'positive' | 'negative';
@@ -1735,6 +1740,8 @@ function safeQualityManifestEntry(
  * local-path masking, and never admits raw provider attributes.
  */
 export function buildSafeRunQualityProjectionV1(input: {
+  /** Object snapshots keep complete policy-redacted content; transport still enforces its object size cap. */
+  contentStorage?: 'object';
   prefs: TelemetryPrefs;
   messageOutput?: string;
   errorMessage?: string;
@@ -1754,7 +1761,7 @@ export function buildSafeRunQualityProjectionV1(input: {
 }): SafeRunQualityV1 | undefined {
   const wantsContent = input.prefs.metrics === true && input.prefs.content === true;
   const output = wantsContent
-    ? safeQualityText(input.messageOutput, OUTPUT_MAX_BYTES)
+    ? safeQualityText(input.messageOutput, input.contentStorage === 'object' ? Infinity : OUTPUT_MAX_BYTES)
     : undefined;
   const errorMessage = safeQualityText(input.errorMessage, OUTPUT_MAX_BYTES);
   const error = errorMessage || input.errorCode || input.failure
@@ -1774,16 +1781,16 @@ export function buildSafeRunQualityProjectionV1(input: {
           : {}),
       }
     : undefined;
-  const tools = wantsContent ? input.tools?.slice(0, 256).map((tool) => {
+  const tools = wantsContent ? input.tools?.slice(0, input.contentStorage === 'object' ? undefined : 256).map((tool) => {
     const safeInput = safeQualityText(
       traceSafeToolPayload(tool.name, 'input',
         tool.input === undefined ? undefined : redactSecrets(tool.input)),
-      TOOL_INPUT_MAX_BYTES,
+      input.contentStorage === 'object' ? Infinity : TOOL_INPUT_MAX_BYTES,
     );
     const safeOutput = safeQualityText(
       traceSafeToolPayload(tool.name, 'output',
         tool.output === undefined ? undefined : redactSecrets(tool.output)),
-      TOOL_OUTPUT_MAX_BYTES,
+      input.contentStorage === 'object' ? Infinity : TOOL_OUTPUT_MAX_BYTES,
     );
     return {
       callHash: createHash('sha256').update(tool.id, 'utf8').digest('hex'),
@@ -2024,6 +2031,12 @@ export function buildTracePayload(
   // here. Fields are flat (Langfuse stores it as JSON but indexes shallow
   // keys best). All entries are anonymous — no PII, no credentials.
   const traceMetadata: Record<string, unknown> = {
+    ...(ctx.evalContextV2 && wantsContent ? { eval_context_v2: wantsArtifacts ? ctx.evalContextV2 : {
+      ...ctx.evalContextV2,
+      attachments: { turnDelta: { semantics: 'current_user_turn', entries: [] }, effectiveContext: { semantics: 'conversation_context_before_run', entries: [] } },
+      artifacts: { snapshotStatus: 'unavailable', entries: [] },
+      completeness: { status: 'partial', reasons: [...ctx.evalContextV2.completeness.reasons, 'artifact_manifest_consent_off'] },
+    } } : {}),
     success,
     env: environment,
     status: ctx.run.status,
@@ -3185,7 +3198,7 @@ export function reportRunCompleted(
 // thread `removedReasonCodes` through and emit overwriting "cleared"
 // scores for them; not done here to keep this PR scoped to the bridge.
 export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
-  const traceId = ctx.runId;
+  const traceId = ctx.traceId ?? ctx.runId;
   const nowIso = new Date().toISOString();
   const batch: unknown[] = [];
 
@@ -3197,6 +3210,7 @@ export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
     customReason: ctx.customReason || undefined,
     installationId: ctx.installationId ?? undefined,
     ...(ctx.metadata ?? {}),
+    ...(ctx.traceId ? { runId: ctx.runId } : {}),
   };
 
   batch.push({
@@ -3204,7 +3218,7 @@ export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
     type: 'score-create',
     timestamp: nowIso,
     body: {
-      id: `${traceId}-rating`,
+      id: `${ctx.runId}-rating`,
       traceId,
       name: 'user_rating',
       value: ctx.rating === 'positive' ? 1 : -1,
@@ -3221,7 +3235,7 @@ export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
       timestamp: nowIso,
       body: {
         // Stable per (run, code) so re-submission overwrites cleanly.
-        id: `${traceId}-reason-${code}`,
+        id: `${ctx.runId}-reason-${code}`,
         traceId,
         name: 'user_rating_reason',
         value: code,

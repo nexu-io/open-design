@@ -651,6 +651,37 @@ describe('OD Next V2 prompt recipe', () => {
     expect(odNextPromptCacheIdentityV2({ ...recipe, taskProfileDigest: A })).not.toBe(baseline);
   });
 
+  it('carries the locked planning intent through a native form continuation and preserves legacy production defaults', () => {
+    const input = { stage: 'clarification' as const, nativeSessionResume: true as const,
+      taskExecutionId: 'planning-task', taskRunIndex: 1, answer: 'The four required answers.' };
+    const planning = composeOdNextStrategyContinuationV2({ ...input, executionIntent: 'plan_only' });
+    expect(planning).toContain('task is locked to executionIntent plan_only');
+    expect(planning).toContain('without creating or modifying files');
+    expect(planning).toContain(input.answer);
+    expect(composeOdNextStrategyContinuationV2({ ...input, executionIntent: 'produce' }))
+      .toBe(composeOdNextStrategyContinuationV2(input));
+    const request = composeOdNextStrategyRequestPromptV2(recipe, { sessionMode: 'chat' });
+    expect(request).not.toContain('chat and plan session modes always mean plan_only');
+    expect(request).toContain('Plan mode requires editable Markdown documents');
+    expect(request).toContain('Chat mode permits explicitly requested trivial file changes');
+    expect(request).toContain('Resolve executionIntent from the user');
+  });
+
+  it('keeps clarification-stage guidance compatible with a completed no-write answer', () => {
+    const input = { stage: 'clarification' as const, nativeSessionResume: true as const,
+      taskExecutionId: 'planning-task', taskRunIndex: 1, answer: 'Use the operator console.' };
+    const planning = composeOdNextStrategyContinuationV2({ ...input, executionIntent: 'plan_only' });
+    expect(planning).toContain('task is locked to executionIntent plan_only');
+    expect(planning).toContain('inputStage clarification (not request)');
+    expect(planning).toContain('outcome completed for an executionIntent plan_only answer without file writes');
+    expect(planning).toContain(input.answer);
+
+    const production = composeOdNextStrategyContinuationV2({ ...input, executionIntent: 'produce' });
+    expect(production).toContain('inputStage clarification (not request)');
+    expect(production).toContain('outcome plan_ready once the Full Plan is frozen for production');
+    expect(production).not.toContain('task is locked to executionIntent plan_only');
+  });
+
   it('emits native-session-only deltas and gives Production the frozen plan plus terminal state shape', () => {
     const clarification = composeOdNextStrategyContinuationV2({
       stage: 'clarification',

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeTemplateTrigger } from '../helpers/home-template-picker';
 //
 // Scenario-card rail coverage.
 //   - The default create rail renders illustrated scenario cards carrying a
@@ -79,10 +80,8 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
 // Types are a horizontal pill row under the working-directory row (product,
 // 2026-08-21); anything that does not fit folds into its 全部 popover.
 function typePill(chipId: string): HTMLElement | null {
-  return (
-    screen.queryByTestId(`home-hero-type-pill-${chipId}`) ??
-    screen.queryByTestId(`home-hero-type-pill-${chipId}-more`)
-  );
+  if (!screen.queryByTestId('home-hero-template-menu')) fireEvent.click(homeTemplateTrigger());
+  return screen.getByTestId('home-hero-template-menu').querySelector(`[data-chip="${chipId}"]`);
 }
 
 describe('HomeHero scenario cards', () => {

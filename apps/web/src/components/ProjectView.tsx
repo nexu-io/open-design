@@ -9,7 +9,6 @@ import {
   useState,
   useSyncExternalStore,
   useLayoutEffect,
-  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
@@ -25,6 +24,7 @@ import {
   type DaemonAgentReconnectState,
   type DaemonAgentRetryState,
   type DaemonReconnectState,
+  createStrategyTaskBlockedError,
   fetchChatRunStatus,
   GENERIC_DAEMON_DISCONNECT_CODE,
   GENERIC_DAEMON_DISCONNECT_MESSAGE,
@@ -44,7 +44,9 @@ import {
   settledSignalFromMessages,
 } from '../runtime/chat/reconnect-state';
 import { forkBoundaryMessageIndex } from '../runtime/chat/fork-boundary';
+import { assistantMessageNeverHadARun } from '../runtime/chat/host-authored-message';
 import { resolveRecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
+import { canRetainSuccessfulRunForBlockedStrategy } from '../runtime/blocked-strategy-result';
 import { loadConversationTranscript } from '../state/load-conversation-transcript';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
@@ -76,6 +78,7 @@ import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   resolveQuestionFormStrategyTaskExecutionId,
   strategySettledMessageFields,
+  strategyTaskParkedOnSucceededRun,
 } from '../runtime/strategy-question-continuation';
 import {
   isTodoWriteToolName,
@@ -360,6 +363,21 @@ import {
 import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 import { CenteredLoader } from './Loading';
 import { ProjectCreationPendingChat } from './ProjectCreationPendingView';
+import {
+  FALLBACK_MAX_CHAT_PANEL_WIDTH,
+  MIN_CHAT_PANEL_WIDTH,
+  MIN_WORKSPACE_PANEL_WIDTH,
+  SPLIT_RESIZE_HANDLE_WIDTH,
+  clampChatPanelWidth,
+  clampPreferredChatPanelWidth,
+  projectSplitClassName,
+  projectSplitStyle,
+  readSavedChatPanelWidth,
+  resolveProjectSplitLayout,
+  saveChatPanelWidth,
+  workspacePanelTrackForMinWidth,
+  writeProjectSplitLayout,
+} from './project-split-layout';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
 import { FirstArtifactHint } from './FirstArtifactHint';
@@ -643,6 +661,7 @@ function mergeServerMessageWithLocal(
   server: ChatMessage,
   local?: ChatMessage,
   absorbedASuccessorRun = false,
+  locallyStreaming = false,
 ): ChatMessage {
   if (!local) return server;
   const merged: ChatMessage = { ...server };
@@ -654,13 +673,37 @@ function mergeServerMessageWithLocal(
       merged.events = local.events;
     }
   }
-  if (!server.producedFiles?.length && local.producedFiles?.length) {
+  // A live task can reuse this row for a successor Run. Once the server
+  // restores the row's physical Run, successor files must not be saved under
+  // that restored identity. Same-Run late files (and legacy rows without Run
+  // identity) still need the ordinary freshness fallback.
+  const producedFilesBelongToAnotherRun = Boolean(
+    server.runId && local.runId && server.runId !== local.runId,
+  );
+  if (
+    !producedFilesBelongToAnotherRun
+    && !server.producedFiles?.length
+    && local.producedFiles?.length
+  ) {
     merged.producedFiles = local.producedFiles;
   }
   if (!server.preTurnFileNames?.length && local.preTurnFileNames?.length) {
     merged.preTurnFileNames = local.preTurnFileNames;
   }
   if (!server.lastRunEventId && local.lastRunEventId) {
+    merged.lastRunEventId = local.lastRunEventId;
+  }
+  if (
+    locallyStreaming && !absorbedASuccessorRun
+    && local.role === 'assistant' && server.role === 'assistant'
+    && local.runId && local.runId === server.runId
+  ) {
+    // A live stream owns its transcript until its controller releases it.
+    // A GET can be ahead of both the SSE reader and its pending text buffer;
+    // accepting that text here would append the same frames again on flush.
+    // Keep the event cursor with the transcript, without deduplicating prose.
+    merged.content = local.content;
+    merged.events = local.events;
     merged.lastRunEventId = local.lastRunEventId;
   }
   if (!server.startedAt && local.startedAt) {
@@ -714,6 +757,7 @@ function mergeServerMessageWithLocal(
 export function mergeServerMessagesIntoConversation(
   current: ChatMessage[],
   serverMessages: ChatMessage[],
+  options: { liveAssistantMessageIds?: ReadonlySet<string> } = {},
 ): ChatMessage[] {
   const currentById = new Map(current.map((message) => [message.id, message]));
   const serverIds = new Set(serverMessages.map((message) => message.id));
@@ -723,6 +767,7 @@ export function mergeServerMessagesIntoConversation(
       message,
       currentById.get(message.id),
       absorbed.has(message.id),
+      options.liveAssistantMessageIds?.has(message.id) === true,
     ),
   );
   for (const message of current) {
@@ -934,18 +979,20 @@ interface QueuedChatSendUpdate {
   meta?: ProjectChatSendMeta;
 }
 
+// Split geometry lives in `project-split-layout.ts` (shared with the
+// creation frame, OPEND-3207); re-exported here for existing importers.
+export {
+  defaultChatPanelWidthForSplit,
+  projectSplitClassName,
+  projectSplitStyle,
+} from './project-split-layout';
+
 let liveArtifactEventSequence = 0;
 // The brand-extraction project's design-system (brand kit) preview tab. Mirrors
 // the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
 // local literal to respect the web↔daemon boundary.
 const BRAND_KIT_FILE = 'brand.html';
 const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
-const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
-const DEFAULT_CHAT_PANEL_WIDTH = 460;
-const MIN_CHAT_PANEL_WIDTH = 345;
-const FALLBACK_MAX_CHAT_PANEL_WIDTH = 720;
-const MIN_WORKSPACE_PANEL_WIDTH = 400;
-const SPLIT_RESIZE_HANDLE_WIDTH = 4;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
 const BYOK_PROVIDER_REQUIRED_MESSAGE =
@@ -1096,50 +1143,12 @@ const reattachReplayGate = createBoundedConcurrency(REATTACH_REPLAY_CONCURRENCY,
   maxHoldMs: REATTACH_REPLAY_MAX_HOLD_MS,
 });
 
-const MIN_NORMAL_SPLIT_WIDTH =
-  MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
 type DesignSystemReviewAgentTask = NonNullable<DesignSystemReviewEntry['agentTask']>;
 interface DesignSystemReviewDetails {
   feedback?: string;
   files?: string[];
   agentTask?: DesignSystemReviewAgentTask;
-}
-
-function workspacePanelMinWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MIN_WORKSPACE_PANEL_WIDTH;
-  return splitWidth < MIN_NORMAL_SPLIT_WIDTH ? 0 : MIN_WORKSPACE_PANEL_WIDTH;
-}
-
-function maxChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return FALLBACK_MAX_CHAT_PANEL_WIDTH;
-  const workspaceMinWidth = workspacePanelMinWidthForSplit(splitWidth);
-  const viewportAwareMax = splitWidth - SPLIT_RESIZE_HANDLE_WIDTH - workspaceMinWidth;
-  // Keep the established 720px drag ceiling on ordinary windows, widening it
-  // only as far as the equal split on larger project workspaces. That makes
-  // 1:1 reachable without letting the chat drag past and dominate preview.
-  const equalSplitWidth = Math.floor((splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2);
-  const responsiveMax = Math.max(FALLBACK_MAX_CHAT_PANEL_WIDTH, equalSplitWidth);
-  return Math.max(0, Math.min(responsiveMax, Math.floor(viewportAwareMax)));
-}
-
-function clampPreferredChatPanelWidth(width: number): number {
-  return Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width));
-}
-
-function clampChatPanelWidth(
-  width: number,
-  maxWidth = FALLBACK_MAX_CHAT_PANEL_WIDTH,
-): number {
-  const effectiveMax = Math.max(0, Math.floor(maxWidth));
-  const effectiveMin = Math.min(MIN_CHAT_PANEL_WIDTH, effectiveMax);
-  return Math.min(effectiveMax, Math.max(effectiveMin, Math.round(width)));
-}
-
-export function defaultChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return DEFAULT_CHAT_PANEL_WIDTH;
-  const equalHalf = (splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2;
-  return clampChatPanelWidth(equalHalf, maxChatPanelWidthForSplit(splitWidth));
 }
 
 function designSystemFeedbackAttachments(
@@ -1368,33 +1377,6 @@ function designSystemNeedsWorkPrompt(
     'Revise the design-system project files directly. Keep DESIGN.md, tokens, previews, UI kit examples, and assets consistent with the feedback. ' +
     'After editing, summarize what changed and which files should be reviewed again.'
   );
-}
-
-function readSavedChatPanelWidth(): { width: number; customized: boolean } {
-  if (typeof window === 'undefined') {
-    return { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  }
-  try {
-    const raw = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
-    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-    return Number.isFinite(parsed)
-      ? { width: clampPreferredChatPanelWidth(parsed), customized: true }
-      : { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  } catch {
-    return { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  }
-}
-
-function saveChatPanelWidth(width: number): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      CHAT_PANEL_WIDTH_STORAGE_KEY,
-      String(clampPreferredChatPanelWidth(width)),
-    );
-  } catch {
-    // localStorage can be unavailable in hardened browser contexts.
-  }
 }
 
 function autoSendFirstMessageKey(projectId: string): string {
@@ -1791,10 +1773,6 @@ function appendLiveArtifactEventItem(
   return next.length > 50 ? next.slice(next.length - 50) : next;
 }
 
-export function projectSplitClassName(workspaceFocused: boolean): string {
-  return workspaceFocused ? 'split split-focus' : 'split';
-}
-
 /**
  * Whether a project open should start with the chat pane collapsed (workspace
  * focus mode). Uses `useProjectCollab`'s confirmed shared-non-owner signal
@@ -1843,37 +1821,17 @@ export function buildQuestionFormKey(
     : null;
 }
 
-type ProjectSplitStyle = CSSProperties & {
-  '--project-chat-panel-width': string;
-  '--project-chat-handle-width': string;
-  '--project-workspace-panel-track': string;
-};
-
-export function projectSplitStyle(
-  workspaceFocused: boolean,
-  chatPanelWidth: number,
-  workspacePanelTrack: string,
-): ProjectSplitStyle | undefined {
-  if (workspaceFocused) return undefined;
-  return {
-    '--project-chat-panel-width': `${chatPanelWidth}px`,
-    '--project-chat-handle-width': `${SPLIT_RESIZE_HANDLE_WIDTH}px`,
-    '--project-workspace-panel-track': workspacePanelTrack,
-  };
-}
-
-// Writes the two animatable width custom properties directly (see the
-// `@property` registrations + `.split` / `.split.split-focus` transition
-// rules in shell.css) instead of composing a `gridTemplateColumns` string —
-// the grid layout is always driven by
-// `var(--project-chat-panel-width) var(--project-chat-handle-width) var(--project-workspace-panel-track)`
-// declared once on `.split`, so a plain custom-property write is all a
-// collapse/expand or a live resize needs to animate or track the cursor.
+// The split's three grid custom properties are written directly (see
+// `writeProjectSplitLayout` and the `@property` registrations + `.split` /
+// `.split.split-focus` transition rules in shell.css) instead of composing a
+// `gridTemplateColumns` string, so a collapse/expand or a live resize is a
+// plain custom-property write.
 function applySplitChatPanelWidth(
   split: HTMLDivElement | null,
   width: number,
   workspacePanelTrack: string,
   workspaceFocused: boolean,
+  options: { animate?: boolean } = {},
 ): void {
   if (!split) return;
   if (workspaceFocused) {
@@ -1890,9 +1848,7 @@ function applySplitChatPanelWidth(
     split.style.removeProperty('--project-workspace-panel-track');
     return;
   }
-  split.style.setProperty('--project-chat-panel-width', `${width}px`);
-  split.style.setProperty('--project-chat-handle-width', `${SPLIT_RESIZE_HANDLE_WIDTH}px`);
-  split.style.setProperty('--project-workspace-panel-track', workspacePanelTrack);
+  writeProjectSplitLayout(split, width, workspacePanelTrack, options);
 }
 
 // The media model the user picked in the New Project → Media dialog, keyed by
@@ -2769,12 +2725,13 @@ export function ProjectView({
     runId: string | null;
     detached: boolean;
     files: Map<string, ProjectFile>;
-    dispose: () => void;
+    dispose: (force?: boolean) => void;
+    retain: () => () => void;
   }>());
   useEffect(() => () => {
     for (const run of manualFileWritesByRunRef.current.values()) {
       if (run.projectId === project.id && run.authorityKey === projectRunAuthorityKey) {
-        run.dispose();
+        run.dispose(true);
       }
     }
   }, [project.id, projectRunAuthorityKey]);
@@ -4052,6 +4009,7 @@ export function ProjectView({
       }
     }
     const preservingLiveConversation = liveReloadMessageIds.size > 0;
+    const liveReloadController = preservingLiveConversation ? abortRef.current : null;
     // Reset the initialized flag so auto-send waits for this authoritative DB
     // read to settle before checking messages.length. A confirmed readable
     // scope for the same principal may keep already-loaded history visible;
@@ -4110,11 +4068,25 @@ export function ProjectView({
           transcriptController.signal,
         );
         if (cancelled) return;
+        // Capture ownership when this GET is admitted, before queuing React's
+        // updater. The same batch may next clear the controller on terminal
+        // status and enqueue its final buffer flush. Reading refs inside the
+        // delayed updater would accept the full GET and then append that flush
+        // again. A GET admitted after termination still takes normal history.
+        const liveAssistantMessageIds =
+          liveReloadController !== null
+          && abortRef.current === liveReloadController
+          && !liveReloadController.signal.aborted
+          && streamingConversationIdRef.current === activeConversationId
+          && projectResourceAuthorityRef.current !== 'denied'
+            ? liveReloadMessageIds
+            : undefined;
         setMessages((current) =>
           preservingLiveConversation
             ? mergeServerMessagesIntoConversation(
                 current.filter((message) => liveReloadMessageIds.has(message.id)),
                 list,
+                { liveAssistantMessageIds },
               )
             : normalizeConversationMessageOrder(list),
         );
@@ -4598,21 +4570,50 @@ export function ProjectView({
       for (const [name, file] of previous.files) files.set(name, file);
       previous.dispose();
     }
-    const dispose = () => {
+    let retained = 0;
+    let generation = 0;
+    let disposalRequested = false;
+    let disposed = false;
+    const onAbort = () => dispose(true);
+    const dispose = (force = false) => {
+      if (disposed) return;
+      if (!force && retained > 0) {
+        disposalRequested = true;
+        return;
+      }
+      disposed = true;
       manualFileWritesByRunRef.current.delete(controller);
-      controller.signal.removeEventListener('abort', dispose);
+      controller.signal.removeEventListener('abort', onAbort);
     };
     const entry = {
       projectId: project.id, authorityKey: projectRunAuthorityKey,
       conversationId, runId, detached: false, files, dispose,
+      retain: () => {
+        if (disposed) return () => {};
+        const retainedGeneration = generation;
+        retained += 1;
+        let released = false;
+        return () => {
+          if (released || generation !== retainedGeneration) return;
+          released = true;
+          retained -= 1;
+          if (retained === 0 && disposalRequested) dispose();
+        };
+      },
     };
     manualFileWritesByRunRef.current.set(controller, entry);
-    controller.signal.addEventListener('abort', dispose, { once: true });
+    controller.signal.addEventListener('abort', onAbort, { once: true });
     return {
       bindRun: (nextRunId: string) => {
         // A strategy successor can reuse the assistant and transport, but its
         // physical run must not inherit a predecessor's ownership receipts.
-        if (entry.runId && entry.runId !== nextRunId) files.clear();
+        if (entry.runId && entry.runId !== nextRunId) {
+          files.clear();
+          // An older recovery's finally must not dispose a successor's writer.
+          generation += 1;
+          retained = 0;
+          disposalRequested = false;
+        }
         entry.runId = nextRunId;
       },
       release: (recoverable = false) => {
@@ -4620,7 +4621,7 @@ export function ProjectView({
           // Keep observing real writes between transports, including during
           // the status probe/backoff. Only the same scoped physical run adopts it.
           entry.detached = true;
-          controller.signal.removeEventListener('abort', dispose);
+          controller.signal.removeEventListener('abort', onAbort);
         } else dispose();
       },
     };
@@ -4828,8 +4829,15 @@ export function ProjectView({
       art: Artifact,
       projectFilesSnapshot?: ProjectFile[],
       sourceText?: string,
-      options: { pointerMinMtime?: number } = {},
+      options: {
+        pointerMinMtime?: number;
+        isCurrent?: () => boolean;
+        shouldOpen?: () => boolean;
+      } = {},
     ) => {
+      if (options.isCurrent && !options.isCurrent()) {
+        return { ok: false as const, cancelled: true as const, error: undefined };
+      }
       const persistedHtml = resolvePersistedArtifactHtml({
         artifactHtml: art.html,
         identifier: art.identifier,
@@ -4872,7 +4880,7 @@ export function ProjectView({
             return { ok: true as const, fileName: pointerTarget };
           }
           savedArtifactRef.current = pointerTarget;
-          requestOpenFile(pointerTarget);
+          if (options.shouldOpen?.() !== false) requestOpenFile(pointerTarget);
           return { ok: true as const, fileName: pointerTarget };
         }
       }
@@ -4921,6 +4929,11 @@ export function ProjectView({
       const file = await writeProjectTextFile(project.id, fileName, artifactToPersist.html, {
         artifactManifest: manifest ?? undefined,
       }, projectRunWorkspaceContext);
+      // The server may have accepted the file before navigation, a new turn,
+      // or access revocation. Do not apply that old response to the current UI.
+      if (options.isCurrent && !options.isCurrent()) {
+        return { ok: false as const, cancelled: true as const, error: undefined };
+      }
       if (file) {
         savedArtifactRef.current = file.name;
         bumpFilesRefresh();
@@ -4937,7 +4950,8 @@ export function ProjectView({
         // Auto-open the freshly-persisted artifact as a tab so the user
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
-        requestOpenFile(file.name);
+        // Evaluate at response time: a user can select another tab during POST.
+        if (options.shouldOpen?.() !== false) requestOpenFile(file.name);
         return { ok: true as const, fileName: file.name };
       } else {
         // writeProjectTextFile collapses all failure paths (non-OK HTTP
@@ -6498,8 +6512,9 @@ export function ProjectView({
           recoverableGenericDisconnectFailed;
         // A predecessor can be persisted as physically succeeded immediately
         // before the logical task advances. Probe daemon task truth even when
-        // this row otherwise looks terminal; completed task rows bail out
-        // below without replaying their final Run again.
+        // this row otherwise looks terminal; completed task rows, and rows whose
+        // task is parked on the user, bail out below without replaying their
+        // final Run again.
         const needsTaskProjectionProbe = Boolean(
           message.strategyTaskExecutionId
           && message.runId
@@ -6673,8 +6688,46 @@ export function ProjectView({
           needsTaskProjectionProbe
           && !needsReplayForMessage
           && !taskRunAdvanced
-          && (!status.strategyTask || status.strategyTask.terminal)
+          && (
+            !status.strategyTask
+            || status.strategyTask.terminal
+            || strategyTaskParkedOnSucceededRun(status, runId)
+          )
         ) {
+          const strategyTask = status.strategyTask;
+          if (
+            status.status === 'succeeded'
+            && status.id === runId
+            && status.projectId === project.id
+            && status.conversationId === reattachConversationId
+            && status.assistantMessageId === message.id
+            && strategyTask?.outcome === 'blocked'
+            && strategyTask.taskExecutionId === message.strategyTaskExecutionId
+            && strategyTask.activeRunId === runId
+            && !canRetainSuccessfulRunForBlockedStrategy(
+              status.status, strategyTask, status.deliverableValid,
+              status.projectDeliverableValid, message.content,
+            )
+          ) {
+            // A cold history row keeps the daemon's physical success. Restore
+            // the same logical failure/reason as live SSE from this existing
+            // authorized probe, without rewriting the persisted physical row.
+            const failure = createStrategyTaskBlockedError(strategyTask);
+            updateMessageById(message.id, (prev) => {
+              if (
+                activeConversationIdRef.current !== reattachConversationId
+                || projectRunAuthorityKeyRef.current !== projectRunAuthorityKey
+                || prev.runId !== runId
+                || prev.strategyTaskExecutionId !== strategyTask.taskExecutionId
+                || prev.runStatus !== 'succeeded'
+              ) return prev;
+              return appendErrorStatusEvent({
+                ...prev,
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
+                runStatus: 'failed',
+              }, failure.message, failure.code);
+            });
+          }
           completedReattachRunsRef.current.add(runId);
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
@@ -7906,6 +7959,7 @@ export function ProjectView({
     daemonLive,
     config.mode,
     activeConversationId,
+    projectRunAuthorityKey,
     currentProject.metadata,
     streaming,
     messages,
@@ -7940,7 +7994,25 @@ export function ProjectView({
     const recoverArtifacts = async () => {
       if (recovering) return;
       recovering = true;
+      const retainedReceipts = new Map<string, NonNullable<ReturnType<typeof findDetachedManualFileWrites>>>();
+      const releaseReceipts: Array<() => void> = [];
+      const retainReceipt = (runId: string) => {
+        const existing = retainedReceipts.get(runId);
+        if (existing) return existing;
+        const receipt = findDetachedManualFileWrites(activeConversationId, runId);
+        if (receipt) {
+          retainedReceipts.set(runId, receipt);
+          releaseReceipts.push(receipt.retain());
+        }
+        return receipt;
+      };
       try {
+        // Pin the live writer before the first HTTP await. A sibling terminal
+        // finalizer may accept an earlier output meanwhile; late manual saves
+        // still have to update this same run's proof until recovery finishes.
+        for (const message of messagesRef.current) {
+          if (message.runId && hasRecoverableArtifactMessage(message)) retainReceipt(message.runId);
+        }
         const serverMessages = await listMessages(
           project.id,
           activeConversationId,
@@ -7956,6 +8028,32 @@ export function ProjectView({
           if (recoveredArtifactMessagesRef.current.has(message.id)) continue;
           const runId = message.runId;
           if (!runId) continue;
+          retainReceipt(runId);
+          const recoveryAuthority = canonicalProjectRunWorkspaceContextRef.current;
+          const latestAssistantMessage = () => {
+            for (let index = messagesRef.current.length - 1; index >= 0; index -= 1) {
+              const item = messagesRef.current[index];
+              // A host memory card belongs to the preceding turn; it does not
+              // supersede that run's pending artifact persistence.
+              if (item?.role === 'assistant' && !assistantMessageNeverHadARun(item)) return item;
+            }
+            return undefined;
+          };
+          const latestAssistantAtStart = latestAssistantMessage();
+          // Match the terminal reattach policy: a deliberate user selection
+          // wins over automatic recovery, without canceling file persistence.
+          const shouldOpenRecoveredArtifact = () => !userTookOverPreviewRef.current;
+          const recoveryTargetIsCurrent = () => {
+            const latestAssistant = latestAssistantMessage();
+            return mountedRef.current
+              && projectIdRef.current === project.id
+              && activeConversationIdRef.current === activeConversationId
+              && canonicalProjectRunWorkspaceContextRef.current === recoveryAuthority
+              && (projectResourceAuthorityRef.current === 'local' || projectResourceAuthorityRef.current === 'workspace')
+              && latestAssistant?.id === latestAssistantAtStart?.id
+              && latestAssistant?.runId === latestAssistantAtStart?.runId
+              && messagesRef.current.some((item) => item.id === message.id && item.runId === runId);
+          };
 
           const sourceText = message.content.trim().length > 0
             ? message.content
@@ -7996,6 +8094,7 @@ export function ProjectView({
             runId,
             projectRunWorkspaceContext,
           ).catch(() => null);
+          if (cancelled || !recoveryTargetIsCurrent()) return;
           let nextFiles = await refreshProjectFiles();
           if (cancelled) return;
           const beforeFileNames = new Set(
@@ -8016,17 +8115,23 @@ export function ProjectView({
               nextFiles,
               { minMtime: runStartedAt },
             );
+          if (!recoveryTargetIsCurrent()) return;
           if (recoveredExistingArtifact) {
             savedArtifactRef.current = recoveredExistingArtifact.name;
-            requestOpenFile(recoveredExistingArtifact.name);
+            if (shouldOpenRecoveredArtifact()) requestOpenFile(recoveredExistingArtifact.name);
           } else {
             savedArtifactRef.current = null;
             await persistArtifact(
               artifactToPersist,
               nextFiles,
               sourceText,
-              { pointerMinMtime: runStartedAt },
+              {
+                pointerMinMtime: runStartedAt,
+                isCurrent: recoveryTargetIsCurrent,
+                shouldOpen: shouldOpenRecoveredArtifact,
+              },
             );
+            if (!recoveryTargetIsCurrent()) return;
             nextFiles = await refreshProjectFiles();
             recoveredExistingArtifact = findExistingArtifactProjectFile(
               artifactToPersist,
@@ -8034,8 +8139,12 @@ export function ProjectView({
               { minMtime: runStartedAt },
             );
           }
-          if (cancelled) return;
-          const recoveredManualFileWrites = findDetachedManualFileWrites(activeConversationId, runId);
+          // Another terminal finalizer can accept an earlier output while this
+          // artifact POST is pending. That changes recovery eligibility and
+          // cleans up this effect, but the successful write still belongs to
+          // this same scoped run and must finish its message projection.
+          if (!recoveryTargetIsCurrent() || (cancelled && !recoveredExistingArtifact)) return;
+          const recoveredManualFileWrites = retainReceipt(runId);
           const manualWrites = recoveredManualFileWrites?.files ?? new Map<string, ProjectFile>();
           const agentPaths = [
             ...extractTouchedFilePathsFromEvents(message.events),
@@ -8055,7 +8164,9 @@ export function ProjectView({
             ...autoOpenArtifactOptions,
             preTurnFileNames: beforeFileNames,
           });
-          if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+          if (producedArtifactToOpen && shouldOpenRecoveredArtifact()) {
+            requestOpenFile(producedArtifactToOpen);
+          }
           // This message's persisted runStatus was already terminal (a
           // precondition of hasRecoverableArtifactMessage); when it has no
           // stored endedAt, fall back to the daemon's authoritative terminal
@@ -8066,9 +8177,19 @@ export function ProjectView({
             latestRunStatus,
             projectRunWorkspaceContext,
           );
+          if (!recoveryTargetIsCurrent()) return;
+          const strategyTask = latestRunStatus?.strategyTask;
+          const taskBlocked = strategyTask?.terminal === true && strategyTask.outcome === 'blocked';
+          // Saving the inline file repairs delivery, not the strategy verdict.
+          // Apply the same success exceptions as the normal provider path.
+          const blockedRunCanSucceed = latestRunStatus != null
+            && canRetainSuccessfulRunForBlockedStrategy(
+              latestRunStatus.status, strategyTask, latestRunStatus.deliverableValid,
+              latestRunStatus.projectDeliverableValid, sourceText,
+            );
           updateMessageById(
             message.id,
-            (prev) => ({
+            (prev) => prev.runId !== runId ? prev : ({
               ...prev,
               content: sourceText,
               producedFiles: produced,
@@ -8083,6 +8204,7 @@ export function ProjectView({
               resultDeliveryState: 'delivered',
               runStatus:
                 latestRunStatus?.status === 'succeeded'
+                  && ((prev.strategyTaskBlocked !== true && !taskBlocked) || blockedRunCanSucceed)
                   ? 'succeeded'
                   : prev.runStatus,
               endedAt: prev.endedAt ?? recoveredArtifactEndedAt,
@@ -8096,6 +8218,7 @@ export function ProjectView({
           onProjectsRefresh();
         }
       } finally {
+        for (const release of releaseReceipts) release();
         recovering = false;
       }
     };
@@ -9014,6 +9137,8 @@ export function ProjectView({
       // has selected a turn-level artifact, however, an older Write refresh
       // must not move focus again.
       let completionSelectedAutoOpen = false;
+      let liveFocusClosed = false;
+      let latestExplicitFocusRequest = 0;
       // A new run gets a clean slate: taking the preview over during the last
       // turn says nothing about this one.
       userTookOverPreviewRef.current = false;
@@ -9118,10 +9243,18 @@ export function ProjectView({
          */
         if (ev.kind === 'artifact_focus' && ev.open) {
           const declaredPath = ev.open;
+          const focusRequest = ++latestExplicitFocusRequest;
           void refreshProjectFiles().then(async (nextFiles) => {
             const moduleFileNames = /\.(jsx|tsx)$/i.test(declaredPath)
               ? await collectReferencedJsxNames(nextFiles, readProjectHtml)
               : undefined;
+            // The file read belongs to this live stream. Completion, failure,
+            // or cancellation must not let its stale focus replace a later choice.
+            if (
+              liveFocusClosed
+              || controller.signal.aborted
+              || focusRequest !== latestExplicitFocusRequest
+            ) return;
             const decision = decideAgentFocusOpen({
               declaredPath,
               projectFiles: nextFiles,
@@ -9208,6 +9341,13 @@ export function ProjectView({
                 const moduleFileNames = /\.(jsx|tsx)$/i.test(filePath)
                   ? await collectReferencedJsxNames(nextFiles, readProjectHtml)
                   : undefined;
+                // Write and explicit focus reads can share pending file I/O.
+                // Neither may take the preview after this stream or user moved on.
+                if (
+                  liveFocusClosed
+                  || controller.signal.aborted
+                  || userTookOverPreviewRef.current
+                ) return;
                 const decision = decideAutoOpenAfterWrite(filePath, nextFiles, {
                   moduleFileNames,
                 });
@@ -9378,6 +9518,7 @@ export function ProjectView({
           });
         },
         onDone: (fullText = '') => {
+          liveFocusClosed = true;
           // The daemon delivers onDone even for a canceled run, so a run
           // superseded by a "send now" interrupt can still land here and must
           // not apply its completion side effects over the replacement. A run
@@ -9458,6 +9599,27 @@ export function ProjectView({
             };
           });
           const finalizingRunId = currentRunId;
+          // File persistence can finish after the user has selected another
+          // preview or moved on to a new run. Recheck focus ownership at each
+          // open boundary without interrupting this run's output persistence.
+          const shouldOpenCompletedArtifact = () => {
+            let latestRunMessage: ChatMessage | undefined;
+            for (let index = messagesRef.current.length - 1; index >= 0; index -= 1) {
+              const message = messagesRef.current[index];
+              if (message?.role === 'assistant' && !assistantMessageNeverHadARun(message)) {
+                latestRunMessage = message;
+                break;
+              }
+            }
+            return mountedRef.current
+              && !userTookOverPreviewRef.current
+              && !supersededRunsRef.current.has(controller)
+              && projectIdRef.current === project.id
+              && activeConversationIdRef.current === runConversationId
+              && canonicalProjectRunWorkspaceContextRef.current.authorityKey === projectRunAuthorityKey
+              && projectResourceAuthorityRef.current !== 'denied'
+              && latestRunMessage?.id === assistantId;
+          };
           if (finalizingRunId) finalizingLocalRunIdsRef.current.add(finalizingRunId);
           if (runCommentAttachments.length > 0) {
             void patchAttachedStatuses(runCommentAttachments, 'needs_review');
@@ -9509,9 +9671,11 @@ export function ProjectView({
                   artifactPersistenceSucceeded = true;
                   savedArtifactRef.current = sameTurnWrite.name;
                   completionSelectedAutoOpen = true;
-                  requestOpenFile(sameTurnWrite.name);
+                  if (shouldOpenCompletedArtifact()) requestOpenFile(sameTurnWrite.name);
                 } else {
-                  const persistence = await persistArtifact(artifactToPersist, nextFiles, finalText);
+                  const persistence = await persistArtifact(artifactToPersist, nextFiles, finalText, {
+                    shouldOpen: shouldOpenCompletedArtifact,
+                  });
                   if (persistence.ok) artifactPersistenceSucceeded = true;
                   else artifactPersistenceError = persistence.error;
                   nextFiles = await refreshProjectFiles({ fresh: true });
@@ -9597,7 +9761,9 @@ export function ProjectView({
               );
               if (producedArtifactToOpen) {
                 completionSelectedAutoOpen = true;
-                requestOpenTurnArtifacts(turnArtifacts.open, producedArtifactToOpen);
+                if (shouldOpenCompletedArtifact()) {
+                  requestOpenTurnArtifacts(turnArtifacts.open, producedArtifactToOpen);
+                }
               }
               const deliveryCandidate: ChatMessage = {
                 ...latestAssistantMsg,
@@ -9655,6 +9821,7 @@ export function ProjectView({
           onProjectsRefresh();
         },
         onError: async (err: Error) => {
+          liveFocusClosed = true;
           // Disconnect-time stamp, used as-is for non-generic-disconnect
           // failures. When the generic-disconnect retry-cap probe below
           // resolves a terminal daemon status, this is advanced to that
@@ -12248,10 +12415,7 @@ export function ProjectView({
     [skills, designTemplates, project.skillId],
   );
   const chatResizeLabel = t('project.resizeChatPanel');
-  const workspacePanelTrack =
-    workspacePanelMinWidth === 0
-      ? 'minmax(0, 1fr)'
-      : `minmax(${workspacePanelMinWidth}px, 1fr)`;
+  const workspacePanelTrack = workspacePanelTrackForMinWidth(workspacePanelMinWidth);
   // The comment panel floats over the workspace now, so opening it must not
   // touch the split at all: the chat column keeps the width the user set.
   // (It used to take over this column at COMMENT_INSPECTOR_PANEL_WIDTH.)
@@ -12277,11 +12441,17 @@ export function ProjectView({
   const renderPreferredChatPanelWidth = useCallback((
     preferredWidth: number,
     maxWidth = chatPanelMaxWidthRef.current,
-    options: { commitState?: boolean } = {},
+    options: { commitState?: boolean; animate?: boolean } = {},
   ): number => {
     const next = clampChatPanelWidth(preferredWidth, maxWidth);
     chatPanelWidthRef.current = next;
-    applySplitChatPanelWidth(splitRef.current, next, workspacePanelTrack, workspaceFocusedRef.current);
+    applySplitChatPanelWidth(
+      splitRef.current,
+      next,
+      workspacePanelTrack,
+      workspaceFocusedRef.current,
+      { animate: options.animate },
+    );
     if (options.commitState !== false) setChatPanelWidth(next);
     return next;
   }, [workspacePanelTrack]);
@@ -12338,29 +12508,34 @@ export function ProjectView({
     const split = splitRef.current;
     if (!split) return undefined;
 
-    const updateAllowedWidth = () => {
-      const splitWidth = split.clientWidth;
-      const nextWorkspaceMin = workspacePanelMinWidthForSplit(splitWidth);
-      const nextMax = maxChatPanelWidthForSplit(splitWidth);
-      chatPanelMaxWidthRef.current = nextMax;
-      setWorkspacePanelMinWidth(nextWorkspaceMin);
-      setChatPanelMaxWidth(nextMax);
-      const preferredWidth = chatPanelWidthCustomizedRef.current
-        ? preferredChatPanelWidthRef.current
-        : defaultChatPanelWidthForSplit(splitWidth);
-      renderPreferredChatPanelWidth(preferredWidth, nextMax);
+    const updateAllowedWidth = (options: { animate?: boolean } = {}) => {
+      // Same resolver as the creation frame that may have preceded this view
+      // (OPEND-3207): a saved width, else the equal split of the container.
+      const layout = resolveProjectSplitLayout(split.clientWidth, {
+        width: preferredChatPanelWidthRef.current,
+        customized: chatPanelWidthCustomizedRef.current,
+      });
+      chatPanelMaxWidthRef.current = layout.chatPanelMaxWidth;
+      setWorkspacePanelMinWidth(layout.workspacePanelMinWidth);
+      setChatPanelMaxWidth(layout.chatPanelMaxWidth);
+      renderPreferredChatPanelWidth(layout.chatPanelWidth, layout.chatPanelMaxWidth, options);
     };
 
-    updateAllowedWidth();
+    // The first write settles the column without the `.split` transition:
+    // the `clientWidth` read above has already forced a style pass with the
+    // provisional inline width, so an animated write here would be seen
+    // sliding from that value on every mount.
+    updateAllowedWidth({ animate: false });
 
     if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(updateAllowedWidth);
+      const observer = new ResizeObserver(() => updateAllowedWidth());
       observer.observe(split);
       return () => observer.disconnect();
     }
 
-    window.addEventListener('resize', updateAllowedWidth);
-    return () => window.removeEventListener('resize', updateAllowedWidth);
+    const onWindowResize = () => updateAllowedWidth();
+    window.addEventListener('resize', onWindowResize);
+    return () => window.removeEventListener('resize', onWindowResize);
   }, [renderPreferredChatPanelWidth]);
 
   useEffect(() => () => finishChatPanelResize(false), [finishChatPanelResize]);

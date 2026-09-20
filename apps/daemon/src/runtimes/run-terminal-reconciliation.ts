@@ -16,6 +16,7 @@ import {
   normalizeAnalyticsCaptureResult,
   type AnalyticsCaptureResult,
 } from '../analytics.js';
+import type { IntentRecoveryRunState } from '../strategies/od-next/intent-resolution-recovery.js';
 import { reconcileStrategyTaskRunTerminal } from '../strategies/task-store.js';
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { summarizeRunDiagnosticsForAnalytics } from '../run-diagnostics.js';
@@ -95,7 +96,7 @@ interface AnalyticsRecovery {
   completedAt?: number;
 }
 
-interface DurableRunState extends RestartRecoverableDurableRunState {
+interface DurableRunState extends RestartRecoverableDurableRunState, IntentRecoveryRunState {
   schemaVersion: 1;
   id: string;
   projectId: string | null;
@@ -163,6 +164,11 @@ interface ReconciliationOptions {
     completion: Promise<unknown>;
   };
   runsLogDir: string;
+  recoverBeforeInterrupt?: (
+    state: DurableRunState,
+    states: ReadonlyMap<string, DurableRunState>,
+    now: number,
+  ) => Partial<DurableRunState> | null;
   finalizeTerminalLocally?: (run: DurableRunState, status: string, terminalAt: number) => void;
 }
 
@@ -206,13 +212,15 @@ function readState(filePath: string): DurableRunState | null {
   }
 }
 
-function writeState(filePath: string, state: DurableRunState): void {
+function writeState(filePath: string, state: DurableRunState): boolean {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   try {
     fs.writeFileSync(tempPath, `${JSON.stringify(state)}\n`, { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tempPath, filePath);
+    return true;
   } catch {
     try { fs.unlinkSync(tempPath); } catch { /* best-effort cleanup */ }
+    return false;
   }
 }
 
@@ -275,6 +283,7 @@ function reconcileMessages(
   db: Database.Database,
   statesByRunId: Map<string, DurableRunState>,
   now: number,
+  deferredRunIds: ReadonlySet<string>,
 ): number {
   let rows: Array<{ id: string; runId: string | null }> = [];
   try {
@@ -286,7 +295,10 @@ function reconcileMessages(
   } catch {
     return 0;
   }
+  let reconciled = 0;
   for (const row of rows) {
+    if (row.runId && deferredRunIds.has(row.runId)) continue;
+    reconciled += 1;
     const state = row.runId ? statesByRunId.get(row.runId) : undefined;
     const status = state && TERMINAL_STATUSES.has(state.status) ? state.status : 'failed';
     db.prepare(
@@ -305,7 +317,7 @@ function reconcileMessages(
         }
       : { label: status, detail: RECONCILED_STATUS_MESSAGE });
   }
-  return rows.length;
+  return reconciled;
 }
 
 /**
@@ -350,7 +362,7 @@ export async function reconcileDurableRunTerminals(
     entries = [];
   }
 
-  const states = entries
+  let states = entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => ({
       filePath: path.join(options.runsLogDir, entry.name, 'state.json'),
@@ -371,6 +383,42 @@ export async function reconcileDurableRunTerminals(
     entry.state.telemetryDelivery.crashWindow = false;
     delete entry.state.langfuseCompletedAt;
     writeState(entry.filePath, entry.state);
+  }
+
+  const deferredRunIds = new Set<string>();
+  if (options.recoverBeforeInterrupt) {
+    const originalStates = new Map(states.map(entry => [entry.state.id, entry.state]));
+    states = states.filter(entry => {
+      try {
+        const recovered = options.recoverBeforeInterrupt!(entry.state, originalStates, now);
+        if (!recovered) return true;
+        const next = { ...entry.state, ...recovered };
+        // A validated local verdict can correct a previously derived restart
+        // failure. Its stale marker would otherwise replay a failed SSE end
+        // even though the durable status has now been repaired to succeeded.
+        if (recovered.status === 'succeeded' && entry.state.status === 'failed'
+          && entry.state.errorCode === RESTART_ERROR_CODE
+          && entry.state.terminalRecoveryReason === 'daemon_restart') {
+          delete next.terminalRecoveryReason;
+          if (next.terminalTrigger === 'daemon_restart') delete next.terminalTrigger;
+        }
+        if (!writeState(entry.filePath, next)) {
+          // SQL may already be committed. Leave the original physical snapshot
+          // untouched for the next local replay, rather than interrupting it.
+          deferredRunIds.add(entry.state.id);
+          console.warn('[runs] local terminal recovery persistence deferred', entry.state.id);
+          return false;
+        }
+        entry.state = next;
+        return true;
+      } catch (error) {
+        // An owner/SQL read failure cannot authorize a successful recovery.
+        // Defer this run without preventing siblings from reconciling.
+        deferredRunIds.add(entry.state.id);
+        console.warn('[runs] local terminal recovery deferred', entry.state.id, error);
+        return false;
+      }
+    });
   }
 
   for (const entry of states) {
@@ -399,7 +447,7 @@ export async function reconcileDurableRunTerminals(
   }
 
   const statesByRunId = new Map(states.map((entry) => [entry.state.id, entry.state]));
-  result.messagesReconciled = reconcileMessages(options.db, statesByRunId, now);
+  result.messagesReconciled = reconcileMessages(options.db, statesByRunId, now, deferredRunIds);
   for (const { state } of states) {
     if (state.status !== 'failed' && state.status !== 'canceled') continue;
     if (reconcileStrategyTaskRunTerminalIsolated(options.db, {

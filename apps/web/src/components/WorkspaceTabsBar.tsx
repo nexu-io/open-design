@@ -14,6 +14,7 @@ import {
   subscribeWorkspaceTabsDock,
 } from './workspaceTabsDock';
 import { useT } from '../i18n';
+import { scrollMovesAnchor } from '../lib/scroll-moves-anchor';
 import { buildPath, navigate, type EntryHomeView, type Route } from '../router';
 import type { Project } from '../types';
 import {
@@ -1136,6 +1137,9 @@ export function WorkspaceTabsBar({
   const [dockActionsProjectId, setDockActionsProjectId] = useState<string | null>(null);
   const [dockActionsAnchor, setDockActionsAnchor] = useState<{ top: number; left: number } | null>(null);
   const dockActionsRef = useRef<HTMLDivElement | null>(null);
+  // The ⋮ button the open menu is anchored to: a scroll only dismisses the
+  // menu when it moves THIS element (see `scrollMovesAnchor`).
+  const dockActionsTriggerRef = useRef<HTMLElement | null>(null);
   // 重命名 edits in place, in the row (the rail row does the same).
   const [dockRenamingProjectId, setDockRenamingProjectId] = useState<string | null>(null);
   const [dockRenameDraft, setDockRenameDraft] = useState('');
@@ -1151,8 +1155,10 @@ export function WorkspaceTabsBar({
     setDockRenamingProjectId(null);
     setDockDuplicateFailedId(null);
   }, [dockMenuOpen]);
-  // Outside pointer / Escape / anything that moves the dropdown closes the
-  // menu — the same dismissals the rail row menu answers to.
+  // Outside pointer / Escape / a scroll that moves the trigger closes the
+  // menu — the same dismissals the rail row menu answers to. A scroll that
+  // does NOT move it (the transcript auto-scrolling under a running turn,
+  // OPEND-3283) is not a dismissal: the menu is still where the user opened it.
   useEffect(() => {
     if (!dockActionsProjectId) return undefined;
     const close = () => setDockActionsProjectId(null);
@@ -1165,14 +1171,17 @@ export function WorkspaceTabsBar({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
     };
+    const onScroll = (event: Event) => {
+      if (scrollMovesAnchor(event, dockActionsTriggerRef.current)) close();
+    };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('scroll', close, true);
+    document.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', close);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('scroll', close, true);
+      document.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', close);
     };
   }, [dockActionsProjectId]);
@@ -2239,6 +2248,7 @@ export function WorkspaceTabsBar({
                             setDockActionsProjectId(null);
                             return;
                           }
+                          dockActionsTriggerRef.current = event.currentTarget;
                           const row = event.currentTarget.parentElement;
                           if (row) {
                             setDockActionsAnchor(

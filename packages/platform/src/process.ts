@@ -645,6 +645,172 @@ export function selectOwnedProcessTree(known: ProcessSnapshot[], current: Proces
   return [...selected.values()];
 }
 
+/**
+ * OS identity of one live process: enough to tell "the process we started"
+ * apart from an unrelated process that later received the same PID.
+ */
+export type ProcessIdentity = {
+  pid: number;
+  ppid: number;
+  /** POSIX process group id; `null` where the platform has no process groups. */
+  processGroupId: number | null;
+  /** OS-reported creation time in ms since the epoch, when the backend reports one. */
+  startedAtMs: number | null;
+  /** Granularity of `startedAtMs`: POSIX `ps lstart` reports whole seconds. */
+  startedAtResolutionMs: number;
+  command: string;
+};
+
+const LSTART_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * @internal Parse `LC_ALL=C ps -o pid=,ppid=,pgid=,lstart=,command=` output.
+ * `lstart` is the C-locale `Www Mmm dd hh:mm:ss yyyy` form in the local zone,
+ * which is the zone this process shares with `ps`.
+ */
+export function parsePosixProcessIdentities(stdout: string): ProcessIdentity[] {
+  const identities: ProcessIdentity[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const match = line.match(
+      /^\s*(\d+)\s+(\d+)\s+(\d+)\s+[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(\d{4})\s*(.*)$/,
+    );
+    if (!match) continue;
+    const month = LSTART_MONTHS.indexOf(match[4]!);
+    const startedAtMs = month < 0
+      ? Number.NaN
+      : new Date(
+        Number(match[9]),
+        month,
+        Number(match[5]),
+        Number(match[6]),
+        Number(match[7]),
+        Number(match[8]),
+      ).getTime();
+    identities.push({
+      command: (match[10] ?? "").trim(),
+      pid: Number(match[1]),
+      ppid: Number(match[2]),
+      processGroupId: Number(match[3]),
+      startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : null,
+      startedAtResolutionMs: 1000,
+    });
+  }
+  return identities;
+}
+
+/**
+ * Read the OS identity (creation time, and process group on POSIX) of the given
+ * PIDs. PIDs that do not exist are absent from the result; a backend failure
+ * throws. Callers that must never mistake "could not look" for "not there"
+ * should probe liveness with `isProcessAlive` first and treat a live PID that
+ * is missing here as unverifiable, not as gone.
+ */
+export async function readProcessIdentities(pids: readonly number[]): Promise<Map<number, ProcessIdentity>> {
+  const exactPids = [...new Set(pids.filter((pid) => Number.isSafeInteger(pid) && pid > 0))];
+  const result = new Map<number, ProcessIdentity>();
+  if (exactPids.length === 0) return result;
+  if (process.platform === "win32") {
+    for (const snapshot of await captureProcessSnapshotsByPids(exactPids)) {
+      result.set(snapshot.pid, {
+        command: snapshot.command,
+        pid: snapshot.pid,
+        ppid: snapshot.ppid,
+        processGroupId: null,
+        startedAtMs: snapshot.startedAtMs ?? null,
+        startedAtResolutionMs: 1,
+      });
+    }
+    return result;
+  }
+  const stdout = await new Promise<string>((resolveList, rejectList) => {
+    execFile(
+      "ps",
+      ["-o", "pid=,ppid=,pgid=,lstart=,command=", "-p", exactPids.join(",")],
+      { encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, maxBuffer: 8 * 1024 * 1024 },
+      (error, out, err) => {
+        if (!error || out.length > 0) {
+          resolveList(out);
+          return;
+        }
+        // `ps -p` exits 1 silently when none of the PIDs exist; that is an
+        // answer. Exit 1 WITH a complaint (unsupported column, bad PID list) is
+        // a backend failure and must not read as "none of them exist".
+        if ((error as { code?: unknown }).code === 1 && err.trim().length === 0) {
+          resolveList("");
+          return;
+        }
+        rejectList(error);
+      },
+    );
+  });
+  const wanted = new Set(exactPids);
+  for (const identity of parsePosixProcessIdentities(stdout)) {
+    if (wanted.has(identity.pid)) result.set(identity.pid, identity);
+  }
+  return result;
+}
+
+/**
+ * Probe whether any member of a POSIX process group is alive. Always `false`
+ * on Windows, which has no process groups.
+ */
+export function isProcessGroupAlive(processGroupId: number | null | undefined): boolean {
+  if (process.platform === "win32" || typeof processGroupId !== "number" || !Number.isSafeInteger(processGroupId) || processGroupId <= 0) {
+    return false;
+  }
+  try {
+    process.kill(-processGroupId, 0);
+    return true;
+  } catch (error) {
+    return errorCode(error) === "EPERM";
+  }
+}
+
+export type TerminateProcessGroupResult = {
+  /** The group was already empty before any signal was sent. */
+  alreadyStopped: boolean;
+  /** SIGKILL was needed because members survived the SIGTERM grace. */
+  forced: boolean;
+  /** Members were still alive after the SIGKILL grace. */
+  survived: boolean;
+};
+
+/**
+ * Terminate a whole POSIX process group: SIGTERM, wait for the group to empty,
+ * then SIGKILL whatever is left. Signalling the group (not a PID list) also
+ * catches members created after the call began. No-op on Windows.
+ */
+export async function terminateProcessGroup(
+  processGroupId: number,
+  options: StopProcessesOptions = {},
+): Promise<TerminateProcessGroupResult> {
+  if (!isProcessGroupAlive(processGroupId)) {
+    return { alreadyStopped: true, forced: false, survived: false };
+  }
+  const signalGroup = (signal: NodeJS.Signals) => {
+    try {
+      process.kill(-processGroupId, signal);
+    } catch {
+      // ESRCH: the group emptied between the probe and the signal.
+    }
+  };
+  const waitForGroupExit = async (timeoutMs: number) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (!isProcessGroupAlive(processGroupId)) return true;
+      await sleep(25);
+    }
+    return !isProcessGroupAlive(processGroupId);
+  };
+  signalGroup("SIGTERM");
+  if (await waitForGroupExit(normalizedGraceMs(options.termGraceMs) ?? 5000)) {
+    return { alreadyStopped: false, forced: false, survived: false };
+  }
+  signalGroup("SIGKILL");
+  const gone = await waitForGroupExit(normalizedGraceMs(options.killGraceMs) ?? 5000);
+  return { alreadyStopped: false, forced: true, survived: !gone };
+}
+
 /** Send a signal to each PID, ignoring `ESRCH` (already-dead) but rethrowing other errors. */
 export function signalProcesses(pids: number[], signal: NodeJS.Signals): void {
   for (const pid of pids) {

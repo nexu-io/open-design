@@ -28,6 +28,7 @@ export interface DaemonTelemetry {
   resolveAppVersion: () => Promise<any>;
   reportFeedback: (req: {
     runId: string;
+    traceId?: string;
     rating: 'positive' | 'negative';
     reasonCodes: string[];
     hasCustomReason: boolean;

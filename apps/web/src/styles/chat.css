@@ -2402,25 +2402,9 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   opacity: 0.45;
 }
 
-.chat-queued-send-row-drop-before::before,
-.chat-queued-send-row-drop-after::after {
-  content: '';
-  position: absolute;
-  left: 28px;
-  right: 8px;
-  height: 2px;
-  border-radius: var(--radius-pill);
-  background: var(--selected);
-  box-shadow: 0 0 0 2px var(--selected-soft);
-}
-
-.chat-queued-send-row-drop-before::before {
-  top: -2px;
-}
-
-.chat-queued-send-row-drop-after::after {
-  bottom: -2px;
-}
+/* The drag-reorder insertion bar moved off the row (OPEND-3203): the row's
+   `overflow: hidden` clipped a pseudo-element at `top: -2px`, so nothing but
+   its halo showed. `QueuedSendStack` now draws it between the cards. */
 
 .chat-queued-send-main {
   min-width: 0;

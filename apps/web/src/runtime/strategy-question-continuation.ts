@@ -79,3 +79,29 @@ export function strategySettledMessageFields(
   }
   return null;
 }
+
+/**
+ * True when a Run status probe proves the Run left its logical task parked on
+ * the user: the Run itself succeeded, and the task is neither terminal nor
+ * running on this Run (`clarification_required`, `plan_ready`).
+ *
+ * Such a Run has nothing left for a reattach to follow. The daemon task store
+ * keeps an active Run only while the outcome is `running`, and it claims any
+ * automatic successor in the same transaction as the Run's verdict — a probe
+ * would then project that successor as a different `activeRunId`. The wire
+ * projection names this same Run only because it falls back to the latest Run
+ * when none is active. A row that already holds this Run's transcript gains
+ * nothing from a replay from event 0; the replay only re-streams text that a
+ * concurrent conversation refresh can double up (OPEND-3230).
+ */
+export function strategyTaskParkedOnSucceededRun(
+  status: Pick<ChatRunStatusResponse, 'status' | 'strategyTask'>,
+  runId: string,
+): boolean {
+  const task = status.strategyTask;
+  return status.status === 'succeeded'
+    && task !== undefined
+    && !task.terminal
+    && task.outcome !== 'running'
+    && task.activeRunId === runId;
+}
