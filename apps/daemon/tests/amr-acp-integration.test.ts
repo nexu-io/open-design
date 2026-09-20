@@ -21,6 +21,8 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { AMR_RUNTIMES } from '@open-design/contracts';
+
 import { attachAcpSession, detectAcpModels } from '../src/agent-protocol/index.js';
 import { acpTelemetryToolCallId } from '../src/agent-protocol/acp/updates.js';
 import {
@@ -148,8 +150,19 @@ describe('AMR runtime def', () => {
     expect(def?.streamFormat).toBe('acp-json-rpc');
   });
 
-  it('builds the documented `vela agent run` argv', () => {
-    expect(amrAgentDef.buildArgs()).toEqual(['agent', 'run']);
+  it('builds the documented `vela agent run` argv, defaulting to the OpenCode harness', () => {
+    // `--runtime` is always emitted, even for the default. vela's own default
+    // is opencode, but stating the selection keeps a run's argv a record of
+    // which harness the daemon asked for rather than whatever the installed
+    // vela happens to default to.
+    expect(amrAgentDef.buildArgs()).toEqual(['agent', 'run', '--runtime', 'opencode']);
+  });
+
+  it('passes the selected AMR harness through to `--runtime`', () => {
+    for (const amrRuntime of AMR_RUNTIMES) {
+      expect(amrAgentDef.buildArgs('', [], undefined, { amrRuntime }))
+        .toEqual(['agent', 'run', '--runtime', amrRuntime]);
+    }
   });
 
   it('fails closed instead of exposing static stale fallback models', () => {

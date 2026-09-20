@@ -24,6 +24,9 @@ import { enforceOdNextStrategyPipelineV2 } from '../src/plugins/strategy-stage-p
 import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 import { computeStableSectionHashes } from '../src/prompts/stable-sections.js';
 import { composeSystemPrompt } from '../src/prompts/system.js';
+import { createSnapshot } from '../src/plugins/snapshots.js';
+import { resolveOdNextPromptRecipeForRun } from '../src/strategies/od-next/initial-prompt-bundle-service.js';
+import { resolveBundledOdNextRuntimeCapability } from '../src/runtimes/od-next-capability-gate.js';
 import { loadCraftSections } from '../src/craft.js';
 
 const BUNDLED_ROOT = path.resolve(import.meta.dirname, '../../../plugins/_official');
@@ -100,6 +103,21 @@ afterAll(() => {
 });
 
 describe('OD Next V2 request recipe wiring', () => {
+  it.each(['none', 'pi'] as const)('composes the actual %s strategy recipe for its execution profile', async (amrRuntime) => {
+    db.prepare('INSERT OR IGNORE INTO projects (id, name) VALUES (?, ?)').run('recipe-project', 'Recipe test');
+    const persisted = createSnapshot(db, {
+      ...snapshot, projectId: 'recipe-project', manifestSourceDigest: 'sha256:' + 'a'.repeat(64),
+    });
+    const capability = resolveBundledOdNextRuntimeCapability({ agentId: 'amr', amrRuntime });
+    const recipe = await resolveOdNextPromptRecipeForRun({
+      db, bundledPluginsDir: BUNDLED_ROOT, appliedPluginSnapshotId: persisted.snapshotId,
+      agentId: 'amr', amrRuntime, streamFormat: 'acp', atomPromptsEnabled: true,
+      syntheticCanary: false, automaticAdmission: true, runtimeCapabilitySnapshot: capability.snapshot,
+      getRuntimeVersions: async () => { throw new Error('Must use frozen admission'); },
+    });
+    expect(recipe?.executionProfile).toBe(amrRuntime === 'none' ? 'text_artifact' : 'filesystem');
+  });
+
   it('injects the canonical Deck Protocol v1 framework for the real PPT profile', async () => {
     const binding = createBundledStrategyBindingV2({ plugin, taskType: 'ppt' });
     const pptSnapshot = {

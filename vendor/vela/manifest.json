@@ -1,8 +1,8 @@
 {
-  "distributionVersion": "0.0.1-test.latest-frozen.g15b6ad22a2d2",
-  "velaBinaryVersion": "0.0.1-test.latest-frozen.g15b6ad22a2d2",
-  "velaSourceCommit": "15b6ad22a2d283ca01e55a2bb2d0ebfb189fda1f",
-  "openDesignBaselineCommit": "4fd79e1d9dd068034f05e250b9d066a7c3e28b5b",
+  "distributionVersion": "0.0.1-test.harness-align.g375c818",
+  "velaBinaryVersion": "0.0.1-test.harness-align.g375c818",
+  "velaSourceCommit": "375c818f513c7ed348081b4066b32f7825b476e4",
+  "openDesignBaselineCommit": "9c964dc51ab3afc8e3926908667abcb54d5b40ba",
   "platforms": [
     "darwin-arm64"
   ],
@@ -12,30 +12,28 @@
     "codex",
     "claude",
     "dsh",
+    "ohmypi",
     "none"
   ],
   "harnessVersions": {
-    "opencode": "1.18.30-powerformer.g92ba6a3b82b5",
+    "opencode": "0.0.0--202609020336 (vela-cli 0.0.35 companion, same as main)",
     "pi": "0.85.1",
     "codex": "0.154.0",
     "claude": "2.1.267",
     "dsh": "0.1.5-rc.1",
-    "none": "0.0.1-test.latest-frozen.g15b6ad22a2d2"
+    "none": "0.0.1-test.harness-align.g375c818",
+    "ohmypi": "18.2.5 (omp GitHub release binary, provisioned by the ODEval Runner; sha256 darwin-arm64 9602f93f94bd1ee5d69f9c7b8c373dbed47abe59f5a39315ef2f0fd3c517f743)"
   },
-  "openCodeSourceCommit": "92ba6a3b82b575cdf1c90f811935ebb6fe256d4a",
-  "openCodeBinarySHA256": "b7aeb12c9e8c46a1a97fb33d5b28cee2b0f26f9cc460dd1eb70d17cc7a2cac14",
-  "openCodeUpstreamVersion": "1.18.30",
+  "openCodeBinarySHA256": "c1dec4a2f722191c0e5c31c0414c348e3ef4d9a68e844194a549ca536d148f9e",
+  "openCodeUpstreamVersion": "0.0.0--202609020336",
   "npmPublished": false,
   "artifacts": [
     {
-      "file": "powerformer-vela-cli-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz",
-      "bytes": 9262,
-      "sha256": "bff26917ca60c995f51bd7baa4a826e48798147b631502d5529d21048ea1289d"
+      "file": "powerformer-vela-cli-0.0.1-test.harness-align.g375c818.tgz"
     },
     {
-      "file": "powerformer-vela-cli-darwin-arm64-0.0.1-test.latest-frozen.g15b6ad22a2d2.tgz",
-      "bytes": 47865268,
-      "sha256": "aae327570e85e6b498e53e716b4a6eb02e4c72d75b0201e3daf4a54bb0b752fa"
+      "file": "powerformer-vela-cli-darwin-arm64-0.0.1-test.harness-align.g375c818.tgz"
     }
-  ]
+  ],
+  "openCodeSource": "@powerformer/vela-cli-darwin-arm64@0.0.35 (the build main ships)"
 }

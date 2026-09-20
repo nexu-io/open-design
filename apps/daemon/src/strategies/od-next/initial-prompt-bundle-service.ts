@@ -4,7 +4,7 @@ import {
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
   OdNextRuntimeCapabilitySnapshotV1Schema,
   detectOdNextDevicePlatformFromText,
-  executionProfileFromStreamFormat,
+  executionProfileForRuntime,
   renderChatTurnHostProtocolInstructions,
   type OdNextPromptBundleHeadV2,
   type OdNextPromptBundleRecipeIdentityV2,
@@ -180,7 +180,7 @@ export async function resolveOdNextPromptRecipeForRun(input: {
   const resolvedRecipe = await resolveOdNextStrategyRequestRecipeV2({
     bundledPluginsDir: input.bundledPluginsDir,
     snapshot,
-    executionProfile: executionProfileFromStreamFormat(input.streamFormat),
+    executionProfile: executionProfileForRuntime(input.agentId, input.streamFormat, input.amrRuntime),
     atomPromptsEnabled: input.atomPromptsEnabled,
     loadAtomBodies: async (atomIds) => {
       const { loadBundledAtomBodiesStrict } = await import('../../plugins/atom-bodies.js');
