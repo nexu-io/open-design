@@ -120,6 +120,10 @@ describe('OD Next V2 prompt recipe', () => {
       expect(text).not.toContain('summarize the written or changed deck file');
       expect(text).not.toMatch(/TodoWrite[^\n]{0,80}(?:must|required)/i);
     }
+    expect(textArtifactPrompt).toContain('identifier="page-name"');
+    expect(textArtifactPrompt).toContain('Only identifier, type, and title attributes are supported');
+    expect(textArtifactPrompt).toContain('does not replace the required Open Design plan/runtime protocol blocks');
+    expect(prototypePrompt).not.toContain('identifier="page-name"');
     expect(textArtifactBundleSkill).toBe(textArtifactRecipe.taskSkill);
     expect(textArtifactBundleSkill).not.toContain('## Final handoff');
 
@@ -844,4 +848,9 @@ describe('runtime plan tool in the stable request context', () => {
     expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'kimi', planToolNote: '' }))
       .not.toContain('runtime-plan-tool');
   });
+});
+
+it('requires an output for every planning step, including preparation', () => {
+  expect(FullPlanV2Schema.safeParse({ executionMode: 'simple', steps: [{ id: 'prepare', objective: 'Resolve tokens', outputs: [] }], readinessArtifacts: [], buildPackages: [] }).success).toBe(false);
+  expect(FullPlanV2Schema.safeParse({ executionMode: 'simple', steps: [{ id: 'prepare', objective: 'Resolve tokens', outputs: ['resolved design tokens'] }], readinessArtifacts: [], buildPackages: [] }).success).toBe(true);
 });

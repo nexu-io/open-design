@@ -8,7 +8,7 @@
  */
 import path from 'node:path';
 import type { AmrRuntime, AmrRuntimeEvidence, ExecutionProfile } from '@open-design/contracts';
-import { parseAmrModelResponses } from '@open-design/contracts';
+import { parseAmrModelResponses, parseAmrDirectModelContinuation } from '@open-design/contracts';
 import {
   createDsmlArtifactTextSuppressor,
   createToolCallTextSuppressor,
@@ -1038,6 +1038,24 @@ export function attachAcpSession({
         return;
       }
       const details = rpcErrorData(obj);
+      // Terminal errors carry the same provider accounting as successful replies.
+      // Only accept evidence for the active prompt/runtime/model; malformed optional
+      // diagnostics must not replace the original failure reason.
+      const failedResult = asObject(details);
+      if (obj.id === promptRequestId && expectedAmrRuntime && amrRuntimeEvidence && failedResult
+        && failedResult.runtime === expectedAmrRuntime && failedResult.runtimeVersion === amrRuntimeEvidence.runtimeVersion
+        && failedResult.modelId === amrRuntimeEvidence.modelId) {
+        emitUsageIfPresent(failedResult.usage);
+        try {
+          const modelResponses = Array.isArray(failedResult.modelResponses) && failedResult.modelResponses.length === 0
+            ? undefined : parseAmrModelResponses(failedResult.modelResponses, failedResult.modelId as string);
+          const directModelContinuation = expectedAmrRuntime === 'none'
+            ? parseAmrDirectModelContinuation(failedResult.directModelContinuation, failedResult.modelId as string) : undefined;
+          amrRuntimeEvidence = { ...amrRuntimeEvidence, ...(modelResponses ? { modelResponses } : {}),
+            ...(directModelContinuation ? { directModelContinuation } : {}) };
+          onAmrRuntimeEvidence?.(amrRuntimeEvidence);
+        } catch { /* Keep the original terminal error, never invent usage/evidence. */ }
+      }
       const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
       if (promotedPayload) {
         failWithPayload(promotedPayload);
@@ -1058,7 +1076,7 @@ export function attachAcpSession({
     if (obj.method === 'session/update' && update) {
       if (update.sessionUpdate === 'amr_model_output_progress') {
         const progressModel = typeof update.modelId === 'string' ? update.modelId.replace(/^amr\//, '') : '';
-        if ((expectedAmrRuntime === 'none' || expectedAmrRuntime === 'claude')
+        if ((expectedAmrRuntime === 'none' || expectedAmrRuntime === 'claude' || expectedAmrRuntime === 'codex')
           && amrRuntimeEvidence?.actualRuntime === expectedAmrRuntime
           && params?.sessionId === sessionId && sessionId !== null && promptRequestId !== null
           && update.runtime === expectedAmrRuntime && progressModel !== ''
@@ -1448,6 +1466,16 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
+      if (expectedAmrRuntime === 'none' && amrRuntimeEvidence && result.directModelContinuation !== undefined) {
+        try {
+          const directModelContinuation = parseAmrDirectModelContinuation(result.directModelContinuation, amrRuntimeEvidence.modelId ?? '');
+          if (directModelContinuation) amrRuntimeEvidence = { ...amrRuntimeEvidence, directModelContinuation };
+        } catch {
+          emitUsageIfPresent(result.usage);
+          fail('AMR returned invalid direct-model continuation evidence.', { retryable: false });
+          return;
+        }
+      }
       if (expectedAmrRuntime && amrRuntimeEvidence && result.modelResponses !== undefined) {
         try {
           const catalogModel = typeof result.modelId === 'string' ? result.modelId.replace(/^amr\//, '') : '';
