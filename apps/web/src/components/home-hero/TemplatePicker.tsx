@@ -1,35 +1,16 @@
-// The composer pill that names the picked creation type.
-//
-// Display + clear only. Picking a type is the type row's job (`TypePillRow`,
-// under the composer) — that row IS the empty state, and this pill is what the
-// choice looks like once it is made. With nothing picked the pill does not
-// render at all, so an untouched composer carries no type chrome.
-//
-// It used to open a dropdown of every kind. That went away (per product): with
-// the full catalog one row below, a second copy behind a chevron was the same
-// question asked twice. Swapping a type now means clearing back to the row.
-//
-// The pill names the TYPE and nothing else. It used to retitle itself to the
-// picked sub-category, which made the composer's own row twitch — relabelling
-// and resizing — every time the sub-type row below was browsed (per product:
-// 切换二级目录时输入框的绿色按钮不要动). That row owns the sub-category now,
-// including giving it up: clicking the lit pill toggles it back off.
-//
-// Clearing lives on the leading icon, which swaps to an × on hover, and gives
-// up the template (the host drops the sub-category with it).
+// Selected creation type with category-switch controls.
+import { useEffect, useId, useRef, useState } from 'react';
 import type { HomeHeroChip } from './chips';
 import { Icon } from '../Icon';
 import { useT } from '../../i18n';
+import styles from './TemplatePicker.module.css';
 
 interface Props {
   // The create chips this pill can name (the apply-scenario ones).
   templates: HomeHeroChip[];
   activeChipId: string | null;
-  /**
-   * Clear the template (back to no type at all), which retires the pill and
-   * brings the type row back. The host drops any picked sub-category with it.
-   */
-  onClearTemplate?: () => void;
+  onPick?: (chip: HomeHeroChip) => void;
+  disabled?: boolean;
   // Localized label for a chip id (reuses HomeHero's chip copy).
   labelFor: (chipId: string) => string;
 }
@@ -37,73 +18,70 @@ interface Props {
 export function TemplatePicker({
   templates,
   activeChipId,
-  onClearTemplate,
+  onPick,
+  disabled = false,
   labelFor,
 }: Props) {
   const t = useT();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setOpen(false); triggerRef.current?.focus(); }
+    };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+  useEffect(() => { setOpen(false); }, [activeChipId, disabled]);
   const active = templates.find((chip) => chip.id === activeChipId) ?? null;
 
-  // Nothing picked → no pill. The type row under the composer owns the empty
-  // state, so a composer nobody has touched carries no type chrome at all.
-  if (!active) return null;
-
-  const canClear = Boolean(onClearTemplate);
-  const clear = () => onClearTemplate?.();
-  const valueLabel = labelFor(active.id);
+  const valueLabel = active ? labelFor(active.id) : t('homeHero.templatePicker.label');
 
   return (
     <div
-      className="home-hero__footer-option home-hero__footer-option--select home-hero__template-option has-selection"
+      ref={rootRef}
+      className={`home-hero__footer-option home-hero__footer-option--select home-hero__template-option${active ? ' has-selection' : ''} ${styles.picker}${open ? ' is-open' : ''}`}
+      data-type={active?.id}
       data-field-name="template"
-      // Selector hook for tests — the stylesheet keys no colour on it
-      // (OPEND-3103): the picked pill wears the brand pair whatever the type.
-      data-chip={active.id}
       data-testid="home-hero-template-picker"
     >
-      {/* Not a button any more — there is nothing to open; the clear inside it
-          is the only interactive part. A `div`, NOT a `span`: every footer
-          option hides its sr-only field label with `.home-hero__footer-option >
-          span`, which would clip this whole row to 1×1. */}
       <div
         className="home-hero__footer-select-trigger home-hero__template-trigger"
         data-testid="home-hero-template-trigger"
         title={t('homeHero.templatePicker.label')}
       >
-        <span
-          className={
-            'home-hero__footer-option-icon home-hero__footer-option-icon--compact' +
-            (canClear ? ' home-hero__template-icon--clearable' : '')
-          }
-          aria-hidden={canClear ? undefined : true}
-          role={canClear ? 'button' : undefined}
-          tabIndex={canClear ? 0 : undefined}
-          aria-label={canClear ? t('common.clear') : undefined}
-          data-testid={canClear ? 'home-hero-template-clear' : undefined}
-          onClick={canClear ? () => clear() : undefined}
-          onKeyDown={
-            canClear
-              ? (event) => {
-                  if (event.key !== 'Enter' && event.key !== ' ') return;
-                  event.preventDefault();
-                  clear();
-                }
-              : undefined
-          }
-        >
+        {active ? <span className="home-hero__footer-option-icon home-hero__footer-option-icon--compact" aria-hidden="true">
           <Icon name={active.icon} size={16} className="home-hero__template-icon-glyph" />
-          {canClear ? (
-            /* 16 — the same box as the glyph it replaces on hover and as the
-               design-system pill's clear beside it, so nothing in the row
-               changes size when the pointer moves across it (per product:
-               两个叉号和没有 hover 时的图标一样大). An earlier pass sized this
-               22 to compensate for `close-line` inking only ~53% of its box
-               against the ~83% the filled glyphs cover; product chose the
-               matching box over the matching ink, so do not re-inflate it. */
-            <Icon name="close" size={16} className="home-hero__template-icon-clear" />
-          ) : null}
-        </span>
-        <span className="home-hero__footer-select-label">{valueLabel}</span>
+        </span> : null}
+        <button type="button" ref={triggerRef} className={styles.switcher}
+          aria-label={t('homeHero.templatePicker.label')} aria-haspopup="listbox"
+          aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={disabled}
+          onClick={() => setOpen((value) => !value)}>
+          <span className="home-hero__footer-select-label">{valueLabel}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="6 6 12 12" fill="currentColor" aria-hidden="true"><path d="M12 15.0006L7.75732 10.758L9.17154 9.34375L12 12.1722L14.8284 9.34375L16.2426 10.758L12 15.0006Z" /></svg>
+        </button>
       </div>
+      {open ? <div id={menuId} role="listbox" aria-label={t('homeHero.templatePicker.label')}
+        className="home-hero__footer-select-menu" data-testid="home-hero-template-menu">
+        {templates.map((chip) => <button key={chip.id} type="button" role="option" data-chip={chip.id}
+          aria-selected={chip.id === activeChipId}
+          className={`home-hero__footer-select-item${chip.id === activeChipId ? ' is-selected' : ''}`}
+          onClick={() => { setOpen(false); if (chip.id !== activeChipId) onPick?.(chip); triggerRef.current?.focus(); }}>
+          <Icon name={chip.icon} size={16} />
+          <span>{labelFor(chip.id)}</span>
+          {chip.id === activeChipId ? <Icon name="check" size={14} /> : null}
+        </button>)}
+      </div> : null}
     </div>
   );
 }

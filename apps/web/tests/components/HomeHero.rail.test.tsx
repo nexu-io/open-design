@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeTemplateTrigger } from '../helpers/home-template-picker';
 //
 // Stage B of plugin-driven-flow-plan — Home intent tabs / shortcuts.
 // Covers:
@@ -106,36 +107,19 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
   return { onPickChip, onPickPlugin, onPickExamplePlugin, onOpenPluginDetails, onClearActiveChip };
 }
 
-// #5517 drops the inline template card rail (and the "Start with a template… /
-// or start a blank project" bar that used to hold it) from Home. The composer
-// footer's radial template picker is now the only in-hero scenario surface, so
-// tests reach templates through the pill instead of `home-hero-rail-*` cards.
-// Types are a horizontal pill row under the working-directory row (product,
-// 2026-08-21). The row's membership is fixed (product, 2026-08-31):
-// `HOME_TYPE_ROW_IDS` inline, `HOME_TYPE_ROW_MORE_IDS` behind 更多. The 更多
-// popover only mounts while open, so reaching one of its entries means opening
-// it first — `typePill` does that rather than making every caller remember.
-function openMore() {
-  if (screen.queryByTestId('home-hero-type-pills-popover')) return;
-  const trigger = screen.queryByTestId('home-hero-type-pills-more');
-  if (trigger) fireEvent.click(trigger);
-}
-
 function typePill(chipId: string): HTMLElement | null {
-  const inline = screen.queryByTestId(`home-hero-type-pill-${chipId}`);
-  if (inline) return inline;
-  openMore();
-  return screen.queryByTestId(`home-hero-type-pill-${chipId}-more`);
+  if (!screen.queryByTestId('home-hero-template-menu')) fireEvent.click(homeTemplateTrigger());
+  return screen.queryByTestId('home-hero-template-menu')?.querySelector(`[data-chip="${chipId}"]`) ?? null;
 }
 
 function pickTemplate(chipId: string) {
-  const pill = typePill(chipId);
-  if (!pill) throw new Error(`No type pill for ${chipId}`);
-  fireEvent.click(pill);
+  const option = typePill(chipId);
+  if (!option) throw new Error(`No type option for ${chipId}`);
+  fireEvent.click(option);
 }
 
 describe('HomeHero intent rail', () => {
-  it('offers exactly the three row types plus the seven behind 更多', () => {
+  it('offers every creation type in the dropdown', () => {
     renderHero();
     // The row is a curated entry set, not the whole create catalog (product,
     // 2026-08-31). Everything else — Brand Kit's own action, the migrate
@@ -207,19 +191,13 @@ describe('HomeHero intent rail', () => {
     expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
   });
 
-  it('clears the creation type from the pill, not from a row in the menu', () => {
-    // The pill's leading icon doubles as the clear (it swaps to an × on
-    // hover); the menu itself still has no Clear row.
+  it('switches the creation type without a clear control', () => {
     const onClearActiveChip = vi.fn();
-    renderHero({ activeChipId: 'prototype', onClearActiveChip });
-    expect(screen.queryByTestId('home-hero-template-reset')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
-    expect(onClearActiveChip).toHaveBeenCalledTimes(1);
-
-    // …and the type row below carries no clear of its own: re-picking the lit
-    // pill is how it is undone there.
-    expect(screen.queryByTestId('home-hero-template-radial-clear')).toBeNull();
+    const { onPickChip } = renderHero({ activeChipId: 'prototype', onClearActiveChip });
+    expect(screen.queryByTestId('home-hero-template-clear')).toBeNull();
+    pickTemplate('deck');
+    expect(onPickChip).toHaveBeenCalledWith(findChip('deck'));
+    expect(onClearActiveChip).not.toHaveBeenCalled();
   });
 
   it('tracks the committed template on the footer pill and resets it on clear', () => {
@@ -245,19 +223,16 @@ describe('HomeHero intent rail', () => {
       error: null,
     } as React.ComponentProps<typeof HomeHero>;
 
-    // Nothing picked → no pill at all; the type row below still offers them.
     const { rerender } = render(<HomeHero {...baseProps} activeChipId={null} />);
-    expect(screen.queryByTestId('home-hero-template-trigger')).toBeNull();
+    expect(homeTemplateTrigger().textContent).toContain('Creation type');
     expect(typePill('deck')).toBeTruthy();
 
     // Picking a template from the menu commits the chip through the host.
     rerender(<HomeHero {...baseProps} activeChipId="deck" />);
     expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
 
-    // Clear nulls the active chip — the pill goes away again rather than
-    // falling back to an empty placeholder.
     rerender(<HomeHero {...baseProps} activeChipId={null} />);
-    expect(screen.queryByTestId('home-hero-template-trigger')).toBeNull();
+    expect(homeTemplateTrigger().textContent).toContain('Creation type');
   });
 
   it('uses the active creation chip as the only clear control for a chip-bound plugin', () => {
@@ -528,17 +503,9 @@ describe('HomeHero intent rail', () => {
       pendingPluginId: 'od-figma-migration',
       pendingChipId: 'figma',
     });
-    for (const id of HOME_TYPE_ROW_IDS) {
-      const pill = screen.getByTestId(`home-hero-type-pill-${id}`);
-      expect((pill as HTMLButtonElement).disabled).toBe(true);
-    }
-    // 更多 is disabled too, so the types behind it are unreachable rather than
-    // reachable-but-inert — the whole row is out of service for the apply.
-    const more = screen.getByTestId('home-hero-type-pills-more') as HTMLButtonElement;
-    expect(more.disabled).toBe(true);
-    fireEvent.click(more);
-    expect(screen.queryByTestId('home-hero-type-pills-popover')).toBeNull();
-    pickTemplate(HOME_TYPE_ROW_IDS[0]!);
+    expect(homeTemplateTrigger().disabled).toBe(true);
+    fireEvent.click(homeTemplateTrigger());
+    expect(screen.queryByTestId('home-hero-template-menu')).toBeNull();
     expect(onPickChip).not.toHaveBeenCalled();
   });
 

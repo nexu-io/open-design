@@ -88,7 +88,6 @@ import { ContextChipHoverCard } from './ContextChipHoverCard';
 import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
 import { FigmaHelpModal } from './FigmaHelpModal';
 import { TemplatePicker } from './home-hero/TemplatePicker';
-import { TypePillRow } from './home-hero/TypePillRow';
 import { LibraryPicker } from './LibraryPicker';
 import { assetTitle } from './LibraryAssetMeta';
 import { libraryAssetRawUrl } from '../providers/registry';
@@ -2347,16 +2346,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 style". */}
             <TemplatePicker
               templates={templateChips}
+              onPick={handlePickTaskChip}
+              disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
               activeChipId={activeChipId}
-              onClearTemplate={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'task_chip_clear',
-                  chip_id: activeChipId ?? undefined,
-                });
-                onClearActiveChip?.();
-              }}
               labelFor={(id) => homeHeroChipLabel(id, t)}
             />
             {libraryPickerOpen ? (
@@ -2580,25 +2572,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         ))}
       </div>
       </div>
-
-      {/* Creation types, horizontal, under the working-directory row (per
-          product, 2026-08-21). They spent a round as a dropdown pill inside the
-          composer's foot row; out here the whole catalog is one glance.
-
-          The row is the EMPTY state's whole job: an untouched Home shows this
-          and nothing else. Picking a type retires it — the composer's pill now
-          names the choice, the categories below narrow it, and the examples
-          answer it, so a second full catalog under all three was just repeating
-          the question. The pill's × brings the row back. */}
-      {activeChipId || isDock ? null : (
-        <TypePillRow
-          chips={templateChips}
-          activeChipId={activeChipId}
-          disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
-          labelFor={(id) => homeHeroChipLabel(id, t)}
-          onPick={handlePickTaskChip}
-        />
-      )}
 
       {/* No second-level category row under a picked type (per product,
           2026-08-25): picking a type already narrows the examples, and a

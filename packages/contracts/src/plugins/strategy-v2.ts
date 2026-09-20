@@ -735,6 +735,13 @@ export const StrategyTaskProjectionV2Schema = z.object({
   executionIntent: StrategyExecutionIntentV2Schema.optional(),
   activeRunId: z.string().min(1),
   nextRunId: z.string().min(1).optional(),
+  /** Daemon-owned positions for the viewed, active and next physical Runs.
+   * Optional for old daemon compatibility; never infer positions from stages.
+   */
+  runMappings: z.array(z.object({
+    runId: z.string().min(1),
+    taskRunIndex: z.number().int().nonnegative(),
+  }).strict()).max(3).optional(),
   terminal: z.boolean(),
   blockedContext: StrategyTaskBlockedContextV2Schema.optional(),
 }).strict().superRefine((value, context) => {

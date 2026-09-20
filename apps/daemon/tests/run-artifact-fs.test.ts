@@ -15,6 +15,13 @@ function tmpProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'od-artifact-fs-'));
 }
 
+function writeNumberedFiles(root: string, prefix: string, extension: string, count: number): void {
+  for (let index = 0; index < count; index += 1) {
+    const suffix = index.toString().padStart(4, '0');
+    fs.writeFileSync(path.join(root, `${prefix}-${suffix}${extension}`), 'x');
+  }
+}
+
 test('the async snapshot preserves the synchronous snapshot contract', async () => {
   const root = tmpProject();
   fs.mkdirSync(path.join(root, 'nested'), { recursive: true });
@@ -335,6 +342,167 @@ test('a no-op turn (no file writes) reports zero', () => {
     supportingMediaTouched: 0,
     filesWritten: 0,
   });
+});
+
+// #7579: `create_artifact` writes a `<file>.artifact.json` manifest sidecar,
+// and the manifest layer accepts non-renderable kinds such as Markdown
+// exports. The snapshot/diff must count such files as artifacts instead of
+// reporting artifactCount: 0 → no_artifact at finalization.
+const validMdManifest = (entry: string): string =>
+  JSON.stringify({
+    version: 1,
+    kind: 'markdown-document',
+    renderer: 'markdown',
+    entry,
+    exports: ['md'],
+    title: entry,
+  });
+
+test('a manifest-backed Markdown export counts as a run artifact', async () => {
+  const root = tmpProject();
+  const doc = path.join(root, 'fitcv-design-system-export.md');
+
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(doc, '# export');
+  fs.writeFileSync(
+    `${doc}.artifact.json`,
+    validMdManifest('fitcv-design-system-export.md'),
+  );
+  const after = snapshotProjectArtifacts(root);
+  const afterAsync = await snapshotProjectArtifactsAsync(root);
+
+  assert.deepEqual(after, afterAsync, 'async snapshot must agree with the sync one');
+  assert.equal(
+    after.get(doc)?.manifestBacked,
+    true,
+    'the .md is tracked as manifest-backed',
+  );
+  assert.equal(
+    after.get(`${doc}.artifact.json`),
+    undefined,
+    'the sidecar itself is metadata, not a tracked artifact',
+  );
+  assert.deepEqual(diffRunArtifacts(before, after), {
+    created: 1,
+    modified: 0,
+    touched: 1,
+    filesWritten: 1,
+    designSystemCreated: false,
+    previewModuleCount: 0,
+    touchedPaths: [doc],
+    contentCreated: 1,
+    contentModified: 0,
+    contentTouched: 1,
+    contentTouchedPaths: [doc],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+  });
+});
+
+test('the async manifest check does not use synchronous sidecar reads', async () => {
+  const root = tmpProject();
+  const doc = path.join(root, 'async-export.md');
+  fs.writeFileSync(doc, '# export');
+  fs.writeFileSync(`${doc}.artifact.json`, validMdManifest('async-export.md'));
+
+  const readFileSync = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+    throw new Error('async snapshot must not use readFileSync');
+  });
+  try {
+    const snapshot = await snapshotProjectArtifactsAsync(root);
+    assert.equal(snapshot.get(doc)?.manifestBacked, true);
+  } finally {
+    readFileSync.mockRestore();
+  }
+});
+
+test('manifest classification is applied before the snapshot budgets', async () => {
+  const otherRoot = tmpProject();
+  writeNumberedFiles(otherRoot, 'ordinary', '.txt', 5000);
+  const manifestBackedDoc = path.join(otherRoot, 'z-manifest-export.md');
+  fs.writeFileSync(manifestBackedDoc, '# export');
+  fs.writeFileSync(
+    `${manifestBackedDoc}.artifact.json`,
+    validMdManifest('z-manifest-export.md'),
+  );
+
+  for (const snapshot of [
+    snapshotProjectArtifacts(otherRoot),
+    await snapshotProjectArtifactsAsync(otherRoot),
+  ]) {
+    assert.equal(
+      snapshot.get(manifestBackedDoc)?.manifestBacked,
+      true,
+      'a manifest-backed file must not be rejected by the ordinary-file budget',
+    );
+    assert.equal(diffRunArtifacts(snapshot, snapshot).filesWrittenUnknown, undefined);
+  }
+
+  const trackedRoot = tmpProject();
+  writeNumberedFiles(trackedRoot, 'tracked', '.html', 5000);
+  const overBudgetDoc = path.join(trackedRoot, 'z-manifest-export.md');
+  fs.writeFileSync(overBudgetDoc, '# export');
+  fs.writeFileSync(
+    `${overBudgetDoc}.artifact.json`,
+    validMdManifest('z-manifest-export.md'),
+  );
+
+  for (const snapshot of [
+    snapshotProjectArtifacts(trackedRoot),
+    await snapshotProjectArtifactsAsync(trackedRoot),
+  ]) {
+    assert.equal(
+      snapshot.get(overBudgetDoc),
+      undefined,
+      'a manifest-backed file must not bypass the tracked-file budget',
+    );
+    assert.equal(diffRunArtifacts(snapshot, snapshot).filesWrittenUnknown, true);
+  }
+});
+
+test('a Markdown file without a valid manifest sidecar stays untracked', () => {
+  const root = tmpProject();
+  fs.writeFileSync(path.join(root, 'notes.md'), 'no sidecar here');
+  fs.writeFileSync(path.join(root, 'broken.md'), 'sidecar is not JSON');
+  fs.writeFileSync(`${path.join(root, 'broken.md')}.artifact.json`, '{not json');
+  fs.writeFileSync(path.join(root, 'stale.md'), 'sidecar has an unknown version');
+  fs.writeFileSync(
+    `${path.join(root, 'stale.md')}.artifact.json`,
+    JSON.stringify({ ...JSON.parse(validMdManifest('stale.md')), version: 99 }),
+  );
+
+  const snapshot = snapshotProjectArtifacts(root);
+  for (const fingerprint of snapshot.values()) {
+    assert.equal(
+      fingerprint.manifestBacked,
+      undefined,
+      'unmanifested or invalidly manifested .md must not be manifest-backed',
+    );
+  }
+
+  const diff = diffRunArtifacts(new Map(), snapshot);
+  assert.equal(diff.touched, 0);
+});
+
+test('an edit to a manifest-backed Markdown export counts as modified', async () => {
+  const root = tmpProject();
+  const doc = path.join(root, 'report.md');
+  fs.writeFileSync(doc, '# report v1');
+  fs.writeFileSync(`${doc}.artifact.json`, validMdManifest('report.md'));
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(doc, '# report v2 — substantially revised');
+  const after = await snapshotProjectArtifactsAsync(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.created, 0);
+  assert.equal(
+    diff.modified,
+    1,
+    'edit-only turns must still report >0 for manifest-backed files',
+  );
+  assert.equal(diff.touched, 1);
 });
 
 for (const mode of ['sync', 'async'] as const) {
