@@ -54,6 +54,10 @@
       "types": "./dist/runtime/deck-stage-fallback.d.ts",
       "default": "./dist/runtime/deck-stage-fallback.mjs"
     },
+    "./runtime/deck-presentation": {
+      "types": "./dist/runtime/deck-presentation.d.ts",
+      "default": "./dist/runtime/deck-presentation.mjs"
+    },
     "./runtime/deck-protocol": {
       "types": "./dist/runtime/deck-protocol.d.ts",
       "default": "./dist/runtime/deck-protocol.mjs"
@@ -61,6 +65,14 @@
     "./runtime/preview-observability": {
       "types": "./dist/runtime/preview-observability.d.ts",
       "default": "./dist/runtime/preview-observability.mjs"
+    },
+    "./runtime/preview-runtime": {
+      "types": "./dist/runtime/preview-runtime.d.ts",
+      "default": "./dist/runtime/preview-runtime.mjs"
+    },
+    "./runtime/preview-phase-events": {
+      "types": "./dist/runtime/preview-phase-events.d.ts",
+      "default": "./dist/runtime/preview-phase-events.mjs"
     },
     "./runtime/preview-build-focus": {
       "types": "./dist/runtime/preview-build-focus.d.ts",

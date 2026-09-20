@@ -565,6 +565,70 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('hands dedicated project-preview origin links to the host', () => {
+    const posts: Array<{ type?: string; fileName?: string }> = [];
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><a href="pages/profile.html?variant=a#bio">Profile</a></main>${buildManualEditBridge(false)}`,
+      {
+        runScripts: 'dangerously',
+        url: 'http://n-preview_1234.localhost:17456/today.html',
+      },
+    );
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; fileName?: string });
+    }) as typeof dom.window.parent.postMessage;
+    const link = dom.window.document.querySelector('a')!;
+    const click = new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+
+    link.dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(posts).toContainEqual({
+      type: 'od:preview-open-file',
+      fileName: 'pages/profile.html',
+      search: '?variant=a',
+      hash: '#bio',
+    });
+
+    dom.window.close();
+  });
+
+  it('hands powered project HTML links to the host', () => {
+    const posts: Array<{ type?: string; fileName?: string }> = [];
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><a href="../profile.html">Profile</a></main>${buildManualEditBridge(false)}`,
+      {
+        runScripts: 'dangerously',
+        url: 'http://localhost:17456/api/projects/project-1/powered/pages/today.html',
+      },
+    );
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; fileName?: string });
+    }) as typeof dom.window.parent.postMessage;
+    const link = dom.window.document.querySelector('a')!;
+    const click = new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+
+    link.dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(posts).toContainEqual({
+      type: 'od:preview-open-file',
+      fileName: 'profile.html',
+      search: '',
+      hash: '',
+    });
+
+    dom.window.close();
+  });
+
   it('drag-repositions an element via pointer drag and posts od-edit-drag-commit', () => {
     const posts: Array<{ type?: string; id?: string; transform?: string }> = [];
     const dom = new JSDOM(
@@ -1292,6 +1356,158 @@ describe('manual edit bridge target normalization', () => {
     expect(result).toBe(false);
     expect(event.defaultPrevented).toBe(true);
     expect(clicked).not.toHaveBeenCalled();
+
+    dom.window.close();
+  });
+});
+
+describe('manual edit mirrors and their acknowledgement', () => {
+  function mountBridge(body: string) {
+    const dom = new JSDOM(
+      `${body}${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const posts: Array<{ type?: string; requestId?: string; id?: string; applied?: boolean }> = [];
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; requestId?: string; applied?: boolean });
+    }) as typeof dom.window.parent.postMessage;
+    let requestSequence = 0;
+    const mirror = (data: Record<string, unknown>) => {
+      requestSequence += 1;
+      const requestId = `req-${requestSequence}`;
+      dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+        data: { ...data, requestId },
+      }));
+      return posts.find((message) => (
+        message.type === 'od-edit-preview:applied' && message.requestId === requestId
+      ));
+    };
+    return { dom, mirror, posts };
+  }
+
+  // The shape the user hit: an anchor whose label sits beside an icon. The
+  // label is one text node, so the mirror can place it without touching the
+  // markup around it.
+  it('mirrors a link label beside markup and keeps the icon', () => {
+    const { dom, mirror } = mountBridge(
+      '<main><a data-od-id="cta" href="./old.css">View tokens<svg viewBox="0 0 24 24"></svg></a></main>',
+    );
+    const link = dom.window.document.querySelector('[data-od-id="cta"]')!;
+
+    const ack = mirror({ type: 'od-edit-preview-link', id: 'cta', text: 'View tokens EDIT', href: './new.css' });
+
+    expect(ack?.applied).toBe(true);
+    expect(link.textContent).toBe('View tokens EDIT');
+    expect(link.getAttribute('href')).toBe('./new.css');
+    expect(link.querySelector('svg')).not.toBeNull();
+
+    dom.window.close();
+  });
+
+  // Two candidate text nodes cannot be told apart, and guessing would corrupt
+  // the page. Refusing is what lets the host fall back to a document refresh.
+  it('refuses a relabel it cannot place unambiguously', () => {
+    const { dom, mirror } = mountBridge(
+      '<main><a data-od-id="cta" href="./old.css"><span>Read</span><span>docs</span></a></main>',
+    );
+    const link = dom.window.document.querySelector('[data-od-id="cta"]')!;
+
+    const ack = mirror({ type: 'od-edit-preview-link', id: 'cta', text: 'Something else', href: './new.css' });
+
+    expect(ack?.applied).toBe(false);
+    expect(link.textContent).toBe('Readdocs');
+    expect(link.getAttribute('href')).toBe('./old.css');
+
+    dom.window.close();
+  });
+
+  it('mirrors an image source and alt text', () => {
+    const { dom, mirror } = mountBridge('<main><img data-od-id="shot" src="./a.png" alt="A"></main>');
+    const image = dom.window.document.querySelector('[data-od-id="shot"]')!;
+
+    const ack = mirror({ type: 'od-edit-preview-image', id: 'shot', src: './b.png', alt: 'B' });
+
+    expect(ack?.applied).toBe(true);
+    expect(image.getAttribute('src')).toBe('./b.png');
+    expect(image.getAttribute('alt')).toBe('B');
+
+    dom.window.close();
+  });
+
+  it('mirrors a removal by taking the node out of the document', () => {
+    const { dom, mirror } = mountBridge('<main><p data-od-id="note">Note</p><p data-od-id="keep">Keep</p></main>');
+
+    const ack = mirror({ type: 'od-edit-preview-remove', id: 'note' });
+
+    expect(ack?.applied).toBe(true);
+    expect(dom.window.document.querySelector('[data-od-id="note"]')).toBeNull();
+    expect(dom.window.document.querySelector('[data-od-id="keep"]')).not.toBeNull();
+
+    dom.window.close();
+  });
+
+  // A target that is gone must not be reported as mirrored — the host would
+  // freeze a document that never received the save.
+  it('reports a target it cannot find as unapplied', () => {
+    const { dom, mirror } = mountBridge('<main><p data-od-id="note">Note</p></main>');
+
+    expect(mirror({ type: 'od-edit-preview-link', id: 'missing', text: 'x', href: '#' })?.applied).toBe(false);
+    expect(mirror({ type: 'od-edit-preview-image', id: 'missing', src: 'x', alt: 'y' })?.applied).toBe(false);
+    expect(mirror({ type: 'od-edit-preview-remove', id: 'missing' })?.applied).toBe(false);
+
+    dom.window.close();
+  });
+
+  // The case root cause C names: an author can force a container to
+  // `data-od-edit="text"`, and the text mirror refuses elements with children.
+  // Before it answered, the host counted that refusal as a success.
+  it('reports a refused text mirror as unapplied', () => {
+    const { dom, mirror } = mountBridge(
+      '<main><div data-od-id="wrap" data-od-edit="text"><span>Nested</span></div></main>',
+    );
+    const wrap = dom.window.document.querySelector('[data-od-id="wrap"]')!;
+
+    const ack = mirror({ type: 'od-edit-preview-text', id: 'wrap', value: 'Replaced' });
+
+    expect(ack?.applied).toBe(false);
+    expect(wrap.querySelector('span')).not.toBeNull();
+
+    dom.window.close();
+  });
+
+  it('acknowledges an applied text mirror', () => {
+    const { dom, mirror } = mountBridge('<main><p data-od-id="note">Note</p></main>');
+    const note = dom.window.document.querySelector('[data-od-id="note"]')!;
+
+    const ack = mirror({ type: 'od-edit-preview-text', id: 'note', value: 'Note EDIT' });
+
+    expect(ack?.applied).toBe(true);
+    expect(note.textContent).toBe('Note EDIT');
+
+    dom.window.close();
+  });
+
+  it('acknowledges an outer-html mirror, and refuses one that is not a single element', () => {
+    const { dom, mirror } = mountBridge('<main><p data-od-id="note">Note</p></main>');
+
+    expect(mirror({ type: 'od-edit-preview-outer-html', id: 'note', html: '<p data-od-id="note">Replaced</p>' })?.applied).toBe(true);
+    expect(dom.window.document.querySelector('[data-od-id="note"]')?.textContent).toBe('Replaced');
+    expect(mirror({ type: 'od-edit-preview-outer-html', id: 'note', html: '<p>One</p><p>Two</p>' })?.applied).toBe(false);
+
+    dom.window.close();
+  });
+
+  // Live preview keystrokes carry no requestId and must stay fire-and-forget:
+  // one answer per request, never an unsolicited one.
+  it('answers only requests that asked to be answered', () => {
+    const { dom, posts } = mountBridge('<main><p data-od-id="note">Note</p></main>');
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-preview-text', id: 'note', value: 'Typed' },
+    }));
+
+    expect(posts.filter((message) => message.type === 'od-edit-preview:applied')).toEqual([]);
+    expect(dom.window.document.querySelector('[data-od-id="note"]')?.textContent).toBe('Typed');
 
     dom.window.close();
   });

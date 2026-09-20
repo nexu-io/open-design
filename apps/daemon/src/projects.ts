@@ -36,8 +36,22 @@ import {
 } from './sandbox-mode.js';
 import { isOrchestratorScratchWorkspace } from './workspace-contract.js';
 
-const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
-const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.file-versions', '.live-artifacts']);
+// `..` escapes the project and must never be accepted. `.` does not: it is how
+// HTML writes a sibling reference (`./styles.css`) and names exactly the same
+// file as the bare name, so it is dropped rather than rejected. Rejecting it
+// meant a document could ask for a file the write API refused — measured on 12
+// of 400 real design-system artifacts, surfacing as a 500.
+const FORBIDDEN_SEGMENT = /^$|^\.\.$/;
+/**
+ * Directories the daemon keeps for its own bookkeeping inside a project.
+ *
+ * User writes into them are refused and they are excluded from member mirrors,
+ * so nothing outside the daemon addresses them by path — which also makes them
+ * the wrong thing to announce as project file changes. Exported so the file
+ * watcher silences exactly this set instead of keeping a second list that can
+ * drift away from it.
+ */
+export const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.file-versions', '.live-artifacts']);
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
 export const RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS = 1000;
@@ -1515,7 +1529,7 @@ export function validateProjectPath(raw) {
   if (raw.includes('\0') || /^[A-Za-z]:/.test(normalized) || normalized.startsWith('/')) {
     throw new Error('invalid file name');
   }
-  const parts = normalized.split('/').filter(Boolean);
+  const parts = normalized.split('/').filter((part) => part !== '' && part !== '.');
   if (parts.length === 0 || parts.some((p) => FORBIDDEN_SEGMENT.test(p))) {
     throw new Error('invalid file name');
   }

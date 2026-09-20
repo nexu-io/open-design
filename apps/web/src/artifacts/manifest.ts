@@ -64,8 +64,27 @@ function exportsForKind(kind: ArtifactKind): ArtifactExportKind[] {
   return ['html', 'pdf', 'zip'];
 }
 
+export const ARTIFACT_MANIFEST_SUFFIX = '.artifact.json';
+
 export function artifactManifestNameFor(entry: string): string {
-  return `${entry}.artifact.json`;
+  return `${entry}${ARTIFACT_MANIFEST_SUFFIX}`;
+}
+
+/**
+ * The document a project path is ABOUT, which is itself unless it is a
+ * manifest sidecar.
+ *
+ * A manifest is generated metadata for one artifact; it is hidden from the
+ * file listing and from the file tree, so nothing references it and nothing
+ * renders it. Treating a manifest write as a change to an unrelated file made
+ * a single artifact save look like a project-wide mutation.
+ */
+export function artifactManifestSubjectPath(filePath: string): string {
+  if (!filePath.endsWith(ARTIFACT_MANIFEST_SUFFIX)) return filePath;
+  const subject = filePath.slice(0, -ARTIFACT_MANIFEST_SUFFIX.length);
+  // `.artifact.json` on its own describes nothing; keep it addressable so it
+  // is never silently folded onto the empty project wildcard.
+  return subject === '' ? filePath : subject;
 }
 
 export function createHtmlArtifactManifest(input: {

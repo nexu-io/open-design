@@ -76,11 +76,20 @@ function normalizePngSize(source: PNG, width: number, height: number): PNG {
 }
 
 export function classifyPixelParity(input: {
-  comparison: Pick<PixelComparison, 'exactDiffPixels' | 'perceptualDiffRatio'>;
+  comparison: Pick<
+    PixelComparison,
+    | 'actualWidth'
+    | 'actualHeight'
+    | 'expectedWidth'
+    | 'expectedHeight'
+    | 'exactDiffPixels'
+    | 'perceptualDiffRatio'
+  >;
   actualSelfDriftRatio: number;
   expectedSelfDriftRatio: number;
   maxPerceptualDiffRatio: number;
   maxSelfDriftRatio: number;
+  dynamicSurface?: boolean;
 }): ParityClassification {
   if (
     input.actualSelfDriftRatio > input.maxSelfDriftRatio
@@ -91,6 +100,17 @@ export function classifyPixelParity(input: {
   if (input.comparison.exactDiffPixels === 0) return 'exact';
   if (input.comparison.perceptualDiffRatio <= input.maxPerceptualDiffRatio) {
     return 'perceptually-equivalent';
+  }
+  if (
+    input.dynamicSurface === true
+    && input.comparison.actualWidth === input.comparison.expectedWidth
+    && input.comparison.actualHeight === input.comparison.expectedHeight
+  ) {
+    // Canvas/video frames can move between otherwise stable captures even
+    // when the host retains the exact same browsing context. Keep that case
+    // visible for review without misreporting it as a transport regression.
+    // A viewport-size change remains a hard difference.
+    return 'unstable';
   }
   return 'different';
 }

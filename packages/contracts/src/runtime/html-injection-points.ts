@@ -798,13 +798,24 @@ function isBogusCommentStart(html: string, i: number): boolean {
 }
 
 export function prependAfterDoctype(html: string, payload: string): string {
+  const at = findAfterDoctypeOffset(html);
+  return html.slice(0, at) + payload + html.slice(at);
+}
+
+/**
+ * The offset `prependAfterDoctype` inserts at: just past a leading DOCTYPE, or
+ * at the top of the document (behind its encoding signature) when there is
+ * none. Exposed so a caller that splices bytes rather than strings — the
+ * daemon streams large documents — lands on exactly the same boundary.
+ */
+export function findAfterDoctypeOffset(html: string): number {
   // A leading U+FEFF is the encoding signature, and it only counts at byte
   // zero. Putting anything in front of it demotes it to an ordinary character
   // token, which in turn puts a character before the doctype — so the doctype
   // stops applying and the document silently drops to quirks mode. The BOM
   // therefore stays put, and every offset here is measured after it.
   const bom = html.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const atTop = (): string => html.slice(0, bom) + payload + html.slice(bom);
+  const atTop = (): number => bom;
   // Whitespace and comments may legally precede the doctype without changing
   // the document's mode, so the payload has to go behind them. "Comment" here
   // is every token the tokenizer turns into one, not just `<!-- … -->`: an XML
@@ -836,7 +847,7 @@ export function prependAfterDoctype(html: string, payload: string): string {
   if (!/^<!doctype/i.test(html.slice(i))) return atTop();
   const doctypeEnd = html.indexOf('>', i);
   if (doctypeEnd < 0) return atTop();
-  return html.slice(0, doctypeEnd + 1) + payload + html.slice(doctypeEnd + 1);
+  return doctypeEnd + 1;
 }
 
 /**

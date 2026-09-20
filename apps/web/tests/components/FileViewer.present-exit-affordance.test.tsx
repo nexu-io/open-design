@@ -18,15 +18,47 @@
 // The invariant frozen here: the presentation overlay must always carry its
 // own exit control. It lives in the host document, so it keeps working no
 // matter where focus went — which is exactly what Esc cannot promise.
+//
+// The layout above is the original report. Since the runtime convergence the
+// overlay no longer owns the frame — presenting promotes the document already
+// running instead of minting a second one — so the overlay is a transparent
+// chrome layer at z-index 1060 over the promoted preview at 1050. The
+// invariant is untouched; only where the frame lives changed.
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
+import type { ComponentProps } from 'react';
 import { CollabProvider, type CollabContextValue } from '../../src/collab/collab-context';
-import { FileViewer } from '../../src/components/FileViewer';
+import { FileViewer as ProductFileViewer } from '../../src/components/FileViewer';
 import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
 import type { ProjectFile } from '../../src/types';
+import {
+  installFileViewerPreviewRuntimeHarness,
+  prepareSettledFileViewerFixture,
+  uninstallFileViewerPreviewRuntimeHarness,
+  useSyntheticProjectScopedPreviewNavigation,
+} from '../helpers/file-viewer-preview-runtime';
 import { workspaceContextFixture } from '../helpers/workspace-context';
+
+// Presenting no longer mints its own document, so the frame this spec focuses
+// is the real Preview Runtime frame. That only mounts under the runtime
+// harness, hence the mock below.
+vi.mock('../../src/runtime/use-project-preview-session-navigation', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../src/runtime/use-project-preview-session-navigation')
+  >();
+  return {
+    ...actual,
+    useProjectScopedPreviewNavigation: (
+      options: Parameters<typeof actual.useProjectScopedPreviewNavigation>[0],
+    ) => useSyntheticProjectScopedPreviewNavigation(options),
+  };
+});
+
+function FileViewer(props: ComponentProps<typeof ProductFileViewer>) {
+  return <ProductFileViewer {...prepareSettledFileViewerFixture(props)} />;
+}
 
 const WORKSPACE_CONTEXT = workspaceContextFixture({
   workspaceId: 'ws-present-exit',
@@ -127,9 +159,11 @@ async function enterPresentation() {
 
 beforeEach(() => {
   resetSharedCancellableGet();
+  installFileViewerPreviewRuntimeHarness();
 });
 
 afterEach(() => {
+  uninstallFileViewerPreviewRuntimeHarness();
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -193,9 +227,15 @@ describe('presentation overlay exit affordance (OPEND-2156)', () => {
     // Reproduce the state the user is actually stuck in: they clicked a slide
     // to advance, so focus now lives in the sandboxed frame and Esc can no
     // longer reach the host.
-    const frame = overlay()!.querySelector('iframe');
+    //
+    // The frame is no longer a child of the overlay. Presenting promotes the
+    // document the user is already looking at instead of minting a second one,
+    // so the preview stays in the viewer and the overlay carries only host
+    // chrome. What this spec protects is unchanged: the exit control has to
+    // keep working once focus has left the host document.
+    const frame = document.querySelector('.viewer.is-tab-present iframe');
     expect(frame).not.toBeNull();
-    frame!.focus();
+    (frame as HTMLIFrameElement).focus();
 
     const exit = overlay()!.querySelector('button');
     expect(exit).not.toBeNull();

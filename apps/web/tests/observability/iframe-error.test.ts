@@ -21,6 +21,19 @@ afterEach(() => {
 });
 
 describe('preview iframe observability', () => {
+  it('ignores the retired visible-paint event without reporting analytics', () => {
+    const reported = reportPreviewIframeMessage({
+      type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+      version: 1,
+      event: 'visible_paint',
+      source_url: 'od://app/api/projects/project-1/raw/index.html?odPreviewEpoch=1',
+      visible_element_count: 1,
+    }, { surface: 'artifact_preview', renderMode: 'url_load' });
+
+    expect(reported).toBe(false);
+    expect(reportSafetyEvent).not.toHaveBeenCalled();
+  });
+
   it('maps runtime failures to a scrubbed PostHog safety event', () => {
     const seen = new Set<string>();
     const reported = reportPreviewIframeMessage({

@@ -214,6 +214,7 @@ describe('ProjectView preview keep-alive invalidation', () => {
       attach: vi.fn(),
       release: vi.fn(),
       evict: vi.fn(),
+      evictFrame: vi.fn(),
       evictProject: evictProjectMock,
       evictMatching: vi.fn(),
       subscribe: vi.fn(() => () => {}),

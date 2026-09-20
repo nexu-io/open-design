@@ -29,6 +29,7 @@ import {
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
 import type { Project, ProjectFile } from '@open-design/contracts';
+import { applyUrlPreviewBridgesToHtml } from './project/index.js';
 
 type DbHandle = ReturnType<typeof openDatabase>;
 
@@ -724,7 +725,13 @@ export function registerDesignSystemRoutes(
       });
       if (body === null) return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
-      res.type('text/html').send(html);
+      // Preview surfaces navigate a frame at this route instead of rebuilding
+      // the fetched HTML into a srcdoc copy, so the guards and bridges srcdoc
+      // used to inject host-side are installed here when the navigation names
+      // them.
+      res
+        .type('text/html')
+        .send(applyUrlPreviewBridgesToHtml(html, 'text/html', req.query.odPreviewBridge));
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -752,11 +759,15 @@ export function registerDesignSystemRoutes(
         res.setHeader('Cache-Control', 'no-store');
         res.setHeader('Last-Modified', packaged.updatedAt);
         return res.type('text/html').send(
-          rewriteDesignSystemShowcaseAssetUrls(
-            packaged.bytes.toString('utf8'),
-            req.params.id,
-            path.posix.dirname(PACKAGED_SHOWCASE_PATH),
-            workspaceQuery,
+          applyUrlPreviewBridgesToHtml(
+            rewriteDesignSystemShowcaseAssetUrls(
+              packaged.bytes.toString('utf8'),
+              req.params.id,
+              path.posix.dirname(PACKAGED_SHOWCASE_PATH),
+              workspaceQuery,
+            ),
+            'text/html',
+            req.query.odPreviewBridge,
           ),
         );
       }
@@ -767,7 +778,9 @@ export function registerDesignSystemRoutes(
       });
       if (body === null) return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
-      res.type('text/html').send(html);
+      res
+        .type('text/html')
+        .send(applyUrlPreviewBridgesToHtml(html, 'text/html', req.query.odPreviewBridge));
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }

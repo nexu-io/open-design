@@ -2,6 +2,7 @@ import type { Express, Request, Response } from 'express';
 import type * as BetterSqlite3 from 'better-sqlite3';
 import path from 'node:path';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { applyUrlPreviewBridgesToHtml } from '../project/index.js';
 import {
   resolveOptionalLocalWorkspaceRequestAuthority,
   type VerifyWorkspaceRequestAuthority,
@@ -198,15 +199,22 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       if (ext === '.html' && typeof contentRel === 'string') {
-        buf = Buffer.from(
-          rewritePluginAssetUrls(
-            buf.toString('utf8'),
-            routeParam(req.params.id),
-            path.posix.dirname(contentRel.replace(/\\/g, '/')),
-            navigationScopeQuery(authority),
-          ),
-          'utf8',
+        const rewritten = rewritePluginAssetUrls(
+          buf.toString('utf8'),
+          routeParam(req.params.id),
+          path.posix.dirname(contentRel.replace(/\\/g, '/')),
+          navigationScopeQuery(authority),
         );
+        // Preview surfaces navigate a frame at this route instead of
+        // rebuilding the fetched HTML into a srcdoc copy, so the guards and
+        // bridges srcdoc used to inject host-side are installed here when the
+        // navigation names them.
+        const bridged = applyUrlPreviewBridgesToHtml(
+          rewritten,
+          'text/html',
+          req.query.odPreviewBridge,
+        );
+        buf = Buffer.from(typeof bridged === 'string' ? bridged : bridged.toString('utf8'), 'utf8');
       }
       res.send(buf);
     } catch (err) {
