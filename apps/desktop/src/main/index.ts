@@ -394,17 +394,20 @@ type DesktopMenuController = {
   setUpdateLabels(labels: DesktopUpdateMenuLabels): void;
 };
 
-export function createZoomMenuItems(): MenuItemConstructorOptions[] {
+export function createZoomMenuItems(
+  platform: NodeJS.Platform = process.platform,
+): MenuItemConstructorOptions[] {
   return [
     { role: "resetZoom" },
     { role: "zoomIn" },
     { role: "zoomOut" },
-    // Windows users reach zoom-out as Ctrl+Shift+- (the Shift spelling of the
-    // same key), but the built-in `zoomOut` role only registers the bare
-    // Cmd/Ctrl+- accelerator, so the Shift spelling silently does nothing
-    // (issue #8095). Register the Shift spelling explicitly; hidden menu
-    // items still register their accelerators on Windows/Linux.
-    { role: "zoomOut", accelerator: "CmdOrCtrl+Shift+-", visible: false },
+    ...(platform === "win32"
+      ? [
+          // Windows users reach zoom-out as Ctrl+Shift+- (the Shift spelling
+          // of the same key), while the built-in role registers only Ctrl+-.
+          { role: "zoomOut", accelerator: "CmdOrCtrl+Shift+-", visible: false } as const,
+        ]
+      : []),
   ];
 }
 
