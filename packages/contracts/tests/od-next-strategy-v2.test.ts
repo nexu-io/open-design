@@ -294,16 +294,23 @@ describe('OD Next V2 runtime state and transitions', () => {
     })).toMatchObject(state);
   });
 
-  it('rejects Direct Edit continuation, route switching, mode switching, and reverse stages', () => {
-    expect(() => StrategyRuntimeStateV2Schema.parse({
+  it.each(['request', 'clarification'] as const)('lets a simple Full Plan complete in the %s Run that froze it', (inputStage) => {
+    const state = {
       schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
       route: 'full_plan',
-      inputStage: 'request',
+      inputStage,
       outcome: 'completed',
       executionMode: 'simple',
       reasonCodes: [],
-    })).toThrow(/cannot complete before Production/);
+    } as const;
+    expect(StrategyRuntimeStateV2Schema.parse(state).outcome).toBe('completed');
+    expect(() => StrategyRuntimeStateV2Schema.parse({ ...state, executionMode: 'complex' }))
+      .toThrow(/Only a simple Full Plan/);
+    expect(() => StrategyRuntimeStateV2Schema.parse({ ...state, executionMode: null }))
+      .toThrow(/Only a simple Full Plan/);
+  });
 
+  it('rejects Direct Edit continuation, route switching, mode switching, and reverse stages', () => {
     expect(() => StrategyRuntimeTransitionV2Schema.parse({
       from: { route: 'direct_edit', inputStage: 'request', executionMode: 'simple' },
       to: { route: 'direct_edit', inputStage: 'production', executionMode: 'simple' },
@@ -427,10 +434,18 @@ describe('OD Next V2 capability, Child, and task projection contracts', () => {
       outcome: 'completed',
       terminal: false,
     })).toThrow(/terminal/);
+    expect(StrategyTaskProjectionV2Schema.parse({
+      ...projection,
+      inputStage: 'request',
+      outcome: 'completed',
+      nextRunId: undefined,
+      terminal: true,
+    }).outcome).toBe('completed');
     expect(() => StrategyTaskProjectionV2Schema.parse({
       ...projection,
       inputStage: 'request',
       outcome: 'completed',
+      executionMode: 'complex',
       nextRunId: undefined,
       terminal: true,
     })).toThrow(/only after Production/);
