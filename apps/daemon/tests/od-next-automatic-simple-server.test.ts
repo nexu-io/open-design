@@ -2466,6 +2466,55 @@ process.exit(127);
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
   }, 90_000);
 
+  it("ends a refused planning turn as the agent's reply instead of a failed Run", async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.refused-request`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'hello'), {
+      'x-od-analytics-device-id': 'device-refused-request',
+      'x-od-analytics-session-id': 'session-refused-request',
+      'x-od-analytics-client-type': 'desktop',
+    });
+    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    // The task records the refusal; the physical Run keeps its own clean exit.
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: { outcome: 'blocked', terminal: true, inputStage: 'request' },
+    });
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
+      status: 'succeeded', code: 0, strategyTask: { outcome: 'blocked', inputStage: 'request' },
+    });
+    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string; content?: string }>;
+    };
+    expect(messages.find((message) => message.runId === task.latestRunId)).toMatchObject({
+      runStatus: 'succeeded',
+      content: expect.stringContaining('Tell me what you would like to design'),
+    });
+    const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
+    expect(recovery?.properties).toMatchObject({
+      result: 'success',
+      od_next_blocked_reason_code: 'od_next_canonical_deliverable_invalid',
+      rpc_close_reason: 'exit_0',
+    });
+    expect(recovery?.properties?.error_code).toBeUndefined();
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
+  }, 90_000);
+
   it('blocks the durable task when the selected agent exits before publishing a session', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.fail-start`, '1');
@@ -3715,6 +3764,10 @@ function finish() {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
     staleTodoList = true;
     text = ${JSON.stringify(production)};
+  } else if (!argv.includes('resume') && fs.existsSync(logPath + '.refused-request')) {
+    // A planning turn that declines the request: the agent answers in prose,
+    // writes nothing, emits no machine block, and exits cleanly.
+    text = 'Hello! Tell me what you would like to design and I will plan it.';
   } else {
     text = ${JSON.stringify(initialRepair)};
   }

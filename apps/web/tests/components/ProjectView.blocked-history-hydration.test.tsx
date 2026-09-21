@@ -93,10 +93,14 @@ const taskId = () => `task-${project.id}`;
 const historyKey = (conversation = conversationId(), principal = context.workspaceMemberId) =>
   `${principal}/${conversation}`;
 
+// The refusal these histories restore is a production gate: the plan was
+// frozen, the build ran, and nothing usable was written. A task refused before
+// production with a reply beside it is the agent's answer, and the cold load
+// keeps it Done — covered by its own case below.
 function blockedTask(overrides: Partial<StrategyTaskProjectionV2> = {}): StrategyTaskProjectionV2 {
   const task: StrategyTaskProjectionV2 = {
-    taskExecutionId: taskId(), activeRunId: runId(), executionMode: null,
-    inputStage: 'request', route: 'full_plan', outcome: 'blocked', terminal: true,
+    taskExecutionId: taskId(), activeRunId: runId(), executionMode: 'simple',
+    inputStage: 'production', route: 'full_plan', outcome: 'blocked', terminal: true,
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'a'.repeat(64), snapshotId: 'fixture' },
     blockedContext: { reasonCodes: [MISSING_STATE], visibleText: 'The requested result was prepared.' },
     ...overrides,
@@ -370,6 +374,33 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     }
     expect(histories.get(historyKey())).toEqual(original);
     expect(unexpectedWrites).toEqual([]);
+  });
+
+  it("keeps a refused planning turn Done on cold load: the agent's reply is the outcome", async () => {
+    const content = '你好！告诉我你想做什么设计，我来帮你规划。';
+    proofs.set(runId(), runProof({ strategyTask: blockedTask({ inputStage: 'request', executionMode: null,
+      blockedContext: { reasonCodes: ['od_next_canonical_deliverable_invalid', MISSING_STATE], visibleText: content } }) }));
+    setHistory(persistedAssistant({ content, strategyTaskBlockedText: content,
+      events: [{ kind: 'thinking', text: 'Reading the request.' }, { kind: 'text', text: content }] }));
+    const original = structuredClone(histories.get(historyKey()));
+    holdProof();
+    render(view());
+    await settleExistingTaskProbe();
+    await expectDisplayedStatus(en['chat.record.done']);
+    expect(errorCodesOnAssistant()).toEqual([]);
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
+    expect(histories.get(historyKey())).toEqual(original);
+    expect(unexpectedWrites).toEqual([]);
+  });
+
+  it('restores the failure for a refused planning turn that left no reply', async () => {
+    proofs.set(runId(), runProof({ strategyTask: blockedTask({ inputStage: 'request', executionMode: null,
+      blockedContext: { reasonCodes: [MISSING_STATE], visibleText: null } }) }));
+    setHistory(persistedAssistant({ content: '', strategyTaskBlockedText: undefined,
+      events: [{ kind: 'thinking', text: 'Reading the request.' }] }));
+    render(view());
+    await expectBlockedRecovery();
   });
 
   it('does not treat an agent-declared reason without visible explanation as the success exception', async () => {

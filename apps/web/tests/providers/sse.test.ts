@@ -2446,19 +2446,84 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
   });
 
-  // The other half of the same rule. A gate the agent did not ask for leaves
-  // the agent's ordinary reply sitting next to the verdict — "sure, three
-  // pages, here is the plan" — and that prose is not an account of the stop.
-  // Suppressing on text alone would hide a real protocol failure behind a
-  // cheerful sentence, so the reason code is what decides.
-  it('still raises a run error when a gate blocked the task the agent did not', async () => {
+  // A planning turn the gate refused is the agent's reply. The user said
+  // "hello", the agent answered and planned nothing, and the daemon recorded
+  // the missing machine block on the task — but the Run finished cleanly and
+  // the reply on screen is the whole outcome of the turn. Raising a run error
+  // over it put a red "task could not complete" card under a greeting.
+  it("leaves a refused planning turn to the agent's reply instead of raising a run error", async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-refused' });
+      if (url === '/api/runs/run-refused') {
+        return jsonResponse({ deliverableValid: false, projectDeliverableValid: false });
+      }
+      if (url === '/api/runs/run-refused/events') {
+        return sseResponse(`event: stdout\ndata: ${JSON.stringify({
+          chunk: '你好！告诉我你想做什么设计，我来帮你规划。',
+        })}\n\nevent: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-refused',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'request',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: null,
+            activeRunId: 'run-refused',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: [
+                'od_next_canonical_deliverable_invalid',
+                'od_next_protocol_runtime_state_missing',
+              ],
+              visibleText: '你好！告诉我你想做什么设计，我来帮你规划。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '你好' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+  });
+
+  // The other half of the same rule. At production the user asked for a
+  // deliverable, the plan was frozen, and a gate refused the turn because
+  // nothing usable was written. The prose sitting next to that verdict —
+  // "working on the lesson" — is not an account of the stop, so text alone
+  // never clears a production block: only a resolved deliverable or the
+  // agent's own declared block does.
+  it('still raises a run error when a gate blocked a production turn the agent did not', async () => {
     const handlers = createDaemonHandlers();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-gated' });
-      if (url === '/api/runs/run-gated') return jsonResponse({ deliverableValid: false });
+      if (url === '/api/runs/run-gated') {
+        return jsonResponse({ deliverableValid: false, projectDeliverableValid: false });
+      }
       if (url === '/api/runs/run-gated/events') {
-        return sseResponse(`event: end\ndata: ${JSON.stringify({
+        return sseResponse(`event: stdout\ndata: ${JSON.stringify({
+          chunk: '好的，按你说的三页来做。计划如下：1) 首页 2) 列表 3) 详情。',
+        })}\n\nevent: end\ndata: ${JSON.stringify({
           code: 0,
           status: 'succeeded',
           strategyTask: {
@@ -2469,10 +2534,10 @@ describe('streamViaDaemon', () => {
               packageHash: 'a'.repeat(64),
               snapshotId: 'snapshot-1',
             },
-            inputStage: 'clarification',
+            inputStage: 'production',
             outcome: 'blocked',
             route: 'full_plan',
-            executionMode: null,
+            executionMode: 'simple',
             activeRunId: 'run-gated',
             terminal: true,
             blockedContext: {

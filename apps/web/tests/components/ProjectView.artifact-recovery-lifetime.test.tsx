@@ -202,7 +202,9 @@ function strategyTask() {
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
   };
   return {
-    activeRunId: `run-${project.id}`, executionMode: null, inputStage: 'request', route: 'full_plan',
+    // A production gate refused this turn: its plan was frozen, the build ran,
+    // and the output landed in the chat instead of on disk.
+    activeRunId: `run-${project.id}`, executionMode: 'simple', inputStage: 'production', route: 'full_plan',
     outcome: 'blocked', terminal: true, taskExecutionId: `task-${project.id}`,
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
     blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_missing'], visibleText: accumulatedText },

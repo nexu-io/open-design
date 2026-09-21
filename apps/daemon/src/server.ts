@@ -12844,12 +12844,21 @@ export async function startServer({
       { allowRetry = true } = {},
     ) => {
       lifecycle.mark('finalize_start');
-      // A clean child exit does not complete a task rejected by the strategy
-      // gate. Reconcile before persisting the message or publishing the Run
-      // terminal event, while retaining the actual process exit code.
+      // A clean child exit does not complete a production task rejected by the
+      // strategy gate: the user asked for a deliverable and none was written.
+      // Reconcile before persisting the message or publishing the Run terminal
+      // event, while retaining the actual process exit code.
+      //
+      // A task refused before production is a different turn. The agent read
+      // the request, decided not to plan a build for it — a greeting, an
+      // off-topic question, a request it could not act on — and answered in
+      // prose. That reply is the turn's outcome and the Run finished the way
+      // the process did; the task record still carries the blocked verdict and
+      // its reason codes for everything that reads them.
       if (
         status === 'succeeded'
         && run.strategyTask?.outcome === 'blocked'
+        && run.strategyTask.inputStage === 'production'
         && run.strategyTask.activeRunId === run.id
       ) {
         status = 'failed';

@@ -98,6 +98,10 @@ describe('a blocked strategy task reaches the user with the daemon\'s own verdic
   // `plan_ready` (which needs a Plan Contract the reply never had), `blocked`
   // or `canceled`. What is NOT correct is handing that to the user as a
   // sentence with no subject, no reason and nothing to look up.
+  //
+  // These frames stream no visible reply. A turn refused before production
+  // that did reply keeps its success (`sse.test.ts`); one that left the user
+  // nothing to read still raises the card, and the card must name the reason.
   it('carries the blocking reason code so the card and the diagnostics can name it', async () => {
     const error = await runBlockedTurn(blockedEndFrame({
       inputStage: 'clarification',

@@ -63,7 +63,12 @@ let messageWrites: ChatMessage[];
 let strategy: 'missing-state' | 'delivered' | 'agent-declared' | 'ordinary-delivery' | 'project-delivered';
 
 function strategyTask() {
-  return { activeRunId: `run-${project.id}`, executionMode: null, inputStage: 'request', route: 'full_plan',
+  // The gate with no delivery proof refuses a production turn: the plan was
+  // frozen, the build ran, and nothing usable was written. A block before
+  // production with a reply beside it is the agent's answer, not a failure.
+  const production = strategy === 'missing-state';
+  return { activeRunId: `run-${project.id}`, executionMode: production ? 'simple' : null,
+    inputStage: production ? 'production' : 'request', route: 'full_plan',
     outcome: 'blocked', terminal: true, taskExecutionId: `task-${project.id}`,
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
     blockedContext: { reasonCodes: [strategy === 'agent-declared' ? OD_NEXT_AGENT_DECLARED_BLOCK_REASON : MISSING_STATE],
