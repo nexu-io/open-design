@@ -351,6 +351,12 @@ async function emitRun(promptText) {
     emitEmptySuccess();
     return;
   }
+  // A supplemental turn contains the original request too. Handle its envelope
+  // before scenario matching, so it cannot accidentally generate an artifact.
+  if (promptText.includes('<open_design_intent_resolution_turn ')) {
+    emitOdNextIntentResolution(promptText);
+    return;
+  }
   if (promptText.includes('# OD Next native continuation — production')) {
     await emitOdNextProductionRun(promptText);
     return;
@@ -641,7 +647,7 @@ function emitOdNextPlanningRun(promptText, inputStage = 'request', taskTypeOverr
   };
   const state = {
     schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage,
-    outcome: 'plan_ready', executionMode: 'simple', reasonCodes: [],
+    outcome: 'plan_ready', executionMode: 'simple', executionIntent: 'produce', reasonCodes: [],
   };
   emitSuccess(
     'The local canary plan is ready.\\n<open-design-plan-contract>\\n'
@@ -659,7 +665,7 @@ function emitOdNextClarificationRequest(promptText) {
   odNextPromptIdentity(promptText);
   const state = {
     schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
-    outcome: 'clarification_required', executionMode: null,
+    outcome: 'clarification_required', executionMode: null, executionIntent: 'produce',
     reasonCodes: ['od_next_clarification_required'],
   };
   const form = '<question-form id="od-next-canary-platform" title="Choose platform">'
@@ -679,6 +685,31 @@ function emitOdNextClarificationRequest(promptText) {
 
 function emitOdNextClarificationRun(promptText) {
   emitOdNextPlanningRun(promptText, 'clarification');
+}
+
+function emitOdNextIntentResolution(promptText) {
+  const stage = /<open_design_intent_resolution_turn [^>]*stage="(request|clarification)"/.exec(promptText)?.[1];
+  const mode = /executionMode (null|"simple"|"complex"), executionIntent/.exec(promptText)?.[1];
+  // These scripted canaries request file creation; this is not a general
+  // classifier for arbitrary user requests or planning-only scenarios.
+  const request = promptText.split('## Frozen original user request')[1] ?? '';
+  const creationCanary = [
+    'Create a delayed deterministic smoke artifact',
+    'Create an OD Next active canary artifact',
+    'Create an OD Next clarification canary artifact',
+    'Create an OD Next PowerPoint protocol canary',
+    'Create a selected-template deck navigation canary',
+  ].some((marker) => request.trimStart().startsWith(marker));
+  if (!stage || !mode || !creationCanary) {
+    throw new Error('Unsupported OD Next fake intent resolution request');
+  }
+  const state = {
+    schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: stage,
+    outcome: 'plan_ready', executionMode: JSON.parse(mode), executionIntent: 'produce', reasonCodes: [],
+  };
+  emitSuccess('<open-design-runtime-state>\\n' + JSON.stringify(state) + '\\n</open-design-runtime-state>', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
 }
 
 function emitOdNextBlockedRun() {
@@ -711,7 +742,7 @@ async function emitOdNextProductionRun(promptText) {
   );
   const state = {
     schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'production',
-    outcome: 'completed', executionMode: 'simple', reasonCodes: [],
+    outcome: 'completed', executionMode: 'simple', executionIntent: 'produce', reasonCodes: [],
   };
   emitSuccess(
     (homeFirstRun
