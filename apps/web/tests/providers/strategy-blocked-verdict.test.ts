@@ -194,3 +194,135 @@ describe('project delivery evidence during blocked run completion', () => {
     }
   });
 });
+
+/**
+ * The daemon's finalize step turns a blocked run `failed` and sends an `error`
+ * frame coded `OD_NEXT_TASK_BLOCKED` ahead of `end` (OPEND-2953). Every gate
+ * arrives wrapped the same way, so without reading through the wrapper the two
+ * carve-outs above could never fire again and the card lost the gate's name:
+ * the code fell to the `execution_failed` detail and rendered as a crash.
+ */
+function daemonReconciledBlockFrames(input: {
+  reasonCodes: string[];
+  visibleText: string | null;
+  exitCode?: number;
+  errorCode?: string;
+}): string {
+  const errorCode = input.errorCode ?? 'OD_NEXT_TASK_BLOCKED';
+  const error = `event: error\ndata: ${JSON.stringify({
+    message: `The task could not complete: ${input.reasonCodes.join(', ')}`,
+    error: {
+      code: errorCode,
+      message: `The task could not complete: ${input.reasonCodes.join(', ')}`,
+      retryable: false,
+      details: { reasonCodes: input.reasonCodes },
+    },
+  })}\n\n`;
+  const end = `event: end\ndata: ${JSON.stringify({
+    code: input.exitCode ?? 0,
+    signal: null,
+    status: 'failed',
+    failureCategory: 'process_exit',
+    failureDetail: 'execution_failed',
+    retryable: false,
+    strategyTask: {
+      taskExecutionId: 'task-1',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.4',
+        packageHash: 'a'.repeat(64),
+        snapshotId: 'snapshot-1',
+      },
+      inputStage: 'request',
+      outcome: 'blocked',
+      route: 'full_plan',
+      executionMode: null,
+      activeRunId: 'run-1',
+      terminal: true,
+      blockedContext: { reasonCodes: input.reasonCodes, visibleText: input.visibleText },
+    },
+  })}\n\n`;
+  return `${error}${end}`;
+}
+
+const DECLARED_REPLY = '已 commit 並推送。settings-r3 領先 main 四個 commit，還沒開 PR。';
+
+/** Streams `reply` (if any) followed by `frames`, with the run status the daemon answers. */
+async function streamReconciledTurn(
+  frames: string,
+  runStatus: Record<string, unknown>,
+  reply = '已完成。交付物在项目根目录。',
+) {
+  const h = handlers();
+  const text = reply
+    ? `event: agent\ndata: ${JSON.stringify({ type: 'text_delta', delta: reply })}\n\n`
+    : '';
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+    if (url === '/api/runs/run-1/events') return sseResponse(text + frames);
+    if (url === '/api/runs/run-1') return jsonResponse(runStatus);
+    throw new Error(`unexpected fetch ${url}`);
+  }));
+  await streamViaDaemon({
+    agentId: 'mock',
+    history: [{ id: '1', role: 'user', content: 'commit & push' }],
+    signal: new AbortController().signal,
+    handlers: h,
+    taskExecutionId: 'task-1',
+  });
+  return h;
+}
+
+describe('a blocked turn the daemon already failed over its own wrapper', () => {
+  it('does not become a failure when the agent declared the block and explained it', async () => {
+    // The field report: a coding request in a design conversation. The agent
+    // did the work, said so, and declared `outcome: blocked` as the contract
+    // instructs for a turn that is not a design request. A 0.22.x daemon then
+    // failed the run, and the user read 「任务意外中断」 under a finished answer.
+    const h = await streamReconciledTurn(
+      daemonReconciledBlockFrames({
+        reasonCodes: ['od_next_agent_declared_block'],
+        visibleText: DECLARED_REPLY,
+      }),
+      { deliverableValid: false, projectDeliverableValid: false },
+      DECLARED_REPLY,
+    );
+
+    expect(h.onError).not.toHaveBeenCalled();
+    expect(h.onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the gate, not the wrapper, when the block is a real refusal', async () => {
+    const h = await streamReconciledTurn(
+      daemonReconciledBlockFrames({
+        reasonCodes: ['od_next_canonical_deliverable_invalid'],
+        visibleText: '已完成。',
+      }),
+      { deliverableValid: false, projectDeliverableValid: false },
+    );
+
+    expect(h.onError).toHaveBeenCalledTimes(1);
+    const error = h.onError.mock.calls[0]![0] as Error & { code?: string };
+    expect(error.code).toBe('od_next_canonical_deliverable_invalid');
+  });
+
+  it('keeps an error the run raised itself ahead of the verdict', async () => {
+    // Narration is not a substitute for a failure the user has to act on: a
+    // declared block next to a real crash still reports the crash.
+    const h = await streamReconciledTurn(
+      daemonReconciledBlockFrames({
+        reasonCodes: ['od_next_agent_declared_block'],
+        visibleText: DECLARED_REPLY,
+        exitCode: 1,
+        errorCode: 'AGENT_EXECUTION_FAILED',
+      }),
+      { deliverableValid: false, projectDeliverableValid: false },
+      DECLARED_REPLY,
+    );
+
+    expect(h.onError).toHaveBeenCalledTimes(1);
+    const error = h.onError.mock.calls[0]![0] as Error & { code?: string };
+    expect(error.code).toBe('AGENT_EXECUTION_FAILED');
+  });
+});

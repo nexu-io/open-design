@@ -573,6 +573,7 @@ import { createStrategyRunWriteEvidenceRecorder, strategyRunWriteEvidence } from
 import { recoverPlanningIntentResolution } from './strategies/od-next/intent-resolution-recovery.js';
 import { isStrategyIntentResolutionRun, requiresStrategyIntentResolution, validateStrategyIntentResolutionReply } from './strategies/od-next/intent-resolution.js';
 import { startIntentResolution } from './strategies/od-next/intent-resolution-store.js';
+import { agentDeclaredBlockSettlesRun } from './strategies/od-next/blocked-run-outcome.js';
 import {
   getStrategyTaskExecutionByRunId,
   reconcileStrategyTaskRunTerminal,
@@ -12847,10 +12848,16 @@ export async function startServer({
       // A clean child exit does not complete a task rejected by the strategy
       // gate. Reconcile before persisting the message or publishing the Run
       // terminal event, while retaining the actual process exit code.
+      //
+      // The one block that is not a rejection: the agent declared it on itself
+      // and explained why in the reply the user is reading. That turn finished
+      // — see `agentDeclaredBlockSettlesRun` — so it keeps its own result and
+      // the task simply settles blocked beside it.
       if (
         status === 'succeeded'
         && run.strategyTask?.outcome === 'blocked'
         && run.strategyTask.activeRunId === run.id
+        && !agentDeclaredBlockSettlesRun(run.strategyTask)
       ) {
         status = 'failed';
         allowRetry = false;
