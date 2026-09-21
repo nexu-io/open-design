@@ -1,8 +1,7 @@
 // @ts-nocheck
 /**
- * Palette engine — a faithful, dependency-free port of @ant-design/colors'
- * `generate()` HSV algorithm of the brand framework
- * (derived from the @ant-design/colors generate() algorithm).
+ * Palette engine — a faithful, dependency-free port of the @ant-design/colors
+ * `generate()` HSV algorithm.
  *
  * One seed color → a deterministic 10-step ladder `[5 lighter, base, 4 darker]`
  * where index 5 ≈ the seed. The same algorithm, run on a dark background with
