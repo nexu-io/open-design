@@ -308,6 +308,7 @@ function projection(stage: 'request' | 'clarification' | 'production', runId: st
     inputStage: stage, outcome: stage === 'request' ? 'clarification_required' : 'running',
     route: 'full_plan', executionMode: stage === 'request' ? null : 'simple',
     activeRunId: runId, terminal: false,
+    deliverableWritten: false, autoRoundCount: stage === 'production' ? 1 : 0,
     ...(mappingMode === 'legacy' ? {} : { runMappings: mappingMode === 'wrong-run'
       ? [{ runId: 'unrelated-run', taskRunIndex: 9 }]
       : mapping ? [mapping] : [] }),

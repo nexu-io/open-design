@@ -314,6 +314,8 @@ function requestProjection(): StrategyTaskProjectionV2 {
     activeRunId: REQUEST_RUN,
     runMappings: [{ runId: REQUEST_RUN, taskRunIndex: 0 }],
     terminal: false,
+    deliverableWritten: false,
+    autoRoundCount: 0,
   };
 }
 
@@ -340,6 +342,8 @@ function productionProjection(): StrategyTaskProjectionV2 {
     activeRunId: PRODUCTION_RUN,
     ...(mappingMode === 'legacy' ? {} : { runMappings }),
     terminal: false,
+    deliverableWritten: false,
+    autoRoundCount: 1,
   };
 }
 

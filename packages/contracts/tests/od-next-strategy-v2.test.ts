@@ -1,134 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AgentCapabilitySnapshotV2Schema,
   AppliedStrategyBindingV2Schema,
   BundledStrategyDeclarationV2Schema,
-  ChildAgentEvidenceV2Schema,
-  FullPlanV2Schema,
   OD_NEXT_APPLIED_STRATEGY_SCHEMA,
-  OD_NEXT_PLAN_CONTRACT_SCHEMA,
-  OD_NEXT_RUNTIME_STATE_SCHEMA,
-  OpenDesignPlanContractV2Schema,
+  OD_NEXT_NO_DECLARATIONS_V2,
   PluginManifestSchema,
-  ResolvedTaskProfileV2Schema,
-  StrategyRuntimeStateV2Schema,
-  StrategyRuntimeTransitionV2Schema,
   StrategyTaskProjectionV2Schema,
+  StrategyTaskSettlementReasonV2Schema,
+  readStrategyTaskDeclarationsV2,
 } from '../src/index.js';
 
 const hash = 'a'.repeat(64);
-
-function taskProfile(overrides: Record<string, unknown> = {}) {
-  return {
-    schemaVersion: '2',
-    taskType: 'prototype',
-    taskProfileVersion: '2.0.0',
-    goal: 'Build a focused product prototype.',
-    contextAndAudience: 'Product operators using a desktop browser.',
-    inputsAndReferences: ['brief:request'],
-    constraints: ['Keep the supplied brand copy unchanged.'],
-    canonicalDeliverable: {
-      id: 'prototype-source',
-      kind: 'prototype',
-      format: 'html',
-    },
-    requiredDeliverables: [
-      { id: 'prototype-source', kind: 'html' },
-    ],
-    designSpec: {
-      source: 'resolved-baseline',
-      version: 'design-spec-v1',
-      decisions: { typeScale: 'compact-product' },
-    },
-    buildRequirements: [
-      { id: 'responsive-flow', text: 'Implement the primary flow at both target widths.' },
-    ],
-    assumptions: [],
-    risks: [],
-    taskSpecific: { primaryFlow: 'create-project' },
-    ...overrides,
-  };
-}
-
-function simplePlan() {
-  return {
-    executionMode: 'simple',
-    steps: [
-      { id: 'build', objective: 'Build the prototype.', outputs: ['prototype-source'] },
-    ],
-    readinessArtifacts: [
-      { id: 'design-spec', version: '1', digest: hash },
-    ],
-    buildPackages: [],
-  };
-}
-
-function complexPlan() {
-  return {
-    executionMode: 'complex',
-    steps: [
-      { id: 'shell', objective: 'Build the shared shell.', outputs: ['shell'] },
-      {
-        id: 'flow',
-        objective: 'Build the primary flow.',
-        outputs: ['flow'],
-        dependsOn: ['shell'],
-      },
-    ],
-    readinessArtifacts: [
-      { id: 'design-spec', version: '1', digest: hash },
-    ],
-    buildPackages: [
-      {
-        id: 'shell',
-        objective: 'Build the shared shell.',
-        inputs: ['design-spec'],
-        outputs: ['shell'],
-        sharedConstraints: ['Use the frozen type and spacing tokens.'],
-        dependsOn: [],
-        allowedResources: ['project-source'],
-      },
-      {
-        id: 'flow',
-        objective: 'Build the primary flow.',
-        inputs: ['shell'],
-        outputs: ['flow'],
-        sharedConstraints: ['Use the frozen type and spacing tokens.'],
-        dependsOn: ['shell'],
-        allowedResources: ['project-source'],
-      },
-    ],
-  };
-}
-
-function planContract(fullPlan = simplePlan()) {
-  return {
-    schema: OD_NEXT_PLAN_CONTRACT_SCHEMA,
-    strategy: {
-      id: 'od-next-strategy',
-      version: '2.0.0',
-      packageHash: hash,
-      snapshotId: 'snapshot-1',
-    },
-    taskProfile: taskProfile(),
-    fullPlan,
-    runManifest: {
-      selectedAgentId: 'codex',
-      capabilitySnapshotHash: hash,
-      inputRefs: ['brief:request'],
-      productionRoutes: ['prototype-html'],
-      preflight: { intake: 'passed', execution: 'passed' },
-    },
-    decisionSummary: {
-      goal: 'Build a focused product prototype.',
-      deliverables: ['Editable HTML prototype'],
-      keyConstraints: ['Keep the supplied brand copy unchanged.'],
-      assumptions: [],
-      risks: [],
-      openDecisions: [],
-    },
-  };
-}
 
 describe('OD Next V2 bundled declaration and applied identity', () => {
   it('parses the versioned asset declaration without changing legacy manifests', () => {
@@ -216,211 +98,9 @@ describe('OD Next V2 bundled declaration and applied identity', () => {
   });
 });
 
-describe('OD Next V2 planning contracts', () => {
-  it('parses profile, simple plan, complex packages, and a complete Plan Contract', () => {
-    expect(ResolvedTaskProfileV2Schema.parse(taskProfile()).taskType).toBe('prototype');
-    expect(FullPlanV2Schema.parse(simplePlan()).buildPackages).toEqual([]);
-    expect(FullPlanV2Schema.parse(complexPlan()).buildPackages).toHaveLength(2);
-    expect(OpenDesignPlanContractV2Schema.parse(planContract()).schema).toBe(
-      OD_NEXT_PLAN_CONTRACT_SCHEMA,
-    );
-  });
-
-  it('rejects complex plans without two packages and rejects invalid dependency graphs', () => {
-    expect(() => FullPlanV2Schema.parse({
-      ...complexPlan(),
-      buildPackages: complexPlan().buildPackages.slice(0, 1),
-    })).toThrow(/at least two/);
-
-    const cyclic = complexPlan();
-    cyclic.buildPackages[0]!.dependsOn = ['flow'];
-    expect(() => FullPlanV2Schema.parse(cyclic)).toThrow(/acyclic/);
-
-    const missingSharedConstraints = complexPlan();
-    missingSharedConstraints.buildPackages[0]!.sharedConstraints = [];
-    expect(() => FullPlanV2Schema.parse(missingSharedConstraints)).toThrow();
-
-    const duplicateOutput = complexPlan();
-    duplicateOutput.buildPackages[1]!.outputs = ['shell'];
-    expect(() => FullPlanV2Schema.parse(duplicateOutput)).toThrow(/already owned/);
-  });
-
-  it.each([
-    ['acceptanceChecklist', []],
-    ['candidateEvidenceBundle', { files: [] }],
-    ['completionGate', { state: 'pending' }],
-    ['critique', { score: 4 }],
-    ['evidencePlan', { source: 'render' }],
-    ['finalEvidenceBundle', { files: [] }],
-    ['qualityScore', 5],
-    ['judge', { state: 'pending' }],
-    ['acceptance', 'passed'],
-    ['repairAttempts', 1],
-    ['repairRequired', true],
-    ['repeat', true],
-    ['revalidation', { state: 'pending' }],
-  ])('rejects forbidden field %s even inside extensible task data', (key, value) => {
-    expect(() => ResolvedTaskProfileV2Schema.parse(taskProfile({
-      taskSpecific: { nested: { [key]: value } },
-    }))).toThrow(/does not allow post-Build field/);
-    expect(() => ResolvedTaskProfileV2Schema.parse(taskProfile({
-      designSpec: {
-        source: 'resolved-baseline',
-        version: 'design-spec-v1',
-        decisions: { nested: { [key]: value } },
-      },
-    }))).toThrow(/does not allow post-Build field/);
-    expect(() => OpenDesignPlanContractV2Schema.parse({
-      ...planContract(),
-      [key]: value,
-    })).toThrow();
-  });
-});
-
-describe('OD Next V2 runtime state and transitions', () => {
-  it.each([
-    { route: 'direct_edit', inputStage: 'request', outcome: 'completed', executionMode: 'simple' },
-    { route: 'direct_edit', inputStage: 'request', outcome: 'blocked', executionMode: 'simple' },
-    { route: 'full_plan', inputStage: 'request', outcome: 'clarification_required', executionMode: null },
-    { route: 'full_plan', inputStage: 'clarification', outcome: 'plan_ready', executionMode: 'simple' },
-    { route: 'full_plan', inputStage: 'contract_repair', outcome: 'plan_ready', executionMode: 'complex' },
-    { route: 'full_plan', inputStage: 'production', outcome: 'completed', executionMode: 'simple' },
-    { route: 'full_plan', inputStage: 'production', outcome: 'canceled', executionMode: 'complex' },
-  ])('accepts $route/$inputStage/$outcome', (state) => {
-    expect(StrategyRuntimeStateV2Schema.parse({
-      schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
-      reasonCodes: [],
-      ...state,
-    })).toMatchObject(state);
-  });
-
-  it.each(['request', 'clarification'] as const)('accepts an explicit planning completion on %s only', (inputStage) => {
-    const state = { schema: OD_NEXT_RUNTIME_STATE_SCHEMA, route: 'full_plan', inputStage,
-      outcome: 'completed', executionMode: null, reasonCodes: [], executionIntent: 'plan_only' };
-    expect(StrategyRuntimeStateV2Schema.parse(state).outcome).toBe('completed');
-    expect(StrategyRuntimeStateV2Schema.safeParse({ ...state, executionIntent: 'produce' }).success).toBe(false);
-    expect(StrategyRuntimeStateV2Schema.safeParse({ ...state, executionIntent: undefined }).success).toBe(false);
-  });
-
-  it.each(['production', 'contract_repair'] as const)('never admits planning-only intent on %s', (inputStage) => {
-    expect(StrategyRuntimeStateV2Schema.safeParse({
-      schema: OD_NEXT_RUNTIME_STATE_SCHEMA, route: 'full_plan', inputStage,
-      outcome: 'completed', executionMode: 'simple', reasonCodes: [], executionIntent: 'plan_only',
-    }).success).toBe(false);
-  });
-
-  it('rejects Direct Edit continuation, route switching, mode switching, and reverse stages', () => {
-    expect(() => StrategyRuntimeStateV2Schema.parse({
-      schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
-      route: 'full_plan',
-      inputStage: 'request',
-      outcome: 'completed',
-      executionMode: 'simple',
-      reasonCodes: [],
-    })).toThrow(/cannot complete before Production/);
-
-    expect(() => StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'direct_edit', inputStage: 'request', executionMode: 'simple' },
-      to: { route: 'direct_edit', inputStage: 'production', executionMode: 'simple' },
-    })).toThrow(/Direct Edit/);
-
-    expect(() => StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'full_plan', inputStage: 'request', executionMode: 'simple' },
-      to: { route: 'direct_edit', inputStage: 'production', executionMode: 'simple' },
-    })).toThrow(/route is locked/);
-
-    expect(() => StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'full_plan', inputStage: 'contract_repair', executionMode: 'simple' },
-      to: { route: 'full_plan', inputStage: 'production', executionMode: 'complex' },
-    })).toThrow(/Execution mode is locked/);
-
-    expect(() => StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'full_plan', inputStage: 'production', executionMode: 'simple' },
-      to: { route: 'full_plan', inputStage: 'request', executionMode: 'simple' },
-    })).toThrow(/Illegal/);
-  });
-
-  it('locks repair mode and enters clarification before mode selection', () => {
-    expect(() => StrategyRuntimeStateV2Schema.parse({
-      schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
-      route: 'full_plan',
-      inputStage: 'contract_repair',
-      outcome: 'blocked',
-      executionMode: null,
-      reasonCodes: ['invalid_contract'],
-    })).toThrow(/already-locked/);
-
-    expect(() => StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'full_plan', inputStage: 'request', executionMode: null },
-      to: { route: 'full_plan', inputStage: 'contract_repair', executionMode: null },
-    })).toThrow(/previously locked/);
-    expect(() => StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'full_plan', inputStage: 'contract_repair', executionMode: null },
-      to: { route: 'full_plan', inputStage: 'production', executionMode: 'simple' },
-    })).toThrow(/cannot continue/);
-    expect(() => StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'full_plan', inputStage: 'request', executionMode: 'simple' },
-      to: { route: 'full_plan', inputStage: 'clarification', executionMode: 'simple' },
-    })).toThrow(/entering clarification/);
-
-    expect(StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'full_plan', inputStage: 'request', executionMode: null },
-      to: { route: 'full_plan', inputStage: 'clarification', executionMode: null },
-    }).to.inputStage).toBe('clarification');
-    expect(StrategyRuntimeTransitionV2Schema.parse({
-      from: { route: 'full_plan', inputStage: 'request', executionMode: 'complex' },
-      to: { route: 'full_plan', inputStage: 'contract_repair', executionMode: 'complex' },
-    }).to.executionMode).toBe('complex');
-  });
-});
-
-describe('OD Next V2 capability, Child, and task projection contracts', () => {
-  it('requires structured evidence before native Child support is verified', () => {
-    expect(AgentCapabilitySnapshotV2Schema.parse({
-      agentId: 'codex',
-      agentVersion: '1.0.0',
-      nativeSessionContinuation: 'verified',
-      nativeSubagents: {
-        support: 'verified',
-        evidenceLevel: 'structured',
-        source: 'fixture:codex-v1',
-      },
-      capturedAt: 1,
-    }).nativeSubagents.support).toBe('verified');
-
-    expect(() => AgentCapabilitySnapshotV2Schema.parse({
-      agentId: 'codex',
-      nativeSessionContinuation: 'verified',
-      nativeSubagents: {
-        support: 'verified',
-        evidenceLevel: 'tool_only',
-        source: 'self-report',
-      },
-      capturedAt: 1,
-    })).toThrow(/structured/);
-  });
-
-  it('parses structured Child lifecycle facts without assigning result quality', () => {
-    expect(ChildAgentEvidenceV2Schema.parse({
-      childId: 'child-1',
-      parentId: 'run-1',
-      packageId: 'shell',
-      state: 'completed',
-      source: 'codex-jsonl',
-      sourceEventType: 'task_complete',
-      startedAt: 10,
-      endedAt: 20,
-    }).state).toBe('completed');
-    expect(ChildAgentEvidenceV2Schema.parse({
-      childId: 'child-without-clock',
-      state: 'failed',
-      source: 'opencode-event',
-      sourceEventType: 'session.error',
-    }).endedAt).toBeUndefined();
-  });
-
-  it('keeps the optional task projection internally consistent', () => {
-    const projection = {
+describe('OD Next V2 task projection and settlement contracts', () => {
+  it('keeps the task projection internally consistent', () => {
+    const running = {
       taskExecutionId: 'task-1',
       strategy: {
         id: 'od-next-strategy',
@@ -429,68 +109,93 @@ describe('OD Next V2 capability, Child, and task projection contracts', () => {
         snapshotId: 'snapshot-1',
       },
       inputStage: 'request',
-      outcome: 'plan_ready',
+      outcome: 'running',
       route: 'full_plan',
       executionMode: 'simple',
       activeRunId: 'run-plan',
-      nextRunId: 'run-production',
+      nextRunId: 'run-build',
       terminal: false,
+      deliverableWritten: false,
+      autoRoundCount: 1,
     };
-    expect(StrategyTaskProjectionV2Schema.parse(projection)).toEqual(projection);
-    const mapped = { ...projection, runMappings: [
+    expect(StrategyTaskProjectionV2Schema.parse(running)).toEqual(running);
+    const mapped = { ...running, runMappings: [
       { runId: 'run-plan', taskRunIndex: 0 },
-      { runId: 'run-production', taskRunIndex: 1 },
+      { runId: 'run-build', taskRunIndex: 1 },
     ] };
     expect(StrategyTaskProjectionV2Schema.parse(mapped)).toEqual(mapped);
     for (const taskRunIndex of [-1, 0.5]) {
       expect(() => StrategyTaskProjectionV2Schema.parse({
-        ...projection, runMappings: [{ runId: 'run-plan', taskRunIndex }],
+        ...running, runMappings: [{ runId: 'run-plan', taskRunIndex }],
       })).toThrow();
     }
-
+    const settled = {
+      ...running,
+      inputStage: 'production',
+      outcome: 'completed',
+      activeRunId: 'run-build',
+      nextRunId: undefined,
+      terminal: true,
+      deliverableWritten: true,
+      settlementReason: 'deliverable_changed',
+    };
+    expect(StrategyTaskProjectionV2Schema.parse(settled)).toEqual({
+      ...settled,
+      nextRunId: undefined,
+    });
     expect(() => StrategyTaskProjectionV2Schema.parse({
-      ...projection,
+      ...running,
       outcome: 'completed',
       terminal: false,
     })).toThrow(/terminal/);
     expect(() => StrategyTaskProjectionV2Schema.parse({
-      ...projection,
-      inputStage: 'request',
-      outcome: 'completed',
-      nextRunId: undefined,
-      terminal: true,
-    })).toThrow(/only after Production/);
+      ...settled,
+      nextRunId: 'run-extra',
+    })).toThrow(/next Run/);
     expect(() => StrategyTaskProjectionV2Schema.parse({
-      ...projection,
-      route: 'direct_edit',
-      inputStage: 'request',
-      outcome: 'plan_ready',
-      nextRunId: 'run-production',
-      terminal: false,
-    })).toThrow(/transition table/);
-    expect(() => StrategyTaskProjectionV2Schema.parse({
-      ...projection,
-      inputStage: 'production',
-      outcome: 'plan_ready',
-      nextRunId: 'run-production',
-      terminal: false,
-    })).toThrow(/transition table/);
-    expect(() => StrategyTaskProjectionV2Schema.parse({
-      ...projection,
-      inputStage: 'contract_repair',
-      outcome: 'running',
+      ...running,
+      settlementReason: 'question',
+    })).toThrow(/completed task/);
+    // Rows written by earlier daemons keep their stage and outcome vocabulary.
+    const legacy = {
+      ...running,
+      inputStage: 'clarification',
+      outcome: 'clarification_required',
+      route: null,
       executionMode: null,
       nextRunId: undefined,
-      terminal: false,
-    })).toThrow(/locked execution mode/);
-    expect(() => StrategyTaskProjectionV2Schema.parse({
-      ...projection,
-      inputStage: 'contract_repair',
-      outcome: 'blocked',
-      executionMode: null,
-      nextRunId: undefined,
-      terminal: true,
-    })).toThrow(/locked execution mode/);
+    };
+    expect(StrategyTaskProjectionV2Schema.parse(legacy)).toEqual({ ...legacy, nextRunId: undefined });
+  });
+
+  it('names every settlement bucket once and reads declarations leniently', () => {
+    expect(StrategyTaskSettlementReasonV2Schema.options).toEqual([
+      'question',
+      'deliverable_changed',
+      'non_design',
+      'no_file_writes',
+      'note_only',
+      'text_only',
+      'todo_unfinished',
+      'truncated',
+      'write_evidence_unknown',
+    ]);
+    expect(readStrategyTaskDeclarationsV2(null)).toEqual(OD_NEXT_NO_DECLARATIONS_V2);
+    expect(readStrategyTaskDeclarationsV2('not an object')).toEqual(OD_NEXT_NO_DECLARATIONS_V2);
+    expect(readStrategyTaskDeclarationsV2({ nonDesignRequest: true, extra: 1 })).toEqual({
+      nonDesignRequest: true,
+      noFileWrites: false,
+    });
+    expect(readStrategyTaskDeclarationsV2({ noFileWrites: 'yes' })).toEqual(OD_NEXT_NO_DECLARATIONS_V2);
+    // Blocks written by older strategy packages map onto the two signals.
+    expect(readStrategyTaskDeclarationsV2({ outcome: 'blocked', route: 'full_plan' })).toEqual({
+      nonDesignRequest: true,
+      noFileWrites: false,
+    });
+    expect(readStrategyTaskDeclarationsV2({ executionIntent: 'plan_only', outcome: 'completed' })).toEqual({
+      nonDesignRequest: false,
+      noFileWrites: true,
+    });
   });
 });
 

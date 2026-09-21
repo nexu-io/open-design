@@ -1,4 +1,3 @@
-import type { OpenDesignPlanContractV2 } from '@open-design/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -7,266 +6,155 @@ import {
   passThroughOrdinaryAssistantText,
 } from '../../../src/strategies/od-next/protocol.js';
 
-const plan = {
-  schema: 'open-design.plan-contract/v2',
-  strategy: {
-    id: 'od-next-strategy',
-    version: '2.0.0',
-    packageHash: 'a'.repeat(64),
-    snapshotId: 'snapshot-1',
-  },
-  taskProfile: {
-    schemaVersion: '2',
-    taskType: 'prototype',
-    taskProfileVersion: '2.0.0',
-    goal: 'Build a prototype',
-    contextAndAudience: 'Operators',
-    inputsAndReferences: ['request'],
-    constraints: [],
-    canonicalDeliverable: { id: 'prototype', kind: 'prototype', format: 'html' },
-    requiredDeliverables: [{ id: 'prototype', kind: 'prototype' }],
-    designSpec: {
-      source: 'resolved-baseline',
-      version: '1',
-      decisions: { palette: 'neutral' },
-    },
-    buildRequirements: [{ id: 'build', text: 'Build the prototype.' }],
-    assumptions: [],
-    risks: [],
-    taskSpecific: {},
-  },
-  fullPlan: {
-    executionMode: 'simple',
-    steps: [{ id: 'build', objective: 'Build', outputs: ['prototype'] }],
-    readinessArtifacts: [],
-    buildPackages: [],
-  },
-  runManifest: {
-    selectedAgentId: 'codex',
-    capabilitySnapshotHash: 'b'.repeat(64),
-    inputRefs: ['request'],
-    productionRoutes: ['html'],
-    preflight: { intake: 'passed', execution: 'passed' },
-  },
-  decisionSummary: {
-    goal: 'Build a prototype',
-    deliverables: ['prototype'],
-    keyConstraints: [],
-    assumptions: [],
-    risks: [],
-    openDecisions: [],
-  },
-} as const;
+const NO_DECLARATIONS = { nonDesignRequest: false, noFileWrites: false };
 
-const state = {
+// A plan block the way a task frozen on an older strategy package still writes it.
+const legacyPlan = {
+  schema: 'open-design.plan-contract/v2',
+  strategy: { id: 'od-next-strategy', version: '2.0.0', packageHash: 'a'.repeat(64), snapshotId: 'snapshot-1' },
+  taskProfile: { goal: 'Build a prototype' },
+  decisionSummary: { goal: 'Build a prototype' },
+};
+
+const legacyState = {
   schema: 'open-design.strategy-state/v2',
   route: 'full_plan',
   inputStage: 'request',
   outcome: 'plan_ready',
   executionMode: 'simple',
   reasonCodes: [],
-} as const;
+};
 
 function machineBlock(tag: string, value: unknown): string {
   return `<${tag}>\n${JSON.stringify(value)}\n</${tag}>`;
 }
 
-describe('OD Next machine protocol stream', () => {
-  it('recognizes exact blocks across every chunk boundary and never returns machine bytes', () => {
-    const wire = [
-      'Ready to build.\n',
-      machineBlock('open-design-plan-contract', plan),
-      '\n',
-      machineBlock('open-design-runtime-state', state),
-      '\nOne open decision remains.',
-    ].join('');
+function pushInChunks(stream: OdNextMachineProtocolStream, text: string, size: number): string {
+  let emitted = '';
+  for (let index = 0; index < text.length; index += size) {
+    emitted += stream.push(text.slice(index, index + size));
+  }
+  return emitted;
+}
 
-    for (let split = 0; split <= wire.length; split += 1) {
+describe('OD Next machine protocol stream', () => {
+  it('withholds reserved blocks across every chunk boundary and never returns machine bytes', () => {
+    const text = [
+      'Visible planning summary.',
+      machineBlock('open-design-plan-contract', legacyPlan),
+      machineBlock('open-design-runtime-state', legacyState),
+      'Closing prose.',
+    ].join('\n');
+    for (const size of [1, 3, 7, 16, 64, text.length]) {
       const stream = new OdNextMachineProtocolStream();
-      const visible = stream.push(wire.slice(0, split)) + stream.push(wire.slice(split));
+      const emitted = pushInChunks(stream, text, size);
       const result = stream.finish();
-      expect(visible).not.toContain('open-design-plan-contract');
-      expect(visible).not.toContain('open-design-runtime-state');
-      expect(result.visibleText).toBe('Ready to build.\n\n\nOne open decision remains.');
-      expect(result.issues).toEqual([]);
-      expect(result.planContract).toEqual(plan);
-      expect(result.runtimeState).toEqual(state);
+      expect(result.visibleText, `chunk size ${size}`).toBe('Visible planning summary.\n\n\nClosing prose.');
+      expect(emitted, `chunk size ${size}`).toBe(result.visibleText);
+      expect(emitted).not.toContain('open-design');
+      expect(result.declarationBlockSeen).toBe(true);
+      expect(result.declarations).toEqual(NO_DECLARATIONS);
     }
   });
 
-  it('normalizes a premature clarification execution mode instead of failing schema', () => {
-    // Observed field shape: the agent asks for clarification but also
-    // predicts the eventual execution mode. The prediction has no authority
-    // at this stage, so it is discarded rather than fatal.
-    const stream = new OdNextMachineProtocolStream();
-    stream.push([
-      '先对齐两个问题。',
-      '<open-design-runtime-state>',
-      JSON.stringify({
-        schema: 'open-design.strategy-state/v2',
-        route: 'full_plan',
-        inputStage: 'request',
-        outcome: 'clarification_required',
-        executionMode: 'simple',
-        reasonCodes: ['scope_required'],
-      }),
-      '</open-design-runtime-state>',
-    ].join('\n'));
-    const result = stream.finish();
-    expect(result.issues).toEqual([]);
-    expect(result.runtimeState).toMatchObject({
-      outcome: 'clarification_required',
-      executionMode: null,
+  it('reads the two declarations leniently and maps the older block vocabulary onto them', () => {
+    const declared = new OdNextMachineProtocolStream();
+    declared.push(`Answer.\n${machineBlock('open-design-runtime-state', { nonDesignRequest: true, noFileWrites: true, extra: 'ignored' })}`);
+    expect(declared.finish()).toEqual({
+      visibleText: 'Answer.\n',
+      declarations: { nonDesignRequest: true, noFileWrites: true },
+      declarationBlockSeen: true,
     });
-    expect(result.normalizations).toEqual([
-      'od_next_protocol_clarification_execution_mode_normalized',
-    ]);
+
+    const legacyBlocked = new OdNextMachineProtocolStream();
+    legacyBlocked.push(`Hi there.\n${machineBlock('open-design-runtime-state', { ...legacyState, outcome: 'blocked' })}`);
+    expect(legacyBlocked.finish().declarations).toEqual({ nonDesignRequest: true, noFileWrites: false });
+
+    const legacyPlanOnly = new OdNextMachineProtocolStream();
+    legacyPlanOnly.push(`Plan only.\n${machineBlock('open-design-runtime-state', { ...legacyState, outcome: 'completed', executionIntent: 'plan_only' })}`);
+    expect(legacyPlanOnly.finish().declarations).toEqual({ nonDesignRequest: false, noFileWrites: true });
+  });
+
+  it('accepts a fenced, prose-wrapped, or sloppily tagged block and ignores what it cannot read', () => {
+    const fenced = new OdNextMachineProtocolStream();
+    fenced.push(`Done.\n<open-design-runtime-state>\n\`\`\`json\n${JSON.stringify({ noFileWrites: true })}\n\`\`\`\n</open-design-runtime-state>`);
+    expect(fenced.finish()).toMatchObject({ visibleText: 'Done.\n', declarations: { noFileWrites: true }, declarationBlockSeen: true });
+
+    const wrapped = new OdNextMachineProtocolStream();
+    wrapped.push(`Done.\n<open-design-runtime-state attr="x">\nHere it is: ${JSON.stringify({ nonDesignRequest: true })} thanks\n</open-design-runtime-state >`);
+    expect(wrapped.finish()).toMatchObject({ visibleText: 'Done.\n', declarations: { nonDesignRequest: true }, declarationBlockSeen: true });
+
+    const unreadable = new OdNextMachineProtocolStream();
+    unreadable.push(`Done.\n<open-design-runtime-state>\nnot json at all\n</open-design-runtime-state>`);
+    expect(unreadable.finish()).toEqual({ visibleText: 'Done.\n', declarations: NO_DECLARATIONS, declarationBlockSeen: false });
+
+    const arrayBody = new OdNextMachineProtocolStream();
+    arrayBody.push(`Done.\n<open-design-runtime-state>\n[1,2]\n</open-design-runtime-state>`);
+    expect(arrayBody.finish()).toEqual({ visibleText: 'Done.\n', declarations: NO_DECLARATIONS, declarationBlockSeen: false });
+  });
+
+  it('carries no declarations for a reply without any block', () => {
+    const stream = new OdNextMachineProtocolStream();
+    stream.push('Plain answer with a `<open-design-runtime-state>` mention in code.');
+    expect(stream.finish()).toEqual({
+      visibleText: 'Plain answer with a `',
+      declarations: NO_DECLARATIONS,
+      declarationBlockSeen: false,
+    });
   });
 
   it('does not treat Markdown headings or ordinary JSON as machine protocol', () => {
-    const text = '# Plan Contract\n\n```json\n{"route":"full_plan"}\n```';
+    const text = '## open design plan\n{"schema":"open-design.plan-contract/v2"}\n';
     const stream = new OdNextMachineProtocolStream();
     expect(stream.push(text)).toBe(text);
-    const result = stream.finish();
-    expect(result.visibleText).toBe(text);
-    expect(result.issues.map((issue) => issue.code)).toEqual([
-      'od_next_protocol_runtime_state_missing',
-    ]);
+    expect(stream.finish()).toEqual({ visibleText: text, declarations: NO_DECLARATIONS, declarationBlockSeen: false });
   });
 
-  it('fails closed on duplicates without selecting the last block', () => {
-    const stream = new OdNextMachineProtocolStream();
-    const visible = stream.push([
-      'summary',
-      machineBlock('open-design-plan-contract', plan),
-      machineBlock('open-design-plan-contract', plan),
-      machineBlock('open-design-runtime-state', state),
-    ].join('\n'));
-    const result = stream.finish();
-
-    expect(visible).toBe('summary\n\n\n');
-    expect(result.planContract).toBeUndefined();
-    expect(result.repairPlanContract).toBeUndefined();
-    expect(result.issues.map((issue) => issue.code)).toContain(
-      'od_next_protocol_plan_contract_duplicate',
-    );
-  });
-
-  it('keeps one schema-valid fenced contract only as a repair anchor', () => {
+  it('merges several runtime-state blocks instead of refusing duplicates', () => {
     const stream = new OdNextMachineProtocolStream();
     stream.push([
-      '<open-design-plan-contract>',
-      '```json',
-      JSON.stringify(plan),
-      '```',
-      '</open-design-plan-contract>',
-      machineBlock('open-design-runtime-state', state),
+      machineBlock('open-design-runtime-state', { nonDesignRequest: true }),
+      machineBlock('open-design-runtime-state', { noFileWrites: true }),
     ].join('\n'));
-    const result = stream.finish();
-
-    expect(result.planContract).toBeUndefined();
-    expect(result.repairPlanContract).toEqual(plan);
-    expect(result.issues.map((issue) => issue.code)).toContain(
-      'od_next_protocol_plan_contract_invalid_json',
-    );
+    expect(stream.finish()).toEqual({
+      visibleText: '\n',
+      declarations: { nonDesignRequest: true, noFileWrites: true },
+      declarationBlockSeen: true,
+    });
   });
 
-  it('recovers a repair anchor from prose wrapped around the contract', () => {
-    // The whole-body fence pattern only matches a block that is nothing but a
-    // fence. An agent that narrates either side of its JSON produced no anchor
-    // at all, so the one allowed serialization repair could not engage and the
-    // task went straight to a terminal block.
-    const stream = new OdNextMachineProtocolStream();
-    stream.push([
-      '<open-design-plan-contract>',
-      'Here is the plan:',
-      '```json',
-      JSON.stringify(plan),
-      '```',
-      'Let me know if you want changes.',
-      '</open-design-plan-contract>',
-      machineBlock('open-design-runtime-state', state),
-    ].join('\n'));
-    const result = stream.finish();
+  it('withholds an unclosed or oversized block and drops stray or incomplete tags', () => {
+    const unclosed = new OdNextMachineProtocolStream();
+    unclosed.push('Summary\n<open-design-plan-contract>\n{"never":"closed"');
+    expect(unclosed.finish()).toEqual({ visibleText: 'Summary\n', declarations: NO_DECLARATIONS, declarationBlockSeen: false });
 
-    expect(result.planContract).toBeUndefined();
-    expect(result.repairPlanContract).toEqual(plan);
-  });
+    const oversized = new OdNextMachineProtocolStream({ maxMachineBlockBytes: 16 });
+    oversized.push(`Summary\n${machineBlock('open-design-runtime-state', { noFileWrites: true, padding: 'x'.repeat(64) })}`);
+    expect(oversized.finish()).toEqual({ visibleText: 'Summary\n', declarations: NO_DECLARATIONS, declarationBlockSeen: false });
 
-  it('does not recover an anchor from a body that carries no complete object', () => {
-    // Fail closed: a truncated block must stay unrecovered rather than have a
-    // partial object mistaken for a declaration.
-    const stream = new OdNextMachineProtocolStream();
-    stream.push([
-      '<open-design-plan-contract>',
-      JSON.stringify(plan).slice(0, 60),
-      '</open-design-plan-contract>',
-      machineBlock('open-design-runtime-state', state),
-    ].join('\n'));
-    const result = stream.finish();
+    const stray = new OdNextMachineProtocolStream();
+    stray.push('Before </open-design-runtime-state> after');
+    expect(stray.finish().visibleText).toBe('Before  after');
 
-    expect(result.planContract).toBeUndefined();
-    expect(result.repairPlanContract).toBeUndefined();
-  });
-
-  it('does not end the recovered object on a brace inside a string value', () => {
-    const withBrace = {
-      ...plan,
-      taskProfile: { ...plan.taskProfile, goal: 'Build a prototype using { and } in prose' },
-    };
-    const stream = new OdNextMachineProtocolStream();
-    stream.push([
-      '<open-design-plan-contract>',
-      'plan follows',
-      JSON.stringify(withBrace),
-      '</open-design-plan-contract>',
-      machineBlock('open-design-runtime-state', state),
-    ].join('\n'));
-    const result = stream.finish();
-
-    expect(result.repairPlanContract).toEqual(withBrace);
-  });
-
-  it('suppresses malformed and oversized reserved blocks instead of leaking them', () => {
-    const stream = new OdNextMachineProtocolStream({ maxMachineBlockBytes: 64 });
-    const visible = stream.push(
-      `before<open-design-plan-contract data-x="bad">${'x'.repeat(200)}\n</open-design-plan-contract>after`,
-    );
-    const result = stream.finish();
-
-    expect(visible).toBe('beforeafter');
-    expect(result.visibleText).toBe('beforeafter');
-    expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining([
-      'od_next_protocol_machine_block_malformed',
-      'od_next_protocol_machine_block_too_large',
-      'od_next_protocol_runtime_state_missing',
-    ]));
+    const incompleteTag = new OdNextMachineProtocolStream();
+    incompleteTag.push('Before <open-design-runtime-state');
+    expect(incompleteTag.finish().visibleText).toBe('Before ');
   });
 
   it('consumes an incomplete closing tag at EOF across every chunk boundary', () => {
-    const complete = machineBlock('open-design-plan-contract', plan);
-    const wire = `summary\n${complete.slice(0, -1)}`;
-
-    for (let split = 0; split <= wire.length; split += 1) {
+    const text = `Summary\n${machineBlock('open-design-runtime-state', { noFileWrites: true })}`.replace(/>$/, '');
+    for (const size of [1, 2, 5, text.length]) {
       const stream = new OdNextMachineProtocolStream();
-      const visible = stream.push(wire.slice(0, split)) + stream.push(wire.slice(split));
+      const emitted = pushInChunks(stream, text, size);
       const result = stream.finish();
-
-      expect(visible, `split ${split}`).toBe('summary\n');
-      expect(result.visibleText, `split ${split}`).toBe('summary\n');
-      expect(result.planContract, `split ${split}`).toBeUndefined();
-      expect(result.repairPlanContract, `split ${split}`).toEqual(plan);
-      expect(result.issues.map((issue) => issue.code), `split ${split}`).toEqual(
-        expect.arrayContaining([
-          'od_next_protocol_machine_block_malformed',
-          'od_next_protocol_runtime_state_missing',
-        ]),
-      );
+      expect(emitted, `chunk size ${size}`).toBe('Summary\n');
+      expect(result.visibleText).toBe('Summary\n');
+      expect(result.declarations).toEqual({ nonDesignRequest: false, noFileWrites: true });
     }
   });
 
   it('leaves the ordinary Run path byte-for-byte unchanged', () => {
-    const ordinary = `Visible <open-design-runtime-state>{"not":"active"}</open-design-runtime-state>`;
+    const ordinary = 'Visible <open-design-runtime-state>{"not":"active"}</open-design-runtime-state>';
     expect(passThroughOrdinaryAssistantText(null, ordinary)).toBe(ordinary);
 
     const strategy = new OdNextMachineProtocolStream();
@@ -275,48 +163,40 @@ describe('OD Next machine protocol stream', () => {
   });
 
   it('does not terminate suppression on a closing-tag string inside JSON', () => {
-    const hostile = structuredClone(plan) as unknown as OpenDesignPlanContractV2;
-    hostile.taskProfile.goal = 'Never leak </open-design-plan-contract> machine bytes';
-    hostile.decisionSummary.goal = hostile.taskProfile.goal;
+    const hostile = { ...legacyPlan, taskProfile: { goal: 'Never leak </open-design-plan-contract> machine bytes' } };
     const stream = new OdNextMachineProtocolStream();
     const visible = stream.push([
       'summary',
       machineBlock('open-design-plan-contract', hostile),
-      machineBlock('open-design-runtime-state', state),
+      machineBlock('open-design-runtime-state', { noFileWrites: true }),
     ].join('\n'));
     const result = stream.finish();
-
     expect(visible).toBe('summary\n\n');
-    expect(result.planContract).toMatchObject({
-      taskProfile: { goal: hostile.taskProfile.goal },
-    });
-    expect(result.issues).toEqual([]);
+    expect(result.visibleText).not.toContain('machine bytes');
+    expect(result.declarations).toEqual({ nonDesignRequest: false, noFileWrites: true });
   });
 });
 
-
 describe('physical-run protocol output ownership', () => {
-  it.each([undefined, 'intent_resolution'] as const)('preserves parsed reply bytes with purpose %s and only emits ordinary answers', purpose => {
-    const runtime = { schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
-      outcome: 'completed', executionMode: 'simple', executionIntent: 'plan_only', reasonCodes: [] };
+  it('emits the visible reply as it streams and returns the withheld tail at close', () => {
     const visible = 'Discuss this JSON: {"runtimeState":{"example":true}}.\n';
-    const text = `${visible}<open-design-runtime-state>\n${JSON.stringify(runtime)}\n</open-design-runtime-state>`;
-    const stream = createOdNextRunProtocol(purpose ? { purpose } : null);
+    const text = `${visible}${machineBlock('open-design-runtime-state', { noFileWrites: true })}`;
+    const stream = createOdNextRunProtocol();
     let emitted = '';
-    for (let i = 0; i < text.length; i += 7) emitted += stream.push(text.slice(i, i + 7));
-    const finished = stream.finish(); emitted += finished.visibleTail;
-    expect(finished.parsed.issues).toEqual([]);
-    expect(finished.parsed.runtimeState?.executionIntent).toBe('plan_only');
+    for (let index = 0; index < text.length; index += 7) emitted += stream.push(text.slice(index, index + 7));
+    const finished = stream.finish();
+    emitted += finished.visibleTail;
     expect(finished.parsed.visibleText).toBe(visible);
-    expect(emitted).toBe(purpose ? '' : visible);
+    expect(finished.parsed.declarations).toEqual({ nonDesignRequest: false, noFileWrites: true });
+    expect(emitted).toBe(visible);
   });
 
-  it.each([undefined, 'intent_resolution'] as const)('handles a close-time withheld text tail with purpose %s', purpose => {
-    const stream = createOdNextRunProtocol(purpose ? { purpose } : null);
+  it('handles a close-time withheld text tail', () => {
+    const stream = createOdNextRunProtocol();
     const text = 'Example: <open-design-runtime-sta';
     const emitted = stream.push(text);
     const finished = stream.finish();
     expect(finished.parsed.visibleText).toBe(text);
-    expect(emitted + finished.visibleTail).toBe(purpose ? '' : text);
+    expect(emitted + finished.visibleTail).toBe(text);
   });
 });

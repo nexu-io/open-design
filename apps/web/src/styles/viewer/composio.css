@@ -2725,18 +2725,6 @@ legend.qf-color-legend {
 .qf-visual-card-on .qf-visual-card-name {
   color: var(--brand-text);
 }
-/* Terminal-blocked strategy task: the inline form is disabled and this strip
-   explains why (gate visible text, or the generic localized notice). */
-.qf-blocked-notice {
-  margin: 8px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
 .question-form-summary {
   display: flex;
   align-items: flex-start;

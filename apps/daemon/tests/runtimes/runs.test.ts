@@ -2176,9 +2176,10 @@ describe('work completeness vs a settled OD Next verdict', () => {
     });
   }
 
-  /** A settled OD Next task projection. `completed` is only reachable once the
-   *  coordinator saw BOTH a succeeded process AND a resolvable canonical
-   *  deliverable, so it is the strongest completion evidence the daemon holds. */
+  /** A settled OD Next task projection whose round wrote the deliverable. The
+   *  daemon watched the file being written — the strongest completion evidence
+   *  it holds, and the one the completeness predicate reads; a task can also
+   *  settle `completed` without it (a question asked, a text-only round). */
   function completedStrategyTask() {
     return {
       taskExecutionId: 'odnext_8979d0a7452e4e65a51c666ad89f864d',
@@ -2194,6 +2195,9 @@ describe('work completeness vs a settled OD Next verdict', () => {
       executionMode: 'simple',
       activeRunId: 'run-1',
       terminal: true,
+      deliverableWritten: true,
+      settlementReason: 'deliverable_changed',
+      autoRoundCount: 1,
     };
   }
 
@@ -2220,7 +2224,9 @@ describe('work completeness vs a settled OD Next verdict', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
     run.lastTodoSnapshot = [{ content: '写入响应式交互原型', status: 'pending' }];
-    run.strategyTask = { ...completedStrategyTask(), outcome: 'blocked' };
+    run.strategyTask = {
+      ...completedStrategyTask(), outcome: 'blocked', deliverableWritten: false, settlementReason: undefined,
+    };
 
     runs.finish(run, 'succeeded', 0, null);
 

@@ -268,10 +268,13 @@ async function resolveDeliverable(
   const baselineEntry = isPrototype && input.touchedPaths
     ? safeRelativeFile(input.baselineEntryFile)
     : null;
-  const selected = declared
-    ? files.find((file) => filePath(file) === declared) ?? null
-    : (baselineEntry ? files.find((file) => filePath(file) === baselineEntry) ?? null : null)
-      ?? inferredEntry(files, acceptedKinds);
+  // The recorded entry wins while it exists. Once the agent has renamed or
+  // removed it, the recording is stale, not authoritative: fall through to
+  // the baseline and the inference chain the way an unrecorded project does,
+  // so a delivering Run can point the project at its new entry.
+  const selected = (declared ? files.find((file) => filePath(file) === declared) ?? null : null)
+    ?? (baselineEntry ? files.find((file) => filePath(file) === baselineEntry) ?? null : null)
+    ?? inferredEntry(files, acceptedKinds);
   if (!selected) {
     return { valid: false, validation: 'entry_missing' };
   }

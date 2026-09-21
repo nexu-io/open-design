@@ -324,10 +324,12 @@ export type RunFailureMessageKey =
   | 'chat.runError.tierUpgradeRequiredMessage'
   | 'chat.runError.fallbackMessage'
   | 'chat.runError.cliSessionRefusedMessage'
-  | 'chat.runError.strategyTaskStateMismatchMessage'
-  | 'chat.runError.agentReplyIncompleteMessage'
-  | 'chat.runError.noDeliverableMessage'
-  | 'chat.runError.clarificationRepeatedMessage'
+  | 'chat.runError.buildRoundSessionLostMessage'
+  | 'chat.runError.roundInterruptedMessage'
+  | 'chat.runError.roundSettlementFailedMessage'
+  | 'chat.runError.taskRecordMismatchMessage'
+  | 'chat.runError.attachmentsTooLargeMessage'
+  | 'chat.runError.attachmentsChangedMessage'
   | 'chat.runError.regionNotSupportedMessage'
   | 'chat.runError.clientEnvironmentMessage'
   | null;
@@ -494,10 +496,12 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.agentCrashed'
   | 'chat.runError.title.accountSuspended'
   | 'chat.runError.title.cliSessionRefused'
-  | 'chat.runError.title.strategyTaskHalted'
-  | 'chat.runError.title.agentReplyIncomplete'
-  | 'chat.runError.title.noDeliverable'
-  | 'chat.runError.title.clarificationRepeated'
+  | 'chat.runError.title.buildRoundSessionLost'
+  | 'chat.runError.title.roundInterrupted'
+  | 'chat.runError.title.roundSettlementFailed'
+  | 'chat.runError.title.taskRecordMismatch'
+  | 'chat.runError.title.attachmentsTooLarge'
+  | 'chat.runError.title.attachmentsChanged'
   | 'chat.runError.title.regionNotSupported'
   | 'chat.runError.title.clientEnvironment'
   | 'chat.runError.title.certificateFailure'
@@ -1056,121 +1060,68 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
     ),
     suppressCard: true,
   },
-  // A strategy-task continuation (clarification answer) arrived after the
-  // daemon's OD Next protocol gate already settled the task — typically a
-  // sticky `blocked` verdict. This is a task-lifecycle rejection, not an
-  // engine failure: name the halted task and point at retrying the request
-  // or starting a new one instead of showing the generic "task failed" card.
-  STRATEGY_TASK_STATE_MISMATCH: retryWithGuidance(
-    'chat.runError.title.strategyTaskHalted',
-    'chat.runError.strategyTaskStateMismatchMessage',
+  // The OD Next rounds. A task ends `blocked` for exactly one reason since the
+  // two-round design: its physical Run failed before the round settled. The
+  // Run's own error frame names the cause and reaches the card first; the
+  // codes below are the ones the daemon raises itself around a round, plus the
+  // blocked reason the provider falls back to when the stream lost the Run's
+  // frame. Every one of them is answered by a new round in the same
+  // conversation — the plan already written stays in the transcript and the
+  // files already written stay in the project — so Retry is the honest button.
+  //
+  // The build round was claimed as a continuation of the planning round's
+  // agent session, and that session was gone by the time it started.
+  OD_NEXT_SESSION_UNAVAILABLE: retryWithGuidance(
+    'chat.runError.title.buildRoundSessionLost',
+    'chat.runError.buildRoundSessionLostMessage',
   ),
-  // The agent answered — completely, readably, and the reply is already on
-  // screen — but the reply carried no usable Runtime State block, and the OD
-  // Next clarification stage admits only `plan_ready` (which needs a Plan
-  // Contract this reply never had), `blocked`, or `canceled`. So the turn
-  // settles terminal-`blocked`.
-  //
-  // Refusing it is CORRECT and is not what these rows change. What they change
-  // is what the user is told. Without a row here the failure fell through to
-  // the generic fallback, whose `messageKey: null` renders
-  // RUN_FAILURE_FALLBACK_MESSAGE_KEY — a blank "the task failed" — while the
-  // user is looking at their submitted answers and a full prose plan. The one
-  // sentence that actually described the failure lived only in the English
-  // diagnostic text. That is design principle 5 inverted twice over: it
-  // explains nothing, and it lets the user suspect their own answers.
-  //
-  // Ladder rung 2. The omission is intermittent — the same prompt re-run
-  // usually emits the block — so Retry is the honest action, and
-  // `retryWithGuidance` keeps exactly the button the fallback already gave.
-  //
-  // ⚠️ `docs/design/run-errors/error-ux-design.md` HAS NO CELL FOR THIS. The
-  // nearest, S21, covers an empty / malformed / looping model response, which
-  // this is not. The copy below is W41's draft for a cell product has yet to
-  // write — replace the wording, not the routing, when they do.
-  //
-  // All four Runtime State issue codes (`strategies/od-next/protocol.ts:16-19`)
-  // share the row: to the user they are one story — the reply came back without
-  // the marker — and splitting them would only ask product for four wordings of
-  // the same sentence.
-  // The turn ran to the end and produced no openable file.
-  //
-  // Ladder rung 2. Distinct from the four Runtime State codes on purpose: to
-  // the user those say "your reply went missing", and this one says "nothing
-  // came out this round" — a different sentence, a different expectation, and
-  // the only one of the two that is true when the project is empty. Since the
-  // undeclared shape of this failure is now attributed here too
-  // (`reattributeUndeclaredTurn`), it is the code a real empty-handed turn
-  // lands on whether or not the agent wrote its machine block.
-  //
-  // Retry earns its place: the deliverable is missing because THIS turn wrote
-  // nothing, and a re-run is exactly the thing that can write it. A turn whose
-  // deliverable does exist never reaches a card at all — `providers/daemon.ts`
-  // keeps it `succeeded` on `projectDeliverableValid`.
-  //
-  // ⚠️ Copy is engineering's, like the rows below it:
-  // `docs/design/run-errors/error-ux-design.md` has no cell for it. S23 ("跑完
-  // 没生成文件") is the nearest and is listed there as invisible in telemetry;
-  // product should rewrite the wording, not the routing.
-  od_next_canonical_deliverable_invalid: retryWithGuidance(
-    'chat.runError.title.noDeliverable',
-    'chat.runError.noDeliverableMessage',
+  // The agent process ended before the round settled (`task-store.ts`
+  // reconcileStrategyTaskRunTerminal). Only reachable as the card's code when
+  // the stream dropped the Run's own error frame — see `providers/daemon.ts`.
+  od_next_physical_run_interrupted: retryWithGuidance(
+    'chat.runError.title.roundInterrupted',
+    'chat.runError.roundInterruptedMessage',
   ),
-  od_next_protocol_runtime_state_missing: agentReplyIncomplete(),
-  od_next_protocol_runtime_state_duplicate: agentReplyIncomplete(),
-  od_next_protocol_runtime_state_invalid_json: agentReplyIncomplete(),
-  od_next_protocol_runtime_state_invalid_schema: agentReplyIncomplete(),
-  // The user answered the clarification form, and the agent came back with
-  // ANOTHER question instead of proceeding.
-  //
-  // DELIBERATELY NOT one of the four above, even though the daemon reaches this
-  // code through the same block-less turn. To the user those are one story —
-  // "the reply came back without its marker" — and this is a different one: "I
-  // answered, and it is asking me again." Folding it into that row would tell
-  // the user their reply went missing while a fresh question form sits on
-  // screen in front of them.
-  //
-  // It is also NOT intermittent, which is why its copy must not promise that a
-  // re-run fixes it. A task admits exactly ONE clarification round
-  // (`coordinator.ts` beginStrategyClarification: "the task is not awaiting its
-  // one allowed clarification answer"), and at `inputStage: 'clarification'`
-  // the contract admits only `plan_ready` / `blocked` / `canceled`
-  // ("Clarification cannot request another clarification round",
-  // `contracts/src/plugins/strategy-v2.ts`). A properly DECLARED second
-  // question is refused by the identical code, so nothing about this is a
-  // dropped block.
-  //
-  // Retry still earns its place, for a different reason than rung 2's usual
-  // one: Retry does not re-roll this turn, it opens a NEW task. `handleRetry`
-  // sends no `strategyTaskExecutionId`, so `resolveClarificationContinuation`
-  // returns `ordinary` and `createStrategyTaskExecution` starts a fresh chain
-  // at `clarificationCount: 0` / `inputStage: 'request'` — where asking a
-  // question is a legal outcome. The agent will likely ask again; that time it
-  // renders as a normal round of questions instead of a failure card.
-  //
-  // ⚠️ `docs/design/run-errors/error-ux-design.md` HAS NO CELL FOR THIS either
-  // — S01–S32 contain nothing about clarification or follow-up questions. The
-  // copy is W41's draft; product should rewrite the wording, not the routing.
-  od_next_clarification_repeated: retryWithGuidance(
-    'chat.runError.title.clarificationRepeated',
-    'chat.runError.clarificationRepeatedMessage',
+  // The agent finished, and the daemon failed while settling the round or
+  // preparing the automatic build round (`server.ts`, the settlement catch).
+  OD_NEXT_CONTINUATION_FAILED: retryWithGuidance(
+    'chat.runError.title.roundSettlementFailed',
+    'chat.runError.roundSettlementFailedMessage',
+  ),
+  // The daemon's own record of the task did not match the Run it was starting,
+  // or the frozen skill package could not be read back (`startChatRun`, the
+  // 409 on `POST /api/runs`). A new round writes fresh records.
+  OD_NEXT_TASK_STATE_INVALID: retryWithGuidance(
+    'chat.runError.title.taskRecordMismatch',
+    'chat.runError.taskRecordMismatchMessage',
+  ),
+  OD_NEXT_SKILL_SNAPSHOT_INVALID: retryWithGuidance(
+    'chat.runError.title.taskRecordMismatch',
+    'chat.runError.taskRecordMismatchMessage',
+  ),
+  // `POST /api/runs` refused the request because the attachments exceed the
+  // per-file, total, or count cap (`task-input-snapshot.ts`). Retry would send
+  // the same attachments and fail the same way, so the card names the fix and
+  // takes rung 4; the composer is where the user acts.
+  OD_NEXT_INPUT_SNAPSHOT_OVERSIZE: contactSupportOnly(
+    'chat.runError.title.attachmentsTooLarge',
+    'chat.runError.attachmentsTooLargeMessage',
+  ),
+  // The attachments changed, or their frozen copy did not match, while the
+  // request was being prepared. Sending again freezes them afresh.
+  OD_NEXT_INPUT_SNAPSHOT_TOCTOU: retryWithGuidance(
+    'chat.runError.title.attachmentsChanged',
+    'chat.runError.attachmentsChangedMessage',
+  ),
+  OD_NEXT_INPUT_SNAPSHOT_TAMPERED: retryWithGuidance(
+    'chat.runError.title.attachmentsChanged',
+    'chat.runError.attachmentsChangedMessage',
+  ),
+  OD_NEXT_INPUT_SNAPSHOT_INVALID: retryWithGuidance(
+    'chat.runError.title.attachmentsChanged',
+    'chat.runError.attachmentsChangedMessage',
   ),
 };
-
-/**
- * The card for "the agent replied, but the reply could not be recorded".
- *
- * A function rather than a shared constant because `AGENT_AGNOSTIC_FAILURE_UI`
- * hands its values straight to callers; four references to one frozen-by-
- * convention object would let a future mutation of one code's card silently
- * rewrite the other three.
- */
-function agentReplyIncomplete(): RunFailureUi {
-  return retryWithGuidance(
-    'chat.runError.title.agentReplyIncomplete',
-    'chat.runError.agentReplyIncompleteMessage',
-  );
-}
 
 // Ladder rung 3: this local path cannot work at all — the provider's quota is
 // spent, and topping it up / changing keys isn't something we can do for the

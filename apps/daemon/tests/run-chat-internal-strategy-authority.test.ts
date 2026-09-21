@@ -11,8 +11,7 @@ import { listInstalledPlugins } from '../src/plugins/registry.js';
 import { createChatRunService } from '../src/runtimes/runs.js';
 import { registerRunRoutes } from '../src/routes/runs.js';
 import { createStrategyTaskExecution, getStrategyTaskExecution } from '../src/strategies/task-store.js';
-import { finalizeStrategyPlanningTurn } from '../src/strategies/od-next/coordinator.js';
-import { OdNextMachineProtocolStream } from '../src/strategies/od-next/protocol.js';
+import { settleStrategyTask } from '../src/strategies/od-next/coordinator.js';
 import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
 
 let tempDir: string;
@@ -83,10 +82,11 @@ describe('POST /api/chat internal strategy authority without a listening server'
       source.status = 'succeeded';
       createStrategyTaskExecution(db, { taskExecutionId: 'task', projectId: 'project', conversationId: 'conversation',
         snapshotId: snapshot.snapshotId, selectedAgentId: 'codex', initialRunId: source.id, ...strategyTaskCreateIdentityFixture(), createdAt: 100 });
-      const protocol = new OdNextMachineProtocolStream();
-      protocol.push('<question-form id="clarify">{"questions":[{"id":"audience","label":"Audience?"}]}</question-form>');
-      expect(finalizeStrategyPlanningTurn(db, { taskExecutionId: 'task', runId: source.id, protocol, updatedAt: 110 }).action)
-        .toBe('awaiting_clarification');
+      // The planning round asked a question and settled on it; the answer
+      // below is an ordinary next request, whichever handle it carries.
+      expect(settleStrategyTask(db, {
+        taskExecutionId: 'task', runId: source.id, reason: 'question', deliverableWritten: false, updatedAt: 110,
+      }).settlementReason).toBe('question');
       // Match the server's headerless local registry lookup; the internal strategy is not installed as a public plugin.
       const authorizePluginRequest = vi.fn(async (_req: unknown, res: LocalResponse, pluginId: string) => {
         const found = listInstalledPlugins(db, null, null).find(plugin => plugin.id === pluginId);
@@ -137,7 +137,9 @@ describe('POST /api/chat internal strategy authority without a listening server'
           expect(authorizePluginRequest).not.toHaveBeenCalled();
           await vi.waitFor(() => expect(startChatRun).toHaveBeenCalledTimes(1));
           expect(res.body).toContain('event: end');
-          expect(getStrategyTaskExecution(db, 'task')?.runs).toHaveLength(2);
+          // The settled task is untouched by the follow-up.
+          expect(getStrategyTaskExecution(db, 'task')).toMatchObject({ outcome: 'completed', settlementReason: 'question' });
+          expect(getStrategyTaskExecution(db, 'task')?.runs).toHaveLength(1);
         } else {
           expect(res.statusCode).toBe(404);
           expect(res.body).toContain(sample === 'forged-task-scope' ? 'CONVERSATION_NOT_FOUND' : 'PLUGIN_NOT_FOUND');

@@ -44,6 +44,9 @@ import {
 import { normalizeTelemetryAppVersion } from '../app-version.js';
 import { buildStructuredMainRunObservationV1 } from './main-run-observation.js';
 import { getDetectedRuntimeVersions } from '../runtimes/detection.js';
+import { getSnapshot } from '../plugins/snapshots.js';
+import { runSideEffectsForRun, type RunSideEffectLedger } from '../runtimes/run-lifecycle-analytics.js';
+import { odNextAgentLaunchFromRunFacts } from '@open-design/contracts/analytics';
 import { OD_NEXT_RUNTIME_PATH_DESCRIPTORS } from '../runtimes/od-next-capability-gate.js';
 import {
   adaptMainRunToolObservationsV1,
@@ -106,6 +109,7 @@ interface TaskRunLike {
   events: Array<{ event: string; data: unknown; timestamp?: number }>;
   promptTelemetry?: Parameters<typeof buildStructuredMainRunObservationV1>[0]['promptTelemetry'];
   analyticsTelemetry?: Parameters<typeof summarizeRunTimingAnalytics>[0]['telemetry'];
+  sideEffectLedger?: RunSideEffectLedger;
   model?: string | null;
   resolvedModelId?: string | null;
   agentId?: string | null;
@@ -516,7 +520,7 @@ async function taskAggregate(
         telemetry: run.promptTelemetry,
         persisted: mapping.finalText,
         stage: mapping.inputStage,
-        ...(mapping.purpose ? { purpose: mapping.purpose } : {}),
+        taskRunIndex: mapping.taskRunIndex,
       });
     }
     const quality = options.dataDir
@@ -627,11 +631,37 @@ async function taskAggregate(
     });
     return [taskRunObservation, ...mainToolObservations, ...childObservations];
   }));
-  const strategyRolloutDecision = options.getRun(task.initialRunId)?.strategyRolloutDecision;
+  const initialRun = options.getRun(task.initialRunId);
+  const strategyRolloutDecision = initialRun?.strategyRolloutDecision;
+  // The task type the scenario binding admitted the task under, frozen in the
+  // applied plugin snapshot at creation. It exists before any agent output,
+  // so the bucket is filled for a task that blocked on its first Run too.
+  const admittedTaskType = getSnapshot(options.db, task.snapshotId)?.strategy?.selectedTaskProfile.taskType
+    ?? strategyRolloutDecision?.taskType
+    ?? undefined;
   const aggregate = aggregateStrategyTaskObservations({
     task,
     observations: observationGroups.flat(),
+    ...(admittedTaskType ? { taskType: admittedTaskType } : {}),
     ...(strategyRolloutDecision ? { strategyRolloutDecision } : {}),
+    // The same judgement `run_finished` reports as `od_next_agent_launch`,
+    // taken from the same Run facts, so the two channels agree.
+    ...(initialRun
+      ? {
+          agentLaunch: odNextAgentLaunchFromRunFacts({
+            status: initialRun.status,
+            firstTokenSeen: Boolean(initialRun.analyticsTelemetry?.firstTokenAt),
+            toolCallSeen: runSideEffectsForRun({
+              events: initialRun.events,
+              ...(initialRun.sideEffectLedger ? { sideEffectLedger: initialRun.sideEffectLedger } : {}),
+            }).toolCallSeen,
+            userVisibleOutputSeen: runSideEffectsForRun({
+              events: initialRun.events,
+              ...(initialRun.sideEffectLedger ? { sideEffectLedger: initialRun.sideEffectLedger } : {}),
+            }).userVisibleOutputSeen,
+          }),
+        }
+      : {}),
   });
   const runs = task.runs.flatMap(mapping => {
     const context = evaluations.get(mapping.runId);

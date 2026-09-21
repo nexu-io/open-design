@@ -297,7 +297,7 @@ for (const strategyMode of ['active', 'off'] as const) {
   });
 }
 
-test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+test('[P0] local OD Next clarification canary settles on the form and the answer opens a new task', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -311,25 +311,43 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
     runId: string;
     taskExecutionId: string;
   };
+  // A round that asks settles its task: the daemon waits for the user rather
+  // than holding a task open across the answer.
   await expect.poll(async () => {
     const response = await page.request.get(`/api/runs/${created.runId}`);
-    return (await response.json() as { strategyTask?: { outcome: string } }).strategyTask?.outcome;
-  }, { timeout: 20_000 }).toBe('clarification_required');
+    return (await response.json() as {
+      strategyTask?: {
+        outcome: string;
+        terminal: boolean;
+        settlementReason?: string;
+        deliverableWritten: boolean;
+      };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    outcome: 'completed',
+    terminal: true,
+    settlementReason: 'question',
+    deliverableWritten: false,
+  });
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
   await form.getByText('Desktop web', { exact: true }).click();
-  const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await form.getByRole('button', { name: 'Send answers' }).click();
-  const clarificationResponse = await clarificationResponsePromise;
-  const clarificationText = await clarificationResponse.text();
-  expect(clarificationResponse.ok(), clarificationText).toBeTruthy();
-  const clarification = JSON.parse(clarificationText) as {
+  const answerResponsePromise = page.waitForResponse(isCreateRunResponse);
+  // The single-question form submits through its primary action, whose
+  // default label is the localized "Next".
+  await form.locator('.qf-primary-action').click();
+  const answerResponse = await answerResponsePromise;
+  const answerText = await answerResponse.text();
+  expect(answerResponse.ok(), answerText).toBeTruthy();
+  const answer = JSON.parse(answerText) as {
+    runId: string;
     taskExecutionId: string;
-    strategyTask?: { inputStage: string };
+    strategyTask?: { inputStage: string; terminal: boolean };
   };
-  expect(clarification.taskExecutionId).toBe(created.taskExecutionId);
-  expect(clarification.strategyTask?.inputStage).toBe('clarification');
+  // The answer is the next user message and opens its own task.
+  expect(answer.taskExecutionId).not.toBe(created.taskExecutionId);
+  expect(answer.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
@@ -337,15 +355,143 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
     'Created od-next-active-canary.html through the continued native session.',
   ).last()).toBeVisible();
   await expect.poll(async () => {
-    const response = await page.request.get(`/api/runs/${created.runId}`);
+    const response = await page.request.get(`/api/runs/${answer.runId}`);
     return (await response.json() as {
-      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
+      strategyTask?: {
+        taskExecutionId: string;
+        inputStage: string;
+        outcome: string;
+        terminal: boolean;
+        deliverableWritten: boolean;
+      };
     }).strategyTask;
   }, { timeout: 20_000 }).toMatchObject({
-    taskExecutionId: created.taskExecutionId,
+    taskExecutionId: answer.taskExecutionId,
+    inputStage: 'production',
     outcome: 'completed',
     terminal: true,
+    deliverableWritten: true,
   });
+  // The first task stays settled on its question.
+  const first = await page.request.get(`/api/runs/${created.runId}`);
+  expect((await first.json() as {
+    strategyTask?: { taskExecutionId: string; outcome: string; settlementReason?: string };
+  }).strategyTask).toMatchObject({
+    taskExecutionId: created.taskExecutionId,
+    outcome: 'completed',
+    settlementReason: 'question',
+  });
+});
+
+test('[P0] local OD Next non-design canary reads as an ordinary reply and ends the task in its own bucket', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next local non-design canary');
+
+  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Say hi as an OD Next non-design canary');
+  const created = await (await createResponsePromise).json() as {
+    runId: string;
+    taskExecutionId: string;
+  };
+  // The declaration ends the task on its own reason: completed, not blocked,
+  // no build round, nothing delivered.
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${created.runId}`);
+    return (await response.json() as {
+      status: string;
+      strategyTask?: {
+        taskExecutionId: string;
+        outcome: string;
+        terminal: boolean;
+        settlementReason?: string;
+        deliverableWritten: boolean;
+        autoRoundCount: number;
+      };
+    });
+  }, { timeout: 20_000 }).toMatchObject({
+    status: 'succeeded',
+    strategyTask: {
+      taskExecutionId: created.taskExecutionId,
+      outcome: 'completed',
+      terminal: true,
+      settlementReason: 'non_design',
+      deliverableWritten: false,
+      autoRoundCount: 0,
+    },
+  });
+  // The chat shows the greeting as an ordinary reply: the declaration block
+  // is not on screen, no failure card, no next step to retry.
+  await expect(page.getByText('Tell me what you would like to design and I will plan it.').last()).toBeVisible();
+  await expect(page.getByText('open-design-runtime-state')).toHaveCount(0);
+  await expect(page.getByText('nonDesignRequest')).toHaveCount(0);
+  await expect(runErrorCard(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Retry$/ })).toHaveCount(0);
+  await page.locator('.chat-log').first().screenshot({ path: test.info().outputPath('od-next-non-design-reply.png') });
+  const { projectId } = await currentProjectContext(page);
+  const files = await page.request.get(`/api/projects/${projectId}/files`);
+  expect(files.ok()).toBeTruthy();
+  const listed = await files.json() as { files?: Array<{ name: string }> } | Array<{ name: string }>;
+  expect((Array.isArray(listed) ? listed : listed.files ?? []).map((file) => file.name)).toEqual([]);
+});
+
+test('[P0] local OD Next build without an entry completes, shows the notice, and the button asks for one', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next local nested canary');
+
+  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Create an OD Next nested canary without an entry');
+  const created = await (await createResponsePromise).json() as { runId: string; taskExecutionId: string };
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['screens/home.html', 'screens/about.html']);
+
+  // The task completed on the written pages even though nothing resolves as
+  // the entry: the entry is a project attribute, not a completion gate.
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${created.runId}`);
+    return (await response.json() as {
+      strategyTask?: { outcome: string; terminal: boolean; deliverableWritten: boolean };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({ outcome: 'completed', terminal: true, deliverableWritten: true });
+
+  await openAllProjectFiles(page);
+  const notice = page.getByTestId('design-files-entry-missing');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('screens/home.html');
+  await page.screenshot({ path: 'ui/reports/screenshots/entry-missing-notice.png', fullPage: false });
+
+  // A build round usually outlives the tab that started it. The notice is
+  // read off the stored verdict of the last settled round, so a page that
+  // did not watch the terminal frame — this one, after a reload — shows it
+  // the same.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  // The saved tab set restores after the workspace is ready and re-selects
+  // the page tab the build left active; open the files panel after that.
+  await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /home\.html/ })).toBeVisible();
+  await openAllProjectFiles(page);
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('screens/about.html');
+
+  // The button sends the fixed follow-up in the same conversation; the fake
+  // answers it by adding index.html, which the daemon records as the entry.
+  const fixResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await page.getByTestId('design-files-entry-request').click();
+  const fix = await (await fixResponsePromise).json() as { runId: string; taskExecutionId: string };
+  expect(fix.taskExecutionId).not.toBe(created.taskExecutionId);
+  await expectProjectFilesToContain(page, projectId, ['index.html']);
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/projects/${encodeURIComponent(projectId)}`);
+    return (await response.json() as { project: { metadata?: { entryFile?: string } } }).project.metadata?.entryFile;
+  }, { timeout: 20_000 }).toBe('index.html');
+  await expect(notice).toHaveCount(0);
 });
 
 test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {
@@ -372,6 +518,42 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
     terminal: true,
   });
 
+  // A blocked task is a Run that failed: the failure card is the Run's own
+  // (the fixture guard fails the process). On a local CLI the card's runtime
+  // action is the Cloud switch, so sending the request again is how the user
+  // retries; it opens a new round in the same conversation — a new task, the
+  // same project and conversation, the conversation URL unchanged, and the
+  // failed task's form (there is none here) or files left as they were.
+  const blockedCard = runErrorCard(page);
+  await expect(blockedCard).toBeVisible({ timeout: 15_000 });
+  await expect(blockedCard).toContainText('The task could not be completed');
+  await expect(blockedCard.getByRole('button')).toHaveText([
+    'Contact us', 'Export logs', 'Switch to OpenDesign Cloud',
+  ]);
+  await blockedCard.screenshot({ path: test.info().outputPath('od-next-blocked-run-card.png') });
+  const blockedContext = await currentProjectContext(page);
+  const urlBeforeRetry = page.url();
+  const retryResponse = await sendPrompt(page, 'Create an OD Next blocked canary');
+  const retryRequest = retryResponse.request().postDataJSON() as {
+    projectId: string; conversationId: string; currentPrompt?: string;
+  };
+  expect(retryRequest.projectId).toBe(blockedContext.projectId);
+  expect(retryRequest.conversationId).toBe(blockedContext.conversationId);
+  const retried = await retryResponse.json() as { runId: string; taskExecutionId: string };
+  expect(retried.runId).not.toBe(blocked.runId);
+  expect(retried.taskExecutionId).not.toBe(blocked.taskExecutionId);
+  expect(page.url()).toBe(urlBeforeRetry);
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${retried.runId}`);
+    return (await response.json() as {
+      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    taskExecutionId: retried.taskExecutionId,
+    outcome: 'blocked',
+    terminal: true,
+  });
+
   await prepareLocalOdNextCanary(page, 'OD Next local canceled canary');
   const canceledResponsePromise = page.waitForResponse(isCreateRunResponse);
   await sendPrompt(page, 'Hold the daemon run open until canceled');
@@ -391,6 +573,97 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
     outcome: 'canceled',
     terminal: true,
   });
+});
+
+// The copy of the failure card for the codes the daemon raises around an OD
+// Next round. Each variant is a persisted conversation whose last assistant
+// turn failed with that code — written through the same message API the chat
+// uses — so the card renders from the persisted error event exactly as it does
+// after a reload. The screenshots are the review evidence for the wording.
+const OD_NEXT_ROUND_FAILURE_COPY = [
+  {
+    code: 'OD_NEXT_SESSION_UNAVAILABLE',
+    detail: 'The agent session this build round continues is no longer available.',
+    title: 'Build round lost its session',
+    description: "The build round was set to continue the planning round's agent session, but that session was gone by the time it started. Send the request again to start a new round: the plan stays in the conversation, and files already written stay in the project.",
+  },
+  {
+    code: 'od_next_physical_run_interrupted',
+    detail: 'The agent process ended before this round settled, so the task stopped here.',
+    title: 'Round interrupted',
+    description: 'The agent stopped before this round finished. Send the request again to start a new round in this conversation; files already written stay in the project.',
+  },
+  {
+    code: 'OD_NEXT_CONTINUATION_FAILED',
+    detail: 'Strategy task changed while applying settlement.',
+    title: 'Round could not be recorded',
+    description: 'The agent finished, but Open Design ran into an error while recording this round and starting the next one. Send the request again to start a new round; if it keeps happening, export the logs and send them to us.',
+  },
+  {
+    code: 'OD_NEXT_TASK_STATE_INVALID',
+    detail: 'OD Next Run, request, immutable input owner, and persisted task mapping are not one exact scope.',
+    title: 'Task record mismatch',
+    description: "Open Design's record of this task did not match the run it was starting, so the round stopped before the agent ran. Send the request again to start a fresh round with new records.",
+  },
+  {
+    code: 'OD_NEXT_INPUT_SNAPSHOT_OVERSIZE',
+    detail: 'OD Next attachments exceed the task byte cap.',
+    title: 'Attachments too large',
+    description: 'The attachments exceed what one request can carry. Remove or shrink some and send the request again.',
+  },
+  {
+    code: 'OD_NEXT_INPUT_SNAPSHOT_TOCTOU',
+    detail: 'OD Next attachment changed while it was being frozen.',
+    title: 'Attachments changed',
+    description: 'The attachments changed while the request was being prepared, or their frozen copy did not match, so they could not be handed to the agent. Send the request again.',
+  },
+] as const;
+
+test('[P1] OD Next round failures render their own card copy from the persisted error', async ({ page }) => {
+  for (const variant of OD_NEXT_ROUND_FAILURE_COPY) {
+    const projectId = `od-next-failure-copy-${variant.code.toLowerCase()}-${Date.now()}`;
+    const { conversationId } = await createProjectViaApi(page, projectId, `Failure copy ${variant.code}`);
+    const now = Date.now();
+    const userId = `${projectId}-user`;
+    const assistantId = `${projectId}-assistant`;
+    for (const message of [
+      { id: userId, role: 'user', content: 'Build a landing page for a coffee roaster.', createdAt: now - 10_000 },
+      {
+        id: assistantId,
+        role: 'assistant',
+        agentId: 'codex',
+        content: '',
+        createdAt: now - 9_000,
+        startedAt: now - 9_000,
+        endedAt: now - 1_000,
+        runId: `${projectId}-run`,
+        runStatus: 'failed',
+        events: [
+          { kind: 'status', label: 'starting', detail: 'codex' },
+          { kind: 'status', label: 'error', detail: variant.detail, code: variant.code },
+        ],
+      },
+    ]) {
+      const response = await page.request.put(
+        `/api/projects/${projectId}/conversations/${conversationId}/messages/${message.id}`,
+        { data: message },
+      );
+      expect(response.ok(), await response.text()).toBeTruthy();
+    }
+
+    await page.goto(`/projects/${projectId}/conversations/${conversationId}`, { waitUntil: 'domcontentloaded' });
+    await waitForLoadingToClear(page);
+    const card = runErrorCard(page);
+    await expect(card).toContainText(variant.title, { timeout: 15_000 });
+    await expect(card.getByTestId('chat-run-error-description')).toHaveText(variant.description);
+    await expect(card).not.toContainText(variant.detail);
+    // A failed local CLI run keeps its fixed action set; the copy is what
+    // changes per code.
+    await expect(card.getByRole('button')).toHaveText([
+      'Contact us', 'Export logs', 'Switch to OpenDesign Cloud',
+    ]);
+    await card.screenshot({ path: test.info().outputPath(`od-next-failure-${variant.code}.png`) });
+  }
 });
 
 test('[P0] OD Next app-config switch takes effect immediately and rejects invalid modes atomically', async ({ page }) => {

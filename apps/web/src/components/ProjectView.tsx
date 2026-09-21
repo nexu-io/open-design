@@ -1,3 +1,4 @@
+import { deliverableFactsFromRunStatus } from '../runtime/run-deliverable-facts';
 import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
 import {
   startTransition,
@@ -24,7 +25,7 @@ import {
   type DaemonAgentReconnectState,
   type DaemonAgentRetryState,
   type DaemonReconnectState,
-  createStrategyTaskBlockedError,
+  type RunDeliverableFacts,
   fetchChatRunStatus,
   GENERIC_DAEMON_DISCONNECT_CODE,
   GENERIC_DAEMON_DISCONNECT_MESSAGE,
@@ -231,6 +232,7 @@ import {
   summarizeDesignSystemPackageAudit,
 } from '../runtime/design-system-package-audit';
 import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
+import type { EntryMissingNoticeState } from './design-files/EntryMissingNotice';
 import { isDesignSystemWorkspacePrompt } from '../design-system-auto-prompt';
 import {
   createConversation,
@@ -244,6 +246,7 @@ import {
   loadTabs,
   patchConversation,
   patchProject,
+  setProjectEntryFile,
   ProjectConversationsHttpError,
   saveMessage,
   startGeneratedPluginShareTask,
@@ -597,67 +600,6 @@ function messagesThatAbsorbedASuccessorRun(
   return absorbed;
 }
 
-function terminalErrorEventOf(message: ChatMessage): AgentEvent | undefined {
-  const events = message.events ?? [];
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.kind === 'status' && event.label === 'error') return event;
-  }
-  return undefined;
-}
-
-/**
- * The client's record of a terminal `blocked` verdict that the server row has
- * no way to contradict — because it has no way to EXPRESS it.
- *
- * A blocked strategy task is not a failed process. The daemon writes the Run's
- * own outcome (`succeeded`, exit 0, zero error frames) and it is right to: the
- * agent answered, and the answer is on screen. What failed is the TASK — the
- * OD Next protocol gate refused the turn because the reply carried no Runtime
- * State block. `providers/daemon.ts` already resolves that verdict into the
- * turn's user-facing status (`endStatus = 'failed'` plus a structured error
- * whose `code` is the gate's reason code), so within the chat
- * `ChatMessage.runStatus` means "how this TURN ended", not "how the process
- * exited".
- *
- * `GET …/messages` returns neither half of that verdict: the daemon persists
- * no `strategyTaskBlocked` column and never wrote the client-side error frame
- * (its Run had none to write). So the post-run alignment refresh arrives
- * carrying only the process status — and the plain `{...server}` copy read that
- * silence as a correction, dropping the verdict AND its reason code. The
- * blocked card that `runtime/amr-guidance.ts` already writes for
- * `od_next_protocol_runtime_state_missing` could therefore never render: with
- * no `runStatus: 'failed'` there is no `retryAssistant`, with no
- * `retryAssistant` there is no `runFailureUi`, and the chat fell back to the
- * anonymous "task failed" card plus the English diagnostic sentence — under a
- * message labelled "completed". The same emptiness took the card's Retry with
- * it (its whole action group hangs off `runFailureUi`).
- *
- * The witnesses are deliberately narrow, so this is "the server does not know
- * about this verdict", never "the local copy wins":
- *   - the daemon's OWN terminal projection stamped the block (`onStrategyTaskSettled`);
- *   - the client already resolved the turn as failed — which excludes the
- *     blocked-but-delivered carve-out in `providers/daemon.ts`, where the Run
- *     succeeded AND delivered and the turn deliberately stays `succeeded`;
- *   - both copies describe the SAME physical Run, so a later Run's row cannot
- *     inherit an older Run's verdict;
- *   - the client holds the attribution (the error event carrying the gate's
- *     reason code) and the server row does not, so nothing is duplicated and a
- *     verdict without a reason can never resurrect an anonymous failure card.
- */
-function localBlockedTurnVerdictUnknownToServer(
-  server: ChatMessage,
-  local: ChatMessage,
-): { runStatus: ChatMessage['runStatus']; errorEvent: AgentEvent } | null {
-  if (local.strategyTaskBlocked !== true) return null;
-  if (local.runStatus !== 'failed') return null;
-  if (!server.runId || server.runId !== local.runId) return null;
-  if (terminalErrorEventOf(server)) return null;
-  const errorEvent = terminalErrorEventOf(local);
-  if (!errorEvent) return null;
-  return { runStatus: local.runStatus, errorEvent };
-}
-
 function mergeServerMessageWithLocal(
   server: ChatMessage,
   local?: ChatMessage,
@@ -715,26 +657,6 @@ function mergeServerMessageWithLocal(
   }
   if (!server.runStatus && local.runStatus) {
     merged.runStatus = local.runStatus;
-  }
-  // A terminal `blocked` verdict is sticky (the daemon answers every further
-  // continuation of that task with 409 STRATEGY_TASK_STATE_MISMATCH) and the
-  // server row cannot carry it, so a refresh must not quietly un-block the
-  // turn's question form.
-  if (!server.strategyTaskBlocked && local.strategyTaskBlocked) {
-    merged.strategyTaskBlocked = local.strategyTaskBlocked;
-    if (server.strategyTaskBlockedText === undefined) {
-      merged.strategyTaskBlockedText = local.strategyTaskBlockedText ?? null;
-    }
-  }
-  // See `localBlockedTurnVerdictUnknownToServer`. The server's richer event log
-  // stays authoritative — the client's error frame is APPENDED to it, not
-  // swapped in — because the daemon's own diagnostics belong to the same turn.
-  const blockedVerdict = localBlockedTurnVerdictUnknownToServer(server, local);
-  if (blockedVerdict) {
-    merged.runStatus = blockedVerdict.runStatus;
-    if (!terminalErrorEventOf(merged)) {
-      merged.events = [...(merged.events ?? []), blockedVerdict.errorEvent];
-    }
   }
   // Feedback is written through a best-effort PUT after the button updates
   // the local message. A run-completion refresh can race that PUT and return
@@ -5205,10 +5127,15 @@ export function ProjectView({
             fresh,
             authorityResolution.name,
           );
+          // The entry file rides the same signal: set by hand or by
+          // `od project entry`, recorded by a delivering Run, moved by a
+          // rename or cleared by a delete, the files panel's ENTRY mark and
+          // the preview follow without a reload.
           if (
             reconciled.name === current.name
             && reconciled.skillId === current.skillId
             && reconciled.designSystemId === current.designSystemId
+            && reconciled.metadata?.entryFile === current.metadata?.entryFile
           ) {
             return;
           }
@@ -6641,6 +6568,16 @@ export function ProjectView({
               status: projectedTaskStatus,
             }
           : physicalStatus;
+        // The files panel's missing-entry notice follows the project's last
+        // settled round whether or not this page watched it settle — a reload
+        // during the build round, a conversation opened after it. The stored
+        // verdict is the one the terminal frame carried; a project that has
+        // recorded an entry since then owes no notice. A predecessor whose
+        // task advanced is not the last round: its successor row reports.
+        if (!taskRunAdvanced && !currentProject.metadata?.entryFile) {
+          const facts = deliverableFactsFromRunStatus(physicalStatus, project.id);
+          if (facts) noteDeliverableFacts(facts);
+        }
         const projectedRunAlreadyHydrated = Boolean(
           taskRunAdvanced
           && messages.some(
@@ -6695,47 +6632,13 @@ export function ProjectView({
             || strategyTaskParkedOnSucceededRun(status, runId)
           )
         ) {
-          const strategyTask = status.strategyTask;
-          if (
-            status.status === 'succeeded'
-            && status.id === runId
-            && status.projectId === project.id
-            && status.conversationId === reattachConversationId
-            && status.assistantMessageId === message.id
-            && strategyTask?.outcome === 'blocked'
-            && strategyTask.taskExecutionId === message.strategyTaskExecutionId
-            && strategyTask.activeRunId === runId
-            && !canRetainSuccessfulRunForBlockedStrategy(
-              status.status, strategyTask, status.deliverableValid,
-              status.projectDeliverableValid, message.content,
-            )
-          ) {
-            // A cold history row keeps the daemon's physical success. Restore
-            // the same logical failure/reason as live SSE from this existing
-            // authorized probe, without rewriting the persisted physical row.
-            const failure = createStrategyTaskBlockedError(strategyTask);
-            updateMessageById(message.id, (prev) => {
-              if (
-                activeConversationIdRef.current !== reattachConversationId
-                || projectRunAuthorityKeyRef.current !== projectRunAuthorityKey
-                || prev.runId !== runId
-                || prev.strategyTaskExecutionId !== strategyTask.taskExecutionId
-                || prev.runStatus !== 'succeeded'
-              ) return prev;
-              return appendErrorStatusEvent({
-                ...prev,
-                ...(strategySettledMessageFields(strategyTask) ?? {}),
-                runStatus: 'failed',
-              }, failure.message, failure.code);
-            });
-          }
           completedReattachRunsRef.current.add(runId);
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
         }
         if (status.strategyTask?.taskExecutionId) {
-          // A blocked verdict is stamped alongside the task handle so the
-          // turn's question form stays terminated after a reload.
+          // The task's terminal stamp travels with its handle so a reload
+          // keeps the delivered / blocked facts the daemon reported.
           const settledFields = strategySettledMessageFields(status.strategyTask);
           updateMessageById(
             message.id,
@@ -7220,6 +7123,7 @@ export function ProjectView({
           onArtifactPaths: (paths) => {
             authoritativeReattachArtifactPaths = paths;
           },
+          onDeliverableFacts: noteDeliverableFacts,
           onStrategyTaskSettled: (strategyTask) => {
             const settledFields = strategySettledMessageFields(strategyTask);
             if (!settledFields) return;
@@ -8192,7 +8096,7 @@ export function ProjectView({
           // Apply the same success exceptions as the normal provider path.
           const blockedRunCanSucceed = latestRunStatus != null
             && canRetainSuccessfulRunForBlockedStrategy(
-              latestRunStatus.status, strategyTask, latestRunStatus.deliverableValid,
+              latestRunStatus.status, latestRunStatus.deliverableValid,
               latestRunStatus.projectDeliverableValid, sourceText,
             );
           updateMessageById(
@@ -8683,6 +8587,9 @@ export function ProjectView({
       const nextVisibleMessages = retryTarget
         ? [...nextHistory, ...retryTarget.preservedAttempts, assistantMsg]
         : [...nextHistory, assistantMsg];
+      const runHistory = retryTarget
+        ? retryRunHistory(retryTarget, userMsg)
+        : nextHistory;
       /*
        * 画出去 —— 同时把画之前的样子记下来。预检拒绝时要**原样**放回去,而
        * 「原样」只有这一刻知道:`messages` 是一份快照,不是能从这一轮反算出来的量
@@ -10228,7 +10135,7 @@ export function ProjectView({
         };
         void streamViaDaemon({
           agentId: config.agentId,
-          history: nextHistory,
+          history: runHistory,
           signal: controller.signal,
           cancelSignal: cancelController.signal,
           handlers,
@@ -10347,6 +10254,7 @@ export function ProjectView({
           onArtifactPaths: (paths) => {
             authoritativeArtifactPaths = paths;
           },
+          onDeliverableFacts: noteDeliverableFacts,
           onRunStatus: (runStatus) => {
             // streamViaDaemon reports `failed` before onError when POST
             // /api/runs itself fails. Until onRunCreated supplies an id there is
@@ -10451,7 +10359,7 @@ export function ProjectView({
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         const byokOpenCodeHistory = await historyWithApiAttachmentContext(
           historyWithCommentAttachmentContext(
-            historyWithWorkspaceContext(nextHistory, userMsg.id, runContext),
+            historyWithWorkspaceContext(runHistory, userMsg.id, runContext),
             userMsg.id,
           ),
           userMsg.id,
@@ -12822,6 +12730,41 @@ export function ProjectView({
   const [brandCreateDesignStarting, setBrandCreateDesignStarting] = useState(false);
   const [projectDesignSystemCreateStarting, setProjectDesignSystemCreateStarting] = useState(false);
   const [projectDuplicateStarting, setProjectDuplicateStarting] = useState(false);
+  /**
+   * The last round of this project wrote files but left it without an entry
+   * the preview can open. Set from the terminal frame's deliverable facts,
+   * cleared when an entry is recorded, when the user dismisses it, or when
+   * the project changes.
+   */
+  const [entryMissingNotice, setEntryMissingNotice] = useState<EntryMissingNoticeState | null>(null);
+  useEffect(() => {
+    setEntryMissingNotice(null);
+  }, [currentProject.id]);
+  const noteDeliverableFacts = useCallback((facts: RunDeliverableFacts) => {
+    if (facts.projectId !== currentProject.id) return;
+    if (facts.validation === 'entry_missing' && facts.artifactPaths.length > 0) {
+      setEntryMissingNotice({ files: facts.artifactPaths });
+      return;
+    }
+    if (facts.valid) setEntryMissingNotice(null);
+  }, [currentProject.id]);
+  const handleSetEntryFile = useCallback(async (name: string) => {
+    const updated = await setProjectEntryFile(currentProject.id, name, projectRunWorkspaceContext);
+    if (!updated) {
+      setProjectActionsToast({
+        message: t('designFiles.setAsEntry'),
+        details: name,
+        tone: 'error',
+      });
+      return;
+    }
+    onProjectChange(updated);
+    setEntryMissingNotice(null);
+  }, [currentProject.id, onProjectChange, projectRunWorkspaceContext, t]);
+  const handleRequestEntry = useCallback(() => {
+    setEntryMissingNotice(null);
+    void handleSend(t('designFiles.entryRequestMessage'), [], [], { entryFrom: 'next_step' });
+  }, [handleSend, t]);
   useEffect(() => {
     if (brandEnrichmentPromptSeed) {
       setBrandEnrichmentPromptSeedCache(brandEnrichmentPromptSeed);
@@ -14074,6 +14017,11 @@ export function ProjectView({
           createDesignSystemFromProjectBusy={projectDesignSystemCreateStarting}
           onDuplicateProject={onDuplicateProject ? handleDuplicateProject : undefined}
           duplicateProjectBusy={projectDuplicateStarting}
+          entryFile={currentProject.metadata?.entryFile ?? null}
+          onSetEntryFile={handleSetEntryFile}
+          entryMissingNotice={entryMissingNotice}
+          onRequestEntry={handleRequestEntry}
+          onDismissEntryMissingNotice={() => setEntryMissingNotice(null)}
           onDeleteDesignSystemProject={onDeleteProject}
           onDesignSystemNeedsWork={sendDesignSystemFeedback}
           designSystemReview={currentProject.metadata?.designSystemReview}
@@ -14697,6 +14645,40 @@ export interface RetryTarget {
   userMsg: ChatMessage;
   priorMessages: ChatMessage[];
   preservedAttempts: ChatMessage[];
+}
+
+/**
+ * The history a retry sends to the run.
+ *
+ * A retry replays the user's turn, so the chat shows the retried attempt
+ * only as history and the new run gets the user's message again as its
+ * current prompt. When the failed attempt was a strategy task, the rounds of
+ * that task which did finish — the planning round's prose, typically — go
+ * into the transcript ahead of the replayed message: a build round that
+ * failed is retried with the plan in hand rather than planned again from
+ * scratch, and the files the finished rounds wrote are still in the project.
+ * Rounds that failed are left out, as before. An agent whose session is
+ * continued gets none of this: the daemon skips the transcript for a resumed
+ * session, which already holds those turns.
+ */
+export function retryRunHistory(
+  retryTarget: RetryTarget,
+  userMsg: ChatMessage,
+): ChatMessage[] {
+  const taskId = retryTarget.failedAssistant.strategyTaskExecutionId;
+  const finishedRounds = taskId
+    ? retryTarget.preservedAttempts.filter((attempt) =>
+      attempt.role === 'assistant'
+      && attempt.strategyTaskExecutionId === taskId
+      && attempt.runStatus === 'succeeded'
+      && attempt.content.trim().length > 0)
+    : [];
+  if (finishedRounds.length === 0) return [...retryTarget.priorMessages, userMsg];
+  // The earlier copy is transcript only. It gets its own id so the per-turn
+  // decorations keyed on the user message id (workspace context, attachment
+  // context) land on the current prompt alone.
+  const retriedTurn: ChatMessage = { ...userMsg, id: `${userMsg.id}:retried` };
+  return [...retryTarget.priorMessages, retriedTurn, ...finishedRounds, userMsg];
 }
 
 export function resolveRetryTarget(

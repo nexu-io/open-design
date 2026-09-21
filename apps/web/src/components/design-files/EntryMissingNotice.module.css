@@ -1,0 +1,44 @@
+/* A one-line notice above the file grid: the last round wrote files but none
+   of them opens as the project's entry. It sits where the upload banner sits,
+   uses the same surface tokens, and never blocks the grid below it. */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.text {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.text strong {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.files {
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.hint {
+  flex: 1 0 100%;
+  font-size: 11px;
+  color: var(--text-muted);
+}

@@ -563,11 +563,11 @@ export function normalizeCustomReason(
  */
 export function odNextBlockedAnalyticsFromStrategyTask(
   strategyTask: {
-    terminal?: boolean;
-    outcome?: string;
     // `| undefined` explicitly: the daemon compiles with
     // `exactOptionalPropertyTypes`, where an optional property and one that may
     // hold `undefined` are different types, and its projection is the latter.
+    terminal?: boolean | undefined;
+    outcome?: string | undefined;
     blockedContext?: { reasonCodes?: readonly string[] | undefined } | null | undefined;
   } | null | undefined,
 ): { od_next_blocked_reason_code?: string } {
@@ -577,6 +577,120 @@ export function odNextBlockedAnalyticsFromStrategyTask(
   return typeof primary === 'string' && primary
     ? { od_next_blocked_reason_code: primary }
     : {};
+}
+
+/**
+ * The task projection fields the analytics mappers below read. Declared
+ * structurally so the daemon's projection type and a test literal both fit;
+ * `| undefined` on optionals because the daemon compiles with
+ * `exactOptionalPropertyTypes`.
+ */
+export interface OdNextTaskAnalyticsSource {
+  strategy?: { version?: string | undefined; packageHash?: string | undefined } | undefined;
+  inputStage?: string | undefined;
+  outcome?: string | undefined;
+  terminal?: boolean | undefined;
+  settlementReason?: string | undefined;
+  autoRoundCount?: number | undefined;
+  deliverableWritten?: boolean | undefined;
+  blockedContext?: { reasonCodes?: readonly string[] | undefined } | null | undefined;
+}
+
+/**
+ * Strategy package identity for every Run an OD Next task owns.
+ *
+ * Read off the Run's task projection rather than the live plugin registry:
+ * the projection names the package the task was frozen on, which is what the
+ * Langfuse task trace also reports, so the two channels bucket the same Run
+ * under the same version. Empty for a Run with no task (the ordinary path).
+ */
+export function odNextTaskIdentityAnalyticsFromStrategyTask(
+  strategyTask: OdNextTaskAnalyticsSource | null | undefined,
+): {
+  od_next_strategy_version?: string;
+  od_next_strategy_package_hash?: string;
+  od_next_task_stage?: string;
+} {
+  if (!strategyTask) return {};
+  const version = strategyTask.strategy?.version;
+  const packageHash = strategyTask.strategy?.packageHash;
+  return {
+    ...(typeof version === 'string' && version ? { od_next_strategy_version: version } : {}),
+    ...(typeof packageHash === 'string' && packageHash
+      ? { od_next_strategy_package_hash: packageHash }
+      : {}),
+    ...(typeof strategyTask.inputStage === 'string' && strategyTask.inputStage
+      ? { od_next_task_stage: strategyTask.inputStage }
+      : {}),
+  };
+}
+
+/**
+ * The Run's own launch evidence, reduced to the one judgement the rollout
+ * dashboards need: did the agent process produce anything at all. Only a
+ * failed Run with none of the three signals counts as never started; a Run
+ * that succeeded, was canceled, or emitted so much as one token did start.
+ */
+export function odNextAgentLaunchFromRunFacts(facts: {
+  status: string;
+  firstTokenSeen: boolean;
+  toolCallSeen: boolean;
+  userVisibleOutputSeen: boolean;
+}): 'started' | 'not_started' {
+  if (facts.status !== 'failed') return 'started';
+  return facts.firstTokenSeen || facts.toolCallSeen || facts.userVisibleOutputSeen
+    ? 'started'
+    : 'not_started';
+}
+
+/**
+ * How the task stood when this Run ended: the outcome, the settlement reason
+ * and the automatic-round count for a settled task, the written-deliverable
+ * fact, and every gate reason code behind a blocked one. Each value is a code
+ * the daemon produced; none carries user content or a path.
+ *
+ * The primary blocked reason keeps its own field
+ * (`odNextBlockedAnalyticsFromStrategyTask`) because dashboards already key
+ * on it; the array beside it is what separates two failures that share a
+ * primary code.
+ */
+export function odNextTaskSettlementAnalyticsFromStrategyTask(
+  strategyTask: OdNextTaskAnalyticsSource | null | undefined,
+): {
+  od_next_task_outcome?: string;
+  od_next_settlement_reason?: string;
+  od_next_auto_round_count?: number;
+  od_next_deliverable_written?: boolean;
+  od_next_reason_codes?: string[];
+  od_next_blocked_reason_code?: string;
+} {
+  if (!strategyTask) return {};
+  const reasonCodes = strategyTask.terminal === true && strategyTask.outcome === 'blocked'
+    ? (strategyTask.blockedContext?.reasonCodes ?? []).filter(
+        (code): code is string => typeof code === 'string' && code.length > 0,
+      )
+    : [];
+  return {
+    ...(typeof strategyTask.outcome === 'string' && strategyTask.outcome
+      ? { od_next_task_outcome: strategyTask.outcome }
+      : {}),
+    ...(strategyTask.terminal === true
+      && strategyTask.outcome === 'completed'
+      && typeof strategyTask.settlementReason === 'string'
+      && strategyTask.settlementReason
+      ? { od_next_settlement_reason: strategyTask.settlementReason }
+      : {}),
+    ...(typeof strategyTask.autoRoundCount === 'number'
+      && Number.isInteger(strategyTask.autoRoundCount)
+      && strategyTask.autoRoundCount >= 0
+      ? { od_next_auto_round_count: strategyTask.autoRoundCount }
+      : {}),
+    ...(typeof strategyTask.deliverableWritten === 'boolean'
+      ? { od_next_deliverable_written: strategyTask.deliverableWritten }
+      : {}),
+    ...(reasonCodes.length > 0 ? { od_next_reason_codes: reasonCodes } : {}),
+    ...odNextBlockedAnalyticsFromStrategyTask(strategyTask),
+  };
 }
 
 export function harnessAnalyticsFromRolloutDecision(

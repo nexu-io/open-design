@@ -1,15 +1,13 @@
 // @vitest-environment jsdom
 
 /**
- * Terminal-blocked strategy tasks must terminate question-form interaction.
+ * A blocked strategy task leaves its question form answerable.
  *
- * When the daemon's OD Next protocol gate settles a task as `blocked` (a
- * sticky terminal outcome), the clarification form rendered by that turn can
- * never be answered again — the daemon rejects any continuation with
- * 409 STRATEGY_TASK_STATE_MISMATCH. The message-level blocked verdict must
- * therefore (a) disable the inline form's submission and (b) surface the
- * gate's visible text (or a generic localized notice) instead of leaving the
- * form silently submittable.
+ * A task blocks only when its Run failed before the round settled. A form
+ * the turn had already rendered is still a question the user can answer: the
+ * answer is the next user message and opens a new task, so the form must not
+ * be disabled and no notice about the task appears under it — the failure is
+ * told once, by the failure card.
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -69,23 +67,19 @@ function fillAudience(container: HTMLElement): void {
   fireEvent.change(input, { target: { value: 'Designers' } });
 }
 
-// NOTE(sync/main): origin/main wrote this against the pre-refactor question
-// form, whose submit button read "Send answers". This branch's stepped form
-// labels the final step's confirm button `qf.submitDefault` ("Next").
-// Only the accessible name moved — the behaviour under test (blocked notice +
-// disabled submit) is unchanged, so the selector is retargeted rather than
-// the assertions relaxed.
+// This branch's stepped form labels the final step's confirm button
+// `qf.submitDefault` ("Next").
 const QUESTION_FORM_SUBMIT_LABEL = 'Next';
 
 describe('AssistantMessage blocked strategy task', () => {
-  it('stops accepting form submissions and shows the gate visible text', () => {
+  it.each([
+    { name: 'with the verdict text', strategyTaskBlockedText: '这一轮在写完首页前停了。' },
+    { name: 'without any verdict text', strategyTaskBlockedText: null },
+  ])('keeps the form submittable and draws no notice $name', ({ strategyTaskBlockedText }) => {
     const onSubmitQuestionForm = vi.fn();
     const { container } = render(
       <AssistantMessage
-        message={blockedMessage({
-          strategyTaskBlocked: true,
-          strategyTaskBlockedText: '澄清轮已被质量门拦下，请重新发起任务。',
-        })}
+        message={blockedMessage({ strategyTaskBlocked: true, strategyTaskBlockedText })}
         streaming={false}
         projectId="proj-1"
         conversationId="conv-1"
@@ -95,40 +89,15 @@ describe('AssistantMessage blocked strategy task', () => {
     );
 
     fillAudience(container);
+    expect(screen.queryByTestId('question-form-blocked-notice')).toBeNull();
+    expect(container.textContent).not.toContain('quality gate');
     const send = screen.getByRole('button', { name: QUESTION_FORM_SUBMIT_LABEL }) as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
+    expect(send.disabled).toBe(false);
     fireEvent.click(send);
-    expect(onSubmitQuestionForm).not.toHaveBeenCalled();
-    expect(screen.getByTestId('question-form-blocked-notice').textContent).toBe(
-      '澄清轮已被质量门拦下，请重新发起任务。',
-    );
+    expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to the generic localized notice when the gate left no visible text', () => {
-    const { container } = render(
-      <AssistantMessage
-        message={blockedMessage({
-          strategyTaskBlocked: true,
-          strategyTaskBlockedText: null,
-        })}
-        streaming={false}
-        projectId="proj-1"
-        conversationId="conv-1"
-        isLast
-        onSubmitQuestionForm={vi.fn()}
-      />,
-    );
-
-    fillAudience(container);
-    expect(
-      (screen.getByRole('button', { name: QUESTION_FORM_SUBMIT_LABEL }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-    expect(screen.getByTestId('question-form-blocked-notice').textContent).toBe(
-      'This task was stopped by the strategy quality gate, so this form can no longer be submitted. Start a new request to continue.',
-    );
-  });
-
-  it('keeps an unblocked form submittable (control)', () => {
+  it('keeps a form on a succeeded turn submittable (control)', () => {
     const onSubmitQuestionForm = vi.fn();
     const { container } = render(
       <AssistantMessage
@@ -142,7 +111,6 @@ describe('AssistantMessage blocked strategy task', () => {
     );
 
     fillAudience(container);
-    expect(screen.queryByTestId('question-form-blocked-notice')).toBeNull();
     const send = screen.getByRole('button', { name: QUESTION_FORM_SUBMIT_LABEL }) as HTMLButtonElement;
     expect(send.disabled).toBe(false);
     fireEvent.click(send);

@@ -332,6 +332,8 @@ function persistedRunStatus(runId: string): ChatRunStatusResponse | null {
         executionMode: 'simple',
         activeRunId: taskTail.runId,
         terminal: true,
+        deliverableWritten: false,
+        autoRoundCount: 0,
       },
     } : {}),
   };

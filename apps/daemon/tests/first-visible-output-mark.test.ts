@@ -153,10 +153,10 @@ describe('first_visible_output is stamped at emission, not at first token', () =
   it('reports the close-time wait when the strategy releases the reply at finish', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-fvo-strategy-'));
     // Every visible byte of this reply is withheld until close. The machine
-    // block is suppressed by design (it is protocol, not prose) and the only
+    // block is stripped by design (it is protocol, not prose) and the only
     // remaining text is `<o` — a prefix of a reserved opening tag, which the
     // protocol must hold because the next chunk could complete
-    // `<open-design-plan-contract`. The next chunk never comes, so `finish()`
+    // `<open-design-runtime-state`. The next chunk never comes, so `finish()`
     // is what finally rules it out and releases it.
     const bin = await writeFakeOpencode(binDir, 'opencode-strategy-tail', `
   emit({ type: 'text', part: { type: 'text', text: [
@@ -225,17 +225,14 @@ describe('first_visible_output is stamped at emission, not at first token', () =
     if (options.strategyRollout === 'active') {
       expect(created.pluginId).toBe('od-next-strategy');
       expect(created.strategyTask).toBeDefined();
-      // The deliberately incomplete state still releases the withheld tail,
-      // but the strategy gate rejects completion before the Run is finalized.
-      expect(run).toMatchObject({
-        status: 'failed',
-        exitCode: 0,
-        errorCode: 'OD_NEXT_TASK_BLOCKED',
-        strategyTask: {
-          outcome: 'blocked',
-          blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_invalid_schema'] },
-        },
-      });
+      // The withheld tail is released at close and the Run ends as it did —
+      // nothing validates the machine block any more. A text-only round is
+      // followed by the automatic build round, so the task is either still
+      // running that round or already settled by the time the status is read.
+      expect(run).toMatchObject({ status: 'succeeded', exitCode: 0 });
+      expect(run.errorCode ?? null).toBeNull();
+      expect(['running', 'completed']).toContain(run.strategyTask?.outcome);
+      expect(run.strategyTask?.blockedContext).toBeUndefined();
     } else {
       expect(created.strategyTask).toBeUndefined();
       expect(run.status).toBe('succeeded');

@@ -754,6 +754,27 @@ export interface ReplaceProjectWorkingDirResponse {
   entryFile: string | null;
 }
 
+/**
+ * `PUT /api/projects/:id/entry-file` — set or clear the file the preview,
+ * exports, shares and external agents open for this project.
+ *
+ * The entry is a project attribute, not a condition a Run has to satisfy:
+ * a Run that writes no entry still completes, and the user (or the agent on
+ * the next round) points at one afterwards. `entryFile` is a project-relative
+ * file path that must exist; `null` clears the recorded entry so the daemon
+ * falls back to inferring one (`index.html`, then a single root-level html
+ * file, then a single file matching the project kind).
+ */
+export interface ProjectEntryFileUpdateRequest {
+  entryFile: string | null;
+}
+
+export interface ProjectEntryFileUpdateResponse {
+  project: Project;
+  /** The recorded entry after the update; null when none is recorded. */
+  entryFile: string | null;
+}
+
 export interface ConversationsResponse {
   conversations: Conversation[];
 }

@@ -64,27 +64,29 @@ function blockedProjection(
     executionMode: null,
     activeRunId: 'run-1',
     terminal: true,
+    deliverableWritten: false,
+    autoRoundCount: 0,
     ...overrides,
   } as StrategyTaskProjectionV2;
 }
 
 describe('strategyBlockedMessageFields', () => {
-  it('derives message termination fields from a blocked terminal projection', () => {
+  it('derives the blocked stamp from a blocked terminal projection', () => {
     expect(strategyBlockedMessageFields(blockedProjection({
       blockedContext: {
-        reasonCodes: ['od_next_machine_protocol_missing'],
-        visibleText: ' 这轮回复没有携带机器协议块。 ',
+        reasonCodes: ['od_next_physical_run_interrupted'],
+        visibleText: ' 这一轮在写完首页前停了。 ',
       },
     }))).toEqual({
       strategyTaskBlocked: true,
-      strategyTaskBlockedText: '这轮回复没有携带机器协议块。',
+      strategyTaskBlockedText: '这一轮在写完首页前停了。',
     });
   });
 
-  it('keeps the blocked flag with a null text when the gate left no visible text', () => {
+  it('keeps the blocked flag with a null text when the verdict carried no visible text', () => {
     expect(strategyBlockedMessageFields(blockedProjection({
       blockedContext: {
-        reasonCodes: ['od_next_native_session_continuity_unproven'],
+        reasonCodes: ['od_next_physical_run_interrupted'],
         visibleText: null,
       },
     }))).toEqual({ strategyTaskBlocked: true, strategyTaskBlockedText: null });
@@ -107,12 +109,28 @@ describe('strategyBlockedMessageFields', () => {
 });
 
 describe('strategySettledMessageFields', () => {
-  it('stamps a delivered flag for a completed task', () => {
+  it('stamps a delivered flag for a completed task whose round wrote a deliverable', () => {
     expect(strategySettledMessageFields(blockedProjection({
       outcome: 'completed',
       terminal: true,
       blockedContext: undefined,
+      deliverableWritten: true,
+      settlementReason: 'deliverable_changed',
+      autoRoundCount: 1,
     }))).toEqual({ strategyTaskDelivered: true });
+  });
+
+  it('stamps nothing for a completed task that delivered nothing', () => {
+    for (const settlementReason of ['question', 'todo_unfinished', 'text_only', 'non_design'] as const) {
+      expect(strategySettledMessageFields(blockedProjection({
+        outcome: 'completed',
+        terminal: true,
+        blockedContext: undefined,
+        deliverableWritten: false,
+        settlementReason,
+        autoRoundCount: settlementReason === 'question' ? 0 : 1,
+      }))).toBeNull();
+    }
   });
 
   it('keeps the blocked stamp taking precedence', () => {

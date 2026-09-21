@@ -41,7 +41,6 @@ import type {
   StrategyTaskProjectionV2,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { OD_NEXT_AGENT_DECLARED_BLOCK_REASON } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
 
 /**
@@ -82,9 +81,11 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
 import { BackoffController } from '../lib/backoff';
 import { parseSseFrame } from './sse';
 import {
-  summarizeArtifactsForTranscript,
-  type PersistedArtifactFileRef,
-} from '../artifacts/strip';
+  buildDaemonPriorTranscript,
+  buildDaemonTranscript,
+  latestUserPromptFromHistory,
+  sanitizePriorAssistantTurnForTranscript,
+} from '@open-design/contracts';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
 import { setChatCorrelation } from '../observability/chat-context';
 import { chatSurfaceRunEnded, chatSurfaceRunStarted } from '../observability/chat-health';
@@ -119,226 +120,16 @@ function closeChatRunCorrelation(): void {
   setChatCorrelation({ run_id: undefined });
 }
 
-const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
-const LARGE_TOOL_RESULT_CHARS = 8_000;
-const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
 const RUN_CREATE_AUTHORITY_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
-const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
-const API_MODE_AGENT_IDS = new Set([
-  'anthropic-api',
-  'openai-api',
-  'azure-openai-api',
-  'google-gemini-api',
-  'ollama-cloud-api',
-  'senseaudio-api',
-  'aihubmix-api',
-  'bedrock-api',
-]);
 
-export function latestUserPromptFromHistory(history: ChatMessage[]): string {
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    const message = history[i];
-    if (message?.role === 'user') return message.content;
-  }
-  return '';
-}
-
-function truncateForTranscript(content: string): string {
-  if (content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
-  const omitted = content.length - MAX_TRANSCRIPT_MESSAGE_CHARS;
-  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[OpenDesign truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
-}
-
-function escapeTranscriptRoleDelimiters(content: string): string {
-  return content.replace(/^(## (?:user|assistant)[ \t]*)(\r?)$/gm, '\\$1$2');
-}
-
-function compactInput(input: unknown): string {
-  if (typeof input === 'string') return input;
-  try {
-    return JSON.stringify(input);
-  } catch {
-    return String(input);
-  }
-}
-
-function buildPriorRunContextWarning(history: ChatMessage[]): string | null {
-  let highestInputTokens = 0;
-  let largeToolResults = 0;
-  let sawAgentBrowserCoreDump = false;
-
-  for (const message of history) {
-    for (const event of message.events ?? []) {
-      if (event.kind === 'usage' && typeof event.inputTokens === 'number') {
-        highestInputTokens = Math.max(highestInputTokens, event.inputTokens);
-      }
-      if (event.kind === 'tool_result') {
-        if (event.content.length > LARGE_TOOL_RESULT_CHARS) largeToolResults += 1;
-        if (
-          event.content.includes('agent-browser skills get core') ||
-          event.content.includes('Agent Browser Core') ||
-          event.content.includes('name: core')
-        ) {
-          sawAgentBrowserCoreDump = true;
-        }
-      }
-      if (event.kind === 'tool_use') {
-        const input = compactInput(event.input);
-        if (input.includes('agent-browser skills get core')) {
-          sawAgentBrowserCoreDump = true;
-        }
-      }
-    }
-  }
-
-  const notes: string[] = [];
-  if (highestInputTokens >= HIGH_INPUT_TOKEN_WARNING_THRESHOLD) {
-    notes.push(`a previous run reported ${highestInputTokens} input tokens`);
-  }
-  if (largeToolResults > 0) {
-    notes.push(`${largeToolResults} large prior tool result${largeToolResults === 1 ? '' : 's'} exist only in persisted event history`);
-  }
-  if (sawAgentBrowserCoreDump) {
-    notes.push('agent-browser documentation output was seen earlier; do not replay it into this turn');
-  }
-  if (notes.length === 0) return null;
-
-  return [
-    '## context warning',
-    `OpenDesign detected ${notes.join(', ')}.`,
-    'Keep this turn compact: summarize prior tool output, read large references from temp files, and quote only task-relevant lines.',
-  ].join('\n');
-}
-
-function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): ChatMessage[] {
-  if (!targetAgentId) return history;
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    const message = history[i];
-    if (
-      message?.role === 'assistant' &&
-      message.agentId &&
-      !isSameTranscriptAgentFamily(message.agentId, targetAgentId)
-    ) {
-      return history.slice(i + 1);
-    }
-  }
-  return history;
-}
-
-function isSameTranscriptAgentFamily(agentId: string, targetAgentId: string): boolean {
-  if (agentId === targetAgentId) return true;
-  if (targetAgentId !== BYOK_OPENCODE_AGENT_ID) return false;
-  return API_MODE_AGENT_IDS.has(agentId);
-}
-
-// Strip OD-specific markup that the agent emitted on a prior turn but
-// that the model would otherwise pattern-match as a template to echo.
-// Today this is `<question-form>` blocks (and the `<ask-question>` alias the
-// UI parser and the daemon open-tag matcher both accept) and the ```json
-// fenced schemas
-// some models (GPT-OSS-120B Medium, Gemini 3.5 Flash) emit alongside
-// them — leaving those literal in the transcript causes weak/medium
-// plain-stream models to re-emit an identical form on the user's
-// follow-up turn, looking like the discovery form loop never breaks
-// (see PR #3157 form-loop investigation). If we only scrubbed the canonical
-// tag, an alias-form turn would replay verbatim and re-trigger that loop.
-//
-// User content is preserved verbatim — a user message that legitimately
-// quotes `<question-form>` (e.g. discussing the markup with the agent)
-// must not be mangled.
-export function sanitizePriorAssistantTurnForTranscript(
-  content: string,
-  persistedArtifactFiles: ReadonlyArray<PersistedArtifactFileRef> = [],
-): string {
-  let sanitized = content.replace(
-    // `\1` backreference keeps the open/close tag names matched so we never
-    // splice across a `<question-form>…</ask-question>` mismatch.
-    /<(question-form|ask-question)\b[^>]*>[\s\S]*?<\/\1>/g,
-    '[question-form was emitted here on a prior turn; the user already answered, see their reply below.]',
-  );
-  // Strip ```json (or plain ```) fenced blocks whose body matches the
-  // form schema shape — `"questions": [` is the strongest tell. A
-  // generic JSON snippet without that key (e.g. an API response the
-  // agent shared) is left intact.
-  sanitized = sanitized.replace(
-    /```(?:json)?\s*\n([\s\S]*?)\n```/g,
-    (match, body: string) => {
-      if (/"questions"\s*:\s*\[/.test(body)) {
-        return '[form schema was echoed here on a prior turn; stripped to avoid a loop.]';
-      }
-      return match;
-    },
-  );
-  // Replace prior-turn `<artifact>` HTML with a one-line summary — but ONLY
-  // for artifacts whose save to the project files is confirmed by the
-  // message's producedFiles record. persistArtifact has refusal and
-  // write-failure branches; on those paths the transcript copy is the only
-  // surviving artifact body, so an unconfirmed block stays verbatim (the
-  // 12K truncation below still bounds it) and a follow-up turn can repair it.
-  // For confirmed saves the agent reads/edits the file from disk, never from
-  // this transcript copy, so re-sending the whole document each turn is pure
-  // waste — the summary keeps identifier/title/type plus the saved file name.
-  // Runs before truncateForTranscript so the summarized message no longer
-  // trips the 12K cap. Uses markdown-aware detection so a literal
-  // `<artifact>` recited in a code fence survives.
-  sanitized = summarizeArtifactsForTranscript(sanitized, persistedArtifactFiles);
-  return sanitized;
-}
-
-// producedFiles → the persistence evidence summarizeArtifactsForTranscript
-// matches artifact blocks against. producedFiles is the whole per-turn file
-// diff — tool-written files included — so a name collision with an unrelated
-// same-turn file must not count as proof the <artifact> body was saved. Only
-// artifact-originated saves qualify: persistArtifact always writes an explicit
-// (non-inferred) manifest, whereas tool-written files surface with no manifest
-// or a daemon-inferred one (`metadata.inferred === true`). Within that
-// narrowed set, the manifest identifier is the strongest link (it survives
-// `-2`/`-3` collision renames); the file name is the fallback for artifact
-// saves whose manifest predates identifier metadata.
-function persistedArtifactFilesOf(message: ChatMessage): PersistedArtifactFileRef[] {
-  return (message.producedFiles ?? [])
-    .filter((file) => file.artifactManifest && file.artifactManifest.metadata?.inferred !== true)
-    .map((file) => {
-      const identifier = file.artifactManifest?.metadata?.identifier;
-      return {
-        name: file.name,
-        identifier: typeof identifier === 'string' && identifier ? identifier : undefined,
-      };
-    });
-}
-
-export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
-  const scopedHistory = scopeHistoryToAgent(history, targetAgentId);
-  const transcript = scopedHistory
-    .map((m) => {
-      const trimmed = m.content.trim();
-      const sanitized =
-        m.role === 'assistant'
-          ? sanitizePriorAssistantTurnForTranscript(trimmed, persistedArtifactFilesOf(m))
-          : trimmed;
-      return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized))}`;
-    })
-    .join('\n\n');
-  const warning = buildPriorRunContextWarning(scopedHistory);
-  return warning ? `${warning}\n\n${transcript}` : transcript;
-}
-
-/** Build only the turns before the latest user message without text subtraction. */
-export function buildDaemonPriorTranscript(
-  history: ChatMessage[],
-  targetAgentId?: string,
-): string {
-  let latestUserIndex = -1;
-  for (let index = history.length - 1; index >= 0; index -= 1) {
-    if (history[index]?.role === 'user') {
-      latestUserIndex = index;
-      break;
-    }
-  }
-  return latestUserIndex < 0
-    ? buildDaemonTranscript(history, targetAgentId)
-    : buildDaemonTranscript(history.slice(0, latestUserIndex), targetAgentId);
-}
+// The transcript builder lives in `@open-design/contracts` (chat-transcript.ts)
+// so the daemon assembles the same history for the rounds it starts itself.
+export {
+  buildDaemonPriorTranscript,
+  buildDaemonTranscript,
+  latestUserPromptFromHistory,
+  sanitizePriorAssistantTurnForTranscript,
+};
 
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
@@ -590,6 +381,8 @@ export interface DaemonStreamOptions {
   onRunStatus?: (status: ChatRunStatus) => void;
   /** Authoritative project-relative artifacts created or modified by the run. */
   onArtifactPaths?: (paths: string[]) => void;
+  /** The daemon's verdict on the project's entry after a succeeded run; see RunDeliverableFacts. */
+  onDeliverableFacts?: (facts: RunDeliverableFacts) => void;
   onRunEventId?: (eventId: string) => void;
   /**
    * 这一轮**被谁取消了**,由 `POST /api/runs/:id/cancel` 的应答如实带回。
@@ -616,6 +409,22 @@ export interface DaemonStreamOptions {
   onStrategyTaskSettled?: (strategyTask: StrategyTaskProjectionV2) => void;
 }
 
+/**
+ * What a succeeded run left the project with, read off the terminal frame (or
+ * the status fallback that replaced it): whether one canonical entry now
+ * resolves, which file it is, and the files this run wrote. The files panel
+ * turns `validation === 'entry_missing'` with a non-empty `artifactPaths`
+ * into its missing-entry notice; nothing else is derived from it.
+ */
+export interface RunDeliverableFacts {
+  runId: string;
+  projectId: string | null;
+  valid: boolean | undefined;
+  validation: ChatRunStatusResponse['deliverableValidation'] | undefined;
+  entryFile: string | undefined;
+  artifactPaths: string[];
+}
+
 export interface DaemonReattachOptions {
   /** Runtime that owns the reattached run, when persisted with its message. */
   agentId?: string;
@@ -629,6 +438,7 @@ export interface DaemonReattachOptions {
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
   onArtifactPaths?: (paths: string[]) => void;
+  onDeliverableFacts?: (facts: RunDeliverableFacts) => void;
   onRunEventId?: (eventId: string) => void;
   /**
    * 这一轮**被谁取消了**,由 `POST /api/runs/:id/cancel` 的应答如实带回。
@@ -694,52 +504,27 @@ export function createGenericDaemonDisconnectError(): Error & { code: string } {
 }
 
 /**
- * The DIAGNOSTIC sentence, not the card.
+ * The DIAGNOSTIC sentence for a blocked strategy task, not the card.
  *
- * What the user reads is now localized copy, resolved from the reason code this
- * error carries: `runtime/amr-guidance.ts` maps the four Runtime State issue
- * codes to `chat.runError.title.agentReplyIncomplete` +
- * `chat.runError.agentReplyIncompleteMessage`, present in all 19 locales.
- * Before that mapping existed this failure fell through to the generic
- * fallback, so the card said "the task failed" and nothing else while the user
- * was looking at their answers and a complete plan.
- *
- * This string stays English on purpose: it lands in the collapsible diagnostic
- * area and in `error.message`, which is engineering-facing surface. It is
- * written to say what the daemon actually refused, without implying the user
- * or the reply was at fault.
- *
- * ⚠️ THE CARD COPY IS STILL A DRAFT — W41's, not product's.
- * `docs/design/run-errors/error-ux-design.md` has no cell for "the agent
- * answered and Open Design could not record the answer". S21, the nearest,
- * covers an empty / malformed / looping model response, which this is not: the
- * reply is complete, readable, and already on screen. Product should rewrite
- * the two locale strings; the routing and the reason codes are settled.
+ * Since the two-round design a task is `blocked` for one reason only: its
+ * physical Run failed before the round settled (the daemon stamps
+ * `od_next_physical_run_interrupted`). The Run's own error frame normally
+ * arrives first and names the cause; this sentence is what the error carries
+ * when the stream lost that frame and the verdict is read off the run-status
+ * response instead. It stays English on purpose: it lands in `error.message`
+ * and the diagnostics export, which are engineering-facing. What the user
+ * reads is the localized card `runtime/amr-guidance.ts` resolves from the
+ * reason code.
  */
 export const STRATEGY_TASK_BLOCKED_MESSAGE =
-  "The agent's reply did not carry the machine-readable state Open Design needs "
-  + 'to record this step, so the task could not continue.';
+  'The agent process ended before this round settled, so the task stopped here.';
 
 /**
- * Hand the user the daemon's OWN verdict on a blocked strategy task.
- *
- * The blocked projection already says why it blocked — `blockedContext`
- * names the gate that refused the turn — and none of it used to leave this
- * function. The user got one subject-less sentence, the card's raw-error view
- * showed `error_code: n/a`, and `resolveRunFailureUi` had nothing to match on,
- * so every gate in the strategy contract rendered the same anonymous card.
- *
- * The turn most often behind it: the user answers a question form, their
- * answers go in, the agent replies — and the reply carries no Runtime State
- * block, so the clarification stage lands terminal-`blocked`. Refusing it is
- * right (the stage admits only `plan_ready`, which needs a Plan Contract the
- * reply never had, `blocked`, or `canceled`), but the user is looking at their
- * answers and a full prose plan while being told, without elaboration, that
- * nothing could continue.
+ * Hand the user the daemon's own verdict on a blocked strategy task.
  *
  * The primary reason code rides on `code` — the same channel every other
  * structured daemon failure uses — so the diagnostics text, the failure-UI
- * resolver, and the error analytics can all name the gate. A projection from a
+ * resolver, and the error analytics can all name it. A projection from a
  * daemon too old to send `blockedContext` still fails, just anonymously.
  */
 export function createStrategyTaskBlockedError(
@@ -1057,6 +842,7 @@ export async function streamViaDaemon({
   appliedPluginSnapshotId,
   mediaExecution,
   titleGeneration,
+  onDeliverableFacts,
   locale,
   workspaceContext,
   initialLastEventId,
@@ -1187,6 +973,7 @@ export async function streamViaDaemon({
       initialLastEventId,
       onRunStatus: emitRunStatus,
       onArtifactPaths,
+      onDeliverableFacts,
       onRunEventId,
       onCancelOrigin,
       projectId,
@@ -1798,6 +1585,7 @@ async function consumeDaemonPhysicalRun({
   initialLastEventId,
   onRunStatus,
   onArtifactPaths,
+  onDeliverableFacts,
   onRunEventId,
   onCancelOrigin,
   projectId,
@@ -1807,6 +1595,10 @@ async function consumeDaemonPhysicalRun({
   onStrategyTaskSettled,
 }: DaemonReattachOptions): Promise<DaemonPhysicalRunResult | void> {
   let acc = '';
+  // The terminal frame's (or fallback status's) verdict on the project entry,
+  // reported once with the run's written files when the run succeeded.
+  let endDeliverable: Pick<RunDeliverableFacts, 'valid' | 'validation' | 'entryFile'> | undefined;
+  let endArtifactPaths: string[] = [];
   /*
    * 流水尾部那一行「正在重试」此刻是不是挂着的。
    *
@@ -1863,7 +1655,20 @@ async function consumeDaemonPhysicalRun({
     const paths = value.filter(
       (item): item is string => typeof item === 'string' && item.trim().length > 0,
     );
-    onArtifactPaths?.([...new Set(paths)]);
+    endArtifactPaths = [...new Set(paths)];
+    onArtifactPaths?.(endArtifactPaths);
+  };
+  const reportDeliverable = (source: {
+    deliverableValid?: boolean | undefined;
+    deliverableValidation?: ChatRunStatusResponse['deliverableValidation'] | undefined;
+    deliverableEntryFile?: string | undefined;
+  }) => {
+    if (typeof source.deliverableValid !== 'boolean' && typeof source.deliverableValidation !== 'string') return;
+    endDeliverable = {
+      valid: source.deliverableValid,
+      validation: source.deliverableValidation,
+      entryFile: typeof source.deliverableEntryFile === 'string' ? source.deliverableEntryFile : undefined,
+    };
   };
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
@@ -2199,6 +2004,7 @@ async function consumeDaemonPhysicalRun({
             if (typeof event.data.retryable === 'boolean') endRetryable = event.data.retryable;
             reportArtifactCount(event.data.artifactCount);
             reportArtifactPaths(event.data.artifactPaths);
+            reportDeliverable(event.data);
             if (event.data.strategyTask) endStrategyTask = event.data.strategyTask;
             // `serverDeclaredSuccess` records whether the server explicitly
             // set `status: 'succeeded'` in the end payload — the local
@@ -2229,6 +2035,7 @@ async function consumeDaemonPhysicalRun({
           if (typeof status.retryable === 'boolean') endRetryable = status.retryable;
           reportArtifactCount(status.artifactCount);
           reportArtifactPaths(status.artifactPaths);
+          reportDeliverable(status);
           if (status.strategyTask) endStrategyTask = status.strategyTask;
           break;
         }
@@ -2274,6 +2081,7 @@ async function consumeDaemonPhysicalRun({
         if (typeof status.retryable === 'boolean') endRetryable = status.retryable;
         reportArtifactCount(status.artifactCount);
         reportArtifactPaths(status.artifactPaths);
+        reportDeliverable(status);
         if (status.strategyTask) endStrategyTask = status.strategyTask;
         // 拿到终态就撤掉重连行。`onRunStatus` 不在这里发:合并 origin/main 后
         // 它挪到了 strategy task 收敛之后统一发一次(见下方 `onRunStatus?.(endStatus)`),
@@ -2308,79 +2116,14 @@ async function consumeDaemonPhysicalRun({
       if (endStrategyTask.outcome === 'canceled') {
         endStatus = 'canceled';
       } else if (endStrategyTask.outcome === 'blocked') {
-        // A blocked strategy verdict does not retroactively unmake a Run that
-        // already succeeded AND delivered. Observed across every runtime: the
-        // agent writes the canonical deliverable correctly, the daemon's own
-        // `validateRunDeliverable` resolves it, and then the turn is refused
-        // over a machine-block defect. Remapping that to `failed` hid the file
-        // the user asked for behind a generic error card and suppressed the
-        // next-step actions that reach it.
-        //
-        // The strategy contract is explicit that a post-claim failure keeps the
-        // current Run's own result rather than inventing a new one, so only a
-        // Run that did NOT succeed-and-deliver falls through to the failure
-        // branch. Both fields are filesystem-backed — never the agent's own
-        // assertion — and an unreachable daemon fails closed to the previous
-        // behaviour.
-        //
-        // `projectDeliverableValid` is the one that answers the question this
-        // branch is actually asking. `deliverableValid` asks "did THIS run
-        // write the entry", which the strategy contract needs for accepting a
-        // completion claim but which is `false` for the most ordinary shape of
-        // this failure: the user says "继续", the agent re-checks work an
-        // earlier turn already finished, correctly rewrites nothing, and the
-        // turn is refused over a machine-block defect. That put a red card over
-        // a finished 16-page deck the user could see rendered beside it. The
-        // OR keeps the stricter field meaningful on its own — a run that did
-        // deliver has obviously delivered.
-        //
-        // The looser field additionally requires that this turn actually SAID
-        // something. It credits a file an EARLIER turn wrote, and that only
-        // means "nothing was lost here" if the user got a reply to go with it.
-        // Without the guard, a turn that returned a bare newline into a project
-        // that already holds a prototype would go silent too — which is the
-        // false-success half of this same conflation (#7564), and swapping one
-        // wrong answer for the other is not a fix. The stricter field keeps its
-        // existing behaviour: a run that wrote the entry delivered, prose or no
-        // prose.
-        const blockedRunStatus = endStatus === 'succeeded'
-          ? await fetchChatRunStatus(runId, workspaceContext)
-          : null;
-        const deliveredDespiteBlock = blockedRunStatus !== null
-          && (
-            (blockedRunStatus.projectDeliverableValid === true
-              && acc.trim().length > 0)
-            || blockedRunStatus.deliverableValid === true
-          );
-        // A block the agent declared on itself is not a failure to report.
-        // Asked for a prototype with nothing to build on, the agent answers in
-        // the chat — "the requirement was skipped, so there is no runnable plan
-        // this round" — and that reply is the turn's outcome. Raising a run
-        // error on top of it restated the same sentence inside a red "task
-        // execution failed" card, so a turn that had simply asked for more
-        // detail read as a crash (OPEND-2565).
-        //
-        // Keyed on the reason code, NOT on the presence of visible text. Every
-        // other block is a gate the agent did not ask for — a missing Runtime
-        // State, an unresolvable deliverable, an unproven session — and the
-        // prose sitting next to it is the agent's ordinary reply ("sure, three
-        // pages, here is the plan"), not an account of the stop. Treating that
-        // as an explanation would hide a real protocol failure behind a
-        // cheerful sentence.
-        //
-        // Also requires a Run that reached the end on its own: a Run that
-        // failed keeps its error even when the agent narrated the failure,
-        // because narration is not a substitute for the failure the user has
-        // to act on.
-        const agentDeclaredBlock = endStrategyTask.blockedContext?.reasonCodes
-          .includes(OD_NEXT_AGENT_DECLARED_BLOCK_REASON) === true;
-        const explainedToUser = endStatus === 'succeeded'
-          && agentDeclaredBlock
-          && (endStrategyTask.blockedContext?.visibleText?.trim().length ?? 0) > 0;
-        if (!deliveredDespiteBlock && !explainedToUser) {
-          endStatus = 'failed';
-          pendingStructuredError ??= createStrategyTaskBlockedError(endStrategyTask);
-        }
+        // A task blocks only when its physical Run failed before the round
+        // settled, so the turn is a failure whatever the stream said. The
+        // Run's own error frame, when the stream carried it, is already the
+        // pending error and names the cause; the task's reason code fills in
+        // only when that frame was lost and the verdict came from the
+        // run-status response.
+        endStatus = 'failed';
+        pendingStructuredError ??= createStrategyTaskBlockedError(endStrategyTask);
       } else if (endStrategyTask.outcome === 'completed') {
         endStatus = 'succeeded';
         serverDeclaredSuccess = true;
@@ -2465,6 +2208,14 @@ async function consumeDaemonPhysicalRun({
         conversationId: conversationId!,
         result: 'success',
         artifactCount: resolvedArtifactCount,
+      });
+    }
+    if (endDeliverable && endStatus === 'succeeded') {
+      onDeliverableFacts?.({
+        runId,
+        projectId: projectId ?? null,
+        ...endDeliverable,
+        artifactPaths: endArtifactPaths,
       });
     }
     handlers.onDone(acc);

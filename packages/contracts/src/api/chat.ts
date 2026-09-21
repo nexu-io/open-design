@@ -1380,14 +1380,14 @@ export interface ChatMessage {
   /** Number of leading normalized events owned by completed predecessor Runs. */
   strategyTaskPrefixEventCount?: number;
   /**
-   * True once the daemon's OD Next protocol gate settled this turn's strategy
-   * task as `blocked` — a sticky terminal verdict. Question forms rendered by
-   * this turn must stop accepting submissions (the daemon rejects any further
-   * continuation with 409 STRATEGY_TASK_STATE_MISMATCH).
+   * True once this turn's strategy task ended `blocked`: its physical Run
+   * failed before the round settled. The turn already carries the Run's own
+   * failure; this stamp only records the task-level fact. It does not gate
+   * anything — a question form this turn rendered stays answerable, and the
+   * answer, like any follow-up, opens a new task.
    */
   strategyTaskBlocked?: boolean;
-  /** Agent-visible text persisted with the blocked verdict; preferred notice
-   *  copy when present (null when the gate left no visible text). */
+  /** Agent-visible text persisted with the blocked verdict, when any. */
   strategyTaskBlockedText?: string | null;
   /**
    * True once this turn's strategy task settled `completed` — the daemon

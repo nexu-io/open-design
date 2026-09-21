@@ -207,13 +207,14 @@ describe('buildStructuredMainRunObservationV1', () => {
   });
 
   it.each([
-    ['request', 'bundle', 'open-design.od-next-prompt-bundle/v2'],
-    ['clarification', 'turn', 'open-design.od-next-request-turn/v1'],
-    ['contract_repair', 'turn', 'open-design.od-next-request-turn/v1'],
-    ['production', 'turn', 'open-design.od-next-request-turn/v1'],
+    ['request', 'bundle', 'open-design.od-next-prompt-bundle/v2', 0],
+    ['clarification', 'turn', 'open-design.od-next-request-turn/v1', 1],
+    ['contract_repair', 'turn', 'open-design.od-next-request-turn/v1', 2],
+    ['production', 'turn', 'open-design.od-next-request-turn/v1', 1],
+    ['production', 'bundle', 'open-design.od-next-prompt-bundle/v2', 1],
   ] as const)(
-    'uses the verified raw inner-text identity for the %s hostComposed boundary',
-    (stage, kind, promptSchema) => {
+    'uses the verified raw inner-text identity for the %s %s hostComposed boundary',
+    (stage, kind, promptSchema, taskRunIndex) => {
       const finalText = `${stage} /Users/alice/private token=sk-test-1234567890123456789012`;
       const sha256 = createHash('sha256').update(finalText, 'utf8').digest('hex');
       const promptTelemetry = bindOdNextExactSendPromptEvidence({
@@ -230,12 +231,13 @@ describe('buildStructuredMainRunObservationV1', () => {
           sha256,
         },
         stage,
+        taskRunIndex,
       });
 
       const observation = buildStructuredMainRunObservationV1({
         taskExecutionId: 'task-exact',
-        runId: `run-${stage}`,
-        taskRunIndex: stage === 'request' ? 0 : 1,
+        runId: `run-${stage}-${kind}`,
+        taskRunIndex,
         stage,
         status: 'succeeded',
         promptTelemetry,

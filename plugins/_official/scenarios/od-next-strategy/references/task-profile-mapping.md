@@ -1,4 +1,4 @@
-# OD Next Task Profile Mapping v2.0.0
+# OD Next Task Profile Mapping v2.0.1
 
 Use explicit project metadata before interpreting free-form text.
 
@@ -10,8 +10,8 @@ Use explicit project metadata before interpreting free-form text.
 | `hyperframes` | `video` with HyperFrames metadata | `../assets/task-profiles/hyperframes.md` | active |
 
 If metadata cannot identify one profile reliably, use task type `generic` when
-the generic contract is sufficient. Otherwise report blocked with the missing
-mapping fact. Never select the nearest specialist profile by guesswork.
+the generic rules are sufficient. Otherwise say in prose which mapping fact is
+missing. Never select the nearest specialist profile by guesswork.
 
 Content state describes packaged profile readiness only. It does not activate
 the scenario or override daemon rollout policy.

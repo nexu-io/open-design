@@ -665,6 +665,30 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
     expect(onProjectChangeMock).not.toHaveBeenCalled();
   });
 
+  it('propagates a changed entry file so the ENTRY mark and preview follow without a reload', async () => {
+    // The daemon pushes the same thin signal when the entry attribute moves
+    // (set by hand or by `od project entry`, recorded by a delivering Run,
+    // carried by a rename, cleared by a delete). Name and settings are equal,
+    // so only the entry distinguishes the re-fetched record.
+    mockedGetProject.mockResolvedValue({
+      ...project,
+      metadata: { ...(project.metadata ?? { kind: 'prototype' }), entryFile: 'screens/start.html' },
+      updatedAt: 456,
+    });
+
+    renderProjectView();
+    dispatchProjectEvent({ type: 'project-metadata-changed', projectId: project.id });
+
+    await waitFor(() => {
+      expect(onProjectChangeMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'project-1',
+          metadata: expect.objectContaining({ entryFile: 'screens/start.html' }),
+        }),
+      );
+    });
+  });
+
   it('does not propagate a newer placeholder over the catalog title after metadata invalidation', async () => {
     const catalogProject = {
       ...project,

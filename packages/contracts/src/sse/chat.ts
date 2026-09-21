@@ -1,6 +1,7 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
 import type {
   AgentEventPayloadTruncation,
+  ChatRunStatusResponse,
   RunFailureAction,
   RunFailureCategory,
   RunFailureDetail,
@@ -166,6 +167,15 @@ export interface ChatSseEndPayload {
   failureAction?: RunFailureAction | null;
   retryable?: boolean | null;
   strategyTask?: StrategyTaskProjectionV2;
+  /** Whether this Run left the project with a resolvable canonical entry, and
+   *  which file it is. Carried on the terminal frame so the files panel can
+   *  say "this round wrote these files but none opens as the entry" without
+   *  a status refetch. Mirror ChatRunStatusResponse.deliverableValid /
+   *  deliverableValidation / deliverableEntryFile; absent from older daemons
+   *  and from Runs the daemon could not inspect. */
+  deliverableValid?: boolean;
+  deliverableValidation?: ChatRunStatusResponse['deliverableValidation'];
+  deliverableEntryFile?: string;
 }
 
 export type DaemonAgentPayload =

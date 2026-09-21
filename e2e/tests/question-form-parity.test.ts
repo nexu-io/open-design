@@ -11,14 +11,14 @@
  * parser once the two drift.
  *
  * They did drift, and the two answers are load-bearing against each other. The
- * OD Next coordinator blocks a `clarification_required` turn that rendered no
- * form (`od_next_clarification_form_missing`), settling the strategy task
- * terminal + blocked. When the web renders a form the daemon scored as absent,
- * the user is left filling in a live form belonging to an already-terminal
- * task, and submitting it returns 409 STRATEGY_TASK_STATE_MISMATCH. That is the
- * production report: an agent wrapped its form in a duplicate of its own open
- * tag, the web unwound to the inner form and rendered it, the daemon charged
- * the outer block as unrenderable and blocked the task.
+ * OD Next settlement reads the daemon detector first: a round that rendered a
+ * form settles its task as waiting on the user, and a round that did not
+ * (and wrote nothing) gets the one automatic build round. When the web renders
+ * a form the daemon scored as absent, the user is left filling in a form while
+ * the daemon has already started building without their answer. The original
+ * production report had the same shape under the older gate: an agent wrapped
+ * its form in a duplicate of its own open tag, the web unwound to the inner
+ * form and rendered it, the daemon charged the outer block as unrenderable.
  *
  * Each parser's own suite passed throughout, because neither owned the shared
  * corpus. This test does. It lives in `e2e/tests/` per the root `AGENTS.md`

@@ -110,13 +110,19 @@ const cases: ProductCase[] = [
     scenario: '未分类任务失败', code: 'AGENT_EXECUTION_FAILED',
     title: GENERIC_TITLE, body: GENERIC_BODY,
   },
+  // Reason codes the daemon no longer produces since the two-round design.
+  // Messages persisted before it still carry them, so they keep rendering —
+  // on the generic card, since the mechanism they described is gone.
   ...[
     'od_next_protocol_runtime_state_missing',
     'od_next_protocol_runtime_state_duplicate',
     'od_next_protocol_runtime_state_invalid_json',
     'od_next_protocol_runtime_state_invalid_schema',
+    'od_next_canonical_deliverable_invalid',
+    'od_next_clarification_repeated',
+    'STRATEGY_TASK_STATE_MISMATCH',
   ].map((code) => ({
-    scenario: `回复未记录：${code}`, code, title: GENERIC_TITLE, body: GENERIC_BODY,
+    scenario: `历史消息里的退役原因码：${code}`, code, title: GENERIC_TITLE, body: GENERIC_BODY,
   })),
   {
     scenario: '当前套餐不支持', code: 'AMR_TIER_UPGRADE_REQUIRED',

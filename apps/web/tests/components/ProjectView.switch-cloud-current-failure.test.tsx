@@ -395,6 +395,7 @@ describe('OPEND-3205 new send owns the current failure presentation', () => {
           },
           inputStage: 'production', outcome: 'blocked', route: 'full_plan',
           executionMode: 'simple', activeRunId: 'production-run', terminal: true,
+          deliverableWritten: false, autoRoundCount: 1,
         },
       } satisfies ChatRunStatusResponse;
     });

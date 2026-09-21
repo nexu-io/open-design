@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildWorkspacePermissions, buildWorkspaceSeatSummary, OD_NEXT_AGENT_DECLARED_BLOCK_REASON, type WorkspaceCollabContext } from '@open-design/contracts';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { ProjectView } from '../../src/components/ProjectView';
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import { I18nProvider } from '../../src/i18n';
@@ -47,7 +47,7 @@ vi.mock('../../src/components/workspace/TerminalViewer', () => ({ TerminalViewer
 
 const HTML = '<!doctype html><html><body><h1>Recovered result</h1></body></html>';
 const ARTIFACT = `<artifact identifier="result" type="text/html" title="Result">${HTML}</artifact>`;
-const MISSING_STATE = 'od_next_protocol_runtime_state_missing';
+const INTERRUPTED = 'od_next_physical_run_interrupted';
 const config: AppConfig = { mode: 'daemon', apiProtocol: 'openai', apiKey: '', baseUrl: '', model: '',
   agentId: 'opencode', skillId: null, designSystemId: null };
 let sequence = 0;
@@ -60,14 +60,13 @@ let releaseWrite: () => void;
 let writeGate: Promise<void>;
 let writeStarted: boolean;
 let messageWrites: ChatMessage[];
-let strategy: 'missing-state' | 'delivered' | 'agent-declared' | 'ordinary-delivery' | 'project-delivered';
+let strategy: 'interrupted' | 'delivered' | 'ordinary-delivery' | 'project-delivered';
 
 function strategyTask() {
   return { activeRunId: `run-${project.id}`, executionMode: null, inputStage: 'request', route: 'full_plan',
     outcome: 'blocked', terminal: true, taskExecutionId: `task-${project.id}`,
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
-    blockedContext: { reasonCodes: [strategy === 'agent-declared' ? OD_NEXT_AGENT_DECLARED_BLOCK_REASON : MISSING_STATE],
-      visibleText: strategy === 'agent-declared' ? 'The user has not supplied the required input.' : 'Fixture protocol gate explanation.' } };
+    blockedContext: { reasonCodes: [INTERRUPTED], visibleText: null } };
 }
 
 beforeEach(() => {
@@ -133,7 +132,7 @@ async function recover(kind: typeof strategy) {
     createdAt: 1000, startedAt: 1000, endedAt: 2000, runId: `run-${project.id}`, runStatus: 'failed',
     resultDeliveryState: 'delivery_failed', preTurnFileNames: [],
     events: [{ kind: 'thinking', text: 'Preparing the requested output.' }, { kind: 'text', text: ARTIFACT },
-      ...(kind === 'missing-state' ? [{ kind: 'status' as const, label: 'error', code: MISSING_STATE }] : [])],
+      ...(kind === 'interrupted' ? [{ kind: 'status' as const, label: 'error', code: INTERRUPTED }] : [])],
     ...(blocked ? { strategyTaskBlocked: true, strategyTaskExecutionId: `task-${project.id}`,
       strategyTaskBlockedText: strategyTask().blockedContext.visibleText } : {}) }];
   render(<I18nProvider initial="en"><ProjectView project={project}
@@ -158,13 +157,13 @@ async function recover(kind: typeof strategy) {
 
 describe('artifact recovery preserves the established strategy verdict contract (OPEND-3028)', () => {
   it('keeps the failed user turn after recovering HTML when physical success has no delivery proof', async () => {
-    const message = await recover('missing-state');
+    const message = await recover('interrupted');
     expect(message.strategyTaskBlocked).toBe(true);
-    expect(message.events).toContainEqual({ kind: 'status', label: 'error', code: MISSING_STATE });
+    expect(message.events).toContainEqual({ kind: 'status', label: 'error', code: INTERRUPTED });
     expect(message.runStatus).toBe('failed');
     expect(screen.getAllByText('Run failed').length).toBeGreaterThan(0);
   });
-  it.each(['delivered', 'agent-declared', 'ordinary-delivery', 'project-delivered'] as const)(
+  it.each(['delivered', 'ordinary-delivery', 'project-delivered'] as const)(
     'retains successful recovery for the existing %s exception', async (kind) => {
       const message = await recover(kind);
       expect(message.runStatus).toBe('succeeded');

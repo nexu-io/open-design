@@ -19,7 +19,9 @@ import {
   buildRunFinishedV4Aliases,
   deriveConfigureGlobals,
   harnessAnalyticsFromRolloutDecision,
-  odNextBlockedAnalyticsFromStrategyTask,
+  odNextAgentLaunchFromRunFacts,
+  odNextTaskIdentityAnalyticsFromStrategyTask,
+  odNextTaskSettlementAnalyticsFromStrategyTask,
   modelIdForTracking,
   sessionModeToTracking,
   type RunTaskLineageProps,
@@ -80,6 +82,7 @@ import {
   runFilesWrittenForRun,
   runAdmissionEvidenceForRun,
   runPreviewModuleCountForRun,
+  runSideEffectsForRun,
 } from '../runtimes/run-lifecycle-analytics.js';
 import { odNextRolloutAnalyticsProperties } from '../strategies/od-next/rollout-analytics.js';
 import type { AppliedPluginSnapshot } from '@open-design/contracts';
@@ -692,6 +695,11 @@ export function createRunAnalyticsLifecycle(
         // what `run_finished` and the crash-recovery replay both see, so stamping
         // it here is the only place this dimension has to be added.
         Object.assign(baseProps, harnessAnalyticsFromRolloutDecision(run.strategyRolloutDecision));
+        // The task row is created inside the Run claim, before this lifecycle
+        // starts, so the strategy package identity is already on the Run and
+        // both `run_created` and `run_finished` (which spreads these props)
+        // bucket under it.
+        Object.assign(baseProps, odNextTaskIdentityAnalyticsFromStrategyTask(run.strategyTask));
         Object.assign(baseProps, buildRunCreatedV4Aliases(baseProps, taskLineage));
         design.runs.setAnalyticsRecovery?.(run, {
           context: analyticsContext,
@@ -972,13 +980,29 @@ export function createRunAnalyticsLifecycle(
             : undefined;
           const finishedProperties: Record<string, unknown> = {
               ...baseProps,
-              // The gate that refused an OD Next turn. `result` above comes
-              // from the physical run status, and a refused turn normally exits
-              // 0 — so without this the whole class counted as `success` while
-              // the user was looking at a failure card. Read off the run's own
-              // terminal projection, the same object the SSE `end` payload and
-              // the failure card were built from, so the three cannot drift.
-              ...odNextBlockedAnalyticsFromStrategyTask(run.strategyTask),
+              // How the OD Next task stood when this Run ended: outcome,
+              // settlement reason, automatic-round count, the written-deliverable
+              // fact and every gate reason code behind a blocked task. `result`
+              // above comes from the physical run status, and a task can settle
+              // without delivering on a Run that exited 0 — so without these
+              // the whole class counted as `success` while the user was
+              // looking at an offer to continue. Read off the run's own
+              // projection, the same object the SSE `end` payload and the
+              // failure card were built from, so the three cannot drift. The
+              // package identity and the Run's own stage come from `baseProps`,
+              // captured at creation: by now the projection may already name
+              // the next round's stage.
+              ...odNextTaskSettlementAnalyticsFromStrategyTask(run.strategyTask),
+              ...(run.strategyTask
+                ? {
+                    od_next_agent_launch: odNextAgentLaunchFromRunFacts({
+                      status: status.status,
+                      firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
+                      toolCallSeen: runSideEffectsForRun(run).toolCallSeen,
+                      userVisibleOutputSeen: runSideEffectsForRun(run).userVisibleOutputSeen,
+                    }),
+                  }
+                : {}),
               design_system_id: run.designSystemId ?? undefined,
               design_system_digest: run.designSystemDigest ?? undefined,
               design_system_selection_source: run.designSystemSelectionSource ?? 'none',

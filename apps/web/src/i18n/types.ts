@@ -2908,13 +2908,12 @@ export interface Dict {
   'chat.runError.title.gitBashMissing': string;
   'chat.runError.title.cpuUnsupported': string;
   'chat.runError.title.cliSessionRefused': string;
-  'chat.runError.title.strategyTaskHalted': string;
-  'chat.runError.title.agentReplyIncomplete': string;
-  'chat.runError.title.noDeliverable': string;
-  'chat.runError.agentReplyIncompleteMessage': string;
-  'chat.runError.noDeliverableMessage': string;
-  'chat.runError.title.clarificationRepeated': string;
-  'chat.runError.clarificationRepeatedMessage': string;
+  'chat.runError.title.buildRoundSessionLost': string;
+  'chat.runError.title.roundInterrupted': string;
+  'chat.runError.title.roundSettlementFailed': string;
+  'chat.runError.title.taskRecordMismatch': string;
+  'chat.runError.title.attachmentsTooLarge': string;
+  'chat.runError.title.attachmentsChanged': string;
   'chat.runError.title.regionNotSupported': string;
   'chat.runError.title.clientEnvironment': string;
   'chat.runError.title.certificateFailure': string;
@@ -2964,7 +2963,12 @@ export interface Dict {
   'chat.runError.accountSuspendedMessage': string;
   'chat.runError.fallbackMessage': string;
   'chat.runError.cliSessionRefusedMessage': string;
-  'chat.runError.strategyTaskStateMismatchMessage': string;
+  'chat.runError.buildRoundSessionLostMessage': string;
+  'chat.runError.roundInterruptedMessage': string;
+  'chat.runError.roundSettlementFailedMessage': string;
+  'chat.runError.taskRecordMismatchMessage': string;
+  'chat.runError.attachmentsTooLargeMessage': string;
+  'chat.runError.attachmentsChangedMessage': string;
   'chat.runError.regionNotSupportedMessage': string;
   'chat.runError.clientEnvironmentMessage': string;
   'chat.runError.clientEnvironmentCause.certificate': string;
@@ -3761,6 +3765,14 @@ export interface Dict {
   'designFiles.rowMenu': string;
   'designFiles.openInTab': string;
   'designFiles.download': string;
+  'designFiles.entryMissingTitle': string;
+  'designFiles.entryMissingBody': string;
+  'designFiles.entryMissingMore': string;
+  'designFiles.entryMissingAsk': string;
+  'designFiles.entryMissingHint': string;
+  'designFiles.setAsEntry': string;
+  'designFiles.entryBadge': string;
+  'designFiles.entryRequestMessage': string;
   'designFiles.downloadSelected': string;
   'designFiles.deleteSelected': string;
   'designFiles.clearSelection': string;
@@ -4414,6 +4426,10 @@ export interface Dict {
   /** Run title while the last turn's question form is still unanswered (OPEND-2744). */
   'assistant.awaitingReplyLabel': string;
   'assistant.canceledLabel': string;
+  /** The turn was cut short because the daemon shut down or restarted, not by the user. */
+  'assistant.canceledByRestartLabel': string;
+  /** The turn was canceled and the daemon could not say by whom. */
+  'assistant.canceledNeutralLabel': string;
   'assistant.copyMarkdown': string;
   /**
    * 回合动作行那颗按钮的名字。**必须和 `chat.newSession` 同字** —— 聊天面板内
@@ -4612,7 +4628,6 @@ export interface Dict {
   'questions.tabLabel': string;
   'questions.banner': string;
   'questions.bannerAnswered': string;
-  'questions.strategyBlockedNotice': string;
   'questions.continue': string;
   'questions.generating': string;
   'questions.skipAll': string;

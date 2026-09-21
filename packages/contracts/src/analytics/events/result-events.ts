@@ -511,9 +511,55 @@ export interface RunCreatedProps extends RunTaskLineageProps {
    * common case.
    */
   od_next_blocked_reason_code?: string;
+  /**
+   * Identity of the OD Next strategy package the Run's task was frozen on,
+   * read off the task row and therefore the same values the Langfuse task
+   * trace carries. Present on every Run an OD Next task owns — the row exists
+   * before `run_created` fires — and absent on the ordinary path, so a query
+   * can bucket by strategy version without a join.
+   */
+  od_next_strategy_version?: string;
+  od_next_strategy_package_hash?: string;
+  /** Which round of its task this Run was (`request` plans, `production` builds). */
+  od_next_task_stage?: string;
 }
 
-export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
+/**
+ * How an OD Next task settled, as seen from the Run that ended. All values are
+ * low-cardinality codes the daemon produced itself; none carries user content.
+ */
+export interface RunOdNextSettlementProps {
+  /** The task's outcome when this Run ended; `running` while a next round is claimed. */
+  od_next_task_outcome?: string;
+  /**
+   * Which settlement rule ended a `completed` task: `question`,
+   * `deliverable_changed`, `non_design`, `no_file_writes`, `note_only`,
+   * `text_only`, `todo_unfinished`, `truncated`, `write_evidence_unknown`.
+   * A task that ended `blocked` has none; its reason codes say why.
+   */
+  od_next_settlement_reason?: string;
+  /** Rounds the daemon started on its own for this task (at most one today). */
+  od_next_auto_round_count?: number;
+  /** A round of this task wrote a deliverable the host watched being written. */
+  od_next_deliverable_written?: boolean;
+  /**
+   * Every reason code behind a `blocked` task, in the gate's order. The first
+   * one is `od_next_blocked_reason_code`; the array exists because a Run that
+   * failed to launch and a Run that was interrupted are different failures
+   * that share a primary code.
+   */
+  od_next_reason_codes?: string[];
+  /**
+   * Whether the agent process produced anything at all on this Run. A task
+   * used to be counted as "agent never ran" when its route was still unset;
+   * the route is now fixed at creation, so the judgement reads the Run's own
+   * facts: a failed Run with no first token, no tool call and no visible output
+   * never started.
+   */
+  od_next_agent_launch?: 'started' | 'not_started';
+}
+
+export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'>, RunOdNextSettlementProps {
   area: 'chat_panel' | 'design_system_generation';
   result: TrackingRunResult;
   error_code?: string;

@@ -62,7 +62,11 @@ describe('run deliverable validation', () => {
     });
   });
 
-  it('rejects a stale declared entry even when an unrelated artifact was touched', async () => {
+  it('falls back to inference when the recorded entry is gone, judging what it finds by kind', async () => {
+    // The recorded entry is a project attribute, not a contract: once it no
+    // longer exists the project is resolved like one that never recorded
+    // an entry, so the single text file is found and then refused for its
+    // kind — the same verdict an unrecorded project gets.
     const fixture = await projectFixture({
       'notes.txt': 'unrelated run output',
     });
@@ -79,7 +83,9 @@ describe('run deliverable validation', () => {
       }),
     ).resolves.toEqual({
       valid: false,
-      validation: 'entry_missing',
+      validation: 'type_mismatch',
+      entryFile: 'notes.txt',
+      artifactKind: 'text',
     });
   });
 
@@ -290,7 +296,7 @@ describe('prototype delivery boundaries', () => {
     expect(inferBaselineHtmlEntry(root, [path.join(root, 'index.html'), path.join(root, 'catalog.html')])).toBe('index.html');
   });
 
-  it('retains the observed entry when a second page is added, but cannot replace a stale declared entry', async () => {
+  it('retains the observed entry when a second page is added, also past a stale recorded entry', async () => {
     const fixture = await projectFixture({
       'landing.html': '<a href="catalog.html">Catalog</a>', 'catalog.html': '<title>Catalog</title>',
     });
@@ -299,8 +305,10 @@ describe('prototype delivery boundaries', () => {
       touchedPaths: ['catalog.html'], baselineEntryFile: 'landing.html' };
     await expect(validateRunDeliverable({ ...input, projectMetadata: { kind: 'prototype' } }))
       .resolves.toMatchObject({ valid: true, entryFile: 'landing.html', linkedPage: 'catalog.html' });
+    // A recorded entry that no longer exists is stale, not authoritative: the
+    // baseline the host observed before the Run still identifies the entry.
     await expect(validateRunDeliverable({ ...input, projectMetadata: { kind: 'prototype', entryFile: 'missing.html' } }))
-      .resolves.toMatchObject({ valid: false, validation: 'entry_missing' });
+      .resolves.toMatchObject({ valid: true, entryFile: 'landing.html', linkedPage: 'catalog.html' });
     await expect(validateRunDeliverable({ ...input, artifactCount: 0, touchedPaths: [], projectMetadata: { kind: 'prototype' } }))
       .resolves.toMatchObject({ valid: false, validation: 'no_artifact' });
     await expect(validateRunDeliverable({ ...baseInput, touchedPaths: input.touchedPaths, projectMetadata: { kind: 'prototype' } }))
@@ -390,9 +398,20 @@ describe('project deliverable validation', () => {
     })).resolves.toMatchObject({ valid: false, validation: 'type_mismatch' });
   });
 
-  it('still refuses a declared entry that is gone', async () => {
+  it('infers the single html when the recorded entry is gone', async () => {
     const fixture = await projectFixture({
       'other.html': '<!doctype html><title>Not the entry</title>',
+    });
+    await expect(validateProjectDeliverable({
+      ...fixture,
+      projectMetadata: { kind: 'deck', entryFile: 'index.html' },
+    })).resolves.toMatchObject({ valid: true, entryFile: 'other.html' });
+  });
+
+  it('still reports a missing entry when nothing can be inferred either', async () => {
+    const fixture = await projectFixture({
+      'a.html': '<!doctype html><title>A</title>',
+      'b.html': '<!doctype html><title>B</title>',
     });
     await expect(validateProjectDeliverable({
       ...fixture,

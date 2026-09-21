@@ -250,14 +250,14 @@ const PROJECT_STRING_FLAGS = new Set([
   'client-request-id',
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
-  'source', 'out',
+  'source', 'out', 'file',
 ]);
 const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   ...PROJECT_STRING_FLAGS,
   'workspace',
   'workspace-member',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail']);
+const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail', 'clear']);
 const WORKSPACE_STRING_FLAGS = new Set([
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
   'member', 'role', 'email', 'app-user', 'lifecycle-state',
@@ -7004,6 +7004,11 @@ async function runProject(args) {
                     [--design-system <id>] [--json]
   od project list                         List projects.
   od project info <id>                    Print one project.
+  od project entry <id> [--file <path> | --clear] [--json]
+                                          Print, set, or clear the file the
+                                          preview, exports, and shares open
+                                          for the project. Same route the UI's
+                                          "set as entry" uses.
   od project restore-automatic-scenario <id> [--json]
                                           Restore the daemon-selected default
                                           scenario with a snapshot CAS guard.
@@ -7118,6 +7123,46 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'entry': {
+      // The entry file is a project attribute the UI, the CLI and the daemon's
+      // own delivery write-back all set through one route; `od project entry`
+      // is the embeddability half of the UI's "set as entry" control.
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
+      const file = typeof flags.file === 'string' ? flags.file.trim() : '';
+      if (!id || (file && flags.clear)) {
+        console.error('Usage: od project entry <id> [--file <path> | --clear] [--json]');
+        process.exit(2);
+      }
+      if (!file && !flags.clear) {
+        const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, {
+          headers: workspaceHeaders,
+        });
+        if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+        const data = await resp.json();
+        const entryFile = typeof data.project?.metadata?.entryFile === 'string'
+          ? data.project.metadata.entryFile
+          : null;
+        if (flags.json) return process.stdout.write(JSON.stringify({ projectId: id, entryFile }, null, 2) + '\n');
+        process.stdout.write(entryFile ? `${entryFile}\n` : 'No entry file recorded; the preview infers one.\n');
+        return;
+      }
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/entry-file`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', ...workspaceHeaders },
+          body: JSON.stringify({ entryFile: flags.clear ? null : file }),
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      process.stdout.write(data.entryFile ? `Entry file: ${data.entryFile}\n` : 'Entry file cleared; the preview infers one.\n');
       return;
     }
     case 'restore-automatic-scenario': {

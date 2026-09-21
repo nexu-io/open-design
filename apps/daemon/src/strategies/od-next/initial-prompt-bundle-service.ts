@@ -57,9 +57,36 @@ import {
   loadOdNextTaskInputSnapshot,
   type OdNextTaskInputSnapshotDescriptor,
 } from './task-input-snapshot.js';
-import { daemonOwnedOdNextPlanningCatalog } from './resolver.js';
 
 type SqliteDb = Parameters<typeof getProject>[0];
+
+/**
+ * Per-task-type production routes and output kinds rendered into the
+ * runtime-facts block of the planning prompt. They describe what the daemon
+ * can serve for each profile; the daemon no longer checks a plan against them.
+ */
+const DAEMON_OWNED_PRODUCTION_ROUTES = {
+  prototype: ['html', 'prototype-html'],
+  ppt: ['ppt-html', 'html', 'deck-html'],
+  marketing: ['marketing-html', 'html', 'image-html'],
+  hyperframes: ['hyperframes-html', 'html'],
+} as const;
+
+const DAEMON_OWNED_OUTPUT_KINDS = {
+  prototype: ['prototype', 'html', 'source'],
+  ppt: ['presentation', 'ppt', 'deck', 'html', 'source'],
+  marketing: ['image', 'marketing', 'html', 'source'],
+  hyperframes: ['video', 'hyperframes', 'html', 'source', 'rendered-video'],
+} as const;
+
+function daemonOwnedOdNextPlanningCatalog(
+  taskType: keyof typeof DAEMON_OWNED_PRODUCTION_ROUTES,
+): { productionRoutes: string[]; outputKinds: string[] } {
+  return {
+    productionRoutes: [...DAEMON_OWNED_PRODUCTION_ROUTES[taskType]],
+    outputKinds: [...DAEMON_OWNED_OUTPUT_KINDS[taskType]],
+  };
+}
 type IntentSignals = ReturnType<typeof latchConversationIntentSignals>;
 
 // Keep this header grammar aligned with parseFormAnswers in @open-design/contracts.

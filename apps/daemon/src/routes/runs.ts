@@ -88,7 +88,7 @@ import {
 import {
   projectStrategyTask,
   projectStrategyTaskByRunId,
-} from '../strategies/od-next/automatic-simple-production.js';
+} from '../strategies/od-next/build-round.js';
 import {
   cancelStrategyTaskExecution,
   createStrategyTaskExecution,
@@ -98,10 +98,6 @@ import {
   type StrategyTaskExecutionRecord,
   StrategyTaskTransitionConflictError,
 } from '../strategies/task-store.js';
-import {
-  beginStrategyClarification,
-  prepareStrategyIntake,
-} from '../strategies/od-next/coordinator.js';
 import type { FrozenSkillPackageV1 } from '../strategies/od-next/frozen-skill-package.js';
 import { InvalidFrozenSkillPackageError } from '../strategies/od-next/frozen-skill-package.js';
 import type { ResolvedExamplePluginRecord } from '../strategies/od-next/example-skill-source.js';
@@ -1110,289 +1106,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
   };
 
-  type ClarificationContinuation = {
-    task: StrategyTaskExecutionRecord;
-    sourceRunId: string;
-    taskRunIndex: number;
-    answer: string;
-    retry: boolean;
-    snapshot: AppliedPluginSnapshot;
-  };
-
-  type ClarificationResolution =
-    | { kind: 'ordinary' }
-    | { kind: 'error'; status: number; code: string; message: string }
-    | { kind: 'continuation'; value: ClarificationContinuation };
-
   /**
-   * A source Run restored from durable state may miss its applied snapshot
-   * id: `durableRunState` historically never serialized the field, so any
-   * daemon restart dropped it while the task record kept its locked snapshot.
-   * The `applied_plugin_snapshots` row keeps `run_id` FK-linked to the source
-   * Run across restarts; that link is the ownership witness authorizing this
-   * one-time backfill. A Run whose field is set must never be touched — the
-   * caller treats it as a genuine mismatch.
+   * A form answer or any other follow-up in an OD Next conversation is an
+   * ordinary new request that opens its own task. The client still passes the
+   * previous task's handle with a form answer; it is accepted only as a
+   * well-formed id and never used to continue that task, so a stale or foreign
+   * handle cannot reach any task state.
    */
-  function recoverSourceRunSnapshotId(
-    task: StrategyTaskExecutionRecord,
-    sourceRun: ChatRun,
-  ): boolean {
-    if (sourceRun.appliedPluginSnapshotId) return false;
-    const linkedSnapshot = db
-      .prepare(
-        `SELECT id FROM applied_plugin_snapshots
-          WHERE id = ? AND run_id = ? AND project_id = ?`,
-      )
-      .get(task.snapshotId, sourceRun.id, task.projectId);
-    if (!linkedSnapshot) return false;
-    sourceRun.appliedPluginSnapshotId = task.snapshotId;
-    design.runs.persistState(sourceRun);
-    return true;
-  }
-
-  /**
-   * Resolve only an explicit daemon-issued task handle. Conversation order is
-   * never an ownership signal: an ordinary follow-up in a conversation that
-   * happens to contain an awaiting strategy task must stay an ordinary Run.
-   */
-  function resolveClarificationContinuation(
-    requestBody: JsonRecord,
-  ): ClarificationResolution {
-    if (requestBody.taskExecutionId === undefined) return { kind: 'ordinary' };
+  function rejectMalformedTaskHandle(requestBody: JsonRecord): { status: number; code: string; message: string } | null {
+    if (requestBody.taskExecutionId === undefined) return null;
     if (
       typeof requestBody.taskExecutionId !== 'string'
       || !requestBody.taskExecutionId.trim()
       || !isSafeId(requestBody.taskExecutionId)
     ) {
-      return {
-        kind: 'error',
-        status: 400,
-        code: 'BAD_REQUEST',
-        message: 'taskExecutionId must be a non-empty safe id',
-      };
+      return { status: 400, code: 'BAD_REQUEST', message: 'taskExecutionId must be a non-empty safe id' };
     }
-    const task = getStrategyTaskExecution(db, requestBody.taskExecutionId);
-    if (!task) {
-      return {
-        kind: 'error',
-        status: 404,
-        code: 'STRATEGY_TASK_NOT_FOUND',
-        message: 'strategy task execution not found',
-      };
-    }
-    if (
-      requestBody.projectId !== task.projectId
-      || requestBody.conversationId !== task.conversationId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SCOPE_MISMATCH',
-        message: 'strategy continuation must use the task\'s locked project and conversation',
-      };
-    }
-    if (
-      typeof requestBody.agentId === 'string'
-      && requestBody.agentId
-      && requestBody.agentId !== task.selectedAgentId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_AGENT_MISMATCH',
-        message: 'strategy continuation must use the task\'s locked agent',
-      };
-    }
-    if (
-      typeof requestBody.appliedPluginSnapshotId === 'string'
-      && requestBody.appliedPluginSnapshotId
-      && requestBody.appliedPluginSnapshotId !== task.snapshotId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SNAPSHOT_MISMATCH',
-        message: 'strategy continuation must use the task\'s locked snapshot',
-      };
-    }
-    if (
-      typeof requestBody.pluginId === 'string'
-      && requestBody.pluginId
-      && requestBody.pluginId !== task.strategyId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_PLUGIN_MISMATCH',
-        message: 'strategy continuation must use the task\'s locked strategy',
-      };
-    }
-    const snapshot = getSnapshot(db, task.snapshotId);
-    if (
-      !snapshot
-      || snapshot.pluginId !== task.strategyId
-      || snapshot.strategy?.id !== task.strategyId
-      || snapshot.strategy.version !== task.strategyVersion
-      || snapshot.strategy.packageHash !== task.strategyPackageHash
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SNAPSHOT_INVALID',
-        message: 'strategy task snapshot identity is unavailable or has drifted',
-      };
-    }
-    const answer = typeof requestBody.currentPrompt === 'string'
-      ? requestBody.currentPrompt
-      : typeof requestBody.message === 'string'
-        ? requestBody.message
-        : '';
-    if (!answer.trim()) {
-      return {
-        kind: 'error',
-        status: 400,
-        code: 'STRATEGY_CLARIFICATION_ANSWER_MISSING',
-        message: 'clarification continuation requires a non-empty answer',
-      };
-    }
-    const existingClientRun =
-      typeof requestBody.clientRequestId === 'string' && requestBody.clientRequestId
-        ? design.runs.list({
-            projectId: task.projectId,
-            conversationId: task.conversationId,
-          }).find((candidate) => candidate.clientRequestId === requestBody.clientRequestId) ?? null
-        : null;
-    const existingMapping = existingClientRun
-      ? task.runs.find((mapping) => mapping.runId === existingClientRun.id)
-      : undefined;
-    const exactRetry = Boolean(
-      existingClientRun
-      && existingMapping?.inputStage === 'clarification'
-      && task.latestRunId === existingClientRun.id
-      && task.activeRunId === existingClientRun.id
-      && task.outcome === 'running',
-    );
-    if (existingClientRun && !exactRetry) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_RETRY_MISMATCH',
-        message: 'clientRequestId is not bound to this task clarification',
-      };
-    }
-    if (exactRetry && existingMapping) {
-      return {
-        kind: 'continuation',
-        value: {
-          task,
-          sourceRunId: existingMapping.sourceRunId!,
-          taskRunIndex: existingMapping.taskRunIndex,
-          answer,
-          retry: true,
-          snapshot,
-        },
-      };
-    }
-    const latestMapping = task.runs.at(-1);
-    if (
-      task.route !== 'full_plan'
-      || task.inputStage !== 'request'
-      || task.outcome !== 'clarification_required'
-      || task.activeRunId !== null
-      || task.terminalRunId !== null
-      || task.clarificationCount !== 0
-      || !latestMapping
-      || latestMapping.runId !== task.latestRunId
-      || latestMapping.inputStage !== 'request'
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_STATE_MISMATCH',
-        message: 'strategy task is not awaiting its first clarification answer',
-      };
-    }
-    const sourceRun = design.runs.get(task.latestRunId);
-    if (
-      !sourceRun
-      || sourceRun.status !== 'succeeded'
-      || sourceRun.projectId !== task.projectId
-      || sourceRun.conversationId !== task.conversationId
-      || sourceRun.agentId !== task.selectedAgentId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SOURCE_RUN_INVALID',
-        message: 'strategy clarification source Run is unavailable or does not match the locked task',
-      };
-    }
-    if (
-      sourceRun.appliedPluginSnapshotId !== task.snapshotId
-      && !recoverSourceRunSnapshotId(task, sourceRun)
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SOURCE_RUN_INVALID',
-        message: 'strategy clarification source Run is unavailable or does not match the locked task',
-      };
-    }
-    return {
-      kind: 'continuation',
-      value: {
-        task,
-        sourceRunId: task.latestRunId,
-        taskRunIndex: latestMapping.taskRunIndex + 1,
-        answer,
-        retry: false,
-        snapshot,
-      },
-    };
-  }
-
-  function applyClarificationContinuationMeta(
-    meta: RunCreateMeta,
-    continuation: ClarificationContinuation,
-  ): void {
-    const { task, answer, sourceRunId, taskRunIndex } = continuation;
-    const instruction = composeOdNextStrategyContinuationV2({
-      stage: 'clarification',
-      nativeSessionResume: true,
-      taskExecutionId: task.taskExecutionId,
-      taskRunIndex,
-      executionIntent: task.executionIntent ?? 'produce',
-      answer,
-    });
-    meta.taskExecutionId = task.taskExecutionId;
-    meta.agentId = task.selectedAgentId;
-    meta.appliedPluginSnapshotId = task.snapshotId;
-    meta.pluginId = task.strategyId;
-    meta.message = instruction;
-    meta.currentPrompt = instruction;
-    meta.titleGeneration = undefined;
-    meta.analyticsHints = {
-      ...(meta.analyticsHints && typeof meta.analyticsHints === 'object'
-        ? meta.analyticsHints
-        : {}),
-      taskExecutionId: task.taskExecutionId,
-      initialRunId: task.initialRunId,
-      sourceRunId,
-      taskRunIndex,
-    };
-    // A continuation is a second physical Run of the same logical task, and the
-    // rollout is only evaluated on the branch that resolves a project — which
-    // this path skips. Without inheriting, every answered clarification would
-    // report no harness at all, quietly dropping the OD Next runs that asked a
-    // question from the comparison the dimension exists for.
-    //
-    // Inherited from the source Run rather than re-read from settings on
-    // purpose: the user may have flipped the switch while the question was on
-    // screen, and this Run belongs to the decision its task started under.
-    // `resolveClarificationContinuation` already verified that source against
-    // the locked task, so it is the trustworthy copy.
-    const sourceDecision = design.runs.get(sourceRunId)?.strategyRolloutDecision;
-    if (sourceDecision) meta.strategyRolloutDecision = sourceDecision;
+    return null;
   }
 
   /** Authorize every bound run mutation before plugin or snapshot resolution. */
@@ -1727,41 +1457,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!authorization.ok) return;
       authorizedBoundMutation = authorization.authorizedBoundMutation;
     }
-    let clarificationResolution;
-    try {
-      clarificationResolution = resolveClarificationContinuation(requestBody);
-    } catch (error) {
-      if (
-        error instanceof InvalidFrozenSkillPackageError
-        || error instanceof InvalidStrategyTaskRecordError
-      ) {
-        return sendApiError(
-          res,
-          409,
-          error instanceof InvalidFrozenSkillPackageError
-            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
-            : 'OD_NEXT_TASK_STATE_INVALID',
-          error.message,
-        );
-      }
-      throw error;
+    const malformedTaskHandle = rejectMalformedTaskHandle(requestBody);
+    if (malformedTaskHandle) {
+      return sendApiError(res, malformedTaskHandle.status, malformedTaskHandle.code, malformedTaskHandle.message);
     }
-    if (clarificationResolution.kind === 'error') {
-      return sendApiError(
-        res,
-        clarificationResolution.status,
-        clarificationResolution.code,
-        clarificationResolution.message,
-      );
-    }
-    const clarificationContinuation = clarificationResolution.kind === 'continuation'
-      ? clarificationResolution.value
-      : null;
-    const clarificationTask = clarificationContinuation?.task ?? null;
     let effectiveAgentId =
-      clarificationTask
-        ? clarificationTask.selectedAgentId
-        : typeof requestBody.agentId === 'string' && requestBody.agentId
+      typeof requestBody.agentId === 'string' && requestBody.agentId
         ? requestBody.agentId
         : null;
     if (!effectiveAgentId) {
@@ -1835,28 +1536,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       throw error;
     }
-    if (clarificationContinuation) {
-      const internalStrategyContinuation = Boolean(
-        clarificationTask?.strategyId === 'od-next-strategy'
-        && clarificationContinuation.snapshot.pluginId === clarificationTask.strategyId
-        && clarificationContinuation.snapshot.strategy?.id === clarificationTask.strategyId,
-      );
-      if (
-        !internalStrategyContinuation
-        && ctx.plugins.authorizePluginRequest
-        && !await ctx.plugins.authorizePluginRequest(
-          req,
-          res,
-          clarificationTask!.strategyId,
-        )
-      ) return;
-      resolvedSnapshot = {
-        ok: true,
-        status: 200,
-        snapshotId: clarificationTask!.snapshotId,
-        snapshot: clarificationContinuation.snapshot,
-      };
-    } else if (idempotentStrategyRetry?.appliedPluginSnapshotId) {
+    if (idempotentStrategyRetry?.appliedPluginSnapshotId) {
       const retrySnapshot = getSnapshot(db, idempotentStrategyRetry.appliedPluginSnapshotId);
       if (retrySnapshot) {
         resolvedSnapshot = {
@@ -2274,12 +1954,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         if (renderedQuery.length > 0) meta.message = renderedQuery;
       }
     }
-    if (clarificationContinuation) {
-      applyClarificationContinuationMeta(meta, clarificationContinuation);
-      meta.odNextTaskInputSnapshot = design.runs.get(
-        clarificationContinuation.sourceRunId,
-      )?.odNextTaskInputSnapshot ?? null;
-    } else if (idempotentStrategyRetry?.strategyRolloutDecision) {
+    if (idempotentStrategyRetry?.strategyRolloutDecision) {
       // Same skipped-evaluation shape as the continuation above. A retry is the
       // same logical request, so it reports the decision that request already
       // made rather than making a fresh one.
@@ -2732,8 +2407,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     ) return;
     let frozenSkillPackage: FrozenSkillPackageV1 | undefined;
     if (
-      !clarificationContinuation
-      && !idempotentStrategyRetry
+      !idempotentStrategyRetry
       && strategyRolloutDecision?.effectiveMode === 'active'
     ) {
       // Everything the session selected inside this task type — an @-mentioned
@@ -2765,18 +2439,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ),
       });
     }
-    const fingerprintSnapshot = clarificationTask
-      ? getSnapshot(db, clarificationTask.snapshotId)
-      : resolvedSnapshot?.ok
-        ? resolvedSnapshot.snapshot
-        : null;
+    const fingerprintSnapshot = resolvedSnapshot?.ok
+      ? resolvedSnapshot.snapshot
+      : null;
     const fingerprintMeta = { ...meta };
     delete fingerprintMeta.strategyRolloutDecision;
     delete fingerprintMeta.runtimeCapabilitySnapshot;
     meta.requestFingerprint = runRequestFingerprint(fingerprintMeta, fingerprintSnapshot);
     if (
-      !clarificationContinuation
-      && !idempotentStrategyRetry
+      !idempotentStrategyRetry
       && strategyRolloutDecision?.effectiveMode === 'active'
     ) {
       // The initial Bundle is frozen before the physical Run exists. Mint the
@@ -2787,8 +2458,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     let createdTaskInputSnapshot: OdNextTaskInputSnapshotDescriptor | null = null;
     let preparedPromptBundleText: string | null = null;
     if (
-      !clarificationContinuation
-      && !idempotentStrategyRetry
+      !idempotentStrategyRetry
       && strategyRolloutDecision?.effectiveMode === 'active'
     ) {
       const taskType = strategyRolloutDecision.taskType;
@@ -2885,10 +2555,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     try {
       preparedRun = internalRuns.prepare({
         meta,
-        ...((runUserSeed || clarificationTask || strategyRolloutDecision?.effectiveMode === 'active')
+        ...((runUserSeed || strategyRolloutDecision?.effectiveMode === 'active')
           ? {
               beforeClaimCommit: (candidate) => {
-                if (!clarificationContinuation && createdTaskInputSnapshot) {
+                if (createdTaskInputSnapshot) {
                   candidate.odNextTaskInputSnapshot = createdTaskInputSnapshot;
                   // `createOrReuse` persisted the optimistic Run before the
                   // claim hook ran. Persist the daemon-owned descriptor now,
@@ -2898,17 +2568,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                   design.runs.persistState(candidate);
                 }
                 seedRunUserMessage();
-                if (clarificationContinuation && !clarificationContinuation.retry) {
-                  beginStrategyClarification(db, {
-                    taskExecutionId: clarificationContinuation.task.taskExecutionId,
-                    sourceRunId: clarificationContinuation.sourceRunId,
-                    nextRunId: candidate.id,
-                    answer: clarificationContinuation.answer,
-                  });
-                }
                 if (
-                  !clarificationContinuation
-                  && strategyRolloutDecision?.effectiveMode === 'active'
+                  strategyRolloutDecision?.effectiveMode === 'active'
                   && resolvedSnapshot?.ok
                   && resolvedSnapshot.snapshot.strategy
                 ) {
@@ -2932,30 +2593,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                       promptBundleText: preparedPromptBundleText,
                       taskInputManifestSha256: initialTaskInputSnapshot.manifestSha256,
                     });
-                    // The route stays unlocked through the request turn so the
-                    // main Agent can choose Direct Edit or Full Plan from the
-                    // request itself (product spec 3.1). The daemon cannot make
-                    // that call here: four of the five eligibility facts depend
-                    // on reading what the user asked for, which only happens
-                    // once the Bundle reaches the Agent.
-                    const preparedStrategy = prepareStrategyIntake(db, {
-                      taskExecutionId,
-                      intake: {
-                        inputRefs: [{ id: 'request', accessible: true }],
-                        selectedAgentAvailable: true,
-                        nativeContinuation: strategyRolloutDecision.syntheticCanary
-                          ? 'verified'
-                          : rolloutCapabilitySnapshot?.nativeSessionContinuation.support
-                            ?? 'unknown',
-                        taskProfileAvailable: true,
-                        dependencies: [],
-                      },
-                    });
-                    if (!preparedStrategy.ok) {
-                      throw new Error(
-                        `OD Next rollout preflight blocked: ${preparedStrategy.reasonCodes.join(',')}`,
-                      );
-                    }
                   } catch (error) {
                     throw new AutomaticOdNextPreparationError(error);
                   }
@@ -3005,14 +2642,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       if (error instanceof InvalidStrategyTaskRecordError) {
         return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
-      }
-      if (clarificationTask) {
-        return sendApiError(
-          res,
-          409,
-          'STRATEGY_TASK_TRANSITION_CONFLICT',
-          error instanceof Error ? error.message : String(error),
-        );
       }
       throw error;
       }
@@ -3136,11 +2765,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const ua = String(req.get('user-agent') ?? '');
       run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
     }
-    if (resolvedSnapshot?.ok || clarificationTask) {
+    if (resolvedSnapshot?.ok) {
       try {
         linkSnapshotToRun(
           db,
-          clarificationTask?.snapshotId ?? resolvedSnapshot!.snapshotId,
+          resolvedSnapshot.snapshotId,
           run.id,
         );
       } catch {
@@ -3192,8 +2821,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     };
     res.status(202).json(body);
     if (
-      !clarificationTask
-      && !resumed
+      !resumed
       && resolvedSnapshot?.ok
       && resolvedSnapshot.snapshot.pipeline
     ) {
@@ -3786,41 +3414,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!authorization.ok) return;
       authorizedBoundMutation = authorization.authorizedBoundMutation;
     }
-    let clarificationResolution;
-    try {
-      clarificationResolution = resolveClarificationContinuation(requestBody);
-    } catch (error) {
-      if (
-        error instanceof InvalidFrozenSkillPackageError
-        || error instanceof InvalidStrategyTaskRecordError
-      ) {
-        return sendApiError(
-          res,
-          409,
-          error instanceof InvalidFrozenSkillPackageError
-            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
-            : 'OD_NEXT_TASK_STATE_INVALID',
-          error.message,
-        );
-      }
-      throw error;
+    const malformedTaskHandle = rejectMalformedTaskHandle(requestBody);
+    if (malformedTaskHandle) {
+      return sendApiError(res, malformedTaskHandle.status, malformedTaskHandle.code, malformedTaskHandle.message);
     }
-    if (clarificationResolution.kind === 'error') {
-      return sendApiError(
-        res,
-        clarificationResolution.status,
-        clarificationResolution.code,
-        clarificationResolution.message,
-      );
-    }
-    const clarificationContinuation = clarificationResolution.kind === 'continuation'
-      ? clarificationResolution.value
-      : null;
-    const clarificationTask = clarificationContinuation?.task ?? null;
-    if (!hasCompleteByokOpenCodeConfig({
-      ...requestBody,
-      ...(clarificationTask ? { agentId: clarificationTask.selectedAgentId } : {}),
-    })) {
+    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
       return sendApiError(
         res,
         400,
@@ -3835,12 +3433,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
       workspaceScope: null,
     };
-    if (clarificationContinuation) {
-      applyClarificationContinuationMeta(meta, clarificationContinuation);
-      meta.odNextTaskInputSnapshot = design.runs.get(
-        clarificationContinuation.sourceRunId,
-      )?.odNextTaskInputSnapshot ?? null;
-    }
     const toolBundleSupport = validateRunToolBundleForAgent(
       toolBundle.bundle,
       typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
@@ -3918,18 +3510,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!preparedWorkspaceScope.ok) return;
       meta.workspaceScope = preparedWorkspaceScope.workspaceScope;
     }
-    const chatPluginId = clarificationTask?.strategyId
-      ?? (typeof requestBody.pluginId === 'string' ? requestBody.pluginId : null);
-    // Same authority as POST /api/runs: the validated task and frozen snapshot
-    // own an internal continuation; it is not a newly requested public plugin.
-    const internalStrategyContinuation = Boolean(
-      clarificationTask?.strategyId === 'od-next-strategy'
-      && clarificationContinuation?.snapshot.pluginId === clarificationTask.strategyId
-      && clarificationContinuation.snapshot.strategy?.id === clarificationTask.strategyId,
-    );
+    const chatPluginId = typeof requestBody.pluginId === 'string' ? requestBody.pluginId : null;
     if (
-      !internalStrategyContinuation
-      && chatPluginId
+      chatPluginId
       && ctx.plugins.authorizePluginRequest
       && !await ctx.plugins.authorizePluginRequest(req, res, chatPluginId)
     ) return;
@@ -3942,38 +3525,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         meta.appliedPluginSnapshotId,
       )
     ) return;
-    meta.requestFingerprint = runRequestFingerprint(
-      meta,
-      clarificationContinuation?.snapshot,
-    );
+    meta.requestFingerprint = runRequestFingerprint(meta, undefined);
     let preparedRun;
     try {
-      preparedRun = internalRuns.prepare({
-        meta,
-        ...(clarificationContinuation && !clarificationContinuation.retry
-          ? {
-              beforeClaimCommit: (candidate) => {
-                beginStrategyClarification(db, {
-                  taskExecutionId: clarificationContinuation.task.taskExecutionId,
-                  sourceRunId: clarificationContinuation.sourceRunId,
-                  nextRunId: candidate.id,
-                  answer: clarificationContinuation.answer,
-                });
-              },
-            }
-          : {}),
-      });
+      preparedRun = internalRuns.prepare({ meta });
     } catch (error) {
       if (error instanceof InvalidStrategyTaskRecordError) {
         return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
-      }
-      if (clarificationContinuation) {
-        return sendApiError(
-          res,
-          409,
-          'STRATEGY_TASK_TRANSITION_CONFLICT',
-          error instanceof Error ? error.message : String(error),
-        );
       }
       throw error;
     }
@@ -4049,13 +3607,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'RUN_NOT_RECHARGE_RESUMABLE',
         'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
       );
-    }
-    if (clarificationContinuation) {
-      try {
-        linkSnapshotToRun(db, clarificationContinuation.task.snapshotId, run.id);
-      } catch {
-        // The locked snapshot remains on the in-memory Run; linking is best-effort.
-      }
     }
     let strategyTask;
     try {

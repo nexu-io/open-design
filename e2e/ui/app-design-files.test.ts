@@ -634,6 +634,57 @@ test('[P1] design files page keeps the current single-file menu actions', async 
   await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
 });
 
+test('[P1] design files row menu sets the project entry and the preview follows it', async ({ page }) => {
+  await routeMockAgents(page);
+
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('Design files entry attribute');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+
+  const { projectId } = await getCurrentProjectContext(page);
+  await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
+  await seedProjectFile(page, projectId, 'beta.html', '<!doctype html><title>beta</title><h1>beta</h1>');
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await openAllProjectFiles(page);
+
+  // Nothing recorded yet: no row is marked, and the preview infers alpha.html
+  // as the single root html... except there are two, so it has no entry.
+  await expect(page.locator('[data-testid^="design-file-entry-"]')).toHaveCount(0);
+
+  const betaRow = page.getByTestId('design-file-row-beta.html');
+  await expect(betaRow).toBeVisible();
+  await betaRow.hover();
+  await page.getByTestId('design-file-menu-beta.html').click();
+  const menu = page.getByTestId('design-file-menu-popover');
+  await expect(menu).toBeVisible();
+  await expect(page.getByTestId('design-file-set-entry-beta.html')).toBeVisible();
+  await page.screenshot({ path: 'ui/reports/screenshots/set-as-entry-menu.png', fullPage: false });
+  const setEntryResponse = page.waitForResponse((response) => (
+    response.url().includes(`/api/projects/${encodeURIComponent(projectId)}/entry-file`)
+    && response.request().method() === 'PUT'
+  ));
+  await page.getByTestId('design-file-set-entry-beta.html').click();
+  const response = await setEntryResponse;
+  expect(response.ok(), await response.text()).toBeTruthy();
+
+  // The record lands on the project, the row is marked, and the recorded
+  // file no longer offers "Set as entry".
+  await expect(page.getByTestId('design-file-entry-beta.html')).toBeVisible();
+  const project = await page.request.get(`/api/projects/${encodeURIComponent(projectId)}`);
+  expect((await project.json() as { project: { metadata?: { entryFile?: string } } }).project.metadata?.entryFile)
+    .toBe('beta.html');
+  const previewUrl = await page.request.get(`/api/projects/${encodeURIComponent(projectId)}/preview-url`);
+  expect((await previewUrl.json() as { file: string }).file).toBe('beta.html');
+
+  await betaRow.hover();
+  await page.getByTestId('design-file-menu-beta.html').click();
+  await expect(page.getByTestId('design-file-menu-popover')).toBeVisible();
+  await expect(page.getByTestId('design-file-set-entry-beta.html')).toHaveCount(0);
+});
+
 test('[P1] design files new sketch creates a persisted sketch tab and restores it after reload', async ({ page }) => {
   test.setTimeout(90_000);
   await routeMockAgents(page);

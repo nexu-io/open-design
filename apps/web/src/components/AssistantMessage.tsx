@@ -115,7 +115,7 @@ import type {
   ProjectMetadata,
   SkillSummary,
 } from "../types";
-import type { ProjectMediaTask } from '@open-design/contracts';
+import type { ProjectMediaTask, RunCancelOrigin } from '@open-design/contracts';
 
 type TranslateFn = (
   key: keyof Dict,
@@ -454,15 +454,6 @@ function AssistantMessageImpl({
     (path: string) => projectId ? projectFileUrl(projectId, path, workspaceContext) : path,
     [projectId, workspaceContext],
   );
-  // A blocked strategy task is a sticky terminal verdict: the daemon rejects
-  // every further continuation with 409 STRATEGY_TASK_STATE_MISMATCH, so the
-  // turn's question forms must stop accepting submissions and explain why.
-  // Prefer the gate's persisted agent-visible text; fall back to the generic
-  // localized notice.
-  const strategyBlockedNotice =
-    message.strategyTaskBlocked === true
-      ? message.strategyTaskBlockedText?.trim() || t("questions.strategyBlockedNotice")
-      : null;
   // NOTE(sync/main): origin/main also declares a `thinkingLinkClick` memo here
   // and hands it to its own `ThinkingBlock`. This branch moved thinking into the
   // execution shell (`components/chat/ExecutionShell.tsx`), which builds its own
@@ -1248,10 +1239,7 @@ function AssistantMessageImpl({
           nextUserContent={nextUserContent}
           suppressDirectionForms={suppressDirectionForms}
           onSubmitQuestionForm={onSubmitQuestionForm}
-          questionFormSubmitDisabled={
-            questionFormSubmitDisabled || strategyBlockedNotice !== null
-          }
-          strategyBlockedNotice={strategyBlockedNotice}
+          questionFormSubmitDisabled={questionFormSubmitDisabled}
           visualStyleContext={visualStyleContextForProjectKind(projectKind)}
           projectId={projectId}
           conversationId={conversationId}
@@ -1419,6 +1407,7 @@ function AssistantMessageImpl({
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
                   canceled: message.runStatus === "canceled",
+                  cancelOrigin: message.cancelOrigin,
                   preparing,
                   preparingStatus,
                   copyMarkdown,
@@ -1438,6 +1427,7 @@ function AssistantMessageImpl({
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
                 canceled={message.runStatus === "canceled"}
+                cancelOrigin={message.cancelOrigin}
                 preparing={preparing}
                 preparingStatus={preparingStatus}
                 copyMarkdown={copyMarkdown}
@@ -2097,11 +2087,30 @@ function appendRoleModel(label: string, model: string | null): string {
   return `${label} · ${model}`;
 }
 
+/**
+ * The status word for a canceled turn says who stopped it, so it must not say
+ * "manually" for a turn the daemon cut short while shutting down or
+ * restarting. A missing origin (a row persisted before the daemon reported
+ * one, or the stop response still in flight) keeps the manual wording: the
+ * user pressing Stop is the only cancel a live page produces itself.
+ */
+export function canceledLabelKey(
+  cancelOrigin: RunCancelOrigin | null | undefined,
+): "assistant.canceledLabel" | "assistant.canceledByRestartLabel" | "assistant.canceledNeutralLabel" {
+  if (cancelOrigin === "daemon_shutdown") return "assistant.canceledByRestartLabel";
+  if (cancelOrigin === "project_cleanup" || cancelOrigin === "unknown") {
+    return "assistant.canceledNeutralLabel";
+  }
+  return "assistant.canceledLabel";
+}
+
 interface AssistantFooterProps {
   streaming: boolean;
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
   canceled?: boolean;
+  /** Who canceled the turn, when the daemon said. Decides the wording only. */
+  cancelOrigin?: RunCancelOrigin | null;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
   // "Preparing…"; once content lands it flips to "Working".
   preparing?: boolean;
@@ -2133,6 +2142,7 @@ export function AssistantFooter({
   hasUnfinishedTodos,
   hasEmptyResponse,
   canceled = false,
+  cancelOrigin,
   preparing = false,
   preparingStatus = "preparing",
   copyMarkdown,
@@ -2193,7 +2203,7 @@ export function AssistantFooter({
               : hasEmptyResponse
               ? t("assistant.emptyResponseLabel")
               : canceled
-              ? t("assistant.canceledLabel")
+              ? t(canceledLabelKey(cancelOrigin))
               : hasUnfinishedTodos
               ? t("assistant.unfinishedLabel")
               : t("assistant.doneLabel")}
@@ -2870,7 +2880,6 @@ function ProseBlock({
   suppressDirectionForms,
   onSubmitQuestionForm,
   questionFormSubmitDisabled,
-  strategyBlockedNotice = null,
   visualStyleContext,
   projectId,
   conversationId,
@@ -2894,8 +2903,6 @@ function ProseBlock({
   projectResolvedDir?: string | null;
   onSubmitQuestionForm?: QuestionFormSubmitHandler;
   questionFormSubmitDisabled: boolean;
-  /** Localized blocked-task notice; non-null terminates form interaction. */
-  strategyBlockedNotice?: string | null;
   visualStyleContext?: VisualStyleContext;
   onRequestOpenFile?: (name: string) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
@@ -3060,7 +3067,6 @@ function ProseBlock({
             interactive={questionFormAnswerable}
             onSubmit={onSubmitQuestionForm}
             submitDisabled={questionFormSubmitDisabled}
-            strategyBlockedNotice={strategyBlockedNotice}
             visualStyleContext={visualStyleContext}
           />
         );
@@ -3085,7 +3091,6 @@ function FormBlock({
   interactive,
   onSubmit,
   submitDisabled,
-  strategyBlockedNotice = null,
   visualStyleContext,
 }: {
   form: QuestionForm;
@@ -3096,8 +3101,6 @@ function FormBlock({
   interactive: boolean;
   onSubmit?: QuestionFormSubmitHandler;
   submitDisabled: boolean;
-  /** Localized blocked-task notice rendered under the disabled form. */
-  strategyBlockedNotice?: string | null;
   visualStyleContext?: VisualStyleContext;
 }) {
   const t = useT();
@@ -3471,15 +3474,6 @@ function FormBlock({
         visualStyleContext={visualStyleContext}
         autoContinueAfterTimeout
       />
-      {strategyBlockedNotice ? (
-        <div
-          className="qf-blocked-notice"
-          role="status"
-          data-testid="question-form-blocked-notice"
-        >
-          {strategyBlockedNotice}
-        </div>
-      ) : null}
       {uploadError ? (
         <div className="qf-upload-error" role="alert">
           {uploadError}

@@ -234,14 +234,18 @@ const RUNNING_REQUEST_PROJECTION: StrategyTaskProjectionV2 = {
   executionMode: null,
   activeRunId: RUN_ID,
   terminal: false,
+  deliverableWritten: false,
+  autoRoundCount: 0,
 };
 
 /**
- * What the daemon projects once the Run has settled a task that now waits on
- * the user. Mirrors `projectStrategyTask`
- * (apps/daemon/src/strategies/od-next/automatic-simple-production.ts): the task
- * store keeps no active Run for a non-`running` outcome, and the wire
- * projection then falls back to the latest Run — this same Run.
+ * What the daemon projected, under the older task protocol, once a Run had
+ * parked its task on the user. Rows in these two outcomes still exist in
+ * databases written before a task settled `completed` on its question, and
+ * the reattach must keep treating them the same way. Mirrors
+ * `projectStrategyTask` (apps/daemon/src/strategies/od-next/build-round.ts):
+ * the task store keeps no active Run for a non-`running` outcome, and the
+ * wire projection then falls back to the latest Run — this same Run.
  */
 const PARKED_PROJECTIONS: Record<'clarification_required' | 'plan_ready', StrategyTaskProjectionV2> = {
   clarification_required: {
@@ -253,6 +257,8 @@ const PARKED_PROJECTIONS: Record<'clarification_required' | 'plan_ready', Strate
     executionMode: null,
     activeRunId: RUN_ID,
     terminal: false,
+    deliverableWritten: false,
+    autoRoundCount: 0,
   },
   plan_ready: {
     taskExecutionId: TASK_EXECUTION_ID,
@@ -263,6 +269,8 @@ const PARKED_PROJECTIONS: Record<'clarification_required' | 'plan_ready', Strate
     executionMode: 'simple',
     activeRunId: RUN_ID,
     terminal: false,
+    deliverableWritten: false,
+    autoRoundCount: 0,
   },
 };
 

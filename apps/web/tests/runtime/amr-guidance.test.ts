@@ -246,24 +246,29 @@ describe('resolveRunFailureUi', () => {
     });
   });
 
-  // Antigravity's per-model quota flow (terminal switch-model) must still win
-  // A clarification answer submitted after the daemon's OD Next protocol gate
-  // already settled the task (blocked, or otherwise past this round) 409s with
-  // STRATEGY_TASK_STATE_MISMATCH. That is a task-lifecycle verdict, not an
-  // engine failure, so it must render dedicated halted-task copy for every
-  // agent instead of the generic "task failed" card.
-  it('maps a strategy-task state mismatch to dedicated halted-task copy', () => {
-    for (const agent of ['claude', 'codex', 'amr', null]) {
-      expect(resolveRunFailureUi('STRATEGY_TASK_STATE_MISMATCH', null, agent)).toMatchObject({
-        primaryAction: 'retry',
-        titleKey: 'chat.runError.title.strategyTaskHalted',
-        messageKey: 'chat.runError.strategyTaskStateMismatchMessage',
-        secondaryRetry: false,
-        cloudSwitchCta: agent !== 'amr',
-      });
+  // The OD Next round failures the daemon raises itself resolve to their own
+  // copy for every agent, never to the generic "task failed" card; the retry
+  // they offer opens a new round in the same conversation.
+  it('maps the OD Next round failures to their own copy with a retry', () => {
+    const rows: Array<[string, string, string]> = [
+      ['OD_NEXT_SESSION_UNAVAILABLE', 'chat.runError.title.buildRoundSessionLost', 'chat.runError.buildRoundSessionLostMessage'],
+      ['od_next_physical_run_interrupted', 'chat.runError.title.roundInterrupted', 'chat.runError.roundInterruptedMessage'],
+      ['OD_NEXT_CONTINUATION_FAILED', 'chat.runError.title.roundSettlementFailed', 'chat.runError.roundSettlementFailedMessage'],
+    ];
+    for (const [code, titleKey, messageKey] of rows) {
+      for (const agent of ['claude', 'codex', 'amr', null]) {
+        expect(resolveRunFailureUi(code, null, agent)).toMatchObject({
+          primaryAction: 'retry',
+          titleKey,
+          messageKey,
+          secondaryRetry: false,
+          cloudSwitchCta: agent !== 'amr',
+        });
+      }
     }
   });
 
+  // Antigravity's per-model quota flow (terminal switch-model) must still win
   // over the generic hard-quota detail override — its bespoke handling is
   // resolved before the detail layer.
   it('keeps the antigravity terminal switch-model flow even with a hard_quota detail', () => {

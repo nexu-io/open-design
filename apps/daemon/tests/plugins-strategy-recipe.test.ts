@@ -289,11 +289,17 @@ describe('OD Next V2 request recipe wiring', () => {
     expect(prompt).toContain('compact operator interfaces');
     expect(prompt).toContain('Use concise product language.');
     expect(prompt).toContain('Prioritize incident triage.');
-    expect(prompt).toContain('open-design.plan-contract/v2');
-    expect(prompt).toContain('open-design.strategy-state/v2');
-    expect(prompt).toContain('capabilitySnapshotHash');
-    expect(prompt).toContain('productionRoutes');
-    expect(prompt).toContain('decisionSummary');
+    // The only machine structure the real package still teaches is the
+    // two-declaration status block; the plan contract is gone from the assets
+    // and from the recipe text alike.
+    expect(prompt).toContain('<open-design-runtime-state>');
+    expect(prompt).toContain('"nonDesignRequest": true');
+    expect(prompt).toContain('"noFileWrites": true');
+    expect(prompt).toContain('`design-notes.md`');
+    expect(prompt).not.toContain('open-design-plan-contract');
+    expect(prompt).not.toContain('open-design.strategy-state/v2');
+    expect(prompt).not.toContain('capabilitySnapshotHash');
+    expect(prompt).not.toContain('Preflight');
     expect(prompt.split('\n').filter((line) => (
       line.startsWith('## Active stage:') || line.startsWith('### ')
     ))).toEqual(expect.arrayContaining([

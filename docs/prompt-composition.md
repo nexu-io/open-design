@@ -93,7 +93,8 @@ to the **host**, not to either strategy — if a strategy is retired, these stay
 | `od:slide` navigate listener | host-driven paging (`next`/`prev`/`first`/`last`/`go`) | ✅ | ✅ |
 | `id="deck-stage"` | `srcdoc.ts:3145` `isFrameworkDeck` → stage style fix, disables click-nav | ✅ | ✅ |
 | `@media print` block | Share → PDF multi-page stitching | ✅ | ✅ |
-| `<question-form>` | `AssistantMessage.tsx` → `QuestionFormView`; `runAskedUserQuestion` analytics | ✅ `discovery.ts` | ✅ `od-next-strategy.ts:434` |
+| `<question-form>` | `AssistantMessage.tsx` → `QuestionFormView`; `runAskedUserQuestion` analytics; an OD Next round that renders one settles its task as waiting on the user | ✅ `discovery.ts` | ✅ `od-next-strategy.ts` `DISCOVERY_AND_PLANNING_SECTION` |
+| `<open-design-runtime-state>` status block (`nonDesignRequest`, `noFileWrites`) | `apps/daemon/src/strategies/od-next/protocol.ts` strips it from the visible reply and reads the two declarations; `decideStrategyRunSettlement` ends the task on them | ❌ | ✅ OD Next only — `renderOdNextOutputContractV2` plus the "Not a design request" section of `general-orchestration.md` |
 | `.od-frames/` device shells | prototype device frames | ❌ | ✅ OD Next only |
 
 Two things to read off this table.
@@ -114,11 +115,23 @@ deck HTML is present, and the directive is emitted as an
 `apps/daemon/src/server.ts:10125`. Copy this shape for the next contract.
 
 **The divergence still runs both ways.** OD Next is not a superset of legacy;
-it owns `.od-frames/` device shells that legacy has no equivalent for. And OD
-Next content has two possible homes — the plugin's markdown assets and the
-TypeScript in `od-next-strategy.ts`. The deck contract lives in the TypeScript,
-not in `ppt.md`. Check both before concluding a contract is absent on that
-side.
+it owns `.od-frames/` device shells and the status block that legacy has no
+equivalent for. And OD Next content has two possible homes — the plugin's
+markdown assets and the TypeScript in `od-next-strategy.ts`. The deck contract
+lives in the TypeScript, not in `ppt.md`; the status block is taught in both,
+with the TypeScript carrying the exact block shape. Check both before
+concluding a contract is absent on that side.
+
+**What OD Next no longer asks the model for.** The plan contract, the runtime
+state with route, stage and outcome, the preflight results, and the
+contract-repair and clarification-continuation rounds are gone from the
+assets and from `od-next-strategy.ts`. The daemon settles a task on what the
+round did (files written, form rendered, declaration made) and starts one
+automatic build round itself; the build round's instruction is
+`composeOdNextBuildRoundInstructionV2`, with a cold-start variant for an agent
+whose session cannot be continued. A Bundle frozen under an older package
+still carries the old contract text; the daemon strips those blocks and reads
+nothing from them.
 
 ## Worked example: #7568, then #7651
 

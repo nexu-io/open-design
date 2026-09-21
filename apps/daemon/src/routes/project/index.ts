@@ -100,6 +100,8 @@ import {
 } from '../../plugins/index.js';
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
+import { entryFileAfterDelete, entryFileAfterRename, metadataWithEntryFile } from '../../project-entry-file.js';
+import { withProjectMutation } from '../../project-mutation-queue.js';
 import { listSkills } from '../../skills.js';
 import { isSafeId } from '../../projects.js';
 import {
@@ -331,6 +333,8 @@ function assertProjectCreatePreparationWithinDeadline(
 }
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
+  /** Thin signal that the project record changed; the web re-fetches it. */
+  notifyProjectMetadataChanged?: (projectId: string) => void;
   /**
    * Request-wide deadline for the read-only preparation POST /api/projects
    * runs before its transaction. Production keeps the 15s default; tests and
@@ -5461,6 +5465,88 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
+  /**
+   * The entry file is a project attribute the preview, exports, shares and
+   * external agents all read. It is set here by the UI's "set as entry"
+   * control and by `od project entry`, and by the daemon itself when a
+   * delivering Run leaves the project without one. It never decides whether a
+   * Run or a task completed.
+   */
+  app.put('/api/projects/:id/entry-file', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      }
+      if (!await enforceWorkspaceProjectMutation(
+        req,
+        res,
+        sendApiError,
+        getWorkspaceProject,
+        getWorkspaceProjectByProjectId,
+        db,
+        project.id,
+        'rename',
+      )) return;
+      /** @type {import('@open-design/contracts').ProjectEntryFileUpdateRequest} */
+      const body = req.body ?? {};
+      const requested = body.entryFile;
+      if (requested !== null && typeof requested !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'entryFile must be a project-relative file path or null');
+      }
+      let normalized: string | null = null;
+      if (requested !== null) {
+        normalized = requested.trim().replaceAll('\\', '/').replace(/^\.\//, '');
+        if (
+          !normalized
+          || normalized.startsWith('/')
+          || normalized.split('/').some((segment: string) => segment === '..' || segment === '')
+        ) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'entryFile must be a project-relative file path');
+        }
+      }
+      // The existence check and the write run as one step in the project's
+      // mutation queue, so a rename or delete of the same file cannot land
+      // between them and leave the record on a path that is gone.
+      const outcome = await withProjectMutation(project.id, async () => {
+        const current = getProject(db, project.id);
+        if (!current) return { error: [404, 'PROJECT_NOT_FOUND', 'not found'] as const };
+        const existingMeta = current.metadata ?? { kind: 'prototype' };
+        let nextMeta;
+        if (normalized === null) {
+          const { entryFile: _cleared, ...rest } = existingMeta;
+          nextMeta = rest;
+        } else {
+          const files: ProjectFile[] = await listFiles(PROJECTS_DIR, current.id, { metadata: existingMeta });
+          const match = files.find((file: ProjectFile) => (
+            file.type !== 'dir' && ((file.path ?? file.name) === normalized || file.name === normalized)
+          ));
+          if (!match) {
+            return { error: [404, 'FILE_NOT_FOUND', `${normalized} is not a file in this project`] as const };
+          }
+          nextMeta = { ...existingMeta, entryFile: match.path ?? match.name };
+        }
+        const updated = updateProject(db, current.id, { metadata: nextMeta });
+        if (!updated) return { error: [404, 'PROJECT_NOT_FOUND', 'not found'] as const };
+        return { updated };
+      });
+      if ('error' in outcome) {
+        const [status, code, message] = outcome.error;
+        return sendApiError(res, status, code, message);
+      }
+      const { updated } = outcome;
+      ctx.notifyProjectMetadataChanged?.(project.id);
+      /** @type {import('@open-design/contracts').ProjectEntryFileUpdateResponse} */
+      const response = {
+        project: updated,
+        entryFile: typeof updated.metadata?.entryFile === 'string' ? updated.metadata.entryFile : null,
+      };
+      res.json(response);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
   app.delete('/api/projects/:id', async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
@@ -5784,7 +5870,9 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 
 }
 
-export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {
+export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {
+  /** Thin signal that the project record changed; the web re-fetches it. */
+  notifyProjectMetadataChanged?: (projectId: string) => void;
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
@@ -5796,12 +5884,33 @@ export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' |
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
   const { db } = ctx;
   const { sendApiError, sendMulterError } = ctx.http;
+  const { design } = ctx;
   // The design-token suggestion route reads the design-system roots to resolve
   // a project's tokens, so this scope needs them alongside PROJECTS_DIR.
   const { PROJECTS_DIR, DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
-  const { getProject, getWorkspaceProject, getWorkspaceProjectByProjectId } = ctx.projectStore;
+  const { getProject, getWorkspaceProject, getWorkspaceProjectByProjectId, updateProject } = ctx.projectStore;
+  /**
+   * Carry the entry attribute across a file mutation. `decide` is
+   * `entryFileAfterRename` / `entryFileAfterDelete` applied to the entry the
+   * project records NOW — re-read after the awaited filesystem work, not the
+   * snapshot the route loaded before it — so a selection made while the
+   * mutation was in flight is judged on its own path: an entry set to another
+   * file meanwhile is left alone, and one set to the file just renamed or
+   * removed is still carried or cleared. `undefined` means untouched.
+   */
+  const carryEntryFile = (
+    projectId: string,
+    decide: (currentEntry: unknown) => string | null | undefined,
+  ) => {
+    const current = getProject(db, projectId);
+    if (!current) return;
+    const next = decide(current.metadata?.entryFile);
+    if (next === undefined) return;
+    updateProject(db, projectId, { metadata: metadataWithEntryFile(current.metadata, next) });
+    ctx.notifyProjectMetadataChanged?.(projectId);
+  };
   const authorizeProjectRequest =
     ctx.authorizeProjectRequest ??
     createAuthorizeProjectRequest({
@@ -6693,12 +6802,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
-      await deleteProjectFolder(
-        PROJECTS_DIR,
-        req.params.id,
-        folderPath,
-        project.metadata,
-      );
+      await withProjectMutation(project.id, async () => {
+        await deleteProjectFolder(
+          PROJECTS_DIR,
+          req.params.id,
+          folderPath,
+          project.metadata,
+        );
+        carryEntryFile(project.id, (entry) => entryFileAfterDelete(entry, folderPath, 'folder'));
+      });
       /** @type {import('@open-design/contracts').DeleteProjectFolderResponse} */
       const body = { ok: true };
       res.json(body);
@@ -7173,8 +7285,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
-      await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
-      await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      await withProjectMutation(project.id, async () => {
+        await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+        await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+        carryEntryFile(project.id, (entry) => entryFileAfterDelete(entry, rawSplat, 'file'));
+      });
       // Tombstone, not delete: an HTML card must be able to say "the current
       // file is gone" rather than silently opening whatever later takes the
       // name. Image cards keep resolving their own snapshot either way.
@@ -7337,6 +7452,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         ? req.body.prompt.trim()
         : null;
       const requestedSource = requestProjectFileVersionSource(req.body?.source);
+      if (requestedSource === 'manual') {
+        // A version the user saved by hand while an agent round is running is
+        // not the agent's write. The round's settlement subtracts these paths
+        // from the filesystem diff so a manual edit never reads as delivery.
+        for (const activeRun of design.runs.list({ projectId: project.id, status: 'running' })) {
+          (activeRun.userWrittenPaths ??= new Set<string>()).add(requestedFile.name);
+        }
+      }
       const fallbackPromptInfo = requestedSource === 'ai' && !manualPrompt ? latestProjectPrompt(project) : null;
       const versionOptions: {
         prompt: string | null;
@@ -7829,29 +7952,36 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
-      const result = await renameProjectFile(
-        PROJECTS_DIR,
-        req.params.id,
-        from,
-        to,
-        project?.metadata,
-      );
-      await renameProjectFileVersionStore(
-        PROJECTS_DIR,
-        req.params.id,
-        result.oldName,
-        result.newName,
-        project?.metadata,
-      );
-      // The workspace identity follows the file. History does not: a snapshot's
-      // `source_path_at_capture` records where the bytes came from at the time
-      // and stays put, so an HTML card keeps opening the renamed latest while
-      // an image card keeps opening its own frozen bytes.
-      try {
-        renameWorkspaceArtifactPath(db, req.params.id, result.oldName, result.newName);
-      } catch (error) {
-        console.warn('[chat-artifacts] rename bookkeeping failed', error);
-      }
+      const result = await withProjectMutation(project.id, async () => {
+        const renamed = await renameProjectFile(
+          PROJECTS_DIR,
+          req.params.id,
+          from,
+          to,
+          project?.metadata,
+        );
+        await renameProjectFileVersionStore(
+          PROJECTS_DIR,
+          req.params.id,
+          renamed.oldName,
+          renamed.newName,
+          project?.metadata,
+        );
+        // The workspace identity follows the file. History does not: a snapshot's
+        // `source_path_at_capture` records where the bytes came from at the time
+        // and stays put, so an HTML card keeps opening the renamed latest while
+        // an image card keeps opening its own frozen bytes.
+        try {
+          renameWorkspaceArtifactPath(db, req.params.id, renamed.oldName, renamed.newName);
+        } catch (error) {
+          console.warn('[chat-artifacts] rename bookkeeping failed', error);
+        }
+        carryEntryFile(
+          project.id,
+          (entry) => entryFileAfterRename(entry, renamed.oldName, renamed.newName),
+        );
+        return renamed;
+      });
       /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
       const body = result;
       res.json(body);
@@ -7884,8 +8014,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         delProject.id,
         'writeFiles',
       )) return;
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
-      await markProjectFileVersionStoreDeleted(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      await withProjectMutation(delProject.id, async () => {
+        await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+        await markProjectFileVersionStoreDeleted(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+        carryEntryFile(delProject.id, (entry) => entryFileAfterDelete(entry, req.params.name, 'file'));
+      });
       try {
         deleteWorkspaceArtifact(db, req.params.id, req.params.name);
       } catch (error) {

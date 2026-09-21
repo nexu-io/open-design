@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
-import { OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA, parseOdNextIntentResolutionTurnV1, type StrategyInputStageV2 } from '@open-design/contracts';
+import { omitOdNextPromptBundlePriorTranscriptV2, type StrategyInputStageV2 } from '@open-design/contracts';
 
 import { redactSecrets } from './redact.js';
 import type { StrategyTaskFinalTextIdentity } from './strategies/task-store.js';
@@ -71,6 +71,14 @@ export interface PromptStackTelemetry {
   odNextExactSend?: OdNextExactSendPromptEvidenceV1;
 }
 
+/**
+ * How the sent text was derived from the persisted mapping text, when it was
+ * not sent verbatim. `prior_transcript_omitted`: the first round continued an
+ * agent session that already held the conversation, so the Bundle went out
+ * without its transcript slot (the frozen Bundle keeps it).
+ */
+export type OdNextExactSendDerivation = 'prior_transcript_omitted';
+
 export interface OdNextExactSendPromptEvidenceV1 {
   schema: 'open-design.od-next-exact-send-prompt/v1';
   boundary: 'hostComposed';
@@ -79,6 +87,7 @@ export interface OdNextExactSendPromptEvidenceV1 {
   stage: StrategyInputStageV2;
   sha256: string;
   utf8Bytes: number;
+  derivation?: OdNextExactSendDerivation;
 }
 
 export class InvalidOdNextExactSendPromptError extends Error {
@@ -466,39 +475,44 @@ export function buildPromptStackTelemetry({
  * cross a runtime transport. The caller must pass the same variable used by
  * prompt-file, argv, ACP, stdin, or stream-json encoding; wrappers are applied
  * only after this gate and therefore never enter this identity.
+ *
+ * The sent text is the persisted mapping text verbatim, or one named
+ * derivation of it. Either way the mapping stays the durable source of truth
+ * and the evidence records which of the two went out.
  */
 export function bindOdNextExactSendPromptEvidence(input: {
   telemetry: PromptStackTelemetry;
   finalText: string;
   persisted: StrategyTaskFinalTextIdentity;
   stage: StrategyInputStageV2;
-  purpose?: 'intent_resolution' | undefined;
+  taskRunIndex: number;
+  derivation?: OdNextExactSendDerivation | undefined;
 }): PromptStackTelemetry {
   const utf8Bytes = byteLength(input.finalText);
   const sha256Hex = createHash('sha256').update(input.finalText, 'utf8').digest('hex');
-  if (
-    input.telemetry.rawBytes !== utf8Bytes ||
-    input.persisted.text !== input.finalText ||
-    input.persisted.utf8Bytes !== utf8Bytes ||
-    input.persisted.sha256 !== sha256Hex
-  ) {
+  const expectedText = input.derivation === 'prior_transcript_omitted'
+    ? omitOdNextPromptBundlePriorTranscriptV2(input.persisted.text)
+    : input.persisted.text;
+  if (input.telemetry.rawBytes !== utf8Bytes || expectedText !== input.finalText) {
     throw new InvalidOdNextExactSendPromptError(
       'OD Next exact-send Prompt does not match its persisted SHA-256 and UTF-8 byte identity.',
     );
   }
-  const resolution = input.purpose === 'intent_resolution';
-  if ((input.persisted.schema === OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA) !== resolution) {
-    throw new InvalidOdNextExactSendPromptError('OD Next exact-send Prompt kind does not match its mapped task stage.');
+  if (!input.derivation && (
+    input.persisted.utf8Bytes !== utf8Bytes || input.persisted.sha256 !== sha256Hex
+  )) {
+    throw new InvalidOdNextExactSendPromptError(
+      'OD Next exact-send Prompt does not match its persisted SHA-256 and UTF-8 byte identity.',
+    );
   }
-  if (resolution) {
-    try {
-      if (parseOdNextIntentResolutionTurnV1(input.finalText).stage !== input.stage) throw new Error();
-    } catch {
-      throw new InvalidOdNextExactSendPromptError('OD Next exact-send Prompt kind does not match its mapped task stage.');
-    }
+  if (input.derivation && input.persisted.kind !== 'bundle') {
+    throw new InvalidOdNextExactSendPromptError(
+      'Only a Prompt Bundle can be sent without its prior transcript.',
+    );
   }
-  const expectedKind = input.stage === 'request' && !resolution ? 'bundle' : 'turn';
-  if (input.persisted.kind !== expectedKind) {
+  // The first Run always owns the Bundle; a later Run owns a request Turn into
+  // a continued session, or a Bundle when it starts a fresh process.
+  if (input.taskRunIndex === 0 && (input.persisted.kind !== 'bundle' || input.stage !== 'request')) {
     throw new InvalidOdNextExactSendPromptError(
       'OD Next exact-send Prompt kind does not match its mapped task stage.',
     );
@@ -513,6 +527,7 @@ export function bindOdNextExactSendPromptEvidence(input: {
       stage: input.stage,
       sha256: sha256Hex,
       utf8Bytes,
+      ...(input.derivation ? { derivation: input.derivation } : {}),
     },
   };
 }
@@ -526,17 +541,22 @@ export function assertOdNextExactSendPromptEvidence(input: {
   telemetry: PromptStackTelemetry;
   persisted: StrategyTaskFinalTextIdentity;
   stage: StrategyInputStageV2;
-  purpose?: 'intent_resolution' | undefined;
+  taskRunIndex: number;
 }): void {
+  const derivation = input.telemetry.odNextExactSend?.derivation;
+  const sentText = derivation === 'prior_transcript_omitted'
+    ? omitOdNextPromptBundlePriorTranscriptV2(input.persisted.text)
+    : input.persisted.text;
   const expected = bindOdNextExactSendPromptEvidence({
     telemetry: buildPromptStackTelemetry({
-      composedPrompt: input.persisted.text,
-      sections: [{ kind: 'odNextExactFinalText', content: input.persisted.text }],
+      composedPrompt: sentText,
+      sections: [{ kind: 'odNextExactFinalText', content: sentText }],
     }),
-    finalText: input.persisted.text,
+    finalText: sentText,
     persisted: input.persisted,
     stage: input.stage,
-    ...(input.purpose ? { purpose: input.purpose } : {}),
+    taskRunIndex: input.taskRunIndex,
+    ...(derivation ? { derivation } : {}),
   });
   if (!isDeepStrictEqual(input.telemetry, expected)) {
     throw new InvalidOdNextExactSendPromptError(

@@ -150,7 +150,7 @@ async function seed(strategy = true) {
     });
     compareAndTransitionStrategyTaskExecution(db, {
       taskExecutionId: TASK, expectedRevision: task.revision,
-      to: { route: 'full_plan', inputStage: 'request', outcome: 'blocked', executionMode: null },
+      to: { route: 'full_plan', inputStage: 'request', outcome: 'blocked', executionMode: 'simple' },
       blockedContext: { reasonCodes: [REASON], visibleText: 'A real task was blocked.' },
     });
   }

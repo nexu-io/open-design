@@ -14,6 +14,7 @@ import {
   type PromptBoundaryEvidenceV1,
   type SafeDeliverableSyntaxTelemetryV1,
   type StrategyInputStageV2,
+  type StrategyTaskSettlementReasonV2,
 } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
 import type { EvalContextV2 } from './eval-context.js';
@@ -103,6 +104,20 @@ export interface StrategyTaskObservationRootV1 {
   snapshotId: string;
   planContractHash: string | null;
   selectedAgentId: string;
+  /** Why a `completed` task ended the way it did; null while running or when it blocked. */
+  settlementReason: StrategyTaskSettlementReasonV2 | null;
+  /** Rounds the daemon started on its own for this task. */
+  autoRoundCount: number;
+  /** A round of this task wrote a deliverable the daemon watched being written. */
+  deliverableWritten: boolean;
+  /** Every gate reason code behind a `blocked` task, in the gate's order. */
+  blockedReasonCodes: string[];
+  /**
+   * Whether the agent process produced anything on the task's first Run.
+   * `unknown` when the exporter had no Run facts to judge from (an aggregate
+   * rebuilt from stored observations alone).
+   */
+  agentLaunch: 'started' | 'not_started' | 'unknown';
   agentCliVersions: string[];
   runtimeCompanionVersions: string[];
   runtimeAdapterVersions: string[];
@@ -199,6 +214,9 @@ export function canonicalTaskObservationTraceTags(
     'od-next-strategy-v2',
     `route:${aggregate.root.route}`,
     `execution-mode:${aggregate.root.executionMode}`,
+    `outcome:${aggregate.root.status}`,
+    `settlement:${aggregate.root.settlementReason ?? 'none'}`,
+    `agent-launch:${aggregate.root.agentLaunch}`,
     ...(context
       ? [`environment:${context.environment}`, `rollout:${context.tag}`]
       : []),
@@ -577,8 +595,16 @@ function aggregateLimitations(args: {
 export function aggregateStrategyTaskObservations(input: {
   task: StrategyTaskExecutionRecord;
   observations: readonly unknown[];
+  /**
+   * The task type the scenario binding admitted the task under. Falls back to
+   * the rollout decision's task type, which is the same admission fact seen
+   * from the Run; both exist before any agent output, so the bucket no longer
+   * depends on the agent having declared anything.
+   */
   taskType?: string;
   strategyRolloutDecision?: OdNextRolloutDecision | null;
+  /** Judged from the initial Run's own facts by the exporter; see `agentLaunch`. */
+  agentLaunch?: 'started' | 'not_started';
 }): StrategyTaskObservationAggregateV1 {
   ensureTaskMapping(input.task);
   const parsed = input.observations.map((observation) => (
@@ -647,7 +673,7 @@ export function aggregateStrategyTaskObservations(input: {
         knownChildUsage: usageSummary(stageChildren),
       };
     });
-  const taskType = input.taskType ?? input.task.planContract?.taskProfile.taskType ?? null;
+  const taskType = input.taskType ?? input.strategyRolloutDecision?.taskType ?? null;
   const limitations = aggregateLimitations({
     missingRunIds,
     children,
@@ -672,6 +698,13 @@ export function aggregateStrategyTaskObservations(input: {
       snapshotId: input.task.snapshotId,
       planContractHash: input.task.planContractHash ?? null,
       selectedAgentId: input.task.selectedAgentId,
+      settlementReason: input.task.settlementReason ?? null,
+      autoRoundCount: input.task.autoRoundCount,
+      deliverableWritten: input.task.deliverableWritten,
+      blockedReasonCodes: input.task.outcome === 'blocked'
+        ? [...(input.task.blockedContext?.reasonCodes ?? [])]
+        : [],
+      agentLaunch: input.agentLaunch ?? 'unknown',
       agentCliVersions: distinctRuntimeVersions(sorted, 'agentCliVersion'),
       runtimeCompanionVersions: distinctRuntimeVersions(
         sorted,
@@ -1136,6 +1169,11 @@ export function buildLegacyTaskObservationPayload(
       snapshotId: aggregate.root.snapshotId,
       planContractHash: aggregate.root.planContractHash,
       selectedAgentId: aggregate.root.selectedAgentId,
+      settlementReason: aggregate.root.settlementReason,
+      autoRoundCount: aggregate.root.autoRoundCount,
+      deliverableWritten: aggregate.root.deliverableWritten,
+      blockedReasonCodes: aggregate.root.blockedReasonCodes,
+      agentLaunch: aggregate.root.agentLaunch,
       appVersion: context?.appVersion,
       appChannel: context?.appChannel,
       packaged: context?.packaged,

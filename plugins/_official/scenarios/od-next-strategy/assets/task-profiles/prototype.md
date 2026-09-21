@@ -1,11 +1,10 @@
-# OD Next Prototype Task Profile v2.2.0
+# OD Next Prototype Task Profile v2.3.0
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics, required-field rules,
-and the artifact contract bind to the V2 machine contract at the recorded
-taskProfileVersion; this file is the prototype projection of that contract.
+The two rounds, asking, Build, and the ship-on-write boundary follow the
+general orchestration Skill; this profile says what a prototype task resolves,
+delivers, and holds to.
 
 ## Profile fields
 
@@ -13,10 +12,10 @@ Resolve product surface and target device, audience, primary flow, required
 screens and interactions, fidelity, baseline artifact, content locks, brand
 references, and required output format. Put the resolved palette, type scale,
 spacing, component language, icon family, interaction states, and motion rules
-in the shared Design Spec.
+in the design notes.
 
 Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
+Skill whether to ask in the one question form, or convert the gap into an
 explicit assumption with its risk disclosed in prose. When fidelity is
 wireframe or low-fi, content and interaction-state requirements downgrade to
 structural sketches and the visual-direction rules below do not apply; when
@@ -28,13 +27,13 @@ visual consistency, responsive behavior, and reference adherence.
 ## Artifact contract
 
 The canonical deliverable is editable prototype source with a stable runnable
-entry. Open Design resolves that entry by looking for a root `index.html`,
-then a single root-level html file, then a single file matching the project
-kind; a delivery in which none of those resolves is rejected as an invalid
-canonical deliverable, so lay the files out accordingly. Required deliverables
-name the source entry and any user-requested derived package. Buttons,
-navigation, forms, and primary controls implement the declared flow rather
-than acting as decoration.
+entry. Open Design finds that entry by looking for a root `index.html`, then a
+single root-level html file, then a single file matching the project kind;
+when none of those resolves the preview cannot open the prototype and the
+user has to point at the entry by hand, so lay the files out so that exactly
+one resolves. Required deliverables name the source entry and any
+user-requested derived package. Buttons, navigation, forms, and primary
+controls implement the declared flow rather than acting as decoration.
 
 The default delivery is a prototype that opens, runs, and remains editable:
 core flows genuinely work end-to-end from the entry point, and buttons,
@@ -42,15 +41,13 @@ navigation, and key controls are never mere decoration.
 
 Writing the primary HTML deliverable to disk IS the delivery: no opening, no
 previewing, no walkthroughs, no second pass of any kind after the write. Meet
-the quality floor below in one pass, while writing the source. Report
-completed when the required deliverables exist and match the contract;
-disclose any residual quality risks in the prose summary — they do not change
-the outcome.
+the quality floor below in one pass, while writing the source, and disclose
+any residual quality risks in the prose summary.
 
 ## Build Requirements
 
 Global priority follows the Core System Prompt; this profile establishes no
-ordering of its own. Where upper-level instructions and contracts are silent:
+ordering of its own. Where upper-level instructions and the plan are silent:
 modification tasks continue the confirmed brand, design system, and existing
 design language; user references apply only within their designated scope;
 and this profile's defaults fill only what is left unspecified.
@@ -79,7 +76,7 @@ and this profile's defaults fill only what is left unspecified.
   by scenario and vocalize the choice in one sentence.
 
 When task configuration provides the following values, execute them and
-record them in the Design Spec:
+record them in the design notes:
 
 - **Visual style** sets the palette's character, the type pairing, and
   corner-radius and shadow intensity; the chosen style never exempts the
@@ -309,10 +306,9 @@ Meet the following in one pass, while writing the source:
 - Locked content, user-specified assets, and non-target regions stay
   untouched — no incidental edits.
 
-## Build Packages
+## Build order
 
-Use simple mode for a cohesive flow that benefits from one context. Complex
-mode may split only when the general orchestration Skill's independent-output
-conditions are met, and only along independently deliverable feature loops,
-roles, or device surfaces after navigation, content locks, and the Design
-Spec are frozen. Do not split one interaction loop across Children.
+Build the whole flow in one context, in the order the design notes list:
+navigation and shared chrome first, then the screens of the core flow in the
+order the user meets them, then secondary screens. Never leave an interaction
+loop half-built between steps.

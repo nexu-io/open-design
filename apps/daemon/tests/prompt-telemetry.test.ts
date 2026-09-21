@@ -36,6 +36,7 @@ describe('prompt telemetry builder', () => {
         sha256,
       },
       stage: 'request',
+      taskRunIndex: 0,
     });
 
     expect(telemetry.odNextExactSend).toEqual({
@@ -72,7 +73,8 @@ describe('prompt telemetry builder', () => {
         utf8Bytes: Buffer.byteLength(persistedText, 'utf8'),
         sha256: createHash('sha256').update(persistedText, 'utf8').digest('hex'),
       },
-      stage: 'contract_repair',
+      stage: 'production',
+      taskRunIndex: 1,
     })).toThrow(/does not match its persisted SHA-256/u);
   });
 

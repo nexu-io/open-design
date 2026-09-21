@@ -1,21 +1,20 @@
-# OD Next Presentation Task Profile v2.0.0
+# OD Next Presentation Task Profile v2.1.0
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+The two rounds, asking, Build, and the ship-on-write boundary follow the
+general orchestration Skill; this profile says what a presentation task
+resolves, delivers, and holds to.
 
 ## Profile fields
 
 Resolve audience, purpose, speaking time or page budget, source material and
 locked scope, story arc, data sources, brand references, and presentation
-format. Freeze type, color, page grid, margins, chart language, imagery, and
-section rhythm in the Design Spec. Record the chosen narrative structure in
-the Task Profile.
+format. Put type, color, page grid, margins, chart language, imagery, section
+rhythm, and the chosen narrative structure in the design notes.
 
 Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
+Skill whether to ask in the one question form, or convert the gap into an
 explicit assumption with its risk disclosed in prose.
 
 Quality focus: narrative coherence, one clear point per slide, readability,
@@ -31,16 +30,15 @@ Open Design's real entry point, with no overflow or cropping.
   never generates, previews, exports, or validates PPTX or PDF.
 - PPTX, PDF, and other formats are produced by Open Design's product-side
   engineering after the HTML primary deliverable is written; they are outside
-  the Agent's responsibility. The Agent does not claim an output that the
-  declared production route did not create.
+  the Agent's responsibility. The Agent does not claim an output it did not
+  create.
 - Even when the user's request mentions PPTX or PDF, complete the HTML
   primary deliverable first; never probe for Keynote, PowerPoint,
   LibreOffice, print-to-PDF routes, or PDF libraries, and never implement a
   format converter.
-- Rules in the general orchestration Skill concerning export routes,
-  exporters, editable formats, or derived deliverables apply only when the
-  current task contract explicitly assigns them to the Agent; they never
-  apply to PPTX or PDF.
+- Rules elsewhere concerning export routes, exporters, editable formats, or
+  derived deliverables apply only when the user explicitly asked the Agent
+  for them; they never apply to PPTX or PDF.
 
 This boundary is an Open Design product runtime boundary, not a default
 design preference a prompt can override. Writing the single-file HTML to disk
@@ -52,7 +50,7 @@ route has not yet produced as completed output.
 ## Build Requirements
 
 Global priority follows the Core System Prompt; this profile establishes no
-separate order. Where higher-level instructions and the contract are silent,
+separate order. Where higher-level instructions and the plan are silent,
 edit tasks carry forward the confirmed brand guidelines, the existing deck,
 and existing templates; user references apply only within their designated
 scope; this profile's defaults fill only what remains unspecified.
@@ -140,7 +138,7 @@ slide type:
   the choice in one sentence.
 
 When the task configuration supplies the following values, execute them and
-record them in the Design Spec:
+record them in the design notes:
 
 - **Visual style** decides the palette, font pairing, and chart style: a
   data-dense style favors tables and chart density; a brand-forward visual
@@ -206,9 +204,8 @@ Meet the following in one pass, while writing the source:
   describe a PPTX or PDF that Open Design's engineering has not yet produced
   as completed.
 
-## Build Packages
+## Build order
 
-Simple mode owns the full narrative. Complex mode may split complete
-chapters, each finishable independently, only after the story arc, data
-definitions, page grid, and Design Spec are frozen. Each package returns a
-complete ordered chapter, not disconnected individual pages.
+Build the deck as one narrative in one context: the shared slide chrome and
+grid first, then the chapters in story order, each chapter complete before
+the next begins, never disconnected individual slides.

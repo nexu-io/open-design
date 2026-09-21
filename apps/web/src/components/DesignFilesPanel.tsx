@@ -37,6 +37,7 @@ import {
 } from './html-thumbnail-source-cache';
 import { BuildPreviewToggle } from './design-files/BuildPreviewToggle';
 import { DesignFilesBuildingState } from './design-files/DesignFilesBuildingState';
+import { EntryMissingNotice, type EntryMissingNoticeState } from './design-files/EntryMissingNotice';
 import { selectBuildPreviewHtmlEntry } from './auto-open-file';
 import type { RunProgressStep } from '../runtime/run-progress';
 
@@ -118,6 +119,17 @@ interface Props {
   onCurrentDirChange?: (dir: string) => void;
   uploadError?: string | null;
   onClearUploadError?: () => void;
+  /**
+   * The project's recorded entry file — the one the preview, exports and
+   * shares open. Marked on its row; other html files offer "Set as entry" in
+   * their row menu, which is the UI half of `od project entry`.
+   */
+  entryFile?: string | null;
+  onSetEntryFile?: (name: string) => Promise<void> | void;
+  /** The last round wrote files but none opens as the entry; see EntryMissingNotice. */
+  entryMissingNotice?: EntryMissingNoticeState | null;
+  onRequestEntry?: () => void;
+  onDismissEntryMissingNotice?: () => void;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -495,6 +507,11 @@ export function DesignFilesPanel({
   onSelectFromLibrary,
   uploadError = null,
   onClearUploadError,
+  entryFile = null,
+  onSetEntryFile,
+  entryMissingNotice = null,
+  onRequestEntry,
+  onDismissEntryMissingNotice,
   onCurrentDirChange,
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
@@ -995,7 +1012,14 @@ export function DesignFilesPanel({
                 >
                   {currentDir === '' ? f.name : f.name.slice(currentDir.length + 1)}
                 </span>
-                <span className="df-row-sub">{categoryLabel(category, t)}</span>
+                <span className="df-row-sub">
+                  {categoryLabel(category, t)}
+                  {entryFile === f.name ? (
+                    <span className="df-entry-badge" data-testid={`design-file-entry-${f.name}`}>
+                      {t('designFiles.entryBadge')}
+                    </span>
+                  ) : null}
+                </span>
               </span>
             </button>
           )}
@@ -1145,6 +1169,11 @@ export function DesignFilesPanel({
             )}
             <span className="df-card-sub">
               {categoryLabel(category, t)} · {relativeTime(f.mtime, t)}
+              {entryFile === f.name ? (
+                <span className="df-entry-badge" data-testid={`design-file-entry-${f.name}`}>
+                  {t('designFiles.entryBadge')}
+                </span>
+              ) : null}
             </span>
           </div>
           {viewerOnly ? (
@@ -1532,6 +1561,14 @@ export function DesignFilesPanel({
           }}
           onDrop={handleDrop}
         >
+          {entryMissingNotice && !viewerOnly ? (
+            <EntryMissingNotice
+              notice={entryMissingNotice}
+              {...(onRequestEntry ? { onRequestEntry } : {})}
+              requestDisabled={running}
+              onDismiss={() => onDismissEntryMissingNotice?.()}
+            />
+          ) : null}
           {visibleUploadError ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
               <span>{visibleUploadError}</span>
@@ -1911,6 +1948,22 @@ export function DesignFilesPanel({
           >
             {t('common.rename')}
           </button>
+          {onSetEntryFile
+            && /\.html?$/i.test(menuPos.name)
+            && entryFile !== menuPos.name ? (
+            <button
+              type="button"
+              data-testid={`design-file-set-entry-${menuPos.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const name = menuPos.name;
+                setMenuPos(null);
+                void onSetEntryFile(name);
+              }}
+            >
+              {t('designFiles.setAsEntry')}
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={!files.some((file) => file.name === menuPos.name && file.localPath)}

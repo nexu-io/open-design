@@ -549,3 +549,49 @@ function optionalField<K extends string>(
 ): Record<K, string> | Record<string, never> {
   return value === undefined ? {} : ({ [key]: value } as Record<K, string>);
 }
+
+/**
+ * A patch over a stored Bundle: every field left out is kept, a field set to
+ * `undefined` is removed, and the result is re-serialized in canonical form.
+ * The head (core prompt, session skills, active stages) is never touched, so
+ * a derived Bundle shares the frozen task's cache-stable prefix byte for byte.
+ */
+export interface OdNextPromptBundleDerivationV2 {
+  context?: Partial<Omit<OdNextPromptBundleV2['context'], 'recipeIdentity'>>;
+  taskMetadata?: Partial<Omit<OdNextPromptBundleV2['taskMetadata'], 'taskType'>>;
+  userFirstPrompt?: string;
+}
+
+export function deriveOdNextPromptBundleV2(
+  source: string,
+  patch: OdNextPromptBundleDerivationV2,
+): string {
+  const bundle = parseOdNextPromptBundleV2(source);
+  const context = { ...bundle.context };
+  for (const [key, value] of Object.entries(patch.context ?? {})) {
+    if (value === undefined) delete (context as Record<string, unknown>)[key];
+    else (context as Record<string, unknown>)[key] = value;
+  }
+  const taskMetadata = { ...bundle.taskMetadata };
+  for (const [key, value] of Object.entries(patch.taskMetadata ?? {})) {
+    if (value === undefined) delete (taskMetadata as Record<string, unknown>)[key];
+    else (taskMetadata as Record<string, unknown>)[key] = value;
+  }
+  return serializeOdNextPromptBundleV2({
+    ...bundle,
+    context,
+    taskMetadata,
+    userFirstPrompt: patch.userFirstPrompt ?? bundle.userFirstPrompt,
+  });
+}
+
+/**
+ * The same Bundle without its `prior_transcript` slot — what the daemon sends
+ * when the first round continues an agent session that already holds the
+ * conversation, exactly as the ordinary chat path skips the transcript on a
+ * resumed turn. The frozen Bundle keeps the transcript, so a round the daemon
+ * later starts from it still has the history.
+ */
+export function omitOdNextPromptBundlePriorTranscriptV2(source: string): string {
+  return deriveOdNextPromptBundleV2(source, { context: { priorTranscript: undefined } });
+}

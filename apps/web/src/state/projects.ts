@@ -1090,6 +1090,41 @@ type ProjectPatch = Omit<Partial<Project>, 'pendingPrompt' | 'customInstructions
   customInstructions?: string | null;
 };
 
+/**
+ * Set or clear the project's entry file — the file the preview, exports and
+ * shares open. Same route `od project entry` uses; the daemon validates that
+ * the file exists and records it on the project's metadata.
+ */
+export async function setProjectEntryFile(
+  id: string,
+  entryFile: string | null,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<Project | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}/entry-file`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+      body: JSON.stringify({ entryFile }),
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { project: Project; entryFile: string | null };
+    if (workspaceContext) {
+      invalidateWorkspaceProjectLists(
+        workspaceContext,
+        currentWorkspaceAccountGeneration(),
+      );
+    } else {
+      evictCoalescedGet('local-projects');
+    }
+    return json.project;
+  } catch {
+    return null;
+  }
+}
+
 export async function patchProject(
   id: string,
   patch: ProjectPatch,

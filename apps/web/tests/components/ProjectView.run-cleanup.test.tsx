@@ -12,6 +12,7 @@ import {
   findSameTurnNonHtmlWriteForRecoveredArtifact,
   hasRecoverableArtifactMessage,
   resolveRetryTarget,
+  retryRunHistory,
   resolveSucceededRunStatus,
   selectPrimaryProjectFile,
   shouldClearActiveRunRefs,
@@ -499,6 +500,67 @@ describe('retry target resolution', () => {
     expect(resolveRetryTarget([userMessage, failedAssistant, { ...userMessage, id: 'user-2' }], failedAssistant.id))
       .toBeNull();
     expect(resolveRetryTarget([failedAssistant], failedAssistant.id)).toBeNull();
+  });
+});
+
+// The history a retry sends to the run. A retried strategy task keeps the
+// rounds that did finish in the transcript, ahead of the replayed user turn,
+// so a build round that failed is retried with its plan in hand; a round
+// that failed, an ordinary (non-task) attempt, and another task's rounds are
+// left out, and the visible chat is untouched by any of this.
+describe('retry run history', () => {
+  const earlier: ChatMessage = { id: 'earlier', role: 'user', content: 'Context from before' };
+  const userMessage: ChatMessage = { id: 'user-1', role: 'user', content: 'Build a landing page' };
+  const planningRound: ChatMessage = {
+    id: 'plan', role: 'assistant', content: 'Plan: three sections, dark theme.',
+    runId: 'run-plan', runStatus: 'succeeded',
+    strategyTaskExecutionId: 'task-1', strategyTaskRunIndex: 0,
+  };
+  const buildRound: ChatMessage = {
+    id: 'build', role: 'assistant', content: 'Writing index.html…',
+    runId: 'run-build', runStatus: 'failed',
+    strategyTaskExecutionId: 'task-1', strategyTaskRunIndex: 1,
+    events: [{ kind: 'status', label: 'error', code: 'AGENT_CRASHED' }],
+  };
+
+  it('carries the finished rounds of the retried task ahead of the replayed turn', () => {
+    const target = resolveRetryTarget([earlier, userMessage, planningRound, buildRound], buildRound.id);
+    expect(target).not.toBeNull();
+    const history = retryRunHistory(target!, userMessage);
+    expect(history.map((message) => [message.id, message.role, message.content])).toEqual([
+      ['earlier', 'user', 'Context from before'],
+      ['user-1:retried', 'user', 'Build a landing page'],
+      ['plan', 'assistant', 'Plan: three sections, dark theme.'],
+      ['user-1', 'user', 'Build a landing page'],
+    ]);
+    // The current prompt is the real user message; the earlier copy is transcript only.
+    expect(history.at(-1)).toBe(userMessage);
+  });
+
+  it('carries nothing when the failed round was the first one', () => {
+    const failedPlanning: ChatMessage = { ...buildRound, id: 'plan-failed', strategyTaskRunIndex: 0 };
+    const target = resolveRetryTarget([earlier, userMessage, failedPlanning], failedPlanning.id);
+    expect(retryRunHistory(target!, userMessage)).toEqual([earlier, userMessage]);
+  });
+
+  it('leaves an ordinary attempt without a task out of the transcript', () => {
+    const ordinaryFailure: ChatMessage = {
+      id: 'ordinary', role: 'assistant', content: 'Partial answer', runId: 'run-x', runStatus: 'failed',
+    };
+    const target = resolveRetryTarget([userMessage, ordinaryFailure], ordinaryFailure.id);
+    expect(retryRunHistory(target!, userMessage)).toEqual([userMessage]);
+  });
+
+  it('carries only the rounds of the task that failed last, not an earlier attempt\'s', () => {
+    const earlierPlan: ChatMessage = { ...planningRound, id: 'plan-0', strategyTaskExecutionId: 'task-0', runId: 'run-plan-0' };
+    const earlierBuild: ChatMessage = { ...buildRound, id: 'build-0', strategyTaskExecutionId: 'task-0', runId: 'run-build-0' };
+    const target = resolveRetryTarget(
+      [userMessage, earlierPlan, earlierBuild, planningRound, buildRound],
+      buildRound.id,
+    );
+    expect(target?.preservedAttempts.map((message) => message.id)).toEqual(['plan-0', 'build-0', 'plan', 'build']);
+    expect(retryRunHistory(target!, userMessage).map((message) => message.id))
+      .toEqual(['user-1:retried', 'plan', 'user-1']);
   });
 });
 

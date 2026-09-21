@@ -454,6 +454,128 @@ describe('run analytics lifecycle', () => {
     });
   });
 
+  it('buckets an OD Next Run under its strategy package on both events and reports how the task settled', async () => {
+    const h = harness();
+    const strategyTask = {
+      taskExecutionId: 'odnext_task',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.4',
+        packageHash: 'a'.repeat(64),
+        snapshotId: 'snapshot-1',
+      },
+      inputStage: 'request',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-under-test',
+      terminal: false,
+      deliverableWritten: false,
+      autoRoundCount: 0,
+    };
+    const run = fakeRun({ strategyTask }) as { strategyTask: typeof strategyTask };
+    h.lifecycle.install({
+      run: run as never,
+      body: { agentId: 'codex' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+
+    const created = await settled(h, 'run_created');
+    // The task row exists before the lifecycle starts, so the identity is on
+    // the creation event too and a query needs no join to bucket by version.
+    expect(created.properties).toMatchObject({
+      od_next_strategy_version: '2.0.4',
+      od_next_strategy_package_hash: 'a'.repeat(64),
+      od_next_task_stage: 'request',
+    });
+    expect(created.properties).not.toHaveProperty('od_next_settlement_reason');
+
+    // The daemon settled the task on this Run before it finished.
+    run.strategyTask = {
+      ...strategyTask,
+      outcome: 'completed',
+      terminal: true,
+      settlementReason: 'todo_unfinished',
+      autoRoundCount: 1,
+      deliverableWritten: false,
+    } as typeof strategyTask;
+    h.settle({ status: 'succeeded' });
+
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({
+      od_next_strategy_version: '2.0.4',
+      od_next_strategy_package_hash: 'a'.repeat(64),
+      od_next_task_stage: 'request',
+      od_next_task_outcome: 'completed',
+      od_next_settlement_reason: 'todo_unfinished',
+      od_next_auto_round_count: 1,
+      od_next_deliverable_written: false,
+      od_next_agent_launch: 'started',
+    });
+    expect(finished.properties).not.toHaveProperty('od_next_reason_codes');
+    expect(finished.properties).not.toHaveProperty('od_next_blocked_reason_code');
+  });
+
+  it('reports every gate reason code and a never-started agent when an OD Next Run failed silently', async () => {
+    const h = harness();
+    const run = fakeRun({
+      strategyTask: {
+        taskExecutionId: 'odnext_task',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.4',
+          packageHash: 'b'.repeat(64),
+          snapshotId: 'snapshot-1',
+        },
+        inputStage: 'request',
+        outcome: 'blocked',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-under-test',
+        terminal: true,
+        blockedContext: {
+          reasonCodes: ['od_next_physical_run_failed', 'od_next_session_unavailable'],
+          visibleText: null,
+        },
+        deliverableWritten: false,
+        autoRoundCount: 0,
+      },
+    });
+    h.lifecycle.install({
+      run,
+      body: { agentId: 'codex' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'failed', errorCode: 'AGENT_EXIT_1' });
+
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({
+      od_next_task_outcome: 'blocked',
+      od_next_reason_codes: ['od_next_physical_run_failed', 'od_next_session_unavailable'],
+      od_next_blocked_reason_code: 'od_next_physical_run_failed',
+      od_next_deliverable_written: false,
+      od_next_auto_round_count: 0,
+      od_next_agent_launch: 'not_started',
+    });
+    expect(finished.properties).not.toHaveProperty('od_next_settlement_reason');
+  });
+
+  it('leaves every OD Next field off an ordinary-path Run', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun(),
+      body: { agentId: 'codex' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    const created = await settled(h, 'run_created');
+    h.settle({ status: 'failed', errorCode: 'AGENT_EXIT_1' });
+    const finished = await settled(h, 'run_finished');
+    for (const properties of [created.properties, finished.properties]) {
+      expect(Object.keys(properties).filter((key) => key.startsWith('od_next_'))).toEqual([]);
+    }
+  });
+
   it('stays silent for a run nobody asked for', async () => {
     // A scheduled Automation has no caller to attribute the Run to. Silence is
     // the correct outcome — inventing an identity would be worse than a gap.

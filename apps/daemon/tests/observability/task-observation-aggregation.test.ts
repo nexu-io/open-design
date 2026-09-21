@@ -11,6 +11,7 @@ import {
   InvalidTaskObservationAggregateError,
   aggregateStrategyTaskObservations,
   buildLegacyTaskObservationPayload,
+  canonicalTaskObservationTraceTags,
   prepareLegacyTaskObservationExport,
   strategyTaskRootObservationId,
   strategyTaskRunObservationId,
@@ -85,9 +86,9 @@ function task(
     inputStage: 'production',
     outcome,
     executionMode: 'simple',
-    // This historical production fixture predates the intent-resolution policy.
-    executionIntent: 'produce',
-    intentResolution: null,
+    settlementReason: outcome === 'completed' ? 'deliverable_changed' : null,
+    autoRoundCount: 1,
+    deliverableWritten: outcome === 'completed',
     planContractHash: 'sha256:plan',
     clarificationCount: 1,
     planContractRepairAttempts: 1,
@@ -447,6 +448,35 @@ describe('strategy task observation aggregation', () => {
       (event) => event.body.id === strategyTaskRunObservationId('task-1', 'run-production'),
     );
     expect(production?.body.level).toBe('WARNING');
+  });
+
+  it('keeps a non-design request in its own settlement bucket, completed and never blocked', () => {
+    const request = RUNS.find((run) => run.inputStage === 'request')!;
+    const aggregate = aggregateStrategyTaskObservations({
+      task: {
+        ...task('completed'),
+        inputStage: 'request',
+        settlementReason: 'non_design',
+        deliverableWritten: false,
+        autoRoundCount: 0,
+        latestRunId: request.runId,
+        terminalRunId: request.runId,
+        runs: [{ ...request, finalText: finalText('bundle') }],
+      },
+      observations: [runObservation(request)],
+    });
+    expect(aggregate.root).toMatchObject({
+      status: 'completed',
+      settlementReason: 'non_design',
+      deliverableWritten: false,
+      autoRoundCount: 0,
+      blockedReasonCodes: [],
+    });
+    expect(canonicalTaskObservationTraceTags(aggregate)).toEqual(expect.arrayContaining([
+      'outcome:completed',
+      'settlement:non_design',
+    ]));
+    expect(canonicalTaskObservationTraceTags(aggregate)).not.toContain('outcome:blocked');
   });
 
   it('maps task, Run, Child, generation, and tool hierarchy with stable legacy ids', () => {

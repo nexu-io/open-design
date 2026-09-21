@@ -349,29 +349,27 @@ export function todoItemsFromTodoWriteInput(input: unknown): unknown {
 }
 
 /**
- * True when a strategy task's own terminal verdict already proves this turn
- * delivered the work it declared.
+ * True when the strategy task's host-observed facts prove this turn delivered.
  *
- * OD Next reaches `completed` only after the coordinator saw BOTH a succeeded
- * process AND a canonical deliverable that this Run resolved on disk
- * (`validateRunDeliverable`: the project's entry file exists, is readable, was
- * touched by the Run, and matches the project kind). That is evidence Open
- * Design produced itself. A TodoWrite snapshot is the agent's own unverified
- * narration of the same turn, and agents routinely write the artifact while
- * leaving the last checklist item on `pending`.
+ * `deliverableWritten` is stamped by the daemon when a round of the task wrote
+ * a deliverable — any non-Markdown file, or DESIGN.md on a design-system
+ * project — from the filesystem diff and the tool-stream ledger, never from
+ * the agent's own narration. A TodoWrite snapshot is that narration: agents
+ * routinely write the artifact while leaving the last checklist item on
+ * `pending`, so when the two disagree the observed write wins. Otherwise a
+ * finished task reads "stopped with unfinished work" and the chat offers to
+ * continue work that is already delivered.
  *
- * When the two disagree the verified verdict wins. Otherwise a finished task
- * reads "stopped with unfinished work", the chat offers to continue work that
- * is already delivered, and taking that offer opens a SECOND task which can
- * only block — it has nothing left to write, so its deliverable validation
- * resolves `no_artifact`.
+ * It deliberately does NOT read the task outcome: a task settles `completed`
+ * after its one automatic build round even when that round wrote nothing, and
+ * in that case the offer to continue the remaining work must stay on screen.
  *
  * A mid-generation truncation is deliberately NOT covered by this: the caller
  * keeps `truncatedMidTurn` as an independent term, so a turn cut off by
- * `max_tokens` stays unfinished no matter what verdict was recorded.
+ * `max_tokens` stays unfinished no matter what was recorded.
  */
 export function strategyTaskProvesDelivery(
-  strategyTask: { outcome?: unknown; terminal?: unknown } | null | undefined,
+  strategyTask: { deliverableWritten?: unknown } | null | undefined,
 ): boolean {
-  return strategyTask?.terminal === true && strategyTask.outcome === 'completed';
+  return strategyTask?.deliverableWritten === true;
 }

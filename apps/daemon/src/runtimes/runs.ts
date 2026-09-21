@@ -1719,6 +1719,15 @@ export function createChatRunService({
       failureAction: run.failureAction ?? null,
       retryable: run.retryable ?? null,
       ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
+      ...(typeof run.deliverableValid === 'boolean'
+        ? { deliverableValid: run.deliverableValid }
+        : {}),
+      ...(typeof run.deliverableValidation === 'string'
+        ? { deliverableValidation: run.deliverableValidation }
+        : {}),
+      ...(typeof run.deliverableEntryFile === 'string'
+        ? { deliverableEntryFile: run.deliverableEntryFile }
+        : {}),
     }, terminalAt, false);
     for (const sse of run.clients) sse.end();
     run.clients.clear();

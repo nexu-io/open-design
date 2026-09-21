@@ -120,6 +120,7 @@ import { useProjectCollabContext } from '../collab/collab-context';
 import { createTerminal, killTerminal, listPlugins, moveWorkspaceProject } from '../state/projects';
 import { MoveToTeamConfirmDialog, moveConfirmSkipped } from './MoveToTeamConfirmDialog';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
+import type { EntryMissingNoticeState } from './design-files/EntryMissingNotice';
 import {
   DesignBrowserPanel,
   labelFromUrl,
@@ -309,6 +310,12 @@ interface Props {
   createDesignSystemFromProjectBusy?: boolean;
   onDuplicateProject?: () => void;
   duplicateProjectBusy?: boolean;
+  /** The project's recorded entry file and the controls that change it; see DesignFilesPanel. */
+  entryFile?: string | null;
+  onSetEntryFile?: (name: string) => Promise<void> | void;
+  entryMissingNotice?: EntryMissingNoticeState | null;
+  onRequestEntry?: () => void;
+  onDismissEntryMissingNotice?: () => void;
   // Delete the backing project (and navigate away) for the design-system project
   // tab's "..." menu. Resolves to handleDeleteProject in App.
   onDeleteDesignSystemProject?: (id: string) => Promise<boolean> | boolean;
@@ -1362,6 +1369,11 @@ export function FileWorkspace({
   createDesignSystemFromProjectBusy = false,
   onDuplicateProject,
   duplicateProjectBusy = false,
+  entryFile = null,
+  onSetEntryFile,
+  entryMissingNotice = null,
+  onRequestEntry,
+  onDismissEntryMissingNotice,
   onDeleteDesignSystemProject,
   onDesignSystemNeedsWork,
   designSystemReview,
@@ -4481,6 +4493,11 @@ export function FileWorkspace({
             createDesignSystemFromProjectBusy={createDesignSystemFromProjectBusy}
             onDuplicateProject={onDuplicateProject}
             duplicateProjectBusy={duplicateProjectBusy}
+            entryFile={entryFile}
+            {...(onSetEntryFile ? { onSetEntryFile } : {})}
+            entryMissingNotice={entryMissingNotice}
+            {...(onRequestEntry ? { onRequestEntry } : {})}
+            {...(onDismissEntryMissingNotice ? { onDismissEntryMissingNotice } : {})}
             onSelectFromLibrary={() => {
               trackFileManagerClick(analytics.track, {
                 page_name: 'file_manager',

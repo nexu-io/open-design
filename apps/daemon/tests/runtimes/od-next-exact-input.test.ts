@@ -39,10 +39,19 @@ describe('OD Next exact Agent input map v1', () => {
       OD_NEXT_EXACT_INPUT_MAP_V1.map((entry) => [entry.id, entry]),
     );
     expect(entriesById.get('request_text')?.classification).toBe('initial_bundle');
-    expect(entriesById.get('contract_repair_turn')).toMatchObject({
+    expect(entriesById.get('production_turn')).toMatchObject({
       classification: 'stage_turn',
-      stage: 'contract_repair',
+      stage: 'production',
     });
+    expect(entriesById.get('production_bundle')).toMatchObject({
+      classification: 'stage_turn',
+      stage: 'production',
+    });
+    // The clarification and contract-repair rounds are no longer composed.
+    expect(entriesById.get('clarification_turn')).toBeUndefined();
+    expect(entriesById.get('contract_repair_turn')).toBeUndefined();
+    // The transcript slot names both of its producers.
+    expect(entriesById.get('prior_transcript')?.source).toContain('appendDaemonTranscript');
     expect(entriesById.get('cwd_reference')?.classification).toBe('excluded');
     expect(entriesById.get('request_text')?.source).toContain('resolveOdNextRequestUserPrompt');
     expect(entriesById.get('daemon_system_prompt')?.textTarget)

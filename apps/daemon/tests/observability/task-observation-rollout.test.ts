@@ -5,18 +5,15 @@ import { createHash } from 'node:crypto';
 
 import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 import {
+  OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2,
   OD_NEXT_REQUEST_TURN_SCHEMA_V1,
-  type OpenDesignPlanContractV2,
 } from '@open-design/contracts';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { closeDatabase, openDatabase, upsertMessage } from '../../src/db.js';
-import { snapshotProjectArtifacts, diffRunArtifacts } from '../../src/run-artifact-fs.js';
-import { composeStrategyIntentResolution } from '../../src/strategies/od-next/intent-resolution.js';
-import { startIntentResolution, recordStrategyRunWriteEvidence } from '../../src/strategies/od-next/intent-resolution-store.js';
-import { OdNextMachineProtocolStream } from '../../src/strategies/od-next/protocol.js';
-import { prepareAutomaticStrategyContinuation } from '../../src/strategies/od-next/automatic-simple-production.js';
+import { prepareAutomaticBuildRound } from '../../src/strategies/od-next/build-round.js';
+import { settleStrategyTask } from '../../src/strategies/od-next/coordinator.js';
 import { createSnapshot } from '../../src/plugins/snapshots.js';
 import {
   createTaskObservationRolloutService,
@@ -37,7 +34,6 @@ import {
 import {
   compareAndTransitionStrategyTaskExecution,
   createStrategyTaskExecution,
-  claimStrategyExecutionIntentResolution,
   getStrategyTaskExecution,
   migrateStrategyTaskStore,
 } from '../../src/strategies/task-store.js';
@@ -74,60 +70,6 @@ function strategyBinding() {
     },
     taskProfileVersions: ['2.0.0'],
     promptRecipe: 'od-next-plan-build-v2' as const,
-  };
-}
-
-function planContractFixture(snapshotId: string): OpenDesignPlanContractV2 {
-  const strategy = strategyBinding();
-  return {
-    schema: 'open-design.plan-contract/v2',
-    strategy: {
-      id: strategy.id,
-      version: strategy.version,
-      packageHash: strategy.packageHash,
-      snapshotId,
-    },
-    taskProfile: {
-      schemaVersion: '2',
-      taskType: 'prototype',
-      taskProfileVersion: strategy.selectedTaskProfile.version,
-      goal: 'Build a synthetic prototype',
-      contextAndAudience: 'Synthetic test',
-      inputsAndReferences: [],
-      constraints: [],
-      canonicalDeliverable: { id: 'prototype', kind: 'prototype', format: 'html' },
-      requiredDeliverables: [{ id: 'prototype', kind: 'prototype' }],
-      designSpec: {
-        source: 'resolved-baseline',
-        version: '1',
-        decisions: { palette: 'neutral' },
-      },
-      buildRequirements: [{ id: 'build-1', text: 'Build the synthetic prototype.' }],
-      assumptions: [],
-      risks: [],
-      taskSpecific: {},
-    },
-    fullPlan: {
-      executionMode: 'simple',
-      steps: [{ id: 'step-1', objective: 'Build', outputs: ['prototype'] }],
-      readinessArtifacts: [],
-      buildPackages: [],
-    },
-    runManifest: {
-      selectedAgentId: 'codex',
-      capabilitySnapshotHash: 'c'.repeat(64),
-      inputRefs: [],
-      productionRoutes: ['html'],
-      preflight: { intake: 'passed', execution: 'passed' },
-    },
-    decisionSummary: {
-      goal: 'Build a synthetic prototype',
-      deliverables: ['prototype'],
-      keyConstraints: [],
-      assumptions: [],
-      risks: [],
-      openDecisions: [],
-    },
   };
 }
 
@@ -197,6 +139,7 @@ function syntheticRun() {
       finalText: TEST_PROMPT_BUNDLE,
       persisted: promptBundleIdentity,
       stage: 'request',
+      taskRunIndex: 0,
     }),
     events: [
       {
@@ -588,11 +531,93 @@ describe('task observation rollout', () => {
         'od-next-strategy-v2',
         'route:direct_edit',
         'execution-mode:simple',
+        'outcome:completed',
+        'settlement:none',
+        'agent-launch:started',
         'environment:synthetic-test',
         'rollout:od-next-task-v1',
       ],
+      metadata: expect.objectContaining({
+        settlementReason: null,
+        autoRoundCount: 0,
+        deliverableWritten: false,
+        blockedReasonCodes: [],
+        agentLaunch: 'started',
+      }),
     });
     expect(batch.filter((event) => event.type === 'span-create')).toHaveLength(1);
+  });
+
+  it('buckets the task under the admitted task type and reports how it settled', async () => {
+    db.prepare(`
+      UPDATE strategy_task_executions
+         SET settlement_reason = 'deliverable_changed', auto_round_count = 1,
+             deliverable_written = 1, updated_at = 2_000
+       WHERE task_execution_id = 'task-1'
+    `).run();
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    const rollout = service({ mode: 'send', fetchImpl });
+    await expect(rollout.finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
+    const request = fetchImpl.mock.calls[0]![1]!;
+    const batch = JSON.parse(String(request.body)).batch as Array<{
+      type: string;
+      body: { tags?: string[]; metadata?: Record<string, unknown> };
+    }>;
+    const trace = batch.find((event) => event.type === 'trace-create')!;
+    // The applied snapshot names the task type at creation; no agent output is
+    // needed for the bucket to be filled.
+    expect(trace.body.metadata).toMatchObject({
+      taskType: 'prototype',
+      settlementReason: 'deliverable_changed',
+      autoRoundCount: 1,
+      deliverableWritten: true,
+      blockedReasonCodes: [],
+      agentLaunch: 'started',
+    });
+    expect(trace.body.metadata!.limitations).not.toContain('task_type_unavailable');
+    expect(trace.body.tags).toEqual(expect.arrayContaining([
+      'outcome:completed',
+      'settlement:deliverable_changed',
+      'agent-launch:started',
+    ]));
+  });
+
+  it('separates a task whose agent never started from one the gate refused', async () => {
+    db.prepare(`
+      UPDATE strategy_task_executions
+         SET outcome = 'blocked',
+             blocked_reason_codes_json = ?,
+             blocked_visible_text = NULL,
+             updated_at = 2_000
+       WHERE task_execution_id = 'task-1'
+    `).run(JSON.stringify(['od_next_physical_run_failed', 'od_next_session_unavailable']));
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    const rollout = service({
+      mode: 'send',
+      fetchImpl,
+      getRun: (runId) => runId === 'run-1'
+        ? { ...syntheticRun(), status: 'failed', errorCode: 'OD_NEXT_SESSION_UNAVAILABLE', events: [] }
+        : null,
+    });
+    await expect(rollout.finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
+    const request = fetchImpl.mock.calls[0]![1]!;
+    const batch = JSON.parse(String(request.body)).batch as Array<{
+      type: string;
+      body: { tags?: string[]; metadata?: Record<string, unknown> };
+    }>;
+    const trace = batch.find((event) => event.type === 'trace-create')!;
+    expect(trace.body.metadata).toMatchObject({
+      outcome: 'blocked',
+      settlementReason: null,
+      blockedReasonCodes: ['od_next_physical_run_failed', 'od_next_session_unavailable'],
+      // A failed Run that produced no token, tool call or visible output.
+      agentLaunch: 'not_started',
+    });
+    expect(trace.body.tags).toEqual(expect.arrayContaining([
+      'outcome:blocked',
+      'settlement:none',
+      'agent-launch:not_started',
+    ]));
   });
 
   it('rebuilds safe Run quality from durable facts before exporting the Task payload', async () => {
@@ -688,45 +713,37 @@ describe('task observation rollout', () => {
     expect(serialized).not.toContain('private artifact body');
   });
 
-  it('exports both physical request spans after a real intent claim, completion and SQLite reopen', async () => {
+  it('exports both physical spans after a planning round, a cold-started build round and a SQLite reopen', async () => {
     const snapshotId = getStrategyTaskExecution(db, 'task-1')!.snapshotId;
     const task = createStrategyTaskExecution(db, {
-      taskExecutionId: 'intent-task', projectId: 'project-1', conversationId: 'conversation-1',
-      snapshotId, selectedAgentId: 'codex', initialRunId: 'intent-source',
+      taskExecutionId: 'build-task', projectId: 'project-1', conversationId: 'conversation-1',
+      snapshotId, selectedAgentId: 'codex', initialRunId: 'build-source',
       ...strategyTaskCreateIdentityFixture(), createdAt: 1_000,
     });
-    const cwd = path.join(tempDir, 'provider-cwd'); fs.mkdirSync(cwd);
-    const diff = diffRunArtifacts(snapshotProjectArtifacts(cwd), snapshotProjectArtifacts(cwd));
-    const evidence = { physicalStatus: 'succeeded' as const, deliverableValid: false,
-      filesWritten: diff.filesWritten, filesWrittenUnknown: diff.filesWrittenUnknown === true,
-      filesWrittenSource: 'filesystem' as const };
-    const sourceProtocol = new OdNextMachineProtocolStream();
-    sourceProtocol.push(`The requested planning answer is complete.\n<open-design-plan-contract>\n${JSON.stringify(planContractFixture(snapshotId))}\n</open-design-plan-contract>\n<open-design-runtime-state>\n${JSON.stringify({ schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request', outcome: 'plan_ready', executionMode: 'simple', reasonCodes: [] })}\n</open-design-runtime-state>`);
-    const source = { runId: task.latestRunId, parsed: sourceProtocol.finish(), toolUseCount: 0, completionEvidence: evidence };
-    expect(source.parsed.issues).toEqual([]);
-    const { instruction, sourceResultJson } = composeStrategyIntentResolution(task, source);
-    recordStrategyRunWriteEvidence(db, { taskExecutionId: task.taskExecutionId, runId: task.latestRunId, filesWritten: evidence.filesWritten, unknown: evidence.filesWrittenUnknown, source: 'filesystem' });
-    const claimed = claimStrategyExecutionIntentResolution(db, {
-      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
-      sourceRunId: task.latestRunId, nextRunId: 'intent-reply', sourceResultJson, finalText: instruction, updatedAt: 2_000,
+    const claimed = prepareAutomaticBuildRound({
+      db, task, reason: 'note_only', resume: false,
+      planningRoundVisibleText: 'The plan, with notes saved to design-notes.md.',
+      service: {
+        prepare: (input: { meta: { doneKey?: unknown }; beforeClaimCommit?: (run: { id: string }) => void }) => {
+          const run = { id: 'build-cold' };
+          input.beforeClaimCommit?.(run);
+          return { kind: 'ready' as const, run, creationKind: 'created' as const, resumed: false };
+        },
+        start: (run: { id: string }) => run,
+      } as never,
+      createMeta: (message, taskRunIndex) => ({ message, taskRunIndex }), updatedAt: 2_000,
     });
-    startIntentResolution(db, task.taskExecutionId, 'intent-reply');
-    const reply = new OdNextMachineProtocolStream();
-    reply.push(`<open-design-runtime-state>\n${JSON.stringify({ schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request', outcome: 'completed', executionMode: 'simple', executionIntent: 'plan_only', reasonCodes: [] })}\n</open-design-runtime-state>`);
-    const completed = prepareAutomaticStrategyContinuation({
-      db, task: claimed, parsed: reply.finish(), toolUseCount: 0, completionEvidence: evidence,
-      service: { prepare: () => { throw new Error('No production on plan-only'); }, start: run => run },
-      createMeta: (stage, message, taskRunIndex) => ({ stage, message, taskRunIndex }), updatedAt: 3_000,
-    });
-    expect(completed.result.action).toBe('completed');
-    const runs = completed.result.task.runs.map(mapping => ({
+    expect(claimed.transport).toBe('cold_start');
+    const settled = settleStrategyTask(db, { taskExecutionId: task.taskExecutionId, runId: 'build-cold', reason: 'deliverable_changed', deliverableWritten: true, updatedAt: 3_000 });
+    expect(settled.outcome).toBe('completed');
+    const runs = settled.runs.map(mapping => ({
       ...syntheticRun(), id: mapping.runId, createdAt: 1_000 + mapping.taskRunIndex * 1_000,
       updatedAt: 2_000 + mapping.taskRunIndex * 1_000,
       promptTelemetry: bindOdNextExactSendPromptEvidence({
         telemetry: buildPromptStackTelemetry({ composedPrompt: mapping.finalText.text,
           sections: [{ kind: 'odNextExactFinalText', content: mapping.finalText.text }] }),
         finalText: mapping.finalText.text, persisted: mapping.finalText, stage: mapping.inputStage,
-        ...(mapping.purpose ? { purpose: mapping.purpose } : {}),
+        taskRunIndex: mapping.taskRunIndex,
       }),
     }));
     const persistedTelemetry = path.join(tempDir, 'run-prompt-evidence.json');
@@ -736,16 +753,17 @@ describe('task observation rollout', () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
     await expect(service({ mode: 'send', fetchImpl,
       getRun: runId => restored.find(run => run.id === runId) ?? null,
-    }).finalizeForRun('intent-reply')).resolves.toMatchObject({ action: 'sent' });
+    }).finalizeForRun('build-cold')).resolves.toMatchObject({ action: 'sent' });
     expect(fetchImpl).toHaveBeenCalledOnce();
     const batch = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch as Array<{
-      body: { id?: string; name?: string; input?: { kind?: string }; metadata?: { runId?: string; taskRunIndex?: number } };
+      body: { id?: string; name?: string; input?: { kind?: string; promptSchema?: string }; metadata?: { runId?: string; taskRunIndex?: number } };
     }>;
-    const spans = batch.filter(event => event.body.name === 'strategy-stage:request');
-    expect(spans).toHaveLength(2);
+    const spans = batch.filter(event => event.body.name?.startsWith('strategy-stage:'));
+    expect(spans.map(span => span.body.name)).toEqual(['strategy-stage:request', 'strategy-stage:production']);
     expect(new Set(spans.map(span => span.body.id)).size).toBe(2);
-    expect(spans.map(span => span.body.input?.kind)).toEqual(['bundle', 'turn']);
-    expect(spans.map(span => span.body.metadata?.runId)).toEqual(['intent-source', 'intent-reply']);
+    expect(spans.map(span => span.body.input?.kind)).toEqual(['bundle', 'bundle']);
+    expect(spans.map(span => span.body.input?.promptSchema)).toEqual([OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2, OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2]);
+    expect(spans.map(span => span.body.metadata?.runId)).toEqual(['build-source', 'build-cold']);
     expect(spans.map(span => span.body.metadata?.taskRunIndex)).toEqual([0, 1]);
   });
 
@@ -759,6 +777,7 @@ describe('task observation rollout', () => {
       finalText: mapping.finalText.text,
       persisted: mapping.finalText,
       stage: mapping.inputStage,
+      taskRunIndex: mapping.taskRunIndex,
     });
     const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
 
@@ -811,6 +830,7 @@ describe('task observation rollout', () => {
       finalText: mapping.finalText.text,
       persisted: mapping.finalText,
       stage: mapping.inputStage,
+      taskRunIndex: mapping.taskRunIndex,
     });
     tamper(promptTelemetry);
     const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
@@ -1017,12 +1037,13 @@ describe('task observation rollout', () => {
     expect(byId.get(childToolId)?.parentObservationId).toBe(childId);
   });
 
-  it('exports one root with the durable request/clarification/repair/production run chain', async () => {
+  it('exports one root with the durable request/production run chain', async () => {
     db.prepare(`
       UPDATE strategy_task_executions
-         SET revision = 0, route = NULL, input_stage = 'request', outcome = 'running',
-             execution_mode = NULL, plan_contract_json = NULL, plan_contract_hash = NULL,
+         SET revision = 0, route = 'full_plan', input_stage = 'request', outcome = 'running',
+             execution_mode = 'simple', plan_contract_json = NULL, plan_contract_hash = NULL,
              clarification_count = 0, plan_contract_repair_attempts = 0,
+             settlement_reason = NULL, auto_round_count = 0, deliverable_written = 0,
              latest_run_id = 'run-1', updated_at = 1000
        WHERE task_execution_id = 'task-1'
     `).run();
@@ -1030,79 +1051,20 @@ describe('task observation rollout', () => {
     task = compareAndTransitionStrategyTaskExecution(db, {
       taskExecutionId: task.taskExecutionId,
       expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        executionIntent: 'produce',
-        inputStage: 'clarification',
-        outcome: 'running',
-        executionMode: null,
-      },
-      nextRun: {
-        runId: 'run-clarification',
-        sourceRunId: 'run-1',
-        finalText: strategyTaskTurnText({
-          taskExecutionId: 'task-1', inputStage: 'clarification', taskRunIndex: 1,
-        }),
-      },
-      updatedAt: 1_100,
-    });
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'clarification',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      updatedAt: 1_150,
-    });
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'contract_repair',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: {
-        runId: 'run-repair',
-        sourceRunId: 'run-clarification',
-        finalText: strategyTaskTurnText({
-          taskExecutionId: 'task-1', inputStage: 'contract_repair', taskRunIndex: 2,
-        }),
-      },
-      updatedAt: 1_200,
-    });
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'running', executionMode: 'simple' },
       nextRun: {
         runId: 'run-production',
-        sourceRunId: 'run-repair',
-        finalText: strategyTaskTurnText({
-          taskExecutionId: 'task-1', inputStage: 'production', taskRunIndex: 3,
-        }),
+        sourceRunId: 'run-1',
+        finalText: strategyTaskTurnText({ taskExecutionId: 'task-1', inputStage: 'production', taskRunIndex: 1 }),
       },
-      planContract: planContractFixture(task.snapshotId),
+      autoRound: { reason: 'note_only' },
       updatedAt: 1_300,
     });
     compareAndTransitionStrategyTaskExecution(db, {
       taskExecutionId: task.taskExecutionId,
       expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'completed',
-        executionMode: 'simple',
-      },
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'completed', executionMode: 'simple' },
+      settlement: { reason: 'deliverable_changed', deliverableWritten: true },
       updatedAt: 2_000,
     });
     const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
@@ -1121,20 +1083,18 @@ describe('task observation rollout', () => {
           finalText: mapping.finalText.text,
           persisted: mapping.finalText,
           stage: mapping.inputStage,
+          taskRunIndex: mapping.taskRunIndex,
         });
         return {
           ...syntheticRun(),
           promptTelemetry,
           id: runId,
-          createdAt: 1_000 + ['run-1', 'run-clarification', 'run-repair', 'run-production']
-            .indexOf(runId) * 100,
+          createdAt: 1_000 + ['run-1', 'run-production'].indexOf(runId) * 100,
         };
       },
     });
 
-    await expect(rollout.finalizeForRun('run-production')).resolves.toMatchObject({
-      action: 'sent',
-    });
+    await expect(rollout.finalizeForRun('run-production')).resolves.toMatchObject({ action: 'sent' });
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const batch = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch as Array<{
@@ -1143,16 +1103,70 @@ describe('task observation rollout', () => {
     }>;
     expect(batch.filter((event) => event.type === 'trace-create')).toHaveLength(1);
     expect(batch.filter((event) => event.type === 'span-create').map((event) => event.body.name))
+      .toEqual(['strategy-stage:request', 'strategy-stage:production']);
+    expect(JSON.parse(deliveryRow().coverageJson!)).toMatchObject({
+      runs: { availability: 'complete', observed: 2, expected: 2, missingRunIds: [] },
+      children: { availability: 'unavailable', knownObservationCount: 0 },
+    });
+  });
+
+  it('still exports the clarification and repair stages an earlier daemon wrote', async () => {
+    const insertRun = db.prepare(`INSERT INTO strategy_task_runs(task_execution_id,run_id,input_stage,task_run_index,source_run_id,final_text_kind,final_text_schema,final_text,final_text_utf8_bytes,final_text_sha256,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+    const chain: Array<['clarification' | 'contract_repair' | 'production', string, string]> = [
+      ['clarification', 'run-clarification', 'run-1'],
+      ['contract_repair', 'run-repair', 'run-clarification'],
+      ['production', 'run-production', 'run-repair'],
+    ];
+    for (const [index, [stage, runId, sourceRunId]] of chain.entries()) {
+      const text = strategyTaskTurnText({ taskExecutionId: 'task-1', inputStage: stage, taskRunIndex: index + 1 });
+      insertRun.run('task-1', runId, stage, index + 1, sourceRunId, 'turn', OD_NEXT_REQUEST_TURN_SCHEMA_V1, text,
+        Buffer.byteLength(text, 'utf8'), createHash('sha256').update(text, 'utf8').digest('hex'), 1_100 + index * 100);
+    }
+    db.prepare(`
+      UPDATE strategy_task_executions
+         SET revision = 4, route = 'full_plan', input_stage = 'production', outcome = 'completed',
+             execution_mode = 'simple', clarification_count = 1, plan_contract_repair_attempts = 1,
+             plan_contract_hash = ?, latest_run_id = 'run-production', updated_at = 2000
+       WHERE task_execution_id = 'task-1'
+    `).run('e'.repeat(64));
+    const legacy = getStrategyTaskExecution(db, 'task-1')!;
+    expect(legacy.runs.map((run) => run.inputStage)).toEqual(['request', 'clarification', 'contract_repair', 'production']);
+    expect(legacy.planContractHash).toBe('e'.repeat(64));
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    const rollout = service({
+      mode: 'send',
+      fetchImpl,
+      getRun: (runId) => {
+        const mapping = legacy.runs.find((candidate) => candidate.runId === runId)!;
+        return {
+          ...syntheticRun(),
+          promptTelemetry: bindOdNextExactSendPromptEvidence({
+            telemetry: buildPromptStackTelemetry({
+              composedPrompt: mapping.finalText.text,
+              sections: [{ kind: 'odNextExactFinalText', content: mapping.finalText.text }],
+            }),
+            finalText: mapping.finalText.text,
+            persisted: mapping.finalText,
+            stage: mapping.inputStage,
+            taskRunIndex: mapping.taskRunIndex,
+          }),
+          id: runId,
+          createdAt: 1_000 + mapping.taskRunIndex * 100,
+        };
+      },
+    });
+    await expect(rollout.finalizeForRun('run-production')).resolves.toMatchObject({ action: 'sent' });
+    const batch = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch as Array<{
+      type: string;
+      body: { name?: string; metadata?: Record<string, unknown> };
+    }>;
+    expect(batch.filter((event) => event.type === 'span-create').map((event) => event.body.name))
       .toEqual([
         'strategy-stage:request',
         'strategy-stage:clarification',
         'strategy-stage:contract_repair',
         'strategy-stage:production',
       ]);
-    expect(JSON.parse(deliveryRow().coverageJson!)).toMatchObject({
-      runs: { availability: 'complete', observed: 4, expected: 4, missingRunIds: [] },
-      children: { availability: 'unavailable', knownObservationCount: 0 },
-    });
   });
 
   it.each([

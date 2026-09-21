@@ -30,13 +30,13 @@ export async function resolveQuestionFormStrategyTaskExecutionId(input: {
 /**
  * Message fields persisting a terminal `blocked` strategy-task verdict.
  *
- * A blocked outcome is sticky: the daemon rejects every further continuation
- * of the task with 409 STRATEGY_TASK_STATE_MISMATCH, so the turn's question
- * form must stop accepting submissions. Every surface that observes a task
- * projection (run-status probe, SSE end, reattach) derives the same message
- * stamp through this helper: the blocked flag plus the gate's agent-visible
- * text (trimmed; null when the gate left none, so the UI falls back to its
- * generic localized notice).
+ * A task blocks when its physical Run failed before the round settled. The
+ * stamp records that task-level fact next to the Run's own failure; it gates
+ * nothing — the turn's question form stays answerable, and the answer opens
+ * a new task like any follow-up. Every surface that observes a task
+ * projection (run-status probe, SSE end, reattach) derives the same stamp
+ * through this helper: the blocked flag plus the agent-visible text the
+ * daemon persisted with the verdict (trimmed; null when there was none).
  *
  * Returns null for anything that is not a blocked terminal projection —
  * callers then leave the message untouched.
@@ -55,12 +55,18 @@ export function strategyBlockedMessageFields(
 /**
  * Message fields persisting ANY terminal strategy-task verdict.
  *
- * `blocked` terminates the turn's question form (above). `completed` is the
- * other verdict a surface has to remember: the daemon reached it by verifying
- * the canonical deliverable on disk, which outranks a TodoWrite snapshot the
- * agent left with stale pending items. Without the stamp the chat keeps
- * offering to "continue remaining tasks" on finished work, and accepting opens
- * a second task that can only block.
+ * `blocked` records a Run that failed before settling (above). The other
+ * stamp a surface has to remember is `strategyTaskDelivered`: a round of the task
+ * wrote a deliverable, which the daemon watched happen and reports as
+ * `deliverableWritten`. That fact outranks a TodoWrite snapshot the agent left
+ * with stale pending items: without the stamp the chat keeps offering to
+ * "continue remaining tasks" on finished work.
+ *
+ * A task also settles `completed` when it asked a question, declared the
+ * request non-design or plan-only, or ran out of automatic rounds without
+ * writing anything. None of those delivered, so none of them is stamped and
+ * the "continue remaining tasks" offer stays available where the transcript
+ * calls for it.
  *
  * Every surface observing a task projection (run-status probe, SSE settle,
  * reattach) derives its message stamp here, so the three cannot drift. Returns
@@ -74,7 +80,11 @@ export function strategySettledMessageFields(
   | null {
   const blocked = strategyBlockedMessageFields(strategyTask);
   if (blocked) return blocked;
-  if (strategyTask?.terminal && strategyTask.outcome === 'completed') {
+  if (
+    strategyTask?.terminal
+    && strategyTask.outcome === 'completed'
+    && strategyTask.deliverableWritten === true
+  ) {
     return { strategyTaskDelivered: true };
   }
   return null;

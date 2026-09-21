@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   harnessAnalyticsFromRolloutDecision,
+  odNextAgentLaunchFromRunFacts,
   odNextBlockedAnalyticsFromStrategyTask,
+  odNextTaskIdentityAnalyticsFromStrategyTask,
+  odNextTaskSettlementAnalyticsFromStrategyTask,
 } from '../src/analytics/events.js';
 
 describe('harnessAnalyticsFromRolloutDecision', () => {
@@ -100,5 +103,100 @@ describe('odNextBlockedAnalyticsFromStrategyTask', () => {
   it('stays silent for a run that had no strategy task at all', () => {
     expect(odNextBlockedAnalyticsFromStrategyTask(undefined)).toEqual({});
     expect(odNextBlockedAnalyticsFromStrategyTask(null)).toEqual({});
+  });
+});
+
+describe('odNextTaskIdentityAnalyticsFromStrategyTask', () => {
+  it('names the strategy package the task was frozen on and the round the Run is', () => {
+    expect(
+      odNextTaskIdentityAnalyticsFromStrategyTask({
+        strategy: { version: '2.0.4', packageHash: 'c'.repeat(64) },
+        inputStage: 'production',
+        outcome: 'running',
+      }),
+    ).toEqual({
+      od_next_strategy_version: '2.0.4',
+      od_next_strategy_package_hash: 'c'.repeat(64),
+      od_next_task_stage: 'production',
+    });
+  });
+
+  it('stays silent for a run with no task and omits blank identity values', () => {
+    expect(odNextTaskIdentityAnalyticsFromStrategyTask(undefined)).toEqual({});
+    expect(odNextTaskIdentityAnalyticsFromStrategyTask(null)).toEqual({});
+    expect(
+      odNextTaskIdentityAnalyticsFromStrategyTask({ strategy: { version: '', packageHash: undefined } }),
+    ).toEqual({});
+  });
+});
+
+describe('odNextTaskSettlementAnalyticsFromStrategyTask', () => {
+  it('carries the settlement of a completed task without any blocked field', () => {
+    expect(
+      odNextTaskSettlementAnalyticsFromStrategyTask({
+        outcome: 'completed',
+        terminal: true,
+        settlementReason: 'question',
+        autoRoundCount: 0,
+        deliverableWritten: false,
+      }),
+    ).toEqual({
+      od_next_task_outcome: 'completed',
+      od_next_settlement_reason: 'question',
+      od_next_auto_round_count: 0,
+      od_next_deliverable_written: false,
+    });
+  });
+
+  it('carries every gate reason code of a blocked task next to the primary one', () => {
+    expect(
+      odNextTaskSettlementAnalyticsFromStrategyTask({
+        outcome: 'blocked',
+        terminal: true,
+        autoRoundCount: 1,
+        deliverableWritten: false,
+        blockedContext: { reasonCodes: ['od_next_physical_run_failed', 'od_next_session_unavailable'] },
+      }),
+    ).toEqual({
+      od_next_task_outcome: 'blocked',
+      od_next_auto_round_count: 1,
+      od_next_deliverable_written: false,
+      od_next_reason_codes: ['od_next_physical_run_failed', 'od_next_session_unavailable'],
+      od_next_blocked_reason_code: 'od_next_physical_run_failed',
+    });
+  });
+
+  it('reports a still-running task as running with no settlement', () => {
+    expect(
+      odNextTaskSettlementAnalyticsFromStrategyTask({
+        outcome: 'running',
+        terminal: false,
+        // A settlement reason on a non-terminal projection is not a settlement.
+        settlementReason: 'text_only',
+        autoRoundCount: 1,
+        deliverableWritten: true,
+      }),
+    ).toEqual({
+      od_next_task_outcome: 'running',
+      od_next_auto_round_count: 1,
+      od_next_deliverable_written: true,
+    });
+  });
+
+  it('stays silent for a run with no task', () => {
+    expect(odNextTaskSettlementAnalyticsFromStrategyTask(undefined)).toEqual({});
+    expect(odNextTaskSettlementAnalyticsFromStrategyTask(null)).toEqual({});
+  });
+});
+
+describe('odNextAgentLaunchFromRunFacts', () => {
+  it('counts only a failed run with none of the three signals as never started', () => {
+    const silent = { firstTokenSeen: false, toolCallSeen: false, userVisibleOutputSeen: false };
+    expect(odNextAgentLaunchFromRunFacts({ status: 'failed', ...silent })).toBe('not_started');
+    expect(odNextAgentLaunchFromRunFacts({ status: 'succeeded', ...silent })).toBe('started');
+    expect(odNextAgentLaunchFromRunFacts({ status: 'canceled', ...silent })).toBe('started');
+    expect(odNextAgentLaunchFromRunFacts({ status: 'failed', ...silent, firstTokenSeen: true })).toBe('started');
+    expect(odNextAgentLaunchFromRunFacts({ status: 'failed', ...silent, toolCallSeen: true })).toBe('started');
+    expect(odNextAgentLaunchFromRunFacts({ status: 'failed', ...silent, userVisibleOutputSeen: true })).toBe('started');
   });
 });

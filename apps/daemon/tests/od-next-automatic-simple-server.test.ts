@@ -12,14 +12,12 @@ import { Agent, fetch as undiciFetch } from 'undici';
 import type {
   AppliedStrategyBindingV2,
   OdNextRuntimeCapabilitySnapshotV1,
-  OpenDesignPlanContractV2,
   ProjectScenarioTaskProfile,
 } from '@open-design/contracts';
 import {
   normalizeAgentObservationV1,
   OD_NEXT_PROMPT_STAGE_CONTRACT_V2,
   parseOdNextPromptBundleV2,
-  parseOdNextIntentResolutionTurnV1,
 } from '@open-design/contracts';
 
 const codexArchiveBoundary = vi.hoisted(() => ({
@@ -87,6 +85,7 @@ vi.mock('node:crypto', async (importOriginal) => {
 });
 
 import { closeDatabase, openDatabase } from '../src/db.js';
+import { startCaptureSink, type CaptureSink } from './first-visible-output-harness.js';
 import { AGENT_DEFS } from '../src/runtimes/registry.js';
 import { agentBinEnvKey } from '../src/runtimes/executables.js';
 import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
@@ -96,13 +95,12 @@ import {
   upsertInstalledPlugin,
 } from '../src/plugins/registry.js';
 import { createBundledStrategyBindingV2 } from '../src/plugins/strategy-package.js';
-import { startServer, type StartServerOptions } from '../src/server.js';
+import { startServer } from '../src/server.js';
 import {
   createStrategyTaskExecution,
   getStrategyTaskExecution,
 } from '../src/strategies/task-store.js';
 import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
-import { prepareStrategyRequest } from '../src/strategies/od-next/coordinator.js';
 import {
   hashOdNextRuntimeCapabilitySnapshotV1,
   resolveBundledOdNextRuntimeCapability,
@@ -170,29 +168,6 @@ const CREATIVE_VOLTAGE_EXAMPLE_DIR = path.join(
 );
 const CLI_SRC = path.resolve(DAEMON_ROOT, 'src/cli.ts');
 const TSX_CLI = path.resolve(REPO_ROOT, 'node_modules/tsx/dist/cli.mjs');
-const EXECUTION_PREFLIGHT = {
-  productionRoutes: [{ id: 'html', available: true }],
-  dependencies: [],
-  inputs: [{ id: 'request', available: true }],
-  renderers: [],
-  exporters: [],
-  templates: [],
-  outputKinds: [{ id: 'prototype', supported: true }],
-};
-const DIRECT_ELIGIBLE = {
-  editableBaselineExists: true,
-  localAndUnambiguous: true,
-  canonicalDeliverableStable: true,
-  deliverableSetStable: true,
-  dependenciesBounded: true,
-};
-const INTAKE_PASSED = {
-  inputRefs: [{ id: 'request', accessible: true }],
-  selectedAgentAvailable: true,
-  nativeContinuation: 'verified' as const,
-  taskProfileAvailable: true,
-  dependencies: [],
-};
 
 function complexCapabilitySnapshot(): OdNextRuntimeCapabilitySnapshotV1 {
   const withoutHash: Omit<OdNextRuntimeCapabilitySnapshotV1, 'snapshotHash'> = {
@@ -222,17 +197,27 @@ describe('OD Next automatic production through the real server', () => {
   let binDir: string | null = null;
   let sequence = 0;
   let previousCodexTransport: string | undefined;
+  let analyticsSink: CaptureSink | null = null;
+  let previousPosthogEnv: { key: string | undefined; host: string | undefined } | null = null;
 
   beforeEach(() => {
     previousDetectionEnv = Object.fromEntries(['PATH', 'OD_AGENT_HOME', ...fixtureAgentBinEnvKeys]
       .map(key => [key, process.env[key]]));
     previousCodexTransport = process.env.OD_CODEX_TRANSPORT;
     process.env.OD_CODEX_TRANSPORT = 'exec-json';
+    previousPosthogEnv = { key: process.env.POSTHOG_KEY, host: process.env.POSTHOG_HOST };
   });
 
   afterEach(async () => {
     if (previousCodexTransport == null) delete process.env.OD_CODEX_TRANSPORT;
     else process.env.OD_CODEX_TRANSPORT = previousCodexTransport;
+    if (previousPosthogEnv) {
+      if (previousPosthogEnv.key === undefined) delete process.env.POSTHOG_KEY;
+      else process.env.POSTHOG_KEY = previousPosthogEnv.key;
+      if (previousPosthogEnv.host === undefined) delete process.env.POSTHOG_HOST;
+      else process.env.POSTHOG_HOST = previousPosthogEnv.host;
+      previousPosthogEnv = null;
+    }
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
     uuidControl.forced.length = 0;
@@ -243,6 +228,8 @@ describe('OD Next automatic production through the real server', () => {
       closeDatabase();
       if (binDir) await rm(binDir, { recursive: true, force: true });
       binDir = null;
+      await analyticsSink?.close();
+      analyticsSink = null;
     } finally {
       try {
         const isolation = await fixtureDetectionIsolation;
@@ -283,9 +270,7 @@ console.log('aider 0.86.0');
     process.env.OD_AGENT_HOME = hostHome;
     process.env.AIDER_BIN = sentinel;
     try {
-      const productionPreflight = vi.fn(() => EXECUTION_PREFLIGHT);
-      const fixture = await createFixture('repair', { preflightResolver: productionPreflight,
-        probeLogPath: selectedLog });
+      const fixture = await createFixture('repair', { probeLogPath: selectedLog });
       const selectedBin = path.join(path.dirname(fixture.logPath), 'codex-repair');
       // Empty fixture-only API-key entries ensure the actual login-status
       // probe is observed instead of relying on any inherited authenticated env.
@@ -313,9 +298,8 @@ console.log('aider 0.86.0');
       await postRun(started!.url, createRunRequest(fixture, 'Build the operator prototype.'));
       const task = await waitForTask(fixture.taskExecutionId, 'completed');
       await waitForRunTerminal(started!.url, task.latestRunId);
-      expect(productionPreflight).toHaveBeenCalled();
       const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
-      expect(invocations.some(call => call.stdin.includes('native continuation — production'))).toBe(true);
+      expect(invocations.some(call => call.stdin.includes('# OD Next build round'))).toBe(true);
 
       // A real non-invocable selected executable must still become unavailable.
       // Exit 127 is the supported stale-wrapper signal, unlike generic exit 1.
@@ -357,75 +341,6 @@ process.exit(127);
       await rm(hostRoot, { recursive: true, force: true });
     }
   });
-
-  it.each(['intent-question', 'intent-request', 'intent-first-write', 'intent-fail'] as const)(
-    'OPEND-2623 real server: %s uses one native intent supplement and retains source ownership',
-    async (mode) => {
-      const productionPreflight = vi.fn(() => EXECUTION_PREFLIGHT);
-      const fixture = await createFixture(mode, { preflightResolver: productionPreflight });
-      const request = 'Ask the required questions first. Do not create or modify files. INTENT_SERVER_2623';
-      queueFixtureIds(fixture);
-      await postRun(started!.url, createRunRequest(fixture, request));
-      const hasQuestion = mode !== 'intent-request';
-      if (hasQuestion) {
-        const awaiting = await waitForTask(fixture.taskExecutionId, 'clarification_required');
-        expect(awaiting.executionIntent).toBeUndefined();
-        expect(awaiting.runs).toHaveLength(1);
-        await waitForRunTerminal(started!.url, awaiting.latestRunId);
-        const answer = '[form answers — intent-2623]\n- Audience: Investors\n- Constraints: Keep the original no-write request';
-        const response = await fetch(`${started!.url}/api/chat`, {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ...createRunRequest(fixture, answer),
-            taskExecutionId: fixture.taskExecutionId,
-            userMessageId: `answer-user-${fixture.projectId}`,
-            assistantMessageId: `answer-assistant-${fixture.projectId}`,
-            clientRequestId: `answer-client-${fixture.projectId}` }),
-        });
-        const responseText = await response.text();
-        expect(response.status, responseText).toBe(200);
-        expect(response.headers.get('content-type')).toContain('text/event-stream');
-        expect(responseText).toContain('event: end');
-      }
-      const blocked = mode === 'intent-first-write' || mode === 'intent-fail';
-      const task = await waitForTask(fixture.taskExecutionId, blocked ? 'blocked' : 'completed');
-      for (const mapping of task.runs) await waitForRunTerminal(started!.url, mapping.runId);
-      const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
-      expect(calls).toHaveLength(hasQuestion ? 3 : 2);
-      expect(calls.filter(call => call.stdin.includes('native continuation — production'))).toHaveLength(0);
-      expect(task.runs.some(run => ['production', 'contract_repair'].includes(run.inputStage))).toBe(false);
-      expect(productionPreflight).not.toHaveBeenCalled();
-      const supplements = task.runs.filter(run => run.purpose === 'intent_resolution');
-      expect(supplements).toHaveLength(1);
-      const supplement = supplements[0]!;
-      const sent = calls.at(-1)!;
-      expect(sent.argv).toContain('resume');
-      expect(sent.argv).toContain(THREAD_ID);
-      const turn = parseOdNextIntentResolutionTurnV1(sent.stdin);
-      expect(turn.stage).toBe(hasQuestion ? 'clarification' : 'request');
-      expect(turn.taskExecutionId).toBe(task.taskExecutionId);
-      expect(turn.sourceRunId).toBe(task.runs.at(-2)!.runId);
-      expect(turn.payload).toContain(request);
-      expect(sent.stdin).toBe(supplement.finalText.text);
-      expect(task.intentResolution?.attempts).toBe(1);
-      if (mode === 'intent-first-write') {
-        expect(task.blockedContext?.reasonCodes).toContain('od_next_planning_files_changed');
-        expect(await readFile(path.join(calls[0]!.cwd, 'intent-draft.txt'), 'utf8')).toBe('Observed first-turn write.');
-        const evidence = database().prepare(
-          'SELECT run_id, files_written FROM strategy_task_run_write_evidence WHERE task_execution_id = ?',
-        ).all(task.taskExecutionId) as Array<{ run_id: string; files_written: number }>;
-        expect(evidence.find(row => row.run_id === task.initialRunId)?.files_written).toBeGreaterThan(0);
-        expect(evidence.filter(row => row.run_id !== task.initialRunId).every(row => row.files_written === 0)).toBe(true);
-      }
-      if (!blocked) {
-        expect(task.executionIntent).toBe('plan_only');
-        const historyResponse = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
-        expect(historyResponse.status).toBe(200);
-        const history = JSON.stringify(await historyResponse.json());
-        expect(history).toContain('INTENT_SOURCE_ANSWER_2623');
-        expect(history).not.toContain('open-design-runtime-state');
-      }
-    },
-  );
 
   it('keeps off/observe public POST behavior ordinary and idempotent with zero strategy tasks', async () => {
     const fixture = await createPublicRolloutFixture('inert');
@@ -1337,10 +1252,21 @@ process.exit(127);
       ),
     );
     expect(created.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+    // The facts admit the Run (the unrecognized version resolves through its
+    // adapter family) and feed telemetry; they are not echoed to the model —
+    // the bundle no longer carries a hash for the agent to write back.
     const task = getStrategyTaskExecution(database(), created.taskExecutionId as string);
-    expect(task?.promptBundle.text).toContain(
+    expect(task?.promptBundle.text).not.toContain(
       resolvedCapability.snapshot!.snapshotHash.slice('sha256:'.length),
     );
+    expect(await readDurableRunState(created.runId as string)).toMatchObject({
+      strategyRolloutDecision: {
+        decisionClass: 'active',
+        effectiveMode: 'active',
+        taskType: 'prototype',
+        primaryReasonCode: 'od_next_rollout_eligible',
+      },
+    });
 
     const canceled = await fetch(
       `${started.url}/api/runs/${encodeURIComponent(created.runId as string)}/cancel`,
@@ -1461,7 +1387,9 @@ process.exit(127);
     const promptBundleText = activeTask?.promptBundle.text ?? '';
     const doneKey = /<od-done key="([a-f0-9]{16})"\/>/.exec(promptBundleText)?.[1];
     expect(doneKey).toMatch(/^[a-f0-9]{16}$/);
-    expect(promptBundleText).toContain('route=direct_edit');
+    // No route to declare since the two-round design; the echo guard's
+    // examples still carry the daemon-minted key.
+    expect(promptBundleText).not.toContain('route=direct_edit');
     expect(promptBundleText).toContain(`<od-next key="${doneKey}" value="Add an orders list page"/>`);
     expect(promptBundleText).toContain(`<od-focus key="${doneKey}"`);
     expect(promptBundleText.slice(
@@ -1537,7 +1465,10 @@ process.exit(127);
         `BODY_MARKER_${skillId.toUpperCase().replaceAll('-', '_')}`,
       ].join('\n'));
     }
-    const prompt = 'Complete this request through automatic Skill routing.';
+    // The planning round is held open so the CLI retry below dedupes against
+    // a Run that is still the task's only one; a round that ended would have
+    // started the automatic build round and doubled the invocation count.
+    const prompt = 'Hold the public rollout run open until canceled.';
     const clientRequestId = 'web-cli-skill-parity-request';
     const strategyTaskCountAtStart = (database().prepare(
       'SELECT COUNT(*) AS count FROM strategy_task_executions',
@@ -1747,12 +1678,9 @@ process.exit(127);
     ]);
     const invocationCount = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
 
-    // Deliberately corrupt this task's mapping after removing its new evidence
-    // children. The test still exercises the real missing-mapping rejection.
-    database().transaction(() => {
-      database().prepare('DELETE FROM strategy_task_run_write_evidence WHERE task_execution_id = ?').run(deleted.taskExecutionId);
-      database().prepare('DELETE FROM strategy_task_runs WHERE task_execution_id = ?').run(deleted.taskExecutionId);
-    }).immediate();
+    // Deliberately corrupt this task's mapping. The test exercises the real
+    // missing-mapping rejection.
+    database().prepare('DELETE FROM strategy_task_runs WHERE task_execution_id = ?').run(deleted.taskExecutionId);
     database().prepare(
       `UPDATE strategy_task_runs
           SET final_text = NULL, final_text_utf8_bytes = NULL, final_text_sha256 = NULL
@@ -1961,7 +1889,6 @@ process.exit(127);
     const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
     expect(terminal.runs.map((run) => run.inputStage)).toEqual([
       'request',
-      'contract_repair',
       'production',
     ]);
 
@@ -1975,9 +1902,9 @@ process.exit(127);
         .filter(Boolean),
     ).toEqual([]);
     // One stable identity per physical Run — a shared insert id would collapse
-    // three Runs into one row on ingest.
+    // the two Runs into one row on ingest.
     const insertIds = recoveries.map((recovery) => recovery?.insertId);
-    expect(new Set(insertIds).size).toBe(3);
+    expect(new Set(insertIds).size).toBe(2);
     // The continuation inherits the requesting client's identity rather than
     // inventing one, so the chain stays attributable to the same person.
     for (const recovery of recoveries) {
@@ -1994,19 +1921,18 @@ process.exit(127);
     expect(new Set(lineage.map((props) => props.initial_run_id))).toEqual(
       new Set([fixture.initialRunId]),
     );
-    expect(lineage.map((props) => props.task_run_index)).toEqual([0, 1, 2]);
+    expect(lineage.map((props) => props.task_run_index)).toEqual([0, 1]);
     // The rollout decision is daemon-owned truth; every Run of an admitted
     // task reports the harness it actually ran under.
     expect(lineage.map((props) => props.harness)).toEqual([
       'od_next',
       'od_next',
-      'od_next',
     ]);
     // The lifecycle re-reads host facts (app config, agent detection) before
-    // it captures, so three physical Runs settle well past the shared default.
+    // it captures, so two physical Runs settle well past the shared default.
   }, 90_000);
 
-  it('runs parsed plan -> serialization repair -> production after each source end and remains exactly-once across restart', async () => {
+  it('runs the planning round then one automatic build round after its source end and remains exactly-once across restart', async () => {
     const fixture = await createFixture('repair');
     const sourcePdfAttachment = path.join(
       process.env.OD_DATA_DIR!,
@@ -2053,22 +1979,24 @@ process.exit(127);
     const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
     expect(terminal.runs.map((run) => run.inputStage)).toEqual([
       'request',
-      'contract_repair',
       'production',
     ]);
     expect(terminal.runs.map((run) => run.sourceRunId ?? null)).toEqual([
       null,
       fixture.initialRunId,
-      terminal.runs[1]?.runId,
     ]);
-    expect(terminal.planContractRepairAttempts).toBe(1);
-    expect(terminal.terminalRunId).toBe(terminal.runs[2]?.runId);
+    expect(terminal).toMatchObject({
+      autoRoundCount: 1,
+      settlementReason: 'deliverable_changed',
+      deliverableWritten: true,
+      planContractRepairAttempts: 0,
+    });
+    expect(terminal.terminalRunId).toBe(terminal.runs[1]?.runId);
 
     const statuses = await Promise.all(
       terminal.runs.map((mapping) => getRun(started!.url, mapping.runId)),
     );
     expect(statuses.map((run) => run.status)).toEqual([
-      'succeeded',
       'succeeded',
       'succeeded',
     ]);
@@ -2109,7 +2037,6 @@ process.exit(127);
     expect(watched.stdout).not.toContain('<open-design-plan-contract>');
     expect(watched.stdout).not.toContain('<open-design-runtime-state>');
     expect(watchedEnds.map((event) => event.data.strategyTask?.inputStage)).toEqual([
-      'contract_repair',
       'production',
       'production',
     ]);
@@ -2131,7 +2058,7 @@ process.exit(127);
 
 
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(invocations).toHaveLength(3);
+    expect(invocations).toHaveLength(2);
     expect(invocations.map((invocation) => invocation.stdin)).toEqual(
       terminal.runs.map((mapping) => mapping.finalText.text),
     );
@@ -2203,25 +2130,32 @@ process.exit(127);
     expect(invocations[0]?.stdin).toContain('"reference":"workspace:project"');
     expect(invocations[0]?.stdin).not.toContain(process.env.OD_DATA_DIR ?? '__missing_data_root__');
     expect(invocations[0]?.stdin).not.toContain('# User request');
+    // The planning round is taught two rounds and the notes file, and no
+    // longer a plan contract, a preflight, or a route to declare.
+    expect(invocations[0]?.stdin).toContain('`design-notes.md`');
+    expect(invocations[0]?.stdin).toContain('"nonDesignRequest": true');
+    expect(invocations[0]?.stdin).not.toContain('<open-design-plan-contract>');
+    expect(invocations[0]?.stdin).not.toContain('Preflight');
+    expect(invocations[0]?.stdin).not.toContain('route=direct_edit');
+    // The build round continues the planning round's native session as a
+    // short request turn: no plan hash to bind, no machine block to close with.
     expect(invocations[1]?.argv.slice(0, 2)).toEqual(['exec', 'resume']);
-    expect(invocations[2]?.argv.slice(0, 2)).toEqual(['exec', 'resume']);
-    expect(invocations.slice(1).map((invocation) => invocation.argv.includes(THREAD_ID)))
-      .toEqual([true, true]);
-    expect(invocations[1]?.stdin).toContain('native continuation — contract_repair');
-    expect(invocations[2]?.stdin).toContain('native continuation — production');
+    expect(invocations[1]?.argv.includes(THREAD_ID)).toBe(true);
     expect(invocations[1]?.stdin).toMatch(/^<open_design_request_turn/);
-    expect(invocations[2]?.stdin).toMatch(/^<open_design_request_turn/);
-    expect(invocations[1]?.stdin).toContain('stage="contract_repair" task_run_index="1"');
-    expect(invocations[2]?.stdin).toContain('stage="production" task_run_index="2"');
+    expect(invocations[1]?.stdin).toContain('stage="production" task_run_index="1"');
+    expect(invocations[1]?.stdin).toContain('# OD Next build round');
+    expect(invocations[1]?.stdin).not.toContain('This round runs in a new session');
     expect(invocations[1]?.stdin).not.toContain('# User request');
-    expect(invocations[2]?.stdin).not.toContain('# User request');
     expect(invocations[1]?.stdin).not.toContain('open-design.strategy-state/v2');
-    expect(invocations[2]?.stdin).toContain('## Closing Runtime State');
-    expect(invocations[2]?.stdin).toContain('schema open-design.strategy-state/v2');
-    expect(invocations[2]?.stdin).toContain('inputStage production');
-    expect(invocations[2]?.stdin).toContain('no Plan Contract block');
+    expect(invocations[1]?.stdin).not.toContain('planContractHash');
+    expect(invocations[1]?.stdin).not.toContain('Closing Runtime State');
     expect(statuses[0]!.updatedAt).toBeLessThanOrEqual(invocations[1]!.startedAt);
-    expect(statuses[1]!.updatedAt).toBeLessThanOrEqual(invocations[2]!.startedAt);
+    // The build round delivered index.html into a project that recorded no
+    // entry, so the daemon records it as the project's entry attribute.
+    const projectAfter = await fetch(`${started!.url}/api/projects/${encodeURIComponent(fixture.projectId)}`);
+    expect(projectAfter.status).toBe(200);
+    expect((await projectAfter.json() as { project: { metadata?: { entryFile?: string } } }).project.metadata?.entryFile)
+      .toBe('index.html');
     for (const invocation of invocations) {
       expect(invocation.taskInputDir).toContain('od-next-run-inputs');
       expect(invocation.taskInputDir).not.toContain('od-next-task-inputs');
@@ -2247,7 +2181,6 @@ process.exit(127);
       return state.odNextTaskInputSnapshot;
     }));
     expect(durableInputSnapshots).toEqual([
-      expect.objectContaining({ taskExecutionId: fixture.taskExecutionId }),
       expect.objectContaining({ taskExecutionId: fixture.taskExecutionId }),
       expect.objectContaining({ taskExecutionId: fixture.taskExecutionId }),
     ]);
@@ -2319,18 +2252,18 @@ process.exit(127);
       await getRun(started!.url, mapping.runId);
       await getRun(started!.url, mapping.runId);
     }
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
-    expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)?.runs).toHaveLength(3);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+    expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)?.runs).toHaveLength(2);
 
     await stopServer(started);
     started = await startDaemon();
     for (const mapping of terminal.runs) {
       expect((await getRun(started.url, mapping.runId)).status).toBe('succeeded');
     }
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
     expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)).toMatchObject({
       outcome: 'completed',
-      terminalRunId: terminal.runs[2]?.runId,
+      terminalRunId: terminal.runs[1]?.runId,
     });
   });
 
@@ -2347,12 +2280,11 @@ process.exit(127);
     const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
     expect(terminal.runs.map((run) => run.inputStage)).toEqual([
       'request',
-      'contract_repair',
       'production',
     ]);
     expect(terminal.route).toBe('full_plan');
-    expect(terminal.terminalRunId).toBe(terminal.runs[2]?.runId);
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+    expect(terminal.terminalRunId).toBe(terminal.runs[1]?.runId);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
 
     const retried = await postRun(started!.url, body);
     expect(retried).toMatchObject({
@@ -2366,16 +2298,16 @@ process.exit(127);
         terminal: true,
       },
     });
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
-    expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)?.runs).toHaveLength(3);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+    expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)?.runs).toHaveLength(2);
 
     await stopServer(started);
     started = await startDaemon();
     expect((await getRun(started.url, fixture.initialRunId)).status).toBe('succeeded');
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
     expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)).toMatchObject({
       outcome: 'completed',
-      terminalRunId: terminal.runs[2]?.runId,
+      terminalRunId: terminal.runs[1]?.runId,
     });
   });
 
@@ -2402,7 +2334,7 @@ process.exit(127);
     await waitForTask(fixture.taskExecutionId, 'completed');
 
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(invocations).toHaveLength(3);
+    expect(invocations).toHaveLength(2);
     const bundle = parseOdNextPromptBundleV2(invocations[0]!.stdin);
     expect(bundle.userFirstPrompt).toBe(repeatedQuery);
     expect(bundle.context.priorTranscript).toContain(priorTranscript);
@@ -2415,7 +2347,7 @@ process.exit(127);
     expect(researchContract).not.toContain('## assistant');
   });
 
-  it('fails a blocked production exit before publishing its Run and message terminal status (OPEND-2953)', async () => {
+  it('settles a build round that delivered nothing as a completed task the chat can still continue (OPEND-2953)', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.blocked-production`, '1');
     queueFixtureIds(fixture);
@@ -2424,46 +2356,152 @@ process.exit(127);
       'x-od-analytics-session-id': 'session-opend-2953',
       'x-od-analytics-client-type': 'desktop',
     });
-    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
+    const task = await waitForTask(fixture.taskExecutionId, 'completed');
+    // The one automatic round ran, wrote nothing, and left its plan open. The
+    // physical Run is what it was — a clean exit — and the task records why it
+    // is not delivered instead of turning that exit into a failure.
+    expect(task).toMatchObject({
+      autoRoundCount: 1,
+      settlementReason: 'todo_unfinished',
+      deliverableWritten: false,
+    });
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
     const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
     expect(terminal).toMatchObject({
-      status: 'failed',
+      status: 'succeeded',
       exitCode: 0,
-      errorCode: 'OD_NEXT_TASK_BLOCKED',
-      failureCategory: 'process_exit',
-      failureDetail: 'execution_failed',
-      retryable: false,
-      strategyTask: { outcome: 'blocked', terminal: true },
+      endedWithUnfinishedWork: true,
+      strategyTask: {
+        outcome: 'completed', terminal: true, settlementReason: 'todo_unfinished', deliverableWritten: false,
+      },
     });
-    expect(terminal.error).toContain('od_next_protocol_runtime_state_missing');
+    expect(terminal.errorCode ?? null).toBeNull();
     const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
       .map((line) => JSON.parse(line));
     expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
     expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
-      status: 'failed', code: 0, artifactCount: 0,
+      status: 'succeeded', code: 0, artifactCount: 0, endedWithUnfinishedWork: true,
     });
-    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
-      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'failed', exit_code: 0 });
+    expect(records.find((event) => event.data?.type === 'strategy_round_settlement' && event.data?.runId === task.latestRunId)?.data)
+      .toMatchObject({ action: 'settle', reason: 'todo_unfinished', deliverableWritten: false });
     const response = await fetch(
       `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
     );
     const { messages } = await response.json() as {
-      messages: Array<{ runId?: string; runStatus?: string }>;
+      messages: Array<{ runId?: string; runStatus?: string; strategyTaskDelivered?: boolean }>;
     };
-    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('failed');
+    const buildMessage = messages.find((message) => message.runId === task.latestRunId);
+    expect(buildMessage?.runStatus).toBe('succeeded');
+    // No delivered stamp: the "continue remaining tasks" offer stays available.
+    expect(buildMessage?.strategyTaskDelivered).toBeUndefined();
     const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
-    expect(recovery?.properties).toMatchObject({
-      result: 'failed',
-      error_code: 'OD_NEXT_TASK_BLOCKED',
-      failure_stage: 'finalize',
-      failure_detail: 'execution_failed',
-      retryable: false,
-      rpc_close_reason: 'exit_0',
-    });
-    for (const mapping of task.runs.slice(0, -1)) {
+    expect(recovery?.properties).toMatchObject({ result: 'success', rpc_close_reason: 'exit_0' });
+    for (const mapping of task.runs) {
       expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
     }
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+  }, 90_000);
+
+  /**
+   * The `run_finished` capture for one Run. posthog-node batches, so when the
+   * event has not arrived after a beat the daemon's own shutdown drains it;
+   * the caller must not use `started` afterwards.
+   */
+  async function capturedRunFinished(runId: string) {
+    const find = () => analyticsSink!.captured().find((record) => (
+      record.event === 'run_finished' && record.properties.run_id === runId
+    ));
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && !find()) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!find()) {
+      await stopServer(started);
+      started = null;
+    }
+    return find();
+  }
+
+  it('ends a greeting the agent declared non-design as its own completed ending, with no build round', async () => {
+    const fixture = await createFixture('repair', { captureAnalytics: true });
+    await writeFile(`${fixture.logPath}.non-design`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'hi'), {
+      'x-od-analytics-device-id': 'device-non-design',
+      'x-od-analytics-session-id': 'session-non-design',
+      'x-od-analytics-client-type': 'desktop',
+    });
+    const task = await waitForTask(fixture.taskExecutionId, 'completed');
+    // The declaration ends the task on its own reason: no build round, no
+    // blocked verdict, nothing delivered.
+    expect(task).toMatchObject({
+      autoRoundCount: 0,
+      settlementReason: 'non_design',
+      deliverableWritten: false,
+    });
+    expect(task.blockedContext ?? null).toBeNull();
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: { outcome: 'completed', terminal: true, settlementReason: 'non_design', deliverableWritten: false },
+    });
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.endedWithUnfinishedWork ?? false).toBe(false);
+    // The chat receives an ordinary succeeded turn: no failure, no blocked
+    // stamp, no delivered stamp, and the declaration block stripped from
+    // the text the user reads.
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toEqual([]);
+    expect(records.find((event) => event.data?.type === 'strategy_round_settlement')?.data)
+      .toMatchObject({ action: 'settle', reason: 'non_design', deliverableWritten: false });
+    const visible = records
+      .filter((event) => event.event === 'agent' && event.data?.type === 'text_delta')
+      .map((event) => event.data.delta as string)
+      .join('');
+    expect(visible).toContain('Tell me what you would like to design');
+    expect(visible).not.toContain('open-design-runtime-state');
+    expect(visible).not.toContain('nonDesignRequest');
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string; strategyTaskDelivered?: boolean; strategyTaskBlocked?: boolean }>;
+    };
+    const reply = messages.find((message) => message.runId === task.latestRunId);
+    expect(reply?.runStatus).toBe('succeeded');
+    expect(reply?.strategyTaskBlocked).toBeUndefined();
+    expect(reply?.strategyTaskDelivered).toBeUndefined();
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
+    // Reported in its own bucket, never as blocked.
+    const finished = await capturedRunFinished(task.latestRunId);
+    expect(finished?.properties).toMatchObject({
+      result: 'success',
+      od_next_task_outcome: 'completed',
+      od_next_settlement_reason: 'non_design',
+      od_next_auto_round_count: 0,
+      od_next_deliverable_written: false,
+    });
+    expect(finished?.properties.od_next_blocked_reason_code ?? null).toBeNull();
+  }, 90_000);
+
+  it('keeps a written deliverable ahead of a non-design declaration', async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.non-design-with-file`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'hi'));
+    const task = await waitForTask(fixture.taskExecutionId, 'completed');
+    // Facts first: the host watched a file being written, so the round
+    // delivered whatever the agent declared about it.
+    expect(task).toMatchObject({
+      autoRoundCount: 0,
+      settlementReason: 'deliverable_changed',
+      deliverableWritten: true,
+    });
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
   }, 90_000);
 
   it('blocks the durable task when the selected agent exits before publishing a session', async () => {
@@ -2571,7 +2609,7 @@ process.exit(127);
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
     expect(invocations).toHaveLength(1);
     expect(parseOdNextPromptBundleV2(invocations[0]!.stdin).coreSystemPrompt.outputContract)
-      .toContain('Emit exactly one Runtime State block on every response.');
+      .toContain('Open Design settles the task on what it observed');
     const reloaded = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
     const { messages } = await reloaded.json() as { messages: Array<{ runId?: string; strategyTaskDelivered?: boolean }> };
     expect(messages.find((message) => message.runId === task.latestRunId)?.strategyTaskDelivered).toBe(true);
@@ -2589,17 +2627,26 @@ process.exit(127);
       clientRequestId: `followup-request-${fixture.projectId}`,
     });
     const followupTerminal = await waitForRunTerminal(started!.url, followup.runId as string);
-    expect(followupTerminal).toMatchObject(declaredEntry ? {
-      deliverableValid: false, deliverableValidation: 'no_artifact',
-      strategyTask: { outcome: 'blocked', terminal: true },
-    } : {
-      deliverableValid: true, deliverableEntryFile: entryFile,
-      strategyTask: { outcome: 'completed', terminal: true },
-    });
-    expect(followupTerminal.strategyTask!.taskExecutionId).not.toBe(task.taskExecutionId);
+    const followupTask = await waitForTask(followupTerminal.strategyTask!.taskExecutionId, 'completed');
+    expect(followupTask.taskExecutionId).not.toBe(task.taskExecutionId);
+    if (declaredEntry) {
+      // A follow-up that wrote nothing gets its one automatic build round; when
+      // that round writes nothing either, the task settles without delivery
+      // instead of failing on the missing entry.
+      expect(followupTask).toMatchObject({ autoRoundCount: 1, settlementReason: 'text_only', deliverableWritten: false });
+      expect(followupTask.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
+      const buildTerminal = await waitForRunTerminal(started!.url, followupTask.latestRunId);
+      expect(buildTerminal).toMatchObject({ status: 'succeeded', strategyTask: { outcome: 'completed', deliverableWritten: false } });
+    } else {
+      expect(followupTerminal).toMatchObject({
+        deliverableValid: true, deliverableEntryFile: entryFile,
+        strategyTask: { outcome: 'completed', terminal: true, deliverableWritten: true, settlementReason: 'deliverable_changed' },
+      });
+      expect(followupTask.runs).toHaveLength(1);
+    }
     const resumed = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(resumed).toHaveLength(2);
-    expect(resumed[1]!.argv).toContain('resume');
+    expect(resumed).toHaveLength(declaredEntry ? 3 : 2);
+    for (const invocation of resumed.slice(1)) expect(invocation.argv).toContain('resume');
   });
 
   it('does not report unfinished work when the task delivered under a stale plan', async () => {
@@ -2637,178 +2684,6 @@ process.exit(127);
     const deliveredTurn = messages.find((message) => message.runId === task.latestRunId);
     expect(deliveredTurn).toBeDefined();
     expect(deliveredTurn!.strategyTaskDelivered).toBe(true);
-  });
-
-  it('fails closed when daemon-owned execution preflight rejects', async () => {
-    const fixture = await createFixture('repair');
-    await stopServer(started);
-    started = await startDaemon(async () => {
-      throw new Error('fixture preflight unavailable');
-    });
-
-    queueFixtureIds(fixture);
-    await postRun(started.url, createRunRequest(fixture, 'Build the operator prototype.'));
-    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
-    const terminal = await waitForRunTerminal(started.url, task.latestRunId);
-
-    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
-    expect(terminal).toMatchObject({
-      status: 'failed',
-      errorCode: 'OD_NEXT_EXECUTION_PREFLIGHT_FAILED',
-      strategyTask: {
-        taskExecutionId: fixture.taskExecutionId,
-        outcome: 'blocked',
-        terminal: true,
-      },
-    });
-  });
-
-  it('does not allocate a stale continuation when cancel wins during execution preflight', async () => {
-    const fixture = await createFixture('repair');
-    await stopServer(started);
-    let enterResolver!: () => void;
-    let releaseResolver!: () => void;
-    const resolverEntered = new Promise<void>((resolve) => { enterResolver = resolve; });
-    const resolverGate = new Promise<void>((resolve) => { releaseResolver = resolve; });
-    started = await startDaemon(async () => {
-      enterResolver();
-      await resolverGate;
-      return EXECUTION_PREFLIGHT;
-    });
-
-    queueFixtureIds(fixture);
-    await postRun(started.url, createRunRequest(fixture, 'Build the operator prototype.'));
-    await resolverEntered;
-    const awaiting = getStrategyTaskExecution(database(), fixture.taskExecutionId);
-    expect(awaiting?.runs.map((run) => run.inputStage)).toEqual(['request']);
-    const activeRunId = awaiting?.activeRunId;
-    expect(activeRunId).toBeTruthy();
-
-    const cancelResponse = await fetch(
-      `${started.url}/api/runs/${encodeURIComponent(activeRunId!)}/cancel`,
-      { method: 'POST' },
-    );
-    expect(cancelResponse.status).toBe(200);
-    releaseResolver();
-
-    const task = await waitForTask(fixture.taskExecutionId, 'canceled');
-    const terminal = await waitForRunTerminal(started.url, activeRunId!);
-    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
-    expect(terminal).toMatchObject({
-      status: 'canceled',
-      strategyTask: { outcome: 'canceled', terminal: true },
-    });
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
-  });
-
-  it('runs a verified complex package chain and requires normalized Child evidence', async () => {
-    const capabilityResult = resolveBundledOdNextRuntimeCapability({
-      agentId: 'codex',
-      agentCliVersion: 'codex-cli 0.147.0',
-      capturedAt: 100,
-    });
-    expect(capabilityResult.reason).toBe('capability_resolved');
-    if (!capabilityResult.snapshot) throw new Error('expected verified Codex capability');
-    const capability = capabilityResult.snapshot;
-    const fixture = await createFixture('complex', { capability });
-    await stopServer(started);
-    started = await startDaemon(
-      () => EXECUTION_PREFLIGHT,
-      ({ phase, taskExecutionId, runId }) => {
-        if (phase === 'eligibility') return { capabilitySnapshot: capability };
-        const rootId = `task-run:${runId}`;
-        const fact = (
-          id: string,
-          kind: 'task_run' | 'child_agent',
-          status: 'running' | 'completed',
-          packageId?: string,
-        ) => normalizeAgentObservationV1({
-          identity: {
-            observationId: id,
-            taskExecutionId,
-            runId,
-            taskRunIndex: 1,
-            ...(kind === 'child_agent' ? { parentObservationId: rootId } : {}),
-          },
-          kind,
-          stage: 'production',
-          status,
-          ...(packageId ? { attributes: { buildPackageId: packageId } } : {}),
-        });
-        return {
-          capabilitySnapshot: capability,
-          taskRunObservationId: rootId,
-          observations: [
-            fact(rootId, 'task_run', 'running'),
-            fact('child-shell', 'child_agent', 'running', 'shell'),
-            fact('child-shell', 'child_agent', 'completed', 'shell'),
-            fact('child-flow', 'child_agent', 'running', 'flow'),
-            fact('child-flow', 'child_agent', 'completed', 'flow'),
-            fact(rootId, 'task_run', 'completed'),
-          ],
-        };
-      },
-    );
-
-    queueFixtureIds(fixture);
-    await postRun(started.url, createRunRequest(fixture, 'Build the complex prototype.'));
-    const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
-    expect(terminal).toMatchObject({
-      executionMode: 'complex',
-      terminalRunId: terminal.runs[1]?.runId,
-    });
-    expect(terminal.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
-  });
-
-  it('binds native Claude Agents to complex Build Packages and completes from durable facts', async () => {
-    const capabilityResult = resolveBundledOdNextRuntimeCapability({
-      agentId: 'claude',
-      agentCliVersion: '2.1.233 (Claude Code)',
-    });
-    expect(capabilityResult.reason).toBe('capability_resolved');
-    if (!capabilityResult.snapshot) throw new Error('expected verified Claude capability');
-    const fixture = await createFixture('complex', {
-      selectedAgentId: 'claude',
-      capability: capabilityResult.snapshot,
-    });
-    if (!started) throw new Error('expected running daemon fixture');
-
-    queueFixtureIds(fixture);
-    await postRun(started.url, createRunRequest(fixture, 'Build the complex prototype.'));
-    const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
-    expect(terminal).toMatchObject({ executionMode: 'complex' });
-    expect(terminal.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
-
-    const invocations = await readClaudeInvocations(fixture.logPath, fixture.projectId);
-    expect(invocations).toHaveLength(2);
-    const production = invocations[1]!;
-    const agentsFlag = production.argv.indexOf('--agents');
-    expect(agentsFlag).toBeGreaterThan(-1);
-    const nativeAgents = JSON.parse(production.argv[agentsFlag + 1]!) as Record<string, unknown>;
-    const handles = Object.keys(nativeAgents);
-    expect(handles).toHaveLength(2);
-    expect(handles.every((handle) => /^od-build-\d+-[a-f0-9]{16}$/.test(handle))).toBe(true);
-    expect(JSON.stringify(nativeAgents)).not.toContain('shell');
-    expect(JSON.stringify(nativeAgents)).not.toContain('flow');
-    const productionPrompt = (JSON.parse(production.stdin) as any).message.content[0].text;
-    expect(productionPrompt).toContain('"buildPackageId":"shell"');
-    expect(productionPrompt).toContain('"buildPackageId":"flow"');
-    expect(production.argv).toContain('--forward-subagent-text');
-
-    const productionRun = await getRun(started.url, terminal.runs[1]!.runId);
-    const childFacts = await readClaudeChildRuntimeFacts(productionRun.eventsLogPath);
-    expect(childFacts.filter((fact) => fact.state === 'completed').map((fact) => (
-      fact.buildPackageId
-    ))).toEqual(['shell', 'flow']);
-    const childToolFacts = await readClaudeChildToolRuntimeFacts(productionRun.eventsLogPath);
-    expect(childToolFacts.filter((fact) => fact.state === 'completed').map((fact) => (
-      [fact.buildPackageId, fact.toolName]
-    ))).toEqual([['shell', 'Bash'], ['flow', 'Bash']]);
-    const persistedEvents = await readFile(productionRun.eventsLogPath, 'utf8');
-    expect(persistedEvents).not.toContain('INTERNAL_CHILD_TEXT_SHOULD_NOT_PERSIST');
-    expect(persistedEvents).not.toContain('INTERNAL_CHILD_TOOL_INPUT');
-    expect(persistedEvents).not.toContain('INTERNAL_CHILD_TOOL_OUTPUT');
   });
 
   it.each(['cancel', 'normal'] as const)(
@@ -2867,7 +2742,7 @@ process.exit(127);
         } else {
           expect(codexArchiveBoundary.cleanupStarted).toBe(false);
           expect(codexArchiveBoundary.cleanupResults).toEqual([]);
-          expect(task?.outcome).toBe('clarification_required');
+          expect(task).toMatchObject({ outcome: 'completed', settlementReason: 'question', deliverableWritten: false });
         }
         // Drain the actual server lifecycle before checking durable external
         // effects. Collector/ordering assertions above remain independent.
@@ -2914,22 +2789,28 @@ process.exit(127);
   );
 
   async function createFixture(
-    mode: 'repair' | 'direct' | 'complex' | IntentServerMode,
+    mode: 'repair' | 'direct' | 'complex',
     {
       selectedAgentId = 'codex',
       capability,
-      preflightResolver,
       probeLogPath,
+      captureAnalytics = false,
     }: {
       selectedAgentId?: string;
       capability?: OdNextRuntimeCapabilitySnapshotV1;
-      preflightResolver?: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']>;
       probeLogPath?: string;
+      /** Stand in for PostHog ingestion so the test can read what the daemon reported. */
+      captureAnalytics?: boolean;
     } = {},
   ) {
     const suffix = `${mode}-${Date.now()}-${++sequence}`;
     if (mode !== 'direct') {
-      const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design', undefined, 'codex-cli 0.147.0', preflightResolver);
+      if (captureAnalytics) {
+        analyticsSink = await startCaptureSink();
+        process.env.POSTHOG_KEY = 'phc_od_next_server_test';
+        process.env.POSTHOG_HOST = analyticsSink.url;
+      }
+      const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design', undefined, 'codex-cli 0.147.0');
       started = publicFixture.started;
       binDir = publicFixture.binDir;
       process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
@@ -2942,7 +2823,7 @@ process.exit(127);
         .toString(16)
         .padStart(12, '0')}`;
       const taskExecutionId = `odnext_${taskOwnerUuid.replaceAll('-', '')}`;
-      const plan = planContract(template.snapshotId, template.strategy, mode.startsWith('intent-') ? 'repair' : mode as 'repair' | 'complex', capability);
+      const plan = planContract(template.snapshotId, template.strategy, mode as 'repair' | 'complex', capability);
       const { bin, logPath } = selectedAgentId === 'claude'
         ? await writeStrategyClaude(binDir, plan)
         : await writeStrategyCodex(binDir, mode, plan, probeLogPath);
@@ -2954,7 +2835,7 @@ process.exit(127);
           agentCliEnv: selectedAgentId === 'claude'
             ? { claude: { CLAUDE_BIN: bin } }
             : { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
-          telemetry: { metrics: false, content: false, artifactManifest: false },
+          telemetry: { metrics: captureAnalytics, content: false, artifactManifest: false },
           privacyDecisionAt: Date.now(),
         }),
       });
@@ -3024,13 +2905,6 @@ process.exit(127);
         selectedAgentId,
         initialRunId,
         ...strategyTaskCreateIdentityFixture(),
-      });
-      prepareStrategyRequest(database(), {
-        taskExecutionId,
-        preference: 'auto',
-        directEdit: DIRECT_ELIGIBLE,
-        intake: INTAKE_PASSED,
-        execution: EXECUTION_PREFLIGHT,
       });
     } else {
       process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
@@ -3153,7 +3027,6 @@ async function createPublicRolloutFixture(
   conversationMode: 'design' | 'chat' | 'plan' = 'chat',
   pluginId?: string,
   agentCliVersion = 'codex-cli 0.147.0',
-  preflightResolver?: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']>,
 ) {
   const suffix = `${label}-${Date.now()}`;
   const binDir = await mkdtemp(path.join(os.tmpdir(), `od-next-public-${label}-`));
@@ -3162,7 +3035,7 @@ async function createPublicRolloutFixture(
     label,
     agentCliVersion,
   );
-  const started = await startDaemon(preflightResolver);
+  const started = await startDaemon();
   const projectId = `od-next-public-${suffix}`;
   const projectResponse = await fetch(`${started.url}/api/projects`, {
     method: 'POST',
@@ -3382,17 +3255,11 @@ async function isolateAgentDetection(): Promise<void> {
   for (const key of fixtureAgentBinEnvKeys) delete process.env[key];
 }
 
-async function startDaemon(
-  resolver: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']> =
-    () => EXECUTION_PREFLIGHT,
-  complexResolver: StartServerOptions['odNextComplexProductionResolver'] = null,
-): Promise<StartedServer> {
+async function startDaemon(): Promise<StartedServer> {
   await isolateAgentDetection();
   const started = await startServer({
     port: 0,
     returnServer: true,
-    odNextExecutionPreflightResolver: resolver,
-    odNextComplexProductionResolver: complexResolver,
   }) as StartedServer;
   fixtureHttpClients.set(new URL(started.url).origin, { owner: started, dispatcher: new Agent() });
   return started;
@@ -3489,12 +3356,23 @@ async function createStrategyTemplate() {
   };
 }
 
+/**
+ * The plan block a task frozen on an older strategy package still writes. The
+ * daemon strips it from the visible reply and ignores its content; the fixture
+ * keeps emitting it to prove exactly that.
+ */
+type LegacyPlanContract = {
+  schema: string;
+  strategy: { id: string; version: string; packageHash: string; snapshotId: string };
+  [key: string]: unknown;
+};
+
 function planContract(
   snapshotId: string,
   strategy: AppliedStrategyBindingV2,
   mode: 'repair' | 'direct' | 'complex' = 'repair',
   capability = complexCapabilitySnapshot(),
-): OpenDesignPlanContractV2 {
+): LegacyPlanContract {
   return {
     schema: 'open-design.plan-contract/v2',
     strategy: {
@@ -3589,12 +3467,10 @@ function machineBlock(tag: string, value: unknown, fenced = false): string {
   return `<${tag}>\n${fenced ? `\`\`\`json\n${json}\n\`\`\`` : json}\n</${tag}>`;
 }
 
-type IntentServerMode = 'intent-question' | 'intent-request' | 'intent-first-write' | 'intent-fail';
-
 async function writeStrategyCodex(
   dir: string,
-  mode: 'repair' | 'direct' | 'complex' | IntentServerMode,
-  plan: OpenDesignPlanContractV2,
+  mode: 'repair' | 'direct' | 'complex',
+  plan: LegacyPlanContract,
   probeLogPath?: string,
 ): Promise<{ bin: string; logPath: string }> {
   const bin = path.join(dir, `codex-${mode}`);
@@ -3630,15 +3506,6 @@ async function writeStrategyCodex(
     inputStage: 'production', outcome: 'completed', executionMode: 'complex',
   }));
 
-  const questionText = '<question-form id="intent-2623">{"questions":[{"id":"audience","type":"text","label":"Audience?","required":true}]}</question-form>';
-  const missingIntentPlan = (stage: 'request' | 'clarification') => [
-    'INTENT_SOURCE_ANSWER_2623: The requested plan is available in this response.',
-    machineBlock('open-design-plan-contract', plan),
-    machineBlock('open-design-runtime-state', {
-      schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: stage,
-      outcome: 'plan_ready', executionMode: 'simple', reasonCodes: [],
-    }),
-  ].join('\n');
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
@@ -3671,26 +3538,19 @@ function finish() {
     process.stderr.write("error: unexpected argument '-C' found\\n");
     process.exit(2);
   }
+  // The build round arrives as a delta into the continued session or as a
+  // full Bundle in a fresh process; the fixture recognises both, and the
+  // older continuation wording a frozen package might still see.
+  const buildRound = stdin.includes('# OD Next build round') || stdin.includes('native continuation — production');
   let text;
-  if (mode.startsWith('intent-')) {
-    if (stdin.startsWith('<open_design_intent_resolution_turn ')) {
-      if (mode === 'intent-fail') { process.stderr.write('fixture intent supplement exited\\n'); process.exit(2); }
-      const stage = / stage="(request|clarification)"/.exec(stdin)?.[1];
-      if (!argv.includes('resume') || !stage) process.exit(9);
-      text = '<open-design-runtime-state>\\n' + JSON.stringify({
-        schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: stage,
-        outcome: 'completed', executionMode: 'simple', executionIntent: 'plan_only', reasonCodes: [],
-      }) + '\\n</open-design-runtime-state>';
-    } else if (stdin.includes('native continuation — clarification')) {
-      text = ${JSON.stringify(missingIntentPlan('clarification'))};
-    } else if (!argv.includes('resume') && stdin.includes('INTENT_SERVER_2623')) {
-      text = mode === 'intent-request' ? ${JSON.stringify(missingIntentPlan('request'))} : ${JSON.stringify(questionText)};
-      if (mode === 'intent-first-write') {
-        const target = path.join(process.cwd(), 'intent-draft.txt');
-        fs.writeFileSync(target, 'Observed first-turn write.');
-        console.log(JSON.stringify({ type: 'item.completed', item: { id: 'first-write', type: 'file_change', changes: [{ path: target, kind: 'add' }], status: 'completed' } }));
-      }
-    } else { process.stderr.write('Unexpected intent fixture invocation\\n'); process.exit(9); }
+  if (!buildRound && (fs.existsSync(logPath + '.non-design') || fs.existsSync(logPath + '.non-design-with-file'))) {
+    // A greeting answered in prose with the light declaration the status
+    // block carries. The second marker also writes a file, so the host's own
+    // write evidence outranks the declaration.
+    if (fs.existsSync(logPath + '.non-design-with-file')) {
+      fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Wrote it anyway</title>');
+    }
+    text = 'Hi! Tell me what you would like to design and I will plan it.\\n' + ${JSON.stringify(machineBlock('open-design-runtime-state', { nonDesignRequest: true, noFileWrites: true }))};
   } else if (fs.existsSync(logPath + '.linked-page')) {
     const childFile = fs.readFileSync(logPath + '.linked-page', 'utf8');
     const edited = fs.existsSync(logPath + '.linked-page-edit');
@@ -3701,17 +3561,17 @@ function finish() {
   } else if (mode === 'direct') {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Direct</title>');
     text = ${JSON.stringify(direct)};
-  } else if (mode === 'complex' && stdin.includes('native continuation — production')) {
+  } else if (mode === 'complex' && buildRound) {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Complex</title>');
     text = ${JSON.stringify(complexProduction)};
   } else if (mode === 'complex') {
     text = ${JSON.stringify(complexPlan)};
   } else if (stdin.includes('native continuation — contract_repair')) {
     text = ${JSON.stringify(repaired)};
-  } else if (stdin.includes('native continuation — production') && fs.existsSync(logPath + '.blocked-production')) {
+  } else if (buildRound && fs.existsSync(logPath + '.blocked-production')) {
     staleTodoList = true;
     text = 'Working on the lesson.';
-  } else if (stdin.includes('native continuation — production')) {
+  } else if (buildRound) {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
     staleTodoList = true;
     text = ${JSON.stringify(production)};
@@ -3734,8 +3594,8 @@ function finish() {
   }
   console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
   console.log(JSON.stringify({ type: 'turn.started' }));
-  if (stdin.includes('native continuation — production') && fs.existsSync(logPath + '.blocked-production')) {
-    // Replay the host-observed failure boundary: completed tools and progress text,
+  if (buildRound && fs.existsSync(logPath + '.blocked-production')) {
+    // Replay the host-observed boundary: completed tools and progress text,
     // no deliverable or Runtime State, then a clean process exit.
     for (let i = 0; i < 2; i++) console.log(JSON.stringify({ type: 'item.completed', item: {
       id: 'tool-' + i, type: 'mcp_tool_call', server: 'tasks', tool: 'TodoWrite',
@@ -3767,7 +3627,7 @@ setTimeout(finish, 1500);
 
 async function writeStrategyClaude(
   dir: string,
-  plan: OpenDesignPlanContractV2,
+  plan: LegacyPlanContract,
 ): Promise<{ bin: string; logPath: string }> {
   const bin = path.join(dir, 'claude-complex');
   const logPath = path.join(dir, 'claude-complex.jsonl');

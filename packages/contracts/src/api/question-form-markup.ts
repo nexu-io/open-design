@@ -17,14 +17,14 @@
 // two surfaces answering one question about the same turn, differently.
 //
 // Every consumer treats the answer as a fact about the rendered UI: the OD Next
-// coordinator blocks a `clarification_required` turn that rendered no form,
-// `GET /api/projects` reports a partition as awaiting input, run analytics
-// record whether the turn asked anything, and run completeness decides whether
-// a turn handed the baton back to the user or stopped with work undone. A
-// detector that scores a form the UI is displaying as absent therefore does not
-// merely mis-count; it settles the strategy task terminal + blocked underneath
-// a form the user can still fill in, and their answer comes back as 409
-// STRATEGY_TASK_STATE_MISMATCH (OPEND-2364). Agreement is the contract.
+// coordinator settles a round that rendered a form as waiting on the user
+// instead of starting the automatic build round, `GET /api/projects` reports a
+// partition as awaiting input, run analytics record whether the turn asked
+// anything, and run completeness decides whether a turn handed the baton back
+// to the user or stopped with work undone. A detector that scores a form the
+// UI is displaying as absent therefore does not merely mis-count; it starts a
+// build round underneath a form the user is still filling in (OPEND-2364).
+// Agreement is the contract.
 
 import {
   chatProtocolSkipRanges,
