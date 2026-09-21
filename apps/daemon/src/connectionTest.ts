@@ -98,6 +98,9 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import {
+  ensureDetectedRuntimeCapabilities,
+} from './runtimes/detection.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2608,8 +2611,23 @@ async function testAgentConnectionInternal(
       // Connection tests should validate the adapter's core CLI path, not
       // fail on unrelated user-installed OpenCode plugins. `opencode run
       // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
+      // the user's full plugin environment. OpenCode 2.x removed the flag
+      // and rejects it ("Unrecognized flag: --pure"), so probe the actual
+      // installed CLI and only push it when advertised. A failed probe
+      // (timeout, spawn error) keeps the historical behavior — the flag is
+      // only skipped on positive evidence it does not exist, never on
+      // absence of evidence.
+      const pureCaps = input.agentId === 'opencode'
+        ? await ensureDetectedRuntimeCapabilities(
+            'opencode',
+            configuredAgentEnv,
+          ).catch(() => null)
+        : null;
+      if (
+        (input.agentId === 'opencode' || input.agentId === 'mimo') &&
+        !args.includes('--pure') &&
+        (input.agentId === 'mimo' || pureCaps?.isolatedRun !== false)
+      ) {
         args.push('--pure');
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {

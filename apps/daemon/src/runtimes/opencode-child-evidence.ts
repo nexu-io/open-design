@@ -369,13 +369,14 @@ export async function collectOpenCodeChildRuntimeFacts(input: {
 }
 
 /**
- * Read one child session through `opencode export <id> --sanitize`, the only
- * OpenCode surface that emits a child transcript together with the `parentID`
- * the two-sided verification needs, and with transcript and file bytes already
- * redacted by the CLI itself.
+ * Read one child session through `opencode session export <id> --sanitize`,
+ * the only OpenCode surface that emits a child transcript together with the
+ * `parentID` the two-sided verification needs, and with transcript and file
+ * bytes already redacted by the CLI itself. (1.x spelled this
+ * `opencode export <id> --sanitize --pure`; 2.x moved it under `session`
+ * and dropped `--pure` — the subcommand has no such flag on v2.0.8.)
  *
- * `--pure` keeps a user-installed OpenCode plugin from executing inside the
- * evidence path, and `execAgentFile` supplies a neutral working directory so
+ * `execAgentFile` supplies a neutral working directory so
  * the bun-based CLI cannot drop a lockfile into the user's project (see
  * `invocation.ts`). The env must be the one the Run was spawned with: it
  * carries the `XDG_DATA_HOME` / `HOME` that decide which session store the
@@ -393,7 +394,7 @@ export function createOpenCodeSanitizedExportLoader(input: {
     }
     const { stdout } = await execAgentFile(
       input.launchPath,
-      ['export', childSessionId, '--sanitize', '--pure'],
+      ['session', 'export', childSessionId, '--sanitize'],
       {
         env: input.env,
         timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,

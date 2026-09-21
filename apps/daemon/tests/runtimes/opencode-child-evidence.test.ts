@@ -814,7 +814,7 @@ describe('native OpenCode child evidence', () => {
     });
     expect(execAgentFileMock).toHaveBeenCalledWith(
       '/opt/open-design/opencode',
-      ['export', 'ses_child_synthetic', '--sanitize', '--pure'],
+      ['session', 'export', 'ses_child_synthetic', '--sanitize'],
       expect.objectContaining({
         env: { XDG_DATA_HOME: '/run/od/share' },
         timeout: expect.any(Number),

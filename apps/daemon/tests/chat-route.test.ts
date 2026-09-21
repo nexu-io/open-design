@@ -731,8 +731,6 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
-          '--dir',
-          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/deepseek-v4-flash',
         ]);
@@ -826,8 +824,6 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
-          '--dir',
-          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/model',
         ]);

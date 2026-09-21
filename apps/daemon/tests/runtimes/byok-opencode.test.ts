@@ -14,7 +14,8 @@ describe('byok-opencode runtime config', () => {
     agentCapabilities.delete('byok-opencode');
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
     expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
-      '--dangerously-skip-permissions': 'skipPermissions',
+      '--auto': 'skipPermissions',
+      '--pure': 'isolatedRun',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
       'run',
@@ -28,7 +29,7 @@ describe('byok-opencode runtime config', () => {
         'run',
         '--format',
         'json',
-        '--dangerously-skip-permissions',
+        '--auto',
         '-m',
         'open-design-byok/gpt-5.5',
       ]);

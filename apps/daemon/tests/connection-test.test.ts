@@ -3908,6 +3908,10 @@ process.exit(1);
         `
 const fs = require('node:fs');
 const args = process.argv.slice(2);
+if (args[0] === 'run' && args[1] === '--help') {
+  console.log('run --format json --auto --pure --title');
+  process.exit(0);
+}
 if (args[0] === 'models') {
   console.log('github-copilot/gpt-4o');
   process.exit(0);
@@ -3945,16 +3949,13 @@ process.stdin.on('end', () => {
             sample: 'ok',
           });
 
-          // `--dir` pins OpenCode's workspace to the probe's own temp cwd, so
-          // a connection test cannot adopt the repository root as its
-          // worktree. The path is minted per probe; everything around it still
-          // has to match byte-for-byte, since the 1.3 compatibility this test
-          // guards is a property of the argument ORDER.
+          // Spawn cwd (probe temp dir) is the workspace pin on 2.x — no
+          // `--dir` argv exists anymore. The order of the remaining flags
+          // still has to match byte-for-byte, since the 1.3 compatibility
+          // this test guards is a property of the argument ORDER.
           const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
           expect(argv.slice(0, 3)).toEqual(['run', '--format', 'json']);
-          expect(argv[3]).toBe('--dir');
-          expect(path.isAbsolute(argv[4] ?? '')).toBe(true);
-          expect(argv.slice(5)).toEqual([
+          expect(argv.slice(3)).toEqual([
             '-m',
             'github-copilot/gpt-4o',
             '--pure',
@@ -4003,6 +4004,8 @@ process.stdin.on('end', () => console.log(JSON.stringify({ type: 'text', part: {
       const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
       expect(argv).toContain('openai/gpt-5.6-sol');
       expect(argv).not.toContain('--variant');
+      // Unscoped variant catalogs stay unforwarded; a scoped catalog folds
+      // into `-m provider/model#variant` instead.
       expect(argv).not.toContain('high');
     } finally {
       rememberLiveModels('opencode', previousModels);
