@@ -28,8 +28,9 @@ test('[P0] @critical home loads with the primary entry controls', async ({ page 
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await ensureRailOpen(page);
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
-  // #5517's rail has no "+ New project" button; project creation starts from
-  // the composer, or from the Projects view's own CTA (see the modal spec below).
+  // #8097 restored the "+ New project" item that #5517 deleted — it is a
+  // primary entry control now, so the smoke asserts it like its neighbours.
+  await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
   await expect(page.getByTestId('entry-nav-search')).toBeVisible();
   await expect(page.getByTestId('entry-nav-design-systems')).toBeVisible();
 });

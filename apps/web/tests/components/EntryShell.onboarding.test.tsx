@@ -569,13 +569,12 @@ describe('EntryShell project reopen request priority', () => {
 });
 
 describe('EntryShell new project rail', () => {
-  // The rail's "+ New project" button (`entry-nav-new-project`) is gone in
-  // #5517's rail: `EntryShell` still passes `onNewProject` — with its
-  // `new_project_plus` ui_click — to `EntryNavRail`, but the rail never renders
-  // a control that calls it, so the button and that analytics event are both
-  // unreachable. The spec that drove it is therefore removed; opening the
-  // new-project modal is still covered by the Projects-view CTA below, which is
-  // the surviving entry point.
+  // #8097 restored the rail's "+ New project" button (`entry-nav-new-project`)
+  // that #5517 had deleted while leaving `EntryShell`'s `onNewProject` wiring
+  // dead. The rail-entry specs — placement, click, disabled state, and the
+  // `new_project_plus` ui_click through the real EntryShell wiring — live in
+  // `EntryShell.new-project-entry.test.tsx`; the Projects-view CTA below stays
+  // as the second entry point.
 
   it('opens the new project modal from the Projects view new-project button', async () => {
     const fetchMock = vi.fn(

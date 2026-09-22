@@ -449,9 +449,12 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-design-systems')).toBeVisible();
   await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-plugins')).toBeVisible();
   // #5517's rail dropped the "+ New project", Projects, Automations and
-  // Integrations destinations. New project is now the Projects view's own CTA;
-  // the removed destinations must not reappear as rail controls.
-  await expect(page.getByTestId('entry-nav-new-project')).toHaveCount(0);
+  // Integrations destinations. #8097 deliberately restored ONLY the New
+  // project item (as the first control of the second destination group, above
+  // 全部项目) because the dialog had lost its entry point outside the
+  // /projects deep link; the other three removed destinations must not
+  // reappear as rail controls.
+  await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
   await expect(page.getByTestId('entry-nav-projects')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-tasks')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-integrations')).toHaveCount(0);
@@ -611,8 +614,8 @@ test('[P1] disabled design systems are filtered from entry creation surfaces', a
   await expect(homePicker.getByTestId('project-ds-picker-option-airbnb')).toHaveCount(0);
   await page.keyboard.press('Escape');
 
-  // The rail's "+ New project" button is gone (#5517); the shared helper opens
-  // the modal from the Projects view's own CTA instead.
+  // Opens via the restored rail item (#8097) — the P1 nav spec above asserts
+  // the item itself; here the modal-visibility assert below is the witness.
   await openNewProjectModal(page);
   const modal = page.getByTestId('new-project-modal');
   await expect(modal).toBeVisible();
