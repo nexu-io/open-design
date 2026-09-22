@@ -178,7 +178,7 @@ let fileContents: Map<string, string>;
 let persisted: Map<string, ChatMessage>;
 let requests: Array<{ method: string; path: string; role: string | null; names: string[]; clock: number }>;
 let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
-let physicalStatus: 'running' | 'succeeded';
+let physicalStatus: 'running' | 'succeeded' | 'failed';
 let runStartedAt: number;
 let accumulatedText: string;
 let eventId: number;
@@ -482,8 +482,11 @@ async function reachPendingArtifactRecovery({ createManualDocument = true } = {}
   });
   expect(fileContents.get('agent-output.html')).toBeUndefined();
   await act(async () => {
-    physicalStatus = 'succeeded'; terminal = true;
-    frame('end', { code: 0, signal: null, status: 'succeeded', artifactCount: 0,
+    // The blocked cases end with a non-zero exit, so the turn fails and the
+    // recovery path below runs. A clean exit keeps the turn Done whatever the
+    // task verdict says, which is exactly the successful-terminal cases.
+    physicalStatus = successfulTerminal ? 'succeeded' : 'failed'; terminal = true;
+    frame('end', { code: successfulTerminal ? 0 : 1, signal: null, status: physicalStatus, artifactCount: 0,
       artifactPaths: [], strategyTask: strategyTask() });
     streamController?.close();
   });

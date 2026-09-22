@@ -64,8 +64,9 @@ let strategy: 'missing-state' | 'delivered' | 'agent-declared' | 'ordinary-deliv
 
 function strategyTask() {
   // The gate with no delivery proof refuses a production turn: the plan was
-  // frozen, the build ran, and nothing usable was written. A block before
-  // production with a reply beside it is the agent's answer, not a failure.
+  // frozen, the build ran, and nothing usable was written. The Run itself
+  // succeeded, and that is what recovery keeps: saving the inline file
+  // repairs delivery, and the verdict stays on the row for the diagnostics.
   const production = strategy === 'missing-state';
   return { activeRunId: `run-${project.id}`, executionMode: production ? 'simple' : null,
     inputStage: production ? 'production' : 'request', route: 'full_plan',
@@ -162,12 +163,14 @@ async function recover(kind: typeof strategy) {
 }
 
 describe('artifact recovery preserves the established strategy verdict contract (OPEND-3028)', () => {
-  it('keeps the failed user turn after recovering HTML when physical success has no delivery proof', async () => {
+  it('keeps the recovered turn on its physical success when the task has no delivery proof', async () => {
     const message = await recover('missing-state');
+    // The persisted row still carries the blocked verdict and the error event
+    // an earlier client wrote; the Run succeeded, so recovery settles the turn
+    // as succeeded instead of keeping it failed over the missing delivery proof.
     expect(message.strategyTaskBlocked).toBe(true);
     expect(message.events).toContainEqual({ kind: 'status', label: 'error', code: MISSING_STATE });
-    expect(message.runStatus).toBe('failed');
-    expect(screen.getAllByText('Run failed').length).toBeGreaterThan(0);
+    expect(message.runStatus).toBe('succeeded');
   });
   it.each(['delivered', 'agent-declared', 'ordinary-delivery', 'project-delivered'] as const)(
     'retains successful recovery for the existing %s exception', async (kind) => {

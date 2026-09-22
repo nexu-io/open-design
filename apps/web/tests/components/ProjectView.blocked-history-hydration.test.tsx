@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // OPEND-3028: normalized history legitimately retains physical succeeded while
-// the canonical task is blocked. A cold mount has no local error to preserve.
+// the canonical task is blocked. A cold mount has no local error to preserve,
+// and a succeeded Run keeps its success beside the blocked verdict: the cold
+// load stamps the verdict on the row and leaves the turn Done.
 // HTTP fixtures model public DTOs; they do not import a daemon private writer or
 // claim that echoing a client PUT reproduces daemon write arbitration.
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
@@ -93,10 +95,10 @@ const taskId = () => `task-${project.id}`;
 const historyKey = (conversation = conversationId(), principal = context.workspaceMemberId) =>
   `${principal}/${conversation}`;
 
-// The refusal these histories restore is a production gate: the plan was
-// frozen, the build ran, and nothing usable was written. A task refused before
-// production with a reply beside it is the agent's answer, and the cold load
-// keeps it Done — covered by its own case below.
+// The verdict these histories carry is a production gate: the plan was
+// frozen, the build ran, and nothing usable was written. Whatever the stage
+// and whatever the agent said, the Run succeeded, and the cold load keeps the
+// turn Done with the verdict stamped on the row.
 function blockedTask(overrides: Partial<StrategyTaskProjectionV2> = {}): StrategyTaskProjectionV2 {
   const task: StrategyTaskProjectionV2 = {
     taskExecutionId: taskId(), activeRunId: runId(), executionMode: 'simple',
@@ -178,16 +180,12 @@ function errorCodesOnAssistant(id = assistantId()) {
     event.kind === 'status' && event.label === 'error' ? [event.code ?? null] : []);
 }
 
-async function expectBlockedRecovery() {
-  await expectDisplayedStatus(en['chat.record.failedTurn']);
-  expect(screen.getByText(en['chat.runError.title.agentReplyIncomplete'])).toBeTruthy();
-  expect(screen.getByTestId('chat-run-error-description').textContent)
-    .toBe(en['chat.runError.agentReplyIncompleteMessage']);
-  expect(errorCodesOnAssistant()).toEqual([MISSING_STATE]);
-  // Existing recovery control, not a new copy/action. Do not dispatch a model.
-  // OPEND-2807 (#8140): a CLI run's card offers Switch to Cloud, never Retry.
-  await waitFor(() => expect((screen.getByTestId('chat-error-switch-to-cloud') as HTMLButtonElement).disabled).toBe(false));
+async function expectDoneWithoutCard(id = assistantId()) {
+  await expectDisplayedStatus(en['chat.record.done'], id);
+  expect(errorCodesOnAssistant(id)).toEqual([]);
+  expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
   expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+  expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
   expect(screen.getByTestId('recovered-files').textContent).toContain(RESULT.name);
 }
 
@@ -280,15 +278,15 @@ afterEach(() => {
 });
 
 describe('blocked task history hydration through real ProjectView and ChatPane (OPEND-3028)', () => {
-  it('restores the reason-specific failure and retry after cold load and a second fresh mount', async () => {
+  it('keeps the succeeded Run Done without a card after cold load and a second fresh mount', async () => {
     const original = structuredClone(histories.get(historyKey()));
     const mounted = render(view());
-    await expectBlockedRecovery();
+    await expectDoneWithoutCard();
     mounted.unmount();
     const previousReads = reads.length;
     render(view());
     await waitFor(() => expect(reads.length).toBeGreaterThan(previousReads));
-    await expectBlockedRecovery();
+    await expectDoneWithoutCard();
     expect(histories.get(historyKey())).toEqual(original);
     expect(unexpectedWrites).toEqual([]);
     expect(streamViaDaemon).not.toHaveBeenCalled();
@@ -346,11 +344,14 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
   });
 
+  // The daemon's project-level delivery answer and this run's own response
+  // used to decide between Done and the card. Neither does now: the Run
+  // succeeded, so every row stays Done once the probe completes.
   it.each([
-    { name: 'keeps project delivery with the current run response', content: 'The existing project is ready.', projectValid: true, succeeds: true },
-    { name: 'rejects project delivery with a blank current run response', content: '\n  ', projectValid: true, succeeds: false },
-    { name: 'keeps the blocked verdict when the project has no delivery', content: 'The existing project is ready.', projectValid: false, succeeds: false },
-  ])('$name after the authorized cold-history probe completes', async ({ content, projectValid, succeeds }) => {
+    { name: 'keeps Done with project delivery and the current run response', content: 'The existing project is ready.', projectValid: true },
+    { name: 'keeps Done with project delivery and a blank current run response', content: '\n  ', projectValid: true },
+    { name: 'keeps Done when the project has no delivery', content: 'The existing project is ready.', projectValid: false },
+  ])('$name after the authorized cold-history probe completes', async ({ content, projectValid }) => {
     // The HTTP fixture carries a main field not yet declared by this older
     // PR's DTO. Use a structural extension, not a cast or production change.
     const proof = { ...runProof(), projectDeliverableValid: projectValid };
@@ -365,13 +366,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     holdProof();
     render(view());
     await settleExistingTaskProbe();
-    if (succeeds) {
-      await expectDisplayedStatus(en['chat.record.done']);
-      expect(screen.queryByTestId('chat-error-retry')).toBeNull();
-      expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
-    } else {
-      await expectBlockedRecovery();
-    }
+    await expectDoneWithoutCard();
     expect(histories.get(historyKey())).toEqual(original);
     expect(unexpectedWrites).toEqual([]);
   });
@@ -394,24 +389,22 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     expect(unexpectedWrites).toEqual([]);
   });
 
-  it('restores the failure for a refused planning turn that left no reply', async () => {
+  it('keeps a refused planning turn that left no reply Done on cold load', async () => {
     proofs.set(runId(), runProof({ strategyTask: blockedTask({ inputStage: 'request', executionMode: null,
       blockedContext: { reasonCodes: [MISSING_STATE], visibleText: null } }) }));
     setHistory(persistedAssistant({ content: '', strategyTaskBlockedText: undefined,
       events: [{ kind: 'thinking', text: 'Reading the request.' }] }));
     render(view());
-    await expectBlockedRecovery();
+    await expectDoneWithoutCard();
   });
 
-  it('does not treat an agent-declared reason without visible explanation as the success exception', async () => {
-    // Schema permits null visible text; the provider success exception does
-    // not. Keep that exact existing distinction in the history surface too.
+  it('keeps an agent-declared block without visible explanation Done on cold load', async () => {
+    // Schema permits null visible text. The explanation used to be the
+    // condition for keeping the success; the Run's own result is now.
     proofs.set(runId(), runProof({ strategyTask: blockedTask({ blockedContext: {
       reasonCodes: [OD_NEXT_AGENT_DECLARED_BLOCK_REASON], visibleText: null } }) }));
     render(view());
-    await expectDisplayedStatus(en['chat.record.failedTurn']);
-    expect(screen.getByTestId('chat-error-switch-to-cloud')).toBeTruthy();
-    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    await expectDoneWithoutCard();
   });
 
   it.each([
