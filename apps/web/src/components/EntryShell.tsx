@@ -592,6 +592,15 @@ interface Props {
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
   onCompleteOnboarding: () => boolean | void;
+  /**
+   * Escape hatch for the passive Cloud reauth gate. A returning user who
+   * accidentally selects the Cloud agent while signed out has no way back:
+   * the gate re-derives from config on every non-onboarding route, so the
+   * owner of the config has to revert the saved selection, not just navigate.
+   * Only surfaced when `onboardingCompleted` is already true, so first-run
+   * Connect stays a required step.
+   */
+  onCancelCloudOnboarding?: () => void;
   onSignedOut?: () => void | Promise<void>;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
 }
@@ -702,6 +711,7 @@ export function EntryShell({
   onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
+  onCancelCloudOnboarding,
   onSignedOut,
   onAmrLoginStatusChange,
 }: Props) {
@@ -2107,6 +2117,7 @@ export function EntryShell({
             onRefreshAgents={onRefreshAgents}
             onAmrLoginStatusChange={onAmrLoginStatusChange}
             onFinish={finishOnboarding}
+            onCancelCloudOnboarding={onCancelCloudOnboarding}
           />
         </main>
       </div>
@@ -2603,6 +2614,7 @@ function OnboardingView({
   onRefreshAgents,
   onAmrLoginStatusChange,
   onFinish,
+  onCancelCloudOnboarding,
 }: {
   autoCloudSignInRequested?: boolean;
   onAutoCloudSignInConsumed?: () => void;
@@ -2624,6 +2636,7 @@ function OnboardingView({
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
   onFinish: () => void;
+  onCancelCloudOnboarding?: () => void;
 }) {
   const t = useT();
   const analytics = useAnalytics();
@@ -4207,6 +4220,18 @@ function OnboardingView({
                 </div>
               </div>
             )}
+            {!cloudBusy && config.onboardingCompleted === true && onCancelCloudOnboarding ? (
+              <button
+                type="button"
+                className="onboarding-cloud__cancel"
+                onClick={() => {
+                  emitOnboardingClick('back', 'back');
+                  onCancelCloudOnboarding();
+                }}
+              >
+                {t('settings.onboardingCloudCancel')}
+              </button>
+            ) : null}
           </div>
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
