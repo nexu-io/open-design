@@ -886,6 +886,17 @@ export interface WorkspaceBillingSummary {
   /** Available balance in USD, as reported by vela (kept as a string to avoid
    *  float drift on money values). */
   balanceUsd: string;
+  /**
+   * Credits per US dollar, as Vela computes it. The Coding Plan quota panel is
+   * the only surface that turns a window's credit count into money, and this is
+   * the rate it must divide by — a client-side copy of a server-owned exchange
+   * rate goes wrong silently the day the backend changes it.
+   *
+   * Optional: absent when the installed Vela CLI / backend does not report it,
+   * or reports a rate that is not a positive number. Callers fall back to their
+   * own documented default rather than rendering nothing.
+   */
+  creditsPerUsd?: number;
   /** Subscription status, e.g. `active` / `canceled`. */
   subscriptionStatus: string;
   /** Actions the caller may take, e.g. `subscription_checkout` / `billing_portal`. */

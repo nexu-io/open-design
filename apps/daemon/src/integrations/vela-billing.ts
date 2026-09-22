@@ -322,6 +322,7 @@ export function parseBillingSummary(stdout: string): WorkspaceBillingSummary | n
     return null;
   }
   const balances = (raw.balances ?? {}) as Record<string, unknown>;
+  const creditsPerUsd = positiveRate(raw.creditsPerUsd);
   return {
     workspaceId: null,
     membershipTier: str(raw.membershipTier),
@@ -329,6 +330,7 @@ export function parseBillingSummary(stdout: string): WorkspaceBillingSummary | n
     subscriptionCredits: credits(balances.subscriptionCredits),
     rechargeCredits: credits(balances.rechargeCredits),
     balanceUsd: str(raw.balanceUsd) || '0',
+    ...(creditsPerUsd === null ? {} : { creditsPerUsd }),
     subscriptionStatus: str(raw.subscriptionStatus),
     availableActions: Array.isArray(raw.availableActions)
       ? raw.availableActions.filter((a): a is string => typeof a === 'string')
@@ -457,6 +459,18 @@ function parseWorkspaceBillingRevisionClock(
   const counter = str(value.counter).trim();
   if (!epoch || !/^(?:0|[1-9]\d*)$/.test(counter)) return null;
   return { epoch, counter };
+}
+
+/**
+ * An exchange rate is only usable when it is a positive finite number. B sends
+ * money-adjacent fields as numbers or as decimal strings, so both are read, but
+ * a zero / negative / unparseable rate is reported as absent rather than as a
+ * bad divisor — a client that divides by it would print wrong money.
+ */
+function positiveRate(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 /** B sends credit buckets as decimal strings; a missing/garbage bucket is 0. */

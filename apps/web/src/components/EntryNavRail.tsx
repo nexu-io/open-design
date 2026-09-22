@@ -952,6 +952,10 @@ function formatBillingTier(tier: string, t: ReturnType<typeof useI18n>['t']): st
   if (normalized === 'pro') return t('entry.billingTierPro');
   if (normalized === 'plus') return t('entry.billingTierPlus');
   if (normalized === 'max') return t('entry.billingTierMax');
+  // Go joined the personal ladder below Plus. Without this it fell through to
+  // the title-case fallback, which happened to read the same today but would
+  // print any future `go_yearly`-shaped id verbatim.
+  if (normalized === 'go') return t('entry.billingTierGo');
   // Unknown id: title-case the segments rather than showing `some_new_tier`.
   return normalized
     .split(/[_-]+/)

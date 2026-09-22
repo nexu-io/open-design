@@ -6,6 +6,136 @@
   line-height: 1.5;
 }
 
-.panel p { margin: 0; opacity: 0.7; }
-.panel progress { display: block; width: 100%; height: 6px; margin: 6px 0; }
-.panel small { opacity: 0.7; }
+.note {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+/* One window = name + used share on one line, its bar under it, the reset
+   instant last. */
+.window {
+  display: grid;
+  gap: 4px;
+}
+
+.windowHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.windowName {
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.windowStat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Separator drawn rather than concatenated, so each fact stays its own node
+   for assistive tech and for specs. */
+.windowRemaining::before {
+  content: '·';
+  margin-inline-end: 6px;
+  color: var(--text-faint);
+}
+
+.windowReset {
+  color: var(--text-soft);
+}
+
+.bar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: 2px 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  appearance: none;
+  background: var(--bg-fill-secondary);
+  overflow: hidden;
+}
+
+.bar::-webkit-progress-bar {
+  background: var(--bg-fill-secondary);
+  border-radius: var(--radius-small);
+}
+
+.bar::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: var(--radius-small);
+  transition: width 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bar::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: var(--radius-small);
+}
+
+/* Spent pool. Presentation only — the bar turns warning-coloured and the row
+   says 「已用完」. Any guidance about what to do next belongs to a different,
+   still-undecided surface and must not grow here. */
+.window[data-exhausted='true'] .windowStat {
+  color: var(--red);
+}
+
+.window[data-exhausted='true'] .bar::-webkit-progress-value {
+  background: var(--red);
+}
+
+.window[data-exhausted='true'] .bar::-moz-progress-bar {
+  background: var(--red);
+}
+
+/* Loading placeholder, sized like one window row so the card does not resize
+   when the reading lands. */
+.skeletonLine,
+.skeletonBar {
+  display: block;
+  border-radius: var(--radius-small);
+  background: linear-gradient(
+    90deg,
+    var(--bg-fill-tertiary) 0%,
+    var(--bg-fill-secondary) 50%,
+    var(--bg-fill-tertiary) 100%
+  );
+  background-size: 200% 100%;
+  animation: coding-plan-skeleton-sheen 2.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+
+.skeletonLine {
+  width: 60%;
+  height: 12px;
+}
+
+.skeletonBar {
+  width: 100%;
+  height: 6px;
+}
+
+@keyframes coding-plan-skeleton-sheen {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonLine,
+  .skeletonBar {
+    animation: none;
+  }
+
+  .bar::-webkit-progress-value {
+    transition: none;
+  }
+}

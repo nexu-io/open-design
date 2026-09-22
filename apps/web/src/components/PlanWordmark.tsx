@@ -5,7 +5,7 @@
 
 import { isTeamPlanTier } from '../collab/team-plan';
 
-export type PlanBadgeTier = 'free' | 'plus' | 'pro' | 'max' | 'team';
+export type PlanBadgeTier = 'free' | 'go' | 'plus' | 'pro' | 'max' | 'team';
 
 /** The tier sources a badge can be derived from; pass whichever are in scope. */
 export interface PlanBadgeSources {
@@ -69,6 +69,10 @@ export function planBadgeTierForLabel(label: string): PlanBadgeTier | null {
   const normalized = label.trim().toLowerCase();
   const words = normalized.split(/[^a-z0-9]+/).filter(Boolean);
   if (isTeamPlanTier(normalized) || words.includes('team') || label.includes('团队')) return 'team';
+  // Whole word only: `go` is two letters that sit inside ordinary words, and
+  // the other tiers can afford a substring match because `plus` / `pro` / `max`
+  // do not.
+  if (words.includes('go')) return 'go';
   if (normalized.includes('plus')) return 'plus';
   if (normalized.includes('pro')) return 'pro';
   if (normalized.includes('max')) return 'max';
@@ -76,7 +80,11 @@ export function planBadgeTierForLabel(label: string): PlanBadgeTier | null {
   return null;
 }
 
-const VIEW_BOX: Record<PlanBadgeTier, { width: number; height: number }> = {
+// TODO(design): Go wordmark asset. Until it lands, `go` is drawn as text
+// (see PlanWordmark below) and is deliberately absent from the vector maps.
+type PlanWordmarkTier = Exclude<PlanBadgeTier, 'go'>;
+
+const VIEW_BOX: Record<PlanWordmarkTier, { width: number; height: number }> = {
   free: { width: 107, height: 49 },
   plus: { width: 114, height: 49 },
   pro: { width: 108, height: 49 },
@@ -84,7 +92,7 @@ const VIEW_BOX: Record<PlanBadgeTier, { width: number; height: number }> = {
   team: { width: 136, height: 49 },
 };
 
-const PATHS: Record<PlanBadgeTier, string[]> = {
+const PATHS: Record<PlanWordmarkTier, string[]> = {
   free: [
     'M21.5 39.5V25.4869C21.5 21.6308 22.8579 18.3357 25.5736 15.6014C28.2893 12.8671 31.5707 11.5 35.418 11.5',
     'M2.5 39.5L2.5 20.7365M2.5 20.7365L2.5 2.5L25.5 2.5M2.5 20.7365H15',
@@ -127,6 +135,35 @@ interface Props {
 }
 
 export function PlanWordmark({ tier, height = 13 }: Props) {
+  // TODO(design): Go wordmark asset — the designer has not delivered the
+  // vector yet. A text placeholder inside the same <svg> box keeps the badge on
+  // the shared contract (currentColor stroke/fill, height-driven width,
+  // aria-hidden) so swapping in the real paths is a one-line change; falling
+  // through to the generic battery glyph would instead leave the one badge that
+  // names the plan saying nothing about it.
+  if (tier === 'go') {
+    return (
+      <svg
+        viewBox="0 0 62 49"
+        height={height}
+        width={Math.round((62 / 49) * height)}
+        fill="none"
+        aria-hidden
+        className="plan-wordmark"
+      >
+        <text
+          x="0"
+          y="38"
+          fontSize="42"
+          fontWeight="600"
+          letterSpacing="-1"
+          fill="currentColor"
+        >
+          Go
+        </text>
+      </svg>
+    );
+  }
   const box = VIEW_BOX[tier];
   return (
     <svg

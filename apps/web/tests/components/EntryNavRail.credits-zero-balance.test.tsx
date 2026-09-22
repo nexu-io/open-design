@@ -98,10 +98,10 @@ describe('top-right credits pill', () => {
         billing: billing({ membershipTier: tier }),
         balanceUsd: '0',
       });
-      // The pill still names the plan (wordmark, or the charge glyph for a
-      // tier with no wordmark such as `go`) but carries no number.
+      // The pill still names the plan (its wordmark — `go`'s is a text
+      // placeholder until the asset lands) but carries no number.
       expect(creditsPill()).not.toBeNull();
-      expect(creditsPill()?.textContent?.trim()).toBe('');
+      expect(creditsPill()?.textContent ?? '').not.toMatch(/\d/);
       expect(creditsPill()?.querySelector('svg')).not.toBeNull();
     },
   );

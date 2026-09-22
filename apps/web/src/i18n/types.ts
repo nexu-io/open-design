@@ -33,8 +33,13 @@ export interface Dict {
   'billing.wallet': string;
   'billing.codingPlan': string;
   'billing.codingPlanUnavailable': string;
-  'billing.codingPlanNone': string;
-  'billing.codingPlanRemaining': string;
+  'billing.codingPlanWindowHours': string;
+  'billing.codingPlanWindowDays': string;
+  'billing.codingPlanUsedPercent': string;
+  'billing.codingPlanRemainingAmount': string;
+  'billing.codingPlanExhausted': string;
+  'billing.codingPlanResetsInDays': string;
+  'billing.codingPlanResetsInHours': string;
   'billing.codingPlanReset': string;
   'billing.codingPlanUnstarted': string;
   'billing.codingPlanFallback': string;
@@ -1176,6 +1181,7 @@ export interface Dict {
   'entry.billingTierPro': string;
   'entry.billingTierPlus': string;
   'entry.billingTierMax': string;
+  'entry.billingTierGo': string;
   'entry.billingFamilyCreator': string;
   'entry.creditsAria': string;
   'entry.creditsAriaWithBalance': string;

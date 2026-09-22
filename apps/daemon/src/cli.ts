@@ -7620,7 +7620,7 @@ Common options:
     if (data?.preflight) {
       console.log(`Expected funding: ${data.preflight.funding} (gateway decides final admission)`);
       for (const window of data.preflight.codingPlan.windows) {
-        console.log(`Coding Plan ${window.durationSeconds}s: ${window.remainingCredits}/${window.limitCredits} credits remaining; resets ${window.resetsAt ?? 'after first use'}`);
+        console.log(`Coding Plan ${window.durationSeconds}s: ${window.remainingCredits}/${window.limitCredits} credits remaining; resets ${window.resetsAt ?? 'not started yet'}`);
       }
     }
     const balanceUsd = workspaceBalance?.balanceUsd ?? summary?.balanceUsd;
