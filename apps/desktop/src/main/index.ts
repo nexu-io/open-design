@@ -394,6 +394,23 @@ type DesktopMenuController = {
   setUpdateLabels(labels: DesktopUpdateMenuLabels): void;
 };
 
+export function createZoomMenuItems(
+  platform: NodeJS.Platform = process.platform,
+): MenuItemConstructorOptions[] {
+  return [
+    { role: "resetZoom" },
+    { role: "zoomIn" },
+    { role: "zoomOut" },
+    ...(platform === "win32"
+      ? [
+          // Windows users reach zoom-out as Ctrl+Shift+- (the Shift spelling
+          // of the same key), while the built-in role registers only Ctrl+-.
+          { role: "zoomOut", accelerator: "CmdOrCtrl+Shift+-", visible: false } as const,
+        ]
+      : []),
+  ];
+}
+
 function installDesktopMenu(
   runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
   options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> & {
@@ -537,9 +554,7 @@ function installDesktopMenu(
             click: toggleDevelopMenu,
           },
           { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
+          ...createZoomMenuItems(),
           { type: "separator" },
           { role: "togglefullscreen" },
         ],
