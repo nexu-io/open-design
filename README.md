@@ -301,6 +301,10 @@ that case, open **Settings → MCP server** in the desktop app and copy the
 client-specific snippet; it uses absolute paths and does not rely on the bare
 `od` command.
 
+For Docker deployments, those snippets refer to the container's runtime, not
+the machine viewing Settings. Read [MCP clients outside the container](deploy/README.md#mcp-clients-outside-the-container)
+before installing one into an agent on the host or a remote workstation.
+
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
