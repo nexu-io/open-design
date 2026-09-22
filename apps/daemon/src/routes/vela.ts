@@ -639,11 +639,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       // Prefer the UI-selected workspace from the same shell headers every
       // other workspace surface uses. Fall back to no scope only for legacy
-      // headerless callers; that keeps personal-default Link behavior.
+      // headerless callers; Link owns their compatibility fallback.
       const workspaceId = headerValue(req, 'x-od-workspace-id');
       // Reject malformed workspace ids before they enter AmrModelLoadingCache
-      // or spawn `vela model list`. Valid scopes are separately bounded by
-      // the cache capacity and probe budget. Same syntax policy as the proxy.
+      // or spawn `vela model list`. Same syntax policy as the proxy.
       if (workspaceId !== null && !VELA_WORKSPACE_ID_PATTERN.test(workspaceId)) {
         res.status(400).json({ error: 'invalid_workspace_id' });
         return;

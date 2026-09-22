@@ -643,9 +643,8 @@ vi.mock('../../src/components/pet/pets', () => ({
 }));
 
 vi.mock('../../src/components/SettingsDialog', () => ({
-  SettingsDialog: ({ onClose, agents }: { onClose: () => void; agents: AgentInfo[] }) => (
+  SettingsDialog: ({ onClose }: { onClose: () => void }) => (
     <div data-testid="settings-surface">
-      <span data-testid="settings-amr-model">{agents.find((agent) => agent.id === 'amr')?.models?.[0]?.id ?? 'none'}</span>
       <button type="button" onClick={onClose}>
         Close settings
       </button>
@@ -4023,49 +4022,6 @@ describe('App project creation routing', () => {
       );
       expect(screen.getByTestId('project-route-conversation').textContent).toBe('conv-exact');
     });
-  });
-
-  it('retains project A catalog in Settings after the ambient workspace switches to B', async () => {
-    window.history.replaceState(null, '', '/projects/project-existing/conversations/conv-exact');
-    const contextA = workspaceContext('ws-1', 'wm-1');
-    const contextB = workspaceContext('ws-2', 'wm-2');
-    mockedListProjects.mockResolvedValue([{ ...existingProject, workspaceId: 'ws-1' }]);
-    mockedFetchAgentsStream.mockResolvedValue([
-      { id: 'amr', name: 'AMR', bin: 'vela', available: true, models: [] },
-    ]);
-    const catalogScopes: Array<string | null> = [];
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const pathname = new URL(String(input), 'http://d.local').pathname;
-      if (pathname.endsWith('/amr/models')) {
-        const scope = new Headers(init?.headers).get('x-od-workspace-id');
-        catalogScopes.push(scope);
-        return new Response(JSON.stringify({
-          source: 'remote', refreshing: false,
-          models: [{ id: `model-${scope}`, label: `model-${scope}` }],
-        }), { status: 200 });
-      }
-      return new Response(JSON.stringify(
-        pathname.endsWith('/workspace/directory')
-          ? workspaceDirectoryFixture([contextA, contextB])
-          : pathname.endsWith('/workspace/context') ? workspaceContextPayload('ws-1', 'wm-1') : {},
-      ), { status: 200 });
-    }));
-    render(<App />);
-    await screen.findByTestId('project-view');
-    await waitFor(() => expect(catalogScopes).toContain('ws-1'));
-    mockedListProjects.mockResolvedValue([]);
-    act(() => notifyWorkspaceContextRefresh({ context: contextB }));
-    await waitFor(() => expect(mockedListProjects).toHaveBeenLastCalledWith(
-      expect.objectContaining({ workspaceContext: expect.objectContaining({ workspaceId: 'ws-2' }) }),
-    ));
-    fireEvent.click(screen.getByRole('button', { name: 'Open settings from project' }));
-    await screen.findByTestId('settings-surface');
-    await waitFor(() => expect(screen.getByTestId('settings-amr-model').textContent).toBe('model-ws-1'));
-    expect(catalogScopes).not.toContain('ws-2');
-    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
-    await screen.findByTestId('project-view');
-    expect(window.location.pathname).toBe('/projects/project-existing/conversations/conv-exact');
-    expect(catalogScopes).not.toContain('ws-2');
   });
 
   it('returns home when full-page Settings was opened from home', async () => {

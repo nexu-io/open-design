@@ -19,8 +19,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
-import type { RuntimeModelOption } from '../src/runtimes/types.js';
+import { describe, expect, it } from 'vitest';
 
 import { attachAcpSession, detectAcpModels } from '../src/agent-protocol/index.js';
 import { acpTelemetryToolCallId } from '../src/agent-protocol/acp/updates.js';
@@ -535,58 +534,6 @@ process.exit(2);
 });
 
 describe('AMR model loading cache', () => {
-  it('evicts the least recently used idle scope at capacity', async () => {
-    const cache = new AmrModelLoadingCache(60_000, 2);
-    const fetchers = {
-      fetchPreset: async () => [{ id: 'preset', label: 'preset' }],
-      fetchRemote: async () => [{ id: 'remote', label: 'remote' }],
-    };
-    cache.warm('ws-1', fetchers.fetchRemote);
-    cache.warm('ws-2', fetchers.fetchRemote);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect((await cache.get('ws-1', fetchers)).source).toBe('remote');
-    cache.warm('ws-3', fetchers.fetchRemote);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect((await cache.get('ws-1', fetchers)).source).toBe('remote');
-    expect((await cache.get('ws-3', fetchers)).source).toBe('remote');
-    expect((await cache.get('ws-2', fetchers)).source).toBe('preset');
-  });
-
-  it('bounds remote probes even when active scopes are invalidated', async () => {
-    const cache = new AmrModelLoadingCache(60_000, 2);
-    const releases: Array<() => void> = [];
-    const fetchRemote = vi.fn(async () => {
-      await new Promise<void>((resolve) => releases.push(resolve));
-      return [{ id: 'remote', label: 'remote' }];
-    });
-    const fetchPreset = vi.fn(async () => [{ id: 'preset', label: 'preset' }]);
-    cache.warm('ws-1', fetchRemote);
-    cache.warm('ws-2', fetchRemote);
-    await expect(cache.get('ws-3', { fetchPreset, fetchRemote })).rejects.toThrow('busy');
-    cache.invalidateAll();
-    await expect(cache.get('ws-4', { fetchPreset, fetchRemote })).rejects.toThrow('busy');
-    expect(fetchPreset).not.toHaveBeenCalled();
-    expect(fetchRemote).toHaveBeenCalledTimes(2);
-    releases.forEach((release) => release());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect((await cache.get('ws-4', { fetchPreset, fetchRemote })).source).toBe('preset');
-    releases.forEach((release) => release());
-  });
-
-  it('reserves capacity while a preset probe is pending and releases it on failure', async () => {
-    const cache = new AmrModelLoadingCache(60_000, 1);
-    let rejectPreset: (error: Error) => void = () => {};
-    const pendingPreset = new Promise<RuntimeModelOption[]>((_, reject) => { rejectPreset = reject; });
-    const fetchRemote = vi.fn(async () => [{ id: 'remote', label: 'remote' }]);
-    const pending = cache.get('ws-1', { fetchPreset: () => pendingPreset, fetchRemote });
-    const fetchPreset = vi.fn(async () => [{ id: 'preset', label: 'preset' }]);
-    await expect(cache.get('ws-2', { fetchPreset, fetchRemote })).rejects.toThrow('busy');
-    expect(fetchPreset).not.toHaveBeenCalled();
-    rejectPreset(new Error('preset failed'));
-    await expect(pending).rejects.toThrow('preset failed');
-    expect((await cache.get('ws-2', { fetchPreset, fetchRemote })).source).toBe('preset');
-  });
-
   it('returns preset immediately, coalesces remote refreshes, then serves remote', async () => {
     const cache = new AmrModelLoadingCache(1_000);
     let remoteCalls = 0;

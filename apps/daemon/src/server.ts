@@ -283,7 +283,6 @@ import {
   plainStdoutFromRunEvents,
 } from './runtimes/plain-stream.js';
 import {
-  readVelaCredentialRevision,
   readVelaLoginStatus,
   resolveAmrProfile,
 } from './integrations/vela.js';
@@ -1142,7 +1141,6 @@ import {
   normalizePersistedAutomationWorkspaceScope,
 } from './automations/workspace-scope.js';
 import {
-  amrCredentialIdentityFromRevision,
   buildAmrRememberedLiveModelScope,
   resolveAmrModelProbe,
 } from './runtimes/amr-model-probe.js';
@@ -11825,9 +11823,6 @@ export async function startServer({
     } catch {
       configuredAgentEnv = {};
     }
-    // AMR remembered-model validation must partition by workspace + credential,
-    // not only the Vela profile. Otherwise a failed workspace-scoped probe can
-    // reuse another workspace's last catalog under the same profile.
     const requestedLiveModelScope = def.id === 'amr'
       ? buildAmrRememberedLiveModelScope({
           profile: resolveAmrProfile({
@@ -11836,9 +11831,6 @@ export async function startServer({
             ...configuredAgentEnv,
           }),
           workspaceId: run.workspaceScope?.workspaceId ?? null,
-          credentialIdentity: amrCredentialIdentityFromRevision(
-            readVelaCredentialRevision(process.env, configuredAgentEnv),
-          ),
         })
       : null;
     const configuredModel =
@@ -13318,12 +13310,6 @@ export async function startServer({
       const amrModelScope = buildAmrRememberedLiveModelScope({
         profile: resolveAmrProfile(modelProbeEnv ?? process.env),
         workspaceId: run.workspaceScope?.workspaceId ?? null,
-        credentialIdentity: amrCredentialIdentityFromRevision(
-          readVelaCredentialRevision(
-            modelProbeEnv ?? process.env,
-            configuredAgentEnv,
-          ),
-        ),
       });
       // Resolve the AMR model catalog through the SAME shared cache the UI's
       // `/api/amr/models` endpoint serves (AmrModelLoadingCache): a cached

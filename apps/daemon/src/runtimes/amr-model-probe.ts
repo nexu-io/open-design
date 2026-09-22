@@ -67,81 +67,12 @@ export function buildAmrModelCacheKey({
   });
 }
 
-export interface BuildAmrRememberedLiveModelScopeInput {
-  /** Resolved Vela / OPEN_DESIGN_AMR profile (e.g. prod, local, test). */
+/** Failed probes may reuse models only from the same profile and workspace. */
+export function buildAmrRememberedLiveModelScope(input: {
   profile: string;
-  /**
-   * Run-pinned or UI-selected workspace id. Empty/null means the personal
-   * (unscoped) catalog partition — never shared with Team workspaces.
-   */
   workspaceId?: string | null;
-  /**
-   * Optional credential identity so account switches under the same profile
-   * do not reuse another user's remembered catalog. Prefer
-   * `userId` (file auth) or `credentialFingerprint` (env auth).
-   */
-  credentialIdentity?: string | null;
-}
-
-/**
- * Scope key for `rememberLiveModels` / `getRememberedLiveModels` on AMR runs.
- *
- * Path A probes are workspace-scoped; the remembered-catalog fallback used
- * when those probes fail must partition the same way. Profile-only keys let a
- * workspace-A run rewrite an omitted/default model request to workspace B's
- * last default under the same Vela profile.
- */
-export function buildAmrRememberedLiveModelScope(
-  input: BuildAmrRememberedLiveModelScopeInput,
-): string {
-  const profile = (typeof input.profile === 'string' ? input.profile.trim() : '') || 'prod';
-  const workspaceId =
-    typeof input.workspaceId === 'string' ? input.workspaceId.trim() : '';
-  const credentialIdentity =
-    typeof input.credentialIdentity === 'string'
-      ? input.credentialIdentity.trim()
-      : '';
-  // Always emit the workspace segment (even when empty) so personal and Team
-  // partitions never collide, and so profile-only legacy keys cannot be
-  // mistaken for an intentional unscoped remember from this helper.
-  const parts = [profile, `ws=${workspaceId}`];
-  if (credentialIdentity) parts.push(`cred=${credentialIdentity}`);
-  return parts.join('|');
-}
-
-/**
- * Compact non-secret identity for remembered-model partitioning.
- * Empty when no account is attached yet (unsigned-in personal).
- *
- * File-backed auth may omit `user.id` (config `user` is optional). Without a
- * stable user/env identity, include `configMtimeMs` so a rewritten
- * `~/.amr/config.json` under the same profile/workspace cannot reuse the
- * previous account's remembered catalog after a failed scoped probe.
- */
-export function amrCredentialIdentityFromRevision(
-  revision: Pick<
-    VelaCredentialRevision,
-    'userId' | 'credentialFingerprint' | 'authSource' | 'configMtimeMs'
-  > | null | undefined,
-): string {
-  if (!revision) return '';
-  const userId = typeof revision.userId === 'string' ? revision.userId.trim() : '';
-  if (userId) return `user:${userId}`;
-  const fingerprint =
-    typeof revision.credentialFingerprint === 'string'
-      ? revision.credentialFingerprint.trim()
-      : '';
-  if (fingerprint) return `env:${fingerprint}`;
-  if (revision.authSource === 'none') return '';
-  if (revision.authSource === 'file') {
-    const mtime =
-      typeof revision.configMtimeMs === 'number' &&
-      Number.isFinite(revision.configMtimeMs)
-        ? String(revision.configMtimeMs)
-        : '';
-    return mtime ? `auth:file:mtime=${mtime}` : 'auth:file';
-  }
-  return `auth:${revision.authSource}`;
+}): string {
+  return JSON.stringify([input.profile, input.workspaceId?.trim() ?? '']);
 }
 
 export async function resolveAmrModelProbe({

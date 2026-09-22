@@ -147,7 +147,6 @@ import {
   resolveCurrentWorkspaceContextReadWitness,
   useWorkspaceBillingResponse,
   useWorkspaceContext,
-  type WorkspaceContextState,
   workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
   workspaceResourceReadContext,
@@ -581,14 +580,7 @@ export function resolveSettingsCloseConfig(
   return base.onboardingCompleted ? base : { ...base, onboardingCompleted: true };
 }
 
-/**
- * Drop AMR picker models from the agents list (live Path A or agent fallback).
- *
- * Path A is the workspace-scoped entitlement authority. Headerless
- * `/api/agents` discovery can still emit a personal free/lock shape; those
- * models must not survive a workspace/account identity change or a failed
- * scoped refetch, or the picker keeps the wrong locks indefinitely.
- */
+/** Remove the previous workspace catalog while its replacement loads. */
 export function clearAmrLiveModelsFromAgents(agents: AgentInfo[]): AgentInfo[] {
   let changed = false;
   const next = agents.map((agent) => {
@@ -601,16 +593,7 @@ export function clearAmrLiveModelsFromAgents(agents: AgentInfo[]): AgentInfo[] {
   return changed ? next : agents;
 }
 
-/**
- * Merge Path A (`GET /api/amr/models`) catalog into the AMR agent for the picker.
- *
- * Invariant: Path A is the workspace-scoped entitlement authority. Prefer its
- * models even when `source === "preset"` (remote refresh still pending or
- * unavailable). When Path A is unresolved, empty, or failed, fail closed:
- * strip AMR models rather than keeping headerless `/api/agents` discovery,
- * so concurrent boot/focus agent streams cannot repopulate unscoped locks
- * after a catalog clear.
- */
+/** Scoped discovery owns entitlements; headerless agent detection does not. */
 export function mergeAmrModelsIntoAgents(
   agents: AgentInfo[],
   amrModels: AmrModelsResponse | null,
@@ -624,71 +607,22 @@ export function mergeAmrModelsIntoAgents(
   });
 }
 
-/**
- * Choose the Path A AMR model-catalog scope for the shell picker.
- *
- * Invariant: catalog scope must match the authority that owns the next run.
- * On project routes that is the open project's resolved workspace context, not
- * the ambient navigation-rail selection (which may diverge while the project
- * stays open). During account transitions the ambient context is intentionally
- * retained with identityChangePending; treat that as pending and refuse to
- * scope a fetch from the retained prior-account context.
- */
+/** The picker follows the same workspace authority as the next run. */
 export function resolveAmrModelsCatalogScope(input: {
   routeKind: string;
-  projectId?: string | null;
   activeProject: { id: string; workspaceId?: string | null } | null;
   activeProjectWorkspaceContext: WorkspaceCollabContext | null;
   ambientWorkspaceContext: WorkspaceCollabContext | null;
   ambientWorkspaceLoading: boolean;
-  ambientWorkspaceFailure?: WorkspaceContextState['failure'];
-  identityChangePending: boolean;
-  accountGeneration: number;
-}): {
-  context: WorkspaceCollabContext | null;
-  pending: boolean;
-  identity: string;
-} {
+}) {
   const onProjectRoute = input.routeKind === 'project';
   const context = onProjectRoute
     ? input.activeProjectWorkspaceContext
     : input.ambientWorkspaceContext;
-  // Fail closed for workspace-bound projects: a null exact context is always
-  // unresolved (still loading, forbidden, or unavailable). Never fall through
-  // to a headerless personal-catalog fetch while the pinned workspace is
-  // unknown — that would let Settings show/persist models the project cannot
-  // use once authority recovers.
-  const ambientPending = !onProjectRoute && (
-    input.ambientWorkspaceLoading
-    || (input.ambientWorkspaceFailure !== undefined
-      && input.ambientWorkspaceFailure !== 'unsupported')
-  );
-  const pending =
-    ambientPending
-    || input.identityChangePending
-    || (onProjectRoute && input.activeProject == null)
-    || (
-      onProjectRoute
-      && Boolean(input.activeProject?.workspaceId?.trim())
-      && input.activeProjectWorkspaceContext == null
-    );
-  const identity = JSON.stringify(
-    pending
-      ? [
-          input.identityChangePending
-            ? 'pending-account'
-            : ambientPending ? 'pending-ambient-workspace' : 'pending-project-workspace',
-          input.accountGeneration,
-          onProjectRoute ? input.projectId ?? null : null,
-          onProjectRoute ? input.activeProject?.workspaceId ?? null : null,
-        ]
-      : [
-          'workspace-account',
-          input.accountGeneration,
-          workspaceIdentityCacheKey(context),
-        ],
-  );
-  return { context, pending, identity };
+  const pending = onProjectRoute
+    ? !input.activeProject || Boolean(input.activeProject.workspaceId && !context)
+    : input.ambientWorkspaceLoading;
+  return { context, pending, identity: workspaceIdentityCacheKey(context) };
 }
 
 const CANONICAL_AGENT_ORDER = [
@@ -1055,11 +989,6 @@ function AppInner() {
   const workspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
   const workspaceContextStateRef = useRef(workspaceContextState);
   const projectRouteWorkspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
-  const amrModelsCatalogContextRef = useRef<WorkspaceCollabContext | null>(null);
-  // Keep pending/identity in refs so refreshAgents (stable callback) can share
-  // the same Path A authority gate as the main catalog poll effect.
-  const amrModelsCatalogPendingRef = useRef(false);
-  const amrModelsCatalogIdentityRef = useRef('');
   const projectOpenWorkspaceWitnessRef = useRef<{
     projectId: string;
     projectWorkspaceId: string;
@@ -1587,11 +1516,6 @@ function AppInner() {
     amrPollGenerationRef.current += 1;
     setAmrPollRestartToken((current) => current + 1);
   }, []);
-
-  // AMR model catalog clear/poll lives after `activeProjectWorkspaceContext`
-  // so Path A discovery can follow the open project's workspace authority
-  // (not only the ambient navigation-rail selection) and the account-generation
-  // pending sentinel.
 
   // v2 schema removed the standalone `app_launch` event; the initial
   // page_view fires from each top-level page surface (home / projects /
@@ -2998,6 +2922,7 @@ function AppInner() {
         saveConfig(nextConfig);
         setConfig(nextConfig);
         await syncConfigToDaemon(nextConfig);
+        restartAmrPolling();
       }
       const agentRequestId = beginAgentStreamRequest();
       setAgentsLoading(true);
@@ -3016,57 +2941,7 @@ function AppInner() {
         });
         const ordered = orderAgentsByRegistry(next);
         reportAgentDetectDiagnostics(analytics.track, ordered);
-        // Settings credential-propagation retries inspect this return value,
-        // not React state. Keep it aligned with the scoped Path A merge
-        // committed to state so headerless `/api/agents` fallback models
-        // cannot stop the loop while the workspace catalog is empty/cleared.
-        let pathACatalog = amrModelsRef.current;
-        if (!pathACatalog || pathACatalog.models.length === 0) {
-          // Path A may have stopped after an empty/error poll during credential
-          // propagation. Re-probe here (do not only bump the poll token) so
-          // this call's return value can carry the scoped catalog as soon as
-          // it becomes available — and so we do not race a caller's own
-          // restartAmrPolling with a second generation bump.
-          //
-          // Match the main poll effect: never re-probe while catalog authority
-          // is pending (account transition or unresolved bound-project
-          // workspace). The context ref may still hold a retained prior-account
-          // context or null, and committing that catalog would bypass the
-          // pending sentinel. Also discard responses after identity changes
-          // mid-flight (same intent as the poll generation guard).
-          if (!amrModelsCatalogPendingRef.current) {
-            const issuedIdentity = amrModelsCatalogIdentityRef.current;
-            const issuedWorkspaceContext = amrModelsCatalogContextRef.current;
-            const scoped = await fetchAmrModels(issuedWorkspaceContext);
-            if (!isCurrentAgentStreamRequest(agentRequestId)) {
-              return mergeAmrModelsIntoAgents(ordered, amrModelsRef.current);
-            }
-            if (amrModelsCatalogIdentityRef.current !== issuedIdentity) {
-              // Identity changes do not supersede the agent stream request.
-              // This request still owns its loading state, even though the
-              // catalog response belongs to an obsolete workspace/account.
-              setAgentsLoading(false);
-              return mergeAmrModelsIntoAgents(ordered, amrModelsRef.current);
-            }
-            if (scoped && Array.isArray(scoped.models) && scoped.models.length > 0) {
-              amrModelsRef.current = scoped;
-              pathACatalog = scoped;
-              // A recovered preset is provisional: the earlier poll may have
-              // stopped on an empty result, so resume it for the remote catalog.
-              if (scoped.source === 'preset' && !scoped.remoteError) {
-                restartAmrPolling();
-              }
-            } else {
-              // Prefer a concurrent Path A win over stomping a just-landed catalog.
-              pathACatalog = amrModelsRef.current;
-              if (!pathACatalog || pathACatalog.models.length === 0) {
-                amrModelsRef.current = null;
-                pathACatalog = null;
-              }
-            }
-          }
-        }
-        const merged = mergeAmrModelsIntoAgents(ordered, pathACatalog);
+        const merged = mergeAmrModelsIntoAgents(ordered, amrModelsRef.current);
         if (isCurrentAgentStreamRequest(agentRequestId)) {
           setAgents(merged);
           setAgentsLoading(false);
@@ -4637,20 +4512,9 @@ function AppInner() {
   } | null>(null);
   const [, setRouteProjectSnapshotRevision] = useState(0);
   const activeAccountGeneration = currentWorkspaceAccountGeneration();
-  // Full-page Settings temporarily hides the project but still edits the
-  // model used on return. Keep its snapshot and exact authority alive for
-  // this session, under the same account/selection fence as closeSettings.
-  const settingsReturnTarget = settingsReturnTargetRef.current;
-  const projectAuthorityRoute = route.kind === 'project'
-    ? route
-    : route.kind === 'home' && route.view === 'settings'
-      && settingsReturnTarget?.accountGeneration === activeAccountGeneration
-      && settingsReturnTarget.identityScopeKey === identityScopeKey
-        ? settingsReturnTarget.route
-        : null;
-  let catalogProject: Project | null = null;
-  if (projectAuthorityRoute) {
-    const listedProject = projects.find((project) => project.id === projectAuthorityRoute.projectId);
+  let loadedActiveProject: Project | null = null;
+  if (route.kind === 'project') {
+    const listedProject = projects.find((project) => project.id === route.projectId);
     if (listedProject) {
       const previous = routeProjectSnapshotRef.current;
       const openingWitness = projectOpenWorkspaceWitnessRef.current;
@@ -4686,21 +4550,21 @@ function AppInner() {
       };
       if (exactOpeningContext) projectOpenWorkspaceWitnessRef.current = null;
     } else if (
-      routeProjectSnapshotRef.current?.project.id !== projectAuthorityRoute.projectId
+      routeProjectSnapshotRef.current?.project.id !== route.projectId
       || routeProjectSnapshotRef.current.accountGeneration !== activeAccountGeneration
       || (
         appliedProjectListWitness?.scopeKey === currentProjectListScope
         && appliedProjectListWitness.workspaceView === 'all'
         && appliedProjectListWitness.generation
           > routeProjectSnapshotRef.current.capturedAfterListGeneration
-        && !appliedProjectListWitness.projectIds.has(projectAuthorityRoute.projectId)
+        && !appliedProjectListWitness.projectIds.has(route.projectId)
         && workspaceContext?.workspaceId
           === routeProjectSnapshotRef.current.project.workspaceId
       )
     ) {
       routeProjectSnapshotRef.current = null;
     }
-    catalogProject =
+    loadedActiveProject =
       listedProject
       ?? routeProjectSnapshotRef.current?.project
       ?? null;
@@ -4712,9 +4576,9 @@ function AppInner() {
   // binding + signed-in account directory instead; this is independent of
   // whichever Workspace another tab or the navigation rail currently selects.
   const projectRouteWorkspaceContext = useProjectRouteWorkspaceContext(
-    catalogProject?.workspaceId,
+    loadedActiveProject?.workspaceId,
     workspaceContextState,
-    routeProjectSnapshotRef.current?.project.id === catalogProject?.id
+    routeProjectSnapshotRef.current?.project.id === loadedActiveProject?.id
       ? routeProjectSnapshotRef.current?.workspaceContext
         ?? routeProjectSnapshotRef.current?.workspaceScope?.context
       : null,
@@ -4725,7 +4589,6 @@ function AppInner() {
   // Waiting for the real row is the authorization gate that turns the cold
   // start from two headerless 400 waves plus a scoped retry into one scoped
   // wave. Unbound local projects still mount as soon as their real row lands.
-  const loadedActiveProject = route.kind === 'project' ? catalogProject : null;
   const activeProject = loadedActiveProject;
   const activeProjectWorkspaceContext = activeProject
     ? projectRouteWorkspaceContext.context
@@ -4737,34 +4600,23 @@ function AppInner() {
     pending: amrModelsCatalogPending,
     identity: amrModelsCatalogIdentity,
   } = resolveAmrModelsCatalogScope({
-    routeKind: projectAuthorityRoute ? 'project' : route.kind,
-    projectId: projectAuthorityRoute?.projectId ?? null,
-    activeProject: catalogProject,
-    activeProjectWorkspaceContext: catalogProject ? projectRouteWorkspaceContext.context : null,
+    routeKind: route.kind,
+    activeProject,
+    activeProjectWorkspaceContext,
     ambientWorkspaceContext: workspaceContext,
     ambientWorkspaceLoading: workspaceContextState.loading,
-    ambientWorkspaceFailure: workspaceContextState.failure,
-    identityChangePending: workspaceContextState.identityChangePending === true,
-    accountGeneration: workspaceAccountGeneration,
   });
+  const amrModelsCatalogContextRef = useRef(amrModelsCatalogContext);
   amrModelsCatalogContextRef.current = amrModelsCatalogContext;
-  amrModelsCatalogPendingRef.current = amrModelsCatalogPending;
-  amrModelsCatalogIdentityRef.current = amrModelsCatalogIdentity;
 
-  // Team entitlements are workspace- and account-scoped. Drop the previous
-  // catalog as soon as that catalog identity changes so the picker cannot keep
-  // free locks (or a prior Team unlock map) while the scoped refetch is in
-  // flight — including the live models already merged into `agents`.
+  // Clear locks from the previous workspace while its replacement loads.
   useEffect(() => {
     amrModelsRef.current = null;
     setAgents((current) => clearAmrLiveModelsFromAgents(current));
-  }, [amrModelsCatalogIdentity]);
+  }, [amrModelsCatalogIdentity, amrModelsCatalogPending]);
 
   useEffect(() => {
     if (!daemonLive) return;
-    // Do not issue a scoped fetch from a retained ambient context during an
-    // account transition, or from ambient B while a project-A route is still
-    // resolving its own workspace authority.
     if (amrModelsCatalogPending) return;
     let cancelled = false;
     let timer: number | null = null;

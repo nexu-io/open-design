@@ -3,7 +3,6 @@ import { test } from 'vitest';
 
 import type { VelaCredentialRevision } from '../../src/integrations/vela.js';
 import {
-  amrCredentialIdentityFromRevision,
   buildAmrModelCacheKey,
   buildAmrRememberedLiveModelScope,
   withVelaModelListWorkspaceScope,
@@ -72,124 +71,14 @@ test('buildAmrModelCacheKey partitions catalogs by workspace id', () => {
   assert.match(team, /ws-team-pro/);
 });
 
-test('buildAmrRememberedLiveModelScope partitions by workspace and credential', () => {
-  const personal = buildAmrRememberedLiveModelScope({
-    profile: 'prod',
-    workspaceId: null,
-    credentialIdentity: 'user:alice',
-  });
-  const teamA = buildAmrRememberedLiveModelScope({
-    profile: 'prod',
-    workspaceId: 'ws-team-a',
-    credentialIdentity: 'user:alice',
-  });
-  const teamB = buildAmrRememberedLiveModelScope({
-    profile: 'prod',
-    workspaceId: 'ws-team-b',
-    credentialIdentity: 'user:alice',
-  });
-  const teamAOtherUser = buildAmrRememberedLiveModelScope({
-    profile: 'prod',
-    workspaceId: 'ws-team-a',
-    credentialIdentity: 'user:bob',
-  });
-
-  assert.notEqual(personal, teamA);
-  assert.notEqual(teamA, teamB);
-  assert.notEqual(teamA, teamAOtherUser);
-  assert.match(teamA, /ws=ws-team-a/);
-  assert.match(teamA, /cred=user:alice/);
-  assert.equal(
-    buildAmrRememberedLiveModelScope({
-      profile: 'prod',
-      workspaceId: '  ws-team-a  ',
-      credentialIdentity: ' user:alice ',
-    }),
-    teamA,
-  );
-});
-
-test('amrCredentialIdentityFromRevision prefers userId then env fingerprint', () => {
-  assert.equal(
-    amrCredentialIdentityFromRevision({
-      authSource: 'file',
-      userId: 'user-1',
-      credentialFingerprint: 'fp-ignored',
-      configMtimeMs: 1,
-    }),
-    'user:user-1',
-  );
-  assert.equal(
-    amrCredentialIdentityFromRevision({
-      authSource: 'env',
-      userId: '',
-      credentialFingerprint: 'abc123',
-      configMtimeMs: 1,
-    }),
-    'env:abc123',
-  );
-  assert.equal(
-    amrCredentialIdentityFromRevision({
-      authSource: 'none',
-      userId: '',
-      credentialFingerprint: '',
-      configMtimeMs: null,
-    }),
-    '',
-  );
-});
-
-test('amrCredentialIdentityFromRevision partitions file auth by config mtime when user is absent', () => {
-  // Supported file config makes `user` optional. Without mtime in the
-  // identity, every such account collapses to `auth:file` and a later
-  // rewrite under the same profile/workspace can reuse the prior catalog.
-  const beforeRewrite = amrCredentialIdentityFromRevision({
-    authSource: 'file',
-    userId: '',
-    credentialFingerprint: '',
-    configMtimeMs: 100,
-  });
-  const afterRewrite = amrCredentialIdentityFromRevision({
-    authSource: 'file',
-    userId: '',
-    credentialFingerprint: '',
-    configMtimeMs: 200,
-  });
-  const missingMtime = amrCredentialIdentityFromRevision({
-    authSource: 'file',
-    userId: '',
-    credentialFingerprint: '',
-    configMtimeMs: null,
-  });
-
-  assert.equal(beforeRewrite, 'auth:file:mtime=100');
-  assert.equal(afterRewrite, 'auth:file:mtime=200');
-  assert.notEqual(beforeRewrite, afterRewrite);
-  assert.equal(missingMtime, 'auth:file');
-
-  const scopeBefore = buildAmrRememberedLiveModelScope({
-    profile: 'prod',
-    workspaceId: 'ws-team',
-    credentialIdentity: beforeRewrite,
-  });
-  const scopeAfter = buildAmrRememberedLiveModelScope({
-    profile: 'prod',
-    workspaceId: 'ws-team',
-    credentialIdentity: afterRewrite,
-  });
-  assert.notEqual(scopeBefore, scopeAfter);
-});
-
 test('remembered AMR live models do not fall back across workspaces', () => {
   const scopeA = buildAmrRememberedLiveModelScope({
     profile: 'prod',
     workspaceId: 'ws-a',
-    credentialIdentity: 'user:alice',
   });
   const scopeB = buildAmrRememberedLiveModelScope({
     profile: 'prod',
     workspaceId: 'ws-b',
-    credentialIdentity: 'user:alice',
   });
 
   rememberLiveModels('amr', [
@@ -215,7 +104,6 @@ test('remembered AMR live models do not fall back across workspaces', () => {
       buildAmrRememberedLiveModelScope({
         profile: 'prod',
         workspaceId: 'ws-c',
-        credentialIdentity: 'user:alice',
       }),
     ),
     [],

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildPersistedConfig,
-  clearAmrLiveModelsFromAgents,
   isAutosaveDraftOnlyChange,
   hydrateReadyTeamProject,
   mergeAgentModelChoice,
@@ -542,71 +541,6 @@ describe('resolveDeepLinkedTeamSharedProject', () => {
   });
 });
 
-describe('clearAmrLiveModelsFromAgents', () => {
-  const agents: AgentInfo[] = [
-    {
-      id: 'amr',
-      name: 'AMR',
-      bin: 'vela',
-      available: true,
-      models: [
-        { id: 'locked-model', label: 'locked-model', enabled: false },
-      ],
-      modelsSource: 'live',
-    },
-    {
-      id: 'claude',
-      name: 'Claude',
-      bin: 'claude',
-      available: true,
-      models: [{ id: 'claude-sonnet', label: 'claude-sonnet' }],
-      modelsSource: 'live',
-    },
-  ];
-
-  it('clears the AMR catalog so a workspace switch cannot keep stale locks', () => {
-    const next = clearAmrLiveModelsFromAgents(agents);
-    expect(next[0]).toMatchObject({
-      id: 'amr',
-      models: [],
-      modelsSource: undefined,
-    });
-    expect(next[1]).toEqual(agents[1]);
-  });
-
-  it('also strips headerless /api/agents fallback AMR models', () => {
-    const fallbackAgents: AgentInfo[] = [
-      {
-        id: 'amr',
-        name: 'AMR',
-        bin: 'vela',
-        available: true,
-        models: [{ id: 'preset-model', label: 'preset-model' }],
-        modelsSource: 'fallback',
-      },
-    ];
-    const next = clearAmrLiveModelsFromAgents(fallbackAgents);
-    expect(next[0]).toMatchObject({
-      id: 'amr',
-      models: [],
-      modelsSource: undefined,
-    });
-  });
-
-  it('is a no-op when AMR already has no models', () => {
-    const empty: AgentInfo[] = [
-      {
-        id: 'amr',
-        name: 'AMR',
-        bin: 'vela',
-        available: true,
-        models: [],
-      },
-    ];
-    expect(clearAmrLiveModelsFromAgents(empty)).toBe(empty);
-  });
-});
-
 describe('mergeAmrModelsIntoAgents', () => {
   const unscopedAgentModels = [
     { id: 'personal-free-model', label: 'personal-free-model', enabled: true },
@@ -684,19 +618,6 @@ describe('mergeAmrModelsIntoAgents', () => {
     });
   });
 
-  it('is the catalog refreshAgents must return so Settings retries stay on Path A', () => {
-    // Settings stops its signed-in empty-models retry loop when the returned
-    // AMR agent has models. Returning raw headerless `/api/agents` agents
-    // (non-empty personal fallback) while state was fail-closed empty made
-    // that loop exit early and left the picker loading until an unrelated
-    // focus refresh. refreshAgents must return this same merge result.
-    const headerlessAgents = agents;
-    const returned = mergeAmrModelsIntoAgents(headerlessAgents, null);
-    const amr = returned.find((agent) => agent.id === 'amr');
-    expect(amr?.models ?? []).toEqual([]);
-    // Non-empty fallback would have stopped Settings; empty keeps it retrying.
-    expect((amr?.models?.length ?? 0) > 0).toBe(false);
-  });
 });
 
 describe('resolveAmrModelsCatalogScope', () => {
@@ -728,44 +649,17 @@ describe('resolveAmrModelsCatalogScope', () => {
     workspaceMemberId: 'member-b',
   };
 
-  it.each([
-    { loading: true, failure: undefined, pending: true },
-    { loading: false, failure: 'unavailable' as const, pending: true },
-    { loading: false, failure: 'reauth-required' as const, pending: true },
-    { loading: false, failure: 'unsupported' as const, pending: false },
-    { loading: false, failure: undefined, pending: false },
-  ])('gates a null ambient catalog on authority: %j', ({ loading, failure, pending }) => {
-    const scope = resolveAmrModelsCatalogScope({
-      routeKind: 'home',
-      activeProject: null,
-      activeProjectWorkspaceContext: null,
-      ambientWorkspaceContext: null,
-      ambientWorkspaceLoading: loading,
-      ambientWorkspaceFailure: failure,
-      identityChangePending: false,
-      accountGeneration: 1,
-    });
-    expect(scope.pending).toBe(pending);
-  });
-
   it('uses the open project workspace on project routes even when ambient rail is B', () => {
     const scope = resolveAmrModelsCatalogScope({
       routeKind: 'project',
-      projectId: 'proj-a',
       activeProject: { id: 'proj-a', workspaceId: 'ws-a' },
       activeProjectWorkspaceContext: workspaceA,
       ambientWorkspaceContext: workspaceB,
       ambientWorkspaceLoading: false,
-      identityChangePending: false,
-      accountGeneration: 3,
     });
     expect(scope.pending).toBe(false);
     expect(scope.context).toBe(workspaceA);
-    expect(scope.identity).toBe(JSON.stringify([
-      'workspace-account',
-      3,
-      workspaceIdentityCacheKey(workspaceA),
-    ]));
+    expect(scope.identity).toBe(workspaceIdentityCacheKey(scope.context));
   });
 
   it('falls back to ambient workspace context off project routes', () => {
@@ -775,81 +669,31 @@ describe('resolveAmrModelsCatalogScope', () => {
       activeProjectWorkspaceContext: null,
       ambientWorkspaceContext: workspaceB,
       ambientWorkspaceLoading: false,
-      identityChangePending: false,
-      accountGeneration: 1,
     });
     expect(scope.pending).toBe(false);
     expect(scope.context).toBe(workspaceB);
   });
 
-  it('marks account transitions pending so retained ambient context is not fetched', () => {
-    const scope = resolveAmrModelsCatalogScope({
-      routeKind: 'home',
-      activeProject: null,
-      activeProjectWorkspaceContext: null,
-      ambientWorkspaceContext: workspaceA,
-      ambientWorkspaceLoading: false,
-      identityChangePending: true,
-      accountGeneration: 4,
-    });
-    expect(scope.pending).toBe(true);
-    expect(scope.context).toBe(workspaceA);
-    expect(scope.identity).toBe(JSON.stringify([
-      'pending-account',
-      4,
-      null,
-      null,
-    ]));
-  });
-
   it('stays pending while a project-bound workspace authority is still unresolved', () => {
     const scope = resolveAmrModelsCatalogScope({
       routeKind: 'project',
-      projectId: 'proj-a',
       activeProject: { id: 'proj-a', workspaceId: 'ws-a' },
       activeProjectWorkspaceContext: null,
       ambientWorkspaceContext: workspaceB,
       ambientWorkspaceLoading: false,
-      identityChangePending: false,
-      accountGeneration: 2,
     });
     expect(scope.pending).toBe(true);
     expect(scope.context).toBeNull();
-    expect(scope.identity).toBe(JSON.stringify([
-      'pending-project-workspace',
-      2,
-      'proj-a',
-      'ws-a',
-    ]));
-  });
-
-  it('stays pending when a bound project workspace lookup settles without exact context', () => {
-    // forbidden / unavailable leave context null after loading finishes.
-    // Catalog must not fall through to a headerless personal fetch.
-    const scope = resolveAmrModelsCatalogScope({
-      routeKind: 'project',
-      projectId: 'proj-a',
-      activeProject: { id: 'proj-a', workspaceId: 'ws-a' },
-      activeProjectWorkspaceContext: null,
-      ambientWorkspaceContext: workspaceB,
-      ambientWorkspaceLoading: false,
-      identityChangePending: false,
-      accountGeneration: 2,
-    });
-    expect(scope.pending).toBe(true);
-    expect(scope.context).toBeNull();
+    expect(scope.identity).toBe(workspaceIdentityCacheKey(scope.context));
   });
 
   it('allows unscoped personal catalog for projects without a pinned workspace', () => {
     const scope = resolveAmrModelsCatalogScope({
       routeKind: 'project',
-      projectId: 'proj-personal',
       activeProject: { id: 'proj-personal', workspaceId: null },
       activeProjectWorkspaceContext: null,
       ambientWorkspaceContext: workspaceB,
       ambientWorkspaceLoading: false,
-      identityChangePending: false,
-      accountGeneration: 1,
     });
     expect(scope.pending).toBe(false);
     expect(scope.context).toBeNull();
