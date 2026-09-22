@@ -4610,6 +4610,7 @@ function commentDisplayLabel(comment: PreviewComment, t: TranslateFn): string {
 export function CommentSidePanel({
   comments,
   projectId,
+  filePath,
   selectedIds,
   activeCommentId,
   collapsed,
@@ -4637,6 +4638,10 @@ export function CommentSidePanel({
 }: {
   comments: PreviewComment[];
   projectId?: string;
+  /** The file currently open in the viewer, so the sync banner can scope its
+   *  per-file backfill answer. Absent means "don't ask for backfill status"
+   *  (e.g. no file context yet), never "no file". */
+  filePath?: string;
   selectedIds: Set<string>;
   activeCommentId: string | null;
   collapsed: boolean;
@@ -4836,7 +4841,7 @@ export function CommentSidePanel({
           </button>
         </div>
       </div>
-      <CommentSyncBanner projectId={projectId} workspaceContext={workspaceContext} />
+      <CommentSyncBanner projectId={projectId} workspaceContext={workspaceContext} filePath={filePath} />
       {sendableCount > 0 ? (
         <div className="comment-side-toolbar">
           <button
@@ -5103,6 +5108,7 @@ export function computeReorderedSortKey(
 function CommentSideDock({
   comments,
   projectId,
+  filePath,
   selectedIds,
   activeCommentId,
   collapsed,
@@ -5130,6 +5136,7 @@ function CommentSideDock({
 }: {
   comments: PreviewComment[];
   projectId?: string;
+  filePath?: string;
   selectedIds: Set<string>;
   activeCommentId: string | null;
   collapsed: boolean;
@@ -5166,6 +5173,7 @@ function CommentSideDock({
       <CommentSidePanel
         comments={comments}
         projectId={projectId}
+        filePath={filePath}
         selectedIds={selectedIds}
         activeCommentId={activeCommentId}
         collapsed={collapsed}
@@ -16562,6 +16570,7 @@ function HtmlViewer({
     <CommentSideDock
       comments={visibleSideComments}
       projectId={projectId}
+      filePath={file.path || file.name}
       deckSlideCount={effectiveDeck ? slideState?.count : undefined}
       selectedIds={selectedSideCommentIds}
       activeCommentId={activeSideCommentId}

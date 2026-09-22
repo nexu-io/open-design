@@ -10,5 +10,20 @@
   overflow-wrap: anywhere;
 }
 .banner p { margin: 0; }
+.banner p + p { margin-block-start: 4px; }
+.title { font-weight: 600; color: var(--text, #333333); }
 .login { margin-block-start: 4px; }
 .login button { text-decoration: underline; }
+.retry {
+  margin-block-start: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--bg-muted, #EDEDF0);
+  color: var(--text, #333333);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.retry:disabled { opacity: 0.6; cursor: default; }
