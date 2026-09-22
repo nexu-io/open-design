@@ -124,6 +124,24 @@ export function ShareTab({
                       <div className={styles.linkAccessHeading}>
                         <div className={styles.linkAccessRow}>
                           <span className={styles.linkAccessLabel}>{t('fileViewer.linkAccessTitle')}</span>
+                          <span className={styles.linkAccessRowEnd}>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={filePublished}
+                            aria-label={t('fileViewer.linkAccessTitle')}
+                            className={`${styles.linkAccessToggle}${filePublished ? ` ${styles.linkAccessToggleOn}` : ''}`}
+                            disabled={viewerOnly || publishingPublicFile || streaming}
+                            title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
+                            onClick={() => {
+                              // The switch IS the publish/unpublish control (board S4 has
+                              // no separate "stop sharing" button — see the evidence file
+                              // for why this replaces, rather than duplicates, that action).
+                              void (filePublished ? unpublishCurrentFilePublic() : publishCurrentFilePublic());
+                            }}
+                          >
+                            <span className={styles.linkAccessToggleThumb} aria-hidden="true" />
+                          </button>
                           <Button
                             type="button"
                             className="share-menu-help od-tooltip"
@@ -134,6 +152,7 @@ export function ShareTab({
                           >
                             <RemixIcon name="question-line" size={14} />
                           </Button>
+                          </span>
                         </div>
                         <p className={styles.linkAccessDescription}>{t('fileViewer.linkAccessDescription')}</p>
                       </div>
