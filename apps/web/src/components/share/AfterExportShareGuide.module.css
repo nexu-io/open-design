@@ -1,5 +1,6 @@
-/* Adapted from Chain-6 .s-m1eexportprompt .prompt and .tool, not a replica
-   of the unavailable Owner-01 image. Keep the guide below the Share anchor. */
+/* Restored from Board8 Chain-6-dialogs.dc.html, .s-m1eexportprompt scope, P1
+   "导出完成 · 分享引导条" mockup (width/pcheck/pfoot/minibar values below are
+   read directly off that markup). Keep the guide below the Share anchor. */
 .guide {
   position: absolute;
   inset-block-start: calc(100% + 8px);
@@ -8,8 +9,7 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 240px;
+  width: 300px;
   max-width: calc(100vw - 32px);
   padding: 14px;
   border: 1px solid #0000000D;
@@ -22,60 +22,78 @@
 }
 .header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-button.openShare {
-  display: flex;
   align-items: center;
-  justify-content: flex-start;
   gap: 6px;
-  min-width: 0;
-  height: auto;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: #29292B;
+  margin: 0;
   font-size: 13px;
   font-weight: 600;
-  line-height: 20px;
-  text-align: start;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  line-height: 18px;
 }
-.openShare svg { flex-shrink: 0; }
-button.close {
-  display: flex;
-  flex: 0 0 20px;
+.pcheck {
+  display: inline-flex;
+  flex: 0 0 16px;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  min-width: 0;
-  height: 20px;
-  padding: 3px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: #858585;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #4C9461;
+  background: #EEF6F0;
 }
-button.neverShow {
-  align-self: flex-start;
-  min-width: 0;
-  height: auto;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
+.desc {
+  margin: 4px 0 0;
   color: #888888;
   font-size: 12px;
-  font-weight: 400;
   line-height: 18px;
-  white-space: normal;
-  text-align: start;
 }
-.openShare:hover, .neverShow:hover { text-decoration: underline; }
-.close:hover { background: #F2F2F4; }
+.pfoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+button.pghost {
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  background: #EDEDF0;
+  color: #333333;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+button.paction {
+  box-sizing: border-box;
+  min-width: 76px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  background: #282828;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pghost:hover { background: #E4E4E7; }
+.paction:hover { background: #1F1F1F; }
+.minibar {
+  position: relative;
+  width: 100%;
+  height: 3px;
+  margin-top: 10px;
+  border-radius: 2px;
+  background: #E2E2E5;
+  overflow: hidden;
+}
+.minibarFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 0%;
+  background: #282828;
+}
 .guide button:focus-visible { outline: 2px solid #29292B; outline-offset: 3px; }
-.error { margin: 0; color: #C94E4E; font-size: 12px; line-height: 18px; }
+.error { margin: 8px 0 0; color: #C94E4E; font-size: 12px; line-height: 18px; }

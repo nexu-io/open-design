@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@open-design/components';
-import { advanceShareGuideClock, startShareGuideClock } from './after-export-share-guide';
+import { advanceShareGuideClock, startShareGuideClock, type ShareGuideClock } from './after-export-share-guide';
 import styles from './AfterExportShareGuide.module.css';
+
+const TOTAL_MS = 10_000;
 
 /** Anchored guide borrowing the shared canvas prompt/tool visual language. */
 export function AfterExportShareGuide({ onOpenShare, onDismiss, onNeverShow, labels }: {
@@ -9,11 +11,12 @@ export function AfterExportShareGuide({ onOpenShare, onDismiss, onNeverShow, lab
   onDismiss: () => void;
   /** Return false when the permanent preference could not be persisted. */
   onNeverShow: () => boolean;
-  labels: { openShare: string; close: string; neverShow: string; saveFailed: string };
+  labels: { title: string; description: string; openShare: string; neverShow: string; saveFailed: string };
 }) {
   const [clock, setClock] = useState(() => startShareGuideClock(performance.now()));
   const [interaction, setInteraction] = useState({ hovered: false, focused: false });
   const [saveFailed, setSaveFailed] = useState(false);
+  const fillRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (clock.paused) return;
     const delay = Math.max(0, clock.remainingMs - (performance.now() - clock.checkedAt));
@@ -21,14 +24,31 @@ export function AfterExportShareGuide({ onOpenShare, onDismiss, onNeverShow, lab
     return () => window.clearTimeout(timer);
   }, [clock, onDismiss]);
 
+  // No per-frame timer: the countdown bar is a single CSS width transition per
+  // clock transition (mount, hover/focus change), not a rAF or interval loop.
+  useLayoutEffect(() => {
+    const fill = fillRef.current;
+    if (!fill) return;
+    const startPercent = (clock.remainingMs / TOTAL_MS) * 100;
+    fill.style.transition = 'none';
+    fill.style.width = `${startPercent}%`;
+    if (clock.paused) return;
+    // Force layout so the reverted (transition: none) width above is
+    // committed before re-enabling the transition below.
+    void fill.offsetWidth;
+    fill.style.transition = `width ${clock.remainingMs}ms linear`;
+    fill.style.width = '0%';
+  }, [clock]);
+
   function updateInteraction(next: typeof interaction) {
-    setClock(previous => advanceShareGuideClock(previous, performance.now(), next));
+    setClock((previous: ShareGuideClock) => advanceShareGuideClock(previous, performance.now(), next));
     setInteraction(next);
   }
   return (
     <section
       className={styles.guide}
-      aria-label={labels.openShare}
+      role="status"
+      aria-label={labels.title}
       onMouseEnter={() => updateInteraction({ ...interaction, hovered: true })}
       onMouseLeave={() => updateInteraction({ ...interaction, hovered: false })}
       onFocusCapture={() => updateInteraction({ ...interaction, focused: true })}
@@ -36,21 +56,25 @@ export function AfterExportShareGuide({ onOpenShare, onDismiss, onNeverShow, lab
         if (!event.currentTarget.contains(event.relatedTarget)) updateInteraction({ ...interaction, focused: false });
       }}
     >
-      <div className={styles.header}>
-        <Button className={styles.openShare} type="button" onClick={() => { onDismiss(); onOpenShare(); }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-            <path d="M10 13.5a5 5 0 0 0 7 .2l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 10.5a5 5 0 0 0-7-.2l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+      <strong className={styles.header}>
+        <span className={styles.pcheck} aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" focusable="false">
+            <path d="m3 8 3 3 7-7" />
           </svg>
-          <span>{labels.openShare}</span>
-        </Button>
-        <Button className={styles.close} type="button" onClick={onDismiss} aria-label={labels.close}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true" focusable="false"><path d="m4 4 8 8M12 4l-8 8" /></svg>
-        </Button>
+        </span>
+        <span>{labels.title}</span>
+      </strong>
+      <p className={styles.desc}>{labels.description}</p>
+      <div className={styles.pfoot}>
+        <Button className={styles.pghost} type="button" onClick={() => {
+          if (onNeverShow()) onDismiss();
+          else setSaveFailed(true);
+        }}>{labels.neverShow}</Button>
+        <Button className={styles.paction} type="button" onClick={() => { onDismiss(); onOpenShare(); }}>{labels.openShare}</Button>
       </div>
-      <Button className={styles.neverShow} type="button" onClick={() => {
-        if (onNeverShow()) onDismiss();
-        else setSaveFailed(true);
-      }}>{labels.neverShow}</Button>
+      <div className={styles.minibar} aria-hidden="true">
+        <div ref={fillRef} className={styles.minibarFill} />
+      </div>
       {saveFailed ? <p className={styles.error} role="alert">{labels.saveFailed}</p> : null}
     </section>
   );

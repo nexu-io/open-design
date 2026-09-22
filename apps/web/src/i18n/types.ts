@@ -137,9 +137,10 @@ export interface Dict {
   'fileViewer.commentSync.sessionMissing': string;
   'fileViewer.commentSync.shareStoppedPersonal': string;
   'fileViewer.commentSync.shareStoppedTeam': string;
+  'fileViewer.shareGuide.title': string;
+  'fileViewer.shareGuide.description': string;
   'fileViewer.shareGuide.tryShare': string;
   'fileViewer.shareGuide.neverShowAgain': string;
-  'fileViewer.shareGuide.awaitingDesign': string;
   'fileViewer.shareGuide.preferenceSaveFailed': string;
   'common.close': string;
   'common.clear': string;

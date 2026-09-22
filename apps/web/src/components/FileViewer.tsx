@@ -17297,8 +17297,9 @@ function HtmlViewer({
                     <AfterExportShareGuide
                       key={afterExportGuide.noticeId}
                       labels={{
+                        title: t('fileViewer.shareGuide.title'),
+                        description: t('fileViewer.shareGuide.description'),
                         openShare: t('fileViewer.shareGuide.tryShare'),
-                        close: t('common.close'),
                         neverShow: t('fileViewer.shareGuide.neverShowAgain'),
                         saveFailed: t('fileViewer.shareGuide.preferenceSaveFailed'),
                       }}
