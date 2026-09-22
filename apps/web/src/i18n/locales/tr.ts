@@ -11,6 +11,7 @@ export const tr: Dict = {
   'billing.codingPlanExhausted': 'Tükendi',
   'billing.codingPlanResetsInDays': '{days} gün {hours} saat sonra sıfırlanır · {time}',
   'billing.codingPlanResetsInHours': '{hours} saat sonra sıfırlanır · {time}',
+  'billing.codingPlanResetsInMinutes': '{minutes} dakika sonra sıfırlanır · {time}',
   'billing.codingPlanReset': 'Sıfırlanma: {time}',
   'billing.codingPlanUnstarted': 'Süre henüz başlamadı',
   'billing.codingPlanFallback': 'Uygun modeller önce planı, ardından cüzdanı kullanır.',

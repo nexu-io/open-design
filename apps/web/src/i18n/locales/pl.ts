@@ -11,6 +11,7 @@ export const pl: Dict = {
   'billing.codingPlanExhausted': 'Wyczerpano',
   'billing.codingPlanResetsInDays': 'Reset za {days} dni {hours} godz. · {time}',
   'billing.codingPlanResetsInHours': 'Reset za {hours} godz. · {time}',
+  'billing.codingPlanResetsInMinutes': 'Reset za {minutes} min · {time}',
   'billing.codingPlanReset': 'Reset: {time}',
   'billing.codingPlanUnstarted': 'Okno jeszcze się nie rozpoczęło',
   'billing.codingPlanFallback': 'Kwalifikujące się modele korzystają najpierw z planu, a potem z portfela.',

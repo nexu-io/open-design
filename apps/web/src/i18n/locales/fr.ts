@@ -11,6 +11,7 @@ export const fr: Dict = {
   'billing.codingPlanExhausted': 'Épuisé',
   'billing.codingPlanResetsInDays': 'Réinitialisation dans {days} j {hours} h · {time}',
   'billing.codingPlanResetsInHours': 'Réinitialisation dans {hours} h · {time}',
+  'billing.codingPlanResetsInMinutes': 'Réinitialisation dans {minutes} min · {time}',
   'billing.codingPlanReset': 'Réinitialisation le {time}',
   'billing.codingPlanUnstarted': 'La fenêtre n’a pas encore démarré',
   'billing.codingPlanFallback': 'Les modèles éligibles utilisent d’abord le forfait, puis le portefeuille.',

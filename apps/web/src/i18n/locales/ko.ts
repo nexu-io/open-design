@@ -11,6 +11,7 @@ export const ko: Dict = {
   'billing.codingPlanExhausted': '모두 사용함',
   'billing.codingPlanResetsInDays': '{days}일 {hours}시간 후 초기화 · {time}',
   'billing.codingPlanResetsInHours': '{hours}시간 후 초기화 · {time}',
+  'billing.codingPlanResetsInMinutes': '{minutes}분 후 초기화 · {time}',
   'billing.codingPlanReset': '{time}에 초기화',
   'billing.codingPlanUnstarted': '아직 사용 기간이 시작되지 않았습니다',
   'billing.codingPlanFallback': '해당 모델은 요금제를 먼저 사용하고, 소진되면 지갑을 사용합니다.',

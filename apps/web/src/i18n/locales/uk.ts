@@ -11,6 +11,7 @@ export const uk: Dict = {
   'billing.codingPlanExhausted': 'Вичерпано',
   'billing.codingPlanResetsInDays': 'Скидання через {days} дн. {hours} год · {time}',
   'billing.codingPlanResetsInHours': 'Скидання через {hours} год · {time}',
+  'billing.codingPlanResetsInMinutes': 'Скидання через {minutes} хв · {time}',
   'billing.codingPlanReset': 'Скидання: {time}',
   'billing.codingPlanUnstarted': 'Відлік вікна ще не почався',
   'billing.codingPlanFallback': 'Відповідні моделі спочатку використовують тариф, а потім гаманець.',

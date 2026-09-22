@@ -11,6 +11,7 @@ export const th: Dict = {
   'billing.codingPlanExhausted': 'ใช้หมดแล้ว',
   'billing.codingPlanResetsInDays': 'รีเซ็ตในอีก {days} วัน {hours} ชั่วโมง · {time}',
   'billing.codingPlanResetsInHours': 'รีเซ็ตในอีก {hours} ชั่วโมง · {time}',
+  'billing.codingPlanResetsInMinutes': 'รีเซ็ตในอีก {minutes} นาที · {time}',
   'billing.codingPlanReset': 'รีเซ็ต {time}',
   'billing.codingPlanUnstarted': 'ยังไม่เริ่มนับรอบการใช้งาน',
   'billing.codingPlanFallback': 'โมเดลที่เข้าเกณฑ์จะใช้แพ็กเกจก่อน แล้วจึงใช้กระเป๋าเงิน',

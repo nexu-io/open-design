@@ -11,6 +11,7 @@ export const en: Dict = {
   'billing.codingPlanExhausted': 'Used up',
   'billing.codingPlanResetsInDays': 'Resets in {days}d {hours}h · {time}',
   'billing.codingPlanResetsInHours': 'Resets in {hours}h · {time}',
+  'billing.codingPlanResetsInMinutes': 'Resets in {minutes}m · {time}',
   'billing.codingPlanReset': 'Resets {time}',
   'billing.codingPlanUnstarted': 'Window not started yet',
   'billing.codingPlanFallback': 'Eligible models use the plan first, then the wallet.',

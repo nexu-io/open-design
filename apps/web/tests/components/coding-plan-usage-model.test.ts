@@ -168,6 +168,7 @@ describe('reset countdown', () => {
     expect(codingPlanResetCountdown('2026-09-25T13:30:00.000Z', now)).toEqual({
       days: 3,
       hours: 3,
+      minutes: 30,
     });
   });
 
@@ -175,11 +176,32 @@ describe('reset countdown', () => {
     expect(codingPlanResetCountdown('2026-09-22T17:45:00.000Z', now)).toEqual({
       days: 0,
       hours: 7,
+      minutes: 45,
     });
   });
 
-  it('has nothing to count down under an hour or in the past', () => {
-    expect(codingPlanResetCountdown('2026-09-22T10:30:00.000Z', now)).toBeNull();
+  // The last hour is the one the user most needs a countdown for — it is the
+  // hour in which waiting is a real option. Falling back to the bare instant
+  // there (「9 月 22 日 10:59 重置」) makes the viewer do the subtraction at
+  // exactly the moment the answer matters most.
+  it('counts the last hour down in minutes rather than giving up', () => {
+    expect(codingPlanResetCountdown('2026-09-22T10:59:00.000Z', now)).toEqual({
+      days: 0,
+      hours: 0,
+      minutes: 59,
+    });
+    expect(codingPlanResetCountdown('2026-09-22T10:03:00.000Z', now)).toEqual({
+      days: 0,
+      hours: 0,
+      minutes: 3,
+    });
+  });
+
+  // Below a minute there is no unit left to round to, and 「0 分钟后重置」 is
+  // a hollow line: the caller names the instant instead.
+  it('has nothing to count down under a minute or in the past', () => {
+    expect(codingPlanResetCountdown('2026-09-22T10:00:30.000Z', now)).toBeNull();
+    expect(codingPlanResetCountdown('2026-09-22T10:00:00.000Z', now)).toBeNull();
     expect(codingPlanResetCountdown('2026-09-22T09:00:00.000Z', now)).toBeNull();
   });
 });

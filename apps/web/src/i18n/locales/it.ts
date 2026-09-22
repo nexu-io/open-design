@@ -11,6 +11,7 @@ export const it: Dict = {
   'billing.codingPlanExhausted': 'Esaurito',
   'billing.codingPlanResetsInDays': 'Si azzera tra {days} g {hours} h · {time}',
   'billing.codingPlanResetsInHours': 'Si azzera tra {hours} h · {time}',
+  'billing.codingPlanResetsInMinutes': 'Si azzera tra {minutes} min · {time}',
   'billing.codingPlanReset': 'Si azzera il {time}',
   'billing.codingPlanUnstarted': 'La finestra non è ancora iniziata',
   'billing.codingPlanFallback': 'I modelli idonei usano prima il piano, poi il portafoglio.',

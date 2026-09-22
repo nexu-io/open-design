@@ -11,6 +11,7 @@ export const ja: Dict = {
   'billing.codingPlanExhausted': '使い切りました',
   'billing.codingPlanResetsInDays': '{days} 日 {hours} 時間後にリセット · {time}',
   'billing.codingPlanResetsInHours': '{hours} 時間後にリセット · {time}',
+  'billing.codingPlanResetsInMinutes': '{minutes} 分後にリセット · {time}',
   'billing.codingPlanReset': '{time} にリセット',
   'billing.codingPlanUnstarted': 'まだ計測が始まっていません',
   'billing.codingPlanFallback': '対象モデルはまずプランを使用し、使い切るとウォレットを使用します。',

@@ -11,6 +11,7 @@ export const de: Dict = {
   'billing.codingPlanExhausted': 'Aufgebraucht',
   'billing.codingPlanResetsInDays': 'Zurücksetzung in {days} Tg. {hours} Std. · {time}',
   'billing.codingPlanResetsInHours': 'Zurücksetzung in {hours} Std. · {time}',
+  'billing.codingPlanResetsInMinutes': 'Zurücksetzung in {minutes} Min. · {time}',
   'billing.codingPlanReset': 'Zurücksetzung am {time}',
   'billing.codingPlanUnstarted': 'Zeitfenster noch nicht gestartet',
   'billing.codingPlanFallback': 'Berechtigte Modelle nutzen zuerst den Plan, danach die Wallet.',

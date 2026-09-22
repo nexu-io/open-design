@@ -11,6 +11,7 @@ export const zhTW: Dict = {
   'billing.codingPlanExhausted': '已用完',
   'billing.codingPlanResetsInDays': '{days} 天 {hours} 小時後重置 · {time}',
   'billing.codingPlanResetsInHours': '{hours} 小時後重置 · {time}',
+  'billing.codingPlanResetsInMinutes': '{minutes} 分鐘後重置 · {time}',
   'billing.codingPlanReset': '{time} 重置',
   'billing.codingPlanUnstarted': '額度尚未開始計時',
   'billing.codingPlanFallback': '適用模型優先使用方案額度，用完後改用錢包。',

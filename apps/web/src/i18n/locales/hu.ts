@@ -11,6 +11,7 @@ export const hu: Dict = {
   'billing.codingPlanExhausted': 'Elfogyott',
   'billing.codingPlanResetsInDays': 'Visszaáll {days} nap {hours} óra múlva · {time}',
   'billing.codingPlanResetsInHours': 'Visszaáll {hours} óra múlva · {time}',
+  'billing.codingPlanResetsInMinutes': 'Visszaáll {minutes} perc múlva · {time}',
   'billing.codingPlanReset': 'Visszaáll: {time}',
   'billing.codingPlanUnstarted': 'Az időablak még nem indult el',
   'billing.codingPlanFallback': 'A jogosult modellek először a csomagot, majd a tárcát használják.',

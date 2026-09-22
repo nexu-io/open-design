@@ -11,6 +11,7 @@ export const zhCN: Dict = {
   'billing.codingPlanExhausted': '已用完',
   'billing.codingPlanResetsInDays': '{days} 天 {hours} 小时后重置 · {time}',
   'billing.codingPlanResetsInHours': '{hours} 小时后重置 · {time}',
+  'billing.codingPlanResetsInMinutes': '{minutes} 分钟后重置 · {time}',
   'billing.codingPlanReset': '{time} 重置',
   'billing.codingPlanUnstarted': '额度尚未开始计时',
   'billing.codingPlanFallback': '适用模型优先使用套餐，耗尽后使用钱包。',

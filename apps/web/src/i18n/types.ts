@@ -40,6 +40,7 @@ export interface Dict {
   'billing.codingPlanExhausted': string;
   'billing.codingPlanResetsInDays': string;
   'billing.codingPlanResetsInHours': string;
+  'billing.codingPlanResetsInMinutes': string;
   'billing.codingPlanReset': string;
   'billing.codingPlanUnstarted': string;
   'billing.codingPlanFallback': string;

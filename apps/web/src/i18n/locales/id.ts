@@ -11,6 +11,7 @@ export const id: Dict = {
   'billing.codingPlanExhausted': 'Habis',
   'billing.codingPlanResetsInDays': 'Direset dalam {days} hari {hours} jam · {time}',
   'billing.codingPlanResetsInHours': 'Direset dalam {hours} jam · {time}',
+  'billing.codingPlanResetsInMinutes': 'Direset dalam {minutes} menit · {time}',
   'billing.codingPlanReset': 'Direset pada {time}',
   'billing.codingPlanUnstarted': 'Periode belum mulai dihitung',
   'billing.codingPlanFallback': 'Model yang memenuhi syarat memakai paket dulu, lalu dompet.',

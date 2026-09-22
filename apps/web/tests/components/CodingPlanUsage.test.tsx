@@ -306,6 +306,31 @@ describe('Coding Plan quota area — window states', () => {
     );
   });
 
+  // The final hour is the one the countdown is worth the most in, so the row
+  // must not fall back to the bare instant there.
+  it('keeps counting down in minutes inside the last hour', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse('2026-09-22T10:00:00.000Z'));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response({
+          windows: [{ durationSeconds: 18_000, resetsAt: '2026-09-22T10:12:00.000Z' }],
+        }),
+      ),
+    );
+
+    renderPanel();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const row = within(screen.getByTestId('coding-plan-window'));
+    expect(row.getByTestId('coding-plan-window-reset').textContent).toMatch(
+      /^Resets in 12m · /,
+    );
+  });
+
   it('refreshes when the quota window resets without a wallet event', async () => {
     vi.useFakeTimers();
     const fetcher = vi.fn(async () =>

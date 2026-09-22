@@ -219,6 +219,8 @@ function CodingPlanReset({
   const at = formatCodingPlanResetAt(view.resetsAt, locale);
   if (!at) return null;
   const countdown = codingPlanResetCountdown(view.resetsAt, Date.now());
+  // Coarsest non-zero unit wins, all the way down to minutes — see
+  // `codingPlanResetCountdown` for why the last hour keeps a countdown.
   const text = !countdown
     ? t('billing.codingPlanReset', { time: at })
     : countdown.days > 0
@@ -227,6 +229,8 @@ function CodingPlanReset({
           hours: countdown.hours,
           time: at,
         })
-      : t('billing.codingPlanResetsInHours', { hours: countdown.hours, time: at });
+      : countdown.hours > 0
+        ? t('billing.codingPlanResetsInHours', { hours: countdown.hours, time: at })
+        : t('billing.codingPlanResetsInMinutes', { minutes: countdown.minutes, time: at });
   return <time dateTime={view.resetsAt}>{text}</time>;
 }

@@ -11,6 +11,7 @@ export const ru: Dict = {
   'billing.codingPlanExhausted': 'Исчерпано',
   'billing.codingPlanResetsInDays': 'Сброс через {days} дн. {hours} ч · {time}',
   'billing.codingPlanResetsInHours': 'Сброс через {hours} ч · {time}',
+  'billing.codingPlanResetsInMinutes': 'Сброс через {minutes} мин · {time}',
   'billing.codingPlanReset': 'Сброс: {time}',
   'billing.codingPlanUnstarted': 'Отсчёт окна ещё не начался',
   'billing.codingPlanFallback': 'Подходящие модели сначала используют тариф, затем кошелёк.',

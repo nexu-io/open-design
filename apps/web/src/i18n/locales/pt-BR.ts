@@ -11,6 +11,7 @@ export const ptBR: Dict = {
   'billing.codingPlanExhausted': 'Esgotado',
   'billing.codingPlanResetsInDays': 'Renova em {days} d {hours} h · {time}',
   'billing.codingPlanResetsInHours': 'Renova em {hours} h · {time}',
+  'billing.codingPlanResetsInMinutes': 'Renova em {minutes} min · {time}',
   'billing.codingPlanReset': 'Renova em {time}',
   'billing.codingPlanUnstarted': 'A janela ainda não começou',
   'billing.codingPlanFallback': 'Os modelos elegíveis usam primeiro o plano e depois a carteira.',

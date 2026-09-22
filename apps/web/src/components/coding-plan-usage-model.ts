@@ -36,6 +36,7 @@ function resolveCreditsPerUsd(creditsPerUsd?: number | null): bigint {
 
 const SECONDS_PER_HOUR = 3_600;
 const SECONDS_PER_DAY = 86_400;
+const MS_PER_MINUTE = 60_000;
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 86_400_000;
 
@@ -123,22 +124,29 @@ export function codingPlanWindowViews(
 }
 
 /**
- * Time left before the window resets, split the way the user asked for it:
- * days and hours, hours alone inside a day.
+ * Time left before the window resets, split into days, hours and minutes. The
+ * caller renders the coarsest unit that is non-zero: days (with hours), hours
+ * alone inside a day, minutes alone inside the last hour.
  *
- * Null once there is less than an hour left (or the instant has passed) —
- * there is no smaller unit in the agreed format, so the caller falls back to
- * naming the instant rather than rendering a hollow 「0 小时后重置」.
+ * The minute band is the point of the split. The final hour is when waiting
+ * for the reset is an actual choice, so it is the hour the countdown is worth
+ * the most — dropping to the bare instant there hands the subtraction back to
+ * the reader at exactly the wrong moment.
+ *
+ * Null only once nothing whole is left to name: under a minute, or the instant
+ * has already passed. That is the one case where the caller genuinely has to
+ * fall back to the instant rather than render a hollow 「0 分钟后重置」.
  */
 export function codingPlanResetCountdown(
   resetsAt: string,
   now: number,
-): { days: number; hours: number } | null {
+): { days: number; hours: number; minutes: number } | null {
   const remainingMs = Date.parse(resetsAt) - now;
-  if (!Number.isFinite(remainingMs) || remainingMs < MS_PER_HOUR) return null;
+  if (!Number.isFinite(remainingMs) || remainingMs < MS_PER_MINUTE) return null;
   return {
     days: Math.floor(remainingMs / MS_PER_DAY),
     hours: Math.floor((remainingMs % MS_PER_DAY) / MS_PER_HOUR),
+    minutes: Math.floor((remainingMs % MS_PER_HOUR) / MS_PER_MINUTE),
   };
 }
 

@@ -11,6 +11,7 @@ export const esES: Dict = {
   'billing.codingPlanExhausted': 'Agotado',
   'billing.codingPlanResetsInDays': 'Se restablece en {days} d {hours} h · {time}',
   'billing.codingPlanResetsInHours': 'Se restablece en {hours} h · {time}',
+  'billing.codingPlanResetsInMinutes': 'Se restablece en {minutes} min · {time}',
   'billing.codingPlanReset': 'Se restablece el {time}',
   'billing.codingPlanUnstarted': 'La ventana aún no ha empezado',
   'billing.codingPlanFallback': 'Los modelos elegibles usan primero el plan y luego el monedero.',

@@ -11,6 +11,7 @@ export const fa: Dict = {
   'billing.codingPlanExhausted': 'تمام شد',
   'billing.codingPlanResetsInDays': 'بازنشانی پس از {days} روز و {hours} ساعت · {time}',
   'billing.codingPlanResetsInHours': 'بازنشانی پس از {hours} ساعت · {time}',
+  'billing.codingPlanResetsInMinutes': 'بازنشانی پس از {minutes} دقیقه · {time}',
   'billing.codingPlanReset': 'بازنشانی در {time}',
   'billing.codingPlanUnstarted': 'شمارش بازه هنوز شروع نشده است',
   'billing.codingPlanFallback': 'مدل‌های واجد شرایط ابتدا از طرح و سپس از کیف پول استفاده می‌کنند.',

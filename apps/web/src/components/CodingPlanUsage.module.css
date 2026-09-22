@@ -1,20 +1,43 @@
+/* This panel does NOT live on the page ground — it is mounted inside the
+   inverted billing card (`.entry-nav-rail__menu-credits`), which paints its own
+   ink ground and its own white-tier text. Page-level text/fill tokens are
+   authored for the page ground, so reading them here paints near-black ink on
+   near-black card.
+   Everything below therefore derives from `currentColor`, which the card hands
+   down, exactly the way the card's own rows do. Nothing here may reference a
+   page token whose value tracks the page background. */
 .panel {
   display: grid;
+  /* `minmax(0, 1fr)`, not the implicit `auto`: an auto track is floored at its
+     content's min-content width, so a row that cannot fit would widen the
+     track and spill past the 232px card instead of shrinking inside it. Every
+     grid/flex level down to the name repeats this. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  padding: 12px;
+  /* Vertical breathing room only. The card already pays a 10px side gutter and
+     its own rows (plan header, wallet) sit on it; a second horizontal inset
+     here stepped the quota block 12px in from both, and cost the window names
+     the width they needed to stay whole. */
+  padding: 12px 0;
   font-size: 12px;
   line-height: 1.5;
+  /* Warning ink for the spent pool, lightened toward the card's own text so it
+     still clears AA on the ink ground — `--red` alone is a page-ground red and
+     only reaches ~4.3:1 here. */
+  --coding-plan-warn: color-mix(in srgb, var(--red) 65%, currentColor);
 }
 
 .note {
   margin: 0;
-  color: var(--text-soft);
+  color: color-mix(in srgb, currentColor 60%, transparent);
 }
 
 /* One window = name + used share on one line, its bar under it, the reset
    instant last. */
 .window {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 4px;
 }
 
@@ -22,33 +45,45 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  min-width: 0;
   gap: 8px;
 }
 
+/* The card is 232px wide: when the name and the numbers cannot both fit, the
+   NAME gives way (it is the repeated, guessable half) and the numbers stay on
+   one line. Without `min-width: 0` the flex item refuses to shrink below its
+   content and pushes the stat into a second row instead. */
 .windowName {
-  color: var(--text-strong);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .windowStat {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  color: var(--text-muted);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: color-mix(in srgb, currentColor 72%, transparent);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 /* Separator drawn rather than concatenated, so each fact stays its own node
-   for assistive tech and for specs. */
+   for assistive tech and for specs. Its share is taken off the stat colour it
+   sits in, so the two stay in the same family whichever state the row is in. */
 .windowRemaining::before {
   content: '·';
   margin-inline-end: 6px;
-  color: var(--text-faint);
+  color: color-mix(in srgb, currentColor 70%, transparent);
 }
 
 .windowReset {
-  color: var(--text-soft);
+  color: color-mix(in srgb, currentColor 60%, transparent);
 }
 
 .bar {
@@ -59,23 +94,27 @@
   border: 0;
   border-radius: var(--radius-small);
   appearance: none;
-  background: var(--bg-fill-secondary);
+  /* The track has to read as a track: its extent is what makes the filled part
+     a proportion. Kept at a share of the card's own ink-on-white text so it
+     clears the 3:1 non-text bar on this ground. */
+  color: inherit;
+  background: color-mix(in srgb, currentColor 36%, transparent);
   overflow: hidden;
 }
 
 .bar::-webkit-progress-bar {
-  background: var(--bg-fill-secondary);
+  background: color-mix(in srgb, currentColor 36%, transparent);
   border-radius: var(--radius-small);
 }
 
 .bar::-webkit-progress-value {
-  background: var(--accent);
+  background: currentColor;
   border-radius: var(--radius-small);
   transition: width 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .bar::-moz-progress-bar {
-  background: var(--accent);
+  background: currentColor;
   border-radius: var(--radius-small);
 }
 
@@ -83,15 +122,15 @@
    says 「已用完」. Any guidance about what to do next belongs to a different,
    still-undecided surface and must not grow here. */
 .window[data-exhausted='true'] .windowStat {
-  color: var(--red);
+  color: var(--coding-plan-warn);
 }
 
 .window[data-exhausted='true'] .bar::-webkit-progress-value {
-  background: var(--red);
+  background: var(--coding-plan-warn);
 }
 
 .window[data-exhausted='true'] .bar::-moz-progress-bar {
-  background: var(--red);
+  background: var(--coding-plan-warn);
 }
 
 /* Loading placeholder, sized like one window row so the card does not resize
@@ -102,9 +141,9 @@
   border-radius: var(--radius-small);
   background: linear-gradient(
     90deg,
-    var(--bg-fill-tertiary) 0%,
-    var(--bg-fill-secondary) 50%,
-    var(--bg-fill-tertiary) 100%
+    color-mix(in srgb, currentColor 14%, transparent) 0%,
+    color-mix(in srgb, currentColor 32%, transparent) 50%,
+    color-mix(in srgb, currentColor 14%, transparent) 100%
   );
   background-size: 200% 100%;
   animation: coding-plan-skeleton-sheen 2.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;

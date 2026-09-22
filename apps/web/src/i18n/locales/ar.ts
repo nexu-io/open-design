@@ -11,6 +11,7 @@ export const ar: Dict = {
   'billing.codingPlanExhausted': 'نفدت',
   'billing.codingPlanResetsInDays': 'يُعاد الضبط خلال {days} يوم و{hours} ساعة · {time}',
   'billing.codingPlanResetsInHours': 'يُعاد الضبط خلال {hours} ساعة · {time}',
+  'billing.codingPlanResetsInMinutes': 'يُعاد الضبط خلال {minutes} دقيقة · {time}',
   'billing.codingPlanReset': 'يُعاد الضبط في {time}',
   'billing.codingPlanUnstarted': 'لم يبدأ احتساب المدة بعد',
   'billing.codingPlanFallback': 'تستخدم النماذج المؤهَّلة الخطة أولاً، ثم المحفظة.',
