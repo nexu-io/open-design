@@ -14,7 +14,10 @@ import {
 	ProductionTouchpointLoadError,
 	loadProductionTouchpointDecision,
 } from "../../src/components/production-touchpoint-loader";
-import { touchpointEntersOfflineFallback } from "../../src/components/touchpoint-lifecycle";
+import {
+	touchpointEntersOfflineFallback,
+	touchpointFallbackFromServerError,
+} from "../../src/components/touchpoint-lifecycle";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -71,6 +74,29 @@ describe("which failures mean the runtime was unreachable", () => {
 			touchpointWithdrawal: true,
 			touchpointOfflineFallback: false,
 		});
+	});
+
+	// Both of these enter fallback, and for going quiet that is all that matters.
+	// For coming back they are opposites: a broken transport announces its own
+	// repair through `online`, and a 5xx announces nothing at all, because the
+	// network it crossed never broke. Only the second needs a heartbeat, so the
+	// loader has to say which one this was.
+	it("separates a server that answered badly from a transport that failed", async () => {
+		for (const status of [500, 502, 503, 504]) {
+			const error = await failure(new Response("", { status }));
+			expect(error, `http_${status} recovers unannounced`).toMatchObject({
+				touchpointOfflineFallback: true,
+				touchpointServerError: true,
+			});
+			expect(touchpointFallbackFromServerError(error)).toBe(true);
+		}
+		for (const response of [new TypeError("fetch failed"), new Response("", { status: 401 })]) {
+			const error = await failure(response);
+			expect(error, `${String(response)} must not claim a heartbeat`).toMatchObject({
+				touchpointServerError: false,
+			});
+			expect(touchpointFallbackFromServerError(error)).toBe(false);
+		}
 	});
 
 	it("does not mark a body it could not parse as a transport failure", async () => {

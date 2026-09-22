@@ -37,10 +37,24 @@ export class ProductionTouchpointLoadError extends Error {
 	 * than a licence to substitute a cached one.
 	 */
 	readonly touchpointOfflineFallback: boolean;
+	/**
+	 * Which KIND of unreachable this was, and therefore whether anything will
+	 * announce its recovery.
+	 *
+	 * `network` is the device's own connection failing, and its repair fires
+	 * `online`. A 5xx is not: the request crossed a network that stayed up the
+	 * whole time and came back with an answer, so `navigator.onLine` never went
+	 * false and no browser event will ever say the server is healthy again. That
+	 * is the difference the shared lifecycle's heartbeat is keyed on — see
+	 * `touchpointFallbackFromServerError` — and it is only ever read for a
+	 * failure that already qualifies above.
+	 */
+	readonly touchpointServerError: boolean;
 	constructor(readonly detail: string) {
 		super("touchpoint_load_failed");
 		this.touchpointWithdrawal = detail === "http_410";
-		this.touchpointOfflineFallback = detail === "network" || /^http_5\d\d$/u.test(detail);
+		this.touchpointServerError = /^http_5\d\d$/u.test(detail);
+		this.touchpointOfflineFallback = detail === "network" || this.touchpointServerError;
 	}
 }
 

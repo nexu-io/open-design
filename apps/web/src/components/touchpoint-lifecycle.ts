@@ -285,6 +285,62 @@ export const touchpointEntersOfflineFallback = (error: unknown) =>
 	typeof error === "object" && error !== null && (error as { touchpointOfflineFallback?: unknown }).touchpointOfflineFallback === true;
 
 /**
+ * Of the failures that enter fallback, which ones will have NOTHING to announce
+ * their recovery.
+ *
+ * Both halves of {@link touchpointEntersOfflineFallback} mean "the runtime was
+ * not reached", and for going quiet that is the only distinction that matters.
+ * For coming BACK they are opposites, and the difference is not about blame —
+ * it is about which of them the browser can observe ending:
+ *
+ *  - A transport failure, a refused connection, a dead DNS, a request that
+ *    burned its whole budget: the device's own network is the thing that
+ *    broke, so its repair fires `online`, and usually `focus` or
+ *    `visibilitychange` with it. The four events ARE the recovery signal.
+ *  - A 5xx: the request left, crossed the network and came back with an
+ *    answer. The network never broke, so `navigator.onLine` stayed true the
+ *    whole time and `online` will never fire; a user who simply leaves the app
+ *    open on the page the activity appears on fires none of the other three
+ *    either. There is no event, anywhere, that says the server is healthy
+ *    again — the only way to find out is to ask.
+ *
+ * So only the second kind earns {@link SERVER_FAULT_HEARTBEAT_MS}. A timeout is
+ * deliberately the first kind: `refresh` already classifies a spent budget as
+ * "the same condition as a refused connection, reported by a different
+ * observer", and this must not quietly reclassify it.
+ */
+export const touchpointFallbackFromServerError = (error: unknown) =>
+	typeof error === "object" && error !== null && (error as { touchpointServerError?: unknown }).touchpointServerError === true;
+
+/**
+ * How long this client will go without asking, while it is in fallback because
+ * the server answered 5xx. Fixed, and deliberately not backed off.
+ *
+ * Backoff would be the right shape if the heartbeat's job were "recover as
+ * early as possible". It is not, and reading it that way is how this interval
+ * gets doubled by someone trying to be kind to a struggling server. Its job is
+ * to put an UPPER BOUND on how late a withdrawal can reach a screen. A
+ * revocation is only ever delivered in the answer to a request this client
+ * makes, so the longest a pulled activity can stay up is exactly the longest
+ * this client will go without making one. Five minutes is that number, and it
+ * is the answer to the question an operator actually asks — "worst case, how
+ * long after I pull an activity is it off every screen?" A doubling interval
+ * has no answer to that question at all: the bound would be whatever the
+ * consecutive-failure count happened to have reached, which nobody can state
+ * in advance.
+ *
+ * The same bound covers the operator's other two cases for free, because they
+ * are the same mechanism: a shortened schedule and a newly published activity
+ * both reach this client in the answer to the next request it makes.
+ *
+ * This is a floor on responsiveness, not a replacement for anything. `online`,
+ * `focus`, `pageshow` and `visibilitychange` remain the fast path and are
+ * unchanged; the heartbeat is what exists for the case where none of them ever
+ * fire.
+ */
+export const SERVER_FAULT_HEARTBEAT_MS = 5 * 60_000;
+
+/**
  * One scheduling implementation for both runtime adapters. A response supplies
  * server-relative authority, never a client activation time. Renewing the same
  * immutable decision keeps its mount identity while replacing its lease.
@@ -312,6 +368,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 		let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
 		let retryTimer: ReturnType<typeof setTimeout> | undefined;
+		let heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
 		let retryIndex = 0;
 		/**
 		 * OPEND-3436. True once a failure said the runtime was not reached, and
@@ -351,6 +408,40 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			publish();
 		};
 		/**
+		 * The 5xx heartbeat: one request every {@link SERVER_FAULT_HEARTBEAT_MS},
+		 * for as long as fallback is held by a server that ANSWERED rather than a
+		 * transport that failed. It is the only thing that asks during that state,
+		 * and the only reason a withdrawal can still reach this screen.
+		 *
+		 * It re-arms before it asks, not after it hears back, because the bound
+		 * belongs to the condition rather than to any one request. A hidden page
+		 * and a collision with a request already in flight both leave
+		 * `revalidateOnce` a no-op, and a heartbeat that re-armed only on an
+		 * outcome would simply stop there — the fallback would then be silent
+		 * forever, which is the defect this exists to close. `armExpiry` schedules
+		 * on the same principle.
+		 *
+		 * Asking through `revalidateOnce` rather than `refresh` is what keeps
+		 * clause 4 of the ticket true: a heartbeat that lands in the same moment
+		 * as a reconnection collapses into that single deduplicated attempt
+		 * instead of doubling it. It also means a heartbeat that fails takes the
+		 * ordinary fallback path — no backoff chain, no second timer, nothing
+		 * until the next bound.
+		 */
+		const armServerFaultHeartbeat = () => {
+			clearTimeout(heartbeatTimer);
+			heartbeatTimer = setTimeout(() => {
+				heartbeatTimer = undefined;
+				if (stopped || ended || !offline) return;
+				armServerFaultHeartbeat();
+				revalidateOnce();
+			}, SERVER_FAULT_HEARTBEAT_MS);
+		};
+		const stopServerFaultHeartbeat = () => {
+			clearTimeout(heartbeatTimer);
+			heartbeatTimer = undefined;
+		};
+		/**
 		 * A timeout or transport failure is not a revocation. Cancel the attempt
 		 * and keep display authority the server already granted; `armExpiry`
 		 * still retires it at its own deadline, so one poll may be missed and a
@@ -368,7 +459,17 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			// set-aside lease too, and the retry that succeeded came back
 			// `{kind:"retain"}` with nothing left to restore.
 			const recoverable = lease.current ?? revalidationLease;
-			if (offlineFallback && touchpointEntersOfflineFallback(error)) offline = true;
+			if (offlineFallback && touchpointEntersOfflineFallback(error)) {
+				offline = true;
+				// Keyed on the LATEST failure rather than the one that entered
+				// fallback, so the heartbeat is armed exactly while the current
+				// evidence says nothing will announce recovery. A 5xx that decays
+				// into a dead transport hands the job back to `online`; a dead
+				// transport that comes back to a still-broken server takes it up
+				// again on that server's next 5xx.
+				if (touchpointFallbackFromServerError(error)) armServerFaultHeartbeat();
+				else stopServerFaultHeartbeat();
+			}
 			if (touchpointWithdrawsDisplay(error) || !recoverable || elapsed(recoverable.start) >= recoverable.validForMs) {
 				revalidationLease = null;
 				status = "error";
@@ -458,6 +559,12 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				// An answer arrived, so the runtime is reachable. Only a decision the
 				// daemon rebuilt from cache says otherwise, and it says so explicitly.
 				offline = offlineFallback && result.kind === "decision" && result.offline === true;
+				// Reachable again, so the fault the heartbeat was bounding is over
+				// and the 30s poll takes recovery back. The one answer that keeps
+				// `offline` true is a decision the daemon rebuilt from cache, and it
+				// keeps the heartbeat with it: the daemon still cannot reach the
+				// runtime, so a withdrawal still has no way in but this one.
+				if (!offline) stopServerFaultHeartbeat();
 				if (result.kind === "retain") {
 					if (!lease.current && revalidationLease && elapsed(revalidationLease.start) < revalidationLease.validForMs) {
 						lease.current = { ...revalidationLease, generation: generation.current };
@@ -616,6 +723,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			stopped = true;
 			revoke();
 			clearTimeout(retryTimer);
+			stopServerFaultHeartbeat();
 			clearInterval(interval);
 			window.removeEventListener("focus", resume);
 			window.removeEventListener("online", resume);

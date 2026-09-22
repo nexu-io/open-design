@@ -20,6 +20,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	RETRY_BACKOFF_MS,
+	SERVER_FAULT_HEARTBEAT_MS,
 	useTouchpointLifecycle,
 	type TouchpointLifecycleLoad,
 } from "../../src/components/touchpoint-lifecycle";
@@ -37,6 +38,16 @@ const unreachable = () =>
 	Object.assign(new Error("touchpoint_load_failed"), { touchpointOfflineFallback: true });
 /** A failure that is the server answering, so it must never enter fallback. */
 const refused = () => Object.assign(new Error("touchpoint_load_failed"), { detail: "http_401" });
+/**
+ * A 5xx. It enters fallback like any other unreached runtime, but the request
+ * crossed a network that never broke, so nothing will fire to announce the
+ * server's return.
+ */
+const serverError = () =>
+	Object.assign(new Error("touchpoint_load_failed"), {
+		touchpointOfflineFallback: true,
+		touchpointServerError: true,
+	});
 
 beforeEach(() => {
 	// `performance` is in `toFake` deliberately: the lifecycle measures elapsed
@@ -370,6 +381,194 @@ describe("offline fallback stops the client asking", () => {
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(0);
 		});
+		expect(result.current.current).toBeNull();
+	});
+});
+
+// The 5xx half of fallback, and why it needs anything extra at all.
+//
+// Going quiet costs nothing when the thing that broke was the device's network,
+// because its repair fires `online`. It costs everything when the thing that
+// broke was the server: the request crossed a network that is still perfectly
+// healthy, `navigator.onLine` never went false, and a user who leaves the app
+// open on the page the activity appears on fires no `focus`, no `pageshow` and
+// no `visibilitychange` either. Nothing, anywhere, will announce that the
+// server came back.
+//
+// What that costs is the ticket's own product bargain. A revocation is only
+// ever delivered in the answer to a request this client makes, so a client that
+// has stopped asking cannot be told an activity was pulled — it keeps showing
+// it for the rest of the cached window, on a device that has been back online
+// the whole time. The heartbeat is the bound on that, and these cases pin the
+// bound rather than the mechanism: one request per interval, none before it,
+// and a withdrawal that actually lands when it arrives.
+describe("a 5xx fallback keeps a slow heartbeat", () => {
+	it("asks exactly once when the bound elapses, and not a millisecond before", async () => {
+		const load = vi
+			.fn<Load>()
+			// An hour-long window, so nothing in this case can be explained by the
+			// lease expiring: every request after the second one is the heartbeat.
+			.mockResolvedValueOnce({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 })
+			.mockRejectedValue(serverError());
+		renderHook(() =>
+			useTouchpointLifecycle({
+				enabled: true,
+				identity: "production",
+				load,
+				offlineFallback: true,
+			}),
+		);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		// The first poll tick fails with a 5xx: that is the attempt that enters
+		// fallback, and the only one that arms the heartbeat.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+
+		// One millisecond short of the bound. No event has fired, so a request
+		// here could only come from a poll or a backoff chain, and neither is
+		// supposed to survive fallback.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS - 1);
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1);
+		});
+		expect(load).toHaveBeenCalledTimes(3);
+
+		// That heartbeat failed the same way. The next chance is the next bound,
+		// not sooner: a heartbeat that fails must not turn into a retry chain.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS - 1);
+		});
+		expect(load).toHaveBeenCalledTimes(3);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1);
+		});
+		expect(load).toHaveBeenCalledTimes(4);
+	});
+
+	// The guard against over-fixing. A device with no network answers every
+	// request the same way for the same reason, and its recovery IS announced,
+	// so a heartbeat there is pure battery with nothing to buy.
+	it("starts no heartbeat when the transport is what failed", async () => {
+		const load = vi
+			.fn<Load>()
+			.mockResolvedValueOnce({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 })
+			.mockRejectedValue(unreachable());
+		renderHook(() =>
+			useTouchpointLifecycle({
+				enabled: true,
+				identity: "production",
+				load,
+				offlineFallback: true,
+			}),
+		);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+
+		// Well past the bound, and past the poll tick that follows it.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS + 30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+
+		// And this is silence by design, not a hook that has stopped working:
+		// the event that does announce this failure's recovery still asks.
+		act(() => {
+			window.dispatchEvent(new Event("online"));
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(load).toHaveBeenCalledTimes(3);
+	});
+
+	it("returns to the thirty-second poll as soon as one heartbeat gets through", async () => {
+		const load = vi
+			.fn<Load>()
+			.mockResolvedValueOnce({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 })
+			.mockRejectedValueOnce(serverError())
+			.mockResolvedValue({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 });
+		renderHook(() =>
+			useTouchpointLifecycle({
+				enabled: true,
+				identity: "production",
+				load,
+				offlineFallback: true,
+			}),
+		);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+
+		// The bound falls on a poll tick — it is a multiple of the interval — and
+		// that tick is still standing down, so this is one request either way.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS);
+		});
+		expect(load).toHaveBeenCalledTimes(3);
+
+		// Reachable again, so recovery goes back through the ordinary interval
+		// rather than a second mechanism running beside it.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(4);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(5);
+	});
+
+	// The whole reason the heartbeat exists. No event fires in this case at all:
+	// if the client does not ask, the withdrawal is never delivered and the
+	// pulled activity stays on screen for the rest of the cached window.
+	it("delivers a withdrawal that only the heartbeat could have asked for", async () => {
+		const load = vi
+			.fn<Load>()
+			.mockResolvedValueOnce({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 })
+			.mockRejectedValueOnce(serverError())
+			// The server is back, and its answer is that the activity is gone —
+			// the shape a 410 revocation receipt arrives in.
+			.mockResolvedValue({ kind: "clear" });
+		const { result } = renderHook(() =>
+			useTouchpointLifecycle({
+				enabled: true,
+				identity: "production",
+				load,
+				offlineFallback: true,
+			}),
+		);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(result.current.current).toBe(first);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		// A 5xx does not take display down: the lease the server granted is still
+		// inside its window, which is exactly why the revocation matters.
+		expect(result.current.current).toBe(first);
+		expect(load).toHaveBeenCalledTimes(2);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS);
+		});
+		expect(load).toHaveBeenCalledTimes(3);
 		expect(result.current.current).toBeNull();
 	});
 });
