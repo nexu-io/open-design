@@ -95,6 +95,18 @@ describe('TemplatePicker', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it('keeps a click made as the picker becomes enabled before passive effects flush', () => {
+    function ReadyPicker({ disabled }: { disabled: boolean }) {
+      useLayoutEffect(() => {
+        if (!disabled) screen.getByTestId('home-hero-template-trigger').querySelector('button')!.click();
+      }, [disabled]);
+      return <TemplatePicker templates={templates} activeChipId="prototype" labelFor={labelFor} disabled={disabled} />;
+    }
+    const { rerender } = render(<ReadyPicker disabled />);
+    rerender(<ReadyPicker disabled={false} />);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+  });
+
   it('closes an open menu when loading disables the picker', () => {
     const props = { templates, activeChipId: 'prototype', labelFor };
     const { rerender } = render(<TemplatePicker {...props} />);
