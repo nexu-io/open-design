@@ -1662,8 +1662,6 @@ def admit_command(args: argparse.Namespace, contract: ConvergenceContract) -> in
         if entry[field] != expected:
             raise ConfigError(f"convergence handoff {field} differs from workflow_run")
     workflow = contract.workflow(entry["workflow"])
-    if entry["policy"] != workflow.policy:
-        raise ConfigError("convergence handoff policy differs from trusted policy")
     base_sha = entry["base_sha"]
     head_sha = entry["head_sha"]
     subprocess.run(
@@ -1680,6 +1678,8 @@ def admit_command(args: argparse.Namespace, contract: ConvergenceContract) -> in
     elif git_differs("HEAD", base_sha, control_paths):
         reason = "producer-control-plane-superseded"
         publish = False
+    elif entry["policy"] != workflow.policy:
+        raise ConfigError("convergence handoff policy differs from trusted policy")
     if publish and contract.schema_version != 1:
         tree = authenticated_source_tree(entry, payload)
         root = args.root.resolve() if args.root else repository_root(__file__)

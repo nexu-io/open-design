@@ -302,6 +302,70 @@ describe("workload convergence", () => {
     expect(readFileSync(outputPath, "utf8")).toContain("publish=true");
   });
 
+  test("skips a changed producer control plane before comparing its policy", () => {
+    const fixture = createRepository();
+    const baseSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fixture.root, encoding: "utf8",
+    }).trim();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.workflows.ci.policy = "test-v2";
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    writeFileSync(path.join(fixture.root, "control.txt"), "changed control");
+    execFileSync("git", ["add", "."], { cwd: fixture.root });
+    execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com",
+      "commit", "-qm", "change control policy"], { cwd: fixture.root });
+    const headSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fixture.root, encoding: "utf8",
+    }).trim();
+    runPlan(fixture);
+
+    const eventPath = path.join(fixture.root, "event.json");
+    const outputPath = path.join(fixture.root, "github-output.txt");
+    const handoffRoot = path.join(fixture.root, "handoff-root");
+    writeFileSync(eventPath, JSON.stringify({
+      repository: { id: 42, full_name: "example/repo" },
+      pull_request: { head: { sha: headSha }, base: { sha: baseSha } },
+    }));
+    execFileSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "handoff", "--pending", fixture.pendingPath,
+      "--products-root", path.join(fixture.root, "products"),
+      "--handoff-root", handoffRoot,
+    ], {
+      cwd: fixture.root,
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_REPOSITORY: "example/repo",
+        GITHUB_REPOSITORY_ID: "42",
+        GITHUB_RUN_ID: "12",
+        GITHUB_RUN_ATTEMPT: "1",
+        GITHUB_OUTPUT: outputPath,
+      },
+    });
+
+    execFileSync("git", ["checkout", "--detach", baseSha], { cwd: fixture.root });
+    execFileSync("git", ["remote", "add", "origin", fixture.root], { cwd: fixture.root });
+    writeFileSync(eventPath, JSON.stringify({
+      repository: { id: 42, full_name: "example/repo" },
+      workflow_run: {
+        id: 12, run_attempt: 1, name: "ci", event: "pull_request", head_sha: headSha,
+        head_repository: { full_name: "example/repo" },
+      },
+    }));
+    writeFileSync(outputPath, "");
+    execFileSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "admit", "--handoff-root", handoffRoot,
+    ], {
+      cwd: fixture.root,
+      env: { ...process.env, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: outputPath },
+    });
+    expect(readFileSync(outputPath, "utf8")).toContain("publish=false");
+    expect(readFileSync(outputPath, "utf8")).toContain("reason=producer-control-plane-changed");
+  });
+
   test("rejects dependency cycles and dangling suites before planning", () => {
     const fixture = createRepository();
     const config = JSON.parse(readFileSync(fixture.configPath, "utf8")) as any;
