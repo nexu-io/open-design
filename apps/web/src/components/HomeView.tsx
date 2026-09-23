@@ -108,7 +108,7 @@ import {
 } from './home-hero/sub-chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
-import { consumePendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
+import { consumePendingHomeChip, hasPendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
 import { navigate } from '../router';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { workspaceContextLinkedDirs } from './workspace-context';
@@ -1465,6 +1465,7 @@ export function HomeView({
       // their apply deferred makes Prototype <-> Deck <-> Media changes
       // feel instant; submit() still resolves the snapshot before sending.
       deferApply?: boolean;
+      focusPrompt?: boolean;
       // True when the user explicitly picked this plugin (example-prompt preset
       // or Community card / detail modal) rather than a type chip's default
       // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
@@ -1549,7 +1550,7 @@ export function HomeView({
       setPrompt(optimisticPrompt);
       setPromptEditedByUser(false);
     }
-    focusPromptAtEnd();
+    if (options?.focusPrompt !== false) focusPromptAtEnd();
 
     if (!inputsValid) {
       setPendingChipId(null);
@@ -1944,13 +1945,37 @@ export function HomeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
 
-  // No default creation type (per product): a cold Home starts with nothing
-  // picked, so the type row below the composer is the only thing on screen and
-  // the composer carries no pill. This used to silently bind the Prototype
-  // chip on the first catalog-resolution turn — which also meant Send had to
-  // stay locked for that turn (`defaultChipSeedPending`). Neither is needed
-  // now: a naked prompt routes through the daemon's own scenario-default table
-  // exactly as it does when the user clears the type with the pill's ×.
+  // Seed only the page's first untouched visit. Restored drafts and host
+  // handoffs own their selection; a later clear must not re-run this default.
+  const [defaultTypeSettled, setDefaultTypeSettled] = useState(false);
+  const defaultTypePending = ownsComposerDraft && !defaultTypeSettled && !active;
+  useEffect(() => {
+    if (!ownsComposerDraft || defaultTypeSettled) return;
+    if (active || promptHandoff || pendingPluginUseHandoff || hasPendingHomeChip(variant)) {
+      setDefaultTypeSettled(true);
+      return;
+    }
+    if (pluginsLoading || pendingChipRestore) return;
+    setDefaultTypeSettled(true);
+    const chip = findChip('prototype');
+    if (chip?.action.kind !== 'apply-scenario') return;
+    const action = chip.action;
+    const record = plugins.find((plugin) => plugin.id === action.pluginId);
+    // A missing catalog entry must not lock the composer or invent a plugin.
+    // Explicit picks continue to report the normal missing-scenario error.
+    if (!record) return;
+    void usePlugin(record, undefined, {
+      chipId: chip.id,
+      projectKind: chip.action.projectKind,
+      inputs: chip.action.inputs,
+      projectMetadata: chip.action.projectMetadata ?? null,
+      suppressPromptUpdate: true,
+      focusPrompt: false,
+      deferApply: true,
+    });
+    // usePlugin reads this render's catalog/context; it is not an effect trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownsComposerDraft, defaultTypeSettled, active, promptHandoff, pendingPluginUseHandoff, variant, pluginsLoading, pendingChipRestore, plugins]);
 
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
@@ -2764,7 +2789,7 @@ export function HomeView({
   async function submit() {
     // The send button disables itself while sending, but the Enter-to-send
     // path lands here directly — swallow re-entry during the in-flight window.
-    if (sending) return;
+    if (sending || defaultTypePending) return;
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
     // P0 ui_click area=chat_composer element=send_button. Fires before the
@@ -3166,6 +3191,7 @@ export function HomeView({
         pendingPluginId={pendingApplyId}
         pendingChipId={pendingChipId}
         submitDisabled={
+          defaultTypePending ||
           Boolean(pendingChipRestore) ||
           Boolean(pendingPluginUseHandoff) ||
           Boolean(pendingApplyId) ||

@@ -63,7 +63,13 @@ let messageWrites: ChatMessage[];
 let strategy: 'missing-state' | 'delivered' | 'agent-declared' | 'ordinary-delivery' | 'project-delivered';
 
 function strategyTask() {
-  return { activeRunId: `run-${project.id}`, executionMode: null, inputStage: 'request', route: 'full_plan',
+  // The gate with no delivery proof refuses a production turn: the plan was
+  // frozen, the build ran, and nothing usable was written. The Run itself
+  // succeeded, and that is what recovery keeps: saving the inline file
+  // repairs delivery, and the verdict stays on the row for the diagnostics.
+  const production = strategy === 'missing-state';
+  return { activeRunId: `run-${project.id}`, executionMode: production ? 'simple' : null,
+    inputStage: production ? 'production' : 'request', route: 'full_plan',
     outcome: 'blocked', terminal: true, taskExecutionId: `task-${project.id}`,
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
     blockedContext: { reasonCodes: [strategy === 'agent-declared' ? OD_NEXT_AGENT_DECLARED_BLOCK_REASON : MISSING_STATE],
@@ -157,12 +163,14 @@ async function recover(kind: typeof strategy) {
 }
 
 describe('artifact recovery preserves the established strategy verdict contract (OPEND-3028)', () => {
-  it('keeps the failed user turn after recovering HTML when physical success has no delivery proof', async () => {
+  it('keeps the recovered turn on its physical success when the task has no delivery proof', async () => {
     const message = await recover('missing-state');
+    // The persisted row still carries the blocked verdict and the error event
+    // an earlier client wrote; the Run succeeded, so recovery settles the turn
+    // as succeeded instead of keeping it failed over the missing delivery proof.
     expect(message.strategyTaskBlocked).toBe(true);
     expect(message.events).toContainEqual({ kind: 'status', label: 'error', code: MISSING_STATE });
-    expect(message.runStatus).toBe('failed');
-    expect(screen.getAllByText('Run failed').length).toBeGreaterThan(0);
+    expect(message.runStatus).toBe('succeeded');
   });
   it.each(['delivered', 'agent-declared', 'ordinary-delivery', 'project-delivered'] as const)(
     'retains successful recovery for the existing %s exception', async (kind) => {

@@ -80,6 +80,20 @@ export function strategySettledMessageFields(
   return null;
 }
 
+/** Resolve a physical Run's task position only from the daemon's matching map.
+ * The same projection can accompany a predecessor end and its successor start.
+ * Old/mismatched projections must not acquire a guessed continuation index.
+ */
+export function strategyTaskRunIndex(
+  strategyTask: StrategyTaskProjectionV2 | undefined,
+  runId: string,
+): number | undefined {
+  const matches = strategyTask?.runMappings?.filter((mapping) => mapping.runId === runId);
+  if (matches?.length !== 1) return undefined;
+  const index = matches[0]?.taskRunIndex;
+  return typeof index === 'number' && Number.isSafeInteger(index) && index >= 0 ? index : undefined;
+}
+
 /**
  * True when a Run status probe proves the Run left its logical task parked on
  * the user: the Run itself succeeded, and the task is neither terminal nor

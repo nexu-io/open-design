@@ -179,7 +179,7 @@ let fileContents: Map<string, string>;
 let persisted: Map<string, ChatMessage>;
 let requests: Array<{ method: string; path: string; role: string | null; names: string[]; clock: number }>;
 let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
-let physicalStatus: 'running' | 'succeeded';
+let physicalStatus: 'running' | 'failed';
 let runStartedAt: number;
 let accumulatedText: string;
 let eventId: number;
@@ -198,7 +198,9 @@ function context(role: 'owner' | 'member'): WorkspaceCollabContext {
 }
 function strategyTask() {
   return {
-    activeRunId: `run-${project.id}`, executionMode: null, inputStage: 'request', route: 'full_plan',
+    // A production gate refused this turn: its plan was frozen, the build ran,
+    // and the output landed in the chat instead of on disk.
+    activeRunId: `run-${project.id}`, executionMode: 'simple', inputStage: 'production', route: 'full_plan',
     outcome: 'blocked', terminal: true, taskExecutionId: `task-${project.id}`,
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
     blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_missing'], visibleText: accumulatedText },
@@ -479,8 +481,12 @@ async function reachPendingArtifactRecovery() {
   });
   expect(fileContents.get('agent-output.html')).toBeUndefined();
   await act(async () => {
-    physicalStatus = 'succeeded'; terminal = true;
-    frame('end', { code: 0, signal: null, status: 'succeeded', artifactCount: 0,
+    // The process exits non-zero, so the turn fails and the recovery path
+    // below runs. A clean exit would keep the turn Done whatever the task
+    // verdict says, and this suite is about what recovery does for a failed
+    // turn.
+    physicalStatus = 'failed'; terminal = true;
+    frame('end', { code: 1, signal: null, status: 'failed', artifactCount: 0,
       artifactPaths: [], strategyTask: strategyTask() });
     streamController?.close();
   });
