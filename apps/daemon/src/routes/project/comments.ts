@@ -92,6 +92,8 @@ export interface RegisterProjectCommentRoutesDeps extends RouteDeps<'db' | 'proj
    * author and no permission gating applies.
    */
   resolveAuthorMemberId?: (authorization: string | undefined) => Promise<string | undefined>;
+  /** Trusted authenticated user name/email, never from request body or a member-id fallback. */
+  resolveCurrentAuthorDisplayName?: () => string | null;
   /**
    * Resolve a shared project's OWNER workspaceMemberId (server-authoritative,
    * from the team hub). Used to let the project owner delete / send-to-agent on
@@ -632,6 +634,8 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
         }
       } else if (authorMemberId) {
         body.authorMemberId = authorMemberId;
+        const authorDisplayName = ctx.resolveCurrentAuthorDisplayName?.();
+        if (authorDisplayName?.trim()) body.authorDisplayName = authorDisplayName.trim();
       }
       // Resolved BEFORE the upsert (not just before the push below) so a
       // genuinely new comment's pin_seq starts unconfirmed on a team-shared

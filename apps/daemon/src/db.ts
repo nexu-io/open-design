@@ -3919,8 +3919,8 @@ export function upsertPreviewComment(
        (id, project_id, conversation_id, file_path, element_id, selector, label,
         text, position_json, html_hint, selection_kind, member_count, pod_members_json,
         style_json, attachments_json, slide_index, slide_key, note, status, created_at, updated_at,
-        anchored_version, author_member_id, pin_seq, pin_seq_confirmed, sort_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        anchored_version, author_member_id, author_kind, author_display_name, pin_seq, pin_seq_confirmed, sort_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        selector = excluded.selector,
        label = excluded.label,
@@ -3964,11 +3964,31 @@ export function upsertPreviewComment(
     now,
     anchoredVersion,
     authorMemberId,
+    authorMemberId ? 'member' : null,
+    authorMemberId && typeof input?.authorDisplayName === 'string' ? input.authorDisplayName.trim() || null : null,
     pinSeq,
     pinSeqConfirmed,
     sortKey,
   );
   return getPreviewComment(db, projectId, conversationId, id);
+}
+
+/** Reconcile the authenticated cloud author fingerprint on the same local member row. */
+export function confirmPreviewCommentAuthorKey(
+  db: SqliteDb,
+  projectId: string,
+  id: string,
+  memberId: string,
+  authorKey: string,
+): boolean {
+  if (!memberId.trim() || !authorKey.trim()) return false;
+  const result = db.prepare(
+    `UPDATE preview_comments SET author_key = ?
+      WHERE id = ? AND project_id = ? AND author_member_id = ?
+        AND (author_key IS NULL OR author_key = '')
+        AND (author_kind = 'member' OR author_kind IS NULL)`,
+  ).run(authorKey.trim(), id, projectId, memberId);
+  return result.changes > 0;
 }
 
 /**

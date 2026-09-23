@@ -564,9 +564,9 @@ describe('durable Team comment relay outbox', () => {
     closeDatabase();
     const reopened = openDatabase(tempDir!);
     const reopenedOutbox = createCommentRelayOutboxStore(reopened, () => 200);
-    const confirmed: Array<{ commentId: string; seq: number }> = [];
+    const confirmed: Array<{ commentId: string; seq: number; authorKey: string | undefined; memberId: string }> = [];
     const secondService = createCollabCloudService({
-      client: clientWithPush(async () => ({ seq: 42 })),
+      client: clientWithPush(async () => ({ seq: 42, authorKey: 'a'.repeat(64) })),
       commentOutbox: reopenedOutbox,
       resolveLocalProjectRelayBinding: () => ({
         workspaceId: 'workspace-a',
@@ -577,14 +577,14 @@ describe('durable Team comment relay outbox', () => {
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
       mergeComment: () => 'unchanged',
-      onCommentPushed: ({ commentId, seq }) => confirmed.push({ commentId, seq }),
+      onCommentPushed: ({ commentId, seq, authorKey, memberId }) => confirmed.push({ commentId, seq, authorKey, memberId }),
       now: () => 200,
       retryDelayMs: () => 0,
     });
     await secondService.flushPendingComments();
 
     expect(reopenedOutbox.count()).toBe(0);
-    expect(confirmed).toEqual([{ commentId: 'comment-1', seq: 42 }]);
+    expect(confirmed).toEqual([{ commentId: 'comment-1', seq: 42, authorKey: 'a'.repeat(64), memberId: queuedContext.workspaceMemberId }]);
     secondService.dispose();
   });
 

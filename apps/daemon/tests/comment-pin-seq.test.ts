@@ -6,6 +6,7 @@ import type { CollabCloudComment } from '@open-design/contracts';
 import {
   closeDatabase,
   confirmPreviewCommentPinSeq,
+  confirmPreviewCommentAuthorKey,
   getPreviewComment,
   insertConversation,
   insertProject,
@@ -59,6 +60,22 @@ function seededDb() {
   insertConversation(db, { id: 'conversation-1', projectId: 'project-1', title: 'Chat', createdAt: 1, updatedAt: 1 });
   return db;
 }
+
+describe('push receipt author identity', () => {
+  it('only writes a trusted push receipt author key to the matching local member comment', () => {
+    const db = seededDb();
+    const own = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target(), note: 'mine', authorMemberId: 'member-a', authorDisplayName: 'Alice',
+    })!;
+    expect(confirmPreviewCommentAuthorKey(db, 'project-1', own.id, 'member-b', 'forged')).toBe(false);
+    expect(confirmPreviewCommentAuthorKey(db, 'wrong-project', own.id, 'member-a', 'forged')).toBe(false);
+    expect(confirmPreviewCommentAuthorKey(db, 'project-1', own.id, 'member-a', 'a'.repeat(64))).toBe(true);
+    expect(getPreviewComment(db, 'project-1', 'conversation-1', own.id)).toMatchObject({
+      authorKind: 'member', authorMemberId: 'member-a', authorDisplayName: 'Alice', authorKey: 'a'.repeat(64),
+    });
+    expect(confirmPreviewCommentAuthorKey(db, 'project-1', own.id, 'member-a', 'b'.repeat(64))).toBe(false);
+  });
+});
 
 describe('pin_seq assignment (recvq5BVsolIxi)', () => {
   it('assigns pin_seq starting at 1 and never rewrites it on a later edit', () => {
