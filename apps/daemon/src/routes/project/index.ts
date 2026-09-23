@@ -431,6 +431,7 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
     comment: PreviewComment,
     context: WorkspaceCollabContext | null,
   ) => boolean | void;
+  pullCommentsNow?: (projectId: string, context: WorkspaceCollabContext) => Promise<boolean>;
   onCommentsRead?: (
     projectId: string,
     context: WorkspaceCollabContext | null,

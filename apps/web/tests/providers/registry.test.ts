@@ -19,6 +19,7 @@ import {
   deployProjectFile,
   createDesignSystemDraft,
   fetchAgentsStream,
+  fetchPreviewComments,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchDesignSystemsResult,
@@ -45,6 +46,27 @@ import {
   upsertPreviewComment,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+describe('explicit comment pull in the UI provider', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('uses the same pull endpoint as CLI and preserves local comments when remote is unavailable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/pull')) {
+        return new Response(JSON.stringify({ pulled: true, comments: [{ id: 'visitor' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true)).toEqual([{ id: 'visitor' }]);
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/p/conversations/conv/comments/pull',
+      expect.objectContaining({ method: 'POST' }));
+    fetchMock.mockImplementation(async input => String(input).endsWith('/pull')
+      ? new Response(null, { status: 503 })
+      : new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 }));
+    expect(await fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true)).toEqual([{ id: 'local' }]);
+  });
+});
 
 describe('skill operation diagnostics', () => {
   afterEach(() => {
