@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { bindVelaShareVersion } from '../src/collab/vela-share-binding.js';
+import { bindVelaShareVersion, resumeVelaShareVersion } from '../src/collab/vela-share-binding.js';
 import { runPinnedVelaCommand } from '../src/collab/vela-pinned-command.js';
 import { type runVelaCommand, velaWorkspaceCommandOptions } from '../src/integrations/vela-command.js';
 const input = { sourceFilePath: 'pages/local.html', workspaceId: 'w', projectId: 'p', resourceId: 'r', slug: 'stable', version: 2, versionId: 'immutable' };
@@ -22,6 +22,9 @@ it.each(['sourceFilePath', 'workspaceId', 'projectId', 'resourceId', 'slug', 've
 it.each([{}, { ...receipt, status: 'stopped' }, { ...receipt, verifiedVersion: 1 }, { ...receipt, verifiedVersionId: 'other' }, { ...receipt, projectId: 'other' }, { ...receipt, slug: 'other' }])('rejects unverified responses without fallback', async value => {
   const run = vi.fn<typeof runVelaCommand>().mockResolvedValue(JSON.stringify(value));
   await expect(bindVelaShareVersion(input, run)).rejects.toThrow(/^PUBLIC_SHARE_BINDING_FAILED$/); expect(run).toHaveBeenCalledTimes(1);
+  run.mockClear();
+  await expect(resumeVelaShareVersion(input, run)).rejects.toThrow(/^PUBLIC_SHARE_BINDING_FAILED$/); expect(run).toHaveBeenCalledTimes(1);
+  expect(run.mock.calls[0]![0].slice(0, 2)).toEqual(['share', 'resume']);
 });
 it.skipIf(!process.env.OD_TEST_VELA_BIN).each(['success', 'missing-proof', 'conflict', 'old-server', 'stopped'] as const)('real Go binding-only %s uses exactly one dedicated endpoint', async mode => {
   const binary = process.env.OD_TEST_VELA_BIN!; const root = await mkdtemp(path.join(tmpdir(), 'od-bind-cli-'));

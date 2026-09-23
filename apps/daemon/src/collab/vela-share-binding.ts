@@ -16,12 +16,22 @@ export interface VelaShareBindingInput {
  * Callers can supply a runner pinned to the original verified session.
  */
 export async function bindVelaShareVersion(input: VelaShareBindingInput, run: typeof runVelaCommand = runVelaCommand): Promise<void> {
+  return completeVelaShareVersion('bind', input, run);
+}
+
+/** Only an explicit owner publish request may resume a stopped generation.
+ * Background binding retries must continue using bindVelaShareVersion. */
+export async function resumeVelaShareVersion(input: VelaShareBindingInput, run: typeof runVelaCommand = runVelaCommand): Promise<void> {
+  return completeVelaShareVersion('resume', input, run);
+}
+
+async function completeVelaShareVersion(operation: 'bind' | 'resume', input: VelaShareBindingInput, run: typeof runVelaCommand): Promise<void> {
   try {
     const request = Object.freeze({ ...input });
     if ([request.sourceFilePath, request.workspaceId, request.projectId, request.resourceId, request.slug, request.versionId]
       .some(value => typeof value !== 'string' || !value.trim())
       || !Number.isSafeInteger(request.version) || request.version < 1) throw new Error('invalid binding identity');
-    const stdout = await run(['share', 'bind', request.slug, '--project-id', request.projectId,
+    const stdout = await run(['share', operation, request.slug, '--project-id', request.projectId,
       '--source-file-path', request.sourceFilePath, '--resource-id', request.resourceId, '--version', String(request.version), '--version-id', request.versionId, '--json'],
     { ...velaWorkspaceCommandOptions(request.workspaceId), timeoutMs: 30_000 });
     const value: unknown = JSON.parse(stdout);

@@ -17,7 +17,7 @@ export function createPublicSharePublishingFixture(
   store: PublicFilePublicationStore,
   resource: (args: string[], workspace: string) => Promise<string>,
   enqueue: Parameters<typeof createPublicFilePublicationRecorder>[2] = () => ({ enqueued: 0, skippedInbound: 0 }),
-  options: { env?: NodeJS.ProcessEnv; configuredEnv?: Record<string, string>; pending?: boolean; failUpload?: boolean; failStop?: boolean; commands?: string[][]; cloud?: FixtureShareCloud } = {},
+  options: { env?: NodeJS.ProcessEnv; configuredEnv?: Record<string, string>; pending?: boolean; failUpload?: boolean; failStop?: boolean; failResume?: boolean; commands?: string[][]; cloud?: FixtureShareCloud } = {},
 ): Pick<RegisterCollabSyncRoutesDeps, 'sharePublishing' | 'readProjectShareState'> {
   const outbox = createShareBindingOutbox(db);
   let ids = 0;
@@ -43,7 +43,9 @@ export function createPublicSharePublishingFixture(
           cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, slug, status: 'stopped' });
           return JSON.stringify({ status: 'stopped', projectId: scope.projectId, slug });
         }
-        if (args[1] === 'bind') {
+        if (args[1] === 'bind' || args[1] === 'resume') {
+          if (args[1] === 'resume' && options.failResume) throw new Error('resume unavailable');
+          if (args[1] === 'bind' && cloud.get(scope.projectId + ':' + scope.filePath)?.status === 'stopped') throw new Error('SHARE_BINDING_STOPPED');
           cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, slug, status: 'active' });
           return JSON.stringify({ status: 'active', projectId: scope.projectId, slug,
             verifiedVersion: Number(args[args.indexOf('--version') + 1]), verifiedVersionId: args[args.indexOf('--version-id') + 1] });
@@ -51,8 +53,9 @@ export function createPublicSharePublishingFixture(
         if (args[1] !== 'publish') throw new Error('unexpected share operation');
         const versionId = args[args.indexOf('--version-id') + 1];
         const receipt = { slug, versionId, version: 1, publishedAt: 1, entryPath: args[args.indexOf('--entry-path') + 1] };
-        if (!options.pending) cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, slug, status: 'active' });
-        return JSON.stringify({ status: options.pending ? 'binding_pending' : 'published', ...receipt, receipt, snapshot: { versionId }, ...(options.pending ? { binding: { code: 'SHARE_BINDING_UNAVAILABLE' } } : {}) });
+        const pending = options.pending || cloud.get(scope.projectId + ':' + scope.filePath)?.status === 'stopped';
+        if (!pending) cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, slug, status: 'active' });
+        return JSON.stringify({ status: pending ? 'binding_pending' : 'published', ...receipt, receipt, snapshot: { versionId }, ...(pending ? { binding: { code: 'SHARE_BINDING_UNAVAILABLE' } } : {}) });
       },
     }),
     retry: () => {},
