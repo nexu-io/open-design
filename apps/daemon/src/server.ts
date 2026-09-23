@@ -8999,6 +8999,9 @@ export async function startServer({
     },
     ...(collabCloud
       ? {
+          // Explicit UI/CLI request runs even when no project SSE subscriber
+          // has ever existed; never rely on the hub's in-memory dirty mark.
+          pullCommentsNow: (projectId, context) => collabCloud.pullProject(projectId, context),
           onCommentsRead: async (
             projectId,
             leasedContext,

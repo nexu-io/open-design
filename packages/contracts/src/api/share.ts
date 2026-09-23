@@ -17,7 +17,7 @@
  */
 
 import type { PublicProjectFilePublication } from './collab.js';
-import type { PreviewCommentSelectionKind, PreviewCommentStatus } from './comments.js';
+import type { PreviewComment, PreviewCommentSelectionKind, PreviewCommentStatus } from './comments.js';
 
 /* ------------------------------------------------------------------ *
  * Share addressing
@@ -1711,6 +1711,12 @@ export function hasEverShared(input: { bindingExists: boolean }): boolean {
 /* ------------------------------------------------------------------ *
  * Comment sync state
  * ------------------------------------------------------------------ */
+
+/** Explicit authorized remote pull; failure uses a non-2xx HTTP response. */
+export interface ProjectCommentPullResponse {
+  pulled: true;
+  comments: PreviewComment[];
+}
 
 /**
  * What the client can say about comment syncing, so the banners have an input.

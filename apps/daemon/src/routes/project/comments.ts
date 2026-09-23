@@ -2,6 +2,7 @@ import type { Express, Request } from 'express';
 import type { CommentSyncStateService } from '../../collab/comment-sync-state.js';
 import type {
   PreviewComment,
+  ProjectCommentPullResponse,
   ProjectCommentReadRequest,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
@@ -149,6 +150,8 @@ export interface RegisterProjectCommentRoutesDeps extends RouteDeps<'db' | 'proj
    * list is serialized, so an opened project catches up in its first response
    * instead of requiring a second read after the next poll tick.
    */
+  /** Explicit sync for UI and CLI, independent of events subscribers/dirty marks. */
+  pullCommentsNow?: (projectId: string, context: WorkspaceCollabContext) => Promise<boolean>;
   onCommentsRead?: (
     projectId: string,
     context: WorkspaceCollabContext | null,
@@ -533,6 +536,36 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
         ? listProjectPreviewComments(db, req.params.id)
         : listPreviewComments(db, req.params.id, req.params.cid, { includeProjectAnchor: true }),
     });
+  });
+
+  app.post('/api/projects/:id/conversations/:cid/comments/pull', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const projectId = req.params.id;
+    const conversationId = req.params.cid;
+    if (!getRoutableConversation(projectId, conversationId)) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    if (!ctx.pullCommentsNow) return res.status(503).json({ error: 'COMMENT_PULL_UNAVAILABLE' });
+    try {
+      const resolution = ctx.resolveFreshWorkspaceContext
+        ? await ctx.resolveFreshWorkspaceContext(req, projectId)
+        : await resolveRequestWorkspaceContext(req, projectId);
+      if (!resolution.ok) return sendWorkspaceResolutionError(res, resolution);
+      if (!resolution.context) return res.status(403).json({ error: 'COMMENT_PULL_CONTEXT_REQUIRED' });
+      if (!await ctx.pullCommentsNow(projectId, resolution.context)) {
+        return res.status(503).json({ error: 'COMMENT_PULL_UNAVAILABLE' });
+      }
+      const response: ProjectCommentPullResponse = {
+        pulled: true,
+        comments: commentsAreProjectScoped(projectId, resolution.context)
+          && typeof listProjectPreviewComments === 'function'
+          ? listProjectPreviewComments(db, projectId)
+          : listPreviewComments(db, projectId, conversationId, { includeProjectAnchor: true }),
+      };
+      return res.json(response);
+    } catch {
+      return res.status(503).json({ error: 'COMMENT_PULL_UNAVAILABLE' });
+    }
   });
 
   app.post('/api/projects/:id/conversations/:cid/comments', async (req, res) => {
