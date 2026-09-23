@@ -4523,7 +4523,7 @@ function CommentAuthorIdentity({
         displayName={comment.authorDisplayName?.trim() ?? ''}
         displayNumber={displayNumber}
         role="sharePage"
-        seed={comment.authorKey ?? comment.authorAppUserId ?? ''}
+        seed={comment.authorKey}
         t={t}
       />
     );
@@ -4557,7 +4557,7 @@ function MemberCommentAuthorIdentity({
       displayName={comment.authorDisplayName?.trim() || directoryAuthor?.displayName?.trim() || ''}
       displayNumber={displayNumber}
       role={directoryAuthor?.role}
-      seed={comment.authorKey ?? comment.authorMemberId ?? directoryAuthor?.memberId ?? ''}
+      seed={comment.authorKey}
       t={t}
     />
   );

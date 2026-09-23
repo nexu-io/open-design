@@ -444,6 +444,29 @@ describe('mergeSyncedPreviewComment', () => {
     });
   });
 
+  it('hydrates a previously pulled user or member with authoritative authorKey at unchanged edit timestamp', () => {
+    const db = seededDb();
+    const key = 'd'.repeat(64);
+    for (const [kind, id] of [['user', 'external'], ['member', 'owner']] as const) {
+      const original = cloudComment(id, {
+        updatedAt: 100,
+        memberId: kind === 'member' ? 'owner-member' : '',
+        authorKind: kind,
+        ...(kind === 'user' ? { authorAppUserId: 'account-1' } : {}),
+      });
+      expect(mergeSyncedPreviewComment(db, 'p1', 'conv-local', original)).toBe('changed');
+      expect(mergeSyncedPreviewComment(db, 'p1', 'conv-local', { ...original, authorKey: key })).toBe('changed');
+    }
+    const comments = listPreviewComments(db, 'p1', 'conv-local');
+    expect(comments.map(comment => comment.authorKey)).toEqual([key, key]);
+    expect(comments[0]!.updatedAt).toBe(100);
+    expect(comments[1]!.updatedAt).toBe(100);
+    const original = cloudComment('external', { updatedAt: 100, memberId: '', authorKind: 'user', authorAppUserId: 'account-1' });
+    expect(mergeSyncedPreviewComment(db, 'p1', 'conv-local', { ...original, authorKey: 'e'.repeat(64) })).toBe('unchanged');
+    expect(mergeSyncedPreviewComment(db, 'p1', 'conv-local', { ...original, authorAppUserId: 'other-account', authorKey: 'e'.repeat(64) })).toBe('unchanged');
+    expect(listPreviewComments(db, 'p1', 'conv-local')[0]!.authorKey).toBe(key);
+  });
+
   it('lands under the LOCAL conversation, not the cloud comment conversationId', () => {
     const db = seededDb();
     // comment.conversationId is 'conv-remote' (a foreign daemon's id) — merge must

@@ -13464,6 +13464,27 @@ describe('FileViewer tweaks toolbar', () => {
     expect(commentAuthorAvatarColor('external-author')).toEqual({ bg: '#D99AFA', fg: '#63365A' });
   });
 
+  it('does not borrow identity ids for avatar color while authoritative authorKey is unavailable', async () => {
+    const comment = (id: string, kind: 'user' | 'member', identity: string): PreviewComment => ({
+      id, projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html',
+      elementId: id, selector: '[data-od-id="hero-copy"]', label: 'Hero copy', text: 'Hero copy',
+      htmlHint: '<p data-od-id="hero-copy">', position: { x: 16, y: 24, width: 320, height: 48 },
+      note: 'Feedback.', status: 'open', authorKind: kind, authorDisplayName: 'Same Person',
+      ...(kind === 'user' ? {authorAppUserId: identity} : {authorMemberId: identity}),
+      createdAt: 10, updatedAt: 10,
+    });
+    render(<CommentSidePanel comments={[
+      comment('external', 'user', 'q9hux'), comment('member', 'member', 'bk05z4'),
+    ]} selectedIds={new Set()} activeCommentId={null} collapsed={false}
+      onCollapsedChange={() => {}} onToggleSelect={() => {}} onSelectAll={() => {}}
+      onClearSelection={() => {}} onReply={() => {}} onSendSelected={() => {}} sending={false} t={t} />);
+    const items = await screen.findAllByTestId('comment-side-item');
+    const colors = items.map(item => item.querySelector<HTMLElement>('.comment-side-avatar')?.style.background);
+    const expected = document.createElement('span');
+    expected.style.background = commentAuthorAvatarColor('').bg;
+    expect(colors).toEqual([expected.style.background, expected.style.background]);
+  });
+
   it('renders a user author from its trusted snapshot without querying the member directory', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(
       JSON.stringify({ members: [] }),

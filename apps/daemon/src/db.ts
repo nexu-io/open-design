@@ -4405,7 +4405,10 @@ export function mergeSyncedPreviewComment(
     : undefined;
   const authorKey = typeof comment.authorKey === 'string' ? comment.authorKey : undefined;
   const existing = db
-    .prepare(`SELECT updated_at AS updatedAt, label FROM preview_comments WHERE id = ? AND project_id = ?`)
+    .prepare(`SELECT updated_at AS updatedAt, label, author_key AS authorKey,
+                     author_kind AS authorKind, author_member_id AS authorMemberId,
+                     author_app_user_id AS authorAppUserId
+                FROM preview_comments WHERE id = ? AND project_id = ?`)
     .get(comment.id, projectId) as DbRow | undefined;
   const label = syncedCommentLabel(comment.label, existing?.label, comment.elementId);
   if (existing) {
@@ -4413,7 +4416,24 @@ export function mergeSyncedPreviewComment(
     // row's conversation/created_at, refreshes mutable content/status/anchor
     // state, and updates author fields only when the incoming wire payload
     // explicitly carries each trusted field. Legacy payloads cannot erase them.
-    if (updatedAt <= Number(existing.updatedAt ?? 0)) return 'unchanged';
+    if (updatedAt <= Number(existing.updatedAt ?? 0)) {
+      // A server version may begin supplying its account-level avatar key
+      // after an older daemon already stored this exact event. A replay is
+      // metadata hydration, not a newer edit: never replace a known key or
+      // update any comment content, timestamp, or author identity.
+      const sameAuthor = authorKind === existing.authorKind
+        && (authorKind === 'user'
+          ? authorAppUserId === existing.authorAppUserId
+          : authorMemberId === existing.authorMemberId);
+      if (updatedAt === Number(existing.updatedAt) && sameAuthor
+        && authorKey && !existing.authorKey) {
+        const hydrated = db.prepare(`UPDATE preview_comments SET author_key = ?
+          WHERE id = ? AND project_id = ? AND author_key IS NULL AND updated_at = ?`)
+          .run(authorKey, comment.id, projectId, updatedAt);
+        return hydrated.changes === 1 ? 'changed' : 'unchanged';
+      }
+      return 'unchanged';
+    }
     const result = db.prepare(
       `UPDATE preview_comments SET
          selector = ?, label = ?, text = ?, position_json = ?, html_hint = ?,
