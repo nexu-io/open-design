@@ -6713,7 +6713,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         'writeFiles',
       )) return;
       const target = await resolveProjectFilePath(PROJECTS_DIR, project.id, folderPath, project.metadata);
-      if (!target.name || !(await ctx.node.fs.stat(target.filePath)).isDirectory()) {
+      if (!target.name || !(await ctx.node.fs.promises.stat(target.filePath)).isDirectory()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'target must be a non-root folder');
       }
       await ctx.stopPublicFilesBeforeDelete?.(project.id, { folderPath: target.name });
