@@ -13485,6 +13485,32 @@ describe('FileViewer tweaks toolbar', () => {
     expect(colors).toEqual([expected.style.background, expected.style.background]);
   });
 
+  it('renders the same human with one authorKey color across public and team comment identities', async () => {
+    const key = 'b'.repeat(64);
+    const base: PreviewComment = {
+      id: 'visitor', projectId: 'project-1', conversationId: 'conversation-1',
+      filePath: 'preview.html', elementId: 'hero', selector: '[data-od-id="hero"]',
+      label: 'Hero', text: 'Hero', htmlHint: '<p>', position: { x: 1, y: 2, width: 3, height: 4 },
+      note: 'Feedback', status: 'open', authorDisplayName: 'Same Person', authorKey: key,
+      createdAt: 10, updatedAt: 10,
+    };
+    render(<CommentSidePanel comments={[
+      { ...base, authorKind: 'user', authorAppUserId: 'account-1' },
+      { ...base, id: 'member', authorKind: 'member', authorMemberId: 'member-9' },
+    ]} selectedIds={new Set()} activeCommentId={null} collapsed={false}
+      onCollapsedChange={() => {}} onToggleSelect={() => {}} onSelectAll={() => {}}
+      onClearSelection={() => {}} onReply={() => {}} onSendSelected={() => {}} sending={false} t={t} />);
+    const items = await screen.findAllByTestId('comment-side-item');
+    const swatch = commentAuthorAvatarColor(key);
+    const expected = document.createElement('span');
+    expected.style.background = swatch.bg;
+    expected.style.color = swatch.fg;
+    expect(items.map(item => item.querySelector<HTMLElement>('.comment-side-avatar')?.style.background))
+      .toEqual([expected.style.background, expected.style.background]);
+    expect(items.map(item => item.querySelector<HTMLElement>('.comment-side-avatar')?.style.color))
+      .toEqual([expected.style.color, expected.style.color]);
+  });
+
   it('renders a user author from its trusted snapshot without querying the member directory', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(
       JSON.stringify({ members: [] }),
