@@ -66,17 +66,17 @@ jobs:
             const REMINDER_MS = 72 * 60 * 60 * 1000;
             const CLOSE_MS = 120 * 60 * 60 * 1000;
             const DRY_RUN = String(context.payload.inputs?.dry_run || 'false').toLowerCase() === 'true';
+            // Every entry must exist in the repository's label registry. An
+            // unregistered name is an unreachable exemption branch, not a
+            // harmless leftover, so the pass asserts this set against the live
+            // registry before it touches a single PR.
             const NON_AUTHOR_BLOCKER_LABELS = new Set([
               'exempt-from-stale',
               'looper:worker-ready',
               'needs-design-review',
               'needs-maintainer-check',
-              'needs-maintainer-merge',
-              'needs-qa',
-              'needs-qa-validation',
               'needs-product-direction',
               'needs-validation',
-              'ready-to-merge',
               'stale-pr/blocked',
               'stale-pr/maintainer-assisted',
             ]);
