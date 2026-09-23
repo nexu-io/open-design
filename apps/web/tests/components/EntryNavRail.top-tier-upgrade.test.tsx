@@ -126,8 +126,8 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
   });
 
   // Design (PR #8364): the top tier's head button says 管理, not 升级, and
-  // lands on the one billing action that tier still has — auto-recharge.
-  it('offers 管理 instead, pointed at the console’s auto-recharge settings', () => {
+  // lands on the console dashboard (ruling 2026-09-23).
+  it('offers 管理 instead, pointed at the console dashboard', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderRail({
       context: context({ planId: 'team_max' } as Partial<WorkspaceCollabContext>),
@@ -137,10 +137,11 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
     fireEvent.click(billingCard().getByRole('button', { name: '管理' }));
 
     expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('billing=auto-recharge'),
+      expect.stringContaining('/dashboard'),
       '_blank',
       'noopener,noreferrer',
     );
+    expect(open.mock.calls[0]?.[0]).not.toContain('billing=');
   });
 
   // An unresolved tier also fails the upgrade gate. It must not flash 管理 on
@@ -183,8 +184,8 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
   );
 
   // (3) Design PR #8364 (ruling 2026-09-23, 「按设计稿」): personal Max shows
-  // 管理 too, pointed at the console's auto-recharge settings, even though the
-  // team ladder still sits above it.
+  // 管理 too, pointed at the console dashboard, even though the team ladder
+  // still sits above it.
   it('offers 管理, not 升级, for a personal max owner', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderRail({
@@ -198,10 +199,11 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
     expect(billingCard().queryByRole('button', { name: '升级' })).toBeNull();
     fireEvent.click(billingCard().getByRole('button', { name: '管理' }));
     expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('billing=auto-recharge'),
+      expect.stringContaining('/dashboard'),
       '_blank',
       'noopener,noreferrer',
     );
+    expect(open.mock.calls[0]?.[0]).not.toContain('billing=');
   });
 
   // (4) Every other personal tier keeps it too.

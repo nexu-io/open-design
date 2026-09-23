@@ -100,6 +100,7 @@ import {
 import { canUpgradeFromPlanTier, isMaxPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
 import {
   AMR_CONSOLE_AUTO_RECHARGE_INTENT,
+  AMR_CONSOLE_RECHARGE_INTENT,
   amrAutoRechargeUrlForProfile,
   amrConsoleUrlForWorkspace,
   amrPlansUrlForProfile,
@@ -803,11 +804,11 @@ function formatWalletBalance(raw: string | null | undefined): string | null {
  * already the dashboard, so routing through it would append a second
  * `/dashboard` segment. Only the intent has to be added.
  */
-function autoRechargeConsoleUrl(base: string | null): string | null {
+function consoleBillingIntentUrl(base: string | null, intent: string): string | null {
   if (!base) return null;
   try {
     const url = new URL(base);
-    url.searchParams.set('billing', AMR_CONSOLE_AUTO_RECHARGE_INTENT);
+    url.searchParams.set('billing', intent);
     return url.toString();
   } catch {
     return base;
@@ -1320,7 +1321,12 @@ export function EntryTopRightCluster({
   // workspace-scoped console the wallet row opens, asked to open its
   // auto-recharge settings on arrival. Topping up IS the action for a top-tier
   // subscriber — see AMR_CONSOLE_AUTO_RECHARGE_INTENT.
-  const billingManageUrl = autoRechargeConsoleUrl(accountBillingUrl);
+  // 管理 (Max) lands on the plain dashboard — product ruling 2026-09-23
+  // (「点击管理, 就跳转到 vela dashboard 就行」), not on the auto-recharge dialog.
+  const billingManageUrl = accountBillingUrl;
+  // The wallet row asks the console for its manual top-up dialog; see
+  // AMR_CONSOLE_RECHARGE_INTENT for the (pending) B-side handler.
+  const walletRechargeUrl = consoleBillingIntentUrl(accountBillingUrl, AMR_CONSOLE_RECHARGE_INTENT);
   // Product decision: plan comparison lives on public Pricing and payment
   // lives in Cloud. The client refreshes billing + context when focus returns
   // so a completed web upgrade syncs plan, credits, seats and gates.
@@ -1576,8 +1582,8 @@ export function EntryTopRightCluster({
                       onClick={() => {
                         trackAccountAction('credits');
                         setCreditsPanelOpen(false);
-                        if (accountBillingUrl) {
-                          window.open(accountBillingUrl, '_blank', 'noopener,noreferrer');
+                        if (walletRechargeUrl) {
+                          window.open(walletRechargeUrl, '_blank', 'noopener,noreferrer');
                         }
                       }}
                     >
