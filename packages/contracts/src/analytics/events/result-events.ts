@@ -811,6 +811,26 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   /** Compacted event count in the terminal message snapshot. */
   message_event_final_event_count?: number;
   message_event_persistence_error_count?: number;
+  /**
+   * Content-free storage summary of what this run left in SQLite, measured
+   * after the run's events were finalized. Byte fields are SQLite
+   * `octet_length` of the stored text (logical content, not file growth).
+   * A field that could not be measured is omitted, never reported as 0.
+   */
+  storage_schema_version?: 1;
+  storage_events_json_bytes?: number;
+  storage_content_bytes?: number;
+  /** Append-only event batches still unfolded for this message. */
+  storage_pending_batch_count?: number;
+  storage_pending_batch_bytes?: number;
+  /** OD Next prompt bundle; only on the task's initial run, never per resume. */
+  storage_prompt_bundle_bytes?: number;
+  /** Largest single persisted event (UTF-16 chars) and its event kind. */
+  storage_largest_event_chars?: number;
+  storage_largest_event_kind?: string;
+  /** Events the payload budget truncated, and their original UTF-8 size. */
+  storage_truncated_event_count?: number;
+  storage_truncated_original_bytes?: number;
   retry_original_failure_category?: TrackingRunFailureCategory;
   retry_original_failure_detail?: TrackingRunFailureDetail;
   retry_original_failure_stage?: TrackingRunFailureStage;
