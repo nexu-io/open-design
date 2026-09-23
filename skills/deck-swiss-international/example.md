@@ -1,4 +1,4 @@
-# Open Design · 2026 路线图
+# OpenDesign · 2026 路线图
 
 > Klein Blue 主题, 双页预览: S01 Cover + S06 KPI Tower
 

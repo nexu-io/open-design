@@ -289,7 +289,7 @@ describe('web updater model', () => {
       downloading: 'Downloading Update…',
       install: 'Install Update…',
       installing: 'Installing Update…',
-      restart: 'Restart to Update Open Design…',
+      restart: 'Restart to Update OpenDesign…',
     };
     await expect(syncUpdaterMenuLabels(labels)).resolves.toEqual({ ok: true });
     expect(setMenuLabels).toHaveBeenCalledWith(labels);

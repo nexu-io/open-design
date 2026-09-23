@@ -12,7 +12,7 @@
  */
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import { useCallback, useState, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -107,7 +107,7 @@ describe('AmrAccountControl', () => {
     });
 
     expect(
-      screen.getByRole('group', { name: 'Open Design Cloud account status' }),
+      screen.getByRole('group', { name: 'OpenDesign Cloud account status' }),
     ).toBeTruthy();
     expect(screen.getByText('Not signed in')).toBeTruthy();
     const signIn = screen.getByRole('button', { name: 'Sign in' });
@@ -204,6 +204,73 @@ describe('AmrAccountControl', () => {
 });
 
 describe('AmrLoginPill', () => {
+  it('does not echo a controlled status between the two Settings pills', () => {
+    const signedInStatus: VelaLoginStatus = {
+      loggedIn: true,
+      loginInFlight: false,
+      profile: 'local',
+      configPath: '/x',
+      user: { id: 'u', email: 'leaf@example.com', plan: 'free' },
+    };
+    const onStatusChange = vi.fn();
+
+    function SettingsPills() {
+      const [status, setStatus] = useState<VelaLoginStatus | null>(signedInStatus);
+      const receiveStatus = useCallback((next: VelaLoginStatus | null) => {
+        onStatusChange(next);
+        setStatus(next);
+      }, []);
+      return (
+        <I18nProvider initial="en">
+          <button onClick={() => setStatus({ ...status! })}>Refresh equivalent status</button>
+          <AmrLoginPill initialStatus={status} skipInitialRefresh onStatusChange={receiveStatus} />
+          <AmrLoginPill initialStatus={status} skipInitialRefresh onStatusChange={receiveStatus} />
+        </I18nProvider>
+      );
+    }
+
+    render(<SettingsPills />);
+
+    expect(screen.getAllByRole('button', { name: 'Sign out' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh equivalent status' }));
+    expect(screen.getAllByRole('button', { name: 'Sign out' })).toHaveLength(2);
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
+  it('applies a genuine parent status change to both Settings pills without feedback', () => {
+    const signedInStatus: VelaLoginStatus = {
+      loggedIn: true,
+      loginInFlight: false,
+      profile: 'local',
+      configPath: '/x',
+      user: { id: 'u', email: 'leaf@example.com', plan: 'free' },
+    };
+    const onStatusChange = vi.fn();
+
+    function SettingsPills() {
+      const [status, setStatus] = useState<VelaLoginStatus | null>(signedInStatus);
+      return (
+        <I18nProvider initial="en">
+          <button onClick={() => setStatus({
+            ...signedInStatus,
+            loggedIn: false,
+            user: null,
+          })}>
+            Apply signed-out status
+          </button>
+          <AmrLoginPill initialStatus={status} skipInitialRefresh onStatusChange={onStatusChange} />
+          <AmrLoginPill initialStatus={status} skipInitialRefresh onStatusChange={onStatusChange} />
+        </I18nProvider>
+      );
+    }
+
+    render(<SettingsPills />);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply signed-out status' }));
+
+    expect(screen.getAllByRole('button', { name: 'Sign in' })).toHaveLength(2);
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
   it('renders a Sign-in button when /status reports loggedIn=false', async () => {
     globalThis.fetch = vi.fn(async (input) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
@@ -279,7 +346,7 @@ describe('AmrLoginPill', () => {
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.getByText('TEST')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'https://vela.powerformer.net/dashboard?source=open_design',
+      'https://open-design.powerformer.net/cloud/dashboard?source=open_design',
     );
   });
 
@@ -309,7 +376,7 @@ describe('AmrLoginPill', () => {
 
     expect(screen.queryByText('PROD')).toBeNull();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'https://open-design.ai/amr/dashboard?source=open_design',
+      'https://open-design.ai/cloud/dashboard?source=open_design',
     );
   });
 
@@ -368,6 +435,44 @@ describe('AmrLoginPill', () => {
         method: 'POST',
         body: JSON.stringify({ url: 'https://open-design.ai/amr/dashboard?od_bridge=odbr_12345678' }),
       }),
+    );
+  });
+
+  it('uses the feature-test origin carried by the visible status for management', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/system/open-external') return jsonResponse({ body: { ok: true } });
+      return new Response('{}', { status: 202 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPill({
+      initialStatus: {
+        loggedIn: true,
+        loginInFlight: false,
+        profile: 'feature-test',
+        consoleOrigin: 'https://feature.example',
+        configPath: '/x',
+        user: { id: 'u', email: 'leaf@example.com', plan: 'plus' },
+      },
+      skipInitialRefresh: true,
+      showConsoleAction: true,
+    });
+
+    const link = screen.getByRole('link', { name: 'Manage' }) as HTMLAnchorElement;
+    expect(link.href).toBe('https://feature.example/dashboard?source=open_design');
+    fireEvent.click(link);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/system/open-external',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('https://feature.example/dashboard'),
+      }),
+    ));
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/attribution/bridge-url',
+      expect.anything(),
     );
   });
 
@@ -438,7 +543,7 @@ describe('AmrLoginPill', () => {
     });
   });
 
-  it('passes the Open Design device id in login attribution when metrics consent is enabled', async () => {
+  it('passes the OpenDesign device id in login attribution when metrics consent is enabled', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -562,8 +667,9 @@ describe('AmrLoginPill', () => {
     expect(await screen.findByText('Signing in…')).toBeTruthy();
   });
 
-  it('clears the local signing-in state as soon as status reports the login is complete', async () => {
+  it('publishes the poll-confirmed signed-in status to the parent', async () => {
     let loginPosted = false;
+    const onStatusChange = vi.fn();
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -589,7 +695,7 @@ describe('AmrLoginPill', () => {
     });
     globalThis.fetch = fetchMock as typeof fetch;
 
-    renderPill();
+    renderPill({ onStatusChange });
     fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => {
@@ -597,10 +703,14 @@ describe('AmrLoginPill', () => {
     });
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
+    expect(onStatusChange).toHaveBeenCalledWith(expect.objectContaining({
+      loggedIn: true,
+      user: expect.objectContaining({ email: 'leaf@example.com' }),
+    }));
   });
 
   // This pill is what Settings' "Sign in / Register" cloud callout and the
-  // Open Design agent card's "Authorize" action both render (SettingsDialog
+  // OpenDesign agent card's "Authorize" action both render (SettingsDialog
   // renders it from a full-page `/settings` route, so the entry rail — and
   // its `useWorkspaceContext` hook — is unmounted the whole time the user is
   // on that page). Besides notifyAmrLoginStatusChanged(), it also fires

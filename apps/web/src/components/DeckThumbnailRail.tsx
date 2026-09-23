@@ -21,7 +21,16 @@
 //   deck animations settle at their final frame instead of keeping N
 //   compositor layers rasterizing forever.
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { useT } from '../i18n';
 import { useInView } from './plugins-home/useInView';
 import { DeckSlideThumbnail } from './DeckSlideThumbnail';
@@ -34,6 +43,71 @@ import type { ParsedDeckThumbnails } from '../runtime/deck-thumbnail-parser';
  * for very long decks.
  */
 export const MOUNTED_THUMBNAIL_CAP = 16;
+
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
+export interface DeckThumbnailViewport {
+  width: number;
+  height: number;
+}
+
+interface DeckIframeThumbnailProps {
+  label: string;
+  srcDoc: string;
+  previewViewport?: DeckThumbnailViewport | null;
+  onReady: () => void;
+}
+
+function DeckIframeThumbnail({
+  label,
+  srcDoc,
+  previewViewport,
+  onReady,
+}: DeckIframeThumbnailProps) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+
+  useIsomorphicLayoutEffect(() => {
+    const host = hostRef.current;
+    const frame = frameRef.current;
+    if (!host || !frame) return;
+    const apply = () => {
+      const hostWidth = host.clientWidth;
+      const hostHeight = host.clientHeight;
+      if (!hostWidth || !hostHeight) return;
+      const hasPreviewViewport = !!previewViewport
+        && Number.isFinite(previewViewport.width)
+        && previewViewport.width > 0
+        && Number.isFinite(previewViewport.height)
+        && previewViewport.height > 0;
+      const viewportWidth = hasPreviewViewport ? previewViewport.width : hostWidth * 2;
+      const viewportHeight = hasPreviewViewport ? previewViewport.height : hostHeight * 2;
+      const scale = Math.min(hostWidth / viewportWidth, hostHeight / viewportHeight);
+      frame.style.width = `${viewportWidth}px`;
+      frame.style.height = `${viewportHeight}px`;
+      frame.style.transform = `scale(${scale})`;
+      frame.style.left = `${(hostWidth - viewportWidth * scale) / 2}px`;
+      frame.style.top = `${(hostHeight - viewportHeight * scale) / 2}px`;
+    };
+    apply();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(apply) : null;
+    observer?.observe(host);
+    return () => observer?.disconnect();
+  }, [previewViewport?.height, previewViewport?.width]);
+
+  return (
+    <div ref={hostRef} className="deck-thumbnail-iframe-host">
+      <iframe
+        ref={frameRef}
+        title={label}
+        sandbox="allow-scripts allow-downloads"
+        srcDoc={srcDoc}
+        tabIndex={-1}
+        onLoad={onReady}
+      />
+    </div>
+  );
+}
 
 /**
  * Pure LRU step for the set of thumbnail indices that keep a live iframe.
@@ -84,6 +158,7 @@ interface DeckThumbnailItemProps {
    * full-deck iframe built by `getSrcDoc`.
    */
   parsedDeck: ParsedDeckThumbnails | null;
+  previewViewport?: DeckThumbnailViewport | null;
   getSrcDoc: (index: number) => string;
   onSelect: (index: number) => void;
   onVisibilityChange: (index: number, inView: boolean) => void;
@@ -96,6 +171,7 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
   label,
   listRef,
   parsedDeck,
+  previewViewport,
   getSrcDoc,
   onSelect,
   onVisibilityChange,
@@ -133,7 +209,13 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
   useEffect(() => {
     if (!mounted) setReadySource(null);
   }, [mounted]);
-  const handleThumbnailReady = useCallback(() => setReadySource(thumbnailSource), [thumbnailSource]);
+  // The iframe fallback uses `getSrcDoc` (a function) as its source identity.
+  // Wrap it so React stores that function instead of invoking it as a state
+  // updater and leaving the loading cover permanently visible.
+  const handleThumbnailReady = useCallback(
+    () => setReadySource(() => thumbnailSource),
+    [thumbnailSource],
+  );
   const handleShadowError = useCallback(() => {
     setReadySource(null);
     setShadowFailed(true);
@@ -159,12 +241,11 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
               onReady={handleThumbnailReady}
             />
           ) : (
-            <iframe
-              title={label}
-              sandbox="allow-scripts allow-downloads"
+            <DeckIframeThumbnail
+              label={label}
               srcDoc={getSrcDoc(index)}
-              tabIndex={-1}
-              onLoad={handleThumbnailReady}
+              previewViewport={previewViewport}
+              onReady={handleThumbnailReady}
             />
           )
         ) : null}
@@ -194,6 +275,9 @@ export interface DeckThumbnailRailProps {
    * thumbnail uses the iframe fallback (decks we can't statically render).
    */
   parsedDeck?: ParsedDeckThumbnails | null;
+  /** Live preview iframe viewport. Used to make responsive fallback thumbnails
+   *  take the same media-query branch and line-wrap identically. */
+  previewViewport?: DeckThumbnailViewport | null;
   onSelect: (index: number) => void;
 }
 
@@ -203,6 +287,7 @@ export const DeckThumbnailRail = memo(function DeckThumbnailRail({
   labelTotal,
   buildThumbSrcDoc,
   parsedDeck = null,
+  previewViewport = null,
   onSelect,
 }: DeckThumbnailRailProps) {
   const t = useT();
@@ -254,6 +339,7 @@ export const DeckThumbnailRail = memo(function DeckThumbnailRail({
             })}
             listRef={listRef}
             parsedDeck={parsedDeck}
+            previewViewport={previewViewport}
             getSrcDoc={getSrcDoc}
             onSelect={onSelect}
             onVisibilityChange={onVisibilityChange}

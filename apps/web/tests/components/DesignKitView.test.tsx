@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 describe('DesignKitView iframe sandboxing', () => {
-  it('uses dual authority for the font fetch and query scope for browser font URLs', async () => {
+  it('keeps fetch headers while browser font URLs use server-derived project authority', async () => {
     const context = {
       workspaceId: 'workspace-team',
       workspaceType: 'team',
@@ -70,7 +70,7 @@ describe('DesignKitView iframe sandboxing', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/projects/project-team/raw/fonts/manifest.json?workspaceId=workspace-team&workspaceMemberId=member-1',
+        '/api/projects/project-team/raw/fonts/manifest.json',
         {
           cache: 'no-store',
           headers: expect.objectContaining({
@@ -81,7 +81,7 @@ describe('DesignKitView iframe sandboxing', () => {
       );
       expect(document.head.querySelector('style[data-brand-fonts="project-team"]')?.textContent)
         .toContain(
-          '/api/projects/project-team/raw/fonts/inter.woff2?workspaceId=workspace-team&workspaceMemberId=member-1',
+          '/api/projects/project-team/raw/fonts/inter.woff2',
         );
     });
     unmount();

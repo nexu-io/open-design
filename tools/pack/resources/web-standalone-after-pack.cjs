@@ -106,6 +106,7 @@ async function readHookConfig() {
 
   return {
     auditReportPath,
+    hyperframesRuntimeSourceRoot: requireAbsolutePath(raw, "hyperframesRuntimeSourceRoot"),
     macAdhocBundleSign: optionalBoolean(raw, "macAdhocBundleSign", false),
     pruneCopiedSharp: requireBoolean(raw, "pruneCopiedSharp"),
     pruneRootNext: requireBoolean(raw, "pruneRootNext"),
@@ -829,6 +830,88 @@ async function pruneRootSharp(appNodeModulesRoot) {
   return removedPaths;
 }
 
+function resolveHyperframesRuntimePackageNames(platformName) {
+  const arch = platformName === "win32" ? "x64" : process.arch;
+  if (arch !== "arm64" && arch !== "x64") {
+    throw new Error(`[tools-pack hyperframes] unsupported ${platformName} architecture: ${arch}`);
+  }
+  if (platformName === "win32") {
+    return [
+      "sharp",
+      "@img/colour",
+      `@img/sharp-win32-${arch}`,
+    ];
+  }
+  if (platformName === "darwin") {
+    return [
+      "sharp",
+      "@img/colour",
+      `@img/sharp-darwin-${arch}`,
+      `@img/sharp-libvips-darwin-${arch}`,
+    ];
+  }
+  throw new Error(`[tools-pack hyperframes] unsupported platform: ${platformName}`);
+}
+
+function packagePath(nodeModulesRoot, packageName) {
+  return path.join(nodeModulesRoot, ...packageName.split("/"));
+}
+
+async function copyHyperframesRuntimeDependencies(config, appNodeModulesRoot, platformName) {
+  const sourceNodeModulesRoot = path.join(config.hyperframesRuntimeSourceRoot, "node_modules");
+  const copied = [];
+  for (const packageName of resolveHyperframesRuntimePackageNames(platformName)) {
+    const sourcePath = packagePath(sourceNodeModulesRoot, packageName);
+    const destinationPath = packagePath(appNodeModulesRoot, packageName);
+    await copyRequired(sourcePath, destinationPath, { dereference: true });
+    copied.push({
+      bytes: await sizePathBytes(destinationPath),
+      destinationPath,
+      packageName,
+      sourcePath,
+    });
+  }
+  return copied;
+}
+
+async function smokeHyperframesCli(
+  appPath,
+  appNodeModulesRoot,
+  platformName,
+  productFilename,
+  copiedPackages,
+) {
+  const cliPath = path.join(appNodeModulesRoot, "hyperframes", "dist", "cli.js");
+  const nodePath = platformName === "win32"
+    ? path.join(appPath, `${productFilename}.exe`)
+    : path.join(appPath, "Contents", "MacOS", productFilename);
+  const requiredPaths = [
+    cliPath,
+    nodePath,
+    ...copiedPackages.map((entry) => path.join(entry.destinationPath, "package.json")),
+  ];
+  for (const requiredPath of requiredPaths) {
+    if (!(await pathExists(requiredPath))) {
+      throw new Error(`[tools-pack hyperframes] final packaged runtime is missing: ${requiredPath}`);
+    }
+  }
+
+  const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1", NODE_PATH: "" };
+  delete env.NODE_OPTIONS;
+  const result = await execFileAsync(nodePath, [cliPath, "--version"], {
+    cwd: appPath,
+    env,
+    maxBuffer: 20 * 1024 * 1024,
+    timeout: 30_000,
+  });
+  return {
+    cliPath,
+    nodePath,
+    stderr: result.stderr.trim(),
+    stdout: result.stdout.trim(),
+  };
+}
+
 async function pruneRootWebPackage(appNodeModulesRoot, platformName) {
   if (platformName !== "win32") return [];
 
@@ -874,7 +957,9 @@ async function auditNoBrokenSymlinks(root, label) {
 }
 
 async function runWebStandaloneAfterPack(context) {
-  if (context?.electronPlatformName != null && context.electronPlatformName !== "darwin" && context.electronPlatformName !== "win32") return;
+  if (context?.electronPlatformName !== "darwin" && context?.electronPlatformName !== "win32") {
+    throw new Error(`[tools-pack web-standalone] unsupported platform: ${context?.electronPlatformName ?? "unknown"}`);
+  }
 
   const config = await readHookConfig();
   const appPath = resolveAppPath(context);
@@ -910,6 +995,11 @@ async function runWebStandaloneAfterPack(context) {
   const copiedAudit = await auditCopiedStandalone(config, installResult, context.electronPlatformName);
   const rootPrune = config.pruneRootNext ? await pruneRootNext(appNodeModulesRoot, context.electronPlatformName) : [];
   const rootSharpPrune = config.pruneRootSharp ? await pruneRootSharp(appNodeModulesRoot) : [];
+  const hyperframesRuntimeCopies = await copyHyperframesRuntimeDependencies(
+    config,
+    appNodeModulesRoot,
+    context.electronPlatformName,
+  );
   const rootWebPackagePrune = await pruneRootWebPackage(appNodeModulesRoot, context.electronPlatformName);
   const rootBuildResiduePrune = context.electronPlatformName === "win32"
     ? await pruneSourceBuildResidue(appNodeModulesRoot, "root app source/build residue")
@@ -932,6 +1022,13 @@ async function runWebStandaloneAfterPack(context) {
     appNodeModulesRoot,
     "root app node_modules",
   );
+  const hyperframesCliSmoke = await smokeHyperframesCli(
+    appPath,
+    appNodeModulesRoot,
+    context.electronPlatformName,
+    context.packager.appInfo.productFilename,
+    hyperframesRuntimeCopies,
+  );
   const macAdhocBundleSign = context.electronPlatformName === "darwin" && config.macAdhocBundleSign
     ? await signMacAdhocBundle(appPath)
     : [];
@@ -944,6 +1041,8 @@ async function runWebStandaloneAfterPack(context) {
     copiedNextDedupeAudit,
     copiedPrune,
     generatedAt: new Date().toISOString(),
+    hyperframesCliSmoke,
+    hyperframesRuntimeCopies,
     macAdhocBundleSign,
     platformName: context.electronPlatformName,
     resourcesRoot,

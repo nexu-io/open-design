@@ -60,6 +60,16 @@ interface Props {
   designTemplates?: SkillSummary[];
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
+  /**
+   * Whether this view is the one on screen. `EntryShell` keeps every entry view
+   * mounted and hides the inactive ones with `display: none` + `inert`, so
+   * without this flag Automations loads its whole data set on every Home launch
+   * for a tab the user has not opened.
+   *
+   * Defaults to active: several suites and any other caller render this view
+   * directly, and the gate is opt-in rather than a new requirement.
+   */
+  isActive?: boolean;
 }
 
 function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate> {
@@ -384,7 +394,7 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function TasksView({ skills = [], designTemplates = [], connectors = [] }: Props) {
+export function TasksView({ skills = [], designTemplates = [], connectors = [], isActive = true }: Props) {
   const t = useT();
   const analytics = useAnalytics();
   // Attaches the same workspace identity headers project reads already carry,
@@ -514,8 +524,18 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
   }, [routineHeaders, tasksWorkspaceIdentity]);
 
   useEffect(() => {
+    // Hidden views do not fetch. This one is mounted from the first paint of
+    // Home, and `refresh` pulls four endpoints — the automation catalog, pending
+    // proposals, routines and the project picker. It also runs twice per launch,
+    // because `refresh` is keyed on `tasksWorkspaceIdentity` and that changes
+    // when `/api/workspace/context` resolves.
+    //
+    // Re-running on activation is what keeps this a delay rather than a
+    // suppression: an identity change while hidden re-enters this effect,
+    // returns early, and the fetch happens when the user opens the tab.
+    if (!isActive) return;
     void refresh();
-  }, [refresh]);
+  }, [isActive, refresh]);
 
   const projectsById = useMemo(() => {
     const map = new Map<string, string>();

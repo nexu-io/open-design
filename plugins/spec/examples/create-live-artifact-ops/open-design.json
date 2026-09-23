@@ -7,7 +7,7 @@
   "description": "Spec example plugin for a refreshable live operations artifact with seeded data fallback.",
   "license": "MIT",
   "author": {
-    "name": "Open Design Spec Examples",
+    "name": "OpenDesign Spec Examples",
     "url": "https://github.com/nexu-io/open-design"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/spec/examples/create-live-artifact-ops",

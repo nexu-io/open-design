@@ -1,21 +1,23 @@
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
+import type { ToolPackConfig } from "@/config/index.js";
 import {
   copyMacPrebundleRuntimeDependencies,
   copyResourceTree,
   createMacElectronRebuildOptions,
   renderMacPackagedConfig,
+  toRelativeImportSpecifier,
   validateMacNativeRebuildOutput,
-} from "../src/mac/app.js";
-import { runElectronBuilder } from "../src/mac/builder.js";
-import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "../src/mac/index.js";
-import { resolveMacPaths } from "../src/mac/paths.js";
+} from "@/mac/app.js";
+import macBuilderSource from "@/mac/builder.ts?raw";
+import { runElectronBuilder } from "@/mac/builder.js";
+import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "@/mac/index.js";
+import { resolveMacPaths } from "@/mac/paths.js";
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -74,11 +76,30 @@ afterEach(() => {
   }
 });
 
+describe("mac prebundle entrypoints", () => {
+  it("canonicalizes symlinked roots before rendering relative imports", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-mac-prebundle-path-"));
+    const physicalRoot = join(root, "physical");
+    const linkedRoot = join(root, "linked");
+    const fromDirectory = join(physicalRoot, "entrypoints");
+    const targetPath = join(physicalRoot, "dist", "entry.js");
+    await mkdir(fromDirectory, { recursive: true });
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, "export {};\n", "utf8");
+    await symlink(physicalRoot, linkedRoot, "dir");
+    try {
+      await expect(toRelativeImportSpecifier(join(linkedRoot, "entrypoints"), targetPath))
+        .resolves.toBe("../dist/entry.js");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("resolveSeededAppConfigPaths", () => {
-  it("declares the Workspace invite URL scheme in the packaged app metadata", async () => {
-    const source = await readFile(new URL("../src/mac/builder.ts", import.meta.url), "utf8");
-    expect(source).toContain("protocols: [");
-    expect(source).toContain('schemes: ["opendesign"]');
+  it("declares the Workspace invite URL scheme in the packaged app metadata", () => {
+    expect(macBuilderSource).toContain("protocols: [");
+    expect(macBuilderSource).toContain('schemes: ["opendesign"]');
   });
 
   it("uses workspace .od by default", () => {
@@ -181,10 +202,28 @@ describe("copyResourceTree", () => {
       for (const name of resourceNames) {
         await mkdir(join(root, name), { recursive: true });
       }
+      const dshRuntimeRoot = join(root, "packages", "dsh-runtime");
+      await mkdir(join(dshRuntimeRoot, "dist", "types"), { recursive: true });
+      await writeFile(
+        join(dshRuntimeRoot, "package.json"),
+        `${JSON.stringify({
+          name: "@open-design/dsh-runtime",
+          version: "0.1.0",
+          files: ["dist"],
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      await writeFile(join(dshRuntimeRoot, "dist", "index.js"), "export {};\n", "utf8");
+      await writeFile(join(dshRuntimeRoot, "dist", "types", "index.d.ts"), "export {};\n", "utf8");
 
       await copyResourceTree(config, paths);
 
       expect(await pathExists(join(paths.resourceRoot, "bin", "node"))).toBe(false);
+      const dshRuntimeResourceRoot = join(paths.resourceRoot, "agent-runtimes", "deepseek-harness");
+      await expect(readFile(join(dshRuntimeResourceRoot, "manifest.json"), "utf8")).resolves.toContain(
+        '"packageName": "@open-design/dsh-runtime"',
+      );
+      expect((await readdir(dshRuntimeResourceRoot)).filter((entry) => entry.endsWith(".tgz"))).toHaveLength(1);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -348,6 +387,16 @@ describe("runElectronBuilder", () => {
       [
         'import { chmod, mkdir, writeFile } from "node:fs/promises";',
         `const prebuildRoot = ${JSON.stringify(nodePtyPrebuildRoot)};`,
+        `const appRoot = ${JSON.stringify(join(paths.appPath, "Contents", "Resources", "app"))};`,
+        'for (const name of ["sidecar", "platform"]) {',
+        '  const root = appRoot + "/node_modules/@open-design/" + name;',
+        '  await mkdir(root + "/dist", { recursive:true });',
+        '  await writeFile(root + "/package.json", JSON.stringify({name:"@open-design/"+name, main:"dist/index.mjs"}));',
+        '  await writeFile(root + "/dist/index.mjs", "export {};");',
+        '  if (name === "sidecar") await writeFile(root + "/dist/supervisor.mjs", "export {};");',
+        '}',
+        'await writeFile(appRoot + "/main.cjs", "");',
+        'await writeFile(appRoot + "/package.json", "{}");',
         "await mkdir(prebuildRoot, { recursive: true });",
         'await writeFile(new URL("pty.node", `file://${prebuildRoot}/`), Buffer.alloc(32 * 1024, 1));',
         'await writeFile(new URL("spawn-helper", `file://${prebuildRoot}/`), "#!/bin/sh\\nexit 0\\n", "utf8");',

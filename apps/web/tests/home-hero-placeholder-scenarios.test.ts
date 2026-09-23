@@ -9,6 +9,7 @@ import {
   PLACEHOLDER_SCENARIO_DEFS,
   type TypewriterState,
 } from '../src/components/home-hero/placeholderScenarios';
+import { subChipsForChip } from '../src/components/home-hero/sub-chips';
 import { en } from '../src/i18n/locales/en';
 
 const TIMING = DEFAULT_TYPEWRITER_TIMING;
@@ -25,20 +26,47 @@ describe('PLACEHOLDER_SCENARIO_DEFS bindings', () => {
     }
   });
 
+  it('binds a scene-specific scenario to a real second-level scene of its chip', () => {
+    // A scene is a refinement of its parent chip, not a template of its own, so
+    // a scenario names the parent AND the scene under it — never a scene alone.
+    for (const def of PLACEHOLDER_SCENARIO_DEFS) {
+      if (!def.prototypeSubtypeId) continue;
+      expect(def.chipId, `scenario "${def.id}"`).toBe('prototype');
+      expect(
+        subChipsForChip(def.chipId, []).map((sub) => sub.slug),
+        `scene "${def.prototypeSubtypeId}" for scenario "${def.id}"`,
+      ).toContain(def.prototypeSubtypeId);
+    }
+  });
+
   it('only binds create templates that actually render a carousel', () => {
     // These are the templates with hand-curated carousel lines. Other templates
     // can still render a carousel through prompt-example or label fallbacks.
-    const SUPPORTED = new Set(['document', 'deck', 'prototype', 'wireframe', 'mobile', 'hyperframes']);
+    const SUPPORTED = new Set(['document', 'deck', 'prototype', 'hyperframes']);
     const used = new Set(PLACEHOLDER_SCENARIO_DEFS.map((d) => d.chipId));
     for (const chipId of used) {
       expect(SUPPORTED.has(chipId), `chipId "${chipId}" is not a carousel template`).toBe(true);
     }
-    // Every supported template must keep at least one scenario so picking it
-    // never strands the user on an empty (non-cycling) carousel.
+    // Every supported template must keep at least one scenario of its OWN (not
+    // only scene-specific ones) so picking it never strands the user on an
+    // empty (non-cycling) carousel.
     for (const chipId of SUPPORTED) {
       expect(
-        PLACEHOLDER_SCENARIO_DEFS.some((d) => d.chipId === chipId),
+        PLACEHOLDER_SCENARIO_DEFS.some((d) => d.chipId === chipId && !d.prototypeSubtypeId),
         `template "${chipId}" has no scenario`,
+      ).toBe(true);
+    }
+  });
+
+  it('keeps a curated carousel for each Prototype scene that had one as a chip', () => {
+    // Mobile app and Wireframe were first-level chips with their own lines;
+    // selecting the scene must still narrow to exactly those lines.
+    for (const slug of ['mobile', 'wireframe']) {
+      expect(
+        PLACEHOLDER_SCENARIO_DEFS.some(
+          (d) => d.chipId === 'prototype' && d.prototypeSubtypeId === slug,
+        ),
+        `scene "${slug}" has no scenario`,
       ).toBe(true);
     }
   });
@@ -57,6 +85,45 @@ describe('PLACEHOLDER_SCENARIO_DEFS bindings', () => {
 });
 
 describe('buildPlaceholderScenarios', () => {
+  function idsFor(activeChipId: string | null, activePrototypeSubtypeId?: string | null) {
+    return buildPlaceholderScenarios({
+      activeChipId,
+      activePrototypeSubtypeId,
+      resolveTextKey: (key) => en[key],
+    }).map((scenario) => scenario.id);
+  }
+
+  it('shows a task type its own lines and never another scene’s', () => {
+    // Selecting 原型 alone must not start suggesting mobile-app or wireframe
+    // lines: those belong to scenes the user has not chosen.
+    expect(idsFor('prototype')).toEqual(['signup-flow', 'orders-dashboard', 'landing-intro']);
+  });
+
+  it('narrows to a scene’s own lines once that scene is selected', () => {
+    expect(idsFor('prototype', 'mobile')).toEqual(['app-idea']);
+    expect(idsFor('prototype', 'wireframe')).toEqual(['product-detail', 'landing-layout']);
+  });
+
+  it('keeps the parent’s lines for a scene that curates none of its own', () => {
+    expect(idsFor('prototype', 'app-prototypes')).toEqual(idsFor('prototype'));
+  });
+
+  it('carries the scene a line belongs to so an empty-composer send can bind it', () => {
+    // Nothing is selected yet, so the full rotation is offered; a scene line
+    // still has to say which scene it would bind, or one-click create would
+    // land on the bare parent and drop the refinement.
+    const rotation = buildPlaceholderScenarios({
+      activeChipId: null,
+      resolveTextKey: (key) => en[key],
+    });
+    expect(rotation.find((scenario) => scenario.id === 'app-idea')).toMatchObject({
+      chipId: 'prototype',
+      prototypeSubtypeId: 'mobile',
+    });
+    expect(rotation.find((scenario) => scenario.id === 'signup-flow')?.prototypeSubtypeId)
+      .toBeUndefined();
+  });
+
   it('uses prompt examples as selected-chip carousel scenarios when no curated scenario exists', () => {
     const scenarios = buildPlaceholderScenarios({
       activeChipId: 'audio',

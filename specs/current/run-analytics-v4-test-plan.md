@@ -7,7 +7,7 @@
 | 测试对象 | `run_created`、`run_finished`、恢复动作曝光/点击、启动前拦截、Task 成功率查询 |
 | 目标 Provider | `amr`、`claude_code`、`codex_cli` |
 | Schema | `event_schema_version = 4`；旧扁平参数在兼容窗口继续双写 |
-| 主要角色 | Open Design QA、研发、数据分析 |
+| 主要角色 | OpenDesign QA、研发、数据分析 |
 | 核心目标 | 验证事件能发出、参数语义正确、跨 Run 能归并、PostHog 中能正确查询 |
 
 最新 `main` 已经使用 v3 表达 MCP/Plugin 来源归因，因此本次代码落地使用 v4；本文中的 v4 对应需求文档里原规划的聚合与任务成功率方案。
@@ -500,6 +500,7 @@ WHERE event = 'run_finished'
 - `apps/web/tests/components/ChatPane.resume-failed.test.tsx`：Resume CTA 曝光、点击和回调。
 - `apps/web/tests/components/ProjectView.run-isolation.test.tsx`：启动前拦截。
 - `apps/web/tests/components/ProjectView.run-cleanup.test.tsx`：真实 ProjectView 发送、终态和重载主链路。
+- `e2e/ui/amr-run-failure-recovery.test.ts`：真实 UI 失败卡、Retry、目标 Run 和成功内容恢复链路。
 - `apps/daemon/tests/run-analytics-observability.test.ts`：Provider Usage、缓存和首次调用 Token。
 - `apps/daemon/tests/run-artifact-fs.test.ts`：HTML/媒体、内容变化、CSS 依赖和种子 HTML。
 - `apps/daemon/tests/db-message-events.test.ts`：Task analytics 消息持久化。
@@ -508,15 +509,14 @@ WHERE event = 'run_finished'
 ### 尚未覆盖，建议补齐后再合并
 
 1. 尚无一条测试通过真实 `/api/runs` 把本次 v4 `run_created`/`run_finished` 发到本地 PostHog 接收器。
-2. 尚无 Playwright 用例串联“失败卡曝光 → 点击 → 目标 Run → 成功”。
-3. 尚未在真实 PostHog 测试项目验证嵌套字段的点号查询、Breakdown 和导出。
-4. 尚未执行 beta/prerelease 的新旧字段生产样本对账。
+2. 尚未在真实 PostHog 测试项目验证嵌套字段的点号查询、Breakdown 和导出。
+3. 尚未执行 beta/prerelease 的新旧字段生产样本对账。
 
 ## 11. 发布门槛
 
 | 阶段 | 必须满足 |
 | --- | --- |
-| PR 合并前 | 当前单元/集成测试通过；新增本地线协议 E2E；新增至少一条 UI 恢复链路 E2E；类型检查和 guard 通过 |
+| PR 合并前 | 当前单元/集成测试和现有 UI 恢复链路通过；新增本地线协议 E2E；类型检查和 guard 通过 |
 | Beta 前 | PostHog 测试项目完成黄金任务集；三个 Provider 均有当前 CLI 真实 Smoke |
 | Prerelease 前 | Task 成功率和 Run 成功率查询经产品、数据、研发三方核对；错误分布可按三层分类拆分 |
 | 停止旧字段前 | 双写至少一个完整版本周期且不少于 14 天；新旧同口径字段 100% 对账；所有看板与导出已迁移 |

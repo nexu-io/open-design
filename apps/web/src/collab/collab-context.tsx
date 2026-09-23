@@ -38,6 +38,7 @@ const DISABLED: CollabContextValue = {
   ownerDisplayName: null,
   ownerRole: null,
   downloadPending: false,
+  materializationPending: false,
   reportChange: () => {},
   requestPublish: () => {},
   refreshPresence: () => {},

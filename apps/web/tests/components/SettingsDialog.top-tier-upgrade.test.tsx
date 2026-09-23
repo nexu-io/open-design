@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Acceptance: the Settings → 本机 CLI → Open Design card must not offer 「升级」
+// Acceptance: the Settings → 本机 CLI → OpenDesign card must not offer 「升级」
 // to a workspace that is already on the TOP plan tier there is.
 //
 // Product ruling (owner, from a real packaged client on Team Max):

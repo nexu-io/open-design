@@ -21,7 +21,7 @@ export const PT_BR_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'agent-browser': {
     description:
-      'CLI de automação de navegador para agentes de IA. Use quando o usuário precisar inspecionar,\ntestar ou automatizar o comportamento do navegador: navegar por páginas, preencher formulários,\nclicar em botões, capturar screenshots, extrair dados de páginas, ler o contexto selecionado\nda aba de navegador do Open Design, testar aplicativos web, fazer dogfooding de pré-visualizações\ndo Open Design, QA, caça a bugs ou revisão da qualidade do aplicativo. Prefira URLs locais de\npré-visualização do Open Design, a menos que o usuário peça explicitamente navegação externa.',
+      'CLI de automação de navegador para agentes de IA. Use quando o usuário precisar inspecionar,\ntestar ou automatizar o comportamento do navegador: navegar por páginas, preencher formulários,\nclicar em botões, capturar screenshots, extrair dados de páginas, ler o contexto selecionado\nda aba de navegador do OpenDesign, testar aplicativos web, fazer dogfooding de pré-visualizações\ndo OpenDesign, QA, caça a bugs ou revisão da qualidade do aplicativo. Prefira URLs locais de\npré-visualização do OpenDesign, a menos que o usuário peça explicitamente navegação externa.',
     examplePrompt:
       'CLI de automação de navegador para agentes de IA.',
   },
@@ -849,7 +849,7 @@ export const PT_BR_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'ui-ux-pro-max': {
     description:
-      'Entrada UI/UX Pro Max somente de catálogo. Os templates upstream completos, os dados e o fluxo de busca não estão incluídos no Open Design.',
+      'Entrada UI/UX Pro Max somente de catálogo. Os templates upstream completos, os dados e o fluxo de busca não estão incluídos no OpenDesign.',
     examplePrompt:
       'Entrada UI/UX Pro Max somente de catálogo.',
   },
@@ -959,6 +959,7 @@ export const PT_BR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': 'Formas suaves e arredondadas, semelhantes a 3D, que imitam argila maleável, com elementos divertidos e fofos e superfícies coloridas.',
   'clean': 'Design focado na simplicidade, com bastante espaço em branco, tipografia legível e uma paleta de cores limitada para reduzir a poluição visual.',
   'clickhouse': 'Banco de dados de analytics rápido. Com destaque em amarelo, no estilo de documentação técnica.',
+  'cloudflare-kumo': 'Sistema de componentes da Cloudflare para apps web modernos: tokens semânticos de temas claro e escuro, tipografia Inter compacta, superfícies neutras em camadas, controles acessíveis e orientação de cores para gráficos.',
   'cohere': 'Plataforma de IA corporativa. Gradientes vibrantes, estética de dashboard rico em dados.',
   'coinbase': 'Exchange de criptomoedas. Identidade azul e limpa, focada em confiança, com ar institucional.',
   'colorful': 'Paletas e gradientes vibrantes e de alto contraste para experiências de usuário envolventes, memoráveis e modernas.',

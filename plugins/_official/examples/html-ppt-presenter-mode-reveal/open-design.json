@@ -10,15 +10,15 @@
   },
   "version": "0.1.0",
   "publishedAt": "2026-05-12T07:18:16Z",
-  "description": "Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.",
+  "description": "OpenDesign live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.",
   "description_i18n": {
-    "en": "Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.",
+    "en": "OpenDesign live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.",
     "zh-CN": "像创始 DevRel 一样做现场 AI 演示——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。",
     "zh-TW": "像创始 DevRel 一样做现场 AI 演示——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-presenter-mode-reveal",
@@ -64,8 +64,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create \"Run a Live AI Product Demo like a Founding DevRel Lead\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Audience: developers, prospects, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund.",
-        "zh-CN": "像创始 DevRel 一样做现场 AI 演示。像创始 DevRel 一样做现场 AI 演示——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+        "en": "Create \"Run a Live AI Product Demo like a Founding DevRel Lead\" as a decision-grade AI literacy deck in this template's own visual system. Subject: OpenDesign live demo: from a one-line prompt to runnable design in a single session — the flow, live. Audience: developers, prospects, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund.",
+        "zh-CN": "像创始 DevRel 一样做现场 AI 演示。像创始 DevRel 一样做现场 AI 演示——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。 主题：OpenDesign live demo: from a one-line prompt to runnable design in a single session — the flow, live. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {

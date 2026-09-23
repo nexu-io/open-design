@@ -25,18 +25,34 @@ import {
 import {
   createSnapshot,
   linkSnapshotToProject,
+  linkSnapshotToRun,
 } from '../src/plugins/snapshots.js';
 import { createAuthorizeProjectRequest } from '../src/collab/project-request-authority.js';
-import { resolveOptionalWorkspaceRequestAuthority } from '../src/collab/workspace-resource-mutation.js';
+import { resolveOptionalLocalWorkspaceRequestAuthority } from '../src/collab/workspace-resource-mutation.js';
 import { createEnforceWorkspaceProjectMutation } from '../src/routes/project/index.js';
 import { workspaceContextFromDirectoryItem } from '../src/collab/vela-workspace-context.js';
 import { registerRunRoutes } from '../src/routes/runs.js';
 import { connectorService } from '../src/connectors/service.js';
 import { upsertInstalledPlugin } from '../src/plugins/registry.js';
+import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
+import {
+  finalizeStrategyPlanningTurn,
+  prepareStrategyRequest,
+} from '../src/strategies/od-next/coordinator.js';
+import { OdNextMachineProtocolStream } from '../src/strategies/od-next/protocol.js';
+import { diffRunArtifacts, snapshotProjectArtifacts } from '../src/run-artifact-fs.js';
+import {
+  createStrategyTaskExecution,
+  getStrategyTaskExecution,
+} from '../src/strategies/task-store.js';
+import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
 
 let server: http.Server | null = null;
 let tempDir: string | null = null;
 let createdRunCount = 0;
+let lastCreatedRun: any = null;
+let strategyTaskAtPhysicalCancel: any = null;
+let runsServiceStub: ReturnType<typeof createRunsServiceStub> | null = null;
 
 afterEach(async () => {
   if (server) {
@@ -45,6 +61,7 @@ afterEach(async () => {
     await new Promise<void>((resolve) => toClose.close(() => resolve()));
   }
   closeDatabase();
+  runsServiceStub = null;
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
 });
@@ -55,8 +72,14 @@ const UNBOUND_PROJECT = 'p-unbound-run';
 const WORKSPACE_ID = 'ws-run-gate';
 const OWNER_MEMBER_ID = 'member-owner-run';
 
-function sendApiError(res: any, status: number, code: string, message: string) {
-  return res.status(status).json({ error: { code, message } });
+function sendApiError(
+  res: any,
+  status: number,
+  code: string,
+  message: string,
+  details: Record<string, unknown> = {},
+) {
+  return res.status(status).json({ error: { code, message, ...details } });
 }
 
 function workspaceHeaders(memberId: string, role: 'owner' | 'admin' | 'member') {
@@ -95,6 +118,127 @@ function snapshotProjectId(snapshotId: string): string | null {
   return typeof row?.projectId === 'string' ? row.projectId : null;
 }
 
+function seedAwaitingClarificationTask(executionIntent?: 'produce' | 'plan_only') {
+  const db = openDatabase(tempDir!);
+  const requestProjectDir = path.join(tempDir!, 'strategy-request-workspace');
+  fs.mkdirSync(requestProjectDir, { recursive: true });
+  const beforeRequest = snapshotProjectArtifacts(requestProjectDir);
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO conversations (id, project_id, title, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run('conversation-strategy', PERSONAL_PROJECT, 'Strategy', now, now);
+  const assetDigests = [
+    { path: './SKILL.md', sha256: 'a'.repeat(64) },
+    { path: './assets/task-profiles/prototype.md', sha256: 'b'.repeat(64) },
+  ];
+  const snapshot = createSnapshot(db, {
+    projectId: PERSONAL_PROJECT,
+    conversationId: 'conversation-strategy',
+    runId: null,
+    pluginId: 'od-next-strategy',
+    pluginVersion: '2.0.0',
+    manifestSourceDigest: 'strategy-manifest',
+    strategy: {
+      schema: 'open-design.applied-strategy/v2',
+      id: 'od-next-strategy',
+      version: '2.0.0',
+      packageHash: strategyPackageHashFromDigests(assetDigests),
+      assetDigests,
+      selectedTaskProfile: {
+        taskType: 'prototype',
+        version: '2.0.0',
+        path: './assets/task-profiles/prototype.md',
+        sha256: 'b'.repeat(64),
+      },
+      taskProfileVersions: ['2.0.0'],
+      promptRecipe: 'od-next-plan-build-v2',
+    },
+    taskKind: 'new-generation',
+    inputs: {},
+    resolvedContext: { items: [] },
+    capabilitiesGranted: ['prompt:inject'],
+    capabilitiesRequired: ['prompt:inject'],
+    assetsStaged: [],
+    connectorsRequired: [],
+    connectorsResolved: [],
+    mcpServers: [],
+  });
+  runsServiceStub?.seed({
+    id: 'run-strategy-request',
+    projectId: PERSONAL_PROJECT,
+    conversationId: 'conversation-strategy',
+    assistantMessageId: 'assistant-strategy-request',
+    agentId: 'codex',
+    pluginId: 'od-next-strategy',
+    appliedPluginSnapshotId: snapshot.snapshotId,
+    odNextTaskInputSnapshot: {
+      taskExecutionId: 'task-strategy-clarification',
+      snapshotDir: path.join(tempDir!, 'strategy-input-fixture'),
+      manifestSha256: 'd'.repeat(64),
+    },
+    status: 'succeeded',
+  });
+  createStrategyTaskExecution(db, {
+    taskExecutionId: 'task-strategy-clarification',
+    projectId: PERSONAL_PROJECT,
+    conversationId: 'conversation-strategy',
+    snapshotId: snapshot.snapshotId,
+    selectedAgentId: 'codex',
+    initialRunId: 'run-strategy-request',
+    ...strategyTaskCreateIdentityFixture(),
+    createdAt: now,
+  });
+  prepareStrategyRequest(db, {
+    taskExecutionId: 'task-strategy-clarification',
+    preference: 'full_plan',
+    directEdit: {
+      editableBaselineExists: false,
+      localAndUnambiguous: false,
+      canonicalDeliverableStable: false,
+      deliverableSetStable: false,
+      dependenciesBounded: false,
+    },
+    intake: {
+      inputRefs: [{ id: 'request', accessible: true }],
+      selectedAgentAvailable: true,
+      nativeContinuation: 'verified',
+      taskProfileAvailable: true,
+      dependencies: [],
+    },
+  });
+  const protocol = new OdNextMachineProtocolStream();
+  protocol.push([
+    '<question-form id="scope">{"questions":[{"id":"surface","label":"Surface?"}]}</question-form>',
+    '<open-design-runtime-state>',
+    JSON.stringify({
+      schema: 'open-design.strategy-state/v2',
+      route: 'full_plan',
+      inputStage: 'request',
+      outcome: 'clarification_required',
+      executionMode: null,
+      ...(executionIntent ? { executionIntent } : {}),
+      reasonCodes: [],
+    }),
+    '</open-design-runtime-state>',
+  ].join('\n'));
+  const requestArtifacts = diffRunArtifacts(beforeRequest, snapshotProjectArtifacts(requestProjectDir));
+  expect(requestArtifacts.filesWritten).toBe(0);
+  expect(requestArtifacts.filesWrittenUnknown).toBeUndefined();
+  finalizeStrategyPlanningTurn(db, {
+    taskExecutionId: 'task-strategy-clarification',
+    runId: 'run-strategy-request',
+    protocol,
+    completionEvidence: {
+      physicalStatus: 'succeeded', deliverableValid: false,
+      filesWritten: requestArtifacts.filesWritten,
+      ...(requestArtifacts.filesWrittenUnknown ? { filesWrittenUnknown: true } : {}),
+      filesWrittenSource: 'filesystem',
+    },
+  });
+  return snapshot;
+}
+
 // A minimal in-memory ChatRunService stub. It deliberately does not spawn a
 // process, but it does preserve enough run state to exercise the complete
 // create -> status/events -> cancel HTTP lifecycle.
@@ -102,6 +246,22 @@ function createRunsServiceStub() {
   const runs = new Map<string, any>();
   let seq = 0;
   const service = {
+    seed(input: Record<string, unknown>) {
+      const run: Record<string, any> = {
+        clientRequestId: null,
+        requestFingerprint: null,
+        workspaceScope: null,
+        message: null,
+        currentPrompt: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        events: [],
+        clients: new Set(),
+        ...input,
+      };
+      runs.set(String(run.id), run);
+      return run;
+    },
     create(meta: any) {
       createdRunCount += 1;
       const run = {
@@ -114,7 +274,17 @@ function createRunsServiceStub() {
         conversationId: typeof meta.conversationId === 'string' ? meta.conversationId : null,
         assistantMessageId: typeof meta.assistantMessageId === 'string' ? meta.assistantMessageId : null,
         agentId: typeof meta.agentId === 'string' ? meta.agentId : null,
+        message: meta.message,
+        currentPrompt: meta.currentPrompt,
+        appliedPluginSnapshotId: meta.appliedPluginSnapshotId,
+        clientRequestId: meta.clientRequestId,
+        requestFingerprint: meta.requestFingerprint,
         workspaceScope: meta.workspaceScope,
+        odNextTaskInputSnapshot: meta.odNextTaskInputSnapshot ?? null,
+        // Mirrors the real store (`runtimes/runs.ts`), which persists the
+        // rollout decision onto the run. Without it a continuation's inherited
+        // decision would be invisible to assertions here.
+        strategyRolloutDecision: meta.strategyRolloutDecision ?? null,
         status: 'queued',
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -122,9 +292,25 @@ function createRunsServiceStub() {
         clients: new Set(),
       };
       runs.set(run.id, run);
+      lastCreatedRun = run;
       return run;
     },
     createOrReuse(meta: any) {
+      const existing = typeof meta.clientRequestId === 'string'
+        ? Array.from(runs.values()).find(
+            (candidate) => candidate.clientRequestId === meta.clientRequestId,
+          )
+        : null;
+      if (existing) {
+        if (
+          typeof existing.requestFingerprint === 'string'
+          && typeof meta.requestFingerprint === 'string'
+          && existing.requestFingerprint !== meta.requestFingerprint
+        ) {
+          return { kind: 'conflict' as const, run: existing };
+        }
+        return { kind: 'reused' as const, run: existing };
+      }
       return { kind: 'created' as const, run: service.create(meta) };
     },
     get: (id: string) => runs.get(id) ?? null,
@@ -135,14 +321,29 @@ function createRunsServiceStub() {
           || run.projectId === filters.projectId,
       ),
     statusBody: (run: any) => ({ ...run }),
+    persistState: () => {},
     stream: (run: any, req: any, res: any) => {
-      res.status(req.method === 'GET' ? 200 : 202).json({ runId: run.id });
+      res.status(req.method === 'GET' ? 200 : 202).json({
+        runId: run.id,
+        ...(run.strategyTask
+          ? {
+              taskExecutionId: run.strategyTask.taskExecutionId,
+              strategyTask: run.strategyTask,
+            }
+          : {}),
+      });
     },
     // Intentionally does NOT invoke `starter` — this test only asserts on the
     // HTTP response to POST /api/runs, not on real agent-process spawning.
     start: (run: any) => run,
+    fail: (run: any, code: string, message: string) => {
+      run.status = 'failed';
+      run.errorCode = code;
+      run.error = message;
+    },
     wait: async () => ({ status: 'succeeded' }),
     cancel: async (run: any) => {
+      strategyTaskAtPhysicalCancel = run.strategyTask ?? null;
       run.status = 'canceled';
       run.updatedAt = Date.now();
       return { ...run };
@@ -177,6 +378,9 @@ async function startServer(opts?: {
   loadPluginRegistryView?: () => Promise<any>;
 }) {
   createdRunCount = 0;
+  lastCreatedRun = null;
+  strategyTaskAtPhysicalCancel = null;
+  runsServiceStub = null;
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-run-ws-gate-'));
   const db = openDatabase(tempDir);
   const now = Date.now();
@@ -256,10 +460,11 @@ async function startServer(opts?: {
 
   const app = express();
   app.use(express.json());
+  runsServiceStub = createRunsServiceStub();
   registerRunRoutes(app, {
     db,
     design: {
-      runs: createRunsServiceStub(),
+      runs: runsServiceStub,
       analytics: { capture: () => {} },
       getAppVersion: () => 'test',
     },
@@ -284,10 +489,7 @@ async function startServer(opts?: {
       authorizePluginRequest: opts?.authorizePluginRequest ?? (
         opts?.authorizePluginWithWorkspaceAuthority
           ? async (req: any, res: any) => {
-              const authority = await resolveOptionalWorkspaceRequestAuthority(
-                req,
-                verifyWorkspaceRequestAuthority,
-              );
+              const authority = resolveOptionalLocalWorkspaceRequestAuthority(req);
               if (!authority.ok) {
                 sendApiError(
                   res,
@@ -309,7 +511,10 @@ async function startServer(opts?: {
       runRetryEventsForAnalytics: () => [],
     },
     messages: {
-      pinAssistantMessageOnRunCreate: () => {},
+      pinAssistantMessageOnRunCreate: (_db: any, _run: any, options?: any) => {
+        options?.beforeClaimCommit?.();
+        return { ok: true };
+      },
       reconcileAssistantMessageOnRunEnd: () => {},
     },
     enforceWorkspaceProjectMutation:
@@ -340,7 +545,6 @@ async function startServer(opts?: {
       }),
     amrWorkspaceScope: {
       isSignedIn: opts?.isAmrSignedIn ?? (() => false),
-      verifyWorkspaceRequestAuthority,
     },
     authorizeProjectRequest: createAuthorizeProjectRequest({
       db,
@@ -374,8 +578,476 @@ async function startServer(opts?: {
 }
 
 describe('POST /api/runs — workspace mutation gate', () => {
+  it.each([
+    ['/api/runs', 'plan_only'], ['/api/chat', 'plan_only'],
+    ['/api/runs', 'produce'], ['/api/chat', 'produce'],
+  ] as const)('preserves %s clarification intent %s despite changed form mode', async (route, executionIntent) => {
+    const baseUrl = await startServer();
+    seedAwaitingClarificationTask(executionIntent);
+    const db = openDatabase(tempDir!);
+    const original = getStrategyTaskExecution(db, 'task-strategy-clarification')!;
+    const response = await fetch(`${baseUrl}${route}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskExecutionId: original.taskExecutionId, projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy', agentId: 'codex', sessionMode: 'design',
+        userMessageId: 'planning-user-answer', assistantMessageId: 'planning-assistant-answer',
+        clientRequestId: 'planning-client-answer', message: 'Desktop workspace', currentPrompt: 'Desktop workspace',
+      }),
+    });
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(202);
+    const continued = getStrategyTaskExecution(db, original.taskExecutionId)!;
+    expect(continued.executionIntent).toBe(executionIntent);
+    expect(continued.promptBundle).toEqual(original.promptBundle);
+    expect(lastCreatedRun.odNextTaskInputSnapshot).toMatchObject({
+      taskExecutionId: original.taskExecutionId, manifestSha256: 'd'.repeat(64),
+    });
+    if (executionIntent === 'produce') {
+      expect(lastCreatedRun.message).not.toContain('task is locked to executionIntent plan_only');
+      return;
+    }
+    expect(lastCreatedRun.message).toContain('task is locked to executionIntent plan_only');
+    const protocol = new OdNextMachineProtocolStream();
+    protocol.push(`The planning answer is complete.\n<open-design-runtime-state>\n${JSON.stringify({
+      schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'clarification',
+      outcome: 'completed', executionMode: null, executionIntent: 'plan_only', reasonCodes: [],
+    })}\n</open-design-runtime-state>`);
+    const finished = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: original.taskExecutionId, runId: continued.latestRunId, protocol,
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: 0 },
+    });
+    expect(finished.action).toBe('completed');
+    expect(finished.task.runs.map(run => run.inputStage)).toEqual(['request', 'clarification']);
+    expect(createdRunCount).toBe(1);
+  });
+
   it.each(['/api/runs', '/api/chat'])(
-    'reuses one fresh exact Workspace authority witness for project and plugin gates through %s',
+    'carries the source Run harness decision into a clarification continuation through %s',
+    async (route) => {
+      // The rollout is only evaluated on the branch that resolves a project,
+      // and a continuation does not take that branch. Before this was
+      // inherited, answering a clarification produced a Run with no decision
+      // at all — so `run_created` / `run_finished` / the recovery replay for
+      // every OD Next task that asked a question reported no harness, dropping
+      // exactly those runs from the comparison the dimension exists for.
+      const baseUrl = await startServer();
+      const snapshot = seedAwaitingClarificationTask();
+      const activeDecision = {
+        schemaVersion: 1 as const,
+        decisionClass: 'active' as const,
+        requestedMode: 'active' as const,
+        effectiveMode: 'active' as const,
+        taskType: 'prototype' as const,
+        assignmentBucket: 42,
+        eligible: true,
+        syntheticCanary: false,
+        reasonCodes: [],
+        primaryReasonCode: 'od_next_rollout_eligible',
+      };
+      runsServiceStub?.seed({
+        id: 'run-strategy-request',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        assistantMessageId: 'assistant-strategy-request',
+        agentId: 'codex',
+        pluginId: 'od-next-strategy',
+        appliedPluginSnapshotId: snapshot.snapshotId,
+        strategyRolloutDecision: activeDecision,
+        status: 'succeeded',
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          userMessageId: 'user-strategy-answer',
+          assistantMessageId: 'assistant-strategy-answer',
+          clientRequestId: 'client-strategy-answer',
+          message: 'Desktop workspace',
+          currentPrompt: 'Desktop workspace',
+        }),
+      });
+      const responseText = await response.text();
+      expect(response.status, responseText).toBe(202);
+
+      expect(lastCreatedRun.strategyRolloutDecision).toMatchObject({
+        effectiveMode: 'active',
+        primaryReasonCode: 'od_next_rollout_eligible',
+      });
+    },
+  );
+
+  it('leaves a continuation undecided when its source Run never had a decision', async () => {
+    // Absent and "took the ordinary route" are different facts. A task that
+    // started before the strategy existed must not be back-filled into either
+    // arm of the comparison.
+    const baseUrl = await startServer();
+    seedAwaitingClarificationTask();
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskExecutionId: 'task-strategy-clarification',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        agentId: 'codex',
+        userMessageId: 'user-strategy-answer',
+        assistantMessageId: 'assistant-strategy-answer',
+        clientRequestId: 'client-strategy-answer',
+        message: 'Desktop workspace',
+        currentPrompt: 'Desktop workspace',
+      }),
+    });
+    expect(response.status, await response.text()).toBe(202);
+    expect(lastCreatedRun.strategyRolloutDecision).toBeNull();
+  });
+
+  it.each(['/api/runs', '/api/chat'])(
+    'atomically binds an explicit clarification handle through %s',
+    async (route) => {
+    const baseUrl = await startServer();
+    const snapshot = seedAwaitingClarificationTask();
+    expect(runsServiceStub?.get('run-strategy-request')).toMatchObject({
+      projectId: PERSONAL_PROJECT,
+      conversationId: 'conversation-strategy',
+      agentId: 'codex',
+      appliedPluginSnapshotId: snapshot.snapshotId,
+      status: 'succeeded',
+    });
+    const response = await fetch(`${baseUrl}${route}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskExecutionId: 'task-strategy-clarification',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        agentId: 'codex',
+        userMessageId: 'user-strategy-answer',
+        assistantMessageId: 'assistant-strategy-answer',
+        clientRequestId: 'client-strategy-answer',
+        message: 'Desktop workspace',
+        currentPrompt: 'Desktop workspace',
+      }),
+    });
+    const responseText = await response.text();
+    expect(response.status, responseText).toBe(202);
+    const body = JSON.parse(responseText) as any;
+    expect(body.strategyTask).toMatchObject({
+      taskExecutionId: 'task-strategy-clarification',
+      inputStage: 'clarification',
+      outcome: 'running',
+      activeRunId: body.runId,
+    });
+    expect(body.taskExecutionId).toBe('task-strategy-clarification');
+    expect(lastCreatedRun).toMatchObject({
+      id: body.runId,
+      agentId: 'codex',
+      appliedPluginSnapshotId: snapshot.snapshotId,
+    });
+    expect(lastCreatedRun.currentPrompt).toContain(
+      'OD Next native continuation — clarification',
+    );
+    const task = getStrategyTaskExecution(
+      openDatabase(tempDir!),
+      'task-strategy-clarification',
+    );
+    expect(task?.runs.map(({ finalText: _finalText, ...run }) => run)).toEqual([
+      { runId: 'run-strategy-request', inputStage: 'request', taskRunIndex: 0 },
+      {
+        runId: body.runId,
+        inputStage: 'clarification',
+        taskRunIndex: 1,
+        sourceRunId: 'run-strategy-request',
+      },
+    ]);
+
+    const repeatedResponse = await fetch(`${baseUrl}${route}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskExecutionId: 'task-strategy-clarification',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        agentId: 'codex',
+        userMessageId: 'user-strategy-answer',
+        assistantMessageId: 'assistant-strategy-answer',
+        clientRequestId: 'client-strategy-answer',
+        message: 'Desktop workspace',
+        currentPrompt: 'Desktop workspace',
+      }),
+    });
+    expect(repeatedResponse.status).toBe(202);
+    await expect(repeatedResponse.json()).resolves.toMatchObject({
+      runId: body.runId,
+      ...(route === '/api/runs' ? { reused: true } : {}),
+      strategyTask: {
+        taskExecutionId: 'task-strategy-clarification',
+        inputStage: 'clarification',
+        activeRunId: body.runId,
+      },
+    });
+    expect(getStrategyTaskExecution(
+      openDatabase(tempDir!),
+      'task-strategy-clarification',
+    )?.runs).toHaveLength(2);
+
+    const cancelResponse = await fetch(
+      `${baseUrl}/api/runs/${encodeURIComponent(body.runId)}/cancel`,
+      { method: 'POST' },
+    );
+    expect(cancelResponse.status).toBe(200);
+    expect(strategyTaskAtPhysicalCancel).toMatchObject({
+      taskExecutionId: 'task-strategy-clarification',
+      outcome: 'canceled',
+      terminal: true,
+    });
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'keeps a handle-less follow-up ordinary through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      seedAwaitingClarificationTask();
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          assistantMessageId: `assistant-ordinary-${route.length}`,
+          clientRequestId: `client-ordinary-${route.length}`,
+          message: 'This is a separate ordinary follow-up',
+          currentPrompt: 'This is a separate ordinary follow-up',
+        }),
+      });
+      expect(response.status).toBe(202);
+      const body = await response.json() as any;
+      expect(body.strategyTask).toBeUndefined();
+      expect(body.taskExecutionId).toBeUndefined();
+      expect(lastCreatedRun).toMatchObject({
+        message: 'This is a separate ordinary follow-up',
+        currentPrompt: 'This is a separate ordinary follow-up',
+      });
+      expect(getStrategyTaskExecution(
+        openDatabase(tempDir!),
+        'task-strategy-clarification',
+      )).toMatchObject({
+        inputStage: 'request',
+        outcome: 'clarification_required',
+        latestRunId: 'run-strategy-request',
+      });
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'fails closed for an unknown explicit clarification handle through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      seedAwaitingClarificationTask();
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-does-not-exist',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          assistantMessageId: `assistant-wrong-${route.length}`,
+          clientRequestId: `client-wrong-${route.length}`,
+          message: 'Wrong handle',
+        }),
+      });
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'STRATEGY_TASK_NOT_FOUND' },
+      });
+      expect(createdRunCount).toBe(0);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'rejects locked agent drift for an explicit clarification handle through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      seedAwaitingClarificationTask();
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'claude',
+          assistantMessageId: `assistant-drift-${route.length}`,
+          clientRequestId: `client-drift-${route.length}`,
+          message: 'Wrong agent',
+        }),
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'STRATEGY_TASK_AGENT_MISMATCH' },
+      });
+      expect(createdRunCount).toBe(0);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'recovers a restart-cleared source Run snapshot via the linked snapshot row through %s',
+    async (route) => {
+      // See recoverSourceRunSnapshotId: `durableRunState()` never serialized
+      // `appliedPluginSnapshotId`, so a daemon restart restored the source Run
+      // without the field while the task record kept its locked snapshot.
+      const baseUrl = await startServer();
+      const snapshot = seedAwaitingClarificationTask();
+      linkSnapshotToRun(
+        openDatabase(tempDir!),
+        snapshot.snapshotId,
+        'run-strategy-request',
+      );
+      // Simulate a source Run restored from a pre-fix durable state.json.
+      runsServiceStub?.seed({
+        id: 'run-strategy-request',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        assistantMessageId: 'assistant-strategy-request',
+        agentId: 'codex',
+        pluginId: 'od-next-strategy',
+        odNextTaskInputSnapshot: {
+          taskExecutionId: 'task-strategy-clarification',
+          snapshotDir: path.join(tempDir!, 'strategy-input-fixture'),
+          manifestSha256: 'd'.repeat(64),
+        },
+        status: 'succeeded',
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          userMessageId: 'user-strategy-answer',
+          assistantMessageId: 'assistant-strategy-answer',
+          clientRequestId: 'client-strategy-answer',
+          message: 'Desktop workspace',
+          currentPrompt: 'Desktop workspace',
+        }),
+      });
+      const responseText = await response.text();
+      expect(response.status, responseText).toBe(202);
+      expect(lastCreatedRun.appliedPluginSnapshotId).toBe(snapshot.snapshotId);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'rejects a snapshot-less source Run whose snapshot row is not linked to it through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      seedAwaitingClarificationTask();
+      // No `linkSnapshotToRun`: the snapshot row keeps `run_id = null`, so the
+      // ownership witness fails.
+      runsServiceStub?.seed({
+        id: 'run-strategy-request',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        assistantMessageId: 'assistant-strategy-request',
+        agentId: 'codex',
+        pluginId: 'od-next-strategy',
+        status: 'succeeded',
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          userMessageId: 'user-strategy-answer',
+          assistantMessageId: 'assistant-strategy-answer',
+          clientRequestId: 'client-strategy-answer',
+          message: 'Desktop workspace',
+          currentPrompt: 'Desktop workspace',
+        }),
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'STRATEGY_TASK_SOURCE_RUN_INVALID' },
+      });
+      expect(createdRunCount).toBe(0);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'rejects a source Run locked to a different snapshot through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      const snapshot = seedAwaitingClarificationTask();
+      const driftedSnapshot = createSnapshot(openDatabase(tempDir!), {
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        runId: null,
+        pluginId: 'od-next-strategy',
+        pluginVersion: '2.0.0',
+        manifestSourceDigest: 'strategy-manifest',
+        strategy: snapshot.strategy,
+        taskKind: 'new-generation',
+        inputs: {},
+        resolvedContext: { items: [] },
+        capabilitiesGranted: ['prompt:inject'],
+        capabilitiesRequired: ['prompt:inject'],
+        assetsStaged: [],
+        connectorsRequired: [],
+        connectorsResolved: [],
+        mcpServers: [],
+      });
+      runsServiceStub?.seed({
+        id: 'run-strategy-request',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        assistantMessageId: 'assistant-strategy-request',
+        agentId: 'codex',
+        pluginId: 'od-next-strategy',
+        appliedPluginSnapshotId: driftedSnapshot.snapshotId,
+        status: 'succeeded',
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          userMessageId: 'user-strategy-answer',
+          assistantMessageId: 'assistant-strategy-answer',
+          clientRequestId: 'client-strategy-answer',
+          message: 'Desktop workspace',
+          currentPrompt: 'Desktop workspace',
+        }),
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'STRATEGY_TASK_SOURCE_RUN_INVALID' },
+      });
+      expect(createdRunCount).toBe(0);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'keeps project and local plugin gates off the remote Workspace directory through %s',
     async (route) => {
       const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
         ok: true,
@@ -410,12 +1082,12 @@ describe('POST /api/runs — workspace mutation gate', () => {
       });
 
       expect(response.status).toBe(202);
-      expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
     },
   );
 
   it.each(['/api/runs', '/api/chat'])(
-    'still performs one fresh project mutation check when no plugin is requested through %s',
+    'keeps project-only run creation off the remote Workspace directory through %s',
     async (route) => {
       const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
         ok: true,
@@ -448,12 +1120,12 @@ describe('POST /api/runs — workspace mutation gate', () => {
       });
 
       expect(response.status).toBe(202);
-      expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
     },
   );
 
   it.each(['/api/runs', '/api/chat'])(
-    'fails closed on a rejected authority witness before plugin resolution through %s',
+    'continues local run creation when the remote Workspace directory is unavailable through %s',
     async (route) => {
       const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
         ok: false,
@@ -482,17 +1154,14 @@ describe('POST /api/runs — workspace mutation gate', () => {
         }),
       });
 
-      expect(response.status).toBe(503);
-      await expect(response.json()).resolves.toMatchObject({
-        error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' },
-      });
-      expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
-      expect(createdRunCount).toBe(0);
+      expect(response.status).toBe(202);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+      expect(createdRunCount).toBe(1);
     },
   );
 
   it.each(['/api/runs', '/api/chat'])(
-    'does not reuse a prior request witness after Workspace membership changes through %s',
+    'does not let stale remote membership state interrupt local run creation through %s',
     async (route) => {
       let memberStatus: 'active' | 'removed' = 'active';
       const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
@@ -528,16 +1197,12 @@ describe('POST /api/runs — workspace mutation gate', () => {
 
       expect((await create()).status).toBe(202);
       memberStatus = 'removed';
-      const removedResponse = await create();
-      expect(removedResponse.status).toBe(403);
-      await expect(removedResponse.json()).resolves.toMatchObject({
-        error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
-      });
-      expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(2);
+      expect((await create()).status).toBe(202);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
     },
   );
 
-  it('does not share a fresh authority witness between concurrent run requests', async () => {
+  it('authorizes concurrent local runs from persisted bindings without a remote witness', async () => {
     const pending: Array<{
       memberId: string;
       resolve: (value: any) => void;
@@ -582,29 +1247,13 @@ describe('POST /api/runs — workspace mutation gate', () => {
 
     const ownerRequest = create(OWNER_MEMBER_ID, 'owner');
     const memberRequest = create('member-concurrent-run', 'member');
-    await vi.waitFor(() => expect(pending).toHaveLength(2));
-    for (const entry of pending) {
-      entry.resolve({
-        ok: true,
-        context: workspaceContextFromDirectoryItem({
-          workspaceId: WORKSPACE_ID,
-          workspaceName: 'Team',
-          workspaceType: 'team',
-          workspaceMemberId: entry.memberId,
-          role: entry.memberId === OWNER_MEMBER_ID ? 'owner' : 'member',
-          memberStatus: 'active',
-          lifecycleState: 'active',
-        }),
-      });
-    }
-
     const [ownerResponse, memberResponse] = await Promise.all([
       ownerRequest,
       memberRequest,
     ]);
     expect(ownerResponse.status).toBe(202);
     expect(memberResponse.status).toBe(403);
-    expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(2);
+    expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
   });
 
   it.each(['/api/runs', '/api/chat'])(
@@ -711,6 +1360,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
           schemaVersion: 1,
           projectId: PERSONAL_PROJECT,
           workspaceId: WORKSPACE_ID,
+          workspaceMemberId: OWNER_MEMBER_ID,
           source: 'persisted_project_binding',
         },
       });
@@ -836,22 +1486,48 @@ describe('POST /api/runs — workspace mutation gate', () => {
     expect(typeof payload.runId).toBe('string');
   });
 
-  it('verifies AMR adoption before any plugin resolution side effects', async () => {
-    const loadPluginRegistryView = vi.fn(async () => ({}));
+  it.each(['/api/runs', '/api/chat'])(
+    'ignores a client-forged workspace scope for an unbound project through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: UNBOUND_PROJECT,
+          agentId: 'claude',
+          message: 'do not trust request scope',
+          workspaceScope: {
+            schemaVersion: 1,
+            projectId: UNBOUND_PROJECT,
+            workspaceId: 'forged-workspace',
+            workspaceMemberId: 'forged-member',
+            source: 'persisted_project_binding',
+          },
+        }),
+      });
+
+      expect(response.status).toBe(202);
+      const { runId } = (await response.json()) as { runId: string };
+      const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+      expect(statusResponse.status).toBe(200);
+      const run = await statusResponse.json() as Record<string, unknown>;
+      expect(run.workspaceScope).toBeNull();
+    },
+  );
+
+  it('keeps an untyped historical AMR run account-scoped during a directory outage', async () => {
+    const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      code: 'WORKSPACE_DIRECTORY_UNAVAILABLE',
+      message: 'workspace directory temporarily unavailable',
+    }));
     const baseUrl = await startServer({
       isAmrSignedIn: () => true,
-      loadPluginRegistryView,
-      verifyWorkspaceRequestAuthority: async () => ({
-        ok: false,
-        status: 503,
-        code: 'WORKSPACE_DIRECTORY_UNAVAILABLE',
-        message: 'workspace directory temporarily unavailable',
-      }),
+      verifyWorkspaceRequestAuthority,
     });
     const db = openDatabase(tempDir!);
-    const beforeSnapshotCount = (db.prepare(
-      'SELECT COUNT(*) AS count FROM applied_plugin_snapshots',
-    ).get() as { count: number }).count;
 
     const response = await fetch(`${baseUrl}/api/runs`, {
       method: 'POST',
@@ -862,21 +1538,13 @@ describe('POST /api/runs — workspace mutation gate', () => {
       body: JSON.stringify({
         projectId: UNBOUND_PROJECT,
         agentId: 'amr',
-        pluginId: 'must-not-resolve-before-adoption',
-        message: 'must verify the historical project first',
+        message: 'local send must survive the outage',
       }),
     });
 
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'WORKSPACE_DIRECTORY_UNAVAILABLE' },
-    });
-    expect(loadPluginRegistryView).not.toHaveBeenCalled();
-    expect(createdRunCount).toBe(0);
+    expect(response.status).toBe(202);
+    expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
     expect(getWorkspaceProjectByProjectId(db, UNBOUND_PROJECT)).toBeUndefined();
-    expect((db.prepare(
-      'SELECT COUNT(*) AS count FROM applied_plugin_snapshots',
-    ).get() as { count: number }).count).toBe(beforeSnapshotCount);
   });
 
   it('authorizes the final run plugin before loading the scoped registry', async () => {
@@ -911,7 +1579,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
     expect(calls).toEqual(['plugin', 'registry']);
   });
 
-  it('adopts an exact historical project scope before authorizing its chat plugin', async () => {
+  it('adopts an explicitly Personal local scope before authorizing its chat plugin', async () => {
     const calls: string[] = [];
     const baseUrl = await startServer({
       isAmrSignedIn: () => true,
@@ -941,6 +1609,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
       headers: {
         'Content-Type': 'application/json',
         ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        'x-od-workspace-type': 'personal',
       },
       body: JSON.stringify({
         projectId: UNBOUND_PROJECT,
@@ -951,7 +1620,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
     });
 
     expect(response.status).toBe(202);
-    expect(calls).toEqual(['adoption', 'plugin']);
+    expect(calls).toEqual(['plugin']);
     expect(getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT))
       .toMatchObject({
         workspaceId: WORKSPACE_ID,
@@ -1102,7 +1771,11 @@ describe('Workspace-bound run lifecycle authority', () => {
         agentId: 'byok-opencode',
         model: 'test-model',
         message: 'byok run',
-        byokProfileId: 'test-profile',
+        byokProvider: {
+          protocol: 'openai',
+          baseUrl: 'http://127.0.0.1:1234/v1',
+          requiresApiKey: false,
+        },
       },
     ];
 
@@ -1145,7 +1818,7 @@ describe('Workspace-bound run lifecycle authority', () => {
     }
   });
 
-  it('does not bypass exact Workspace authority for AMR run status, events, or cancel', async () => {
+  it('keeps persisted local AMR run status, events, and cancel available offline', async () => {
     const baseUrl = await startServer();
     const createResponse = await fetch(`${baseUrl}/api/runs`, {
       method: 'POST',
@@ -1168,10 +1841,7 @@ describe('Workspace-bound run lifecycle authority', () => {
       [`/api/runs/${runId}/cancel`, 'POST'],
     ] as const) {
       const response = await fetch(`${baseUrl}${path}`, { method });
-      expect(response.status).toBe(400);
-      await expect(response.json()).resolves.toMatchObject({
-        error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
-      });
+      expect(response.status).toBe(200);
     }
 
     const exactHeaders = workspaceHeaders(OWNER_MEMBER_ID, 'owner');
@@ -1214,11 +1884,11 @@ describe('Workspace-bound run lifecycle authority', () => {
     });
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+      error: { code: 'WORKSPACE_CONTEXT_INCOMPLETE' },
     });
   });
 
-  it('fails closed when a historical run record has no reliable agentId', async () => {
+  it('keeps a persisted historical run available without relying on runtime identity', async () => {
     const baseUrl = await startServer();
     const createResponse = await fetch(`${baseUrl}/api/runs`, {
       method: 'POST',
@@ -1235,10 +1905,7 @@ describe('Workspace-bound run lifecycle authority', () => {
     const { runId } = (await createResponse.json()) as { runId: string };
 
     const response = await fetch(`${baseUrl}/api/runs/${runId}`);
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
-    });
+    expect(response.status).toBe(200);
   });
 
   it.each([
@@ -1334,7 +2001,7 @@ describe('POST /api/runs — delegates membership and balance eligibility to Vel
 
 describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () => {
   it.each(['/api/runs', '/api/chat'])(
-    'transactionally binds an unbound historical project to the exact verified Personal Workspace through %s',
+    'transactionally binds an unbound historical project to the exact local Personal Workspace through %s',
     async (route) => {
     const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
       ok: true,
@@ -1368,7 +2035,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
     });
 
       expect(response.status).toBe(202);
-      expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
       expect(
         getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
       ).toMatchObject({
@@ -1379,7 +2046,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
     },
   );
 
-  it('keeps an adopted Personal project runnable only by the verified adopting member', async () => {
+  it('keeps an adopted Personal project runnable only by its persisted creator', async () => {
     const verifyWorkspaceRequestAuthority = vi.fn(async (req: any) => {
       const memberId = req.get('x-od-workspace-member-id');
       return {
@@ -1430,10 +2097,11 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
     await expect(foreignResponse.json()).resolves.toMatchObject({
       error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
     });
+    expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
   });
 
   it.each(['/api/runs', '/api/chat'])(
-    'refuses a signed-in AMR run through %s when an unbound project has no explicit Personal identity',
+    'keeps a signed-in AMR run through %s account-scoped when its local project is unbound',
     async (route) => {
     const verifyWorkspaceRequestAuthority = vi.fn();
     const baseUrl = await startServer({
@@ -1451,10 +2119,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
       }),
     });
 
-      expect(response.status).toBe(409);
-      await expect(response.json()).resolves.toMatchObject({
-        error: { code: 'AMR_WORKSPACE_SCOPE_REQUIRED' },
-      });
+      expect(response.status).toBe(202);
       expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
       expect(
         getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
@@ -1503,7 +2168,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
     ).toBeUndefined();
   });
 
-  it('fails closed without binding when the exact Personal authority is unavailable', async () => {
+  it('adopts an explicitly Personal project locally when Workspace authority is unavailable', async () => {
     const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
       ok: false,
       status: 503,
@@ -1526,18 +2191,19 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
       body: JSON.stringify({
         projectId: UNBOUND_PROJECT,
         agentId: 'amr',
-        message: 'do not guess',
+        message: 'keep local send available',
       }),
     });
 
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' },
-    });
-    expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(202);
+    expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
     expect(
       getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
-    ).toBeUndefined();
+    ).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      visibility: 'personal',
+      createdByWorkspaceMemberId: OWNER_MEMBER_ID,
+    });
   });
 
   it.each(['/api/runs', '/api/chat'])(
@@ -1559,7 +2225,11 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
           agentId: 'byok-opencode',
           model: 'test-model',
           message: 'byok',
-          byokProfileId: 'test-profile',
+          byokProvider: {
+            protocol: 'openai',
+            baseUrl: 'http://127.0.0.1:1234/v1',
+            requiresApiKey: false,
+          },
         },
       ]) {
         const response = await fetch(`${baseUrl}${route}`, {

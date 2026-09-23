@@ -8,7 +8,7 @@ import {
   validateOpenDesignBriefCatalog,
 } from '../src/index.js';
 
-describe('Open Design shared Brief decisions', () => {
+describe('OpenDesign shared Brief decisions', () => {
   it('defines deterministic choice-only questions for all eight artifact types', () => {
     expect(Object.keys(openDesignBriefCatalog).sort()).toEqual(
       [...OPEN_DESIGN_BRIEF_ARTIFACT_TYPES].sort(),
@@ -95,7 +95,7 @@ describe('Open Design shared Brief decisions', () => {
     expect(Object.keys(initial.answers)).toHaveLength(openDesignBriefCatalog.audio.length);
 
     const cli = formatOpenDesignBriefForCli(initial);
-    expect(cli).toContain('Open Design brief');
+    expect(cli).toContain('OpenDesign brief');
     expect(cli).toContain('Artifact: audio');
     expect(cli).toContain('Ready to confirm');
     expect(cli).toContain('Current choices:');

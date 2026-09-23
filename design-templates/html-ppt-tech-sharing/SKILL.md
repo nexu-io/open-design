@@ -3,9 +3,9 @@ name: html-ppt-tech-sharing
 en_name: "Give an Engineering Tech Talk like a Staff Developer-Advocate"
 zh_name: "像 Staff DevRel 一样做工程分享"
 description: |
-  Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Built as a decision-grade AI literacy deck for engineers, dev community.
+  OpenDesign internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Built as a decision-grade AI literacy deck for engineers, dev community.
 en_description: |
-  Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Built as a decision-grade AI literacy deck for engineers, dev community.
+  OpenDesign internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Built as a decision-grade AI literacy deck for engineers, dev community.
 zh_description: |
   像 Staff DevRel 一样做工程分享——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
   animations: true
   category: "ai-literacy"
   scenario: "ai"
-  example_prompt: "Create \"Give an Engineering Tech Talk like a Staff Developer-Advocate\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Audience: engineers, dev community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
+  example_prompt: "Create \"Give an Engineering Tech Talk like a Staff Developer-Advocate\" as a decision-grade AI literacy deck in this template's own visual system. Subject: OpenDesign internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Audience: engineers, dev community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 # HTML PPT · Tech Sharing
 

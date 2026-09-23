@@ -2,11 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildDaemonTranscript,
+  buildDaemonPriorTranscript,
   DAEMON_RUN_FINISHED_EVENT,
+  DAEMON_STREAM_RECONNECT_LIMIT,
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
   streamViaDaemon,
+  type DaemonReconnectState,
   type DaemonRunFinishedEventDetail,
 } from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
@@ -41,7 +44,7 @@ describe('parseSseFrame', () => {
 describe('streamViaDaemon', () => {
   it('sends the latest user turn separately from the full CLI transcript', async () => {
     const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
       if (url === '/api/runs/run-1/events') {
@@ -60,6 +63,7 @@ describe('streamViaDaemon', () => {
         { id: '3', role: 'user', content: 'post-consent revision' },
       ],
       systemPrompt: '',
+      skillIds: ['frontend-design', 'imagegen'],
       signal: new AbortController().signal,
       handlers,
     });
@@ -70,6 +74,7 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
     expect(body.userMessageId).toBe('3');
+    expect(body.skillIds).toEqual(['frontend-design', 'imagegen']);
   });
 
   it('sends the selected Local BYOK provider only to the local run endpoint', async () => {
@@ -115,6 +120,7 @@ describe('streamViaDaemon', () => {
     const handlers = createDaemonHandlers();
     const eventTarget = new EventTarget();
     const published: DaemonRunFinishedEventDetail[] = [];
+    const artifactPaths: string[][] = [];
     eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
       published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
     });
@@ -124,30 +130,69 @@ describe('streamViaDaemon', () => {
       if (url === '/api/runs') return jsonResponse({ runId: 'run-artifact-success' });
       if (url === '/api/runs/run-artifact-success/events') {
         return sseResponse(
-          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2}\n\n',
+          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2,"artifactPaths":["existing.png","renders/new.png"]}\n\n',
         );
       }
       throw new Error(`unexpected fetch ${url}`);
     }));
 
     await streamViaDaemon({
-      agentId: 'mock',
+      agentId: 'amr',
       history: [{ id: '1', role: 'user', content: 'make a design' }],
       systemPrompt: '',
       signal: new AbortController().signal,
       handlers,
       projectId: 'project-1',
       conversationId: 'conversation-1',
+      onArtifactPaths: (paths) => artifactPaths.push(paths),
     });
 
+    expect(handlers.onArtifactCount).toHaveBeenCalledWith(2);
     expect(published).toEqual([{
+      agentId: 'amr',
       runId: 'run-artifact-success',
       projectId: 'project-1',
       conversationId: 'conversation-1',
       result: 'success',
       artifactCount: 2,
     }]);
+    expect(artifactPaths).toEqual([['existing.png', 'renders/new.png']]);
   });
+
+  it.each(['kimi', 'codex'])(
+    'does not publish a local %s artifact run to the AMR upgrade gate',
+    async (agentId) => {
+      const handlers = createDaemonHandlers();
+      const eventTarget = new EventTarget();
+      const published: DaemonRunFinishedEventDetail[] = [];
+      eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
+        published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
+      });
+      vi.stubGlobal('window', eventTarget);
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') return jsonResponse({ runId: `run-${agentId}` });
+        if (url === `/api/runs/run-${agentId}/events`) {
+          return sseResponse(
+            'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":1}\n\n',
+          );
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }));
+
+      await streamViaDaemon({
+        agentId,
+        history: [{ id: '1', role: 'user', content: 'make a design' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+      });
+
+      expect(published).toEqual([]);
+    },
+  );
 
   it.each([
     ['no artifact', '{"code":0,"status":"succeeded","artifactCount":0}'],
@@ -219,6 +264,118 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(handlers.onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries the tool call clock through to the client so a row can show its duration', async () => {
+    // 时间在这条链上丢过两次:SSE 只发 (event, data, id),web 的 toAgentEvent() 又不带。
+    // daemon 现在在唯一出口盖 startedAt / completedAt(runtimes/tool-timing.ts),
+    // 这里守住第二处 —— 转换时必须把它们带过来,否则工具行永远没有耗时。
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-t' });
+      if (url === '/api/runs/run-t/events') {
+        return sseResponse(
+          'event: agent\ndata: {"type":"tool_use","id":"call_1","name":"Read","input":{"file_path":"a.ts"},"startedAt":1000}\n\n' +
+          'event: agent\ndata: {"type":"tool_result","toolUseId":"call_1","content":"ok","isError":false,"completedAt":1400}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-t') return jsonResponse({ id: 'run-t', status: 'succeeded' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'claude',
+      history: [{ id: '1', role: 'user', content: 'read it' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const events = handlers.onAgentEvent.mock.calls.map((c) => c[0]);
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'tool_use', id: 'call_1', startedAt: 1000 }),
+      expect.objectContaining({ kind: 'tool_result', toolUseId: 'call_1', completedAt: 1400 }),
+    ]));
+  });
+
+  /**
+   * 推理 token 计数过线。这一段是整条链**唯一没有别的守卫**的接缝:
+   * daemon 那头发得再对,`translateAgentEvent` 少一个分支就整条哑掉,而它返回 `null`
+   * 是完全无声的(`tool_input_delta` 走的正是那条静默丢弃的路)。
+   *
+   * `at` 由**客户端**在这里盖 —— 它的唯一消费方拿聊天面板自己的 `nowMs` 去比,
+   * 两个时刻必须是同一只钟,daemon 的时刻会把机器间的时钟偏差直接算进去。
+   * 所以这里断言它是「本机此刻」,而不是断言它等于载荷里的某个字段。
+   */
+  it('carries the reasoning-progress count across the wire, client-stamped', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-tk' });
+      if (url === '/api/runs/run-tk/events') {
+        return sseResponse(
+          'event: agent\ndata: {"type":"thinking_tokens","tokens":50}\n\n' +
+          'event: agent\ndata: {"type":"thinking_tokens","tokens":3278}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-tk') return jsonResponse({ id: 'run-tk', status: 'succeeded' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const before = Date.now();
+    await streamViaDaemon({
+      agentId: 'claude',
+      history: [{ id: '1', role: 'user', content: 'think about it' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const counts = handlers.onAgentEvent.mock.calls
+      .map((c) => c[0])
+      .filter((e) => e?.kind === 'thinking_tokens');
+    expect(counts.map((e) => e.tokens), '两帧都要过线,而且是累计值原样').toEqual([50, 3278]);
+    for (const one of counts) {
+      expect(typeof one.at, '到达时刻是客户端盖的').toBe('number');
+      expect(one.at).toBeGreaterThanOrEqual(before);
+      expect(one.at).toBeLessThanOrEqual(Date.now());
+    }
+  });
+
+  it('omits the clock fields entirely when the adapter has no timing to report', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-u' });
+      if (url === '/api/runs/run-u/events') {
+        return sseResponse(
+          'event: agent\ndata: {"type":"tool_use","id":"c1","name":"Read","input":{}}\n\n' +
+          'event: agent\ndata: {"type":"tool_result","toolUseId":"c1","content":"ok","isError":false}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-u') return jsonResponse({ id: 'run-u', status: 'succeeded' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'claude',
+      history: [{ id: '1', role: 'user', content: 'read it' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const use = handlers.onAgentEvent.mock.calls.map((c) => c[0]).find((e) => e?.kind === 'tool_use');
+    const result = handlers.onAgentEvent.mock.calls.map((c) => c[0]).find((e) => e?.kind === 'tool_result');
+    expect(use).not.toHaveProperty('startedAt');
+    expect(result).not.toHaveProperty('completedAt');
   });
 
   it('keeps consuming when a same-run retry succeeds after the transient error status briefly reads failed', async () => {
@@ -329,6 +486,81 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).toHaveBeenCalledTimes(1);
     const err = handlers.onError.mock.calls[0]![0] as Error & { resumable?: boolean };
     expect(err.resumable).toBe(true);
+  });
+
+  // Frame shape lifted from a real failed run (`.od/runs/60d39320-…`): the
+  // daemon's own sentence is generic and the actual cause only exists in the
+  // stderr the daemon captured. The live path has to carry that onto the
+  // surfaced error, or the failure card can only ever show the generic sentence.
+  it('carries the captured stderr tail onto a surfaced terminal failure', async () => {
+    const stderrTail =
+      'Error: dsh: plugin tree failed to load: credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string';
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          `event: error\ndata: ${JSON.stringify({
+            message: 'DeepSeek Harness profile exited without a terminal result.',
+            error: {
+              code: 'DSH_PROFILE_MISSING_RESULT',
+              message: 'DeepSeek Harness profile exited without a terminal result.',
+              retryable: false,
+            },
+            stderrTail,
+          })}\n\n`,
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'failed' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'deepseek-harness',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const err = handlers.onError.mock.calls[0]![0] as Error & { stderrTail?: string };
+    expect(err.message).toBe('DeepSeek Harness profile exited without a terminal result.');
+    expect(err.stderrTail).toBe(stderrTail);
+  });
+
+  it('leaves the stderr tail unset when the failure frame carries none', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"upstream drop","retryable":true}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'failed' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const err = handlers.onError.mock.calls[0]![0] as Error & { stderrTail?: string };
+    expect(err.stderrTail).toBeUndefined();
   });
 
   it('sends run-scoped media execution policy to the daemon', async () => {
@@ -503,6 +735,18 @@ describe('streamViaDaemon', () => {
     ).toBe('current turn');
   });
 
+  it('frames prior transcript separately without subtracting the latest user text', () => {
+    const history = [
+      { id: '1', role: 'user' as const, content: 'same text' },
+      { id: '2', role: 'assistant' as const, content: 'answer same text', agentId: 'codex' },
+      { id: '3', role: 'user' as const, content: 'same text' },
+    ];
+    expect(buildDaemonPriorTranscript(history, 'codex')).toBe(
+      '## user\nsame text\n\n## assistant\nanswer same text',
+    );
+    expect(latestUserPromptFromHistory(history)).toBe('same text');
+  });
+
   it('truncates oversized prior messages before composing daemon context', () => {
     const transcript = buildDaemonTranscript([
       { id: '1', role: 'user', content: 'x'.repeat(13_000) },
@@ -510,7 +754,7 @@ describe('streamViaDaemon', () => {
     ]);
 
     expect(transcript).toContain('## user');
-    expect(transcript).toContain('[Open Design truncated 1000 chars from this prior message');
+    expect(transcript).toContain('[OpenDesign truncated 1000 chars from this prior message');
     expect(transcript).not.toContain('x'.repeat(13_000));
     expect(transcript).toContain('small answer');
   });
@@ -1138,7 +1382,7 @@ describe('streamViaDaemon', () => {
       }),
     );
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('Open Design link URL or model route');
+    expect(message).toContain('OpenDesign link URL or model route');
     expect(message).not.toContain('json-rpc id 4');
     expect(message).not.toContain('https://example.invalid');
     expect(handlers.onDone).not.toHaveBeenCalled();
@@ -1496,7 +1740,7 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('Open Design started, but the run did not complete');
+    expect(message).toContain('OpenDesign started, but the run did not complete');
     expect(message).not.toContain('sqlite-migration');
     expect(message).not.toContain('OPENCODE_SERVER_PASSWORD');
     expect(message).not.toContain('opencode server listening');
@@ -1805,6 +2049,103 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
+  it('automatically retries a retryable workspace-authority outage before creating the run', async () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const onRunStatus = vi.fn();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({
+          error: {
+            code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+            message: 'workspace membership authority is temporarily unavailable',
+            retryable: true,
+          },
+        }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }))
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-after-recovery' }))
+        .mockResolvedValueOnce(sseResponse(
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'amr',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        clientRequestId: 'request-1',
+        onRunStatus,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const firstCreate = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+      const retriedCreate = fetchMock.mock.calls[1] as unknown as [RequestInfo | URL, RequestInit];
+      expect(firstCreate[0]).toBe('/api/runs');
+      expect(retriedCreate[0]).toBe('/api/runs');
+      expect(retriedCreate[1].body).toBe(firstCreate[1].body);
+      expect(JSON.parse(String(retriedCreate[1].body)).clientRequestId).toBe('request-1');
+      expect(onRunStatus).not.toHaveBeenCalledWith('failed');
+      expect(handlers.onError).not.toHaveBeenCalled();
+      expect(handlers.onDone).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces the structured authority error after automatic run-create retries are exhausted', async () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const onRunStatus = vi.fn();
+      const outage = () => new Response(JSON.stringify({
+        error: {
+          code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+          message: 'workspace membership authority is temporarily unavailable',
+          retryable: true,
+        },
+      }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+      const fetchMock = vi.fn()
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'amr',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        clientRequestId: 'request-1',
+        onRunStatus,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(onRunStatus).toHaveBeenCalledWith('failed');
+      expect(handlers.onError).toHaveBeenCalledWith(expect.objectContaining({
+        message: 'workspace membership authority is temporarily unavailable',
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        retryable: true,
+        status: 503,
+      }));
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('marks invalid create-run JSON as failed', async () => {
     const handlers = createDaemonHandlers();
     const onRunStatus = vi.fn();
@@ -1886,6 +2227,351 @@ describe('streamViaDaemon', () => {
     expect(onRunEventId).toHaveBeenCalledWith('5');
   });
 
+  it('follows daemon-projected successor Runs until the logical strategy task is terminal', async () => {
+    const handlers = createDaemonHandlers();
+    const strategy = {
+      id: 'od-next-strategy',
+      version: '2.0.0',
+      packageHash: 'a'.repeat(64),
+      snapshotId: 'snapshot-1',
+    };
+    const requestProjection = {
+      taskExecutionId: 'task-1',
+      strategy,
+      inputStage: 'request',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: null,
+      activeRunId: 'run-request',
+      runMappings: [{ runId: 'run-request', taskRunIndex: 0 }],
+      terminal: false,
+    };
+    const productionProjection = {
+      ...requestProjection,
+      inputStage: 'production',
+      outcome: 'running',
+      executionMode: 'simple',
+      activeRunId: 'run-production',
+      nextRunId: 'run-production',
+      runMappings: [
+        { runId: 'run-request', taskRunIndex: 0 },
+        { runId: 'run-production', taskRunIndex: 1 },
+      ],
+    };
+    const completedProjection = {
+      ...productionProjection,
+      outcome: 'completed',
+      terminal: true,
+      nextRunId: undefined,
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') {
+        return jsonResponse({
+          runId: 'run-request',
+          taskExecutionId: 'task-1',
+          strategyTask: requestProjection,
+        });
+      }
+      if (url === '/api/runs/run-request/events') {
+        return sseResponse(
+          `event: stdout\ndata: {"chunk":"Decision summary.\\n"}\n\nevent: end\ndata: ${JSON.stringify({ code: 0, status: 'succeeded', strategyTask: productionProjection })}\n\n`,
+        );
+      }
+      if (url === '/api/runs/run-production/events') {
+        return sseResponse(
+          `event: stdout\ndata: {"chunk":"Final delivery."}\n\nevent: end\ndata: ${JSON.stringify({ code: 0, status: 'succeeded', strategyTask: completedProjection })}\n\n`,
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const onRunCreated = vi.fn();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'Build the operator UI' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunCreated,
+      onRunStatus,
+    });
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      '/api/runs',
+      '/api/runs/run-request/events',
+      '/api/runs/run-production/events',
+    ]);
+    expect(onRunCreated).toHaveBeenNthCalledWith(1, 'run-request', requestProjection);
+    expect(onRunCreated).toHaveBeenNthCalledWith(2, 'run-production', productionProjection);
+    expect(onRunStatus.mock.calls.filter(([status]) => status === 'succeeded')).toHaveLength(1);
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(handlers.onDone).toHaveBeenCalledWith('Decision summary.\nFinal delivery.');
+  });
+
+  it('posts an explicit strategy task handle only for a daemon-issued continuation', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-clarification' });
+      if (url === '/api/runs/run-clarification/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: 'answer', role: 'user', content: 'Desktop first' }],
+      signal: new AbortController().signal,
+      handlers,
+      taskExecutionId: 'task-clarification',
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]!.body));
+    expect(body.taskExecutionId).toBe('task-clarification');
+  });
+
+  // A canceled task ends the turn as canceled whatever the process did. A
+  // blocked task does not override the physical result: the Run succeeded, so
+  // the turn ends Done and the verdict rides along on the task projection.
+  it.each([
+    { outcome: 'blocked', physicalStatus: 'succeeded', expectedStatus: 'succeeded', expectsError: false },
+    { outcome: 'canceled', physicalStatus: 'failed', expectedStatus: 'canceled', expectsError: false },
+  ])('settles a terminal task outcome $outcome on the physical Run status $physicalStatus', async ({
+    outcome,
+    physicalStatus,
+    expectedStatus,
+    expectsError,
+  }) => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-terminal' });
+      if (url === '/api/runs/run-terminal/events') {
+        return sseResponse(`event: end\ndata: ${JSON.stringify({
+          code: physicalStatus === 'succeeded' ? 0 : 1,
+          status: physicalStatus,
+          strategyTask: {
+            taskExecutionId: 'task-terminal',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'production',
+            outcome,
+            route: 'full_plan',
+            executionMode: 'simple',
+            activeRunId: 'run-terminal',
+            terminal: true,
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'Build it' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(onRunStatus).toHaveBeenLastCalledWith(expectedStatus);
+    if (expectsError) {
+      expect(handlers.onError).toHaveBeenCalledTimes(1);
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } else {
+      expect(handlers.onError).not.toHaveBeenCalled();
+      expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  // OPEND-2565. A block the agent already explained is not a failure to report:
+  // asked for a prototype with nothing to build on, the agent answers in the
+  // chat and that reply is the turn's outcome. Raising a run error on top of it
+  // restated the same sentence inside a red "task execution failed" card, so a
+  // turn that had simply asked for more detail read as a crash. A machine gate
+  // that left no text ends the same way now — the `it.each` above, whose
+  // projection carries no blockedContext, pins that a succeeded Run stays Done.
+  it('leaves a blocked task to its own explanation instead of raising a run error', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-blocked' });
+      if (url === '/api/runs/run-blocked/events') {
+        return sseResponse(`event: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-blocked',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'clarification',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: 'simple',
+            activeRunId: 'run-blocked',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: ['od_next_agent_declared_block'],
+              visibleText: '由于原型需求被跳过，本轮无法形成可执行方案。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '你好' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+  });
+
+  // A planning turn the gate refused is the agent's reply. The user said
+  // "hello", the agent answered and planned nothing, and the daemon recorded
+  // the missing machine block on the task — but the Run finished cleanly and
+  // the reply on screen is the whole outcome of the turn. Raising a run error
+  // over it put a red "task could not complete" card under a greeting.
+  it("leaves a refused planning turn to the agent's reply instead of raising a run error", async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-refused' });
+      if (url === '/api/runs/run-refused') {
+        return jsonResponse({ deliverableValid: false, projectDeliverableValid: false });
+      }
+      if (url === '/api/runs/run-refused/events') {
+        return sseResponse(`event: stdout\ndata: ${JSON.stringify({
+          chunk: '你好！告诉我你想做什么设计，我来帮你规划。',
+        })}\n\nevent: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-refused',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'request',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: null,
+            activeRunId: 'run-refused',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: [
+                'od_next_canonical_deliverable_invalid',
+                'od_next_protocol_runtime_state_missing',
+              ],
+              visibleText: '你好！告诉我你想做什么设计，我来帮你规划。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '你好' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+  });
+
+  // The same rule at production. The plan was frozen, the build ran, and a
+  // gate refused the turn because nothing usable was written. The Run still
+  // succeeded, so the turn ends Done with the agent's own words; the verdict
+  // and its reason code reach the message through the settled projection, not
+  // through a run error. The next message starts a new task.
+  it("keeps a production turn the gate blocked on the Run's own success", async () => {
+    const handlers = createDaemonHandlers();
+    const onStrategyTaskSettled = vi.fn();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-gated' });
+      if (url === '/api/runs/run-gated') {
+        return jsonResponse({ deliverableValid: false, projectDeliverableValid: false });
+      }
+      if (url === '/api/runs/run-gated/events') {
+        return sseResponse(`event: stdout\ndata: ${JSON.stringify({
+          chunk: '好的，按你说的三页来做。计划如下：1) 首页 2) 列表 3) 详情。',
+        })}\n\nevent: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-gated',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'production',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: 'simple',
+            activeRunId: 'run-gated',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: ['od_next_protocol_runtime_state_missing'],
+              visibleText: '好的，按你说的三页来做。计划如下：1) 首页 2) 列表 3) 详情。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '深色，三页' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+      onStrategyTaskSettled,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+    expect(onStrategyTaskSettled).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'blocked',
+      inputStage: 'production',
+      blockedContext: expect.objectContaining({
+        reasonCodes: ['od_next_protocol_runtime_state_missing'],
+      }),
+    }));
+  });
+
   it('reattaches to an existing daemon run after the last stored event id', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn()
@@ -1933,13 +2619,55 @@ describe('streamViaDaemon', () => {
   });
 
   it('reports an error when reconnects are exhausted before an end event', async () => {
+    // 走满 5 次预算的路径现在会**退避**(见 providers/daemon.ts 的
+    // DAEMON_STREAM_RECONNECT_BACKOFF_*),整段要十几秒真实时间。用假时钟推,
+    // 既保住确定性也不让这一条把套件拖慢。
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+        if (url === '/api/runs/run-1/events') return sseResponse('');
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'mock',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
+      expect(handlers.onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'daemon stream disconnected before run completed',
+          code: 'DAEMON_STREAM_DISCONNECTED',
+        }),
+      );
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /*
+   * 下面三条测的是「重连读数怎么交给 UI」(设计稿组件 22 · 第 82–84 格)。
+   * 传输层的重连行为一个字没动 —— 只是把循环里那个局部变量变成可观察的信号。
+   */
+
+  it('reports reconnect progress while a daemon stream keeps dropping', async () => {
     const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') return sseResponse('');
-      throw new Error(`unexpected fetch ${url}`);
-    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse(''))
+      .mockResolvedValueOnce(sseResponse(''))
+      .mockResolvedValueOnce(sseResponse('id: 1\nevent: stdout\ndata: {"chunk":"hi"}\n\nid: 2\nevent: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
     vi.stubGlobal('fetch', fetchMock);
 
     await streamViaDaemon({
@@ -1950,58 +2678,136 @@ describe('streamViaDaemon', () => {
       handlers,
     });
 
-    expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
-    expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'daemon stream disconnected before run completed',
-        code: 'DAEMON_STREAM_DISCONNECTED',
-      }),
-    );
-    expect(handlers.onDone).not.toHaveBeenCalled();
+    // 恢复后发一条 cleared 让那一行整个消失 —— 设计稿明说不留「已恢复」
+    expect(handlers.onReconnect.mock.calls.map(([state]) => state)).toEqual([
+      { attempt: 1, max: DAEMON_STREAM_RECONNECT_LIMIT, phase: 'reconnecting' },
+      { attempt: 2, max: DAEMON_STREAM_RECONNECT_LIMIT, phase: 'reconnecting' },
+      { attempt: 0, max: DAEMON_STREAM_RECONNECT_LIMIT, phase: 'cleared' },
+    ]);
+    expect(handlers.onDone).toHaveBeenCalledWith('hi');
+  });
+
+  it('keeps the surfaced reconnect count monotonic when resumed streams only carry keepalives', async () => {
+    // keepalive 会把传输层的重连**预算**清零(那是刻意的:一条安静但活着的流不该被判死),
+    // 但用户眼里那次「连上了什么也没来」不是恢复 —— 读数不能跟着回到 1/5(盘点 R7)。
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const attempts = handlers.onReconnect.mock.calls
+      .map(([state]) => state)
+      .filter((state) => state.phase === 'reconnecting')
+      .map((state) => state.attempt);
+    expect(attempts).toEqual([1, 2, 3]);
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('hands the reconnect row an exhausted phase when the retry budget runs out', async () => {
+    // 走满 5 次预算的路径现在会**退避**(见 providers/daemon.ts 的
+    // DAEMON_STREAM_RECONNECT_BACKOFF_*),整段要十几秒真实时间。用假时钟推,
+    // 既保住确定性也不让这一条把套件拖慢。
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+        if (url === '/api/runs/run-1/events') return sseResponse('');
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'mock',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      const states = handlers.onReconnect.mock.calls.map(([state]) => state);
+      // 5 次尝试走满,最后一格(83)是 5/5,下一条就是「交回给人」(84)
+      expect(states.map((state) => state.attempt)).toEqual([1, 2, 3, 4, 5, 5]);
+      expect(states.at(-1)).toEqual({
+        attempt: DAEMON_STREAM_RECONNECT_LIMIT,
+        max: DAEMON_STREAM_RECONNECT_LIMIT,
+        phase: 'exhausted',
+      });
+      expect(handlers.onError).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'DAEMON_STREAM_DISCONNECTED' }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('marks a daemon run failed when the SSE stream closes silently and status is still active', async () => {
-    const handlers = createDaemonHandlers();
-    const onRunStatus = vi.fn();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') return sseResponse('');
-      if (url === '/api/runs/run-1') {
-        return new Response(
-          JSON.stringify({
-            id: 'run-1',
-            status: 'running',
-            createdAt: 1,
-            updatedAt: 2,
-            exitCode: null,
-            signal: null,
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    // 走满 5 次预算的路径现在会**退避**(见 providers/daemon.ts 的
+    // DAEMON_STREAM_RECONNECT_BACKOFF_*),整段要十几秒真实时间。用假时钟推,
+    // 既保住确定性也不让这一条把套件拖慢。
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const onRunStatus = vi.fn();
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+        if (url === '/api/runs/run-1/events') return sseResponse('');
+        if (url === '/api/runs/run-1') {
+          return new Response(
+            JSON.stringify({
+              id: 'run-1',
+              status: 'running',
+              createdAt: 1,
+              updatedAt: 2,
+              exitCode: null,
+              signal: null,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
 
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'hello' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-      onRunStatus,
-    });
+      const streaming = streamViaDaemon({
+        agentId: 'mock',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        onRunStatus,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
 
-    expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
-    expect(onRunStatus).toHaveBeenCalledWith('failed');
-    expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'daemon stream disconnected before run completed',
-        code: 'DAEMON_STREAM_DISCONNECTED',
-      }),
-    );
-    expect(handlers.onDone).not.toHaveBeenCalled();
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
+      expect(onRunStatus).toHaveBeenCalledWith('failed');
+      expect(handlers.onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'daemon stream disconnected before run completed',
+          code: 'DAEMON_STREAM_DISCONNECTED',
+        }),
+      );
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('includes selected preview comments without requiring visible draft text', async () => {
@@ -2050,7 +2856,7 @@ describe('streamViaDaemon', () => {
     ]);
   });
 
-  it('sends canonical research query metadata to daemon runs', async () => {
+  it('sends multi-turn research with explicit current and prior transcript framing', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -2063,17 +2869,28 @@ describe('streamViaDaemon', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'Search for: EV market' }],
+      agentId: 'codex',
+      history: [
+        { id: '1', role: 'user', content: 'same query' },
+        { id: '2', role: 'assistant', content: 'prior answer same query', agentId: 'codex' },
+        { id: '3', role: 'user', content: 'same query' },
+      ],
       systemPrompt: '',
       signal: new AbortController().signal,
       handlers,
-      research: { enabled: true, query: 'EV market' },
+      research: { enabled: true },
     });
 
     const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
     const body = JSON.parse(String(createRunInit.body));
-    expect(body.research).toEqual({ enabled: true, query: 'EV market' });
+    expect(body.message).toBe(
+      '## user\nsame query\n\n## assistant\nprior answer same query\n\n## user\nsame query',
+    );
+    expect(body.currentPrompt).toBe('same query');
+    expect(body.priorTranscript).toBe(
+      '## user\nsame query\n\n## assistant\nprior answer same query',
+    );
+    expect(body.research).toEqual({ enabled: true });
   });
 
   it('preserves detail on agent status events', async () => {
@@ -2255,6 +3072,9 @@ function createDaemonHandlers() {
   return {
     ...createStreamHandlers(),
     onAgentEvent: vi.fn(),
+    onArtifactCount: vi.fn(),
+    // 重连读数(组件 22)。可选回调,挂上来是为了能在测里读它的调用序列。
+    onReconnect: vi.fn<(state: DaemonReconnectState) => void>(),
   };
 }
 

@@ -3,6 +3,7 @@ import {
   panelEventToSse,
   CRITIQUE_SSE_EVENT_NAMES,
   isPanelEvent,
+  stripCritiqueGrammar,
   type PanelEvent,
 } from '../src/critique';
 
@@ -295,5 +296,59 @@ describe('isPanelEvent (numeric domain enforcement, lefarcen P2 on PR #1314 roun
     expect(isPanelEvent({
       type: 'parser_warning', runId: 'r', kind: 'weak_debate', position: 0,
     })).toBe(true);
+  });
+});
+
+/**
+ * 用户截图里那一段:`<MUST_FIX id="R1-C1">…</MUST_FIX>` 原样打在正文里,
+ * 还被 markdown 渲成了斜体 —— 斜体正是**下划线**造成的:`MUST_FIX` 里的 `_`
+ * 成对出现,markdown 当成强调标记。所以「斜体」本身就是这条语法带下划线的证据。
+ *
+ * 真因:`CRITIQUE_INLINE_TAGS` 把它写成了 `MUSTFIX`(没有下划线),
+ * 而 prompt(`apps/daemon/src/prompts/panel.ts`)、解析器
+ * (`apps/daemon/src/critique/parsers/v1.ts` 的 `MUST_FIX_RE`)和全部 fixture
+ * 用的都是 `MUST_FIX`。列表里那个 `MUSTFIX` 在真实数据里一次都没出现过 ——
+ * 它挡不住任何东西,同一段话里的 `<PANELIST>` 被剥掉了,它却整条留在正文里。
+ *
+ * 下面的样本逐字取自真实录制 `.od/runs/81e03cea-…/events.jsonl` 的
+ * `text_delta`,不是编的。
+ */
+describe('stripCritiqueGrammar:MUST_FIX 不许漏进正文', () => {
+  /** 真实录制里的一条 `text_delta`,逐字 */
+  const REAL = '<PANELIST role="Critic" score="8.4"><MUST_FIX id="R1-C1">移除标题与引语的强制换行，避免窄屏孤行。</MUST_FIX></PANELIST>';
+
+  it('剥掉 MUST_FIX 的壳,留住里面那句人话', () => {
+    const out = stripCritiqueGrammar(REAL);
+    expect(out).not.toContain('<MUST_FIX');
+    expect(out).not.toContain('</MUST_FIX');
+    // 属性也跟着标记一起消失,不许剩下 `id="R1-C1"` 这种碎片
+    expect(out).not.toContain('id="R1-C1"');
+    // 剥的是壳,不是字
+    expect(out).toContain('移除标题与引语的强制换行');
+  });
+
+  it('真实录制里出现过的七个标记,一个都不留', () => {
+    // 这七个是把三份录制的 events.jsonl 全扫一遍得到的实际集合
+    const emitted = ['CRITIQUE_RUN', 'MUST_FIX', 'PANELIST', 'RESOLVED', 'ROUND', 'ROUND_END', 'SHIP'];
+    for (const tag of emitted) {
+      const out = stripCritiqueGrammar(`前面。<${tag} a="1">里面的话。</${tag}>后面。`);
+      expect(out, `<${tag}> 没剥干净`).not.toContain(`<${tag}`);
+      expect(out, `<${tag}> 把正文吃掉了`).toContain('里面的话。');
+    }
+  });
+
+  /*
+   * 正面对照 —— 防的是「凡是尖括号一律删掉」这种糊弄式修法。
+   * 少了这一条,把正则改成 `/<[^>]*>/g` 也能让上面两条变绿。
+   */
+  it('长得像但不是的东西,一个字都不许动', () => {
+    const innocent = [
+      '我们讨论了 <PANELISTS> 这个复数拼法,以及 a<b 和 5 < 7 的写法。',
+      '`MUST_FIX` 这个词出现在正文里(没有尖括号)时当然要留着。',
+      '<div class="x">这是普通 HTML,不归这套语法管。</div>',
+      '<MUST_FIXED>多一截也不算这个标记。</MUST_FIXED>',
+      '<ROUNDABOUT> 也不是 ROUND。',
+    ].join('\n');
+    expect(stripCritiqueGrammar(innocent)).toBe(innocent);
   });
 });

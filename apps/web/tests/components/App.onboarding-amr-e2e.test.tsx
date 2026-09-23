@@ -1,19 +1,21 @@
 // @vitest-environment jsdom
 //
 // High-fidelity integration test for the onboarding -> home agent-selection
-// bug: the user picks (or accepts the recommended default) Open Design AMR
+// bug: the user picks (or accepts the recommended default) OpenDesign AMR
 // during first-run onboarding, but the home agent picker comes back showing
 // Claude Code. Unlike the component-level EntryShell tests (which mock
 // `onAgentChange` so it never updates config), this mounts the REAL `App`
 // with the REAL router and REAL EntryView/onboarding UI, so the App-level
-// config lifecycle + auto-select interact exactly as in production. Only the
-// daemon/provider boundary is mocked, and AMR (vela) detection is made to lag
+// config lifecycle + auto-select interact exactly as in production. Network
+// boundaries and CMS content hosts are mocked; AMR (vela) detection is made to lag
 // the first agent probe — the exact window in which the bug surfaces.
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { navigate } from '../../src/router';
 import type { AppConfig } from '../../src/types';
 import { loadConfig, fetchDaemonConfig } from '../../src/state/config';
 import {
@@ -29,6 +31,31 @@ import { fetchAmrModels } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
+
+// App owns route eligibility; the host suites separately exercise authorization,
+// network cancellation and verified content. These stand-ins expose whether App
+// allows either host to display over the real onboarding page.
+vi.mock('../../src/components/ProductionCampaignModal', () => ({
+  ProductionCampaignModal: ({ authenticated }: { authenticated: boolean }) =>
+    authenticated ? <div role="dialog" aria-label="Production campaign witness" /> : null,
+}));
+vi.mock('../../src/components/TestCampaignModal', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/TestCampaignModal')>()),
+  TestCampaignModal: ({ authenticated }: { authenticated: boolean }) =>
+    authenticated ? <div role="dialog" aria-label="Test campaign witness" /> : null,
+}));
+
+// The badge and the hover entry are the top-right CMS touchpoints. Their own
+// suites cover authorization and content; here they only report whether App's
+// route gating lets either one on screen.
+vi.mock('../../src/components/ProductionCampaignBadge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/ProductionCampaignBadge')>()),
+  ProductionCampaignBadge: () => <div data-testid="production-campaign-badge-witness" />,
+}));
+vi.mock('../../src/components/ProductionCampaignHover', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/ProductionCampaignHover')>()),
+  ProductionCampaignHover: () => <div data-testid="production-campaign-hover-witness" />,
+}));
 
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
@@ -236,6 +263,99 @@ afterEach(() => {
   analyticsMocks.track.mockReset();
 });
 
+describe('CMS campaigns during onboarding', () => {
+  it('suppresses both hosts on the login page even after the account is restored', async () => {
+    window.history.replaceState(null, '', '/onboarding');
+    render(<App />);
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    expect(screen.queryByRole('dialog', { name: 'Production campaign witness' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Test campaign witness' })).toBeNull();
+  });
+
+  it('allows hosts after leaving onboarding and removes them on returning to login', async () => {
+    window.history.replaceState(null, '', '/onboarding');
+    render(<App />);
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    // Keep onboarding incomplete so the real passive-reauth flow does not
+    // immediately redirect a restored, fully configured account back home.
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByRole('dialog', { name: 'Test campaign witness' });
+
+    await act(async () => navigate({ kind: 'home', view: 'onboarding' }));
+    expect(screen.queryByRole('dialog', { name: 'Production campaign witness' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Test campaign witness' })).toBeNull();
+
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByRole('dialog', { name: 'Test campaign witness' });
+  });
+});
+
+describe('CMS campaigns outside the home view', () => {
+  // The top-right hosts are desktop-only, so the route assertions need a host
+  // bridge in place before they can say anything about gating.
+  let restoreHost: (() => void) | undefined;
+  beforeEach(() => {
+    restoreHost = installMockOpenDesignHost();
+  });
+  afterEach(() => {
+    restoreHost?.();
+    restoreHost = undefined;
+  });
+  // Every campaign placement this app authorizes is a HOME placement
+  // (`opend.home.*`). The hosts follow: the modal and the top-right entries
+  // belong to the home view, not to a project workbench or another entry tab.
+  const witnesses = () => ({
+    modals: [
+      screen.queryByRole('dialog', { name: 'Production campaign witness' }),
+      screen.queryByRole('dialog', { name: 'Test campaign witness' }),
+    ],
+    topRight: [
+      screen.queryByTestId('production-campaign-badge-witness'),
+      screen.queryByTestId('production-campaign-hover-witness'),
+    ],
+  });
+  async function arriveOnHome() {
+    window.history.replaceState(null, '', '/onboarding');
+    render(<App />);
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByTestId('production-campaign-badge-witness');
+    await screen.findByTestId('production-campaign-hover-witness');
+  }
+
+  it('withdraws every host on another entry view and restores them on home', async () => {
+    await arriveOnHome();
+
+    await act(async () => navigate({ kind: 'home', view: 'projects' }));
+    const away = witnesses();
+    expect(away.modals).toEqual([null, null]);
+    expect(away.topRight).toEqual([null, null]);
+
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByTestId('production-campaign-badge-witness');
+  });
+
+  it('withdraws every host on an open project', async () => {
+    await arriveOnHome();
+
+    await act(async () =>
+      navigate({
+        kind: 'project',
+        projectId: 'project-1',
+        conversationId: null,
+        fileName: null,
+      }),
+    );
+    const inProject = witnesses();
+    expect(inProject.modals).toEqual([null, null]);
+    expect(inProject.topRight).toEqual([null, null]);
+  });
+});
+
 describe('onboarding -> home AMR selection (end to end)', () => {
   // Known PR #6475 race: when AMR detection trails the first agent probe, the
   // Home switcher can still settle on the registry-first `default` agent after
@@ -262,7 +382,7 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     // default and completes onboarding directly; the removed About-you,
     // Newsletter, and design-system steps must not be part of this witness.
     const hostedSource = await screen.findByRole('radio', {
-      name: /Open Design Hosted/i,
+      name: /OpenDesign Hosted/i,
     });
     expect(hostedSource.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));

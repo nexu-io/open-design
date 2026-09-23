@@ -1,3 +1,9 @@
+import type Database from 'better-sqlite3';
+
+import { getWorkspaceResourceByResourceId } from '../db.js';
+
+type SqliteDb = Database.Database;
+
 const WORKSPACE_TEAM_DESIGN_SYSTEM_BINDING_PREFIX = 'team-mirror:';
 
 /**
@@ -40,4 +46,19 @@ export function designSystemLogicalResourceId(bindingResourceId: string): string
   } catch {
     return bindingResourceId;
   }
+}
+
+export function workspaceTeamDesignSystemBindingAllowsRead(
+  db: SqliteDb,
+  workspaceId: string,
+  designSystemId: string,
+): boolean {
+  const binding = getWorkspaceResourceByResourceId(
+    db,
+    'design_system',
+    workspaceTeamDesignSystemBindingResourceId(workspaceId, designSystemId),
+  );
+  return binding?.workspaceId === workspaceId
+    && binding.visibility === 'team'
+    && binding.resourceState !== 'deleted';
 }

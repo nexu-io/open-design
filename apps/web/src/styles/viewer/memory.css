@@ -32,7 +32,7 @@
 }
 .memory-path-copied-badge {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--success-fg, #16a34a);
   background: var(--success-bg, #dcfce7);
   padding: 1px 6px;
@@ -213,7 +213,7 @@
   color: var(--text-success, #1f7a4d);
   border: 1px solid rgba(34, 139, 90, 0.32);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* Library install UI */
@@ -265,7 +265,7 @@
 .library-section-count {
   margin-left: 6px;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .library-add-btn {
@@ -537,7 +537,7 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-weight: 500;
+  font-weight: 600;
 }
 .library-source-badge.installed {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -645,6 +645,15 @@
   min-height: 0;
   background: var(--bg);
 }
+/* Manual editing is an active workspace interaction, so its controls must
+   remain clickable above body-portaled non-modal prompts such as
+   ExperienceSurvey (z-index 1400). Raise the shell that is the prompt's
+   direct stacking sibling; nested workspace layers cannot reliably escape
+   the shell's grid painting order. */
+.workspace-shell:has(.manual-edit-workspace) {
+  position: relative;
+  z-index: 1500;
+}
 .manual-edit-workspace > .manual-edit-right {
   position: absolute;
   top: 8px;
@@ -750,7 +759,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--manual-edit-field-text);
-  font-weight: 500;
+  font-weight: 600;
 }
 .manual-edit-measure-list {
   display: flex;
@@ -789,7 +798,7 @@
 .manual-edit-param-row span {
   color: var(--manual-edit-field-muted);
   font-size: var(--font-size-12, 12px);
-  font-weight: 500;
+  font-weight: 600;
   line-height: 125%;
 }
 .manual-edit-param-row code {
@@ -936,7 +945,7 @@
   color: var(--text-strong);
   font: inherit;
   font-size: var(--font-size-14, 14px);
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: background-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
     border-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
@@ -976,7 +985,7 @@
   max-width: 44%;
   padding-right: var(--spacing-8);
   overflow: hidden;
-  font-weight: 500;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1066,7 +1075,7 @@
   display: flex; align-items: center; justify-content: space-between;
   background: transparent; border: none; padding: 0 var(--spacing-2);
   font-size: var(--font-size-13, 13px); color: var(--text-muted); cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 125%;
 }
 .cc-quad-head em { color: var(--text); font-style: normal; }
@@ -1079,7 +1088,7 @@
   color: var(--manual-edit-field-text);
   padding: 0 var(--spacing-8); height: 40px; font-size: var(--font-size-13, 13px); gap: var(--spacing-2);
 }
-.cc-quad-axis { color: var(--manual-edit-field-muted); font-style: normal; font-size: var(--font-size-12, 12px); flex: 0 0 auto; font-weight: 500; }
+.cc-quad-axis { color: var(--manual-edit-field-muted); font-style: normal; font-size: var(--font-size-12, 12px); flex: 0 0 auto; font-weight: 600; }
 .cc-step-quad {
   flex-basis: 12px;
   width: 12px;
@@ -1110,7 +1119,7 @@
 }
 .cc-suggest-head {
   display: flex; align-items: baseline; gap: var(--spacing-6);
-  font-size: var(--font-size-12, 12px); font-weight: 500;
+  font-size: var(--font-size-12, 12px); font-weight: 600;
   color: var(--manual-edit-field-muted);
 }
 .cc-suggest-head em { font-style: normal; color: var(--manual-edit-field-text); }
@@ -1144,7 +1153,7 @@
 .cc-suggest-token {
   flex: 0 1 auto; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--manual-edit-field-muted); font-weight: 500;
+  color: var(--manual-edit-field-muted); font-weight: 600;
 }
 .cc-suggest-val {
   flex: 0 0 auto;
@@ -1329,7 +1338,8 @@
 .manual-edit-footer-right {
   flex: 0 0 auto;
 }
-.manual-edit-delete-btn {
+.manual-edit-delete-btn,
+.manual-edit-history-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1346,17 +1356,24 @@
     color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
     transform var(--duration-faster, 100ms) var(--curve-easy-ease, ease);
 }
+.manual-edit-history-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-muted);
+  color: var(--text-strong);
+}
 .manual-edit-delete-btn:hover:not(:disabled) {
   background: var(--red-bg);
   color: var(--red);
 }
-.manual-edit-delete-btn:active:not(:disabled) {
+.manual-edit-delete-btn:active:not(:disabled),
+.manual-edit-history-btn:active:not(:disabled) {
   transform: translateY(1px);
 }
 .manual-edit-delete-confirm-action {
   color: var(--red);
 }
 .manual-edit-delete-btn:disabled,
+.manual-edit-history-btn:disabled,
 .manual-edit-footer-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -1371,7 +1388,7 @@
   background: var(--bg-subtle);
   font: inherit;
   font-size: var(--font-size-14, 14px);
-  font-weight: 500;
+  font-weight: 600;
   transition: background-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
     border-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
     color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),

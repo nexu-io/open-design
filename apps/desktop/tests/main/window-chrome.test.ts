@@ -7,7 +7,7 @@ const runtimeSource = readFileSync(new URL("../../src/main/runtime.ts", import.m
 /**
  * runtime.ts constructs three BrowserWindows — the brand splash
  * (`createSplashWindow`), the desktop pet, and the main app window — and the
- * splash, declared FIRST, shares the `title: "Open Design"` / `width: 1280`
+ * splash, declared FIRST, shares the `title: "OpenDesign"` / `width: 1280`
  * markers with the main window while intentionally omitting
  * `backgroundThrottling: false`. A loose `new BrowserWindow({` anchor therefore
  * locks onto the splash block. Anchor instead on the `const window =`
@@ -38,6 +38,28 @@ describe("desktop BrowserWindow chrome options", () => {
     expect(runtimeSource).toContain("--app-chrome-traffic-space: 10px !important;");
     expect(runtimeSource).toContain("flex: 0 0 var(--app-chrome-traffic-space) !important;");
     expect(runtimeSource).toContain("width: var(--app-chrome-traffic-space) !important;");
+  });
+
+  test("centers the macOS traffic lights on the 44px top chrome (OPEND-3111)", () => {
+    // The chrome row is 44px tall (routines.css `.workspace-shell
+    // .workspace-tabs-chrome.app-chrome-header`), so its midline is 22 and the
+    // 12px traffic-light circles start at 22 - 6 = 16. Keep this in step with
+    // the CSS: apps/web/tests/styles/top-chrome-height.test.ts pins the 44.
+    // The offset lives in MAC_WINDOW_CHROME, spread into the main window.
+    expect(runtimeSource).toContain("trafficLightPosition: { x: 12, y: 16 }");
+    expect(mainAppWindowOptions()).toContain("...MAC_WINDOW_CHROME");
+  });
+
+  test("boots on the inlined pixel-scan wordmark instead of a one-shot clip (OPEND-3202)", () => {
+    // The splash is up before any HTTP origin exists, so the wordmark ships
+    // inlined from splash-pixel-scan.ts; the old <video> clip played once and
+    // froze for the rest of a cold boot.
+    expect(runtimeSource).toContain('from "./splash-pixel-scan.js"');
+    expect(runtimeSource).toContain("${SPLASH_PIXEL_SCAN_STYLE}");
+    expect(runtimeSource).toContain("${SPLASH_PIXEL_SCAN_MARKUP}");
+    expect(runtimeSource).toContain("${splashPixelScanScript()}");
+    expect(runtimeSource).not.toContain("splash-video");
+    expect(runtimeSource).not.toContain("<video");
   });
 
   test("mirrors macOS fullscreen state onto the renderer for chrome CSS", () => {

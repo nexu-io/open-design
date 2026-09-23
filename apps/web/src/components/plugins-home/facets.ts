@@ -3,7 +3,8 @@
 // The Home starter grid is organized around the artifact a user wants
 // to make first:
 //
-//   Slides · Prototype · Live Artifact · Image · Video · HyperFrames · Audio
+//   Slides · Document · WebGL · Prototype · Live Artifact · Image · Video ·
+//   HyperFrames · Audio
 //
 // Prototype, Slides, Image, and Video have enough bundled templates to
 // deserve a second row. Those child buckets follow the Feishu prompt
@@ -137,49 +138,107 @@ function isLiveArtifactPlugin(record: InstalledPluginRecord): boolean {
   return (CURATED_LIVE_ARTIFACT_PLUGIN_IDS as readonly string[]).includes(record.id);
 }
 
+// Documents (OPEND-3118): prototype-mode plugins whose tags name a document —
+// résumés, reports, specs, invoices, guides, letters. This is the tag group the
+// retired 原型 → 文档 / 报告 scene bucket matched, so the same plugins move from
+// that sub-row to their own kind; every consumer that reads `document` (the
+// Community 文档 tab, the Home `document` chip) now finds them. Mode-gated so a
+// deck about a report stays a deck and an image poster tagged `resume` stays
+// an image.
+const DOCUMENT_TAG_SLUGS = [
+  'report',
+  'financial-report',
+  'finance-report',
+  'case-report',
+  'clinical-case',
+  'case-study',
+  'guide',
+  'tutorial',
+  'pm-spec',
+  'prd',
+  'spec',
+  'invoice',
+  'resume',
+  'cv',
+  'docs',
+  'documentation',
+  'letter',
+  'one-pager',
+  'memo',
+] as const;
+
+function isDocumentPlugin(record: InstalledPluginRecord): boolean {
+  return byMode('prototype')(record) && hasAnySlug(record, DOCUMENT_TAG_SLUGS);
+}
+
+// WebGL (OPEND-3098): the bundled `webgl-*` examples — full-screen shader /
+// 3D scenes that render in the powered preview. Any of these slugs is enough;
+// a plugin that names webgl / a shader / the GPU is a GPU artifact whichever
+// mode it declares, and the Home `webgl` chip creates them as prototypes.
+const WEBGL_TESTS = [byAnySlug('webgl', 'webgl2', 'shader', 'gpu')];
+
+function isWebglPlugin(record: InstalledPluginRecord): boolean {
+  return matchesAny(record, WEBGL_TESTS);
+}
+
 // Curated artifact-kind list. Keep this aligned with the Home creation
 // intents and the app's artifact product types.
 const PRIMARY_CATEGORIES: readonly CategoryDef[] = [
   {
     slug: 'deck',
     label: 'Slides',
-    starterPrompt: 'Create an Open Design plugin that generates a polished slide deck from a narrative brief.',
+    starterPrompt: 'Create an OpenDesign plugin that generates a polished slide deck from a narrative brief.',
     test: byMode('deck'),
+  },
+  // `find` takes the first hit, so Document and WebGL sit ahead of the
+  // prototype mode they share: a prototype-mode plugin is a document or a
+  // GPU scene FIRST, and only a plain prototype when it is neither.
+  {
+    slug: 'document',
+    label: 'Document',
+    starterPrompt: 'Create an OpenDesign plugin that generates a polished document — a report, spec, résumé, or invoice — from a brief.',
+    test: (record) => isDocumentPlugin(record) && !isLiveArtifactPlugin(record),
+  },
+  {
+    slug: 'webgl',
+    label: 'WebGL',
+    starterPrompt: 'Create an OpenDesign plugin that generates a real-time WebGL shader or 3D scene that runs live on the GPU.',
+    test: (record) => isWebglPlugin(record) && !isLiveArtifactPlugin(record),
   },
   {
     slug: 'prototype',
     label: 'Prototype',
-    starterPrompt: 'Create an Open Design plugin that generates an interactive prototype from a product brief.',
+    starterPrompt: 'Create an OpenDesign plugin that generates an interactive prototype from a product brief.',
     test: (record) => byMode('prototype')(record) && !isLiveArtifactPlugin(record),
   },
   {
     slug: 'live-artifact',
     label: 'Live Artifact',
-    starterPrompt: 'Create an Open Design plugin that generates a live artifact with refreshable, data-aware UI.',
+    starterPrompt: 'Create an OpenDesign plugin that generates a live artifact with refreshable, data-aware UI.',
     test: isLiveArtifactPlugin,
   },
   {
     slug: 'image',
     label: 'Image',
-    starterPrompt: 'Create an Open Design plugin that generates image assets from structured creative direction.',
+    starterPrompt: 'Create an OpenDesign plugin that generates image assets from structured creative direction.',
     test: byMode('image'),
   },
   {
     slug: 'video',
     label: 'Video',
-    starterPrompt: 'Create an Open Design plugin that generates video prompts, storyboards, or render-ready motion artifacts.',
+    starterPrompt: 'Create an OpenDesign plugin that generates video prompts, storyboards, or render-ready motion artifacts.',
     test: isVideoPlugin,
   },
   {
     slug: 'hyperframes',
     label: 'HyperFrames',
-    starterPrompt: 'Create an Open Design plugin that generates a HyperFrames-ready motion composition.',
+    starterPrompt: 'Create an OpenDesign plugin that generates a HyperFrames-ready motion composition.',
     test: isHyperFramesPlugin,
   },
   {
     slug: 'audio',
     label: 'Audio',
-    starterPrompt: 'Create an Open Design plugin that generates audio, voice, or sound-design assets from a brief.',
+    starterPrompt: 'Create an OpenDesign plugin that generates audio, voice, or sound-design assets from a brief.',
     test: byMode('audio'),
   },
 ];
@@ -237,7 +296,7 @@ const DECK_SUBCATEGORIES: readonly SubcategoryDef[] = DECK_COMMERCIAL_ORDER.map(
   parent: 'deck',
   slug: id,
   label: DECK_COMMERCIAL_LABELS[id],
-  starterPrompt: `Create an Open Design deck plugin for the ${DECK_COMMERCIAL_LABELS[id]} scene — a decision-grade slide deck with the structure, language, and visual discipline that scene's audience expects.`,
+  starterPrompt: `Create an OpenDesign deck plugin for the ${DECK_COMMERCIAL_LABELS[id]} scene — a decision-grade slide deck with the structure, language, and visual discipline that scene's audience expects.`,
   test: (record) => resolveCommercialCategoryId(record) === id,
 }));
 
@@ -258,7 +317,6 @@ const SUBCATEGORY_DISPLAY_ORDER: Record<string, readonly string[]> = {
     'business-dashboards',
     'app-prototypes',
     'developer-tools',
-    'docs-reports',
   ],
   // Deck order is the commercial-priority order declared above.
   deck: DECK_COMMERCIAL_ORDER,
@@ -279,9 +337,9 @@ function orderSubcategoriesForDisplay(parent: string, options: FacetOption[]): F
     .map((entry) => entry.option);
 }
 
-// Scene child buckets based on the Feishu prompt taxonomy. HyperFrames
-// and Audio intentionally have no children, so selecting them keeps the
-// section flat.
+// Scene child buckets based on the Feishu prompt taxonomy. Document, WebGL,
+// HyperFrames and Audio intentionally have no children, so selecting them
+// keeps the section flat.
 //
 // NOTE: array order here is matching precedence (see SUBCATEGORY_DISPLAY_ORDER
 // above), NOT the on-screen order. Keep it stable.
@@ -290,7 +348,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'business-dashboards',
     label: 'Dashboards',
-    starterPrompt: 'Create an Open Design prototype plugin for business systems, admin panels, or analytics dashboards.',
+    starterPrompt: 'Create an OpenDesign prototype plugin for business systems, admin panels, or analytics dashboards.',
     test: byAnySlug(
       'dashboard',
       'admin-panel',
@@ -310,7 +368,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'app-prototypes',
     label: 'Apps',
-    starterPrompt: 'Create an Open Design prototype plugin for multi-screen apps, onboarding, or task-productivity flows.',
+    starterPrompt: 'Create an OpenDesign prototype plugin for multi-screen apps, onboarding, or task-productivity flows.',
     test: byAnySlug(
       'mobile',
       'app',
@@ -332,7 +390,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'landing-marketing',
     label: 'Landing / marketing',
-    starterPrompt: 'Create an Open Design prototype plugin for landing pages, marketing sites, pricing pages, or campaign pages.',
+    starterPrompt: 'Create an OpenDesign prototype plugin for landing pages, marketing sites, pricing pages, or campaign pages.',
     test: byAnySlug(
       'landing',
       'landing-page',
@@ -355,7 +413,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'developer-tools',
     label: 'Developer tools',
-    starterPrompt: 'Create an Open Design prototype plugin for developer tools, engineering workflows, docs, or code collaboration.',
+    starterPrompt: 'Create an OpenDesign prototype plugin for developer tools, engineering workflows, docs, or code collaboration.',
     test: byAnySlug(
       'engineering',
       'docs',
@@ -369,33 +427,14 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
       'issue',
     ),
   },
-  {
-    parent: 'prototype',
-    slug: 'docs-reports',
-    label: 'Docs / reports',
-    starterPrompt: 'Create an Open Design prototype plugin for reports, documents, case studies, specs, invoices, or resumes.',
-    test: byAnySlug(
-      'report',
-      'financial-report',
-      'finance-report',
-      'case-report',
-      'clinical-case',
-      'case-study',
-      'guide',
-      'tutorial',
-      'pm-spec',
-      'prd',
-      'spec',
-      'invoice',
-      'resume',
-      'cv',
-    ),
-  },
+  // (The former `docs-reports` prototype scene is the `document` primary
+  // category now — see DOCUMENT_TAG_SLUGS. Document, like HyperFrames and
+  // Audio, stays flat.)
   {
     parent: 'prototype',
     slug: 'brand-design',
     label: 'Brand / design',
-    starterPrompt: 'Create an Open Design prototype plugin for brand pages, visual exploration, design reviews, or mockups.',
+    starterPrompt: 'Create an OpenDesign prototype plugin for brand pages, visual exploration, design reviews, or mockups.',
     test: byAnySlug(
       'design',
       'design-review',
@@ -414,7 +453,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'image',
     slug: 'ui-product-mockups',
     label: 'UI / product mockups',
-    starterPrompt: 'Create an Open Design image plugin for product UI mockups, game UI, product cards, or interface showcases.',
+    starterPrompt: 'Create an OpenDesign image plugin for product UI mockups, game UI, product cards, or interface showcases.',
     test: byAnySlug(
       'app-web-design',
       'game-ui',
@@ -430,35 +469,35 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'image',
     slug: 'brand-visuals',
     label: 'Brand / logo',
-    starterPrompt: 'Create an Open Design image plugin for logos, brand visuals, typography-led posters, or visual systems.',
+    starterPrompt: 'Create an OpenDesign image plugin for logos, brand visuals, typography-led posters, or visual systems.',
     test: byAnySlug('logo', 'brand', 'typography', 'poster', 'key-art', 'cover-art'),
   },
   {
     parent: 'image',
     slug: 'storyboards-motion-refs',
     label: 'Storyboards',
-    starterPrompt: 'Create an Open Design image plugin for storyboards, choreography breakdowns, pose references, or motion planning sheets.',
+    starterPrompt: 'Create an OpenDesign image plugin for storyboards, choreography breakdowns, pose references, or motion planning sheets.',
     test: byAnySlug('storyboard', 'dance', 'choreography', 'pose-reference', 'video-reference', 'sequence'),
   },
   {
     parent: 'image',
     slug: 'social-content',
     label: 'Social / content',
-    starterPrompt: 'Create an Open Design image plugin for social posts, infographics, explainers, or content graphics.',
+    starterPrompt: 'Create an OpenDesign image plugin for social posts, infographics, explainers, or content graphics.',
     test: byAnySlug('social-media-post', 'infographic', 'explainer', 'social', 'collage'),
   },
   {
     parent: 'image',
     slug: 'avatar-portrait',
     label: 'Avatar / portrait',
-    starterPrompt: 'Create an Open Design image plugin for avatars, portraits, identity photos, or character headshots.',
+    starterPrompt: 'Create an OpenDesign image plugin for avatars, portraits, identity photos, or character headshots.',
     test: byAnySlug('profile-avatar', 'portrait', 'selfie', 'identity'),
   },
   {
     parent: 'image',
     slug: 'illustration-style',
     label: 'Illustration / style',
-    starterPrompt: 'Create an Open Design image plugin for illustrations, anime, fantasy scenes, 3D renders, or style-transfer prompts.',
+    starterPrompt: 'Create an OpenDesign image plugin for illustrations, anime, fantasy scenes, 3D renders, or style-transfer prompts.',
     test: byAnySlug(
       'illustration',
       'anime',
@@ -474,7 +513,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'video',
     slug: 'motion-effects',
     label: 'Motion / effects',
-    starterPrompt: 'Create an Open Design video plugin for motion graphics, VFX, title frames, animation, or logo/outro sequences.',
+    starterPrompt: 'Create an OpenDesign video plugin for motion graphics, VFX, title frames, animation, or logo/outro sequences.',
     test: byAnySlug(
       'motion-graphics',
       'vfx',
@@ -491,28 +530,28 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'video',
     slug: 'social-short-form',
     label: 'Social / short form',
-    starterPrompt: 'Create an Open Design video plugin for short-form social clips, vertical video, TikTok-style captions, or dance trends.',
+    starterPrompt: 'Create an OpenDesign video plugin for short-form social clips, vertical video, TikTok-style captions, or dance trends.',
     test: byAnySlug('short-form', 'vertical', 'tiktok', 'social-meme', 'dance', 'k-pop', 'karaoke', 'captions'),
   },
   {
     parent: 'video',
     slug: 'marketing-product',
     label: 'Marketing / product',
-    starterPrompt: 'Create an Open Design video plugin for product promos, advertising, brand sizzle reels, or marketing cuts.',
+    starterPrompt: 'Create an OpenDesign video plugin for product promos, advertising, brand sizzle reels, or marketing cuts.',
     test: byAnySlug('marketing', 'product', 'advertising', 'product-promo', 'saas', 'website-to-video', 'brand'),
   },
   {
     parent: 'video',
     slug: 'data-explainers',
     label: 'Data / explainers',
-    starterPrompt: 'Create an Open Design video plugin for data explainers, animated charts, maps, diagrams, or flow walkthroughs.',
+    starterPrompt: 'Create an OpenDesign video plugin for data explainers, animated charts, maps, diagrams, or flow walkthroughs.',
     test: byAnySlug('data', 'chart', 'flowchart', 'diagram', 'map', 'route', 'infographic'),
   },
   {
     parent: 'video',
     slug: 'cinematic-story',
     label: 'Cinematic / story',
-    starterPrompt: 'Create an Open Design video plugin for cinematic scenes, story sequences, anime/action shots, or fantasy clips.',
+    starterPrompt: 'Create an OpenDesign video plugin for cinematic scenes, story sequences, anime/action shots, or fantasy clips.',
     test: byAnySlug(
       'cinematic',
       'fantasy',

@@ -132,7 +132,7 @@ describe('od message-center CLI', () => {
               {
                 id: 'release',
                 typeName: 'Product update',
-                title: 'Open Design 0.14 is available',
+                title: 'OpenDesign 0.14 is available',
                 publishedAt: '2026-07-16T12:00:00.000Z',
                 readAt: null,
               },
@@ -164,7 +164,7 @@ describe('od message-center CLI', () => {
       method: 'GET',
       url: '/api/integrations/vela/message-center/messages?locale=en-US&filter=unread&limit=50',
     });
-    expect(result.stdout).toContain('release\tunread\tProduct update\t2026-07-16T12:00:00.000Z\tOpen Design 0.14 is available');
+    expect(result.stdout).toContain('release\tunread\tProduct update\t2026-07-16T12:00:00.000Z\tOpenDesign 0.14 is available');
     expect(result.stdout).toContain('unreadCount\t1');
   });
 

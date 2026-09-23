@@ -29,7 +29,7 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 //
 // Auth/config precedence for Local CLI launches:
 //
-// 1. Provider BYOK is separate. It is used by Open Design's direct provider
+// 1. Provider BYOK is separate. It is used by OpenDesign's direct provider
 //    API calls and is not automatically mapped into Local CLI launches.
 // 2. The inherited launch env represents the user's local CLI setup
 //    (OAuth/login files, CLI homes, or user-owned API-key env). Preserve it
@@ -68,6 +68,38 @@ function amrAnalyticsIdentityEnv(
   return { OD_INSTALLATION_ID: installationId };
 }
 
+/**
+ * Claude Code must expose a plan tool, or a Claude run can never draw the Todos
+ * card the rest of the product is built around.
+ *
+ * Claude Code >= 2.1.x retired `TodoWrite` in favour of `TaskCreate` /
+ * `TaskUpdate` / `TaskList` / `TaskGet`, and gates that family behind this
+ * variable for the current model generation. Measured on 2.1.247, reading the
+ * `tools` array of the init frame from `claude -p --output-format stream-json
+ * --verbose`:
+ *
+ *   --model opus   (claude-opus-5)     → Task, TaskOutput, TaskStop
+ *   --model sonnet (claude-sonnet-5)   → Task, TaskOutput, TaskStop
+ *   … either of those, with the flag   → + TaskCreate, TaskGet, TaskList, TaskUpdate
+ *   --model haiku  (claude-haiku-4-5)  → the Task family, flag or not
+ *
+ * `TodoWrite` appears on no model in that build, so the `default` / `opus` /
+ * `sonnet` aliases the model picker offers ship with no plan tool at all unless
+ * this is set. `claude-stream.ts` reduces the Task family back into the
+ * canonical `TodoWrite` snapshot, so nothing downstream has to know which
+ * dialect the installed build speaks.
+ *
+ * Setting it is monotone — inside Claude Code the check is an early
+ * `return true`, so it can only ever ADD the family, never remove `TodoWrite`
+ * from a build that still has it — and builds that predate the variable ignore
+ * an unknown env key. A value the user set (inherited env, or Settings → Local
+ * CLI → Advanced) wins, per the precedence rules above.
+ */
+function applyClaudeTaskToolEnv(env: NodeJS.ProcessEnv): void {
+  if (typeof env.CLAUDE_CODE_ENABLE_TODO_TOOLS === 'string') return;
+  env.CLAUDE_CODE_ENABLE_TODO_TOOLS = '1';
+}
+
 export function spawnEnvForAgent(
   agentId: string,
   baseEnv: RuntimeEnvMap,
@@ -99,7 +131,7 @@ export function spawnEnvForAgent(
       const home = os.homedir();
       if (home) env.HOME = home;
     }
-    // Identify Open Design as the host so the vela CLI tags its command +
+    // Identify OpenDesign as the host so the vela CLI tags its command +
     // model_request analytics with source=open_design (revenue attribution).
     // Not PII (unlike the installation id above), so set it regardless of the
     // telemetry-consent gate that amrAnalyticsIdentityEnv applies.
@@ -132,9 +164,23 @@ export function spawnEnvForAgent(
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
+    applyClaudeTaskToolEnv(env);
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
+    // Name the rollout root the codex CLI is about to write into. Child
+    // evidence is read back from `<CODEX_HOME>/sessions/.../rollout-*.jsonl`,
+    // and `collectCodexChildEvidence` deliberately refuses a homedir fallback
+    // so it can never attribute one install's sessions to another. That leaves
+    // the caller owing it an explicit root — which nothing supplied, so the
+    // collector's `CODEX_HOME` guard was false on every default install and a
+    // complex Run's native Children went unobserved. The plan still locked
+    // complex, then failed certification for evidence the daemon simply never
+    // looked for.
+    if (!env.CODEX_HOME?.trim()) {
+      const home = os.homedir();
+      if (home) env.CODEX_HOME = path.join(home, '.codex');
+    }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'opencode' || agentId === 'byok-opencode') {
@@ -177,6 +223,7 @@ export function spawnEnvForAgent(
 }
 
 export function openDesignAmrRunAttempt(input: {
+  cumulativeRetryAttemptCount?: number | null;
   retryAttemptCount?: number | null;
   manualResumeAttemptCount?: number | null;
 }): number {
@@ -185,6 +232,7 @@ export function openDesignAmrRunAttempt(input: {
       ? Math.floor(value)
       : 0;
   return (
+    normalizedCount(input.cumulativeRetryAttemptCount) +
     normalizedCount(input.retryAttemptCount) +
     normalizedCount(input.manualResumeAttemptCount)
   );

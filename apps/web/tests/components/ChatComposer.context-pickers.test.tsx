@@ -18,7 +18,7 @@ import { ChatComposer, type ChatComposerHandle } from '../../src/components/Chat
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
 import type { AppliedPluginSnapshot, ProjectMetadata } from '@open-design/contracts';
-import { composerText, pressEnter, typeAndSettle } from '../helpers/lexical-composer';
+import { composerText, pressEnter, typeAndSettle, typeInComposer } from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {
   id: 'community-deck',
@@ -183,7 +183,7 @@ async function flushMounts() {
 function stagedPluginChip(): Element | null {
   return screen
     .queryByTestId('staged-contexts')
-    ?.querySelector('.staged-chip.staged-context--plugin') ?? null;
+    ?.querySelector('[data-staged-kind="plugin"]') ?? null;
 }
 
 function projectPatchBodies(): Array<{ metadata?: { linkedDirs?: string[] } }> {
@@ -220,7 +220,10 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
-    if (url.includes('/api/plugins/') && url.endsWith('/apply')) {
+    if (
+      url.includes('/api/plugins/')
+      && (url.endsWith('/apply') || url.endsWith('/apply-local'))
+    ) {
       return new Response(JSON.stringify(APPLY_RESULT), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -410,6 +413,23 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByText('No results for “missing”.')).toBeNull();
   });
 
+  it('describes /mcp slash commands as MCP actions instead of pet actions', async () => {
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('/');
+
+    const popover = await screen.findByTestId('slash-popover');
+    const settingsRow = within(popover).getByText('/mcp').closest('button');
+    const mcpRow = within(popover).getByText('/mcp slack').closest('button');
+    expect(settingsRow).toBeTruthy();
+    expect(mcpRow).toBeTruthy();
+    expect(settingsRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
+    expect(settingsRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
+    expect(mcpRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
+    expect(mcpRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
+  });
+
   it('lists Design Files first in All and picks the first file with Enter', async () => {
     renderComposer({
       projectFiles: [
@@ -439,7 +459,7 @@ describe('ChatComposer context pickers', () => {
 
     await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
     const labels = Array.from(
-      screen.getByTestId('mention-popover').querySelectorAll('.mention-section-label'),
+      screen.getByTestId('mention-popover').querySelectorAll('[data-testid="mention-section-label"]'),
       (node) => node.textContent,
     );
     expect(labels[0]).toBe('Design files');
@@ -448,7 +468,9 @@ describe('ChatComposer context pickers', () => {
     pressEnter();
 
     await waitFor(() => expect(composerText()).toBe('@designs/landing.html '));
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
+    // 待发送附件已经搬进自己的托盘(设计稿组件 21):`.composer > .tray` 只装附件,
+    // 不再和 plugin / skill / MCP 芯片挤在同一行。
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
@@ -472,7 +494,7 @@ describe('ChatComposer context pickers', () => {
 
     await waitFor(() => expect(screen.getByText('Dribbble')).toBeTruthy());
     const labels = Array.from(
-      screen.getByTestId('mention-popover').querySelectorAll('.mention-section-label'),
+      screen.getByTestId('mention-popover').querySelectorAll('[data-testid="mention-section-label"]'),
       (node) => node.textContent,
     );
     expect(labels[0]).toBe('Tabs');
@@ -481,7 +503,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(composerText()).toBe('@Dribbble '));
     const pill = screen
       .getByTestId('chat-composer-input')
-      .querySelector('.composer-inline-mention');
+      .querySelector('[data-mention-kind]');
     expect(pill?.getAttribute('data-mention-kind')).toBe('workspace');
     expect(screen.getByTestId('staged-contexts').textContent).toContain('BrowserDribbble');
 
@@ -985,7 +1007,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(composerText()).toBe('@Slack MCP '));
     const pill = screen
       .getByTestId('chat-composer-input')
-      .querySelector('.composer-inline-mention');
+      .querySelector('[data-mention-kind]');
     expect(pill?.textContent).toBe('@Slack MCP');
     expect(pill?.getAttribute('data-mention-kind')).toBe('mcp');
     expect(screen.getByTestId('staged-contexts').textContent).toContain('@Slack MCP');
@@ -1009,7 +1031,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
     const pill = screen
       .getByTestId('chat-composer-input')
-      .querySelector('.composer-inline-mention');
+      .querySelector('[data-mention-kind]');
     expect(pill?.textContent).toBe('@Deck Builder');
     expect(pill?.getAttribute('data-mention-kind')).toBe('skill');
     expect(screen.getByTestId('staged-contexts').textContent).toContain('@Deck Builder');
@@ -1026,6 +1048,25 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByLabelText('Remove Deck Builder'));
     await waitFor(() => expect(composerText().trim()).toBe(''));
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
+  });
+
+  it('does not keep a removed @ skill marked active when the mention picker reopens', async () => {
+    renderComposer({ currentSkillId: 'deck-builder' });
+    await flushMounts();
+
+    await typeAndSettle('@deck');
+    await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
+    fireEvent.click(screen.getByText('Deck Builder'));
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+
+    typeInComposer('');
+    await waitFor(() => expect(screen.queryByTestId('staged-contexts')).toBeNull());
+
+    await typeAndSettle('@deck');
+    const picker = await screen.findByTestId('mention-popover');
+    const skill = within(picker).getByRole('option', { name: /Deck Builder/ });
+
+    expect(skill.textContent).not.toContain('Active');
   });
 
   it('shows all matching skills and ranks exact prefix matches first', async () => {
@@ -1058,7 +1099,7 @@ describe('ChatComposer context pickers', () => {
 
     await waitFor(() => expect(screen.getByText('Audit Helper 9')).toBeTruthy());
     const skillNames = Array.from(
-      screen.getByTestId('mention-popover').querySelectorAll('.mention-item strong'),
+      screen.getByTestId('mention-popover').querySelectorAll('[data-testid="mention-item-name"]'),
       (node) => node.textContent,
     );
 
@@ -1079,7 +1120,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(composerText()).toBe('@My Export '));
     const pill = screen
       .getByTestId('chat-composer-input')
-      .querySelector('.composer-inline-mention');
+      .querySelector('[data-mention-kind]');
     expect(pill?.textContent).toBe('@My Export');
     expect(pill?.getAttribute('data-mention-kind')).toBe('plugin');
   });
@@ -1242,7 +1283,7 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByText('designs/landing.html'));
 
     await waitFor(() => expect(composerText()).toBe('Use @designs/landing.html '));
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Remove landing.html'));
@@ -1250,7 +1291,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Use '));
-    expect(screen.queryByTestId('staged-contexts')).toBeNull();
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
   it('preserves surrounding draft formatting when removing a design file token', async () => {
@@ -1279,7 +1320,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() =>
       expect(composerText()).toBe('Plan:\n\n@designs/landing.html '),
     );
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
 
     // The user keeps typing after the trailing space; re-seed the full draft to
     // capture that, then remove the staged chip.
@@ -1294,7 +1335,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Plan:\n\n\n\nKeep spacing'));
-    expect(screen.queryByTestId('staged-contexts')).toBeNull();
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
   it('removes a design file token when punctuation follows it', async () => {
@@ -1411,7 +1452,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeTruthy();
+      expect(screen.getByText('File upload failed for 1 file(s). (storage offline)')).toBeTruthy();
     });
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
 
@@ -1422,9 +1463,9 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeNull();
+      expect(screen.queryByText('File upload failed for 1 file(s). (storage offline)')).toBeNull();
     });
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('recovered.txt');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('recovered.txt');
   });
 
   // The sliders "tools" popover (Official / My plugins switch, plugin search)

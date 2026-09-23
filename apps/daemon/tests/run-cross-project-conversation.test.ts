@@ -142,6 +142,225 @@ describe('run cross-project conversation ownership', () => {
     }
     expect(landedConversationId).not.toBe(convB);
   });
+
+  it('rejects an assistantMessageId that belongs to another conversation', async () => {
+    // nettee P1 on #6418: the run's assistantMessageId must reference an
+    // assistant message in THIS conversation, or pin/append/finalize would
+    // mutate another conversation's row via the id-only writers.
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_a_${randomUUID()}`;
+    const projectB = `xown_b_${randomUUID()}`;
+    await createProject(url, projectA, 'Ownership A');
+    await createProject(url, projectB, 'Ownership B');
+
+    const convA = await firstConversationId(url, projectA);
+    const convB = await firstConversationId(url, projectB);
+    expect(convA).toBeTruthy();
+    expect(convB).toBeTruthy();
+
+    // Seed an assistant message in conv A.
+    const assistantId = `assistant_own_${randomUUID()}`;
+    const seed = await fetch(
+      `${url}/api/projects/${projectA}/conversations/${convA}/messages/${assistantId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: assistantId,
+          role: 'assistant',
+          content: 'x',
+          runId: 'run-a',
+          runStatus: 'running',
+          events: [],
+        }),
+      },
+    );
+    expect(seed.status).toBe(200);
+
+    // A run for conv B must not use conv A's assistant message.
+    const resp = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectB,
+        conversationId: convB,
+        assistantMessageId: assistantId,
+        clientRequestId: `cr_own_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(409);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'IDEMPOTENCY_CONFLICT' },
+    });
+  });
+
+  it('rejects an assistantMessageId that references a user message', async () => {
+    // nettee P1 on #6418: a user row in the same conversation must never be
+    // rebound as the run's assistant message (the generation reset would wipe
+    // the user's row).
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_user_${randomUUID()}`;
+    await createProject(url, projectA, 'Ownership user A');
+
+    const convA = await firstConversationId(url, projectA);
+    expect(convA).toBeTruthy();
+
+    // Seed a USER message in conv A.
+    const userId = `user_own_${randomUUID()}`;
+    const seed = await fetch(
+      `${url}/api/projects/${projectA}/conversations/${convA}/messages/${userId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: userId,
+          role: 'user',
+          content: 'hello',
+          events: [],
+        }),
+      },
+    );
+    expect(seed.status).toBe(200);
+
+    // A run in conv A must not use a user message as assistantMessageId.
+    const resp = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        conversationId: convA,
+        assistantMessageId: userId,
+        clientRequestId: `cr_user_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(409);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'INVALID_ASSISTANT_MESSAGE' },
+    });
+  });
+
+  it('rejects a supplied assistantMessageId when no conversation is bound', async () => {
+    // nettee on #6418: /api/chat is a valid no-conversation route, but a
+    // supplied assistantMessageId with no resolvable conversation cannot be
+    // validated and would mutate a foreign row via the id-only writers.
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_noconv_${randomUUID()}`;
+    await createProject(url, projectA, 'No-conv A');
+
+    const assistantId = `assistant_noconv_${randomUUID()}`;
+    const resp = await fetch(`${url}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        assistantMessageId: assistantId,
+        clientRequestId: `cr_noconv_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(400);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'BAD_REQUEST' },
+    });
+  });
+
+  it('rejects a supplied assistantMessageId when the chat conversation is missing', async () => {
+    // nettee on #6418: /api/chat must validate a supplied conversationId
+    // before atomic claim, otherwise a fresh assistantMessageId inserts a row
+    // with a nonexistent conversation foreign key and returns a raw 500.
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_missing_conv_${randomUUID()}`;
+    await createProject(url, projectA, 'Missing conversation A');
+
+    const assistantId = `assistant_missing_conv_${randomUUID()}`;
+    const resp = await fetch(`${url}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        conversationId: `missing-conversation-${randomUUID()}`,
+        assistantMessageId: assistantId,
+        clientRequestId: `cr_missing_conv_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(404);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'CONVERSATION_NOT_FOUND' },
+    });
+  });
+
+  it('lets a retry rebind an assistantMessageId the daemon no longer owns', async () => {
+    // nettee on #6418: the concurrency guard must reject only when the daemon
+    // STILL has the referenced run active — a normal retry rebinding a finished
+    // run (or a runId-less placeholder) stays allowed. The message row's own
+    // runStatus is not authoritative for concurrency.
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_active_${randomUUID()}`;
+    await createProject(url, projectA, 'Active A');
+
+    const convA = await firstConversationId(url, projectA);
+    expect(convA).toBeTruthy();
+
+    // Seed an assistant message owned by a TERMINAL (finished) run — a retry
+    // should be able to rebind it via the atomic claim.
+    const assistantId = `assistant_active_${randomUUID()}`;
+    const seed = await fetch(
+      `${url}/api/projects/${projectA}/conversations/${convA}/messages/${assistantId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: assistantId,
+          role: 'assistant',
+          content: 'old attempt',
+          runId: 'run-finished',
+          runStatus: 'canceled',
+          events: [{ kind: 'text', text: 'old attempt' }],
+        }),
+      },
+    );
+    expect(seed.status).toBe(200);
+
+    // A run submitted with this assistantMessageId must not be rejected as
+    // RUN_IN_PROGRESS — the terminal old run is rebindable.
+    const resp = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        conversationId: convA,
+        assistantMessageId: assistantId,
+        clientRequestId: `cr_active_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    const body = (await resp.json()) as { error?: { code?: string } };
+    expect(resp.status).not.toBe(409);
+    expect(body.error?.code).not.toBe('RUN_IN_PROGRESS');
+  });
 });
 
 async function createProject(url: string, id: string, name: string): Promise<void> {

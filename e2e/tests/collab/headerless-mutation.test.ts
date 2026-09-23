@@ -1,10 +1,9 @@
 // @vitest-environment node
 
-// Headerless legacy/CLI callers own only unbound local projects. They must stay
-// able to create and mutate that local set whether or not the daemon most
-// recently observed a signed-in Workspace. Once a project is explicitly bound,
-// every mutation requires the matching explicit Workspace identity; mutable
-// current/default state is never an authorization fallback.
+// Headerless legacy/CLI callers can mutate daemon-local projects without making
+// every operation depend on browser Workspace context or Vela availability.
+// An explicit identity must still match an existing binding; a complete pair on
+// an unbound project becomes durable local attribution.
 
 import { createServer, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -50,14 +49,6 @@ let authorityUrl: string;
 beforeAll(async () => {
   authority = createServer((req, res) => {
     const url = req.url ?? '';
-    // 403 `missing_principal` makes the provider bootstrap a default workspace
-    // from the directory, so the daemon ends up with an ambient workspace —
-    // which is the state every signed-in install is in.
-    if (url.startsWith('/api/v1/workspaces/current')) {
-      res.writeHead(403, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: 'missing_principal' }));
-      return;
-    }
     if (url.startsWith('/api/v1/workspaces')) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ items: [OWN, OTHER] }));
@@ -176,7 +167,7 @@ async function od(
   }
 }
 
-describe('a headerless caller can mutate only unbound local projects', () => {
+describe('local project mutations do not require remote Workspace authority', () => {
   test(
     'create then duplicate with no workspace headers — the od CLI shape',
     { timeout: 300_000 },
@@ -209,10 +200,8 @@ describe('a headerless caller can mutate only unbound local projects', () => {
           });
           expect(rename, 'rename runs the same gate').toBe(200);
 
-          // --- BOUNDARY 1: a project bound to a workspace the daemon is NOT
-          // currently in must stay refused for a headerless caller. This is the
-          // teammate's-shared-project / previous-identity case the branch exists
-          // for, and it must not be relaxed.
+          // Headerless CLI operations stay usable for locally stored projects,
+          // even when the browser originally attributed one to a Workspace.
           const elsewhere = await requestJson<CreatedProject>(webUrl, '/api/projects', {
             body: {
               designSystemId: null,
@@ -237,21 +226,33 @@ describe('a headerless caller can mutate only unbound local projects', () => {
           );
           expect(
             foreignBound.status,
-            'a headerless caller has no standing over a project bound elsewhere',
-          ).toBe(400);
-          expect(foreignBound.text).toContain('WORKSPACE_CONTEXT_REQUIRED');
+            'a headerless local caller must not need Vela authority',
+          ).toBe(200);
 
-          // --- BOUNDARY 2: dropping headers must not be an escalation path. A
-          // caller that DOES assert an identity is judged on that assertion, so
-          // the fix must not hand the unverifiable caller a route back to 200.
-          const forged = await post(webUrl, `/api/projects/${own}/duplicate`, workspaceHeaders({
+          // A complete explicit pair on an unbound project is local attribution,
+          // not proof of remote membership.
+          const attributed = await post(webUrl, `/api/projects/${own}/duplicate`, workspaceHeaders({
             workspaceId: 'ws-hdl-forged',
             workspaceMemberId: 'mem-hdl-forged',
           }), { name: 'Forged duplicate' });
           expect(
-            forged.status,
-            'an asserted identity that cannot be verified is still refused',
-          ).not.toBe(200);
+            attributed.status,
+            'local attribution must not synchronously consult Vela',
+          ).toBe(200);
+
+          // Once a project is bound, an explicitly different Workspace still
+          // fails the local namespace match.
+          const mismatched = await post(
+            webUrl,
+            `/api/projects/${elsewhere.project.id}/duplicate`,
+            workspaceHeaders({
+              workspaceId: 'ws-hdl-mismatch',
+              workspaceMemberId: 'mem-hdl-mismatch',
+            }),
+            { name: 'Mismatched duplicate' },
+          );
+          expect(mismatched.status).toBe(403);
+          expect(mismatched.text).toContain('WORKSPACE_PROJECT_PERMISSION_DENIED');
         },
         {
           env: {
@@ -351,7 +352,7 @@ describe('a headerless caller can mutate only unbound local projects', () => {
 
   // The dual-track contract, pinned through the real binary rather than by
   // intent. `AGENTS.md` makes `od` the embeddability surface external agents
-  // drive Open Design through, and there was no test anywhere exercising a CLI
+  // drive OpenDesign through, and there was no test anywhere exercising a CLI
   // project mutation — which is why a 401 on every CLI-created project shipped
   // to this branch unnoticed.
   test(

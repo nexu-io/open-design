@@ -47,7 +47,7 @@ export type WorkspaceRequestAuthorityResult =
   | { ok: true; context: WorkspaceCollabContext }
   | {
       ok: false;
-      status: 400 | 403 | 503;
+      status: 400 | 401 | 403 | 503;
       code: string;
       message: string;
       retryable?: true;
@@ -55,6 +55,10 @@ export type WorkspaceRequestAuthorityResult =
 
 export type VerifyWorkspaceRequestAuthority = (
   req: unknown,
+) => Promise<WorkspaceRequestAuthorityResult>;
+
+export type ResolveWorkspaceResourceReadAuthority = (
+  resourceId: string,
 ) => Promise<WorkspaceRequestAuthorityResult>;
 
 type RequestAuthorityCacheEntry = {
@@ -175,6 +179,68 @@ export type OptionalWorkspaceRequestAuthorityResult =
   | Exclude<WorkspaceRequestAuthorityResult, { ok: true }>;
 
 /**
+ * Resolve Workspace identity for daemon-local data-plane work.
+ *
+ * The browser's Workspace headers are attribution and namespace selectors on
+ * this boundary, not a remote authorization token. Local files, conversations,
+ * terminals, Skills, Plugins, and Design Systems must remain usable while Vela
+ * is offline. Consequently this resolver validates only that the identity pair
+ * is complete; it never calls the membership directory and deliberately does
+ * not inherit stale role/lifecycle/permission claims from the browser.
+ *
+ * Operations that publish, share, sync, bill, or otherwise mutate remote Team
+ * state must continue to use `resolveOptionalWorkspaceRequestAuthority` (or a
+ * narrower fresh verifier) at that actual cloud boundary.
+ */
+export function resolveOptionalLocalWorkspaceRequestAuthority(
+  req: any,
+): OptionalWorkspaceRequestAuthorityResult {
+  const claimed = workspaceResourceContextFromRequest(req);
+  if (claimed === null) return { ok: true, context: null };
+  if (claimed === 'missing') {
+    return {
+      ok: false,
+      status: 400,
+      code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+      message: 'both workspace and member identity are required',
+    };
+  }
+  return {
+    ok: true,
+    context: {
+      workspaceId: claimed.workspaceId,
+      workspaceType: claimed.workspaceType,
+      workspaceMemberId: claimed.workspaceMemberId,
+      role: 'member',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      billingState: 'active',
+      planId: null,
+      providerMode: 'personal_byok',
+      seatSummary: {
+        seatLimit: 0,
+        usedSeats: 0,
+        availableSeats: 0,
+        isSeatFull: false,
+      },
+      permissions: {
+        canManageMembers: false,
+        canManageBilling: false,
+        canInviteMembers: false,
+        canManageAutoRecharge: false,
+        canShareProjects: true,
+        canWriteSyncedFiles: true,
+        canViewWorkspaceSettings: false,
+        canManageSharedResources: false,
+      },
+      ...(claimed.workspaceType === 'team'
+        ? { teamId: claimed.workspaceId }
+        : {}),
+    },
+  };
+}
+
+/**
  * Resolve the three request-scope states shared by resource reads and writes:
  *
  * - no Workspace/member headers: the legacy Personal/global lane;
@@ -292,9 +358,20 @@ export function withLastKnownMembership(
 }
 
 export type WorkspaceResourceAccessInput = {
+  workspaceId?: string | null;
   visibility?: string | null;
   resourceState?: string | null;
   createdByWorkspaceMemberId?: string | null;
+  resourceHubResourceId?: string | null;
+  syncState?: string | null;
+};
+
+export type WorkspaceMutationAuthorityLease = {
+  verify: VerifyWorkspaceRequestAuthority;
+  allow: (
+    row: WorkspaceResourceAccessInput,
+    context: WorkspaceCollabContext,
+  ) => boolean;
 };
 
 export function headerValue(req: any, name: string): string | null {
@@ -390,6 +467,24 @@ export function workspaceResourceAccess(
 } {
   const frozen = wp.resourceState === 'frozen' || wp.resourceState === 'deleted' || isWorkspaceResourceLocked(ctx);
   const selfCreated = wp.createdByWorkspaceMemberId != null && wp.createdByWorkspaceMemberId === ctx.workspaceMemberId;
+  /*
+   * ⚠️ 下面这两行是「创建者可写 / 非创建者只读」的全部实现,改动前先读完。
+   *
+   * 项目页那条本地快路径(`project-workspace-scope.ts` 的
+   * `resolveLocalProjectWorkspaceScope`)**故意**把 `role` 钉成 `'member'`
+   * —— 它的契约就是「不查成员目录」。于是在那条路径上 `privileged` 恒为
+   * false,`canMutate` 退化成 `selfCreated`,只读态才成立。
+   *
+   * 两个后果值得记住:
+   * 1. 谁要是「修好」那个硬编码,让 role 变成真实角色,工作区 owner 就对
+   *    工作区里每一个项目都可写(包括不是他建的)—— 只读态静默消失。
+   * 2. 只读态在首屏渲染路径上。用户 2026-09-07 的原话:「不能等半天错误的
+   *    身份模型再显示正确的」。所以这条链**不许改成等 `/api/workspace/context`
+   *    或任何网络请求**,先渲染错的再纠正同样算回退。
+   *
+   * 需要真实角色的场合(例如付款入口该不该给)必须另取权威工作区身份,
+   * 不要从这里的 ctx 反推。
+   */
   const privileged = ctx.role === 'owner' || ctx.role === 'admin';
   const canMutate = !frozen && ctx.canWriteSyncedFiles && ctx.memberStatus === 'active' && (privileged || selfCreated);
   // Sharing is the one mutation that must ALSO work on an unattributed
@@ -509,7 +604,13 @@ function workspaceResourceMutationAllowed(
 export type BoundWorkspaceResourceMutationGate = (
   req: any,
   res: Response,
-  sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+  sendApiError: (
+    res: Response,
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => unknown,
   getWorkspaceResource: (db: unknown, workspaceId: string, resourceId: string) => WorkspaceResourceAccessInput | null | undefined,
   getWorkspaceResourceByResourceId: (db: unknown, resourceId: string) => WorkspaceResourceAccessInput | null | undefined,
   db: unknown,
@@ -601,7 +702,13 @@ export async function enforceVerifiedWorkspaceResourceMutation(
   resourceType: string,
   req: any,
   res: Response,
-  sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+  sendApiError: (
+    res: Response,
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => unknown,
   getWorkspaceResource: (
     db: unknown,
     workspaceId: string,
@@ -615,22 +722,51 @@ export async function enforceVerifiedWorkspaceResourceMutation(
   resourceId: string,
   capability: WorkspaceResourceMutationCapability,
   verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
+  options: { authorityLease?: WorkspaceMutationAuthorityLease } = {},
 ): Promise<boolean> {
   // No persisted Workspace binding means this is a genuine legacy/local
   // resource. Preserve that path without inventing a Workspace from ambient
   // navigation state.
-  if (!getWorkspaceResourceByResourceId(db, resourceId)) return true;
+  const persistedRow = getWorkspaceResourceByResourceId(db, resourceId);
+  if (!persistedRow) return true;
   if (!verifyWorkspaceRequestAuthority) {
     sendApiError(res, 400, 'WORKSPACE_CONTEXT_REQUIRED', 'an explicit workspace context is required');
     return false;
   }
 
-  const verified = await verifyWorkspaceRequestAuthorityForRequest(
+  let verified: Awaited<ReturnType<VerifyWorkspaceRequestAuthority>> | undefined;
+  if (options.authorityLease) {
+    const leased = await verifyWorkspaceRequestAuthorityForRequest(
+      req,
+      options.authorityLease.verify,
+    );
+    const leasedRow = leased.ok
+      ? getWorkspaceResource(
+          db,
+          leased.context.workspaceId,
+          resourceId,
+        )
+      : null;
+    if (
+      leased.ok
+      && leasedRow
+      && options.authorityLease.allow(leasedRow, leased.context)
+    ) {
+      verified = leased;
+    }
+  }
+  verified ??= await verifyWorkspaceRequestAuthorityForRequest(
     req,
     verifyWorkspaceRequestAuthority,
   );
   if (!verified.ok) {
-    sendApiError(res, verified.status, verified.code, verified.message);
+    sendApiError(
+      res,
+      verified.status,
+      verified.code,
+      verified.message,
+      verified.retryable ? { retryable: true } : {},
+    );
     return false;
   }
 
@@ -652,14 +788,16 @@ export async function enforceVerifiedWorkspaceResourceMutation(
 }
 
 /**
- * Fresh exact authority gate for the data plane of a Workspace-bound resource.
+ * Exact authority gate for the data plane of a Workspace-bound resource.
  *
  * Reads deliberately do not require creator/admin mutation standing: every
- * active member may read a resource that is bound to the exact Workspace in
- * the request. Locked/frozen Team resources intentionally remain readable but
- * read-only; removed members, authority outages, cross-Workspace identities,
- * and deleted resources fail closed. Truly unbound legacy local resources
- * remain compatible.
+ * active member may read a resource bound to the exact Workspace resolved by
+ * the server. Explicit request claims are checked rather than trusted, while a
+ * headerless read derives its Workspace from persisted ownership. Locked or
+ * frozen Team resources intentionally remain readable but read-only; removed
+ * members, authority outages, cross-Workspace identities, and deleted
+ * resources fail closed. Truly unbound legacy local resources remain
+ * compatible.
  */
 export async function enforceVerifiedWorkspaceResourceRead(
   resourceType: string,
@@ -684,7 +822,10 @@ export async function enforceVerifiedWorkspaceResourceRead(
   db: unknown,
   resourceId: string,
   verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
-  options: { allowNavigationQuery?: boolean } = {},
+  options: {
+    allowNavigationQuery?: boolean;
+    resolveAuthority?: ResolveWorkspaceResourceReadAuthority;
+  } = {},
 ): Promise<boolean> {
   if (!getWorkspaceResourceByResourceId(db, resourceId)) return true;
   const scopedRequest = options.allowNavigationQuery
@@ -699,16 +840,17 @@ export async function enforceVerifiedWorkspaceResourceRead(
     );
     return false;
   }
-  if (!verifyWorkspaceRequestAuthority) {
-    sendApiError(
-      res,
-      400,
-      'WORKSPACE_CONTEXT_REQUIRED',
-      'an explicit workspace context is required',
-    );
-    return false;
-  }
-  const verified = await verifyWorkspaceRequestAuthority(scopedRequest);
+  const claimed = workspaceResourceContextFromRequest(scopedRequest);
+  const verified = claimed === null && options.resolveAuthority
+    ? await options.resolveAuthority(resourceId)
+    : verifyWorkspaceRequestAuthority
+      ? await verifyWorkspaceRequestAuthority(scopedRequest)
+      : {
+          ok: false as const,
+          status: 400 as const,
+          code: 'WORKSPACE_CONTEXT_REQUIRED',
+          message: 'an explicit workspace context is required',
+        };
   if (!verified.ok) {
     sendApiError(
       res,
@@ -768,7 +910,7 @@ export async function enforceVerifiedWorkspaceResourceRead(
  * Headerless is the `od` CLI's normal shape, not an anomaly: nothing in
  * `apps/daemon/src/cli.ts` attaches `x-od-workspace-*` outside `od workspace …`,
  * and `AGENTS.md` makes the CLI the embeddability contract that external agents
- * drive Open Design through. This branch used to answer 401 for ANY bound
+ * drive OpenDesign through. This branch used to answer 401 for ANY bound
  * resource, which was survivable only while headerless creates left projects
  * unbound. Once every created project got a workspace home (#6201), the two
  * rules combined into a project its own creator could not touch:

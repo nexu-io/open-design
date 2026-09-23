@@ -1,11 +1,11 @@
 ---
-title: Open Design 0.14.1
-description: Opt in to silent updates that are applied the next time Open Design starts.
+title: OpenDesign 0.14.1
+description: Opt in to silent updates that are applied the next time OpenDesign starts.
 ---
 
 ## Silent updates
 
-You can now allow Open Design to apply a downloaded update silently the next
+You can now allow OpenDesign to apply a downloaded update silently the next
 time the app starts. Enable the option while installing an update or manage it
 later in Settings.
 

@@ -3,6 +3,11 @@ import {
   type InstalledPluginRecord,
   type LocalizedText,
 } from '@open-design/contracts';
+import { homePresetCopy } from './homePresetCopy';
+
+export function localizeHomePresetTitle(locale: string, record: InstalledPluginRecord): string {
+  return homePresetCopy(record.id, locale)?.title || localizePluginTitle(locale, record);
+}
 
 export function localizePluginTitle(locale: string, record: InstalledPluginRecord): string {
   return resolveLocalizedText(localizedText(record.manifest?.title_i18n), locale) || record.title;

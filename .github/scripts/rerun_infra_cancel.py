@@ -30,7 +30,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 DEFAULT_MAX_ATTEMPT = 2
 ALLOWED_EVENTS = frozenset({"pull_request", "merge_group"})
@@ -63,7 +63,7 @@ IGNORED_AGGREGATE_JOB_NAMES = frozenset(
 ANNOTATIONS_PER_PAGE = 100
 
 
-GhRequest = Callable[[str, str, dict[str, str] | None, str | None], Any]
+GhRequest = Callable[[str, str, Optional[dict[str, str]], Optional[str]], Any]
 
 
 class Skip(Exception):
@@ -127,7 +127,7 @@ def annotation_indicates_ordinary_failure(item: dict[str, Any]) -> bool:
 
     Notice- and warning-level annotations without markers are setup / policy
     noise and must not reclassify a pure runner-shutdown job as ordinary.
-    Concrete repository path: ``scripts/scopes.ts`` emits ``::warning::`` when
+    Concrete repository path: ``.github/scripts/scopes.py`` emits ``::warning::`` when
     changed-file resolution falls back to the full plan; that warning must not
     suppress infra-cancel retry when a later shutdown marker is also present.
 

@@ -5,9 +5,9 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
-import { readBuiltAppManifest, writePackagedConfigFile } from "../src/win/manifest.js";
-import type { WinBuiltAppManifest, WinPaths } from "../src/win/types.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { readBuiltAppManifest, writePackagedConfigFile } from "@/win/manifest.js";
+import type { WinBuiltAppManifest, WinPaths } from "@/win/types.js";
 
 function makePaths(root: string): Pick<WinPaths, "builtManifestPath"> {
   return { builtManifestPath: join(root, "manifest.json") };

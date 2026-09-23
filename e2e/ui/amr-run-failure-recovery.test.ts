@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { expect, test } from '@/playwright/suite';
+import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import type { Page } from '@playwright/test';
 
 import { writeFakeVelaBin, seedVelaLoginConfig } from '@/amr';
@@ -24,10 +25,9 @@ import {
 } from '@/playwright/amr';
 
 let codexRuntime: Awaited<ReturnType<typeof createFakeAgentRuntimes>>['codex'];
-const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design AMR',
+  name: 'OpenDesign AMR',
   bin: 'vela',
   available: true,
   version: 'test',
@@ -115,7 +115,28 @@ test.beforeAll(async () => {
   codexRuntime = runtimes.codex;
 });
 
-test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and recover after manual Retry', async ({ page }) => {
+/*
+ * 跑到一半死在钱上的那一轮,**屏幕上只有升级卡**,没有第二张白色通用报错卡。
+ *
+ * 产品 2026-09-02 裁决:「额度不足和额度耗尽,升级卡各只有一张,**不存在第二张
+ * 白色通用报错卡**」(规格 `specs/current/chat-panel-decisions-sheet.md` 的 T60
+ * 在 2026-09-07 再次复核确认继续有效)。落点是 `amr-guidance.ts` 里
+ * `AMR_INSUFFICIENT_BALANCE` 那一格的 `suppressCard` —— 白卡连同它那颗〔充值〕
+ * 一起让位,交给 `ProjectView` 补查钱包读数点亮的升级卡(T61:锚在那一轮下面)。
+ *
+ * ⚠️ **这条用例以前断言的是〔Top up〕+〔Retry〕,那是白卡上的按钮。** 它在
+ * 2026-09-02 裁决之后仍然绿了一天多,原因不是产品还没改:补查当时走的是账号级
+ * `/api/integrations/vela/wallet`,而这个夹具**没有 stub 那条路由**,读数落空 →
+ * 走「升级卡画不出来就把白卡还回来」的兜底分支。OPEND-2597(`bd5ddea74e`)把补查
+ * 钉到夹具真正 stub 的 `/api/workspace/billing` 之后,主分支才第一次被这条用例照到。
+ *
+ * ⚠️ **交棒不是删除**:钱包读不出确定数字时白卡(充值 + 重试)必须还回来 ——
+ * 那是这一轮唯一的自救路径(T60)。那一档由组件级红测
+ * `apps/web/tests/components/chat/w62-mid-run-balance-card.test.tsx` 钉着,
+ * 这里不再搭一遍同样的浏览器现场(e2e/AGENTS.md「Keep browser witnesses at
+ * cross-layer boundaries」)。
+ */
+test('[P0] @critical AMR insufficient-balance failures hand the turn to the upgrade card, and a fresh send recovers', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   const profile = 'local';
@@ -153,13 +174,33 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and re
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR insufficient balance recovery smoke');
 
-  const topUp = page.getByRole('button', { name: /Top up|充值|儲值/i }).first();
-  const retry = page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first();
-  await expect(topUp).toBeVisible({ timeout: T.long });
-  await expect(retry).toBeVisible();
+  // 接手方在场:升级卡挂在死掉的那一轮下面,念的是那一刻的**工作区**钱包读数
+  // (夹具 `accountBalanceUsd: '20.00'` 走 `/api/workspace/billing?scope=workspace`,
+  // 不是账号钱包 —— OPEND-2597)。
+  const upgradeCard = page.getByTestId('chat-upgrade-card');
+  await expect(upgradeCard).toBeVisible({ timeout: T.long });
+  await expect(upgradeCard).toContainText('$20.00');
 
-  await topUp.click();
+  // 让位的那一半:白卡和它那颗〔充值〕一个都不在。用精确定位 + `toHaveCount(0)`,
+  // 不用否定式文本匹配 —— 后者在选择器写错时会永远为真。
+  await expect(page.locator('[data-user-action-card="run-recovery"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Top up|充值|儲值/i })).toHaveCount(0);
 
+  // 死在钱上不锁死这条会话:再发一次照样跑得通(假 vela 只失败第一次)。
+  // 这一轮没有〔重试〕可点 —— 白卡让位之后,重试这颗按钮跟着它一起走了。
+  await sendPrompt(page, 'AMR insufficient balance recovery smoke, second attempt');
+  await expect(page.getByText('AMR balance retry recovered.').first()).toBeVisible({ timeout: T.long });
+
+  // 那张卡是**那一轮为什么停下来的凭据**(T61 ④):后面这一轮跑通了,它照旧钉在
+  // 原处、读数也不改写。存档账本只增不删(`ChatPane.archiveLowBalanceTurnCard`)。
+  await expect(upgradeCard).toBeVisible();
+  await expect(upgradeCard).toContainText('$20.00');
+
+  // 卡上那颗唯一的出口是真的通的 —— 个人档 owner 落在 plans 深链上,归因来源
+  // 记 `chat_upgrade_card`(和白卡那颗〔充值〕的 `chat_error_recharge` 分开记,
+  // 漏斗要读得出「卡」和「报错卡」各带来多少)。放在最后:它会真的开一个新窗口,
+  // 不让那件事横在本用例后续的输入动作前面。
+  await upgradeCard.getByRole('button').click();
   await expect
     .poll(async () =>
       page.evaluate(() => {
@@ -167,24 +208,19 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and re
         return opened.find((href) => {
           const url = new URL(href, window.location.href);
           return (
-            url.pathname.endsWith('/dashboard') &&
-            url.searchParams.get('source') === 'open_design' &&
             url.searchParams.get('od_origin') === 'open_design' &&
-            url.searchParams.get('od_entry_source') === 'chat_error_recharge'
+            url.searchParams.get('od_entry_source') === 'chat_upgrade_card'
           );
         }) ?? null;
       }),
     )
     .toBeTruthy();
-
-  await retry.click();
-  await expect(page.getByText('AMR balance retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 
-test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in and auto-recover', async ({ page }) => {
+test('[P0] @critical AMR auth failures return to the existing sign-in gate without auto-retry', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
-  let loggedIn = false;
+  let loggedIn = true;
   let loginRequested = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -224,24 +260,19 @@ test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in an
   });
 
   await gotoProject(page, amr.projectId);
+  loggedIn = false;
   await sendPrompt(page, 'AMR auth failure recovery smoke');
-
-  const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
-  await expect(authorizeAndRetry).toBeVisible({ timeout: T.long });
-  await authorizeAndRetry.click();
-
-  // New inline flow: clicking Authorize & retry starts vela login in place (it
-  // POSTs /login directly) instead of bouncing the user out to the Settings
-  // dialog. The run then auto-retries once /status reports signed in.
-  await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
-  await expect(settingsSurface(page)).toHaveCount(0);
-  await expect(page.getByText('AMR auth auto retry recovered.').first()).toBeVisible({ timeout: T.long });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  expect(loginRequested).toBe(false);
 });
 
-test('[P0] @critical AMR model catalog invalid-key failures authorize and auto-recover', async ({ page }) => {
+test('[P0] @critical AMR model catalog invalid-key failures return to sign-in without auto-retry', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
-  let loggedIn = false;
+  let loggedIn = true;
   let loginRequested = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -327,19 +358,15 @@ test('[P0] @critical AMR model catalog invalid-key failures authorize and auto-r
   expect(assistantMsgRes.ok(), `upsert assistant msg: ${await assistantMsgRes.text()}`).toBeTruthy();
 
   await gotoProject(page, projectId);
-
-  const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
-  await expect(authorizeAndRetry).toBeVisible({ timeout: T.long });
-  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
-
-  await authorizeAndRetry.click();
-  await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
-  await expect(settingsSurface(page)).toHaveCount(0);
-  await expect(page.getByText('AMR model catalog auth retry recovered.').first()).toBeVisible({ timeout: T.long });
+  loggedIn = false;
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  expect(loginRequested).toBe(false);
 });
 
-test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-retry after sign-in', async ({ page }) => {
+test('[P0] @critical signed-out Cloud switching keeps the existing sign-in gate without auto-retry', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   let loggedIn = false;
@@ -426,33 +453,26 @@ test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-ret
 
   await gotoProject(page, projectId);
 
-  const switchAndRetry = page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i }).first();
-  await expect(switchAndRetry).toBeVisible({ timeout: T.long });
-  await switchAndRetry.click();
+  const card = runErrorCard(page);
+  await expect(card.getByRole('button')).toHaveText([
+    'Contact us', 'Export logs', 'Switch to OpenDesign Cloud',
+  ]);
+  await card.getByRole('button', { name: 'Switch to OpenDesign Cloud', exact: true }).click();
 
-  await expect
-    .poll(() => new URL(page.url()).pathname, { timeout: T.medium })
-    .toBe('/settings');
-  const settings = settingsSurface(page);
-  await expect(settings).toBeVisible({ timeout: T.long });
+  // OPEND-3205 removes the Settings detour, not the existing authentication
+  // gate. Keep the signed-out fixture and require explicit sign-in, with no run.
+  await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.medium });
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
   await expect
     .poll(async () => {
       const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
       return raw ? JSON.parse(raw).agentId : null;
     })
     .toBe('amr');
-
-  await settings.getByTestId('settings-agent-select-amr').click();
-  await settings.getByRole('button', { name: /^(Authorize|Sign in)$/ }).first().click();
-
-  await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
-  await expect.poll(() => runRequests.bodies.filter((body) => body.agentId === 'amr').length, { timeout: T.long }).toBe(1);
-  expect(runRequests.bodies.filter((body) => body.agentId === 'amr')[0]).toMatchObject({
-    agentId: 'amr',
-    currentPrompt: 'please recover this failed non-AMR model run',
-  });
+  expect(loginRequested).toBe(false);
+  await runRequests.expectNone();
+  await expect(page).toHaveURL(/\/onboarding$/);
   runRequests.dispose?.();
-  await expect(page.getByText('AMR promotion retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 
 test('[P0] @critical Settings reopens AMR with the configured profile, account badge, and model catalog', async ({ page }) => {
@@ -554,6 +574,7 @@ test('[P1] Settings AMR wallet fallback balance renders from the daemon wallet e
     selectedAgentId: 'amr',
     assistantText: 'AMR wallet refresh smoke',
     accountSummaryAvailable: false,
+    workspaceBalanceAvailable: false,
   });
 
   await gotoEntryHome(page);
@@ -609,8 +630,8 @@ test('[P1] Settings AMR upgrade opens the attributed plans URL for the active pr
 
   await expect.poll(() => openedUrl).toBeTruthy();
   const url = new URL(openedUrl);
-  expect(url.pathname).toBe('/dashboard');
-  expect(url.searchParams.get('billing')).toBe('plan');
+  expect(url.pathname).toBe('/pricing/');
+  expect(url.searchParams.get('billing')).toBeNull();
   expect(url.searchParams.get('od_origin')).toBe('open_design');
   expect(url.searchParams.get('od_entry_source')).toBe('settings_amr_upgrade');
   expect(url.searchParams.get('od_entry_id')).toBeTruthy();
@@ -666,7 +687,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect(settings.getByTestId('settings-agent-select-codex')).toHaveAttribute('aria-pressed', 'true');
-  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('OpenDesign');
 
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
@@ -699,17 +720,18 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 test('[P0] after an AMR failure the user can switch to Codex and complete a fresh run', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
-  // AMR_AUTH_REQUIRED means the AMR session is invalid, so /status reports
-  // signed-out — the inline auth card then offers the Authorize & retry action.
+  // The user can still leave a failed Cloud run by selecting a local runtime;
+  // keep the status response authenticated until that switch is complete so
+  // the mandatory Cloud sign-in gate does not preempt the Settings action.
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        loggedIn: false,
+        loggedIn: true,
         profile: 'local',
         configPath: '/tmp/.amr/config.json',
-        user: null,
+        user: { id: 'switch-to-codex', email: 'switch-to-codex@example.com', plan: 'free' },
       }),
     });
   });
@@ -719,11 +741,9 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR auth failure before switch smoke');
   await expect(runErrorCard(page)).toContainText(
-    /Open Design agent isn't signed in yet|AMR sign-in is required/i,
+    /Sign in to see your projects and continue the conversation|AMR sign-in is required/i,
     { timeout: T.long },
   );
-  await expect(page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first()).toBeVisible();
-
   const settings = await openExecutionSettingsDialog(page);
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect
@@ -744,7 +764,8 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
   ).toBeVisible();
 });
 
-test('[P0] upstream outages keep Retry available without promoting AMR', async ({ page }) => {
+// G16: CLI failures offer only the Cloud switch; classification and raw diagnostics remain.
+test('[P0] CLI upstream outages preserve guidance with only the Cloud switch', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   const root = join(tmpdir(), `open-design-upstream-ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
@@ -817,13 +838,20 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
 
   await gotoProject(page, projectId);
 
-  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: T.long });
-  await expect(page.getByText(/Generation service unavailable|model provider is temporarily unavailable/i).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
+  const card = runErrorCard(page);
+  await expect(card).toContainText('Model service unavailable', { timeout: T.long });
+  await expect(card.getByTestId('chat-run-error-description')).toHaveText(
+    'The current model is temporarily unavailable. Try again later, or switch models.',
+  );
+  await expect(card.getByRole('button')).toHaveText([
+    'Contact us', 'Export logs', 'Switch to OpenDesign Cloud',
+  ]);
+  await expect(card.getByRole('button', { name: /^Retry$/i })).toHaveCount(0);
+  await expect(card).not.toContainText('The model provider is temporarily unavailable.');
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
-test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw source', async ({ page }) => {
+test('[P1] zh-CN context-limit guidance offers only Cloud switching and keeps raw source off the card', async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem('open-design:locale', 'zh-CN');
     window.localStorage.setItem('open-design:locale-source', 'manual');
@@ -899,21 +927,34 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   await gotoProject(page, projectId);
 
   const card = runErrorCard(page);
-  await expect(card).toContainText('内容过长', { timeout: T.long });
-  await expect(card).toContainText('本轮输入超出了模型的上下文上限');
-  await expect(page.getByRole('button', { name: /^重试$/ }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
+  await expect(card).toContainText('对话内容过长', { timeout: T.long });
+  // L7 revision 96 approved context-limit wording; preserve the original code/detail fixture.
+  await expect(card.getByTestId('chat-run-error-description')).toHaveText(
+    '当前上下文已超出模型可处理的长度，请新建对话后再试。',
+  );
+  await expect(card.getByRole('button')).toHaveText([
+    '联系我们', '导出日志', '切换到 OpenDesign Cloud',
+  ]);
+  await expect(card.getByRole('button', { name: '重试', exact: true })).toHaveCount(0);
 
-  const sourceToggle = card.getByRole('button', { name: /查看详情/ });
-  await expect(sourceToggle).toHaveAttribute('aria-expanded', 'false');
-  await sourceToggle.click();
-  await expect(sourceToggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(card.locator('.run-error__diagnostic')).toContainText(rawDetail);
+  // 卡上不再有「错误详情」折叠(用户 2026-08-27):既没有那颗〔查看详情〕,
+  // 上游原文也不出现在卡上的任何地方。
+  await expect(card.getByRole('button', { name: /查看详情/ })).toHaveCount(0);
+  await expect(card).not.toContainText(rawDetail);
 });
 
-test('[P0] antigravity rate limits offer terminal model switching without promoting AMR', async ({ page }) => {
+// G16 replaces terminal/retry actions on this CLI error card with the single Cloud action.
+test('[P0] antigravity rate limits keep classification and use only the Cloud switch', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
+  // This case owns the signed-in in-project switch. The signed-out gate is
+  // covered separately above, without relying on another worker test's login.
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    await route.fulfill({ json: {
+      loggedIn: true, profile: 'local',
+      user: { id: 'antigravity-switch-user', email: 'antigravity-switch@example.com', plan: 'free' },
+    } });
+  });
   let oauthLaunchCalls = 0;
   await page.route('**/api/agents/antigravity/oauth-launch', async (route) => {
     oauthLaunchCalls += 1;
@@ -989,14 +1030,21 @@ test('[P0] antigravity rate limits offer terminal model switching without promot
 
   await gotoProject(page, projectId);
 
-  const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
-  await expect(launchTerminal).toBeVisible({ timeout: T.long });
-  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
-
-  await launchTerminal.click();
-
-  await expect.poll(() => oauthLaunchCalls).toBe(1);
+  const originalUrl = page.url();
+  const runRequests = trackRunRequests(page);
+  const card = runErrorCard(page);
+  await expect(card).toContainText('Model service is busy', { timeout: T.long });
+  await expect(card).not.toContainText('Switch to another Antigravity model before retrying this run.');
+  await expect(card.getByRole('button')).toHaveText([
+    'Contact us', 'Export logs', 'Switch to OpenDesign Cloud',
+  ]);
+  await expect(card.getByRole('button', { name: /Switch model in terminal|^Retry$/i })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Switch to OpenDesign Cloud', exact: true }).click();
+  await expect(page.getByText('Switched to OpenDesign Cloud. Please resend your task.', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(originalUrl);
+  await runRequests.expectNone();
+  expect(oauthLaunchCalls).toBe(0);
+  runRequests.dispose?.();
 });
 
 async function setupAmrWorkspace(
@@ -1013,6 +1061,7 @@ async function setupAmrWorkspace(
     seedLoginConfig?: boolean;
     assistantText?: string;
     accountSummaryAvailable?: boolean;
+    workspaceBalanceAvailable?: boolean;
   },
 ) {
   await stubCatalogsEmpty(page);
@@ -1083,6 +1132,9 @@ async function setupAmrWorkspace(
       accountPlan: 'free',
       ...(options.accountSummaryAvailable !== undefined
         ? { accountSummaryAvailable: options.accountSummaryAvailable }
+        : {}),
+      ...(options.workspaceBalanceAvailable !== undefined
+        ? { workspaceBalanceAvailable: options.workspaceBalanceAvailable }
         : {}),
     },
   );

@@ -2,7 +2,7 @@
 
 ## Decision
 
-Open Design owns the Tailwind color, radius, shadow, and font vocabulary. Tailwind v4 is configured with CSS-first `@theme`, clears the default color namespace with `--color-*: initial`, and exposes project tokens backed by `apps/web/src/index.css` CSS variables.
+OpenDesign owns the Tailwind color, radius, shadow, and font vocabulary. Tailwind v4 is configured with CSS-first `@theme`, clears the default color namespace with `--color-*: initial`, and exposes project tokens backed by `apps/web/src/index.css` CSS variables.
 
 The runtime source of truth stays in `:root`, `[data-theme="dark"]`, and system-mode CSS variable overrides. Tailwind utilities resolve through those variables, so light mode, dark mode, system mode, and custom accent all share one token path.
 
@@ -20,7 +20,7 @@ Token names follow the current product language in `index.css` for core surfaces
 
 ## Design decision: token-backed color, radius, shadow, and font
 
-Project-owned tokens cover colors, radius, shadow, and font because color carries Open Design's brand and theme behavior, while existing cards, popovers, modals, inputs, controls, editorial moments, and code/file-path text depend on project variables for visual stability.
+Project-owned tokens cover colors, radius, shadow, and font because color carries OpenDesign's brand and theme behavior, while existing cards, popovers, modals, inputs, controls, editorial moments, and code/file-path text depend on project variables for visual stability.
 
 Radius, shadow, and font aliases resolve to the current CSS variables, including dark-theme shadow overrides and custom `--serif` / `--mono` stacks. Spacing uses Tailwind's native system to keep TSX class names familiar during migration; type uses native utilities plus exact `text-ui-9`, `text-ui-10`, `text-ui-10_5`, `text-ui-11`, `text-ui-11_5`, `text-ui-12_5`, `text-ui-13`, and `text-ui-13_5` aliases for existing 9px, 10px, 10.5px, 11px, 11.5px, 12.5px, 13px, and 13.5px component copy:
 
@@ -262,7 +262,7 @@ Use this vocabulary for TSX migrations.
 
 ## Migration rules
 
-1. Use Open Design color token utilities for app UI chrome and component styling.
+1. Use OpenDesign color token utilities for app UI chrome and component styling.
 2. Keep raw CSS variables as the visual source in `index.css`; Tailwind `@theme` tokens should reference `var(--*)` for theme-sensitive values.
 3. Use status names in TSX. Examples: `text-danger`, `bg-success-surface`, `border-info-border`.
 4. Use project-backed radius and shadow utilities for migrated components that currently depend on `--radius*` or `--shadow*`; examples include `rounded-card`, `rounded-panel`, `shadow-token-sm`, and `shadow-token-md`.

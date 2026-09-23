@@ -20,8 +20,12 @@ vi.mock('@open-design/platform', async (importOriginal) => ({
   stopProcesses: stopProcessesMock,
 }));
 
+import * as diagnosticEvidence from '../../src/services/diagnostics-evidence.js';
 import { runVelaCommand } from '../../src/integrations/vela-command.js';
-import { runVelaResourceCommand } from '../../src/collab/vela-cli-resource-adapter.js';
+import {
+  runVelaResourceBatchCommand,
+  runVelaResourceCommand,
+} from '../../src/collab/vela-cli-resource-adapter.js';
 
 function stoppedResult(
   matchedPids: number[],
@@ -45,6 +49,21 @@ function deferred<T>() {
 }
 
 describe('runVelaCommand', () => {
+  it('records team-list failures with the actual child proxy environment without changing the rejection', async () => {
+    const record = vi.spyOn(diagnosticEvidence, 'recordDiagnosticFailure').mockImplementation(() => undefined);
+    const failure = Object.assign(new Error('upstream failed'), { code: 'ETIMEDOUT' });
+    execFileMock.mockImplementation((_command: string, _args: string[], _options: unknown, callback: (error: Error) => void) => {
+      callback(failure);
+      return { pid: 4321 };
+    });
+    await expect(runVelaCommand(['team-projects', 'list'], { env: {
+      VELA_BIN: process.execPath, OD_DATA_DIR: '', VELA_WORKSPACE_ID: 'team-1', HTTPS_PROXY: 'http://localhost:7890',
+    } })).rejects.toBe(failure);
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'team-projects', error: failure, workspaceId: 'team-1', env: expect.objectContaining({ HTTPS_PROXY: 'http://localhost:7890' }),
+    }));
+  });
+
   beforeEach(() => {
     execFileMock.mockReset();
     listProcessSnapshotsMock.mockReset();
@@ -129,6 +148,55 @@ describe('runVelaCommand', () => {
     expect(onStderr).toHaveBeenCalledWith(
       '{"event":"resource_pull_profile","schemaVersion":1}\n',
     );
+  });
+
+  it('streams batch request JSON over stdin instead of the command line', async () => {
+    const stdin = { on: vi.fn(), end: vi.fn() };
+    execFileMock.mockImplementationOnce(
+      (
+        _command: string,
+        _args: string[],
+        _options: unknown,
+        callback: (error: Error | null, stdout: string) => void,
+      ) => {
+        callback(null, '{"results":[]}\n');
+        return { pid: 4321, stdin };
+      },
+    );
+    vi.stubEnv('VELA_BIN', process.execPath);
+    vi.stubEnv('OD_DATA_DIR', '');
+
+    await runVelaResourceBatchCommand(
+      [{
+        key: 'plugin-1',
+        kind: 'plugin',
+        resourceId: 'hub-plugin-1',
+        dir: '/staging/plugin-1',
+        ref: 'published',
+      }],
+      'workspace-1',
+    );
+
+    expect(execFileMock.mock.calls[0]?.[1]).toEqual([
+      'resource',
+      'pull-batch',
+      '--requests-file',
+      '-',
+      '--json',
+    ]);
+    expect(stdin.end).toHaveBeenCalledWith(JSON.stringify({
+      requests: [{
+        key: 'plugin-1',
+        kind: 'plugin',
+        resourceId: 'hub-plugin-1',
+        dir: '/staging/plugin-1',
+        ref: 'published',
+      }],
+    }));
+    const options = execFileMock.mock.calls[0]?.[2] as {
+      env: NodeJS.ProcessEnv;
+    };
+    expect(options.env.VELA_WORKSPACE_ID).toBe('workspace-1');
   });
 
   it('keeps the Settings-backed AMR binary authoritative over inherited VELA_BIN', async () => {
@@ -330,7 +398,7 @@ describe('runVelaCommand', () => {
     });
   });
 
-  it('bounds pulls at 30s, metadata commands at 60s, and pushes at 10 minutes', async () => {
+  it('bounds pulls at 30s, batch pulls at 2 minutes, metadata at 60s, and pushes at 10 minutes', async () => {
     vi.useFakeTimers();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubEnv('VELA_BIN', process.execPath);
@@ -419,6 +487,28 @@ describe('runVelaCommand', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(stopProcessesMock).toHaveBeenCalledTimes(3);
     await pullRejection;
+
+    // A batch amortizes work across many destinations, so it gets a larger
+    // aggregate budget without becoming unbounded.
+    const batch = runVelaResourceBatchCommand(
+      [{
+        key: 'plugin-1',
+        kind: 'plugin',
+        resourceId: 'resource-1',
+        dir: '/tmp/plugin-1',
+        ref: 'published',
+      }],
+      'workspace-1',
+    );
+    const batchRejection = expect(batch).rejects.toMatchObject({
+      code: 'ETIMEDOUT',
+      name: 'TimeoutError',
+    });
+    await vi.advanceTimersByTimeAsync(119_999);
+    expect(stopProcessesMock).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stopProcessesMock).toHaveBeenCalledTimes(4);
+    await batchRejection;
 
     // The budgets ride the daemon's confirmed-kill deadline timer, never
     // execFile's own timeout/signal plumbing.

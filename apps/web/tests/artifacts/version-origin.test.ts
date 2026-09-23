@@ -26,7 +26,7 @@ function version(overrides: Partial<ProjectFileVersion> = {}): ProjectFileVersio
 
 describe('artifact export version origin', () => {
   it('emits matched Plugin origin only when the exact UTF-8 digest agrees', async () => {
-    const content = '<html><body>你好 Open Design</body></html>';
+    const content = '<html><body>你好 OpenDesign</body></html>';
     const contentDigest = await artifactVersionContentDigest(content);
     await expect(artifactExportOriginProps(content, version({
       contentDigest,

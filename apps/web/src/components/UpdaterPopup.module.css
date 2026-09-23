@@ -1,6 +1,6 @@
-/* Update-ready indicator: a round brand-green rocket button pinned to the
-   bottom-left rail footer. Visual carried over from the accepted #6156 design;
-   the state behind it is the real updater's `shouldShowControl`.
+/* Update-ready indicator: a round brand-green rocket button shown as its own
+   top-right cluster control for signed-in and signed-out users. The state
+   behind it is the real updater's `shouldShowControl`.
 
    There is deliberately no progress ring here: the indicator only exists once
    the installer has finished downloading, so any percentage it drew would be
@@ -9,8 +9,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  /* Compact standalone circle aligned with the neighbouring account capsule. */
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
   border-radius: var(--radius-pill, 999px);

@@ -52,11 +52,11 @@ describe('HomeHero compact composer controls', () => {
     // Round 4 widened the old 36px icon square into a pill that carries a
     // connection dot + the selected model name, capped so a long model id
     // ellipsizes instead of stretching the composer foot.
-    // Base rule: the 220px name-pill cap. The ≤900px media block later
-    // re-collapses the chip to a 36px icon square — both ends are asserted.
+    // The 220px name-pill cap holds at every width now: the ≤900px block no
+    // longer collapses the chip back to a 36px icon square (#7635).
     expect(ruleValue(switcherChip, 'height')).toBe('36px');
     expect(ruleValues(switcherChip, 'max-width')[0]).toBe('220px');
-    expect(ruleValues(switcherChip, 'max-width').at(-1)).toBe('36px');
+    expect(ruleValues(switcherChip, 'max-width').at(-1)).toBe('220px');
   });
 
   it('keeps the switcher from expanding beyond its content on narrow screens', () => {
@@ -65,10 +65,16 @@ describe('HomeHero compact composer controls', () => {
     expect(ruleValue(switcher, 'flex-basis')).toBe('auto');
   });
 
-  it('keeps the template picker search field free of the global input focus halo', () => {
-    const templateSearchFocus = cssDeclarations('.home-hero__template-search input:focus');
+  it('reveals the creation-type clear icon from the whole pill hover target', () => {
+    const hideTypeIcon = cssDeclarations(
+      '.home-hero__template-option:hover .home-hero__template-icon--clearable .home-hero__template-icon-glyph',
+    );
+    const revealClearIcon = cssDeclarations(
+      '.home-hero__template-option:hover .home-hero__template-icon--clearable .home-hero__template-icon-clear',
+    );
 
-    expect(ruleValue(templateSearchFocus, 'outline')).toBe('none');
-    expect(ruleValue(templateSearchFocus, 'box-shadow')).toBe('none');
+    expect(ruleValue(hideTypeIcon, 'opacity')).toBe('0');
+    expect(ruleValue(revealClearIcon, 'opacity')).toBe('1');
   });
+
 });

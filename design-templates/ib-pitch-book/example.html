@@ -80,20 +80,24 @@
     will-change: transform;
   }
   .slide {
-    min-width: 100vw; height: 100vh;
+    /* Size to the flex stage after the sample banner has been subtracted. */
+    min-width: 100vw; height: 100%;
     background: var(--paper);
     display: grid; place-items: stretch;
     position: relative; overflow: hidden;
   }
   .slide-inner {
-    width: min(1320px, 92vw);
-    height: min(820px, 86vh);
-    margin: auto;
+    width: 1320px;
+    height: 820px;
+    margin: 0;
     padding: 56px 64px 48px;
     display: grid; grid-template-rows: auto 1fr auto;
     background: var(--paper);
     box-shadow: 0 30px 80px -30px rgba(0,0,0,0.35), 0 6px 18px -8px rgba(0,0,0,0.25);
-    position: relative;
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(var(--slide-scale, 1));
+    transform-origin: center center;
     border-top: 6px solid var(--ink);
   }
   /* Magazine masthead */
@@ -558,7 +562,11 @@
     .stage { display: block; transform: none !important; transition: none; }
     .slide { page-break-after: always; height: 100vh; }
     .chrome, .agent-stamp, .demo-banner { display: none; }
-    .slide-inner { box-shadow: none; }
+    .slide-inner {
+      width: 100%; height: 100%;
+      position: relative; left: auto; top: auto;
+      transform: none; box-shadow: none;
+    }
   }
 </style>
 </head>
@@ -566,12 +574,12 @@
 
 <div class="agent-stamp">
   <span class="dot"></span>
-  Generated with <b>Open Design</b> · plugin: <b>ib-pitch-book</b>
+  Generated with <b>OpenDesign</b> · plugin: <b>ib-pitch-book</b>
 </div>
 
 <div class="deck" id="deck">
 <div class="demo-banner" role="note" aria-label="Sample deck disclaimer">
-  <strong>Open Design sample deck.</strong> A Series B fundraising-pitch template: headline OSS figures follow the project README (60K+ stars · 300+ contributors · 217+ plugins); round terms, ARR, and figures marked demo are illustrative.
+  <strong>OpenDesign sample deck.</strong> A Series B fundraising-pitch template: headline OSS figures follow the project README (60K+ stars · 300+ contributors · 217+ plugins); round terms, ARR, and figures marked demo are illustrative.
 </div>
 <div class="stage" id="stage">
 
@@ -593,15 +601,15 @@
       </div>
       <div class="cover-meta">
         <div class="row"><span class="k">Prepared for</span><span class="v">Growth-equity investors<br/>Series B, lead + co-investors</span></div>
-        <div class="row"><span class="k">Prepared by</span><span class="v">Open Design (nexu-io)<br/>Founding &amp; growth team</span></div>
+        <div class="row"><span class="k">Prepared by</span><span class="v">OpenDesign (nexu-io)<br/>Founding &amp; growth team</span></div>
         <div class="row"><span class="k">Date</span><span class="v">July 9, 2026</span></div>
         <div class="row"><span class="k">The raise</span><span class="v">$28M Series B at a $180M pre-money valuation</span></div>
-        <div class="row"><span class="k">Sample status</span><span class="v">Headline OSS metrics follow the project README; round terms, ARR, and valuation outputs are illustrative placeholders for Open Design demonstration only.</span></div>
+        <div class="row"><span class="k">Sample status</span><span class="v">Headline OSS metrics follow the project README; round terms, ARR, and valuation outputs are illustrative placeholders for OpenDesign demonstration only.</span></div>
       </div>
     </div>
     <div class="marque">Series B · Deck v2</div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>Page 1 / 10 · github.com/nexu-io/open-design</span>
     </footer>
   </div>
@@ -634,7 +642,7 @@
       </ol>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>02 / 10 · plugin: ib-pitch-book · ds: investment-banking</span>
     </footer>
   </div>
@@ -659,12 +667,12 @@
         <div class="kpi"><span class="k">Enterprise design tool spend</span><span class="v num">$9.4<small>B</small></span><span class="delta up">+21% YoY</span></div>
         <div class="kpi"><span class="k">YTD dev-tool VC volume</span><span class="v num">$48.2<small>B</small></span><span class="delta up">+22% YoY</span></div>
         <div class="kpi"><span class="k">Growth-equity dry powder, sector-tagged</span><span class="v num">$184<small>B</small></span><span class="delta up">+9%</span></div>
-        <div class="kpi"><span class="k">Open Design cost vs. cloud</span><span class="v num">~$73<small>/mo</small></span><span class="delta up">−80%+</span></div>
+        <div class="kpi"><span class="k">OpenDesign cost vs. cloud</span><span class="v num">~$73<small>/mo</small></span><span class="delta up">−80%+</span></div>
       </div>
       <div class="market-cols">
         <div class="chartbox">
           <div class="title">
-            <h3>Open Design installs &amp; stars — rolling 36 months</h3>
+            <h3>OpenDesign installs &amp; stars — rolling 36 months</h3>
             <div class="src">Source: demo dataset — illustrative placeholders</div>
           </div>
           <div class="chart">
@@ -700,7 +708,7 @@
         </div>
         <div style="display:grid;gap:18px;align-content:start;">
           <div class="pull">"Every enterprise design team we talk to says the same thing: the cloud AI design tools that finally work are the ones they're least allowed to use."</div>
-          <p class="body-text">Three signals point to an open window for Open Design. (i) Cloud AI design platforms lock buyers to one model, one vendor, and one data-residency posture — a hard no for regulated enterprise IT. (ii) Growth-equity dry powder tagged to open-core and dev-tool categories is back near record levels, with 17 sector-tagged funds active in the past 9 months. (iii) Coding-agent adoption inside enterprises has already happened — Claude Code, Codex, Cursor are on the machine — but nothing wires them into a complete design workflow until now.</p>
+          <p class="body-text">Three signals point to an open window for OpenDesign. (i) Cloud AI design platforms lock buyers to one model, one vendor, and one data-residency posture — a hard no for regulated enterprise IT. (ii) Growth-equity dry powder tagged to open-core and dev-tool categories is back near record levels, with 17 sector-tagged funds active in the past 9 months. (iii) Coding-agent adoption inside enterprises has already happened — Claude Code, Codex, Cursor are on the machine — but nothing wires them into a complete design workflow until now.</p>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--rule);padding-top:12px;">
             <div><div class="kicker">Enterprise pilots</div><div class="num" style="font-size:22px;">40 orgs</div></div>
             <div><div class="kicker">Investor interest</div><div class="num" style="font-size:22px;">12 firms</div></div>
@@ -710,7 +718,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>03 / 10 · source: demo dataset · headline figures from README</span>
     </footer>
   </div>
@@ -729,7 +737,7 @@
       <div class="col-narrative">
         <span class="eyebrow">Section 2 · The solution, benchmarked</span>
         <h2 class="section">Where the <em>round</em> should price.</h2>
-        <p class="body-text">Twelve design and developer-tool peers selected on open-core or agent-native positioning, revenue scale, and growth profile. Open Design's proposed <strong>7.2×</strong> forward EV/ARR sits <strong>below the peer median (8.4×)</strong> — the discount is deliberate: it prices in pre-monetization risk on the enterprise layer while the OSS distribution and growth rate already clear the peer bar.</p>
+        <p class="body-text">Twelve design and developer-tool peers selected on open-core or agent-native positioning, revenue scale, and growth profile. OpenDesign's proposed <strong>7.2×</strong> forward EV/ARR sits <strong>below the peer median (8.4×)</strong> — the discount is deliberate: it prices in pre-monetization risk on the enterprise layer while the OSS distribution and growth rate already clear the peer bar.</p>
         <div class="criteria">
           <div class="t">Selection criteria</div>
           <ul>
@@ -756,19 +764,19 @@
             <tr><td>Studioflow</td><td>Agent-native</td><td>331</td><td>358</td><td>38</td><td>25</td><td>9.4×</td><td>14.3×</td><td>+52%</td></tr>
             <tr><td>Bramble UI</td><td>Closed SaaS</td><td>149</td><td>161</td><td>21</td><td>12</td><td>7.7×</td><td>13.4×</td><td>+27%</td></tr>
             <tr><td>Vectorem</td><td>Open-core</td><td>201</td><td>212</td><td>27</td><td>17</td><td>7.9×</td><td>12.5×</td><td>+41%</td></tr>
-            <tr class="target"><td>Open Design</td><td>Open-core, agent-native</td><td>180</td><td>208</td><td>29</td><td>19</td><td>7.2×</td><td>10.9×</td><td>+58%</td></tr>
+            <tr class="target"><td>OpenDesign</td><td>Open-core, agent-native</td><td>180</td><td>208</td><td>29</td><td>19</td><td>7.2×</td><td>10.9×</td><td>+58%</td></tr>
             <tr><td>Driftboard</td><td>Closed SaaS</td><td>412</td><td>439</td><td>62</td><td>39</td><td>7.1×</td><td>11.3×</td><td>+24%</td></tr>
             <tr><td>Modeliq</td><td>Agent-native</td><td>284</td><td>301</td><td>34</td><td>22</td><td>8.9×</td><td>13.7×</td><td>+47%</td></tr>
             <tr><td>GridForm</td><td>Closed SaaS</td><td>112</td><td>119</td><td>17</td><td>9</td><td>7.0×</td><td>13.2×</td><td>+22%</td></tr>
             <tr><td>InkStack</td><td>Open-core</td><td>354</td><td>373</td><td>43</td><td>27</td><td>8.7×</td><td>13.8×</td><td>+35%</td></tr>
-            <tr class="summary"><td>Median (excl. Open Design)</td><td>—</td><td>284</td><td>301</td><td>34</td><td>22</td><td>8.4×</td><td>13.3×</td><td>+35%</td></tr>
-            <tr class="summary"><td>Mean (excl. Open Design)</td><td>—</td><td>292</td><td>309</td><td>38</td><td>24</td><td>8.1×</td><td>13.2×</td><td>+35%</td></tr>
+            <tr class="summary"><td>Median (excl. OpenDesign)</td><td>—</td><td>284</td><td>301</td><td>34</td><td>22</td><td>8.4×</td><td>13.3×</td><td>+35%</td></tr>
+            <tr class="summary"><td>Mean (excl. OpenDesign)</td><td>—</td><td>292</td><td>309</td><td>38</td><td>24</td><td>8.1×</td><td>13.2×</td><td>+35%</td></tr>
           </tbody>
         </table>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>04 / 10 · skill: comps-analysis · source: demo dataset</span>
     </footer>
   </div>
@@ -786,7 +794,7 @@
     <div class="body">
       <div>
         <span class="eyebrow">Section 3 · Comparable raises</span>
-        <h2 class="section">Growth equity <em>has paid</em> 6.8–9.8× ARR for platforms like Open Design.</h2>
+        <h2 class="section">Growth equity <em>has paid</em> 6.8–9.8× ARR for platforms like OpenDesign.</h2>
         <p class="body-text" style="margin-top:10px;">14 financings screened, 9 retained based on stage, category overlap, and disclosure quality. Open-core-led rounds carry a +1.4× step-up premium over closed-SaaS rounds, consistent with the distribution advantage a free tier compounds into.</p>
       </div>
       <table class="fin">
@@ -804,7 +812,7 @@
           <tr><td>Oct 2023</td><td>Crestmark Robotics</td><td>Emerson Ventures</td><td>Open-core</td><td>26.4</td><td>10.1</td><td>91</td><td>8.6×</td><td>2.6×</td><td>+36%</td></tr>
           <tr><td>Jul 2023</td><td>Driscoll Industrial App</td><td>Apollo Growth</td><td>Closed SaaS</td><td>19.4</td><td>8.2</td><td>67</td><td>6.9×</td><td>2.4×</td><td>+22%</td></tr>
           <tr><td>Apr 2023</td><td>Yardley Precision Labs</td><td>ABB Ventures</td><td>Open-core</td><td>12.1</td><td>4.6</td><td>54</td><td>8.5×</td><td>2.6×</td><td>+39%</td></tr>
-          <tr class="target"><td>Jul 2026</td><td>Open Design</td><td>Vantage Peak Capital</td><td>Open-core</td><td>28.0</td><td>3.2</td><td>180</td><td>7.2×</td><td>—</td><td>proposed</td></tr>
+          <tr class="target"><td>Jul 2026</td><td>OpenDesign</td><td>Vantage Peak Capital</td><td>Open-core</td><td>28.0</td><td>3.2</td><td>180</td><td>7.2×</td><td>—</td><td>proposed</td></tr>
           <tr><td>Dec 2022</td><td>Westgate Automation</td><td>Bain Growth</td><td>Closed SaaS</td><td>25.1</td><td>10.7</td><td>78</td><td>6.8×</td><td>2.3×</td><td>+19%</td></tr>
           <tr class="summary"><td>Median — open-core (n=4)</td><td colspan="2">—</td><td>—</td><td>19.9</td><td>7.2</td><td>76</td><td>8.6×</td><td>2.7×</td><td>+40%</td></tr>
           <tr class="summary"><td>Median — closed SaaS (n=4)</td><td colspan="2">—</td><td>—</td><td>23.6</td><td>9.7</td><td>73</td><td>7.0×</td><td>2.4×</td><td>+23%</td></tr>
@@ -812,7 +820,7 @@
       </table>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>05 / 10 · source: demo dataset · no live financing data</span>
     </footer>
   </div>
@@ -880,7 +888,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>06 / 10 · skills: comps-analysis · dcf-model · vc-method</span>
     </footer>
   </div>
@@ -947,7 +955,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>07 / 10 · reported case: $500 → ~$73 / mo · grid illustrative</span>
     </footer>
   </div>
@@ -1040,7 +1048,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>08 / 10 · skill: strategic-alternatives</span>
     </footer>
   </div>
@@ -1076,7 +1084,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>09 / 10 · $28M Series B · $180M pre-money · illustrative terms</span>
     </footer>
   </div>
@@ -1100,8 +1108,8 @@
         <div>
           <h3>Important disclosures</h3>
           <div class="body-text">
-            <p>These materials have been prepared by the Open Design founding team for the exclusive use of prospective Series B investors. They are intended to provide a basis for discussion only and are not, and may not be relied upon as, financial, investment, legal, tax, or accounting advice. Recipients should consult their own professional advisors.</p>
-            <p><strong>Demo-data notice:</strong> the round size, pre-money valuation, ARR figures, investor names, process dates, and comparable-company figures in this artifact are illustrative placeholders created for Open Design demonstration only. They are not sourced from a live term sheet, cap table, or third-party data provider. Only the headline OSS metrics (60K+ stars, 300+ contributors, 217+ plugins, 129 design systems, 21 coding agents, and the Apache-2.0 license) follow the actual project README.</p>
+            <p>These materials have been prepared by the OpenDesign founding team for the exclusive use of prospective Series B investors. They are intended to provide a basis for discussion only and are not, and may not be relied upon as, financial, investment, legal, tax, or accounting advice. Recipients should consult their own professional advisors.</p>
+            <p><strong>Demo-data notice:</strong> the round size, pre-money valuation, ARR figures, investor names, process dates, and comparable-company figures in this artifact are illustrative placeholders created for OpenDesign demonstration only. They are not sourced from a live term sheet, cap table, or third-party data provider. Only the headline OSS metrics (60K+ stars, 300+ contributors, 217+ plugins, 129 design systems, 21 coding agents, and the Apache-2.0 license) follow the actual project README.</p>
             <p>In a live raise, the financial analysis must be derived only from documented source material such as audited financials, a verified cap table, licensed third-party comps data, or explicitly labeled assumptions. Each figure should carry a source date and should be traceable to a citation log before external distribution.</p>
             <p>Comparable-raise multiples, projections, and valuation outputs in this sample are synthetic and should not be reused as factual market observations. Replace this sample source block with round-specific citations, freshness dates, licensing notes, and the founding team's required review status.</p>
             <p>The nominal valuation outputs presented are indicative and are intended to frame investor discussion of the Series B. They are not a recommendation to enter into, or refrain from entering into, any specific investment. Any decision to invest will require independent legal review, term-sheet negotiation, and customary closing conditions.</p>
@@ -1110,22 +1118,22 @@
         <div style="display:grid;gap:14px;">
           <div class="stamp">
             <div class="lab">Founding team</div>
-            <div class="who">Open Design — nexu-io</div>
+            <div class="who">OpenDesign — nexu-io</div>
             <div class="det">github.com/nexu-io/open-design<br/>discord.gg/mHAjSMV6gz · x.com/nexudotio</div>
           </div>
           <div class="stamp">
             <div class="lab">Demo source status</div>
-            <div class="det" style="font-family:var(--mono);font-size:11px;">Synthetic Open Design demo dataset · headline OSS metrics only follow the README · no live cap table or term sheet</div>
+            <div class="det" style="font-family:var(--mono);font-size:11px;">Synthetic OpenDesign demo dataset · headline OSS metrics only follow the README · no live cap table or term sheet</div>
           </div>
           <div class="stamp">
             <div class="lab">Generated with</div>
-            <div class="det" style="font-family:var(--mono);font-size:11px;">Open Design · plugin: ib-pitch-book · Apache-2.0 · runs locally · BYOK · no sign-up</div>
+            <div class="det" style="font-family:var(--mono);font-size:11px;">OpenDesign · plugin: ib-pitch-book · Apache-2.0 · runs locally · BYOK · no sign-up</div>
           </div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck · End of document</span>
+      <span class="conf">OpenDesign — sample deck · End of document</span>
       <span>10 / 10 · github.com/nexu-io/open-design · Apache-2.0</span>
     </footer>
   </div>
@@ -1154,6 +1162,15 @@
   const slides = stage.querySelectorAll('.slide');
   const total  = slides.length;
   const now    = document.getElementById('now');
+  function fit(){
+    const slide = slides[0];
+    if (!slide) return;
+    const scale = Math.min(1, slide.clientWidth * 0.92 / 1320, Math.max(0, slide.clientHeight - 36) / 820);
+    stage.style.setProperty('--slide-scale', String(Math.max(0, scale)));
+  }
+  window.addEventListener('resize', fit);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fit).observe(stage);
+  fit();
   document.getElementById('total').textContent = String(total).padStart(2,'0');
   let i = 0;
   function go(n){

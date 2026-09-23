@@ -1,6 +1,6 @@
 # agent-protocol
 
-Daemon module providing the ACP and pi RPC subprocess protocol adapters used to drive external AI agent CLIs from the Open Design daemon.
+Daemon module providing the ACP and pi RPC subprocess protocol adapters used to drive external AI agent CLIs from the OpenDesign daemon.
 
 ---
 

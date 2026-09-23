@@ -7,7 +7,7 @@
 
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceCollabContext } from '@open-design/contracts';
+import type { CollabMemberRole, WorkspaceCollabContext } from '@open-design/contracts';
 
 vi.mock('../src/collab/workspace-events', () => ({
   useWorkspaceInvalidation: vi.fn(() => ({ connected: false })),
@@ -21,12 +21,13 @@ const PROJECT_ID = 'project-unbound';
 function workspaceContext(
   workspaceId: string,
   workspaceMemberId: string,
-): WorkspaceCollabContext {
+  role: CollabMemberRole = 'member',
+): WorkspaceCollabContext & { workspaceType: 'team' } {
   return {
     workspaceId,
     workspaceType: 'team',
     workspaceMemberId,
-    role: 'member',
+    role,
     memberStatus: 'active',
     lifecycleState: 'active',
     billingState: 'active',
@@ -125,6 +126,59 @@ describe('useProjectWorkspaceScope ignores shell Workspace selection', () => {
       'x-od-workspace-id': 'workspace-a',
       'x-od-workspace-member-id': 'member-a',
     });
+    hook.unmount();
+  });
+
+  /*
+   * The route bootstrap already performed the exact, header-carrying scope read
+   * and handed its answer down as `initialScope`. Seeding from it is what keeps
+   * a project open without a second round trip and without FileViewer painting
+   * its fail-closed skeleton first.
+   *
+   * The seed check asked whether the pre-fetched scope and the caller's context
+   * were the same CACHE KEY. They never are for an owner or an admin: the caller
+   * carries the real role, and the daemon's scope route answers with its
+   * placeholder `member` on its only branch. So every project open by a
+   * workspace owner threw the pre-fetched answer away and refetched it.
+   */
+  it('seeds a bound project from a bootstrap scope carrying the placeholder role', async () => {
+    const caller = workspaceContext('workspace-a', 'member-a', 'owner');
+    const bootstrapScope = {
+      kind: 'team',
+      projectId: 'project-bound',
+      workspaceId: 'workspace-a',
+      visibility: 'team',
+      // What the daemon actually answered for this very caller.
+      context: workspaceContext('workspace-a', 'member-a'),
+    } as const;
+
+    const hook = renderHook(() =>
+      useProjectWorkspaceScope('project-bound', caller, 'workspace-a', bootstrapScope),
+    );
+
+    expect(hook.result.current).toEqual({ loading: false, scope: bootstrapScope });
+    expect(scopeReads).toHaveLength(0);
+    hook.unmount();
+  });
+
+  // The seed is still an authority decision: a scope belonging to somebody else
+  // may not become this caller's state.
+  it('refuses to seed a bootstrap scope belonging to another member', async () => {
+    const caller = workspaceContext('workspace-a', 'member-a', 'owner');
+    const foreignScope = {
+      kind: 'team',
+      projectId: 'project-bound',
+      workspaceId: 'workspace-a',
+      visibility: 'team',
+      context: workspaceContext('workspace-a', 'member-elsewhere'),
+    } as const;
+
+    const hook = renderHook(() =>
+      useProjectWorkspaceScope('project-bound', caller, 'workspace-a', foreignScope),
+    );
+
+    expect(hook.result.current.loading).toBe(true);
+    expect(hook.result.current.scope).toBeNull();
     hook.unmount();
   });
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Automations should become the product-wide loop that lets Open Design improve
+Automations should become the product-wide loop that lets OpenDesign improve
 itself over time: ingest sources, distill durable memory, crystallize reusable
 skills, extract and refine design systems, and feed compact context back into
 future agent runs.
@@ -22,7 +22,7 @@ design agent.
 
 ## Product thesis
 
-Open Design becomes a self-evolving design agent when every useful run can
+OpenDesign becomes a self-evolving design agent when every useful run can
 promote durable knowledge into one of four trees:
 
 1. **Memory tree** - user, project, source, connector, and artifact knowledge

@@ -13,6 +13,7 @@
 // mirroring real vela's on-disk side-effect without the device-auth loop.
 
 import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { createServer } from 'node:http';
 import https from 'node:https';
 import type { AddressInfo } from 'node:net';
@@ -307,9 +308,9 @@ describe('GET /api/integrations/vela/wallet', () => {
 
   it('fetches the AMR wallet balance with the local control key and caches it briefly', async () => {
     const walletApi = await startWalletApi((req, res) => {
-      expect(req.url).toBe('/api/v1/wallet/balance');
       expect(req.headers.authorization).toBe('Bearer ck-wallet-balance');
       res.setHeader('content-type', 'application/json');
+      expect(req.url).toBe('/api/v1/wallet/balance');
       res.end(JSON.stringify({
         balanceUsd: '0.1000',
         updatedAt: '2026-06-23T06:05:18.782Z',
@@ -538,11 +539,11 @@ describe('GET /api/integrations/vela/wallet', () => {
   });
 
   it('does not serve a cached wallet balance after the control key is rejected', async () => {
-    let requestCount = 0;
-    const walletApi = await startWalletApi((_req, res) => {
-      requestCount += 1;
+    let walletRequestCount = 0;
+    const walletApi = await startWalletApi((req, res) => {
       res.setHeader('content-type', 'application/json');
-      if (requestCount === 1) {
+      walletRequestCount += 1;
+      if (walletRequestCount === 1) {
         res.end(JSON.stringify({
           balanceUsd: '0.1000',
           updatedAt: '2026-06-23T06:05:18.782Z',
@@ -638,6 +639,60 @@ describe('GET /api/integrations/vela/wallet', () => {
 });
 
 describe('GET /api/integrations/vela/status', () => {
+  it('reports AMR runtime unavailable instead of signed out when the vela binary cannot be resolved', async () => {
+    const previousPath = process.env.PATH;
+    const previousAgentHome = process.env.OD_AGENT_HOME;
+    const previousResourceRoot = process.env.OD_RESOURCE_ROOT;
+    const previousVelaBin = process.env.VELA_BIN;
+    const previousVelaOpenCodeBin = process.env.VELA_OPENCODE_BIN;
+    process.env.PATH = '';
+    process.env.OD_AGENT_HOME = tmpHome;
+    delete process.env.OD_RESOURCE_ROOT;
+    delete process.env.VELA_BIN;
+    delete process.env.VELA_OPENCODE_BIN;
+
+    const isolatedApp = express();
+    isolatedApp.use(express.json());
+    registerVelaRoutes(isolatedApp, {
+      paths: { RUNTIME_DATA_DIR: tmpHome },
+      appConfig: {
+        readAppConfig: async () => ({ agentCliEnv: {} }),
+      },
+      http: {},
+      env: {
+        HOME: tmpHome,
+        OPEN_DESIGN_AMR_PROFILE: 'local',
+        PATH: '',
+      },
+    });
+    const isolatedServer = createServer(isolatedApp);
+    await new Promise<void>((resolve) => isolatedServer.listen(0, '127.0.0.1', resolve));
+    const isolatedAddress = isolatedServer.address() as AddressInfo;
+    const isolatedUrl = `http://127.0.0.1:${isolatedAddress.port}`;
+
+    try {
+      const { status, body } = await getJson<{ error?: string; loggedIn?: boolean }>(
+        `${isolatedUrl}/api/integrations/vela/status`,
+      );
+
+      expect(status).toBe(503);
+      expect(body.error).toBe('amr-runtime-unavailable');
+      expect(body.loggedIn).toBeUndefined();
+    } finally {
+      await new Promise<void>((resolve) => isolatedServer.close(() => resolve()));
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      if (previousAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+      else process.env.OD_AGENT_HOME = previousAgentHome;
+      if (previousResourceRoot === undefined) delete process.env.OD_RESOURCE_ROOT;
+      else process.env.OD_RESOURCE_ROOT = previousResourceRoot;
+      if (previousVelaBin === undefined) delete process.env.VELA_BIN;
+      else process.env.VELA_BIN = previousVelaBin;
+      if (previousVelaOpenCodeBin === undefined) delete process.env.VELA_OPENCODE_BIN;
+      else process.env.VELA_OPENCODE_BIN = previousVelaOpenCodeBin;
+    }
+  });
+
   it('reports loggedIn=false when ~/.amr/config.json is absent', async () => {
     const { status, body } = await getJson<{
       loggedIn: boolean;
@@ -1453,7 +1508,7 @@ describe('POST /api/integrations/vela/login', () => {
     await waitForVelaLoginIdle();
   });
 
-  it('passes Open Design attribution device id to vela login', async () => {
+  it('passes OpenDesign attribution device id to vela login', async () => {
     const dataDir = process.env.OD_DATA_DIR as string;
     const previous = await readAppConfig(dataDir);
     const dumpPath = path.join(tmpHome, 'vela-env-attribution.json');
@@ -1607,7 +1662,7 @@ describe('POST /api/integrations/vela/login', () => {
     }
   });
 
-  it('omits Open Design attribution device id without analytics consent headers', async () => {
+  it('omits OpenDesign attribution device id without analytics consent headers', async () => {
     const dataDir = process.env.OD_DATA_DIR as string;
     const previous = await readAppConfig(dataDir);
     const dumpPath = path.join(tmpHome, 'vela-env-attribution-no-headers.json');
@@ -1638,7 +1693,7 @@ describe('POST /api/integrations/vela/login', () => {
     }
   });
 
-  it('omits Open Design attribution device id when telemetry metrics are disabled', async () => {
+  it('omits OpenDesign attribution device id when telemetry metrics are disabled', async () => {
     const dataDir = process.env.OD_DATA_DIR as string;
     const previous = await readAppConfig(dataDir);
     const dumpPath = path.join(tmpHome, 'vela-env-attribution-metrics-off.json');
@@ -2460,7 +2515,7 @@ describe('ALL /api/integrations/vela/message-center/*', () => {
 });
 
 describe('POST /api/integrations/vela/analytics-entry', () => {
-  it('mirrors Open Design AMR entry clicks to the AMR analytics ingest shape', async () => {
+  it('mirrors OpenDesign AMR entry clicks to the AMR analytics ingest shape', async () => {
     const requests: unknown[] = [];
     const captureServer = createServer((req, res) => {
       let raw = '';
@@ -2657,7 +2712,7 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     }
   });
 
-  it('mirrors Open Design onboarding profile snapshots with the header-derived device id', async () => {
+  it('mirrors OpenDesign onboarding profile snapshots with the header-derived device id', async () => {
     const requests: unknown[] = [];
     const captureServer = createServer((req, res) => {
       let raw = '';
@@ -2966,6 +3021,235 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
   });
 });
 
+describe('Test touchpoint runtime proxy', () => {
+  it('forwards the caller encoding preference and labels the reply it gets back', async () => {
+    // Decisions carry base64 content and run to megabytes. Building the upstream
+    // headers from scratch dropped `accept-encoding`, so every refresh pulled the
+    // payload uncompressed; the body is piped verbatim, so the reply must also
+    // carry upstream's `content-encoding` or the caller decodes gzip as JSON.
+    let seenAcceptEncoding: string | undefined;
+    const upstream = createServer((req, res) => {
+      seenAcceptEncoding = req.headers['accept-encoding'] as string | undefined;
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('content-encoding', 'gzip');
+      res.statusCode = 200;
+      res.end(gzipSync(Buffer.from(JSON.stringify({ placementKey: 'opend.home.hover-layer' }))));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/touchpoints/test-runtime?deploymentId=deployment-1&placementKey=opend.home.hover-layer&locale=zh-CN`,
+        { headers: { 'accept-encoding': 'gzip' } },
+      );
+      expect(response.status).toBe(200);
+      expect(seenAcceptEncoding).toBe('gzip');
+      // `fetch` decodes transparently, which is only possible when the header survived.
+      expect(await response.json()).toEqual({ placementKey: 'opend.home.hover-layer' });
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('leaves an unencoded reply unlabelled when the caller asks for no encoding', async () => {
+    let seenAcceptEncoding: string | undefined = 'unset';
+    const upstream = createServer((req, res) => {
+      seenAcceptEncoding = req.headers['accept-encoding'] as string | undefined;
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ placementKey: 'opend.home.hover-layer' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/touchpoints/test-runtime?deploymentId=deployment-1&placementKey=opend.home.hover-layer&locale=zh-CN`,
+        { headers: { 'accept-encoding': 'identity' } },
+      );
+      expect(seenAcceptEncoding).toBe('identity');
+      expect(response.headers.get('content-encoding')).toBeNull();
+      expect(await response.json()).toEqual({ placementKey: 'opend.home.hover-layer' });
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('forwards only the registered context POST with daemon-held credentials', async () => {
+    const requests: Array<{
+      url: string;
+      method: string;
+      authorization: string | undefined;
+      body: string;
+    }> = [];
+    const upstream = createServer((req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        requests.push({
+          url: req.url ?? '',
+          method: req.method ?? '',
+          authorization: req.headers.authorization,
+          body,
+        });
+        res.setHeader('content-type', 'application/json');
+        res.statusCode = 201;
+        res.end(JSON.stringify({ deploymentId: 'deployment-1', scenario: 'realtime', updatedAt: '2026-09-14T00:00:00.000Z' }));
+      });
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const accepted = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/context`,
+        { deploymentId: 'deployment-1', scenario: 'realtime' },
+        { authorization: 'Bearer browser-supplied-key' },
+      );
+      expect(accepted.status).toBe(201);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/test-context',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            deploymentId: 'deployment-1',
+            scenario: 'realtime',
+          }),
+        },
+      ]);
+      const acceptance = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/test-deployments/deployment-1/acceptances`,
+        {
+          placementKey: 'opend.home.campaign-modal',
+          hostVersion: '2',
+          locale: 'zh-CN',
+          scenario: 'realtime',
+          evidence: 'http://127.0.0.1:55381/#cms-test',
+        },
+        { authorization: 'Bearer browser-supplied-key' },
+      );
+      expect(acceptance.status).toBe(201);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/test-context',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            deploymentId: 'deployment-1',
+            scenario: 'realtime',
+          }),
+        },
+        {
+          url: '/api/v1/touchpoints/test-deployments/deployment-1/acceptances',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            placementKey: 'opend.home.campaign-modal',
+            hostVersion: '2',
+            locale: 'zh-CN',
+            scenario: 'realtime',
+            evidence: 'http://127.0.0.1:55381/#cms-test',
+          }),
+        },
+      ]);
+      const simulated = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/context`,
+        { deploymentId: 'deployment-1', scenario: 'before' },
+      );
+      expect(simulated.status).toBe(400);
+      expect(simulated.body).toEqual({ error: 'realtime_test_runtime_required' });
+      expect(requests).toHaveLength(2);
+      const rejected = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/unknown`,
+        { deploymentId: 'deployment-1', scenario: 'before' },
+      );
+      expect(rejected.status).toBe(404);
+      expect(rejected.body).toEqual({
+        error: 'unknown_touchpoint_runtime_path',
+      });
+      expect(requests).toHaveLength(2);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+});
+
+describe('Production touchpoint runtime proxy', () => {
+  it('routes a local publish reader separately without changing the stored login or trusting remote overrides', async () => {
+    const requests: string[] = [];
+    const upstream = createServer((req, res) => {
+      requests.push(req.url ?? '');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ activityId: 'published-local' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: 'http://127.0.0.1:1' });
+    try {
+      process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL = `http://127.0.0.1:${address.port}`;
+      const response = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.account-badge&locale=zh-CN`,
+      );
+      expect(response.status).toBe(200);
+      expect(requests).toHaveLength(1);
+      process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL = 'https://example.com';
+      const rejected = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.account-badge&locale=zh-CN`,
+      );
+      expect(rejected.status).toBe(400);
+      expect(requests).toHaveLength(1);
+    } finally {
+      delete process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL;
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+  it('forwards only the exact production decision path with daemon-held credentials', async () => {
+    const requests: Array<{
+      url: string;
+      method: string;
+      authorization: string | undefined;
+    }> = [];
+    const upstream = createServer((req, res) => {
+      requests.push({
+        url: req.url ?? '',
+        method: req.method ?? '',
+        authorization: req.headers.authorization,
+      });
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ activityId: 'activity-1' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const accepted = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.campaign-modal&locale=en-US`,
+      );
+      expect(accepted.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/production?placementKey=opend.home.campaign-modal&locale=en-US',
+          method: 'GET',
+          authorization: 'Bearer ck-seeded-key',
+        },
+      ]);
+      const rejected = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime/deployments`,
+      );
+      expect(rejected.status).toBe(404);
+      expect(requests).toHaveLength(1);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+});
+
 describe('POST /api/integrations/vela/logout', () => {
   it('drops back to preset AMR models after file-backed logout invalidates the cached remote catalog', async () => {
     seedLogin('local');
@@ -3261,6 +3545,7 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     const cases: Array<[string, string]> = [
       ['settings_amr_upgrade', 'settings'],
       ['inline_amr_upgrade', 'chat_panel'],
+      ['go_plan_sunset_modal', 'home'],
       ['deepseek_unpaid_modal', 'home'],
       ['deepseek_workbench_badge', 'home'],
       ['deepseek_model_switcher_upgrade', 'chat_panel'],
@@ -3289,6 +3574,36 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     expect(parsed).toMatchObject({
       campaignId: 'deepseek_v4_flash',
       conversionSource: 'deepseek_workbench_badge',
+    });
+  });
+
+  // The ingest allowlist is fail-closed: an unrecognised campaign id voids the
+  // WHOLE entry, not just its campaign field. So a live campaign missing from
+  // the set loses every attributed entry it produces — and the campaign's own
+  // success metrics (活动归因付费人数 / 金额) are defined as payments carrying
+  // its `campaign_id`, which means the campaign would report zero while
+  // converting normally.
+  it('accepts the current campaign id, not only the finished one', () => {
+    const parsed = parseAmrEntryAnalyticsPayload({
+      ...payloadFor('deepseek_workbench_badge', 'home'),
+      campaignId: 'deepseek_v4_pro',
+      conversionSource: 'deepseek_workbench_badge',
+    });
+    expect(parsed).toMatchObject({
+      campaignId: 'deepseek_v4_pro',
+      conversionSource: 'deepseek_workbench_badge',
+    });
+  });
+
+  it('accepts the targeted Go Plan sunset campaign dimensions', () => {
+    const parsed = parseAmrEntryAnalyticsPayload({
+      ...payloadFor('go_plan_sunset_modal', 'home'),
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
+    });
+    expect(parsed).toMatchObject({
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
     });
   });
 

@@ -189,6 +189,13 @@ export interface ProjectPreviewUrlResponse {
   csp: string;
   iframeSandbox: string;
   opaqueOrigin: true;
+  /** Unix epoch milliseconds when the bearer scope stops authorizing assets. */
+  expiresAt: number;
+}
+
+export interface ProjectPreviewScopeRenewResponse {
+  /** Unix epoch milliseconds after the authenticated host renewed the scope. */
+  expiresAt: number;
 }
 
 /**

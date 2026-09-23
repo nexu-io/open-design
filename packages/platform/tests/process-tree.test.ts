@@ -4,15 +4,34 @@ import { describe, expect, it } from "vitest";
 
 import {
   collectProcessTreePids,
+  selectOwnedProcessTree,
   processCommandExactlyRunsExecutable,
   stopProcesses,
+  type ProcessStampContract,
   type ProcessSnapshot,
   waitForProcessExit,
 } from "../src/index.js";
+import { parseWindowsProcessSnapshots, selectStampedProcessesAtInvocation } from "../src/process.js";
 
 function snapshot(pid: number, ppid: number, command = `pid-${pid}`): ProcessSnapshot {
   return { command, pid, ppid };
 }
+
+type TestStamp = { namespace: string };
+
+const stampContract: ProcessStampContract<TestStamp> = {
+  normalizeStamp(input) {
+    const namespace = (input as Partial<TestStamp>).namespace;
+    if (typeof namespace !== "string" || namespace.length === 0) throw new Error("invalid namespace");
+    return { namespace };
+  },
+  normalizeStampCriteria(input = {}) {
+    const namespace = (input as Partial<TestStamp>).namespace;
+    return namespace == null ? {} : { namespace };
+  },
+  stampFields: ["namespace"],
+  stampFlags: { namespace: "--test-namespace" },
+};
 
 describe("collectProcessTreePids", () => {
   it("returns an empty array when no roots are supplied", () => {
@@ -45,6 +64,66 @@ describe("collectProcessTreePids", () => {
   it("terminates on parent-child cycles instead of looping forever", () => {
     const processes = [snapshot(100, 200), snapshot(200, 100)];
     expect(collectProcessTreePids(processes, [100])).toEqual([200, 100]);
+  });
+});
+
+describe("selectStampedProcessesAtInvocation", () => {
+  const command = "node fixture.js --test-namespace=alpha";
+
+  it("keeps only matching Windows processes created before the invocation boundary", () => {
+    expect(selectStampedProcessesAtInvocation([
+      { command, pid: 100, ppid: 1, startedAtMs: 900 },
+      { command, pid: 200, ppid: 1, startedAtMs: 1_100 },
+      { command: "node unrelated.js", pid: 300, ppid: 1 },
+    ], { namespace: "alpha" }, stampContract, 1_000, "win32")).toEqual([
+      { command, pid: 100, ppid: 1, startedAtMs: 900 },
+    ]);
+  });
+
+  it("quick-fails when a matching Windows process has an ambiguous creation boundary", () => {
+    expect(() => selectStampedProcessesAtInvocation([
+      { command, pid: 100, ppid: 1 },
+    ], { namespace: "alpha" }, stampContract, 1_000, "win32")).toThrow(
+      "cannot establish process generation boundary for pid 100",
+    );
+
+    expect(() => selectStampedProcessesAtInvocation([
+      { command, pid: 200, ppid: 1, startedAtMs: 1_000 },
+    ], { namespace: "alpha" }, stampContract, 1_000, "win32")).toThrow(
+      "cannot establish process generation boundary for pid 200",
+    );
+  });
+
+  it("does not require Windows creation metadata from unrelated processes", () => {
+    expect(selectStampedProcessesAtInvocation([
+      { command: "node unrelated.js", pid: 300, ppid: 1 },
+    ], { namespace: "alpha" }, stampContract, 1_000, "win32")).toEqual([]);
+  });
+
+});
+
+describe("parseWindowsProcessSnapshots", () => {
+  it("retains the OS creation time used by the generation boundary", () => {
+    expect(parseWindowsProcessSnapshots(JSON.stringify({
+      CommandLine: "node fixture.js",
+      ParentProcessId: 10,
+      ProcessId: 20,
+      StartedAtMs: "1724490000123",
+    }))).toEqual([{
+      command: "node fixture.js",
+      pid: 20,
+      ppid: 10,
+      startedAtMs: 1_724_490_000_123,
+    }]);
+  });
+
+  it("leaves invalid creation metadata explicit for boundary quick-fail", () => {
+    expect(parseWindowsProcessSnapshots(JSON.stringify({
+      CommandLine: "node fixture.js",
+      ParentProcessId: 10,
+      ProcessId: 20,
+      StartedAtMs: null,
+    }))).toEqual([{ command: "node fixture.js", pid: 20, ppid: 10 }]);
   });
 });
 
@@ -123,4 +202,33 @@ describe("stopProcesses", () => {
     },
     5_000,
   );
+});
+
+
+describe("generation-fenced owned process trees", () => {
+  const processAt = (pid: number, ppid: number, startedAtMs?: number): ProcessSnapshot => ({
+    pid, ppid, command: "same executable", ...(startedAtMs === undefined ? {} : { startedAtMs }),
+  });
+  const root = processAt(10, 1, 100);
+  const child = processAt(11, 10, 101);
+  it("extends only a proven live ancestor and ignores same-name siblings", () => {
+    expect(selectOwnedProcessTree([root], [root, child, processAt(12, 11, 102), processAt(20, 1, 101)])
+      .map(entry => entry.pid)).toEqual([10, 11, 12]);
+  });
+  it("retains a known child after the wrapper exits, without trusting a reused wrapper PID", () => {
+    const replacement = processAt(10, 1, 200);
+    expect(selectOwnedProcessTree([root, child], [replacement, child, processAt(12, 11, 102), processAt(21, 10, 201)])
+      .map(entry => entry.pid)).toEqual([11, 12]);
+  });
+  it("rejects a reused descendant PID and that replacement's children", () => {
+    expect(selectOwnedProcessTree([root, child], [processAt(11, 1, 200), processAt(12, 11, 201)])).toEqual([]);
+  });
+  it("rejects unknown creation times and children older than their claimed parent", () => {
+    expect(selectOwnedProcessTree([root], [root, processAt(11, 10), processAt(12, 10, 99)])).toEqual([root]);
+    expect(selectOwnedProcessTree([processAt(10, 1)], [root, child])).toEqual([]);
+  });
+  it("does not discover an orphan from a root PID that was never captured", () => {
+    expect(selectOwnedProcessTree([], [child])).toEqual([]);
+    expect(selectOwnedProcessTree([root], [child])).toEqual([]);
+  });
 });

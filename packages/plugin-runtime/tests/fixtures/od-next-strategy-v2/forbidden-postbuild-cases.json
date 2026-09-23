@@ -1,0 +1,117 @@
+{
+  "fixtureVersion": 1,
+  "mutations": [
+    {
+      "id": "acceptance-structure",
+      "targetCase": "request-full-plan-simple",
+      "path": "expect.acceptance",
+      "value": { "status": "pending" },
+      "expectedError": "forbidden_structure:acceptance"
+    },
+    {
+      "id": "acceptance-checklist-structure",
+      "targetCase": "request-full-plan-simple",
+      "path": "expect.acceptanceChecklist",
+      "value": ["Approve the artifact before delivery."],
+      "expectedError": "forbidden_structure:acceptanceChecklist"
+    },
+    {
+      "id": "evidence-plan-structure",
+      "targetCase": "request-full-plan-complex",
+      "path": "expect.evidencePlan",
+      "value": { "checker": "screenshot-comparison" },
+      "expectedError": "forbidden_structure:evidencePlan"
+    },
+    {
+      "id": "judge-structure",
+      "targetCase": "production-complex",
+      "path": "expect.judgeReport",
+      "value": { "score": 4.5 },
+      "expectedError": "forbidden_structure:judgeReport"
+    },
+    {
+      "id": "quality-gate-structure",
+      "targetCase": "production-simple",
+      "path": "expect.qualityGate",
+      "value": "visual_score >= 4",
+      "expectedError": "forbidden_structure:qualityGate"
+    },
+    {
+      "id": "artifact-repair-structure",
+      "targetCase": "production-simple",
+      "path": "expect.artifactRepair",
+      "value": { "attempts": 1 },
+      "expectedError": "forbidden_structure:artifactRepair"
+    },
+    {
+      "id": "repeat-structure",
+      "targetCase": "production-complex",
+      "path": "expect.repeat",
+      "value": true,
+      "expectedError": "forbidden_structure:repeat"
+    },
+    {
+      "id": "critique-structure",
+      "targetCase": "production-complex",
+      "path": "expect.critique",
+      "value": { "score": 4 },
+      "expectedError": "forbidden_structure:critique"
+    },
+    {
+      "id": "post-build-verification-instruction",
+      "targetCase": "production-simple",
+      "path": "expect.buildActions.1",
+      "value": "After Build, verify the artifact in a browser before delivery.",
+      "expectedError": "forbidden_instruction:post_build_verification"
+    },
+    {
+      "id": "screenshot-review-instruction",
+      "targetCase": "production-complex",
+      "path": "expect.buildActions.2",
+      "value": "After the deliverable exists, take screenshots and review the visual output.",
+      "expectedError": "forbidden_instruction:artifact_review"
+    },
+    {
+      "id": "judge-instruction",
+      "targetCase": "production-complex",
+      "path": "expect.buildActions.2",
+      "value": "Ask a Judge agent to score the finished artifact.",
+      "expectedError": "forbidden_instruction:judge"
+    },
+    {
+      "id": "repair-until-pass-instruction",
+      "targetCase": "production-simple",
+      "path": "expect.buildActions.1",
+      "value": "Repair the finished artifact until the acceptance check passes.",
+      "expectedError": "forbidden_instruction:artifact_repair"
+    },
+    {
+      "id": "revalidation-instruction",
+      "targetCase": "production-simple",
+      "path": "expect.buildActions.1",
+      "value": "Revalidate the finished artifact after making delivery fixes.",
+      "expectedError": "forbidden_instruction:revalidation"
+    },
+    {
+      "id": "critique-theater-instruction",
+      "targetCase": "production-complex",
+      "path": "expect.buildActions.2",
+      "value": "Run critique-theater after Build and repeat until its score converges.",
+      "expectedError": "forbidden_instruction:critique_theater"
+    },
+    {
+      "id": "critique-instruction",
+      "targetCase": "production-complex",
+      "path": "expect.buildActions.2",
+      "value": "Perform a five-dimensional critique before declaring the deliverable complete.",
+      "expectedError": "forbidden_instruction:critique"
+    },
+    {
+      "id": "repeat-stage-instruction",
+      "targetCase": "production-complex",
+      "path": "expect.buildActions.2",
+      "value": "Repeat the review stage until its score converges.",
+      "expectedError": "forbidden_instruction:repeat_stage"
+    }
+  ]
+}

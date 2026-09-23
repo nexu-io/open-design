@@ -9,7 +9,10 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { agentCapabilities } from '../capabilities.js';
 import type { RuntimeAgentDef } from '../types.js';
+
+const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
 // `agy` v1.0.3 still has no `--model` flag (upstream issue #35), but the
 // TUI's Switch-Model picker writes the choice to its settings.json, and
@@ -171,6 +174,10 @@ export const antigravityAgentDef = {
   name: 'Antigravity',
   bin: 'agy',
   versionArgs: ['--version'],
+  helpArgs: ['--help'],
+  capabilityFlags: {
+    [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+  },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
     { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
@@ -203,7 +210,7 @@ export const antigravityAgentDef = {
   // composed in server.ts gives a second line of defense for weak
   // plain-stream models like Gemini 3.5 Flash.
   buildArgs: (
-    _prompt,
+    prompt,
     _imagePaths,
     _extra = [],
     options = {},
@@ -215,18 +222,12 @@ export const antigravityAgentDef = {
         runtimeContext.antigravitySettingsPath,
       );
     }
-    // We invoke agy via `-p -` (print mode + stdin sentinel), NOT
-    // `chat -`. Verified against `agy --help` on v1.0.3 — the
-    // `Available subcommands` list is `changelog / help / install /
-    // plugin / update`, and `chat` is NOT among them. `-p` is the
-    // documented print-mode flag (`Short alias for --print`) and
-    // `agy -p -` reads the prompt from stdin. The looper reviewer
-    // bot's environment runs a different agy build that may have
-    // renamed the entry point; until upstream confirms a stable
-    // headless subcommand (see google-antigravity/antigravity-cli#119)
-    // and the change actually ships in the auto-update channel that
-    // packaged OD users get, `-p -` is the contract that actually
-    // produces a print-mode reply on the installed CLI.
+    // Print mode via `-p <prompt>`. Older OD used `agy -p -` and wrote the
+    // prompt on stdin, but current agy (reproduced on 1.1.13) treats `-`
+    // as the literal prompt string and ignores stdin — the model only
+    // ever sees a single dash (#7161). Passing the real prompt as the
+    // `-p` argument matches the verified working CLI form
+    // (`agy -p "say hello"`).
     const args: string[] = [];
     // Always opt into `--log-file` when the daemon supplied a path so
     // it can post-exit grep for the actual upstream failure shape
@@ -235,19 +236,19 @@ export const antigravityAgentDef = {
     // never echoes those errors on stdout. See server.ts empty-output
     // guard for the consumer.
     //
-    // Flag order is load-bearing on agy v1.0.3: `agy -p --log-file
-    // /tmp/x -` runs successfully but leaves /tmp/x empty, while `agy
-    // --log-file /tmp/x -p -` captures the diagnostic log, including
-    // `Propagating selected model override to backend: label="<model>"`
-    // and auth/quota failures.
+    // Flag order is load-bearing on agy: put `--log-file` before `-p`
+    // so diagnostics (model override / auth / quota) land in the log.
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
-    args.push('-p');
-    args.push('-');
+    // Daemon-managed print-mode runs have no interactive approval channel.
+    if (agentCapabilities.get('antigravity')?.skipPermissions) {
+      args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
+    }
+    args.push('-p', prompt);
     return args;
   },
-  promptViaStdin: true,
+  promptViaStdin: false,
   streamFormat: 'plain',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',

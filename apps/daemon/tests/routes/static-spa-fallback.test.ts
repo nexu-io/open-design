@@ -1,9 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { resolveStaticSpaFallbackPath } from '../../src/server.js';
+import {
+  registerStaticSpaFallback,
+  resolveStaticSpaFallbackPath,
+} from '../../src/static-spa.js';
 
 describe('static SPA fallback', () => {
   let tempDir: string;
@@ -52,5 +55,24 @@ describe('static SPA fallback', () => {
     } finally {
       rmSync(emptyDir, { force: true, recursive: true });
     }
+  });
+
+  it('serves the shell relative to a hidden static root', () => {
+    const staticDir = path.join(tempDir, '.hermes', 'apps', 'web', 'out');
+    const indexPath = path.join(staticDir, 'index.html');
+    const app = { get: vi.fn() };
+    const response = { sendFile: vi.fn() };
+    const next = vi.fn();
+
+    expect(() => registerStaticSpaFallback(app as never, staticDir)).not.toThrow();
+    const handler = app.get.mock.calls[0]?.[1];
+    expect(handler).toBeTypeOf('function');
+
+    mkdirSync(staticDir, { recursive: true });
+    writeFileSync(indexPath, '<!doctype html>');
+    handler(request('/projects/proj-1'), response, next);
+
+    expect(response.sendFile).toHaveBeenCalledWith('index.html', { root: staticDir });
+    expect(next).not.toHaveBeenCalled();
   });
 });

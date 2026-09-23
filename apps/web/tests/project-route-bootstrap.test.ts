@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { bootstrapProjectRoute } from '../src/state/projects';
+import {
+  bootstrapFirstOpenTeamProjectRoute,
+  bootstrapProjectRoute,
+} from '../src/state/projects';
 import { resetCoalescedGet } from '../src/lib/coalesced-get';
 import { workspaceContextFixture } from './helpers/workspace-context';
 
@@ -14,6 +17,27 @@ const CONTEXT_B = workspaceContextFixture({
   workspaceId: 'workspace-b',
   workspaceMemberId: 'member-b',
   role: 'member',
+});
+/*
+ * What `GET /api/projects/:id/workspace-scope` ACTUALLY answers.
+ *
+ * The daemon route has exactly one branch (`resolveLocalProjectWorkspaceScope`)
+ * and it hardcodes `role: 'member'` no matter who asks — that placeholder is the
+ * whole implementation of "creator may write / non-creator is read-only", and it
+ * deliberately never consults the membership directory.
+ *
+ * These fixtures used to echo the caller's own context back, `role: 'owner'`
+ * included. That is a response production cannot produce, and it is why every
+ * test in this file stayed green while a team owner opening their own project
+ * got "项目不存在".
+ */
+const SCOPE_CONTEXT_A = workspaceContextFixture({
+  workspaceId: CONTEXT_A.workspaceId,
+  workspaceMemberId: CONTEXT_A.workspaceMemberId,
+});
+const SCOPE_CONTEXT_B = workspaceContextFixture({
+  workspaceId: CONTEXT_B.workspaceId,
+  workspaceMemberId: CONTEXT_B.workspaceMemberId,
 });
 const PROJECT_A = {
   id: PROJECT_ID,
@@ -43,7 +67,7 @@ describe('bootstrapProjectRoute', () => {
             projectId: PROJECT_ID,
             workspaceId: CONTEXT_A.workspaceId,
             visibility: 'team',
-            context: CONTEXT_A,
+            context: SCOPE_CONTEXT_A,
           },
         }), { status: 200 });
       }
@@ -61,7 +85,7 @@ describe('bootstrapProjectRoute', () => {
         projectId: PROJECT_ID,
         workspaceId: CONTEXT_A.workspaceId,
         visibility: 'team',
-        context: CONTEXT_A,
+        context: SCOPE_CONTEXT_A,
       },
     });
 
@@ -87,8 +111,8 @@ describe('bootstrapProjectRoute', () => {
       const headers = new Headers(init?.headers);
       calls.push({ url, headers });
       const context = headers.get('x-od-workspace-id') === CONTEXT_B.workspaceId
-        ? CONTEXT_B
-        : CONTEXT_A;
+        ? SCOPE_CONTEXT_B
+        : SCOPE_CONTEXT_A;
       if (url.endsWith('/workspace-scope')) {
         return new Response(JSON.stringify({
           scope: {
@@ -144,6 +168,64 @@ describe('bootstrapProjectRoute', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  // OPEND: a team OWNER opening their own project from the team directory
+  // before the ambient project list has loaded. The witness they hand in is the
+  // shell's (real role `owner`); the daemon answers with its placeholder role.
+  // Re-confirmation asks "is this the same person", so the role difference is
+  // not an answer to it — and treating it as one produced "项目不存在" on a
+  // project the daemon had a local row for. Only owners/admins ever saw it,
+  // because a plain member's two contexts are byte-identical.
+  it('re-confirms an owner witness against the daemon placeholder member role', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.endsWith('/workspace-scope')) {
+        return new Response(JSON.stringify({
+          scope: {
+            kind: 'team',
+            projectId: PROJECT_ID,
+            workspaceId: CONTEXT_A.workspaceId,
+            visibility: 'team',
+            context: SCOPE_CONTEXT_A,
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    }));
+
+    await expect(bootstrapProjectRoute(PROJECT_ID, {
+      accountGeneration: 11,
+      exactContext: CONTEXT_A,
+    })).resolves.toMatchObject({ kind: 'found', project: PROJECT_A });
+    // An exact witness skips the headerless discovery lane entirely: one scope
+    // read, one detail read.
+    expect(calls).toHaveLength(2);
+  });
+
+  // The other half of the same gate: relaxing role must not relax WHO.
+  it('still fails closed when the daemon re-confirms a different member', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/workspace-scope')) {
+        return new Response(JSON.stringify({
+          scope: {
+            kind: 'team',
+            projectId: PROJECT_ID,
+            workspaceId: CONTEXT_A.workspaceId,
+            visibility: 'team',
+            context: { ...SCOPE_CONTEXT_A, workspaceMemberId: 'member-someone-else' },
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    }));
+
+    await expect(bootstrapProjectRoute(PROJECT_ID, {
+      accountGeneration: 12,
+      exactContext: CONTEXT_A,
+    })).resolves.toEqual({ kind: 'forbidden' });
+  });
+
   it.each([
     { status: 403, kind: 'forbidden' as const },
     { status: 404, kind: 'not-found' as const },
@@ -166,7 +248,7 @@ describe('bootstrapProjectRoute', () => {
           projectId: 'different-project',
           workspaceId: CONTEXT_A.workspaceId,
           visibility: 'team',
-          context: CONTEXT_A,
+          context: SCOPE_CONTEXT_A,
         },
       }), { status: 200 }),
     ];
@@ -183,7 +265,7 @@ describe('bootstrapProjectRoute', () => {
           projectId: PROJECT_ID,
           workspaceId: CONTEXT_A.workspaceId,
           visibility: 'team',
-          context: CONTEXT_A,
+          context: SCOPE_CONTEXT_A,
         },
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
@@ -192,7 +274,7 @@ describe('bootstrapProjectRoute', () => {
           projectId: PROJECT_ID,
           workspaceId: CONTEXT_A.workspaceId,
           visibility: 'team',
-          context: CONTEXT_A,
+          context: SCOPE_CONTEXT_A,
         },
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
@@ -263,5 +345,150 @@ describe('bootstrapProjectRoute', () => {
     await bootstrapProjectRoute(PROJECT_ID, { accountGeneration: 3 });
     await bootstrapProjectRoute(PROJECT_ID, { accountGeneration: 3 });
     expect(failedFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('bootstrapFirstOpenTeamProjectRoute', () => {
+  it('uses one exact idempotent bootstrap then mounts only a confirmed Team binding', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let bound = false;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url.endsWith('/collab/bootstrap')) {
+        bound = true;
+        return new Response(JSON.stringify({
+          ok: true,
+          awaitingFirstMaterialization: true,
+        }), { status: 202 });
+      }
+      if (url.endsWith('/workspace-scope')) {
+        if (!bound) return new Response('{}', { status: 404 });
+        return new Response(JSON.stringify({
+          scope: {
+            kind: 'team',
+            projectId: PROJECT_ID,
+            workspaceId: CONTEXT_A.workspaceId,
+            visibility: 'team',
+            context: SCOPE_CONTEXT_A,
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    }));
+
+    await expect(bootstrapProjectRoute(PROJECT_ID, {
+      accountGeneration: 4,
+      exactContext: CONTEXT_A,
+    })).resolves.toEqual({ kind: 'not-found' });
+
+    await expect(bootstrapFirstOpenTeamProjectRoute(PROJECT_ID, {
+      accountGeneration: 4,
+      exactContext: CONTEXT_A,
+    })).resolves.toMatchObject({
+      kind: 'found',
+      project: PROJECT_A,
+      awaitingFirstMaterialization: true,
+      scope: { kind: 'team', context: SCOPE_CONTEXT_A },
+    });
+
+    expect(calls).toHaveLength(4);
+    expect(calls[1]?.url).toContain('/collab/bootstrap');
+    expect(calls[1]?.init?.method).toBe('PUT');
+    expect(calls.every((call) =>
+      new Headers(call.init?.headers).get('x-od-workspace-id') === CONTEXT_A.workspaceId,
+    )).toBe(true);
+  });
+
+  it('rejects an old-daemon unbound placeholder and preserves the fallback lane', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: true,
+        awaitingFirstMaterialization: true,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scope: {
+          kind: 'unbound',
+          projectId: PROJECT_ID,
+          workspaceId: null,
+          context: null,
+        },
+      }), { status: 200 })));
+
+    await expect(bootstrapFirstOpenTeamProjectRoute(PROJECT_ID, {
+      accountGeneration: 4,
+      exactContext: CONTEXT_A,
+    })).resolves.toEqual({ kind: 'unavailable' });
+  });
+
+  // The progressive first-open fast lane. Same fork, different consequence:
+  // for an owner/admin the lane returned `unavailable` every single time and the
+  // route silently fell back to the slow full-materialization path.
+  it('mounts the placeholder for an owner whose scope reports the placeholder role', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/collab/bootstrap')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          awaitingFirstMaterialization: true,
+        }), { status: 202 });
+      }
+      if (url.endsWith('/workspace-scope')) {
+        return new Response(JSON.stringify({
+          scope: {
+            kind: 'team',
+            projectId: PROJECT_ID,
+            workspaceId: CONTEXT_A.workspaceId,
+            visibility: 'team',
+            context: SCOPE_CONTEXT_A,
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    }));
+
+    await expect(bootstrapFirstOpenTeamProjectRoute(PROJECT_ID, {
+      accountGeneration: 9,
+      exactContext: CONTEXT_A,
+    })).resolves.toMatchObject({
+      kind: 'found',
+      awaitingFirstMaterialization: true,
+    });
+  });
+
+  it('still rejects a placeholder bound to a different member', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/collab/bootstrap')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 202 });
+      }
+      if (url.endsWith('/workspace-scope')) {
+        return new Response(JSON.stringify({
+          scope: {
+            kind: 'team',
+            projectId: PROJECT_ID,
+            workspaceId: CONTEXT_A.workspaceId,
+            visibility: 'team',
+            context: { ...SCOPE_CONTEXT_A, workspaceMemberId: 'member-someone-else' },
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    }));
+
+    await expect(bootstrapFirstOpenTeamProjectRoute(PROJECT_ID, {
+      accountGeneration: 10,
+      exactContext: CONTEXT_A,
+    })).resolves.toEqual({ kind: 'unavailable' });
+  });
+
+  it('never starts the Team lane for a Personal context', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(bootstrapFirstOpenTeamProjectRoute(PROJECT_ID, {
+      accountGeneration: 4,
+      exactContext: { ...CONTEXT_A, workspaceType: 'personal', teamId: undefined },
+    })).resolves.toEqual({ kind: 'not-found' });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

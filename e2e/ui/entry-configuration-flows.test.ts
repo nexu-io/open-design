@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { expectStableCount } from '@/playwright/assertions';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import type { Locator, Page } from '@playwright/test';
 
@@ -57,7 +57,7 @@ const IMAGE_TEMPLATE = {
   source: {
     repo: 'open-design/test-prompts',
     license: 'MIT',
-    author: 'Open Design QA',
+    author: 'OpenDesign QA',
   },
 };
 
@@ -69,6 +69,10 @@ async function readSavedConfig(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx) and its backdrop sits
+  // at z-index 1500 — above the z-index 120 chrome that owns the rail/settings
+  // controls this spec clicks. A live release card would swallow those clicks.
+  await suppressWhatsNew(page);
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,
@@ -194,6 +198,7 @@ test('[P2] connectors search supports empty results and keyboard-closeable detai
       skillId: null,
       designSystemId: null,
       onboardingCompleted: true,
+      privacyDecisionAt: 1,
       agentModels: {},
       composio: {
         apiKey: '',
@@ -327,7 +332,7 @@ test('[P1] typing a draft replacement Composio key does not trigger global autos
     },
   );
 
-  const replacementInput = settingsDialog.getByPlaceholder('Paste a new key to replace the saved one');
+  const replacementInput = settingsDialog.getByPlaceholder(/new key to replace the saved key/i);
   await replacementInput.fill('cmp-draft-secret-9999');
   await expect(settingsDialog.getByRole('button', { name: 'Save key', exact: true })).toBeEnabled();
 
@@ -389,7 +394,7 @@ async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.long });
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.long });
 }

@@ -18,6 +18,7 @@ import {
   type PackagedOnboardingConfigFetch,
   packagedAppShellFailureReason,
   packagedAppShellPolicy,
+  packagedAppRouteUrl,
   packagedAppShellSettled,
   packagedAppShellState,
   type PackagedAppShellProbeDocument,
@@ -79,7 +80,7 @@ function renderFixture(
     body: { textContent: options.bodyText ?? '' },
     querySelector: (selectors) => elements.find((element) => matchesSelector(element, selectors)) ?? null,
     querySelectorAll: (selectors) => elements.filter((element) => matchesSelector(element, selectors)),
-    title: options.title ?? 'Open Design',
+    title: options.title ?? 'OpenDesign',
   };
 }
 
@@ -90,15 +91,15 @@ function probe(document: PackagedAppShellProbeDocument): PackagedAppShellSnapsho
   return snapshot;
 }
 
-// The surface a signed-in or onboarding-seeded packaged app comes up on.
+// The surface a signed-in packaged app comes up on.
 const HOME_SHELL: readonly FixtureNode[] = [
   { classes: ['entry-shell'] },
   { attributes: { 'data-testid': 'entry-nav-home' }, classes: ['entry-nav__item'] },
   { attributes: { 'data-testid': 'entry-nav-updater' }, classes: ['entry-nav__item'] },
 ];
 
-// The surface a fresh packaged install comes up on since the #4513 cloud
-// sign-in redesign: EntryShell's onboarding shell wrapping OnboardingView's
+// The auth-first surface a fresh install or a completed but signed-out core
+// run comes up on: EntryShell's onboarding shell wrapping OnboardingView's
 // identity gate. Runtime selection intentionally follows Cloud sign-in.
 const CLOUD_SIGN_IN_LANDING: readonly FixtureNode[] = [
   { classes: ['entry-shell', 'entry-shell--no-header', 'entry-shell--onboarding'] },
@@ -108,6 +109,12 @@ const CLOUD_SIGN_IN_LANDING: readonly FixtureNode[] = [
 ];
 
 describe('packaged app-shell probe', () => {
+  it('accepts auth-first routes as packaged renderer URLs', () => {
+    expect(packagedAppRouteUrl('od://app/')).toBe(true);
+    expect(packagedAppRouteUrl('od://app/onboarding')).toBe(true);
+    expect(packagedAppRouteUrl('http://127.0.0.1:3000/')).toBe(false);
+  });
+
   it('ships a self-contained expression that reads the globals the renderer has', () => {
     expect(packagedAppShellExpression).toContain('(document, HTMLElement)');
     expect(packagedAppShellExpression).toContain('[data-testid="entry-nav-home"]');
@@ -230,17 +237,29 @@ describe('packaged app-shell terminal state', () => {
 });
 
 // The postcondition PerishCode's review on #6481 asked to keep: a run that
-// seeds onboarding as completed must still notice when the app ignores it.
-// The setup's claim and the accepted terminal state have to come from the same
-// fact, so the policy reads the daemon's own `onboardingCompleted` (served from
-// `readAppConfig(RUNTIME_DATA_DIR)`) rather than the smoke profile.
+// seeds onboarding as completed must still notice when a cold launch loses it.
+// Auth-first means a retained completed user may legitimately see the same
+// cloud sign-in landing as a first run, so the seed check and surface policy
+// must stay separate.
 describe('packaged app-shell policy', () => {
-  it('requires home once the daemon confirms onboarding is completed', () => {
+  it('accepts the auth-first landing when a seeded core run retained onboarding completion', () => {
+    const landing = probe(renderFixture(CLOUD_SIGN_IN_LANDING));
+    const policy = packagedAppShellPolicy({
+      coreProfile: true,
+      daemonOnboardingCompleted: true,
+      seededOnboardingCompleted: true,
+    });
+
+    expect(policy).toEqual({ acceptOnboardingLanding: true });
+    expect(packagedAppShellSettled(landing, policy)).toBe(true);
+  });
+
+  it('requires home when the scenario does not establish auth-first permission', () => {
     expect(
       packagedAppShellPolicy({ coreProfile: true, daemonOnboardingCompleted: true, seededOnboardingCompleted: false }),
     ).toEqual({ acceptOnboardingLanding: false });
     expect(
-      packagedAppShellPolicy({ coreProfile: false, daemonOnboardingCompleted: true, seededOnboardingCompleted: false }),
+      packagedAppShellPolicy({ coreProfile: false, daemonOnboardingCompleted: true, seededOnboardingCompleted: true }),
     ).toEqual({ acceptOnboardingLanding: false });
   });
 
@@ -250,7 +269,7 @@ describe('packaged app-shell policy', () => {
     ).toEqual({ acceptOnboardingLanding: true });
   });
 
-  it('keeps a seeded run failing when the app ignores completed onboarding', () => {
+  it('does not infer completed-user auth permission without a seed', () => {
     const landing = probe(renderFixture(CLOUD_SIGN_IN_LANDING));
     const policy = packagedAppShellPolicy({ coreProfile: true, daemonOnboardingCompleted: true, seededOnboardingCompleted: false });
 
@@ -566,20 +585,20 @@ describe('packaged launch scenarios', () => {
     expect(result).toEqual({ appShell: 'home', onboardingCompleted: true });
   });
 
-  it('fails a completed user that lands on onboarding instead of home', async () => {
+  it('settles a retained completed user on the core auth-first landing', async () => {
     const clock = virtualClock();
     const landing = probe(renderFixture(CLOUD_SIGN_IN_LANDING));
 
-    await expect(
-      runPackagedAppShellPhase({
-        coreProfile: true,
-        now: clock.now,
-        observe: async () => landing,
-        readOnboardingConfig: async () => ({ kind: 'reading', ok: true, onboardingCompleted: true, status: 200 }),
-        scenario: 'completed-user',
-        sleep: clock.sleep,
-      }),
-    ).rejects.toThrow(/needs home/);
+    const result = await runPackagedAppShellPhase({
+      coreProfile: true,
+      now: clock.now,
+      observe: async () => landing,
+      readOnboardingConfig: async () => ({ kind: 'reading', ok: true, onboardingCompleted: true, status: 200 }),
+      scenario: 'completed-user',
+      sleep: clock.sleep,
+    });
+
+    expect(result).toEqual({ appShell: 'onboarding-landing', onboardingCompleted: true });
   });
 
   it('fails a completed user whose seeded state was lost across the relaunch', async () => {

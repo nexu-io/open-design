@@ -33,9 +33,9 @@ od:
 
 HTML is the source of truth for video. A composition is an HTML file with `data-*` attributes for timing, a GSAP timeline for animation, and CSS for appearance. The framework handles clip visibility, media playback, and timeline sync.
 
-## Open Design integration (load-bearing for this surface)
+## OpenDesign integration (load-bearing for this surface)
 
-When this skill runs inside Open Design (i.e. `$OD_PROJECT_DIR` is set), the
+When this skill runs inside OpenDesign (i.e. `$OD_PROJECT_DIR` is set), the
 output flow is fixed: only the rendered `.mp4` should land in the project
 root. Composition source files (`hyperframes.json`, `meta.json`,
 `index.html`, assets) belong inside a hidden cache directory so they don't
@@ -44,8 +44,8 @@ clutter the user's FileViewer or the chat's "produced files" chips.
 **Render workflow inside OD — fast path**:
 
 For most OD requests ("test video", "5s product reveal", "demo clip"),
-do NOT write the composition HTML from scratch. Use HyperFrames'
-built-in scaffold and edit only what the prompt actually changes. The
+do NOT write the composition HTML from scratch. Use Open Design's
+deterministic scaffold and edit only what the prompt actually changes. The
 "author from scratch" path costs minutes of model output and silent
 chat-tool time; the scaffold path costs seconds.
 
@@ -57,9 +57,11 @@ COMP="$OD_PROJECT_DIR/$COMP_REL"
 
 # 2. Get an immediately-renderable scaffold (hyperframes.json,
 #    meta.json, index.html with GSAP CDN + window.__timelines.main
-#    already registered). This runs in your shell — pure file copy,
-#    no Chrome, no network beyond the npx cache.
-npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
+#    already registered). Open Design writes these files itself; it does
+#    not run `hyperframes init`, consult an npx cache, or install global skills.
+"$OD_NODE_BIN" "$OD_BIN" media scaffold \
+  --project "$OD_PROJECT_ID" \
+  --composition-dir "$COMP_REL"
 
 # 3. Edit ONLY $COMP/index.html — change `data-duration` on the root
 #    if you need a non-default length, swap the placeholder palette
@@ -68,8 +70,8 @@ npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
 #    `window.__timelines["main"] = gsap.timeline({paused:true})` block.
 #    Keep edits minimal; the scaffold is already valid HF.
 
-# 4. Dispatch render through the OD daemon. Do NOT run `npx hyperframes
-#    render` from this shell — the daemon runs it for you in an
+# 4. Dispatch render through the OD daemon. Do NOT run HyperFrames
+#    `render` from this shell — the daemon runs it for you in an
 #    unsandboxed process. (Many agent CLIs, Claude Code in particular,
 #    wrap Bash in macOS sandbox-exec under which puppeteer's Chrome
 #    subprocess hangs partway through frame capture. The daemon process
@@ -122,15 +124,15 @@ init + edit is the default path.
 The lighter HF subcommands you CAN still run from your own shell
 (they don't need to spawn Chrome):
 
-- `npx hyperframes lint "$COMP"` — validate composition before dispatch
-- `npx hyperframes transcribe <audio>` — generate captions
-- `npx hyperframes tts <text>` — generate narration
+- `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" lint "$COMP"` — validate composition before dispatch
+- `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe <audio>` — generate captions
+- `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" tts <text>` — generate narration
 
 Reserve the daemon dispatch for `render`/`inspect`/`preview` (anything
 Chrome-bound). After authoring the composition under `.hyperframes-cache/`,
 render it by calling `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`.
 The daemon runs the Chrome-bound HyperFrames render outside your shell
-sandbox and streams progress back to you. Do not run `npx hyperframes render`
+sandbox and streams progress back to you. Do not run HyperFrames `render`
 yourself.
 
 **Do NOT** drop `hyperframes.json` / `meta.json` / `index.html` in the
@@ -411,8 +413,8 @@ When no `visual-style.md` or animation direction is provided, follow [house-styl
 
 ## Output Checklist
 
-- [ ] `npx hyperframes lint` and `npx hyperframes validate` both pass
-- [ ] `npx hyperframes inspect` passes, or every reported overflow is intentionally marked
+- [ ] `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" lint` and `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" validate` both pass
+- [ ] `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" inspect` passes, or every reported overflow is intentionally marked
 - [ ] Contrast warnings addressed (see Quality Checks below)
 - [ ] Layout issues addressed (see Quality Checks below)
 - [ ] Animation choreography verified (see Quality Checks below)
@@ -424,8 +426,8 @@ When no `visual-style.md` or animation direction is provided, follow [house-styl
 `hyperframes inspect` runs the composition in headless Chrome, seeks through the timeline, and maps visual layout issues with timestamps, selectors, bounding boxes, and fix hints. Run it after `lint` and `validate`:
 
 ```bash
-npx hyperframes inspect
-npx hyperframes inspect --json
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" inspect
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" inspect --json
 ```
 
 Failures usually mean text is spilling out of a bubble/card, a fixed-size label is clipping dynamic copy, or text has moved off the canvas. Fix by increasing container size or padding, reducing font size or letter spacing, adding a real `max-width` so text wraps inside the container, or using `window.__hyperframes.fitTextFontSize(...)` for dynamic copy.

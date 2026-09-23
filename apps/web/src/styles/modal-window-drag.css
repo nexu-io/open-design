@@ -9,12 +9,11 @@
   .plugin-details-modal-backdrop,
   .plugins-import-modal__backdrop,
   .ds-modal-backdrop,
-  .prompt-template-modal-backdrop,
-  .prompt-template-lightbox-backdrop,
   .home-hero-confirm__backdrop,
   .project-ds-picker-fullscreen,
   .staged-preview-modal,
-  .qs-overlay
+  .qs-overlay,
+  .community-template-preview
 ) {
   --modal-window-drag-strip-height: 56px;
 }
@@ -27,12 +26,11 @@
   .plugin-details-modal-backdrop,
   .plugins-import-modal__backdrop,
   .ds-modal-backdrop,
-  .prompt-template-modal-backdrop,
-  .prompt-template-lightbox-backdrop,
   .home-hero-confirm__backdrop,
   .project-ds-picker-fullscreen,
   .staged-preview-modal,
-  .qs-overlay
+  .qs-overlay,
+  .community-template-preview
 )::before {
   content: '';
   position: absolute;

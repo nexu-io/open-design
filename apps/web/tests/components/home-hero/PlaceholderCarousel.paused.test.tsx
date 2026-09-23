@@ -23,11 +23,12 @@ const SCENARIOS = [
 describe('PlaceholderCarousel — paused while the editor has focus (#118)', () => {
   it('renders nothing and schedules no timer once paused', () => {
     vi.useFakeTimers();
+    const onScenarioChange = vi.fn();
     const { container, rerender } = render(
       <PlaceholderCarousel
         scenarios={[...SCENARIOS]}
         active
-        onScenarioChange={() => {}}
+        onScenarioChange={onScenarioChange}
       />,
     );
     // The typewriter starts at zero characters; let it type a few first so the
@@ -52,6 +53,36 @@ describe('PlaceholderCarousel — paused while the editor has focus (#118)', () 
     // passing must not bring any text back under the caret.
     typeAFewCharacters();
     expect(container.textContent).toBe('');
+    expect(onScenarioChange).toHaveBeenCalledWith(SCENARIOS[0]);
+  });
+
+  it('reports the active scenario while initially paused so empty input stays submittable', () => {
+    const onScenarioChange = vi.fn();
+
+    render(
+      <PlaceholderCarousel
+        scenarios={[...SCENARIOS]}
+        active
+        paused
+        onScenarioChange={onScenarioChange}
+      />,
+    );
+
+    expect(onScenarioChange).toHaveBeenCalledWith(SCENARIOS[0]);
+  });
+
+  it('reports the current scenario while paused so empty-composer Send stays enabled', () => {
+    const onScenarioChange = vi.fn();
+    render(
+      <PlaceholderCarousel
+        scenarios={[...SCENARIOS]}
+        active
+        paused
+        onScenarioChange={onScenarioChange}
+      />,
+    );
+
+    expect(onScenarioChange).toHaveBeenCalledWith(SCENARIOS[0]);
   });
 
   it('keeps animating while unpaused', () => {

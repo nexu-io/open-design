@@ -21,6 +21,7 @@ import {
   isDesignSystemFile,
   isPreviewModulePath,
 } from './runtimes/run-artifacts.js';
+import { parsePersistedManifest } from './artifacts/manifest.js';
 
 // A file worth fingerprinting for run-finish bookkeeping: a user-facing
 // artifact (HTML / image / video / audio) OR a design-system marker
@@ -30,10 +31,56 @@ function isTrackedRunFile(name: string): boolean {
   return isArtifactPath(name) || isDesignSystemFile(name) || isRenderDependencyPath(name);
 }
 
+// Manifest-backed artifacts: `create_artifact` persists a manifest sidecar
+// next to the artifact file as `<file>.artifact.json`, and the manifest layer
+// (`artifacts/manifest.ts`) accepts entry kinds the extension whitelist above
+// does not — most importantly Markdown exports (`markdown-document`). A file
+// with a valid sidecar therefore counts as a tracked run artifact even though
+// its extension is not renderable, while the sidecar itself is metadata and
+// never tracked. See #7579: a manifest-backed `.md` export was invisible to
+// the snapshot/diff, so finalization reported `artifactCount: 0` →
+// `no_artifact`.
+const MANIFEST_SIDECAR_SUFFIX = '.artifact.json';
+
+function isManifestSidecarPath(name: string): boolean {
+  return name.toLowerCase().endsWith(MANIFEST_SIDECAR_SUFFIX);
+}
+
+function manifestSidecarFor(fullPath: string): string {
+  return fullPath + MANIFEST_SIDECAR_SUFFIX;
+}
+
+// Valid = parses through the same manifest layer `create_artifact` writes with
+// (`parsePersistedManifest`), so a stray or malformed sidecar never widens
+// tracking to arbitrary unmanifested files.
+function hasValidManifestSidecar(fullPath: string): boolean {
+  if (isManifestSidecarPath(fullPath)) return false;
+  let raw: string;
+  try {
+    raw = fs.readFileSync(manifestSidecarFor(fullPath), 'utf8');
+  } catch {
+    return false;
+  }
+  return parsePersistedManifest(raw, path.basename(fullPath)) !== null;
+}
+
+async function hasValidManifestSidecarAsync(fullPath: string): Promise<boolean> {
+  if (isManifestSidecarPath(fullPath)) return false;
+  let raw: string;
+  try {
+    raw = await fs.promises.readFile(manifestSidecarFor(fullPath), 'utf8');
+  } catch {
+    return false;
+  }
+  return parsePersistedManifest(raw, path.basename(fullPath)) !== null;
+}
+
 const RENDER_DEPENDENCY_EXTENSIONS = new Set([
   '.css',
+  '.cjs',
   '.js',
   '.jsx',
+  '.mjs',
   '.ts',
   '.tsx',
 ]);
@@ -64,6 +111,11 @@ export interface ArtifactFingerprint {
   // pathological "same byte length AND preserved mtime" rewrite that size+mtime
   // alone would miss. Large media skip hashing to bound run-finish cost.
   hash: string | null;
+  // True when the file is tracked because of a valid `.artifact.json` sidecar
+  // rather than its extension. `diffRunArtifacts` counts these as artifacts
+  // even though `isArtifactPath` rejects the extension (e.g. Markdown
+  // exports). Extension-classified files never set this.
+  manifestBacked?: boolean;
 }
 
 // Files larger than this are not content-hashed (cost bound). Artifacts that
@@ -71,12 +123,31 @@ export interface ArtifactFingerprint {
 // regenerated wholesale (size changes), so size+mtime suffices for them.
 const HASH_MAX_BYTES = 1024 * 1024;
 
-function fingerprintFile(full: string, size: number, mtimeMs: number): ArtifactFingerprint {
+function fingerprintFile(full: string, size: number, mtimeMs: number, onReadFailure: () => void): ArtifactFingerprint {
   let hash: string | null = null;
   if (size <= HASH_MAX_BYTES) {
     try {
       hash = createHash('sha1').update(fs.readFileSync(full)).digest('hex');
     } catch {
+      onReadFailure();
+      hash = null;
+    }
+  }
+  return { size, mtimeMs, hash };
+}
+
+async function fingerprintFileAsync(
+  full: string,
+  size: number,
+  mtimeMs: number,
+  onReadFailure: () => void,
+): Promise<ArtifactFingerprint> {
+  let hash: string | null = null;
+  if (size <= HASH_MAX_BYTES) {
+    try {
+      hash = createHash('sha1').update(await fs.promises.readFile(full)).digest('hex');
+    } catch {
+      onReadFailure();
       hash = null;
     }
   }
@@ -85,6 +156,10 @@ function fingerprintFile(full: string, size: number, mtimeMs: number): ArtifactF
 
 // path -> fingerprint for every artifact-extension file under the project root.
 export type ArtifactSnapshot = Map<string, ArtifactFingerprint>;
+
+// Coverage is local to an actual scan, not inferred from a zero-sized Map.
+// Keep legacy counters and the existing scan/permission boundaries unchanged.
+const snapshotCoverage = new WeakMap<ArtifactSnapshot, boolean>();
 
 // Directories that never hold user-facing artifacts; skipped so the walk stays
 // cheap and never wanders into dependencies, VCS, or daemon scratch.
@@ -104,40 +179,162 @@ const IGNORED_DIR_NAMES: ReadonlySet<string> = new Set([
 // minor undercount, never a hang.
 const MAX_FILES = 5000;
 
-// Walk `rootDir` and fingerprint every artifact file (HTML + image/video/audio,
-// per `run-artifacts.ts`). Best-effort: unreadable dirs/files are skipped, never
-// thrown. Returns an empty snapshot when the root does not exist.
+// Separate cap for files outside the tracked-extension set (markdown, docs,
+// code, JSON, …). These feed only the coarse `files_written_count` signal, so
+// they get their own budget instead of competing with — and on a large
+// imported repo starving — the artifact fingerprints that the primary
+// `artifact_count` funnel depends on.
+const MAX_OTHER_FILES = 5000;
+
+// Cheap fingerprint for non-tracked files: size + mtime only, no content read.
+// `files_written_count` is a boolean-ish "did the run write anything" signal,
+// so the pathological same-size-same-mtime rewrite these miss is acceptable —
+// hashing every code file in an imported repo at run finish is not.
+function statOnlyFingerprint(size: number, mtimeMs: number): ArtifactFingerprint {
+  return { size, mtimeMs, hash: null };
+}
+
+// Walk `rootDir` and fingerprint every file: tracked files (artifact
+// extensions + DESIGN.md + render dependencies, per `run-artifacts.ts`) get a
+// full content fingerprint; every other file gets a cheap size+mtime stamp so
+// the diff can also report the all-file-types `files_written_count`. Each class
+// has its own cap (`MAX_FILES` / `MAX_OTHER_FILES`) so a code-heavy imported
+// repo cannot starve artifact tracking. Best-effort: unreadable dirs/files are
+// skipped, never thrown. Returns an empty snapshot when the root does not
+// exist.
 export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
   const snapshot: ArtifactSnapshot = new Map();
+  let complete = true;
+  const markIncomplete = () => { complete = false; };
+  let trackedCount = 0;
+  let otherCount = 0;
   const walk = (dir: string): void => {
-    if (snapshot.size >= MAX_FILES) return;
+    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
+      complete = false;
       return;
     }
     for (const entry of entries) {
-      if (snapshot.size >= MAX_FILES) return;
+      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         walk(path.join(dir, entry.name));
-      } else if (entry.isFile() && isTrackedRunFile(entry.name)) {
+      } else if (entry.isFile() && !isManifestSidecarPath(entry.name)) {
         const full = path.join(dir, entry.name);
+        const tracked = isTrackedRunFile(entry.name);
+        const manifestBacked = !tracked && hasValidManifestSidecar(full);
+        const trackedForBudget = tracked || manifestBacked;
+        if (trackedForBudget ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) { complete = false; continue; }
         try {
           const stat = fs.statSync(full);
-          snapshot.set(full, fingerprintFile(full, stat.size, stat.mtimeMs));
+          const fingerprint = trackedForBudget
+            ? fingerprintFile(full, stat.size, stat.mtimeMs, markIncomplete)
+            : statOnlyFingerprint(stat.size, stat.mtimeMs);
+          snapshot.set(
+            full,
+            manifestBacked ? { ...fingerprint, manifestBacked } : fingerprint,
+          );
+          if (trackedForBudget) trackedCount += 1;
+          else otherCount += 1;
         } catch {
+          complete = false;
           // Race (file removed mid-walk) or permission error — skip.
         }
       }
     }
   };
   walk(rootDir);
+  snapshotCoverage.set(snapshot, complete);
+  return snapshot;
+}
+
+// Async counterpart used by the normal run start/finish path. It deliberately
+// preserves the synchronous snapshot's traversal order, cap, filtering, and
+// best-effort error behavior; the only difference is that directory, stat, and
+// content reads yield the daemon event loop instead of pausing unrelated HTTP
+// and SSE traffic while a large project is scanned.
+export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<ArtifactSnapshot> {
+  const snapshot: ArtifactSnapshot = new Map();
+  let complete = true;
+  const markIncomplete = () => { complete = false; };
+  const files: Array<{ full: string; tracked: boolean; manifestBacked: boolean }> = [];
+  let trackedCount = 0;
+  let otherCount = 0;
+  const walk = async (dir: string): Promise<void> => {
+    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      complete = false;
+      return;
+    }
+    for (const entry of entries) {
+      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
+      if (entry.isDirectory()) {
+        if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
+        await walk(path.join(dir, entry.name));
+      } else if (entry.isFile() && !isManifestSidecarPath(entry.name)) {
+        const full = path.join(dir, entry.name);
+        const tracked = isTrackedRunFile(entry.name);
+        const manifestBacked = !tracked && await hasValidManifestSidecarAsync(full);
+        const trackedForBudget = tracked || manifestBacked;
+        if (trackedForBudget ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) { complete = false; continue; }
+        files.push({ full, tracked: trackedForBudget, manifestBacked });
+        if (trackedForBudget) trackedCount += 1;
+        else otherCount += 1;
+      }
+    }
+  };
+  await walk(rootDir);
+
+  // A small worker pool prevents a 5k-file project from turning the async
+  // safety fix into a long serial tail, while still bounding filesystem load.
+  // Results are committed in traversal order so diff output remains stable.
+  // Non-tracked files only need a stat (size+mtime stamp), never a content
+  // read, so widening the walk to all files adds no hashing cost.
+  const fingerprints = new Array<readonly [string, ArtifactFingerprint] | null>(files.length);
+  let nextIndex = 0;
+  const fingerprintWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = nextIndex;
+      if (index >= files.length) return;
+      nextIndex += 1;
+      const { full, tracked, manifestBacked } = files[index]!;
+      try {
+        const stat = await fs.promises.stat(full);
+        const fingerprint = tracked
+          ? await fingerprintFileAsync(full, stat.size, stat.mtimeMs, markIncomplete)
+          : statOnlyFingerprint(stat.size, stat.mtimeMs);
+        fingerprints[index] = [
+          full,
+          manifestBacked ? { ...fingerprint, manifestBacked: true } : fingerprint,
+        ];
+      } catch {
+        complete = false;
+        fingerprints[index] = null;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(16, files.length) },
+      () => fingerprintWorker(),
+    ),
+  );
+  for (const fingerprint of fingerprints) {
+    if (fingerprint) snapshot.set(fingerprint[0], fingerprint[1]);
+  }
+  snapshotCoverage.set(snapshot, complete);
   return snapshot;
 }
 
 export interface RunArtifactDiff {
+  /** A best-effort scan cannot establish zero writes when either side was incomplete. */
+  filesWrittenUnknown?: true;
   // Artifact files (HTML / image / video / audio) present after the run but not
   // before. `DESIGN.md` is NOT an artifact extension and is excluded here.
   created: number;
@@ -172,6 +369,14 @@ export interface RunArtifactDiff {
   renderDependencyTouched: number;
   renderDependencyTouchedPaths: string[];
   supportingMediaTouched: number;
+  // Distinct files of ANY type this run created or modified — markdown briefs,
+  // docx exports, JSON data, code, plus everything the counters above already
+  // cover. `artifact_count` deliberately only counts renderable outputs, which
+  // makes a run that delivered `PROMPTS.md` or `report.docx` look identical to
+  // a pure chat turn in the funnel; this counter closes that blind spot
+  // (`run_finished.files_written_count`). Same mtime-inclusive touched
+  // semantics as `touched`; deletions are ignored.
+  filesWritten: number;
 }
 
 // Classify created vs modified tracked files between two snapshots into the
@@ -191,6 +396,7 @@ export function diffRunArtifacts(
   let contentModified = 0;
   let renderDependencyTouched = 0;
   let supportingMediaTouched = 0;
+  let filesWritten = 0;
   const contentTouchedPaths: string[] = [];
   const renderDependencyTouchedPaths: string[] = [];
   for (const [filePath, fingerprint] of after) {
@@ -202,6 +408,7 @@ export function diffRunArtifacts(
         prior.mtimeMs !== fingerprint.mtimeMs ||
         prior.hash !== fingerprint.hash);
     if (!isNew && !isChanged) continue;
+    filesWritten += 1;
     const contentChanged = isNew || (!!prior && (
       prior.hash !== null && fingerprint.hash !== null
         ? prior.hash !== fingerprint.hash
@@ -212,7 +419,9 @@ export function diffRunArtifacts(
     // only. Normalize separators so the design-system / preview signals work on
     // Windows project runs, not just POSIX.
     const classifyPath = filePath.replace(/\\/g, '/');
-    if (isArtifactPath(classifyPath)) {
+    // Manifest-backed files count as artifacts despite a non-renderable
+    // extension; the manifest sidecar was validated at snapshot time.
+    if (isArtifactPath(classifyPath) || fingerprint.manifestBacked === true) {
       if (isNew) created += 1;
       else modified += 1;
       touchedPaths.push(filePath);
@@ -244,6 +453,9 @@ export function diffRunArtifacts(
     renderDependencyTouched,
     renderDependencyTouchedPaths,
     supportingMediaTouched,
+    filesWritten,
+    ...(snapshotCoverage.get(before) !== true || snapshotCoverage.get(after) !== true
+      ? { filesWrittenUnknown: true as const } : {}),
   };
 }
 

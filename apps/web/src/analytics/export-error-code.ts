@@ -55,5 +55,23 @@ export function exportErrorCode(err: unknown): string {
   // Same status regex (and the same false-positive guards) as the deploy helper.
   const status = /\b([45]\d\d)\b/.exec(message)?.[1];
   if (status) return `HTTP_${status}`;
-  return err.name || 'UNKNOWN';
+  // A numeric `status` carried on the error (set by the export runtime from
+  // the daemon response) is as good as one parsed out of the message.
+  const carriedStatus = (err as { status?: unknown }).status;
+  if (typeof carriedStatus === 'number' && carriedStatus >= 400) return `HTTP_${carriedStatus}`;
+  // Last resort, in descending order of how much the value actually tells you.
+  //
+  // `err.name` used to be returned unconditionally here. For a subclass
+  // (TypeError, RangeError, AbortError) that names a real failure mode and is
+  // worth keeping. For a plain `new Error(...)` — which is what the export
+  // path throws for every daemon-reported failure — it collapses to the
+  // literal "Error": the single largest bucket in `artifact_export_result`
+  // (148 events / 82 users over 14 days, 48% of image-export failures) and
+  // completely undiagnosable. So keep a meaningful name, drop the generic one.
+  if (err.name && err.name !== 'Error') return err.name;
+  // The daemon's generic envelope code (BAD_REQUEST, INTERNAL, ...) is coarse
+  // — that is why it does not win over message classification above — but it
+  // is a real classification and strictly better than nothing.
+  if (typeof structured === 'string' && structured.length > 0) return `ENVELOPE_${structured}`;
+  return 'UNCLASSIFIED';
 }

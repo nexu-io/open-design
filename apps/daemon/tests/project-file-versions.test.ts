@@ -162,7 +162,7 @@ describe('project file versions', () => {
 
   it('writes a v2 manifest with an exact UTF-8 digest, explicit current id, and bounded artifact origin', async () => {
     await withProject(async (projectsRoot, projectId) => {
-      const content = '<html><body>你好 Open Design</body></html>';
+      const content = '<html><body>你好 OpenDesign</body></html>';
       const contentDigest = createHash('sha256').update(Buffer.from(content, 'utf8')).digest('hex');
       const version = await createProjectFileVersion(
         projectsRoot,

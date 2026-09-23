@@ -10,9 +10,9 @@
   },
   "version": "1.0.0",
   "publishedAt": "2026-06-16T09:32:15Z",
-  "description": "Open Design's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Built as a decision-grade fundraising pitch deck for pre-seed & seed VCs.",
+  "description": "OpenDesign's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Built as a decision-grade fundraising pitch deck for pre-seed & seed VCs.",
   "description_i18n": {
-    "en": "Open Design's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Built as a decision-grade fundraising pitch deck for pre-seed & seed VCs.",
+    "en": "OpenDesign's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Built as a decision-grade fundraising pitch deck for pre-seed & seed VCs.",
     "zh-CN": "像顶级 pre-seed 创始人一样写种子路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。",
     "zh-TW": "像顶级 pre-seed 创始人一样写种子路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。"
   },
@@ -70,8 +70,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create \"Write a Seed Pitch like a Top Pre-Seed Founder\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Audience: pre-seed & seed VCs. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent.",
-        "zh-CN": "像顶级 pre-seed 创始人一样写种子路演。像顶级 pre-seed 创始人一样写种子路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+        "en": "Create \"Write a Seed Pitch like a Top Pre-Seed Founder\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: OpenDesign's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Audience: pre-seed & seed VCs. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent.",
+        "zh-CN": "像顶级 pre-seed 创始人一样写种子路演。像顶级 pre-seed 创始人一样写种子路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。 主题：OpenDesign's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {

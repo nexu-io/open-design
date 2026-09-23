@@ -1,22 +1,23 @@
 // Composer footer toolbar alignment.
 //
-// The composer's bottom row mixes five controls authored in five different
-// components — the + icon (.icon-btn), the working-dir pill
-// (.working-dir-pill-trigger), the agent avatar (.avatar-agent-trigger), the
-// composer mode picker (.composer-mode__trigger) and Send
-// (.composer-send). The composer mounts under `.chat-composer-fixed-layer` (a
+// The composer's bottom row mixes three controls authored in three different
+// components — the + icon (.icon-btn), the agent avatar
+// (.avatar-agent-trigger) and Send (.composer-send); the session-mode picker
+// that used to sit between them left the row (#7635), and the working
+// directory lives inside the + menu rather than as a pill of its own. The composer mounts under `.chat-composer-fixed-layer` (a
 // body-level portal), so the `.app`-scoped "one control system" normalization
 // in chat.css never reached it and the controls drifted to 28/30/32px. Even
 // though the row centers them, the differing heights left the pills and Send
-// visibly misaligned against the left buttons.
-//
-// This spec is the regression boundary: every interactive control in the
-// composer row must share one height and one vertical center so the toolbar
+// visibly misaligned against the left buttons.//
+// This spec is the regression boundary: the utility controls share the compact
+// 28px geometry, Send keeps its deliberate emphasis as the supplied 32px
+// disc (#7635), and every control shares one vertical center so the toolbar
 // reads as a single row.
 
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -33,6 +34,7 @@ test.beforeEach(async ({ page }) => {
         skillId: null,
         designSystemId: null,
         onboardingCompleted: true,
+        privacyDecisionAt: 1,
         agentModels: {},
       }),
     );
@@ -43,6 +45,7 @@ test.beforeEach(async ({ page }) => {
       json: {
         config: {
           onboardingCompleted: true,
+          privacyDecisionAt: 1,
           agentId: 'mock',
           skillId: null,
           designSystemId: null,
@@ -71,11 +74,14 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P1] composer footer controls share one height and baseline', async ({ page }) => {
+test('[P1] composer footer controls keep their size hierarchy on one baseline', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Composer toolbar alignment');
   await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  // A cold worker compiles the project route on first open, which can outlive
+  // the default assertion window; gate on the loading screen clearing first.
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.long });
   await expect(page.getByTestId('chat-send')).toBeVisible();
 
   const metrics = await page.evaluate(() => {
@@ -83,9 +89,7 @@ test('[P1] composer footer controls share one height and baseline', async ({ pag
     if (!row) return { error: 'no .composer-row' as const };
     const selectors = [
       '.icon-btn',
-      '.working-dir-pill-trigger',
       '.avatar-agent-trigger',
-      '.composer-mode__trigger',
       '.composer-send',
     ];
     const controls: Array<{ sel: string; height: number; center: number }> = [];
@@ -101,18 +105,26 @@ test('[P1] composer footer controls share one height and baseline', async ({ pag
   if ('error' in metrics) throw new Error(metrics.error);
   const { controls } = metrics;
 
-  // The toolbar should never collapse to a single control; if it does, the
-  // selectors below are stale and the height assertion is meaningless.
-  expect(controls.length).toBeGreaterThanOrEqual(4);
+  // Every control the row is documented to carry must be found; a shorter
+  // list means a selector went stale and the height assertions below would be
+  // measuring less than the whole toolbar.
+  expect(controls.map((control) => control.sel)).toEqual([
+    '.icon-btn',
+    '.avatar-agent-trigger',
+    '.composer-send',
+  ]);
 
-  const heights = controls.map((c) => c.height);
   const centers = controls.map((c) => c.center);
   const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
 
-  // One control system: identical heights. On main these drift (e.g. the +
-  // at 32px, the working-dir pill at 28px, Send at 30px) and this fails.
-  expect(spread(heights), `control heights: ${JSON.stringify(controls)}`).toBeLessThanOrEqual(1);
-  // ...and a shared vertical center so nothing rides high or low in the row.
+  const send = controls.find((control) => control.sel === '.composer-send');
+  const utilityControls = controls.filter((control) => control.sel !== '.composer-send');
+  expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(32);
+  for (const control of utilityControls) {
+    expect(control.height, `control heights: ${JSON.stringify(controls)}`).toBe(28);
+  }
+
+  // All controls share a vertical center so nothing rides high or low in the row.
   expect(spread(centers), `control centers: ${JSON.stringify(controls)}`).toBeLessThanOrEqual(1);
 });
 

@@ -21,6 +21,9 @@ export function resolveExportCliDeckMode(options: ExportCliDeckModeOptions): boo
   if (explicitDeck && explicitPage) {
     throw new Error('--deck cannot be combined with --page or --no-deck');
   }
+  if (options.format === "html" && (explicitDeck || explicitPage)) {
+    throw new Error('--deck/--page/--no-deck is not valid with --format html');
+  }
   if (options.format === "pptx") {
     if (explicitPage) throw new Error('--page/--no-deck is not valid with --format pptx');
     return true;

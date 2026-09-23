@@ -99,4 +99,4 @@ Evaluate your code against this matrix before delivering. This is the last filte
 
 ## Provenance
 
-Formalized by Open Design from candidate 29c1e7dd-dc71-4ec1-8516-48d972c308d2.
+Formalized by OpenDesign from candidate 29c1e7dd-dc71-4ec1-8516-48d972c308d2.

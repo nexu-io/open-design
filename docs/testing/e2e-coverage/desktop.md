@@ -32,7 +32,7 @@
 | ID | 场景 | Gate | 来源 |
 | --- | --- | --- | --- |
 | DESK-101 | 构建出的 mac 安装包可以完成安装、启动、健康检查、停止和卸载 | `OD_PACKAGED_E2E_MAC=1` | `mac.spec.ts` |
-| DESK-102 | 全新 mac 打包应用的 onboarding 会同时呈现 Open Design Cloud、Local CLI 与 BYOK 路径 | `OD_PACKAGED_E2E_MAC=1` + `OD_PACKAGED_E2E_MAC_ONBOARDING_SMOKE=1` | `mac.spec.ts` |
+| DESK-102 | 全新 mac 打包应用的 onboarding 会同时呈现 OpenDesign Cloud、Local CLI 与 BYOK 路径 | `OD_PACKAGED_E2E_MAC=1` + `OD_PACKAGED_E2E_MAC_ONBOARDING_SMOKE=1` | `mac.spec.ts` |
 | DESK-201 | Linux headless 打包运行时可完成安装、启动、status/logs 检查、停止、卸载和 cleanup | `OD_PACKAGED_E2E_LINUX_HEADLESS=1` | `linux.spec.ts` |
 | DESK-202 | Linux AppImage 可完成安装、启动、eval/截图探活、日志检查、停止和卸载 | `OD_PACKAGED_E2E_LINUX_APPIMAGE=1` | `linux.spec.ts` |
 

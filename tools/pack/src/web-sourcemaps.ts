@@ -42,7 +42,7 @@ import { join } from "node:path";
 
 import { createPackageManagerInvocation } from "@open-design/platform";
 
-import type { ToolPackConfig } from "./config.js";
+import type { ToolPackConfig } from "./config/index.js";
 import { execFileAsync } from "./mac/commands.js";
 
 const POSTHOG_CLI_VERSION = "0.7.11";

@@ -1,0 +1,33 @@
+.split {
+  height: 100%;
+}
+
+.chatPane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--veil-panel);
+}
+
+.pendingComposer {
+  min-width: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.workspace {
+  grid-column: 3;
+}
+
+.addIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+/* The design-files column now renders DesignFilesPanel's own `.df-panel` /
+   `.df-empty` shell (global styles) so the empty pill sits in the same place
+   before and after the hand-off. The local body/title/empty rules that used to
+   draw a top-left caption here are gone with it. */

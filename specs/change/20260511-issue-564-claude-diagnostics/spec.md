@@ -9,7 +9,7 @@ created: '2026-05-11'
 
 ### Problem Statement
 
-Issue #564 reports that Claude Code can appear installed and selectable in Open Design, but a run exits immediately with the generic message `Agent exited with code 1`. PR #604 addressed one confirmed variant by adding configurable per-agent CLI environment, including `CLAUDE_CONFIG_DIR`, but the issue still contains other failure modes that are not explained well to users.
+Issue #564 reports that Claude Code can appear installed and selectable in OpenDesign, but a run exits immediately with the generic message `Agent exited with code 1`. PR #604 addressed one confirmed variant by adding configurable per-agent CLI environment, including `CLAUDE_CONFIG_DIR`, but the issue still contains other failure modes that are not explained well to users.
 
 The remaining in-scope problem is diagnostic: Claude local auth/config/model failures collapse into the same generic exit message, which prevents users from knowing whether to re-authenticate, set `CLAUDE_CONFIG_DIR`, or fix a custom endpoint/proxy setup.
 
@@ -41,7 +41,7 @@ The remaining in-scope problem is diagnostic: Claude local auth/config/model fai
 ### Known Failure Variants from #564
 
 - Custom endpoint or proxy rejects the model Claude Code selects, producing a model/plan/region error upstream.
-- Multiple Claude config directories cause Open Design's spawned Claude process to use different state than the user's terminal session.
+- Multiple Claude config directories cause OpenDesign's spawned Claude process to use different state than the user's terminal session.
 - Stale, expired, or corrupted Claude auth state makes the non-interactive `claude -p` run fail even when basic terminal checks appear healthy.
 - On Windows, native PowerShell and WSL can use separate Claude installs and separate credential stores.
 - A ghost `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` can interfere with expected OAuth/subscription auth in some environments.
@@ -54,11 +54,11 @@ Add a Claude-specific diagnostic helper used by both chat-run failure handling a
 
 The first version should classify these cases:
 
-- `401`, `apiKeySource: "none"`, missing/invalid token, or authentication failure: tell the user to run `claude`, use `/login`, then retry the same Open Design run.
+- `401`, `apiKeySource: "none"`, missing/invalid token, or authentication failure: tell the user to run `claude`, use `/login`, then retry the same OpenDesign run.
 - `ANTHROPIC_BASE_URL` present with model/plan/region unavailable text: explain that the custom endpoint or proxy does not expose the selected Claude Code model and recommend changing the model, fixing the endpoint, or temporarily removing the custom endpoint.
 - `CLAUDE_CONFIG_DIR` present: include the effective expanded path in the diagnostic detail so users can compare it with the terminal where Claude works.
 - No `CLAUDE_CONFIG_DIR` present but symptoms match config-state failure: suggest setting it in Settings when using multiple Claude profiles.
-- Windows credential or WSL/native mismatch indicators: suggest re-authenticating in the same shell/environment used by Open Design and checking Windows Credential Manager where applicable.
+- Windows credential or WSL/native mismatch indicators: suggest re-authenticating in the same shell/environment used by OpenDesign and checking Windows Credential Manager where applicable.
 
 The helper should redact secrets before returning details. It must not echo token values, full API keys, or authorization headers.
 

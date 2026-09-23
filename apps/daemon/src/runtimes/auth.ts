@@ -1,5 +1,6 @@
 import { execAgentFile } from './invocation.js';
 import { readCodexProviderEnvKey } from '../codex-config-normalize.js';
+import { reportsPlatformProviderCredentialFault } from '../integrations/vela-errors.js';
 import type { RuntimeAgentDef, RuntimeEnv } from './types.js';
 
 export type AgentAuthProbeResult = {
@@ -18,10 +19,13 @@ export type AgentAuthProbeResult = {
 };
 
 const CURSOR_AUTH_GUIDANCE =
-  'Cursor Agent is not authenticated. Run `cursor-agent login`, then `cursor-agent status`, and retry. For automation, ensure CURSOR_API_KEY is set in the Open Design process environment.';
+  'Cursor Agent is not authenticated. Run `cursor-agent login`, then `cursor-agent status`, and retry. For automation, ensure CURSOR_API_KEY is set in the OpenDesign process environment.';
 
 const DEEPSEEK_AUTH_GUIDANCE =
-  'DeepSeek TUI is installed but is not authenticated. Add or verify your API key in `~/.deepseek/config.toml` as `api_key = "..."`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
+  'DeepSeek TUI is installed but is not authenticated. Add or verify your API key in `~/.deepseek/config.toml` as `api_key = "..."`, or expose DEEPSEEK_API_KEY to the OpenDesign daemon process, then retry. If OpenDesign is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
+
+const DEEPSEEK_HARNESS_AUTH_GUIDANCE =
+  'DeepSeek Harness has no model API key configured. Open a terminal and run `dsh web`, then open Settings → Models and add your DeepSeek API key. Return to OpenDesign and retry. For automation, expose DEEPSEEK_API_KEY to the OpenDesign process.';
 
 // agy's print mode (`-p`) detects a missing OAuth token, prints the
 // Google sign-in URL to stdout, waits 30s for completion, then exits
@@ -34,7 +38,7 @@ const DEEPSEEK_AUTH_GUIDANCE =
 // system keyring — both `-p` and TUI invocations read from there
 // afterward, so the chat run can succeed on retry.
 const ANTIGRAVITY_AUTH_GUIDANCE =
-  'Antigravity needs to sign in. The agy CLI\'s keyring entry has expired or been cleared, and `-p` print mode cannot complete OAuth on its own (it has no field to paste the auth code into).\n\nFix: open a terminal and run `agy` once — it will open Google sign-in in your browser, accept the redirect, and store the token in your system keyring. After you finish, return here and retry this chat. You only need to do this once; the keyring entry persists across both terminal and Open Design runs.';
+  'Antigravity needs to sign in. The agy CLI\'s keyring entry has expired or been cleared, and `-p` print mode cannot complete OAuth on its own (it has no field to paste the auth code into).\n\nFix: open a terminal and run `agy` once — it will open Google sign-in in your browser, accept the redirect, and store the token in your system keyring. After you finish, return here and retry this chat. You only need to do this once; the keyring entry persists across both terminal and OpenDesign runs.';
 
 // agy's account-level quota is per-model (consumer accounts get a
 // separate quota for Gemini 3 Pro vs Flash vs Claude vs GPT-OSS), and
@@ -48,13 +52,13 @@ const ANTIGRAVITY_AUTH_GUIDANCE =
 // the picker from OD until upstream issue #35 ships a `--model`
 // flag — see antigravity.ts notes.
 const ANTIGRAVITY_QUOTA_GUIDANCE =
-  'Antigravity returned "RESOURCE_EXHAUSTED: Individual quota reached" for the current model. Each Antigravity model (Gemini 3 Pro / Flash, Claude 4.6, GPT-OSS) has its own quota.\n\nFix: open `agy` in a terminal and use its Switch Model picker (the menu at the bottom of the TUI) to pick a model with available quota, then retry here. Open Design uses whatever model you pick in agy\'s TUI when the Settings model picker is left on "Default". Quotas reset automatically on Antigravity\'s schedule.';
+  'Antigravity returned "RESOURCE_EXHAUSTED: Individual quota reached" for the current model. Each Antigravity model (Gemini 3 Pro / Flash, Claude 4.6, GPT-OSS) has its own quota.\n\nFix: open `agy` in a terminal and use its Switch Model picker (the menu at the bottom of the TUI) to pick a model with available quota, then retry here. OpenDesign uses whatever model you pick in agy\'s TUI when the Settings model picker is left on "Default". Quotas reset automatically on Antigravity\'s schedule.';
 
 const REASONIX_AUTH_GUIDANCE =
-  'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
+  'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the OpenDesign daemon process, then retry. If OpenDesign is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
 
 const CLAUDE_AUTH_GUIDANCE =
-  'Claude Code is installed but is not authenticated. Run `claude auth login` or open `claude` and complete login in a terminal, then rescan. If Open Design was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.';
+  'Claude Code is installed but is not authenticated. Run `claude auth login` or open `claude` and complete login in a terminal, then rescan. If OpenDesign was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.';
 
 export function cursorAuthGuidance(): string {
   return CURSOR_AUTH_GUIDANCE;
@@ -62,6 +66,10 @@ export function cursorAuthGuidance(): string {
 
 export function deepseekAuthGuidance(): string {
   return DEEPSEEK_AUTH_GUIDANCE;
+}
+
+export function deepseekHarnessAuthGuidance(): string {
+  return DEEPSEEK_HARNESS_AUTH_GUIDANCE;
 }
 
 export function antigravityAuthGuidance(): string {
@@ -118,12 +126,63 @@ export function isDeepSeekAuthFailureText(text: string): boolean {
   const value = String(text || '');
   if (!value.trim()) return false;
   return (
+    /\b(?:MISSING_CREDENTIAL|DSH_PROVIDER_AUTH_FAILED)\b/i.test(value) ||
     /KEY=<your-key>/i.test(value) ||
     /api_key\s*=\s*["']<your-key>["']/i.test(value) ||
     (/~\/\.deepseek\/config\.toml/i.test(value) && /api[_ -]?key|KEY=/i.test(value)) ||
     (/DEEPSEEK_API_KEY/i.test(value) &&
       /auth|api[_ -]?key|missing|not set|required|unauthorized/i.test(value))
   );
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function unknownRecord(value: unknown): UnknownRecord | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as UnknownRecord;
+}
+
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+export type DeepSeekHarnessFailure = {
+  code: string;
+  message: string;
+  authRequired: boolean;
+};
+
+/**
+ * Turns the profile's structured error payload into a safe user-facing error.
+ * Harness SDK errors can place an object in `message`; never coerce that object
+ * to text because it produces `[object Object]` and can expose provider data.
+ */
+export function normalizeDeepSeekHarnessFailure(payload: unknown): DeepSeekHarnessFailure {
+  const root = unknownRecord(payload);
+  const nestedError = unknownRecord(root?.error);
+  const embeddedMessage = unknownRecord(root?.message);
+  const code = firstNonEmptyString(
+    nestedError?.code,
+    root?.code,
+    embeddedMessage?.code,
+  ) ?? 'AGENT_EXECUTION_FAILED';
+  const rawMessage = firstNonEmptyString(
+    typeof payload === 'string' ? payload : undefined,
+    root?.message,
+    nestedError?.message,
+    embeddedMessage?.message,
+  );
+  const authRequired = isDeepSeekAuthFailureText(`${code}\n${rawMessage ?? ''}`);
+  return {
+    code,
+    message: authRequired
+      ? deepseekHarnessAuthGuidance()
+      : rawMessage ?? 'DeepSeek Harness profile error.',
+    authRequired,
+  };
 }
 
 export function isReasonixAuthFailureText(text: string): boolean {
@@ -186,6 +245,13 @@ export function classifyAgentAuthFailure(
       message: deepseekAuthGuidance(),
     };
   }
+  if (agentId === 'deepseek-harness') {
+    if (!isDeepSeekAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: deepseekHarnessAuthGuidance(),
+    };
+  }
   if (agentId === 'antigravity') {
     if (!isAntigravityAuthFailureText(text)) return null;
     return {
@@ -234,7 +300,7 @@ const STATUS_CTX =
 
 // Authentication / authorization: a missing, invalid, or expired credential.
 const AGENT_AUTH_FAILURE_RE = new RegExp(
-  `(\\b(unauthor(?:ized|ised)|authenticat(?:e|ed|ion)|invalid[ _-]?(?:api[ _-]?)?key|incorrect api key|x-api-key|not (?:authenticated|logged[ _-]?in)|please (?:sign|log)[ _-]?in|oauth token (?:has )?expired|session expired|credentials? (?:are )?(?:missing|invalid|required))\\b|\\/login\\b|${STATUS_CTX}401\\b)`,
+  `(\\b(unauthor(?:ized|ised)|authenticat(?:e|ed|ion)|invalid[ _-]?(?:api[ _-]?)?key|incorrect api key|no api key|x-api-key|missing[ _-]?credentials?|not (?:authenticated|logged[ _-]?in)|please (?:sign|log)[ _-]?in|oauth token (?:has )?expired|session expired|credentials? (?:are )?(?:missing|invalid|required))\\b|\\/login\\b|${STATUS_CTX}401\\b)`,
   'i',
 );
 
@@ -250,6 +316,142 @@ const AGENT_UPSTREAM_FAILURE_RE = new RegExp(
   'i',
 );
 
+/**
+ * A tool invocation, as the AGENT itself frames it.
+ *
+ * `tool bash failed:` / `tool error:` / `tool_use_error:` are the agent saying
+ * "a tool I ran failed" — it is the authority on whether it was mid-tool, so
+ * this is the strongest attribution available in the text. `mcp` / `connector`
+ * / `plugin` are the daemon's own words for "a service the agent operates":
+ * `run-failure-classification.ts` `isToolErrorText` already reads exactly this
+ * vocabulary, and `mcp_auth_required` (bifrost `mcp/agent.go:333`) is vela's
+ * self-identifying code for a per-user MCP OAuth. Reusing that vocabulary
+ * rather than inventing one keeps a single answer to "what counts as a tool".
+ */
+const TOOL_INVOCATION_MARKER =
+  /\btool[_ -](?:error|use|call|result)\b|\btool\s+[\w./-]+\s+(?:failed|error)\b|\bmcp_auth_required\b|\b(?:mcp|connector|plugin)\b/i;
+
+/**
+ * A program identifying ITSELF as the speaker: the Unix `progname: message`
+ * convention, plus npm's `npm ERR!` variant of it. `gh:`, `curl:`, `docker:`,
+ * `psql:` and `npm ERR!` all carry it, and so will the next tool — that is what
+ * the convention is for, which is why this is a shape and not a roster of tool
+ * names.
+ *
+ * It reads WHO is speaking. It does not, on its own, say whether that speaker
+ * is foreign: `dsh: MISSING_CREDENTIAL: …` is DeepSeek Harness in exactly the
+ * same shape, so the caller has to check the name against
+ * `OWN_AGENT_COMMAND_NAMES`. An earlier cut of this predicate assumed the agent
+ * would never prefix itself and dropped that row —
+ * `tests/runtimes/service-failure-classification.test.ts` caught it, and the
+ * row is pinned as A18 in the landing table.
+ *
+ * Two kinds of leading token are not names at all and are rejected by the
+ * caller: severities (`Error:`, `warning:`, `fatal:`) name how bad the line is,
+ * and status reason phrases (`Unauthorized:`) name what the server answered.
+ * That rejection is load-bearing — vela's real model-service 401 arrives as
+ * `Error: list Link models: API request failed with status 401: invalid_api_key`
+ * (`acp-service-failure.test.ts` row A14).
+ */
+const PROGRAM_DIAGNOSTIC_PREFIX = /^[ \t]*([A-Za-z][\w.+-]{0,31})(?::[ \t]|[ \t]ERR!)/;
+
+const SEVERITY_LABELS = new Set([
+  'err', 'error', 'errors',
+  'warn', 'warning',
+  'fatal', 'panic', 'critical', 'crit',
+  'note', 'notice', 'info', 'debug', 'trace', 'verbose',
+]);
+
+/**
+ * Every command name Open Design's own agent CLIs answer to — each shipped
+ * adapter's `id` and its `bin`.
+ *
+ * This is the half of the attribution the text cannot supply, and the reason
+ * the program-prefix shape alone is not enough: `dsh: MISSING_CREDENTIAL:
+ * llm-deepseek: no API key for provider route …` wears exactly the same prefix
+ * as `gh: not authenticated`, and it is DeepSeek Harness reporting its OWN
+ * model key. Position does not separate them either — echoed tool output and
+ * the agent's own lines are both line-initial. Only the name does.
+ *
+ * It is an allowlist of OURS, not a blocklist of tools, and that direction is
+ * what makes it hold: everything the daemon did not spawn is foreign by
+ * default, so the next `terraform:` or `kubectl:` needs no amendment here. The
+ * only list that has to stay current is the adapter registry, which the daemon
+ * maintains anyway — and
+ * `tests/runtimes/tool-vs-agent-auth-snapshot.test.ts` reads the real
+ * `SHIPPED_AGENT_DEFS` and goes red if this falls behind it. Kept as a literal
+ * rather than derived from `registry.ts` because that module imports every
+ * adapter and every adapter imports this file.
+ *
+ * Exported for that guard only.
+ */
+export const OWN_AGENT_COMMAND_NAMES: ReadonlySet<string> = new Set([
+  'agy', 'aider', 'amp', 'amr', 'antigravity', 'atomcode', 'byok-opencode',
+  'claude', 'codebuddy', 'codex', 'copilot', 'cursor-agent', 'deepseek',
+  'deepseek-harness', 'devin', 'dsh', 'grok', 'grok-build', 'hermes', 'kilo',
+  'kimi', 'kiro', 'kiro-cli', 'mimo', 'opencode', 'opencode-cli', 'pi',
+  'qoder', 'qodercli', 'qwen', 'reasonix', 'trae-cli', 'traecli', 'vela',
+  'vibe', 'vibe-acp',
+]);
+
+/**
+ * True when the auth failure `text` reports belongs to a TOOL the agent ran,
+ * rather than to the agent's own credential.
+ *
+ * This is an attribution question, not a vocabulary question, and the
+ * distinction is the whole point. `AGENT_AUTH_REQUIRED` means "sign in" — an
+ * offer to fix a credential the daemon can reach (the agent's CLI login, or the
+ * AMR Cloud session the web resolves it to,
+ * `apps/web/src/runtime/amr-guidance.ts`). A run's failure text is not a clean
+ * channel for that claim: `collectFailureText`
+ * (`run-failure-classification.ts:177`) folds `stderr` events into the corpus
+ * (:188), and the ACP bridge folds whatever the agent wrote into its JSON-RPC
+ * error frame — so `gh`, `npm`, `curl` and MCP output are read here too, in the
+ * same auth vocabulary the agent's own failures use. Answering "sign in" to one
+ * of those sends the user to log in to Open Design for a `gh` token in their
+ * own shell: a fix guaranteed not to work.
+ *
+ * The rule is: **when the report names the credential's holder, believe it; the
+ * daemon may supply "the agent" only when the report names nobody.** A holder
+ * is named in exactly two ways, and both are the text identifying its own
+ * speaker rather than us guessing from prose — the same precedence
+ * `reportsPlatformProviderCredentialFault` established for R-053, where a
+ * self-identifying machine code outranked the sentence it travelled with.
+ *
+ * Line scope, not whole-text scope: an unrelated `npm ERR!` elsewhere in a long
+ * stderr tail must not vouch for the agent's own 401 on another line. And the
+ * program prefix must be the SPEAKER of the complaint, not the complaint — so
+ * the auth vocabulary has to appear after it. That is what keeps vela's own
+ * `auth_required: please reconnect AMR Cloud` from reading as a program named
+ * `auth_required`.
+ *
+ * Exported because the two classifiers that read the same corpus —
+ * `classifyAgentServiceFailure` here and `run-failure-classification.ts`'s
+ * `isAuthDetailText` branch — have to agree about whose credential it is.
+ */
+export function reportsToolPrincipalAuthFailure(text: string): boolean {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  for (const line of value.split(/\r?\n/)) {
+    if (!AGENT_AUTH_FAILURE_RE.test(line)) continue;
+    if (TOOL_INVOCATION_MARKER.test(line)) return true;
+    const prefix = PROGRAM_DIAGNOSTIC_PREFIX.exec(line);
+    if (!prefix) continue;
+    const speaker = (prefix[1] ?? '').toLowerCase();
+    // A severity (`Error:`) or a status reason phrase (`Unauthorized:`) is a
+    // LABEL, not a name: it says how bad the line is, or what the server
+    // answered, never who wrote it. Reading either as a speaker would drop a
+    // real model-service 401 — vela's arrives as `Error: list Link models: API
+    // request failed with status 401: invalid_api_key`.
+    if (SEVERITY_LABELS.has(speaker)) continue;
+    if (AGENT_AUTH_FAILURE_RE.test(speaker)) continue;
+    // One of our own agent CLIs speaking as itself, not a tool inside it.
+    if (OWN_AGENT_COMMAND_NAMES.has(speaker)) continue;
+    if (AGENT_AUTH_FAILURE_RE.test(line.slice(prefix[0].length))) return true;
+  }
+  return false;
+}
+
 // Returns the model-service failure class implied by an agent's combined
 // stdout/stderr/error text, or null when the text looks like an ordinary
 // process failure. Auth is checked before rate/upstream so a `401` is never
@@ -260,7 +462,24 @@ export function classifyAgentServiceFailure(
 ): AgentServiceFailureCode | null {
   const value = String(text || '');
   if (!value.trim()) return null;
-  if (AGENT_AUTH_FAILURE_RE.test(value)) return 'AGENT_AUTH_REQUIRED';
+  // Claimed before auth because the code says whose credentials failed and the
+  // sentence beside it does not. vela's link gateway answers an upstream
+  // 401/403 with `upstream_provider_unauthenticated` /
+  // `upstream_provider_forbidden` on an HTTP 500, worded "Upstream provider
+  // credentials are missing or invalid." — which satisfies this file's
+  // `credentials (?:are )?missing` alternative and so reported the platform's
+  // own misconfiguration to the user as "Sign-in required" (catalogue R-053).
+  // A self-identifying machine code outranks a class read off prose; the same
+  // precedence the daemon records as `evidenceLevel: 'structured_code'`.
+  if (reportsPlatformProviderCredentialFault(value)) return 'UPSTREAM_UNAVAILABLE';
+  // The auth class is a claim about THIS agent's credential — the web turns it
+  // into a sign-in offer. A report that names a different holder (a tool the
+  // agent ran) is answering a different question, so it does not reach the auth
+  // branch. It is scoped to the auth branch on purpose: rate limit and upstream
+  // outage are true of a tool's request whoever made it, so a tool that hit a
+  // 503 or a 429 still classifies below.
+  const toolPrincipal = reportsToolPrincipalAuthFailure(value);
+  if (!toolPrincipal && AGENT_AUTH_FAILURE_RE.test(value)) return 'AGENT_AUTH_REQUIRED';
   if (AGENT_RATE_FAILURE_RE.test(value)) return 'RATE_LIMITED';
   if (AGENT_UPSTREAM_FAILURE_RE.test(value)) return 'UPSTREAM_UNAVAILABLE';
   return null;
@@ -296,7 +515,7 @@ function withProbeTails(
 // so a newly-onboarded CLI gets an actionable banner the moment it opts into
 // auth probing, without bespoke copy.
 function genericAuthGuidance(agentName: string): string {
-  return `${agentName} appears to be installed but is not authenticated. Sign in with the CLI in a terminal, then rescan. If Open Design was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.`;
+  return `${agentName} appears to be installed but is not authenticated. Sign in with the CLI in a terminal, then rescan. If OpenDesign was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.`;
 }
 
 // Agents that ship a bespoke auth-failure classifier + tailored sign-in hint
@@ -309,6 +528,7 @@ const TAILORED_AUTH_AGENTS = new Set([
   'claude',
   'cursor-agent',
   'deepseek',
+  'deepseek-harness',
   'antigravity',
   'reasonix',
 ]);
@@ -320,12 +540,27 @@ function hasNonEmptyEnv(env: RuntimeEnv, keys: string[]): boolean {
   });
 }
 
-function hasProbeSatisfyingApiKey(agentId: string, env: RuntimeEnv): boolean {
+const CLAUDE_ENTERPRISE_PROVIDER_FLAGS = [
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+] as const;
+
+// `claude auth status` reports Claude.ai credentials only. An explicitly
+// enabled enterprise provider is therefore the authoritative authentication
+// path and must not be mistaken for a missing Claude.ai login.
+function hasClaudeEnterpriseProviderAuth(env: RuntimeEnv): boolean {
+  return CLAUDE_ENTERPRISE_PROVIDER_FLAGS.some((key) => env[key] === '1');
+}
+
+function hasProbeSatisfyingAuth(agentId: string, env: RuntimeEnv): boolean {
   if (agentId === 'codex') {
     return hasNonEmptyEnv(env, ['CODEX_API_KEY', 'OPENAI_API_KEY']);
   }
   if (agentId === 'claude') {
-    return hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
+    return (
+      hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']) ||
+      hasClaudeEnterpriseProviderAuth(env)
+    );
   }
   return false;
 }
@@ -367,7 +602,7 @@ export async function probeAgentAuthStatus(
   // through to the generic classifier (#4456).
   const classifierId = probe.classifierAgentId ?? def.id;
   const agentName = def.name || def.id;
-  if (hasProbeSatisfyingApiKey(classifierId, env)) return { status: 'ok' };
+  if (hasProbeSatisfyingAuth(classifierId, env)) return { status: 'ok' };
   // Codex custom providers authenticate via a provider-specific `env_key` (e.g.
   // AZURE_OPENAI_API_KEY) declared in config.toml, even when `codex login
   // status` (a ChatGPT/OpenAI-login check) exits non-zero. Honor that key so a

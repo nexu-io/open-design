@@ -94,7 +94,7 @@ async function buildApiAttachmentContext(
     }
     if (remaining <= 0) {
       blocks.push(
-        '[Open Design omitted remaining attached files because the attachment context budget was exhausted.]',
+        '[OpenDesign omitted remaining attached files because the attachment context budget was exhausted.]',
       );
       break;
     }
@@ -223,7 +223,7 @@ function inferProjectFileKind(name: string): ProjectFileKind {
 function clipAttachmentText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   const omitted = text.length - maxChars;
-  return `${text.slice(0, maxChars)}\n\n[Open Design truncated ${omitted} chars from this attachment before sending it to the API provider.]`;
+  return `${text.slice(0, maxChars)}\n\n[OpenDesign truncated ${omitted} chars from this attachment before sending it to the API provider.]`;
 }
 
 function escapeMarkdownFence(text: string): string {

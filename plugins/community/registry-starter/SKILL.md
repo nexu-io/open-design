@@ -1,6 +1,6 @@
 ---
 name: community-registry-starter
-description: A small community registry starter plugin used to verify Open Design marketplace install flows.
+description: A small community registry starter plugin used to verify OpenDesign marketplace install flows.
 ---
 
 # Community Registry Starter

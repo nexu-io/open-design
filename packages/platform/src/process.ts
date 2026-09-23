@@ -16,6 +16,17 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { createCommandInvocation, type CommandInvocationRequest } from "./command.js";
 
+/** Opt-in query budget; existing snapshot callers retain their current defaults. */
+export type ProcessSnapshotOptions = { timeoutMs?: number };
+
+function snapshotBudget(options: ProcessSnapshotOptions): { timeout?: number; killSignal?: "SIGKILL" } {
+  if (options.timeoutMs === undefined) return {};
+  if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0) {
+    throw new RangeError("Process snapshot timeout must be a positive integer");
+  }
+  return { timeout: options.timeoutMs, killSignal: "SIGKILL" };
+}
+
 export type ProcessStampShape = object;
 
 export type ProcessStampField<TStamp extends ProcessStampShape> = Extract<keyof TStamp, string>;
@@ -40,6 +51,19 @@ export type ProcessSnapshot = {
   command: string;
   pid: number;
   ppid: number;
+  /** OS-reported process creation time when the enumeration backend can provide it. */
+  startedAtMs?: number;
+};
+
+export type StampedProcessInvocationSnapshot = {
+  matches: ProcessSnapshot[];
+  processes: ProcessSnapshot[];
+  roots: ProcessSnapshot[];
+};
+
+export type StampedProcessSetInvocationSnapshot<TCriteria> = {
+  entries: Array<StampedProcessInvocationSnapshot & { criteria: TCriteria }>;
+  processes: ProcessSnapshot[];
 };
 
 export type StampedProcessMatchCriteria<TStamp extends ProcessStampShape> = Partial<TStamp>;
@@ -94,6 +118,7 @@ type WindowsProcessRecord = {
   CommandLine?: string | null;
   ParentProcessId?: number | string | null;
   ProcessId?: number | string | null;
+  StartedAtMs?: number | string | null;
 };
 
 /** @internal Extract a Node `error.code` as a string, or `null` when the value carries no code. */
@@ -334,9 +359,9 @@ function parsePsOutput(stdout: string): ProcessSnapshot[] {
 }
 
 /** @internal Enumerate process snapshots on POSIX via `ps`. */
-async function listPosixProcessSnapshots(): Promise<ProcessSnapshot[]> {
+async function listPosixProcessSnapshots(options: ProcessSnapshotOptions = {}): Promise<ProcessSnapshot[]> {
   const stdout = await new Promise<string>((resolveList, rejectList) => {
-    execFile("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
+    execFile("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, ...snapshotBudget(options) }, (error, out) => {
       if (error) rejectList(error);
       else resolveList(out);
     });
@@ -345,17 +370,44 @@ async function listPosixProcessSnapshots(): Promise<ProcessSnapshot[]> {
 }
 
 /** @internal Enumerate process snapshots on Windows via `Get-CimInstance Win32_Process` JSON. */
-async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
+async function listWindowsProcessSnapshots(options: ProcessSnapshotOptions = {}): Promise<ProcessSnapshot[]> {
   const command = [
     "$ErrorActionPreference = 'Stop'",
-    "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine | ConvertTo-Json -Compress",
+    "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine, @{Name='StartedAtMs';Expression={([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds()}} | ConvertTo-Json -Compress",
   ].join("; ");
   const stdout = await new Promise<string>((resolveList, rejectList) => {
-    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, ...snapshotBudget(options) }, (error, out) => {
       if (error) rejectList(error);
       else resolveList(out);
     });
   });
+  return parseWindowsProcessSnapshots(stdout);
+}
+
+/** Capture exact PIDs without paying Windows' full Win32_Process enumeration cost. */
+export async function captureProcessSnapshotsByPids(pids: readonly number[]): Promise<ProcessSnapshot[]> {
+  const exactPids = [...new Set(pids.filter((pid) => Number.isSafeInteger(pid) && pid > 0))];
+  if (exactPids.length === 0) return [];
+  if (process.platform !== "win32") {
+    const wanted = new Set(exactPids);
+    return (await captureProcessSnapshot()).filter(({ pid }) => wanted.has(pid));
+  }
+  const filter = exactPids.map((pid) => `ProcessId = ${pid}`).join(" OR ");
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    `Get-CimInstance Win32_Process -Filter \"${filter}\" | Select-Object ProcessId, ParentProcessId, CommandLine, @{Name='StartedAtMs';Expression={([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds()}} | ConvertTo-Json -Compress`,
+  ].join("; ");
+  const stdout = await new Promise<string>((resolveList, rejectList) => {
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 1024 * 1024 }, (error, out) => {
+      if (error) rejectList(error);
+      else resolveList(out);
+    });
+  });
+  return parseWindowsProcessSnapshots(stdout);
+}
+
+/** @internal Parse the JSON emitted by the Windows process enumeration command. */
+export function parseWindowsProcessSnapshots(stdout: string): ProcessSnapshot[] {
   const payload = stdout.trim();
   if (!payload) return [];
   const records = JSON.parse(payload) as WindowsProcessRecord | WindowsProcessRecord[];
@@ -363,11 +415,28 @@ async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
     .map((record) => {
       const pid = Number(record.ProcessId);
       const ppid = Number(record.ParentProcessId);
+      const startedAtMs = Number(record.StartedAtMs);
       const commandLine = record.CommandLine?.trim();
       if (!commandLine || Number.isNaN(pid) || Number.isNaN(ppid)) return null;
-      return { command: commandLine, pid, ppid };
+      return {
+        command: commandLine,
+        pid,
+        ppid,
+        ...(Number.isSafeInteger(startedAtMs) && startedAtMs > 0 ? { startedAtMs } : {}),
+      };
     })
     .filter((snapshot): snapshot is ProcessSnapshot => snapshot != null);
+}
+
+/**
+ * Capture the current process table without converting backend failure into an
+ * empty snapshot. Mutation paths use this strict form so discovery failure can
+ * never be mistaken for an already-stopped process set.
+ */
+export async function captureProcessSnapshot(options: ProcessSnapshotOptions = {}): Promise<ProcessSnapshot[]> {
+  return process.platform === "win32"
+    ? await listWindowsProcessSnapshots(options)
+    : await listPosixProcessSnapshots(options);
 }
 
 /**
@@ -378,12 +447,147 @@ async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
  */
 export async function listProcessSnapshots(): Promise<ProcessSnapshot[]> {
   try {
-    return process.platform === "win32"
-      ? await listWindowsProcessSnapshots()
-      : await listPosixProcessSnapshots();
+    return await captureProcessSnapshot();
   } catch {
     return [];
   }
+}
+
+/**
+ * Select stamped processes that unambiguously existed before an operation's
+ * invocation boundary. Windows process enumeration is asynchronous, so its
+ * results are fenced by the OS creation time. A matching record exactly on the
+ * boundary, or without a creation time, is deliberately rejected instead of
+ * risking that a newer generation is terminated.
+ *
+ * @internal Exported from this module for deterministic boundary tests; the
+ * package barrel exposes only `captureStampedProcessSnapshot`.
+ */
+export function selectStampedProcessesAtInvocation<
+  TStamp extends ProcessStampShape,
+  TCriteria extends Partial<TStamp> = Partial<TStamp>,
+>(
+  snapshots: ProcessSnapshot[],
+  criteria: TCriteria | undefined,
+  contract: ProcessStampContract<TStamp, TCriteria>,
+  invokedAtMs: number,
+  platform: NodeJS.Platform = process.platform,
+): ProcessSnapshot[] {
+  const matches = snapshots.filter((snapshot) => matchesStampedProcess(snapshot, criteria, contract));
+  if (platform !== "win32") return matches;
+  return matches.filter((snapshot) => {
+    if (snapshot.startedAtMs == null || snapshot.startedAtMs === invokedAtMs) {
+      throw new Error(`cannot establish process generation boundary for pid ${snapshot.pid}`);
+    }
+    if (snapshot.startedAtMs > invokedAtMs) return false;
+    return snapshot.startedAtMs < invokedAtMs;
+  });
+}
+
+/**
+ * Capture the process table and argv-stamped roots that safely belonged to the
+ * generation visible when this call began. Unlike `listProcessSnapshots`,
+ * enumeration and boundary failures are surfaced so lifecycle callers can
+ * quick-fail instead of reporting a false `alreadyStopped` result.
+ */
+export async function captureStampedProcessSnapshot<
+  TStamp extends ProcessStampShape,
+  TCriteria extends Partial<TStamp> = Partial<TStamp>,
+>(
+  criteria: TCriteria | undefined,
+  contract: ProcessStampContract<TStamp, TCriteria>,
+): Promise<StampedProcessInvocationSnapshot> {
+  const invokedAtMs = Date.now();
+  const processes = await captureProcessSnapshot();
+  const matches = selectStampedProcessesAtInvocation(processes, criteria, contract, invokedAtMs);
+  const matchedPids = new Set(matches.map(({ pid }) => pid));
+  return {
+    matches,
+    processes,
+    roots: matches.filter(({ ppid }) => !matchedPids.has(ppid)),
+  };
+}
+
+/**
+ * Capture one invocation-fenced process table for several stamp criteria.
+ * Lifecycle operations use this form when a logical resource spans multiple
+ * stamped generations: every member is observed at the same boundary and a
+ * slow platform backend (notably Windows CIM) is paid only once.
+ */
+export async function captureStampedProcessSetSnapshot<
+  TStamp extends ProcessStampShape,
+  TCriteria extends Partial<TStamp> = Partial<TStamp>,
+>(
+  criteriaSet: readonly TCriteria[],
+  contract: ProcessStampContract<TStamp, TCriteria>,
+): Promise<StampedProcessSetInvocationSnapshot<TCriteria>> {
+  const invokedAtMs = Date.now();
+  const processes = process.platform === "win32"
+    ? await captureWindowsStampedProcessTrees(criteriaSet, contract)
+    : await captureProcessSnapshot();
+  return {
+    entries: criteriaSet.map((criteria) => {
+      const matches = selectStampedProcessesAtInvocation(
+        processes,
+        criteria,
+        contract,
+        invokedAtMs,
+      );
+      const matchedPids = new Set(matches.map(({ pid }) => pid));
+      return {
+        criteria,
+        matches,
+        processes,
+        roots: matches.filter(({ ppid }) => !matchedPids.has(ppid)),
+      };
+    }),
+    processes,
+  };
+}
+
+/** Query stamped Windows roots and only their descendant trees in one shell. */
+async function captureWindowsStampedProcessTrees<
+  TStamp extends ProcessStampShape,
+  TCriteria extends Partial<TStamp>,
+>(
+  criteriaSet: readonly TCriteria[],
+  contract: ProcessStampContract<TStamp, TCriteria>,
+): Promise<ProcessSnapshot[]> {
+  if (criteriaSet.length === 0) return [];
+  const clauses = criteriaSet.map((criteria) => {
+    const normalized = contract.normalizeStampCriteria(criteria);
+    const fields = contract.stampFields.flatMap((field) => {
+      const value = normalized[field];
+      if (typeof value !== "string") return [];
+      const needle = `${contract.stampFlags[field]}=${value}`.replaceAll("'", "''");
+      return [`CommandLine LIKE '%${needle}%'`];
+    });
+    return fields.length === 0 ? "CommandLine IS NOT NULL" : `(${fields.join(" AND ")})`;
+  });
+  const rootFilter = [...new Set(clauses)].join(" OR ");
+  const powershellRootFilter = `'${rootFilter.replaceAll("'", "''")}'`;
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    `$roots = @(Get-CimInstance Win32_Process -Filter ${powershellRootFilter})`,
+    "$all = [System.Collections.Generic.List[object]]::new()",
+    "$seen = @{}",
+    "$frontier = [System.Collections.Generic.List[int]]::new()",
+    "foreach ($process in $roots) { $pidValue = [int]$process.ProcessId; if (-not $seen.ContainsKey($pidValue)) { $seen[$pidValue] = $true; $all.Add($process); $frontier.Add($pidValue) } }",
+    "while ($frontier.Count -gt 0) {",
+    "  $childFilter = (($frontier | ForEach-Object { \"ParentProcessId = $_\" }) -join ' OR ')",
+    "  $frontier = [System.Collections.Generic.List[int]]::new()",
+    "  $children = @(Get-CimInstance Win32_Process -Filter $childFilter)",
+    "  foreach ($process in $children) { $pidValue = [int]$process.ProcessId; if (-not $seen.ContainsKey($pidValue)) { $seen[$pidValue] = $true; $all.Add($process); $frontier.Add($pidValue) } }",
+    "}",
+    "$all | Select-Object ProcessId, ParentProcessId, CommandLine, @{Name='StartedAtMs';Expression={([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds()}} | ConvertTo-Json -Compress",
+  ].join("; ");
+  const stdout = await new Promise<string>((resolveList, rejectList) => {
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
+      if (error) rejectList(error);
+      else resolveList(out);
+    });
+  });
+  return parseWindowsProcessSnapshots(stdout);
 }
 
 /**
@@ -417,8 +621,198 @@ export function collectProcessTreePids(
   return [...visited].sort((left, right) => right - left);
 }
 
-/** @internal Send a signal to each PID, ignoring `ESRCH` (already-dead) but rethrowing other errors. */
-function signalProcesses(pids: number[], signal: NodeJS.Signals): void {
+/**
+ * Revalidate known Windows process generations before extending their tree.
+ * The caller supplies identities captured while its owned child was alive;
+ * this function never upgrades a bare root PID into an ownership proof.
+ */
+export function selectOwnedProcessTree(known: ProcessSnapshot[], current: ProcessSnapshot[]): ProcessSnapshot[] {
+  const validTime = (value: number | undefined): value is number =>
+    typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  const currentByPid = new Map(current.map(entry => [entry.pid, entry]));
+  const selected = new Map<number, ProcessSnapshot>();
+  const queue = known.flatMap(entry => {
+    const live = currentByPid.get(entry.pid);
+    return live && validTime(entry.startedAtMs) && live.startedAtMs === entry.startedAtMs ? [live] : [];
+  });
+  for (let index = 0; index < queue.length; index++) {
+    const parent = queue[index]!;
+    if (selected.has(parent.pid)) continue;
+    selected.set(parent.pid, parent);
+    queue.push(...current.filter(entry => entry.ppid === parent.pid
+      && validTime(entry.startedAtMs) && entry.startedAtMs >= parent.startedAtMs!));
+  }
+  return [...selected.values()];
+}
+
+/**
+ * OS identity of one live process: enough to tell "the process we started"
+ * apart from an unrelated process that later received the same PID.
+ */
+export type ProcessIdentity = {
+  pid: number;
+  ppid: number;
+  /** POSIX process group id; `null` where the platform has no process groups. */
+  processGroupId: number | null;
+  /** OS-reported creation time in ms since the epoch, when the backend reports one. */
+  startedAtMs: number | null;
+  /** Granularity of `startedAtMs`: POSIX `ps lstart` reports whole seconds. */
+  startedAtResolutionMs: number;
+  command: string;
+};
+
+const LSTART_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * @internal Parse `LC_ALL=C ps -o pid=,ppid=,pgid=,lstart=,command=` output.
+ * `lstart` is the C-locale `Www Mmm dd hh:mm:ss yyyy` form in the local zone,
+ * which is the zone this process shares with `ps`.
+ */
+export function parsePosixProcessIdentities(stdout: string): ProcessIdentity[] {
+  const identities: ProcessIdentity[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const match = line.match(
+      /^\s*(\d+)\s+(\d+)\s+(\d+)\s+[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(\d{4})\s*(.*)$/,
+    );
+    if (!match) continue;
+    const month = LSTART_MONTHS.indexOf(match[4]!);
+    const startedAtMs = month < 0
+      ? Number.NaN
+      : new Date(
+        Number(match[9]),
+        month,
+        Number(match[5]),
+        Number(match[6]),
+        Number(match[7]),
+        Number(match[8]),
+      ).getTime();
+    identities.push({
+      command: (match[10] ?? "").trim(),
+      pid: Number(match[1]),
+      ppid: Number(match[2]),
+      processGroupId: Number(match[3]),
+      startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : null,
+      startedAtResolutionMs: 1000,
+    });
+  }
+  return identities;
+}
+
+/**
+ * Read the OS identity (creation time, and process group on POSIX) of the given
+ * PIDs. PIDs that do not exist are absent from the result; a backend failure
+ * throws. Callers that must never mistake "could not look" for "not there"
+ * should probe liveness with `isProcessAlive` first and treat a live PID that
+ * is missing here as unverifiable, not as gone.
+ */
+export async function readProcessIdentities(pids: readonly number[]): Promise<Map<number, ProcessIdentity>> {
+  const exactPids = [...new Set(pids.filter((pid) => Number.isSafeInteger(pid) && pid > 0))];
+  const result = new Map<number, ProcessIdentity>();
+  if (exactPids.length === 0) return result;
+  if (process.platform === "win32") {
+    for (const snapshot of await captureProcessSnapshotsByPids(exactPids)) {
+      result.set(snapshot.pid, {
+        command: snapshot.command,
+        pid: snapshot.pid,
+        ppid: snapshot.ppid,
+        processGroupId: null,
+        startedAtMs: snapshot.startedAtMs ?? null,
+        startedAtResolutionMs: 1,
+      });
+    }
+    return result;
+  }
+  const stdout = await new Promise<string>((resolveList, rejectList) => {
+    execFile(
+      "ps",
+      ["-o", "pid=,ppid=,pgid=,lstart=,command=", "-p", exactPids.join(",")],
+      { encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, maxBuffer: 8 * 1024 * 1024 },
+      (error, out, err) => {
+        if (!error || out.length > 0) {
+          resolveList(out);
+          return;
+        }
+        // `ps -p` exits 1 silently when none of the PIDs exist; that is an
+        // answer. Exit 1 WITH a complaint (unsupported column, bad PID list) is
+        // a backend failure and must not read as "none of them exist".
+        if ((error as { code?: unknown }).code === 1 && err.trim().length === 0) {
+          resolveList("");
+          return;
+        }
+        rejectList(error);
+      },
+    );
+  });
+  const wanted = new Set(exactPids);
+  for (const identity of parsePosixProcessIdentities(stdout)) {
+    if (wanted.has(identity.pid)) result.set(identity.pid, identity);
+  }
+  return result;
+}
+
+/**
+ * Probe whether any member of a POSIX process group is alive. Always `false`
+ * on Windows, which has no process groups.
+ */
+export function isProcessGroupAlive(processGroupId: number | null | undefined): boolean {
+  if (process.platform === "win32" || typeof processGroupId !== "number" || !Number.isSafeInteger(processGroupId) || processGroupId <= 0) {
+    return false;
+  }
+  try {
+    process.kill(-processGroupId, 0);
+    return true;
+  } catch (error) {
+    return errorCode(error) === "EPERM";
+  }
+}
+
+export type TerminateProcessGroupResult = {
+  /** The group was already empty before any signal was sent. */
+  alreadyStopped: boolean;
+  /** SIGKILL was needed because members survived the SIGTERM grace. */
+  forced: boolean;
+  /** Members were still alive after the SIGKILL grace. */
+  survived: boolean;
+};
+
+/**
+ * Terminate a whole POSIX process group: SIGTERM, wait for the group to empty,
+ * then SIGKILL whatever is left. Signalling the group (not a PID list) also
+ * catches members created after the call began. No-op on Windows.
+ */
+export async function terminateProcessGroup(
+  processGroupId: number,
+  options: StopProcessesOptions = {},
+): Promise<TerminateProcessGroupResult> {
+  if (!isProcessGroupAlive(processGroupId)) {
+    return { alreadyStopped: true, forced: false, survived: false };
+  }
+  const signalGroup = (signal: NodeJS.Signals) => {
+    try {
+      process.kill(-processGroupId, signal);
+    } catch {
+      // ESRCH: the group emptied between the probe and the signal.
+    }
+  };
+  const waitForGroupExit = async (timeoutMs: number) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (!isProcessGroupAlive(processGroupId)) return true;
+      await sleep(25);
+    }
+    return !isProcessGroupAlive(processGroupId);
+  };
+  signalGroup("SIGTERM");
+  if (await waitForGroupExit(normalizedGraceMs(options.termGraceMs) ?? 5000)) {
+    return { alreadyStopped: false, forced: false, survived: false };
+  }
+  signalGroup("SIGKILL");
+  const gone = await waitForGroupExit(normalizedGraceMs(options.killGraceMs) ?? 5000);
+  return { alreadyStopped: false, forced: true, survived: !gone };
+}
+
+/** Send a signal to each PID, ignoring `ESRCH` (already-dead) but rethrowing other errors. */
+export function signalProcesses(pids: number[], signal: NodeJS.Signals): void {
   for (const pid of pids) {
     try {
       process.kill(pid, signal);

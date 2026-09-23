@@ -103,12 +103,25 @@ describe('InviteDialog — seat gate (#115)', () => {
     expect((confirm as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it.each(['already_member', 'active_pending_invite'])(
-    'shows duplicate copy only for explicit %s',
+  // The two 409 duplicate variants must read differently: "already on the team"
+  // and "already invited" call for different next steps. `invite_existing_member`
+  // is B's wire code for the first one (V0.19.1 acceptance bug recvrovm9Bcyy0) —
+  // it used to fall through to the generic retry copy.
+  it.each(['already_member', 'invite_existing_member'])(
+    'names the already-a-member reason for explicit %s',
     async (error) => {
-      expect(await submitWithError(error)).toHaveTextContent(
-        /已有待处理的邀请|pending invitation/i,
-      );
+      const alert = await submitWithError(error);
+      expect(alert).toHaveTextContent(/已是团队成员|already a team member/i);
+      expect(alert).not.toHaveTextContent(/发送失败|failed to send/i);
+    },
+  );
+
+  it.each(['active_pending_invite', 'invite_duplicate'])(
+    'names the pending-invite reason for explicit %s',
+    async (error) => {
+      const alert = await submitWithError(error);
+      expect(alert).toHaveTextContent(/已有待接受的邀请|pending invitation/i);
+      expect(alert).not.toHaveTextContent(/发送失败|failed to send/i);
     },
   );
 
@@ -126,7 +139,8 @@ describe('InviteDialog — seat gate (#115)', () => {
     async (error) => {
       const alert = await submitWithError(error);
       expect(alert).toHaveTextContent(/发送失败|failed to send/i);
-      expect(alert).not.toHaveTextContent(/已有待处理的邀请|pending invitation/i);
+      expect(alert).not.toHaveTextContent(/已有待接受的邀请|pending invitation/i);
+      expect(alert).not.toHaveTextContent(/已是团队成员|already a team member/i);
     },
   );
 });

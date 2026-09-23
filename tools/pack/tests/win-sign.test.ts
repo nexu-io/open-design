@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { resolveSigntoolPath } from "../src/win/sign.js";
+import { resolveSigntoolPath } from "@/win/sign.js";
 
 describe("resolveSigntoolPath", () => {
   it("probes filesystem candidates before falling back to bare signtool", async () => {

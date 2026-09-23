@@ -11,6 +11,7 @@
 // pull a version that is not yet durable. The adapter is expected to resolve only
 // on durable success (E's atomic write); this scheduler adds the coalescing.
 
+import { COLLAB_VELA_FANOUT_CONCURRENCY, ConcurrencyGate } from './concurrency-gate.js';
 import type { ResourceHubPrincipal } from './resource-principal.js';
 
 export interface ResourcePublishInput {
@@ -76,6 +77,12 @@ interface ProjectState {
   /** A change arrived while a publish was in flight → re-publish after it settles. */
   dirty: boolean;
   dirtyReason: string;
+  /**
+   * The publish has passed the fan-out gate and the adapter is reading the
+   * project. Until then the publish is only queued: it has not looked at the
+   * project yet, so a change arriving in that window needs no second publish.
+   */
+  admitted: boolean;
   /** Pending automatic retry of a failed publish (see {@link PUBLISH_RETRY_BACKOFF_MS}). */
   retryTimer: ReturnType<typeof setTimeout> | null;
   /** Consecutive failed publish attempts with no success or newer change in between. */
@@ -98,6 +105,12 @@ export class CollabPublishScheduler {
   private readonly onPublished?: CollabPublishSchedulerOptions['onPublished'];
   private readonly onError?: CollabPublishSchedulerOptions['onError'];
   private readonly projects = new Map<string, ProjectState>();
+  // Per-project re-entry is already blocked by `state.publishing`, but nothing
+  // bounded the fan-out ACROSS projects: a run boundary that dirties every
+  // project in a workspace, or a batch of debounce windows expiring in the
+  // same tick, spawned one concurrent `vela resource push` per project. The
+  // gate caps that peak; the queue behind it preserves every publish.
+  private readonly gate = new ConcurrencyGate(COLLAB_VELA_FANOUT_CONCURRENCY);
 
   constructor(options: CollabPublishSchedulerOptions) {
     this.adapter = options.adapter;
@@ -115,6 +128,10 @@ export class CollabPublishScheduler {
     state.consecutiveFailures = 0;
     this.clearRetryTimer(state);
     if (state.publishing) {
+      // Still queued behind the fan-out cap: the adapter has not read the
+      // project yet, so it will pick this change up when it is admitted.
+      // `state.reason` above is what it will publish under.
+      if (!state.admitted) return;
       // Don't interrupt an in-flight publish — mark dirty so a fresh one runs
       // after it settles (last-write-wins; the change is never lost).
       state.dirty = true;
@@ -139,6 +156,9 @@ export class CollabPublishScheduler {
       state.timer = null;
     }
     if (state.publishing) {
+      // Same queued-vs-reading split as notifyChanged: a publish still waiting
+      // for a fan-out slot will observe the end-of-run state on its own.
+      if (!state.admitted) return;
       state.dirty = true;
       state.dirtyReason = state.reason;
       return;
@@ -161,10 +181,18 @@ export class CollabPublishScheduler {
     state.timer = null;
     this.clearRetryTimer(state);
     state.publishing = true;
-    const reason = state.reason;
+    state.admitted = false;
+    // Resolved at admission, not at queueing: a change that lands while this
+    // publish waits for a slot updates `state.reason`, and that is the state
+    // the adapter is about to read.
+    let reason = state.reason;
     let failed = false;
     try {
-      const result = await this.adapter.publish({ projectId, reason });
+      const result = await this.gate.run(() => {
+        state.admitted = true;
+        reason = state.reason;
+        return this.adapter.publish({ projectId, reason });
+      });
       state.consecutiveFailures = 0;
       if (result) {
         this.onPublished?.({
@@ -179,6 +207,7 @@ export class CollabPublishScheduler {
       this.onError?.({ projectId, error });
     } finally {
       state.publishing = false;
+      state.admitted = false;
       if (state.dirty) {
         state.dirty = false;
         // A change landed during the publish — schedule a fresh one. That
@@ -224,6 +253,7 @@ export class CollabPublishScheduler {
         publishing: false,
         dirty: false,
         dirtyReason: 'change',
+        admitted: false,
         retryTimer: null,
         consecutiveFailures: 0,
       };

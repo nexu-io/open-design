@@ -147,7 +147,7 @@ export function claimProjectTurnIndex(
   }
 }
 
-// Desktop packaged builds install the Open Design host bridge so the
+// Desktop packaged builds install the OpenDesign host bridge so the
 // same web bundle can distinguish desktop runs from browser visits.
 // Falls back to 'web' when the host bridge isn't present.
 export function detectClientType(): AnalyticsClientType {

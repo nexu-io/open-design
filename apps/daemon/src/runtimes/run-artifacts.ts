@@ -212,6 +212,16 @@ export function countNewArtifacts(events: readonly RunEventLike[]): number {
   return collectWrittenPathsMatching(events, isArtifactPath).size;
 }
 
+// Count of distinct files of ANY type the run successfully wrote or edited —
+// the tool-stream fallback for `run_finished.files_written_count` (the
+// filesystem-diff primary lives in `run-artifact-fs.ts#diffRunArtifacts`).
+// Unlike `countNewArtifacts` there is no extension filter: a run that only
+// delivered `PROMPTS.md` or `report.docx` still reports its writes. Failure
+// pairing and path dedup come from the shared helper.
+export function countWrittenFiles(events: readonly RunEventLike[]): number {
+  return collectWrittenPathsMatching(events, () => true).size;
+}
+
 // True iff the run raised an intent-clarification question. Fed into
 // `run_finished.asked_user_question`. A clarification turn is the agent
 // stopping to ask the user a finite-choice question; it inherently produces

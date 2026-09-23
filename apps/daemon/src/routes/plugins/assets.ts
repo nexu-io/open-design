@@ -3,7 +3,7 @@ import type * as BetterSqlite3 from 'better-sqlite3';
 import path from 'node:path';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import {
-  resolveOptionalWorkspaceRequestAuthority,
+  resolveOptionalLocalWorkspaceRequestAuthority,
   type VerifyWorkspaceRequestAuthority,
 } from '../../collab/workspace-resource-mutation.js';
 
@@ -93,10 +93,7 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       });
       return undefined;
     }
-    const authority = await resolveOptionalWorkspaceRequestAuthority(
-      scopedRequest,
-      deps.verifyWorkspaceRequestAuthority,
-    );
+    const authority = resolveOptionalLocalWorkspaceRequestAuthority(scopedRequest);
     if (!authority.ok) {
       res.status(authority.status).json({
         error: authority.code,

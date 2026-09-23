@@ -1,0 +1,25 @@
+{
+  "name": "example-demo-plugin",
+  "title": "Demo Plugin",
+  "title_i18n": {
+    "zh-CN": "演示插件"
+  },
+  "description": "A public library plugin fixture.",
+  "description_i18n": {
+    "zh-CN": "公开库插件夹具"
+  },
+  "tags": ["demo"],
+  "author": {
+    "name": "OpenDesign"
+  },
+  "od": {
+    "kind": "example",
+    "mode": "prototype",
+    "scenario": "demo",
+    "preview": {
+      "type": "html",
+      "poster": "https://cdn.example.test/demo-poster.webp",
+      "entry": "./example.html"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
-import { WIN_PREBUNDLED_APP_DIR_NAME } from "../win-prebundle.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { WIN_PREBUNDLED_APP_DIR_NAME } from "./prebundle.js";
 import {
   ELECTRON_BUILDER_ASAR,
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,

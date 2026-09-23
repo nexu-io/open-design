@@ -122,11 +122,28 @@ describe('plugin project duplication', () => {
     },
   );
 
-  it('returns a canonical retryable 503 when workspace authority is unavailable', async () => {
+  it('duplicates locally without querying the remote Workspace directory', async () => {
     const root = await makeTempRoot('od-plugin-duplicate-authority-');
     const projectsRoot = path.join(root, 'projects');
     const plugin = await makePreviewPlugin(root, 'authority-plugin-fixture');
-    const randomId = vi.fn();
+    const projectId = 'authority-plugin-project';
+    const project = {
+      id: projectId,
+      name: 'Authority Plugin Fixture',
+      skillId: null,
+      designSystemId: null,
+      pendingPrompt: null,
+      metadata: { kind: 'prototype' },
+      createdAt: 1,
+      updatedAt: 1,
+    } as unknown as Project;
+    const randomId = vi.fn()
+      .mockReturnValueOnce(projectId)
+      .mockReturnValueOnce('authority-plugin-conversation');
+    const fetchProjectCreationWorkspaceDirectory = vi.fn(
+      async () => ({ ok: false as const, items: [] }),
+    );
+    const ensureWorkspaceProject = vi.fn();
     const app = express();
     app.use(express.json());
     registerPluginRoutes(app, {
@@ -145,11 +162,13 @@ describe('plugin project duplication', () => {
       },
       ids: { randomId },
       projectStore: {
-        insertProject: vi.fn(),
-        getProject: vi.fn(),
-        ensureWorkspaceProject: vi.fn(),
+        insertProject: vi.fn(() => project),
+        getProject: vi.fn(() => project),
+        ensureWorkspaceProject,
         dbDeleteProject: vi.fn(),
-        removeProjectDir: vi.fn(),
+        removeProjectDir: async (rootDir: string, id: string) => {
+          await rm(path.join(rootDir, id), { recursive: true, force: true });
+        },
       },
       conversations: { insertConversation: vi.fn() },
       plugins: {
@@ -157,7 +176,7 @@ describe('plugin project duplication', () => {
         listInstalledPlugins: vi.fn(() => []),
       },
       verifyWorkspaceRequestAuthority,
-      fetchProjectCreationWorkspaceDirectory: async () => ({ ok: false, items: [] }),
+      fetchProjectCreationWorkspaceDirectory,
       helpers: {
         requireLocalDaemonRequest: ((_req, _res, next) => next()) as express.RequestHandler,
         assembleExample: (templateHtml: string) => templateHtml,
@@ -186,16 +205,17 @@ describe('plugin project duplication', () => {
         },
       );
 
-      expect(resp.status).toBe(503);
-      await expect(resp.json()).resolves.toEqual({
-        error: {
-          code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
-          message: 'workspace membership authority is temporarily unavailable',
-          retryable: true,
-        },
-      });
-      expect(randomId).not.toHaveBeenCalled();
-      await expectMissing(projectsRoot);
+      expect(resp.status).toBe(201);
+      expect(randomId).toHaveBeenCalledTimes(2);
+      expect(fetchProjectCreationWorkspaceDirectory).not.toHaveBeenCalled();
+      expect(ensureWorkspaceProject).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          projectId,
+          workspaceId: 'workspace-authority',
+          createdByWorkspaceMemberId: 'member-authority',
+        }),
+      );
     } finally {
       await close(server.server);
     }
@@ -205,6 +225,7 @@ describe('plugin project duplication', () => {
     const root = await makeTempRoot('od-plugin-duplicate-workspace-');
     const projectsRoot = path.join(root, 'projects');
     const plugin = await makePreviewPlugin(root, 'workspace-plugin-fixture');
+    (plugin.manifest.od as { mode?: string }).mode = 'deck';
     const projectId = 'workspace-plugin-project';
     const project = {
       id: projectId,
@@ -234,6 +255,10 @@ describe('plugin project duplication', () => {
       transactionSteps.push('workspace:bind');
       return input;
     });
+    const insertProjectMock = vi.fn(() => {
+      transactionSteps.push('project:insert');
+      return project;
+    });
     const app = express();
     app.use(express.json());
     registerPluginRoutes(app, {
@@ -249,10 +274,7 @@ describe('plugin project duplication', () => {
           .mockReturnValueOnce('workspace-plugin-conversation'),
       },
       projectStore: {
-        insertProject: vi.fn(() => {
-          transactionSteps.push('project:insert');
-          return project;
-        }),
+        insertProject: insertProjectMock,
         getProject: vi.fn(() => project),
         ensureWorkspaceProject,
         dbDeleteProject: vi.fn(),
@@ -298,6 +320,12 @@ describe('plugin project duplication', () => {
         },
       );
       expect(resp.status).toBe(201);
+      expect(insertProjectMock).toHaveBeenCalledWith(
+        db,
+        expect.objectContaining({
+          metadata: expect.objectContaining({ kind: 'deck' }),
+        }),
+      );
       expect(ensureWorkspaceProject).toHaveBeenCalledWith(
         db,
         expect.objectContaining({

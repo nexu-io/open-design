@@ -3,9 +3,9 @@ name: deck-open-slide-canvas
 en_name: "Write an Architecture Review like a World-Class Staff Engineer"
 zh_name: "像世界级 Staff Engineer 一样写架构评审"
 description: |
-  Open Design's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Built as a decision-grade product management deck for staff eng, tech leads, security.
+  OpenDesign's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Built as a decision-grade product management deck for staff eng, tech leads, security.
 en_description: |
-  Open Design's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Built as a decision-grade product management deck for staff eng, tech leads, security.
+  OpenDesign's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Built as a decision-grade product management deck for staff eng, tech leads, security.
 zh_description: |
   像世界级 Staff Engineer 一样写架构评审——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -55,7 +55,7 @@ od:
     zh-CN: "用「1920 画布自由 Deck」模板把我的内容做成一套「锁死 1920×1080 画布, React 组件级自由组合, 不绑模板」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
   category: "product-management"
   scenario: "product"
-  example_prompt: "Create \"Write an Architecture Review like a World-Class Staff Engineer\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Audience: staff eng, tech leads, security. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
+  example_prompt: "Create \"Write an Architecture Review like a World-Class Staff Engineer\" as a decision-grade Product management deck in this template's own visual system. Subject: OpenDesign's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Audience: staff eng, tech leads, security. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 
 【模板: 1920 画布自由 Deck】

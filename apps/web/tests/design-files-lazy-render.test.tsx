@@ -139,6 +139,7 @@ function renderPanel(
   return render(
     <DesignFilesPanel
       projectId="lazy-render-project"
+      projectKind="prototype"
       files={files}
       liveArtifacts={[]}
       onRefreshFiles={vi.fn()}

@@ -1,7 +1,7 @@
 // Tiered v4-UUID generator that survives non-secure contexts.
 //
 // `crypto.randomUUID()` is restricted to secure contexts — HTTPS or
-// `localhost`. When Open Design is served over plain HTTP on a LAN
+// `localhost`. When OpenDesign is served over plain HTTP on a LAN
 // IP (the standard Docker / unRAID / NAS self-hosted setup, e.g.
 // `http://192.168.1.10:17573`), Chromium silently makes
 // `crypto.randomUUID` undefined. Calls then throw

@@ -1,20 +1,20 @@
-# Open Design 账号体系 + 用户头像（订阅/余额）设计方案
+# OpenDesign 账号体系 + 用户头像（订阅/余额）设计方案
 
-> 状态：设计中（design）。本 spec 是评审稿，**独立于** "Open Design Cloud 文案改造" PR（`feat/cloud-subscription-copy`），不随其合入。评审通过后另起实现分支。
+> 状态：设计中（design）。本 spec 是评审稿，**独立于** "OpenDesign Cloud 文案改造" PR（`feat/cloud-subscription-copy`），不随其合入。评审通过后另起实现分支。
 
 ## Context / 背景
 
-AMR（Agentic Model Router）不再作为 Open Design 的独立产品，收敛成 Open Design 的订阅 / 云服务。随之而来的产品架构变化：
+AMR（Agentic Model Router）不再作为 OpenDesign 的独立产品，收敛成 OpenDesign 的订阅 / 云服务。随之而来的产品架构变化：
 
-- **AMR 的账号体系 = Open Design 的账号体系。** 不再有"AMR 账号"，只有"Open Design 账号"（承接现有 vela / Open Design Cloud 账号）。
-- Open Design 需要成为一个**可登录**的产品，并提供类似 Claude 的**常驻用户头像**：头像 · 套餐 ▾ →（点击）当前套餐 + 余额 + 管理/充值入口。
+- **AMR 的账号体系 = OpenDesign 的账号体系。** 不再有"AMR 账号"，只有"OpenDesign 账号"（承接现有 vela / OpenDesign Cloud 账号）。
+- OpenDesign 需要成为一个**可登录**的产品，并提供类似 Claude 的**常驻用户头像**：头像 · 套餐 ▾ →（点击）当前套餐 + 余额 + 管理/充值入口。
 
 **已确认的产品决策：**
-1. **全局账号，与运行方式解耦**——登录即"登录 Open Design"，头像常驻；哪怕用本地 CLI / BYOK 也是登录态。订阅是对 Open Design 的订阅，不是对某个运行时。
+1. **全局账号，与运行方式解耦**——登录即"登录 OpenDesign"，头像常驻；哪怕用本地 CLI / BYOK 也是登录态。订阅是对 OpenDesign 的订阅，不是对某个运行时。
 2. **头像下拉展示完整版：身份 + 套餐 + 余额**——需要打通上游余额数据。
 3. **先出 spec、再实现**（本文件）。
 4. **开源 / 商业化边界（open-core）**——account 是**可选的商业化边界**，不是 OSS 核心的前置。OSS 核心（本地 CLI / BYOK）**无需登录即可正常使用**；登录只解锁云运行时 / 订阅 / 团队版。绝不让 OSS 体验变成"打开即逼登录"。
-5. **身份源 = 现有 vela 账号（方案 A）**——把 vela / Open Design Cloud 账号确立为**唯一的 "Open Design 账号"**。身份、计费、未来的 org/seat/role 全部在**托管后端（vela）**演进；开源 repo **不自建第二套身份**，只做瘦客户端（账号契约 + 登录流 + 头像）。团队版的组织/席位/角色是 vela 账号模型的演进，不是本 repo 要造的东西。
+5. **身份源 = 现有 vela 账号（方案 A）**——把 vela / OpenDesign Cloud 账号确立为**唯一的 "OpenDesign 账号"**。身份、计费、未来的 org/seat/role 全部在**托管后端（vela）**演进；开源 repo **不自建第二套身份**，只做瘦客户端（账号契约 + 登录流 + 头像）。团队版的组织/席位/角色是 vela 账号模型的演进，不是本 repo 要造的东西。
 
 ## 现状（代码事实，决定工作量）
 
@@ -29,7 +29,7 @@ AMR（Agentic Model Router）不再作为 Open Design 的独立产品，收敛�
 
 ## 开源 / 商业化分层（open-core）
 
-Open Design 本身是开源产品，商业化走 open-core：**账号挂在托管后端，开源端只做可选的瘦客户端**。
+OpenDesign 本身是开源产品，商业化走 open-core：**账号挂在托管后端，开源端只做可选的瘦客户端**。
 
 | 层 | 放哪 | 内容 |
 |---|---|---|
@@ -53,7 +53,7 @@ Open Design 本身是开源产品，商业化走 open-core：**账号挂在托�
 - 不改计费后端、不自建支付（充值/管理仍跳现有外部 console）。
 - 不在 app 内实现订阅升级流程（上游若已有 tier 则仅展示）。
 - 不做团队版。
-- 不重命名内部代码标识（agent id `amr`、`vela` 端点、`~/.amr` 等沿用，仅对外措辞用 Open Design / Open Design Cloud）。
+- 不重命名内部代码标识（agent id `amr`、`vela` 端点、`~/.amr` 等沿用，仅对外措辞用 OpenDesign / OpenDesign Cloud）。
 
 ## 架构设计
 
@@ -91,7 +91,7 @@ export interface AccountSummary {
 ### 2. daemon 侧
 
 - 新增 `GET /api/account/summary`（`daemon/src/routes/`，可与 vela.ts 同域）：组合「本地登录态（`readVelaLoginStatus`）」+「经 `/api/amr` 上游取 balance / subscription」→ 组装成 `AccountSummary`。
-- 登录/登出复用现有 `/api/integrations/vela/login|login/cancel|logout`（对外语义改为"Open Design 账号"，端点路径可不动）。
+- 登录/登出复用现有 `/api/integrations/vela/login|login/cancel|logout`（对外语义改为"OpenDesign 账号"，端点路径可不动）。
 - **依赖确认**：上游 vela API 是否已暴露 balance / subscription（tier、续费日）端点与字段 → 见 Open questions Q1。
 
 ### 3. web 侧：全局 account context
@@ -104,7 +104,7 @@ export interface AccountSummary {
 - **新组件 `AccountAvatar`**（与运行时切换器彻底分开）：
   - 触发器：头像（`image` 或 email 首字母）+ `name · planLabel ▾`（对标截图 `frg · Max ▾`）。
   - 下拉：身份块（头像/姓名/邮箱）→ 套餐（`planLabel` + 续费日）→ 余额（`balance.displayText` + "充值/管理"按钮跳外部 console，沿用 `amr-attribution` 归因）→ 设置 → 登出。
-  - **未登录态**：头像位显示"登录 Open Design" CTA，点击触发现有 vela device-auth 登录流。
+  - **未登录态**：头像位显示"登录 OpenDesign" CTA，点击触发现有 vela device-auth 登录流。
 - **登录态展示规则（统一，适用于所有露出账号状态的地方）**：
   - **登录态不再展示冗余的 "✓ / 已登录"**——"已登录"由"显示了套餐"隐含表达。直接展示当前套餐（`planLabel`）。
   - **未登录态**才显示登录 / 授权 CTA。
@@ -122,7 +122,7 @@ export interface AccountSummary {
 - **P1 数据层**：contracts `account.ts` + daemon `/api/account/summary`（含余额打通）+ web `AccountProvider`。
 - **P2 UI**：`AccountAvatar`（登录态展示）+ 全局头部接入 + 未登录登录流。
 - **P3 收敛 + CLI**：把分散的 4 处登录态迁到 context；`od account` 子命令。
-- **P4 文案/验证**：i18n（承接 Open Design Cloud 命名）+ 截图 + 测试。
+- **P4 文案/验证**：i18n（承接 OpenDesign Cloud 命名）+ 截图 + 测试。
 
 ## Open questions（需确认，决定能否落地）
 
@@ -130,7 +130,7 @@ export interface AccountSummary {
 2. **"套餐(tier)"是真实订阅层级还是现有 `plan` 自由串？** 截图的 `Max` 映射到哪个字段/取值？
 3. **未登录态策略**：home 首屏即引导登录，还是仅在需要云能力时？（影响 onboarding 与转化）
 4. **全局头部容器**：复用现有哪个头部，还是新建统一顶栏 slot？（影响 home/project 两处接入方式）
-5. ~~登录态拿不到套餐时的 fallback~~ → **已定：拿不到套餐就不显示状态**（方案②，只显示 Open Design Cloud 名称）。
+5. ~~登录态拿不到套餐时的 fallback~~ → **已定：拿不到套餐就不显示状态**（方案②，只显示 OpenDesign Cloud 名称）。
    - "登录了但无套餐"是预期常态，非异常：①免费用户（从未订阅）；②本地 `~/.amr/config.json` 投影未含 plan（老 CLI / 登录时未写入）；③权威套餐在上游、本地缺；④上游拉取失败或加载中。一律降级为"不显示状态"。
    - **实现注意**：要把"已登录但无套餐（→ 不显示状态、也不显示登录 CTA）"与"未登录（→ 显示登录 CTA）"区分开，二者都"没有套餐标签"，但前者无 CTA、后者有 CTA。判定用 `loggedIn`，不要用"有没有 plan"。
 

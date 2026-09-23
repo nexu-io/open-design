@@ -128,7 +128,7 @@ describe('UpdaterPopup', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Update ready' });
     expect(dialog).toBeTruthy();
     expect(dialog.className).toBe('updater-popup is-ready');
-    expect(screen.getByText('Open Design 1.2.3-beta.4 is ready. Open Design will close and open the installer.')).toBeTruthy();
+    expect(screen.getByText('OpenDesign 1.2.3-beta.4 is ready. OpenDesign will close and open the installer.')).toBeTruthy();
     expect(screen.getByTestId('updater-silent-update-checkbox')).toBeChecked();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('Install update');
     expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
@@ -156,7 +156,7 @@ describe('UpdaterPopup', () => {
 
     await screen.findByRole('dialog', { name: 'Update ready' });
     expect(
-      screen.getByText('Open Design 1.2.3-beta.4 requires a full reinstall. Open Design will close and open the installer.'),
+      screen.getByText('OpenDesign 1.2.3-beta.4 requires a full reinstall. OpenDesign will close and open the installer.'),
     ).toBeTruthy();
     expect(screen.getByTestId('updater-reinstall-learn-more')).toBeTruthy();
   });
@@ -178,7 +178,7 @@ describe('UpdaterPopup', () => {
 
     await screen.findByRole('dialog', { name: 'Update ready' });
     expect(
-      screen.getByText('Open Design 1.2.3-beta.4 requires a full reinstall. Open Design will close and open the installer.'),
+      screen.getByText('OpenDesign 1.2.3-beta.4 requires a full reinstall. OpenDesign will close and open the installer.'),
     ).toBeTruthy();
     expect(screen.queryByTestId('updater-reinstall-learn-more')).toBeNull();
   });
@@ -202,7 +202,7 @@ describe('UpdaterPopup', () => {
 
     expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('安装更新');
-    expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并打开安装器。')).toBeTruthy();
+    expect(screen.getByText('OpenDesign 1.2.3-beta.4 已就绪。OpenDesign 会关闭并打开安装器。')).toBeTruthy();
   });
 
   it('uses install-and-restart copy for payload updates', async () => {
@@ -226,7 +226,7 @@ describe('UpdaterPopup', () => {
 
     expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('安装并重启');
-    expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并自动重启。')).toBeTruthy();
+    expect(screen.getByText('OpenDesign 1.2.3-beta.4 已就绪。OpenDesign 会关闭并自动重启。')).toBeTruthy();
   });
 
   it('seeds the default silent-update preference only after a successful daemon GET', async () => {
@@ -486,65 +486,54 @@ describe('UpdaterPopup', () => {
     expect(screen.getByRole('button', { name: 'Later' }).getAttribute('disabled')).not.toBeNull();
   });
 
-  it('recovers the handoff prompt if the app has not closed after the watchdog', async () => {
-    const install = vi.fn(async () => downloadedStatus({
-      installResult: {
-        dryRun: true,
-        openedAt: '2026-05-19T00:00:00.000Z',
-        path: '/tmp/open-design-updater/Open Design Beta.dmg',
-      },
+  it.each(['darwin', 'win32'] as const)('keeps accepted %s payload shutdown pending beyond the cleanup grace', async (platform) => {
+    const status = payloadDownloadedStatus({ platform });
+    const install = vi.fn(async () => ({
+      ...status,
+      installResult: { openedAt: '2026-09-10T05:20:14Z', path: status.downloadPath! },
     }));
     const quit = vi.fn(async () => ({ ok: true as const }));
-    restoreHost = installMockOpenDesignHost({
-      host: {
-        updater: {
-          install,
-          quit,
-          status: vi.fn(async () => downloadedStatus()),
-        },
-      },
-    });
-
+    restoreHost = installMockOpenDesignHost({ host: { updater: {
+      install, quit, status: vi.fn(async () => status),
+    } } });
     render(<UpdaterPopup />);
-
     fireEvent.click(await screen.findByTestId('entry-nav-updater'));
     vi.useFakeTimers();
     try {
-      fireEvent.click(screen.getByTestId('updater-install-button'));
-
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(screen.getByRole('button', { name: 'Opening installer...' }).getAttribute('disabled')).not.toBeNull();
-
-      act(() => {
-        vi.advanceTimersByTime(10_000);
-      });
-
-      expect(screen.getByRole('dialog', { name: 'Could not quit' })).toBeTruthy();
-      expect(screen.getByTestId('updater-install-button').textContent).toBe('Quit Open Design');
-      expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).toBeNull();
-      fireEvent.click(screen.getByTestId('updater-install-button'));
-
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
+      await act(async () => { fireEvent.click(screen.getByTestId('updater-install-button')); });
+      for (const elapsed of [10_000, 22_000, 28_000]) {
+        await act(async () => { vi.advanceTimersByTime(elapsed); });
+        expect(screen.queryByRole('dialog', { name: 'Could not quit' })).toBeNull();
+        expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).not.toBeNull();
+        fireEvent.click(screen.getByTestId('updater-install-button'));
+      }
       expect(install).toHaveBeenCalledTimes(1);
-      expect(quit).toHaveBeenCalledTimes(2);
-      expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).not.toBeNull();
-
-      act(() => {
-        vi.advanceTimersByTime(10_000);
-      });
-
-      expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).toBeNull();
+      expect(quit).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('allows retry after an explicit quit refusal without reopening the installer', async () => {
+    const status = payloadDownloadedStatus();
+    const install = vi.fn(async () => ({
+      ...status,
+      installResult: { openedAt: '2026-09-10T05:20:14Z', path: status.downloadPath! },
+    }));
+    const quit = vi.fn().mockResolvedValueOnce({ ok: false, reason: 'desktop quit is not available' })
+      .mockResolvedValueOnce({ ok: true });
+    restoreHost = installMockOpenDesignHost({ host: { updater: {
+      install, quit, status: vi.fn(async () => status),
+    } } });
+    render(<UpdaterPopup />);
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Could not quit' })).toBeTruthy());
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    await waitFor(() => expect(quit).toHaveBeenCalledTimes(2));
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: 'Could not quit' })).toBeNull();
+    expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).not.toBeNull();
   });
 
   it('shows install failures and leaves the ready prompt usable', async () => {

@@ -274,7 +274,7 @@ to the Latin run only.
 ## Beyond CJK — other scripts
 
 The five layers above are written in CJK examples because that's the
-most common pairing in Open Design today, but the same machinery
+most common pairing in OpenDesign today, but the same machinery
 applies to other scripts. Quick reference:
 
 | Script family            | XML slot   | Italic OK? | Most common defect                                                                  | Recommended faces                                |

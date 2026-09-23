@@ -280,6 +280,42 @@ describe('DesignsTab select mode', () => {
     expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
   });
 
+  it('keeps a single-project delete confirmation open after refusal and allows retry', async () => {
+    const onDelete = vi.fn()
+      .mockRejectedValueOnce(new Error('Delete permission denied'))
+      .mockResolvedValueOnce(true);
+    render(
+      <DesignsTab
+        projects={[project]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={onDelete}
+        onRename={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    const dialog = screen.getByRole('alertdialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledTimes(1);
+      expect(within(dialog).getByRole('alert').textContent).toContain(
+        'Delete permission denied',
+      );
+    });
+    expect(screen.getByRole('alertdialog')).toBe(dialog);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+  });
+
   it('exits select mode when switching to kanban view', () => {
     render(
       <DesignsTab

@@ -11,6 +11,9 @@ Run this before emitting `<artifact>`. P0 = must pass; P1 = should pass; P2 = ni
 - [ ] **No emoji used as feature icons.** Use the inline SVG monoline marks shipped in Layout 3, or a tasteful single-character glyph in `--font-mono`. ✨ 🚀 🎯 are out.
 - [ ] **No invented metrics.** Every number on the page came from the user, the brief, or is clearly labelled as a placeholder (e.g. `[REPLACE] · 38×`). "10× faster", "99.9% uptime" without source = remove.
 - [ ] **No filler copy.** Zero "Feature One / Feature Two", lorem ipsum, "Lorem ipsum dolor". If a section feels empty, delete it; do not pad.
+- [ ] **Named real-world referents use the correct real images.** Search/fetch and verify the intended person, product, brand mark, cover, artwork, event, landmark, or place. Never use generated, drawn, generic, look-alike, or fictional substitutes.
+- [ ] **No remote image dependencies.** Every used image is copied into the project and referenced relatively. No hotlinks, expiring URLs, broken sources, or unlabeled `.ph-img` scaffolds remain.
+- [ ] **Content images preserve their intrinsic ratio and full frame.** Inspect source width and height; replace the entire `.ph-img` scaffold with `<img class="content-img" width="…" height="…">`. Do not retain `.ph-img`, `.wide`, `.portrait`, or `.square`, do not fix both rendered axes, and do not use `cover` for content. Unusually tall or wide images must be bounded on one axis with the other left automatic so they neither crop nor create an excessive page-height column.
 - [ ] **`data-od-id` on every top-level `<section>`.** Used by comment mode to target sections.
 - [ ] **Mobile reflow works.** All `grid-2`, `grid-3`, `grid-4`, `grid-2-1`, `grid-1-2` collapse to one column at ≤920px (the default media query in `template.html` does this). Verify by mentally narrowing — no horizontal scroll.
 - [ ] **No `scrollIntoView()` calls.** Breaks the OD preview iframe. Use `scrollTo({...})` if you need scroll behaviour.

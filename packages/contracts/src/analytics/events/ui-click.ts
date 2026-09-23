@@ -6,7 +6,7 @@ import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } fr
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
 import type { OnboardingClickProps, TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingRunRecoveryActionType } from './result-events.js';
-import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCampaignConversionSource, TrackingCampaignId, TrackingCampaignUserState, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
+import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCampaignConversionSource, TrackingCampaignDeliveryMode, TrackingCampaignId, TrackingCampaignUserState, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
 import type { AccountMenuClickProps, CommunityTemplateClickProps, EntryNavigationClickProps, ExtensionMarketplaceClickProps, ProjectCollectionClickProps, TrackingWorkspaceScope, WorkspaceInviteClickProps, WorkspaceSwitcherClickProps } from './workspace.js';
 // ---- ui_click ------------------------------------------------------------
 //
@@ -74,7 +74,7 @@ export interface ExecutionSettingsPopoverClickProps {
 }
 
 // Items inside the header gear settings popover (EntrySettingsMenu): the
-// interface-language select, the "Share Open Design" social grid, the Discord /
+// interface-language select, the "Share OpenDesign" social grid, the Discord /
 // social follow links and the Settings → details entry. The same popover is
 // mounted both on the home header and the in-project artifact header, hence the
 // two-value page_name.
@@ -140,6 +140,12 @@ export interface HomeChatComposerClickProps {
     // "Recent folders" submenu.
     | 'working_dir_recent'
     | 'task_chip'
+    // The × the composer's type pill reveals on hover: clears the picked task
+    // type back to none (the pill then disappears; the entry point in the
+    // accessory row stays). Fires only once no sub-category is left to clear —
+    // that step sends `subcategory_chip` with `subcategory: 'all'` instead.
+    // `chip_id` is the type being cleared.
+    | 'task_chip_clear'
     // Sub-category filter pill under the task rail (全部 / Landing / Brand /
     // Dashboards / …). `subcategory` carries the picked slug; '全部' sends
     // `subcategory: 'all'`. `chip_id` is the parent task type.
@@ -873,7 +879,16 @@ export interface NextStepActionClickProps {
     | 'chip'
     | 'toolbox_action'
     | 'toolbox_more'
-    | 'share_to_open_design';
+    | 'share_to_open_design'
+    /**
+     * One of the agent-written follow-up suggestions under a delivered turn.
+     * Unlike every element above it, clicking this SENDS the row's sentence as
+     * the user's next message, so its click-through is literally the
+     * second-turn rate. `chip_id` carries the row's 0-based position, never the
+     * text — the text is model-written prose about the user's own project and
+     * has no business in an analytics payload.
+     */
+    | 'suggestion';
   chip_id?: string;
 }
 
@@ -900,8 +915,6 @@ export interface QuestionsFormClickProps {
     | 'submit'
     | 'visual_style_card'
     | 'visual_style_refresh'
-    | 'visual_style_gallery_open'
-    | 'visual_style_category_tab'
     | 'step_back'
     | 'step_next'
     | 'step_skip';
@@ -917,15 +930,18 @@ export interface QuestionsFormClickProps {
   question_id?: string;
   style_id?: string;
   style_context?: 'deck' | 'prototype' | 'document' | 'image' | 'video';
-  interaction_source?: 'inline' | 'gallery';
-  category_id?: 'all' | 'business' | 'editorial' | 'creative' | 'minimal';
+  // visual_style_card only: where the card was picked. The `'gallery'` arm and
+  // the `category_id` it carried retired with the visual-style gallery dialog
+  // (B53) — that dialog was the paging-era overflow surface, and the whole
+  // catalog now lives in the inline stack/grid.
+  interaction_source?: 'inline';
   step_index?: number;
   step_count?: number;
   project_id: string;
 }
 
 // Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
-// `go_amr` is the link that opens https://open-design.ai/amr.
+// `go_amr` is the link that opens https://open-design.ai/cloud/dashboard.
 export interface RunFailedToastClickProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -967,6 +983,18 @@ export interface DeepSeekCampaignModalClickProps {
   element: 'close' | 'later' | 'use_now' | 'upgrade';
   campaign_id: TrackingCampaignId;
   user_state: TrackingCampaignUserState;
+}
+
+export interface GoPlanSunsetModalClickProps {
+  page_name: 'home';
+  area: 'go_plan_sunset_modal';
+  element: 'view_other_subscriptions' | 'acknowledge' | 'close';
+  close_method?: 'unknown';
+  campaign_id: 'go_plan_sunset_202608';
+  announcement_version: '2026_08_25';
+  delivery_mode: TrackingCampaignDeliveryMode;
+  current_plan_id: string;
+  locale: string;
 }
 
 export interface DeepSeekCampaignBadgeClickProps {
@@ -1020,15 +1048,24 @@ export interface ChatPanelResourcesPopoverClickProps {
     | 'customize_in_settings';
 }
 
-// Actions on the queued-send strip ("N queued · to send") that sits above
-// the chat composer while a run is in flight: re-open a queued prompt in the
-// composer (`edit`), promote it to send immediately (`send_now`), or drop it
-// from the queue (`delete`). `queue_length` is the queue size at click time,
-// before the action applies.
+// Actions on the queued-send strip that sits above the chat composer while a
+// run is in flight: re-open a queued prompt in the composer (`edit`), send it
+// now (`steer`, B11 「引导对话」 — stops the turn in flight first when there is
+// one), or drop it from the queue (`delete`).
+//
+// `send_now` is RETIRED, not renamed. The strip's leading button used to have
+// two faces — `steer` while a turn was interruptible, `send_now` otherwise —
+// wired to the same handler under two names. Product collapsed them into the
+// single 「引导对话」 button on 2026-09-08, and the survivor reports `steer`.
+// So from that release on this surface emits no `send_now` at all; the member
+// stays in the union because PostHog still holds the historical events and
+// dashboards that read them must keep type-checking.
+//
+// `queue_length` is the queue size at click time, before the action applies.
 export interface ChatPanelMessageQueueClickProps {
   page_name: 'chat_panel';
   area: 'message_queue';
-  element: 'edit' | 'send_now' | 'delete';
+  element: 'edit' | 'send_now' | 'delete' | 'steer';
   project_id: string;
   queue_length: number;
 }
@@ -1057,6 +1094,8 @@ export interface FileManagerClickProps {
     | 'previous'
     | 'next'
     | 'per_page_dropdown';
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 // The workspace tab strip's "+" launcher — a command-palette popover for
@@ -1145,6 +1184,8 @@ export interface ArtifactToolbarClickProps {
     | 'versions';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   // Which surface hosted the click. Reported for element=versions (the only
   // toolbar action that also lives in the overflow menu).
   entry_from?: 'toolbar' | 'more_menu';
@@ -1173,6 +1214,8 @@ export interface DrawToolbarClickProps {
   submit_action?: 'draft' | 'queue' | 'send';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 export interface TweaksPopoverClickProps {
@@ -1182,6 +1225,8 @@ export interface TweaksPopoverClickProps {
   variant_name?: string;
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   status_before: 'on' | 'off';
   status_after: 'on' | 'off';
 }
@@ -1192,6 +1237,8 @@ export interface CommentPopoverClickProps {
   element: 'save_comment' | 'send_to_chat' | 'add_note';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 export interface ArtifactHeaderClickProps {
@@ -1209,6 +1256,8 @@ export interface ArtifactHeaderClickProps {
     | 'settings';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 // Canonical, bounded set of hand-off `target_id` values: the editor /
@@ -1266,7 +1315,7 @@ export interface HandoffClickProps {
     | 'open_editor'
     // Copy the hand-off prompt for a specific CLI agent.
     | 'copy_cli_prompt'
-    // Open the Open Design AMR website link.
+    // Open the OpenDesign AMR website link.
     | 'amr_website';
   // Bounded enum id of the editor / CLI target, present for `open_editor`,
   // `copy_cli_prompt`, and for `trigger` when it directly launches the
@@ -1281,6 +1330,8 @@ export interface HandoffClickProps {
   framework?: 'react' | 'vue' | 'svelte' | 'solid' | 'next' | 'vanilla';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 export interface PresentPopoverClickProps {
@@ -1322,6 +1373,8 @@ export interface DeckViewerClickProps {
     | 'speaker_notes_edit';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   // Only for thumbnail_rail_toggle: which way the toggle went.
   action?: 'expand' | 'collapse';
   // Active slide index (0-based) at the moment of the interaction, and the
@@ -1337,7 +1390,14 @@ export interface ShareOptionPopoverClickProps {
   // Export/share formats, plus 'publish_required_guide' for the share-intent
   // signal: the user opened Share wanting a link but the artifact isn't
   // deployed yet, so only the "publish online first" guide row is shown.
-  element: TrackingExportFormat | 'publish_required_guide';
+  // 'publish_file' is the Share tab's "Publish this file for everyone" button
+  // (the outcome reports separately via artifact_publish_result);
+  // 'copy_publish_link' is the copy-link button shown once a file is published.
+  element:
+    | TrackingExportFormat
+    | 'publish_required_guide'
+    | 'publish_file'
+    | 'copy_publish_link';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
   project_id: string;
@@ -1372,6 +1432,8 @@ export interface FileVersionModalClickProps {
     | 'restore_cancel';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   // Provenance of the version the click targets (version_item: the clicked
   // version; restore*: the version being restored).
   version_source?: TrackingFileVersionSource;
@@ -1431,6 +1493,32 @@ export interface AssistantFeedbackReasonSubmitClickProps {
   custom_reason?: string;
 }
 
+// CONVERSATION FORK funnel. The click and result events share this context so
+// analysts can compare historical-vs-latest forks without joining prompts or
+// other user-authored content into PostHog.
+export type TrackingConversationForkPoint = 'latest' | 'historical' | 'unknown';
+
+export interface ConversationForkAnalyticsContext {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'assistant_fork_button';
+  action: 'fork_conversation';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  conversation_id: string;
+  assistant_message_id: string;
+  source_run_id: string | null;
+  source_agent_id: string;
+  agent_provider_id: string;
+  session_mode: TrackingSessionMode;
+  fork_point: TrackingConversationForkPoint;
+  seed_message_count: number | null;
+  conversation_message_count: number;
+  messages_after_fork_count: number | null;
+}
+
+export type ConversationForkClickProps = ConversationForkAnalyticsContext;
+
 // SETTINGS clicks
 export type TrackingSettingsArea =
   | 'configure_execution_mode'
@@ -1452,6 +1540,7 @@ export type TrackingSettingsArea =
   | 'design_systems'
   | 'project_locations'
   | 'privacy'
+  | 'labs'
   | 'about';
 
 export interface SettingsSidebarClickProps {
@@ -1654,6 +1743,7 @@ export type UiClickProps =
   | RunRecoveryActionClickProps
   | AmrEntryClickProps
   | DeepSeekCampaignModalClickProps
+  | GoPlanSunsetModalClickProps
   | DeepSeekCampaignBadgeClickProps
   | ChatPanelResourcesPopoverClickProps
   | ChatPanelMessageQueueClickProps
@@ -1670,6 +1760,7 @@ export type UiClickProps =
   | DeckViewerClickProps
   | ShareOptionPopoverClickProps
   | FileVersionModalClickProps
+  | ConversationForkClickProps
   | AssistantFeedbackButtonClickProps
   | AssistantFeedbackReasonSubmitClickProps
   | SettingsSidebarClickProps

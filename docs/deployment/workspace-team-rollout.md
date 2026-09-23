@@ -1,6 +1,6 @@
 # Workspace Team 上线 Runbook
 
-本手册用于把 Workspace Team 从 Vela `feature-test` 推进到 `test`，最终再发布到 production。它同时覆盖 Vela DB/API/Link/Web/CLI 和 Open Design 桌面包；任何一层没有明确版本和验收证据，都不能把整体标记为已上线。
+本手册用于把 Workspace Team 从 Vela `feature-test` 推进到 `test`，最终再发布到 production。它同时覆盖 Vela DB/API/Link/Web/CLI 和 OpenDesign 桌面包；任何一层没有明确版本和验收证据，都不能把整体标记为已上线。
 
 > 安全边界：仓库内不得记录 Stripe 密钥、Webhook secret、数据库连接串、内部域名或测试账号密码。环境 URL、Secret 名称和值以 GitHub Environment、GitOps 仓库和内部上线记录为准。本手册中的 `<...>` 必须在受限上线记录中填写，不能直接提交真实 secret。
 
@@ -14,7 +14,7 @@
 | DB operator       | Atlas 状态、备份/PITR 可用性、migration 与 catalog seed        |
 | Payments owner    | Stripe 产品、Price、Coupon、Webhook 和 sandbox/production 隔离 |
 | Vela owner        | API、Link、Web、CLI 构建与部署                                 |
-| Open Design owner | CLI pin、beta/prerelease/stable 包和 updater 元数据            |
+| OpenDesign owner | CLI pin、beta/prerelease/stable 包和 updater 元数据            |
 | QA pair           | Owner + Admin/Member 双账号真实浏览器验收                      |
 | SRE on-call       | Grafana/Loki/Tempo、告警、回滚和事故响应                       |
 
@@ -26,7 +26,7 @@ workflow run URL | deploy start/end | operator | validation evidence
 rollback target | result | open issue/waiver
 ```
 
-版本必须是不可变标识：Git SHA、ECR digest、npm 精确版本、Open Design release version。分支名或 `latest` 不能单独作为证据。
+版本必须是不可变标识：Git SHA、ECR digest、npm 精确版本、OpenDesign release version。分支名或 `latest` 不能单独作为证据。
 
 ## 2. 当前硬门禁
 
@@ -42,9 +42,9 @@ git diff --name-status origin/main...origin/feat/workspace-team -- db/schema db/
 
 左侧计数不为 `0` 时，先在独立 worktree 将 `origin/main` 合入 `feat/workspace-team`，解决冲突并重新运行完整 CI。禁止在有用户 WIP 的主 checkout 中操作。
 
-### 2.2 Open Design production 目前是显式关闭状态
+### 2.2 OpenDesign production 目前是显式关闭状态
 
-当前 Open Design 代码只允许 `feature-test` 和 `test` profile 启用 Workspace Team transport；`prod` 即使拿到 Vela Web URL 也会保持关闭。证据在：
+当前 OpenDesign 代码只允许 `feature-test` 和 `test` profile 启用 Workspace Team transport；`prod` 即使拿到 Vela Web URL 也会保持关闭。证据在：
 
 - `apps/packaged/src/sidecars.ts` 的 `WORKSPACE_TEAM_AMR_PROFILES`
 - `.github/workflows/release-beta.yml` 的 `amr_profile` 和 `OD_VELA_WEB_URL`
@@ -89,7 +89,7 @@ gh run list -R powerformer/vela --branch feat/workspace-team \
   --workflow qa-browser-ci.yml --limit 10
 ```
 
-Open Design：
+OpenDesign：
 
 ```bash
 gh run list -R nexu-io/open-design --branch feat/workspace-team \
@@ -101,7 +101,7 @@ gh run list -R nexu-io/open-design --branch feat/workspace-team \
 - 所有 blocker review comment 已核实并解决；不适用的 comment 有书面原因。
 - 合入提交没有 `Co-authored-by`。
 - Vela API 对旧 CLI 请求仍向后兼容；显式 Workspace 请求不得静默回退 Personal。
-- 未登录 Open Design 仍能使用本地 Coding Agent 和 BYOK，不能因 AMR 不可用被余额弹窗阻断。
+- 未登录 OpenDesign 仍能使用本地 Coding Agent 和 BYOK，不能因 AMR 不可用被余额弹窗阻断。
 - `powerformer/apps` 中各环境的变量/ExternalSecret 映射已合并并同步；只确认 Secret 存在，不在日志中打印值。
 
 Workspace billing flags 必须按 API 的启动校验保持依赖顺序：
@@ -146,7 +146,7 @@ production 目录只能从 production Stripe 对象生成。禁止复制内部 W
 5. Vela Link（若请求、计费或 runtime contract 有变化）。
 6. Vela Web。
 7. Vela CLI 精确版本发布。
-8. Open Design pin 新 CLI，构建对应环境的包。
+8. OpenDesign pin 新 CLI，构建对应环境的包。
 9. 双账号真实浏览器与 packaged app 验收。
 10. 观察窗口通过后才进入下一环境。
 
@@ -179,7 +179,7 @@ gh workflow run vela-cli-package.yml \
   -R powerformer/vela --ref feat/workspace-team
 ```
 
-记录 workflow 产出的精确 `@powerformer/vela-cli@<version>-test.<n>`，确认 macOS arm64/x64、Windows x64 和 Linux 包发布与 smoke 均成功。随后在 Open Design 更新 `tools/pack/package.json` 的精确 pin 和 lockfile；不能依赖 npm dist-tag 漂移。
+记录 workflow 产出的精确 `@powerformer/vela-cli@<version>-test.<n>`，确认 macOS arm64/x64、Windows x64 和 Linux 包发布与 smoke 均成功。随后在 OpenDesign 更新 `tools/pack/package.json` 的精确 pin 和 lockfile；不能依赖 npm dist-tag 漂移。
 
 构建 feature-test beta：
 
@@ -215,7 +215,7 @@ gh workflow run deploy-web-eks-test.yml -R powerformer/vela --ref main
 
 Test workflow 会写 GitOps values，但不像 feature-test workflow 一样内建 exact-digest rollout job。Release commander 必须从 workflow 记录 GitOps commit/image tag，并由 SRE 在 GitOps/集群只读视图确认 rollout healthy 后再验收。
 
-用 `amr_profile=test` 重跑 Open Design beta；其余输入与 feature-test 相同。Feature-test 包不能作为 test 证据，因为 profile 和后端不同。
+用 `amr_profile=test` 重跑 OpenDesign beta；其余输入与 feature-test 相同。Feature-test 包不能作为 test 证据，因为 profile 和后端不同。
 
 ## 7. Production
 
@@ -247,9 +247,9 @@ gh workflow run vela-cli-release.yml -R powerformer/vela \
   --ref main -f target_ref=main -f bump=patch
 ```
 
-记录 GitHub release tag、npm 精确版本、各平台 checksum 和 Windows smoke。然后让 Open Design release branch pin 该 production CLI 精确版本。
+记录 GitHub release tag、npm 精确版本、各平台 checksum 和 Windows smoke。然后让 OpenDesign release branch pin 该 production CLI 精确版本。
 
-### 7.2 Open Design prerelease 与 stable
+### 7.2 OpenDesign prerelease 与 stable
 
 Workspace Team 必须先存在于 `main`，再走仓库既有 release branch -> prerelease -> stable promotion，不从 beta 直接升 stable：
 
@@ -362,7 +362,7 @@ Atlas migration 默认不可逆。服务回滚必须能在新 schema 上运行�
 
 回滚到上一个健康 Web image 后，先验证 HTML 引用旧 hash 资产仍为 `200`。只对确认污染的 asset URL 做精确 purge。
 
-### CLI/Open Design
+### CLI/OpenDesign
 
 - 停止发布/撤回下载通知；不要覆盖已发布的 npm 版本或 release artifact。
 - Beta/prerelease 通过发布一个更高版本修复；Stable 使用仓库 release 流程发布 patch。
@@ -383,7 +383,7 @@ Atlas migration 默认不可逆。服务回滚必须能在新 schema 上运行�
 - [ ] project 首开/缓存/评论/在线状态无性能回退。
 - [ ] 观察窗口内没有新增 firing alert 或未解释的错误尖峰。
 - [ ] 回滚目标和执行人已确认，且没有依赖不可逆 DB downgrade。
-- [ ] QA、Vela owner、Open Design owner、SRE、Release commander 签字。
+- [ ] QA、Vela owner、OpenDesign owner、SRE、Release commander 签字。
 
 任何 waiver 必须写明风险、有效期、owner 和回收条件；口头“先上线再看”不是有效签字。
 
@@ -391,12 +391,12 @@ Atlas migration 默认不可逆。服务回滚必须能在新 schema 上运行�
 
 操作命令和边界来自以下实际实现；修改 workflow 后应同步更新本手册：
 
-- Open Design `.github/workflows/ci.yml`
-- Open Design `.github/workflows/release-beta.yml`
-- Open Design `.github/workflows/cut-release.yml`
-- Open Design `.github/workflows/release-prerelease.yml`
-- Open Design `.github/workflows/release-stable.yml`
-- Open Design `tools/pack/AGENTS.md`
+- OpenDesign `.github/workflows/ci.yml`
+- OpenDesign `.github/workflows/release-beta.yml`
+- OpenDesign `.github/workflows/cut-release.yml`
+- OpenDesign `.github/workflows/release-prerelease.yml`
+- OpenDesign `.github/workflows/release-stable.yml`
+- OpenDesign `tools/pack/AGENTS.md`
 - Vela `.github/workflows/deploy-*-feature-test.yml`
 - Vela `.github/workflows/deploy-*-test.yml`
 - Vela `.github/workflows/deploy-*-prod.yml`

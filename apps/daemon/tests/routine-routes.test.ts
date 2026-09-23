@@ -263,7 +263,6 @@ describe('routine routes', () => {
   it.each([
     {
       label: 'removed membership',
-      expectedStatus: 403,
       directory: {
         ok: true as const,
         items: [{
@@ -274,15 +273,14 @@ describe('routine routes', () => {
     },
     {
       label: 'authority outage',
-      expectedStatus: 503,
       directory: { ok: false as const, items: [] },
     },
-  ])('fails $label before scoped routine REST side effects', async ({
+  ])('keeps local routine operations available during $label', async ({
     directory,
-    expectedStatus,
   }) => {
+    const fetchWorkspaceDirectory = vi.fn(async () => directory);
     const { app, db, rescheduleOne, runNow, unschedule } = buildApp({
-      fetchWorkspaceDirectory: async () => directory,
+      fetchWorkspaceDirectory,
     });
     seedRoutine(db, {
       id: 'routine-a',
@@ -297,25 +295,17 @@ describe('routine routes', () => {
       'x-od-workspace-member-id': 'member-a',
     };
     try {
-      const attempts: Array<[string, RequestInit]> = [
-        ['/api/routines', { headers }],
-        ['/api/routines/routine-a', { headers }],
-        ['/api/routines/routine-a', {
+      const list = await fetch(`http://127.0.0.1:${port}/api/routines`, { headers });
+      expect(list.status).toBe(200);
+      const patch = await fetch(
+        `http://127.0.0.1:${port}/api/routines/routine-a`,
+        {
           method: 'PATCH',
           headers: { ...headers, 'content-type': 'application/json' },
           body: JSON.stringify({ enabled: false }),
-        }],
-        ['/api/routines/routine-a/runs', { headers }],
-        ['/api/routines/routine-a/runs/missing/crystallize', {
-          method: 'POST',
-          headers,
-        }],
-        ['/api/routines/routine-a', { method: 'DELETE', headers }],
-      ];
-      for (const [path, init] of attempts) {
-        const response = await fetch(`http://127.0.0.1:${port}${path}`, init);
-        expect(response.status, path).toBe(expectedStatus);
-      }
+        },
+      );
+      expect(patch.status).toBe(200);
 
       const runResponse = await fetch(
         `http://127.0.0.1:${port}/api/routines/routine-a/run`,
@@ -323,10 +313,11 @@ describe('routine routes', () => {
       );
       expect(runResponse.status).toBe(202);
       expect(getRoutine(db, 'routine-a')).toMatchObject({
-        enabled: true,
+        enabled: false,
         name: 'routine-a',
       });
-      expect(rescheduleOne).not.toHaveBeenCalled();
+      expect(fetchWorkspaceDirectory).not.toHaveBeenCalled();
+      expect(rescheduleOne).toHaveBeenCalledWith('routine-a');
       expect(runNow).toHaveBeenCalledWith('routine-a');
       expect(unschedule).not.toHaveBeenCalled();
     } finally {
@@ -566,7 +557,7 @@ describe('routine routes', () => {
       });
       const created = await create.json() as { routine: { id: string } };
       expect(create.status).toBe(201);
-      expect(fetchWorkspaceDirectory).toHaveBeenCalledTimes(1);
+      expect(fetchWorkspaceDirectory).not.toHaveBeenCalled();
 
       const patch = await fetch(
         `http://127.0.0.1:${port}/api/routines/${created.routine.id}`,
@@ -584,7 +575,7 @@ describe('routine routes', () => {
       );
 
       expect(patch.status).toBe(200);
-      expect(fetchWorkspaceDirectory).toHaveBeenCalledTimes(2);
+      expect(fetchWorkspaceDirectory).not.toHaveBeenCalled();
       expect(JSON.parse(getRoutine(db, created.routine.id)?.contextJson ?? '{}')).toEqual({
         connectorIds: ['github'],
         workspaceScope: {
@@ -597,9 +588,10 @@ describe('routine routes', () => {
     }
   });
 
-  it('does not persist a scoped routine when authority is unavailable', async () => {
+  it('persists a scoped local routine when the Workspace directory is unavailable', async () => {
+    const fetchWorkspaceDirectory = vi.fn(async () => ({ ok: false as const, items: [] }));
     const { app, db } = buildApp({
-      fetchWorkspaceDirectory: async () => ({ ok: false, items: [] }),
+      fetchWorkspaceDirectory,
     });
     const { server, port } = await listen(app);
     try {
@@ -624,8 +616,9 @@ describe('routine routes', () => {
         }),
       });
 
-      expect(res.status).toBe(503);
-      expect(listRoutines(db)).toHaveLength(0);
+      expect(res.status).toBe(201);
+      expect(listRoutines(db)).toHaveLength(1);
+      expect(fetchWorkspaceDirectory).not.toHaveBeenCalled();
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

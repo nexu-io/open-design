@@ -426,6 +426,30 @@ describe('decidePostToolResumeRecovery', () => {
     expect(decidePostToolResume({ sideEffects: { toolCallSeen: false } })).toBeNull();
   });
 
+  it.each([
+    'upstream_5xx',
+    'stream_disconnected',
+    'provider_high_demand',
+    'provider_routing_error',
+    'network_error',
+  ] as const)(
+    'continues the native session after a retryable post-tool %s failure',
+    (failureDetail) => {
+      expect(decidePostToolResume({
+        failure: {
+          failure_category: 'upstream_unavailable',
+          failure_detail: failureDetail,
+          failure_stage: 'post_tool_resume',
+          retryable: true,
+        },
+      })).toMatchObject({
+        shouldRetry: true,
+        retryStrategy: NATIVE_SESSION_CONTINUE_STRATEGY,
+        retryReason: 'post_tool_resume',
+      });
+    },
+  );
+
   it('does not loop after the single continuation attempt', () => {
     expect(decidePostToolResume({ continuationAttemptCount: 1 })).toBeNull();
   });
@@ -471,5 +495,22 @@ describe('computeRetryBackoffMs', () => {
       expect(delay).toBeGreaterThanOrEqual(capped / 2);
       expect(delay).toBeLessThanOrEqual(capped);
     }
+  });
+});
+
+describe('verified AMR continuation', () => {
+  const failure = { failure_category: 'process_exit', failure_detail: 'continuation_incomplete',
+    failure_stage: 'post_tool_resume', retryable: false } as const;
+  it('uses the native path without authorizing prompt replay', () => {
+    expect(decidePostToolResume({ failure, hasVerifiedAmrContinuation: true })?.retryStrategy).toBe('native_session_continue');
+    expect(decide({ failure }).shouldRetry).toBe(false);
+  });
+  it.each([
+    { hasVerifiedAmrContinuation: false }, { hasNativeSession: false },
+    { supportsNativeSessionContinue: false }, { continuationAttemptCount: 1 },
+    { sideEffects: { toolCallSeen: true, cancelRequested: true } },
+    { failure: { ...failure, failure_stage: 'tool_outstanding' as const } },
+  ])('rejects unsafe or exhausted recovery: %j', (override) => {
+    expect(decidePostToolResume({ failure, hasVerifiedAmrContinuation: true, ...override })).toBeNull();
   });
 });

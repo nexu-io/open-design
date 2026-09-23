@@ -37,7 +37,7 @@
 | ENTRY-013 | 创建音频项目时，所选 `duration` 与修剪后的 `voice` 会正确写入创建 payload | `NewProjectPanel.test.tsx` |
 | ENTRY-014 | 入口页不再渲染旧 pet rail，Settings 也不再暴露 pet picker 的显示/隐藏开关 | `entry-chrome-flows.test.ts` |
 | ENTRY-015 | 紧凑桌面宽度下，入口页 header 与整页不会出现明显横向溢出 | `entry-chrome-flows.test.ts` |
-| ENTRY-016 | 展开的入口导航包含 `Home / Projects / Automations / Plugins / Design systems / Integrations`，并把 Plugins 与 Integrations 保持在主导航组 | `entry-chrome-flows.test.ts` |
+| ENTRY-016 | 展开的入口导航保持当前 `Home / Community / Design systems / Plugins / Settings` 结构，不再暴露已移除的 Projects / Automations / Integrations rail 入口 | `entry-chrome-flows.test.ts` |
 
 ### 资源驱动创建场景
 

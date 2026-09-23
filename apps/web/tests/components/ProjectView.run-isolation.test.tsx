@@ -51,6 +51,8 @@ const saveTabs = vi.fn();
 const playSound = vi.fn();
 const showCompletionNotification = vi.fn();
 const analyticsTrackMock = vi.fn();
+/** What the inline question form was told about each answer it handed over. */
+const questionFormSubmitOutcomes: Array<boolean | void> = [];
 const useProjectFileEvents = vi.fn();
 const workspaceScopeMocks = vi.hoisted(() => {
   const personalContext = (): WorkspaceCollabContext & {
@@ -99,6 +101,45 @@ const workspaceScopeMocks = vi.hoisted(() => {
     } as ProjectWorkspaceScopeState,
   };
 });
+
+function stubAuthoritativePersonalWorkspaceBalance(balanceUsd: string): void {
+  const observedAt = '2026-07-26T00:00:00.000Z';
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    if (url.pathname !== '/api/workspace/billing') {
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    }
+    return new Response(JSON.stringify({
+      summary: null,
+      workspaceBalance: {
+        workspaceId: 'workspace-personal',
+        workspaceMemberId: 'member-personal',
+        balanceUsd,
+        billingScopeVersion: 2,
+        expiresAt: null,
+        updatedAt: observedAt,
+      },
+      workspaceRuntime: {
+        workspaceId: 'workspace-personal',
+        workspaceMemberId: 'member-personal',
+        status: 'fresh',
+        revision: '1',
+        observedAt,
+        softExpiresAt: '2099-07-26T00:00:30.000Z',
+        hardExpiresAt: '2099-07-26T00:02:00.000Z',
+        retryAt: null,
+        errorCode: null,
+        reason: 'authoritative-action-read',
+        sourceGapDetected: false,
+      },
+      authoritativeWorkspaceRead: {
+        workspaceId: 'workspace-personal',
+        workspaceMemberId: 'member-personal',
+        observedAt,
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }));
+}
 const projectCollabMocks = vi.hoisted(() => ({
   enabled: false,
   syncState: 'local_only' as 'local_only' | 'synced' | null,
@@ -373,6 +414,8 @@ vi.mock('../../src/components/ChatPane', () => ({
     onNewConversation,
     error,
     onRetry,
+    onResendUserMessage,
+    onSubmitQuestionForm,
   }: {
     activeConversationId: string | null;
     conversations: Conversation[];
@@ -399,6 +442,14 @@ vi.mock('../../src/components/ChatPane', () => ({
     onSendQueuedNow?: (id: string) => void;
     onNewConversation: () => void;
     onRetry?: (message: ChatMessage) => void;
+    onResendUserMessage?: (message: ChatMessage) => void;
+    onSubmitQuestionForm?: (
+      text: string,
+      attachments?: unknown[],
+      context?: unknown,
+      sourceAssistantMessageId?: string,
+      formId?: string,
+    ) => boolean | void | Promise<boolean | void>;
   }) => {
     const attached = attachedComments ?? [];
     const retryTarget = [...(messages ?? [])]
@@ -450,12 +501,33 @@ vi.mock('../../src/components/ChatPane', () => ({
             )
             .join('\n')}
         </output>
+        <output data-testid="user-messages">
+          {(messages ?? [])
+            .filter((message) => message.role === 'user')
+            .map(
+              (message) =>
+                `${message.id}|${message.sendFailed ? 'failed' : 'sent'}|${message.content}`,
+            )
+            .join('\n')}
+        </output>
         <output data-testid="attached-comment-count">{attached.length}</output>
         {retryTarget && onRetry ? (
           <button type="button" data-testid="chat-retry" onClick={() => onRetry(retryTarget)}>
             retry
           </button>
         ) : null}
+        {(messages ?? [])
+          .filter((message) => message.role === 'user' && message.sendFailed)
+          .map((message) => (
+            <button
+              key={message.id}
+              type="button"
+              data-testid="user-send-failed"
+              onClick={() => onResendUserMessage?.(message)}
+            >
+              resend
+            </button>
+          ))}
         {queuedItems?.map((item, index) => (
           <div key={item.id}>
             <button
@@ -578,6 +650,40 @@ vi.mock('../../src/components/ChatPane', () => ({
           disabled={sendDisabled}
         >
           send with context
+        </button>
+        <button
+          type="button"
+          data-testid="send-message-stable-request"
+          onClick={() =>
+            onSend(
+              'hello from stable request',
+              [],
+              [],
+              { clientRequestId: 'submission-1' },
+            )
+          }
+          disabled={sendDisabled}
+        >
+          send stable request
+        </button>
+        <button
+          type="button"
+          data-testid="submit-question-form"
+          onClick={() => {
+            void Promise.resolve(
+              onSubmitQuestionForm?.(
+                'Audience: Designers',
+                [],
+                undefined,
+                'assistant-brief',
+                'travel_app_brief',
+              ),
+            ).then((accepted) => {
+              questionFormSubmitOutcomes.push(accepted);
+            });
+          }}
+        >
+          submit question form
         </button>
         <button type="button" data-testid="new-conversation" onClick={onNewConversation}>
           new
@@ -802,6 +908,7 @@ describe('ProjectView conversation run isolation', () => {
     projectCollabMocks.writerAuthority = 'allowed';
     resolveConversationBMessages = null;
     conversationAMessages = [runningAssistant];
+    questionFormSubmitOutcomes.length = 0;
     listConversations.mockResolvedValue(conversations);
     listMessages.mockImplementation(async (_projectId: string, conversationId: string) => {
       if (conversationId === 'conv-a') return conversationAMessages;
@@ -845,6 +952,7 @@ describe('ProjectView conversation run isolation', () => {
       stale: false,
       source: 'vela_api',
     });
+    stubAuthoritativePersonalWorkspaceBalance('10.00');
     launchAntigravityOauth.mockResolvedValue({ ok: true });
     streamViaDaemon.mockImplementation(async () => {});
   });
@@ -853,6 +961,7 @@ describe('ProjectView conversation run isolation', () => {
     cleanup();
     window.localStorage.clear();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -1021,7 +1130,36 @@ describe('ProjectView conversation run isolation', () => {
     },
   );
 
-  // An Open Design Cloud run is billed to the CALLER's own wallet. The gate must
+  it('preserves the configured system notification for a background completion', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+
+    renderProjectView({
+      ...config,
+      notifications: {
+        ...config.notifications!,
+        desktopEnabled: true,
+      },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    resolveConversationBMessages?.([]);
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+
+    conversationAMessages = [succeededAssistant];
+    fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
+
+    await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
+    expect(showCompletionNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'succeeded', body: 'done' }),
+    );
+  });
+
+  // An OpenDesign Cloud run is billed to the CALLER's own wallet. The gate must
   // therefore ask about the caller's identity, not about this project's
   // workspace scope — a project whose scope is unresolved says nothing about
   // whether the signed-in user can pay, and holding the send closed there just
@@ -1359,10 +1497,8 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
-  it('hard-blocks the AMR send and shows the balance dialog when the wallet is empty', async () => {
+  it('lets Vela decide a selected Personal model when the wallet is empty', async () => {
     conversationAMessages = [];
-    // Both the cached read and the refresh confirmation report an empty
-    // wallet, so the send must be hard-blocked before any run spawns.
     fetchAmrWalletSnapshot.mockResolvedValue({
       status: 'available',
       profile: 'prod',
@@ -1373,6 +1509,7 @@ describe('ProjectView conversation run isolation', () => {
       stale: false,
       source: 'vela_api',
     });
+    stubAuthoritativePersonalWorkspaceBalance('0');
     renderProjectView(
       { ...config, agentId: 'amr' },
       project,
@@ -1392,11 +1529,11 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
-    expect(streamViaDaemon).not.toHaveBeenCalled();
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
   });
 
-  it('soft-warns on a low AMR wallet and proceeds with the same send on confirmation', async () => {
+  it('does not guess whether a selected Personal model is metered at low balance', async () => {
     conversationAMessages = [];
     fetchAmrWalletSnapshot.mockResolvedValue({
       status: 'available',
@@ -1408,6 +1545,7 @@ describe('ProjectView conversation run isolation', () => {
       stale: false,
       source: 'vela_api',
     });
+    stubAuthoritativePersonalWorkspaceBalance('1.20');
     renderProjectView(
       { ...config, agentId: 'amr' },
       project,
@@ -1427,13 +1565,8 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    // The reminder holds the send: no run yet.
-    await waitFor(() => expect(screen.getByTestId('amr-low-balance-dialog')).toBeTruthy());
-    expect(streamViaDaemon).not.toHaveBeenCalled();
-
-    // "Start anyway" resolves the pending send — the run starts without a re-submit.
-    fireEvent.click(screen.getByTestId('amr-low-balance-dialog-proceed'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
     expect(streamViaDaemon).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: 'amr' }),
     );
@@ -1451,6 +1584,7 @@ describe('ProjectView conversation run isolation', () => {
       stale: false,
       source: 'vela_api',
     });
+    stubAuthoritativePersonalWorkspaceBalance('1.20');
     renderProjectView(
       { ...config, agentId: 'amr' },
       project,
@@ -1546,6 +1680,141 @@ describe('ProjectView conversation run isolation', () => {
         }),
       ]);
     });
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it('identifies a question-form answer by its occurrence, not by a fresh id', async () => {
+    // "At most one user answer message and one non-failed run per
+    // sourceAssistantMessageId + formId" cannot be a property of the form's
+    // own lock: a second tab, a denied-storage reload, or a queue replay all
+    // reach the host without it. Deriving the send's ids from the occurrence
+    // makes the guarantee a property of the request instead — the queue dedupes
+    // on `clientRequestId`, the answer row keeps one `userMessageId`, and the
+    // daemon's createOrReuse collapses the second send onto the first run.
+    conversationAMessages = [];
+
+    renderProjectView();
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+    fireEvent.click(screen.getByTestId('submit-question-form'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    const first = streamViaDaemon.mock.calls[0]![0] as Record<string, unknown>;
+
+    // Leaving the project and coming back is the reported path back into the
+    // same form. A freshly mounted view must not mint a fresh identity for it.
+    cleanup();
+    renderProjectView();
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+    fireEvent.click(screen.getByTestId('submit-question-form'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    const second = streamViaDaemon.mock.calls[1]![0] as Record<string, unknown>;
+
+    // The run key is the occurrence: `createOrReuse` collapses the second
+    // send onto the first run instead of spawning another.
+    expect(first.clientRequestId).toBeTruthy();
+    expect(second.clientRequestId).toBe(first.clientRequestId);
+    // The answer row carries the same identity and is written `createOnly`,
+    // so the daemon — not this view — decides which answer survives.
+    expect(second.userMessageId).toBe(first.userMessageId);
+    const claims = saveMessage.mock.calls.filter(
+      (call) => (call[3] as { createOnly?: boolean } | undefined)?.createOnly === true,
+    );
+    expect(claims).toHaveLength(2);
+    expect(claims.every((call) => (call[2] as { id: string }).id === first.userMessageId)).toBe(true);
+  });
+
+  it('adopts the answer that actually ran when another submitter claimed the occurrence first', async () => {
+    // The losing tab must not keep showing an answer no run ever read.
+    conversationAMessages = [];
+    saveMessage.mockImplementation(async (_p: string, _c: string, message: ChatMessage) => ({
+      ...message,
+      content: '[form answers — travel_app_brief]\n- Audience: Founders',
+    }));
+
+    renderProjectView();
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+    fireEvent.click(screen.getByTestId('submit-question-form'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('user-messages').textContent).toContain('Audience: Founders'),
+    );
+    expect(screen.getByTestId('user-messages').textContent).not.toContain('Audience: Designers');
+  });
+
+  it('reports a question-form answer parked in the queue as accepted', async () => {
+    // The inline form holds the only copy of its answer. Leaving the project
+    // while the pre-run gate is still deciding parks that answer in the
+    // conversation queue — a durable acceptance, not a refusal. Reporting a
+    // refusal instead re-opens the form (and rolls back any file it uploaded
+    // for a send the queue still points at), so the user answers a second
+    // time and the drain sends the same brief twice.
+    conversationAMessages = [];
+    let resolveWallet: (snapshot: unknown) => void = () => {};
+    fetchAmrWalletSnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveWallet = resolve;
+        }),
+    );
+    renderProjectView(
+      { ...config, agentId: 'amr' },
+      project,
+      [
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'amr',
+          available: true,
+          models: [{ id: 'glm-5', label: 'GLM 5' }],
+        },
+      ],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('submit-question-form'));
+    await waitFor(() => expect(fetchAmrWalletSnapshot).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    await waitFor(() => {
+      if (!resolveConversationBMessages) throw new Error('Expected conv-b message load to be pending');
+    });
+    await act(async () => {
+      resolveConversationBMessages?.([]);
+    });
+
+    await act(async () => {
+      resolveWallet({
+        status: 'available',
+        profile: 'prod',
+        user: null,
+        balanceUsd: '10.00',
+        updatedAt: null,
+        fetchedAt: '2026-07-02T00:00:00.000Z',
+        stale: false,
+        source: 'vela_api',
+      });
+    });
+
+    await waitFor(() => {
+      const raw = window.localStorage.getItem('od:chat-queued-sends:project-1:v1');
+      expect(raw).toBeTruthy();
+      const queued = JSON.parse(raw ?? '[]') as Array<{
+        conversationId?: string;
+        prompt?: string;
+      }>;
+      expect(queued).toEqual([
+        expect.objectContaining({
+          conversationId: 'conv-a',
+          prompt: 'Audience: Designers',
+        }),
+      ]);
+    });
+    await waitFor(() => expect(questionFormSubmitOutcomes).toEqual([true]));
     expect(streamViaDaemon).not.toHaveBeenCalled();
   });
 
@@ -1765,6 +2034,48 @@ describe('ProjectView conversation run isolation', () => {
     expect(showCompletionNotification).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      label: 'run failure',
+      terminalMessage: { ...succeededAssistant, runStatus: 'failed' as const },
+    },
+    {
+      label: 'delivery failure',
+      terminalMessage: {
+        ...succeededAssistant,
+        resultDeliveryState: 'delivery_failed' as const,
+      },
+    },
+  ])(
+    'keeps the foreground $label system notification silent while preserving its sound',
+    async ({ terminalMessage }) => {
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+
+      renderProjectView({
+        ...config,
+        notifications: {
+          ...config.notifications!,
+          desktopEnabled: true,
+        },
+      });
+
+      await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+      await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+      fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+      await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+      resolveConversationBMessages?.([]);
+      await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+
+      conversationAMessages = [terminalMessage];
+      fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
+
+      await waitFor(() => expect(playSound).toHaveBeenCalledWith('failure-sound'));
+      expect(showCompletionNotification).not.toHaveBeenCalled();
+    },
+  );
+
   it('downgrades a reloaded terminal Design run whose file writes never landed', async () => {
     conversationAMessages = [
       {
@@ -1819,6 +2130,62 @@ describe('ProjectView conversation run isolation', () => {
     expect(screen.getByTestId('chat-error').textContent).toMatch(
       /finished without producing a deliverable project file/i,
     );
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('trusts the daemon artifact count when browser file reconciliation misses delivered output', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: '',
+        sessionMode: 'design',
+        events: [
+          { kind: 'text', text: 'I finished the design.' },
+          {
+            kind: 'tool_use',
+            id: 'write-1',
+            name: 'Write',
+            input: { file_path: 'index.html', content: '<!doctype html>' },
+          },
+        ],
+        preTurnFileNames: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+      artifactCount: 1,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const recoveredMessage = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id
+            && message.resultDeliveryState === 'delivered',
+        );
+      expect(recoveredMessage).toMatchObject({
+        runStatus: 'succeeded',
+        resultDeliveryState: 'delivered',
+        producedFiles: [],
+        traceObjectFiles: [],
+      });
+      expect(recoveredMessage?.events).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'ARTIFACT_NOT_FOUND' }),
+        ]),
+      );
+    });
+    expect(screen.getByTestId('chat-error').textContent).toBe('');
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
@@ -2027,6 +2394,48 @@ describe('ProjectView conversation run isolation', () => {
 
     expect(streamViaDaemon).not.toHaveBeenCalled();
     expect(screen.getByTestId('attached-comment-count').textContent).toBe('0');
+  });
+
+  it('queues a logical submission only once when its stable request id is retried', async () => {
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('send-message-stable-request'));
+    fireEvent.click(screen.getByTestId('send-message-stable-request'));
+
+    await waitFor(() => expect(screen.getByTestId('send-queued-0')).toBeTruthy());
+    expect(screen.queryByTestId('send-queued-1')).toBeNull();
+  });
+
+  it('reuses a queued submission request id when the daemon run starts', async () => {
+    let finishReattach: (() => void) | null = null;
+    let reattachHandlers: { onDone: () => void } | null = null;
+    reattachDaemonRun.mockImplementation(async (input: unknown) => {
+      reattachHandlers = (input as { handlers: { onDone: () => void } }).handlers;
+      return new Promise<void>((resolve) => {
+        finishReattach = resolve;
+      });
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('send-message-stable-request'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0')).toBeTruthy());
+
+    await act(async () => {
+      reattachHandlers?.onDone();
+      finishReattach?.();
+    });
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      clientRequestId: 'submission-1',
+    }));
   });
 
   it('keeps newer attached comments when a queued send flushes older comment attachments', async () => {
@@ -2452,7 +2861,7 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
-  it('auto-starts queued sends one at a time after the active run completes', async () => {
+  it('auto-starts queued sends one at a time in the same event flush after the active run becomes terminal', async () => {
     let finishReattach: (() => void) | null = null;
     let reattachHandlers: { onDone: () => void } | null = null;
     const daemonRuns: Array<{
@@ -2508,12 +2917,19 @@ describe('ProjectView conversation run isolation', () => {
     });
     expect(streamViaDaemon).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      daemonRuns[0]?.onRunStatus?.('succeeded');
-      daemonRuns[0]?.handlers.onDone('first done');
-    });
-
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    // Terminal status is the drain signal. Freeze timers before delivering it:
+    // the next send must begin from this React update/effect cycle, without a
+    // polling interval or a delayed retry (the reported regression was ~20s).
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        daemonRuns[0]?.onRunStatus?.('succeeded');
+        daemonRuns[0]?.handlers.onDone('first done');
+      });
+      expect(streamViaDaemon).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(streamViaDaemon.mock.calls[1]?.[0]).toEqual(
       expect.objectContaining({
         history: expect.arrayContaining([
@@ -2540,6 +2956,28 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
     await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
+  });
+
+  it('restores only one queued send for each stable request id', async () => {
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+    const duplicateQueuedSend = {
+      id: 'submission-1',
+      conversationId: 'conv-a',
+      prompt: 'hello from stable request',
+      attachments: [],
+      commentAttachments: [],
+      meta: { clientRequestId: 'submission-1' },
+      createdAt: 1,
+    };
+    window.localStorage.setItem(
+      'od:chat-queued-sends:project-1:v1',
+      JSON.stringify([duplicateQueuedSend, duplicateQueuedSend]),
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('send-queued-0')).toBeTruthy());
+    expect(screen.queryByTestId('send-queued-1')).toBeNull();
   });
 
   it('surfaces conversation message load errors and keeps sends disabled until messages load', async () => {
@@ -2992,6 +3430,184 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
+  it('keeps a pre-run daemon failure on the user row and retries that row without duplication', async () => {
+    conversationAMessages = [];
+    saveMessage.mockImplementation(
+      async (_projectId: string, _conversationId: string, message: ChatMessage) => message,
+    );
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        history: ChatMessage[];
+        userMessageId?: string;
+        onRunCreated?: (runId: string) => void;
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+        handlers: { onError: (error: Error) => void | Promise<void> };
+      }) => {
+        if (streamViaDaemon.mock.calls.length === 1) {
+          // This is the exact ordering used by streamViaDaemon when POST
+          // /api/runs fails before the response yields a run id.
+          options.onRunStatus?.('failed');
+          await options.handlers.onError(new Error('daemon 503: unavailable'));
+          return;
+        }
+        options.onRunCreated?.('run-after-user-resend');
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(screen.getByTestId('user-send-failed')).toBeTruthy());
+    expect(screen.getByTestId('assistant-summary').textContent).toBe('');
+    expect(screen.getByTestId('chat-error').textContent).toBe('');
+    expect(screen.getByTestId('conversation-latest-runs').textContent).toBe('conv-a:\nconv-b:');
+    expect(playSound).not.toHaveBeenCalled();
+
+    const firstCall = streamViaDaemon.mock.calls[0]?.[0] as {
+      clientRequestId: string;
+      userMessageId: string;
+      history: ChatMessage[];
+    };
+    expect(screen.getByTestId('user-messages').textContent).toBe(
+      `${firstCall.userMessageId}|failed|hello from b`,
+    );
+    const persistedMessages = saveMessage.mock.calls.map((call) => call[2] as ChatMessage);
+    expect(persistedMessages).toContainEqual(
+      expect.objectContaining({
+        id: firstCall.userMessageId,
+        role: 'user',
+        clientRequestId: firstCall.clientRequestId,
+        sendFailed: true,
+      }),
+    );
+    expect(persistedMessages.some((message) => message.role === 'assistant')).toBe(false);
+
+    fireEvent.click(screen.getByTestId('user-send-failed'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    const retryCall = streamViaDaemon.mock.calls[1]?.[0] as {
+      clientRequestId: string;
+      userMessageId: string;
+      history: ChatMessage[];
+    };
+    expect(retryCall.clientRequestId).toBe(firstCall.clientRequestId);
+    expect(retryCall.userMessageId).toBe(firstCall.userMessageId);
+    expect(retryCall.history).toHaveLength(1);
+    expect(retryCall.history[0]).toMatchObject({
+      id: firstCall.userMessageId,
+      role: 'user',
+      content: 'hello from b',
+    });
+    expect(screen.getByTestId('user-messages').textContent).toBe(
+      `${firstCall.userMessageId}|sent|hello from b`,
+    );
+    expect(screen.queryByTestId('user-send-failed')).toBeNull();
+  });
+
+  /**
+   * OPEND-2586 的最后一句:「**再次失败时仍可继续重试**」。
+   *
+   * 上面那条只走了「失败一次 → 重试成功」。这一条走「失败 → 重试 → 又失败」:
+   * 第二次失败必须重新把那一行标回失败态,重试按钮仍在,而且**那条消息只有一条** ——
+   * 每次重试都用同一个 `userMessageId` / `clientRequestId` 重发,不是新开一条。
+   */
+  it('keeps the same user row retryable when the retry fails the same way', async () => {
+    conversationAMessages = [];
+    saveMessage.mockImplementation(
+      async (_projectId: string, _conversationId: string, message: ChatMessage) => message,
+    );
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+        handlers: { onError: (error: Error) => void | Promise<void> };
+      }) => {
+        // POST /api/runs 5xx: no run id ever came back, on every attempt.
+        options.onRunStatus?.('failed');
+        await options.handlers.onError(new Error('daemon 503: unavailable'));
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(screen.getByTestId('user-send-failed')).toBeTruthy());
+    const firstCall = streamViaDaemon.mock.calls[0]?.[0] as {
+      clientRequestId: string;
+      userMessageId: string;
+    };
+
+    fireEvent.click(screen.getByTestId('user-send-failed'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    // The retry failed exactly as the first send did — the row must come back
+    // to a failed state, not silently settle as sent.
+    await waitFor(() =>
+      expect(screen.getByTestId('user-messages').textContent).toBe(
+        `${firstCall.userMessageId}|failed|hello from b`,
+      ),
+    );
+    expect(screen.getByTestId('user-send-failed')).toBeTruthy();
+
+    const secondCall = streamViaDaemon.mock.calls[1]?.[0] as {
+      clientRequestId: string;
+      userMessageId: string;
+    };
+    expect(secondCall.userMessageId).toBe(firstCall.userMessageId);
+    expect(secondCall.clientRequestId).toBe(firstCall.clientRequestId);
+
+    // …and a third attempt is still reachable from that same row.
+    fireEvent.click(screen.getByTestId('user-send-failed'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+      expect(screen.getByTestId('user-messages').textContent).toBe(
+        `${firstCall.userMessageId}|failed|hello from b`,
+      ),
+    );
+    expect(screen.getByTestId('assistant-summary').textContent).toBe('');
+  });
+
+  it('durably queues one retry when the conversation becomes busy', async () => {
+    const failedUser = {
+      id: 'failed-user-while-busy',
+      role: 'user',
+      content: 'retry this exact send',
+      createdAt: 1,
+      clientRequestId: 'request-before-busy',
+      sendFailed: true,
+    } as ChatMessage & { clientRequestId: string };
+    conversationAMessages = [failedUser, runningAssistant];
+    saveMessage.mockImplementation(
+      async (_projectId: string, _conversationId: string, message: ChatMessage) => message,
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('user-send-failed')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('user-send-failed'));
+
+    await waitFor(() => {
+      const queued = JSON.parse(
+        window.localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]',
+      ) as Array<{ id?: string; prompt?: string }>;
+      expect(queued).toEqual([
+        expect.objectContaining({
+          id: failedUser.clientRequestId,
+          prompt: failedUser.content,
+        }),
+      ]);
+    });
+    expect(screen.queryByTestId('user-send-failed')).toBeNull();
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
   it('keeps Chat retry available after a structured AMR insufficient-balance error', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
@@ -3130,13 +3746,14 @@ describe('ProjectView conversation run isolation', () => {
     },
   );
 
-  it('routes workspace authorize recovery through AMR mode switching for structured auth failures', async () => {
+  it('requests persisted Cloud without arming a replay from the legacy workspace callback seam', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     const onModeChange = vi.fn();
     const onAgentChange = vi.fn();
     const onOpenAmrSettings = vi.fn();
     const onArmAmrAuthRetryContinuation = vi.fn();
+    const onSwitchToCloud = vi.fn().mockResolvedValue(undefined);
     streamViaDaemon.mockImplementation(
       async (options: {
         onRunCreated?: (runId: string) => void;
@@ -3175,6 +3792,7 @@ describe('ProjectView conversation run isolation', () => {
         onAgentChange,
         onOpenAmrSettings,
         onArmAmrAuthRetryContinuation,
+        onSwitchToCloud,
       },
     );
 
@@ -3186,32 +3804,25 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-authorize')).toBeTruthy());
 
-    fireEvent.click(screen.getByTestId('workspace-authorize'));
-
-    expect(onModeChange).toHaveBeenCalledWith('daemon');
-    expect(onAgentChange).toHaveBeenCalledWith('amr');
-    expect(onOpenAmrSettings).toHaveBeenCalledTimes(1);
-    expect(onArmAmrAuthRetryContinuation).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: project.id,
-      conversationId: 'conv-a',
-      assistantId: expect.any(String),
-      originMountId: expect.any(String),
-      workspaceIdentityKey: expect.any(String),
-    }));
-    expect(onArmAmrAuthRetryContinuation.mock.invocationCallOrder[0]).toBeLessThan(
-      onModeChange.mock.invocationCallOrder[0]!,
-    );
-    expect(onArmAmrAuthRetryContinuation.mock.invocationCallOrder[0]).toBeLessThan(
-      onOpenAmrSettings.mock.invocationCallOrder[0]!,
-    );
+    // This old FileWorkspace stub exposes the callback as a test seam, not
+    // a current product button. Real main/side card entry is verified by the
+    // OPEND-3205 actual-host suite; no Settings route or new run is permitted.
+    await act(async () => { fireEvent.click(screen.getByTestId('workspace-authorize')); });
+    expect(onSwitchToCloud).toHaveBeenCalledOnce();
+    expect(onModeChange).not.toHaveBeenCalled();
+    expect(onAgentChange).not.toHaveBeenCalled();
+    expect(onOpenAmrSettings).not.toHaveBeenCalled();
+    expect(onArmAmrAuthRetryContinuation).not.toHaveBeenCalled();
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('streaming-state').textContent).toBe('idle');
   });
 
-  it('leaves retry ownership with the App continuation while Settings is open', async () => {
+  it('does not start another run after the legacy workspace callback selects Cloud', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     fetchVelaLoginStatus.mockResolvedValue({ loggedIn: true });
     const onArmAmrAuthRetryContinuation = vi.fn();
+    const onSwitchToCloud = vi.fn().mockResolvedValue(undefined);
     streamViaDaemon.mockImplementation(
       async (options: {
         onRunCreated?: (runId: string) => void;
@@ -3249,6 +3860,7 @@ describe('ProjectView conversation run isolation', () => {
       {
         onOpenAmrSettings: vi.fn(),
         onArmAmrAuthRetryContinuation,
+        onSwitchToCloud,
       },
     );
 
@@ -3260,10 +3872,10 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-authorize')).toBeTruthy());
 
-    fireEvent.click(screen.getByTestId('workspace-authorize'));
+    await act(async () => { fireEvent.click(screen.getByTestId('workspace-authorize')); });
 
-    expect(onArmAmrAuthRetryContinuation).toHaveBeenCalledTimes(1);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(onSwitchToCloud).toHaveBeenCalledOnce();
+    expect(onArmAmrAuthRetryContinuation).not.toHaveBeenCalled();
     expect(streamViaDaemon).toHaveBeenCalledTimes(1);
   });
 
@@ -3429,6 +4041,7 @@ function renderProjectView(
     onAgentChange?: (agentId: string) => void;
     onOpenSettings?: (section?: SettingsSection) => void;
     onOpenAmrSettings?: () => void;
+    onSwitchToCloud?: () => Promise<void>;
     onArmAmrAuthRetryContinuation?: (
       continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
     ) => void;
@@ -3449,6 +4062,7 @@ function projectViewElement(
     onAgentChange?: (agentId: string) => void;
     onOpenSettings?: (section?: SettingsSection) => void;
     onOpenAmrSettings?: () => void;
+    onSwitchToCloud?: () => Promise<void>;
     onArmAmrAuthRetryContinuation?: (
       continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
     ) => void;
@@ -3470,6 +4084,7 @@ function projectViewElement(
       onRefreshAgents={() => {}}
       onOpenSettings={handlers.onOpenSettings ?? (() => {})}
       onOpenAmrSettings={handlers.onOpenAmrSettings}
+      onSwitchToCloud={handlers.onSwitchToCloud}
       onArmAmrAuthRetryContinuation={handlers.onArmAmrAuthRetryContinuation}
       onBack={() => {}}
       onClearPendingPrompt={() => {}}

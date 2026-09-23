@@ -2,6 +2,7 @@ import express from 'express';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  emitWorkspaceEventToAllScopes,
   emitWorkspaceEventToScope,
   registerCollabContextRoutes,
   type WorkspaceEventSinksByWorkspace,
@@ -130,5 +131,16 @@ describe('GET /api/workspace/events exact authority', () => {
       'members-changed',
       { type: 'members-changed', at: 1 },
     );
+
+    expect(emitWorkspaceEventToAllScopes(sinks, {
+      type: 'workspace-directory-changed',
+      at: 2,
+    })).toBe(true);
+    for (const send of sends) {
+      expect(send).toHaveBeenCalledWith(
+        'workspace-directory-changed',
+        { type: 'workspace-directory-changed', at: 2 },
+      );
+    }
   });
 });

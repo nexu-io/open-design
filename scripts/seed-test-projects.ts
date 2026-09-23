@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Seed Open Design with pre-baked test projects so the UI has real slide
+// Seed OpenDesign with pre-baked test projects so the UI has real slide
 // decks and web prototypes to work with without waiting for an LLM run.
 // Pulls each project's content straight from a skill or plugin
 // `example.html`, drops it in as `index.html`, and adds a couple of fake
@@ -311,7 +311,7 @@ function parseArgs(argv: string[]): Args {
 function printHelp() {
   console.log(`Usage: pnpm seed:test-projects [opts]
 
-Seeds Open Design with pre-baked, real HTML artifacts from:
+Seeds OpenDesign with pre-baked, real HTML artifacts from:
   - Skills examples
   - Bundled default plugin examples
   - Community plugin examples

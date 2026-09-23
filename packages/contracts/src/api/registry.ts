@@ -5,6 +5,8 @@ export type ModelCapability = 'standard' | 'advanced' | 'best_quality';
 export interface ModelMetadata {
   cost?: ModelCost;
   capability?: ModelCapability;
+  /** Provider/catalog-declared total context window; observability only. */
+  contextWindowTokens?: number;
 }
 
 export interface AgentModelOption {
@@ -24,6 +26,8 @@ export interface AgentModelOption {
   additionalSpeedTiers?: string[];
   /** Service tiers supported by this model, keyed by Codex config id. */
   serviceTierOptions?: AgentModelOption[];
+  /** Reasoning efforts advertised for this exact model route. */
+  reasoningOptions?: AgentModelOption[];
 }
 
 /**
@@ -44,7 +48,7 @@ export type AgentFixIntent =
   /** Re-run agent detection (the Settings "Rescan" affordance). */
   | { kind: 'rescan' }
   /**
-   * Prompt the user to point Open Design at an explicit binary by writing
+   * Prompt the user to point OpenDesign at an explicit binary by writing
    * `envKey` (e.g. `CURSOR_AGENT_BIN`) into `agentCliEnv`. Used when the CLI
    * is installed somewhere PATH detection can't reach.
    */
@@ -69,10 +73,20 @@ export type AgentDiagnosticReason =
   | 'not-on-path'
   /** A file matched but is not executable (missing +x / wrong PATHEXT). */
   | 'not-executable'
-  /** A wrapper/shim was found but its target is gone (exit 126/127). */
+  /**
+   * A wrapper/shim was found but its target is gone. POSIX says so with exit
+   * 127; a Windows `.cmd` wrapper starts an interpreter successfully and only
+   * then reports it in stderr, so the launcher's own words count too.
+   */
   | 'shim-broken'
   /** A user-set `*_BIN` override points at a missing/invalid file. */
   | 'configured-bin-invalid'
+  /** The binary ran, but its version could not be read under a strict policy. */
+  | 'version-probe-failed'
+  /** The installed CLI version is outside this OpenDesign build's tested set. */
+  | 'untested-version'
+  /** A required external runtime profile or companion failed its handshake. */
+  | 'runtime-profile-incompatible'
   /** Installed and invocable, but the CLI is not authenticated. */
   | 'auth-missing'
   /** Installed, but auth status could not be verified. */
@@ -114,7 +128,7 @@ export interface AgentInfo {
    */
   diagnostics?: AgentDiagnostic[];
   models?: AgentModelOption[];
-  /** Whether models came from the installed CLI or Open Design's static fallback. */
+  /** Whether models came from the installed CLI or OpenDesign's static fallback. */
   modelsSource?: 'live' | 'fallback';
   reasoningOptions?: AgentModelOption[];
   /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */
@@ -132,7 +146,8 @@ export interface AgentInfo {
   externalMcpInjection?:
     | 'claude-mcp-json'
     | 'acp-merge'
-    | 'opencode-env-content';
+    | 'opencode-env-content'
+    | 'mimo-env-content';
   /**
    * When `false`, the Settings model picker hides the "Custom (fill below)"
    * option and the free-text input. Use this for agents whose CLI doesn't
@@ -141,6 +156,33 @@ export interface AgentInfo {
    * live Vela catalog). Undefined === allow, matching the historical UX.
    */
   supportsCustomModel?: boolean;
+  /**
+   * How the daemon writes the composed prompt to this runtime's stdin. Mirrors
+   * `RuntimeAgentDef.promptInputFormat` in the daemon (same precedent as
+   * `externalMcpInjection` above). `'text'` writes the prompt and closes stdin
+   * immediately; `'stream-json'` wraps it as one JSONL `user` message and KEEPS
+   * stdin open, which is the only way a further message can reach the model
+   * mid-turn. Undefined means `'text'`.
+   *
+   * Read it through `agentSupportsMidTurnSteering` rather than comparing the
+   * literal, so the rule lives in one place.
+   */
+  promptInputFormat?: 'text' | 'stream-json';
+}
+
+/**
+ * Whether B11 「引导对话」 (steer the running turn) can work on this agent at all.
+ *
+ * Steering writes a further JSONL `user` frame onto the agent child's stdin
+ * while the turn is still running. Only a `stream-json` runtime leaves stdin
+ * open past the opening prompt; for every other runtime the daemon has already
+ * closed it, so the write would be silently lost. UI surfaces must gate the
+ * affordance on this instead of assuming every agent can be steered.
+ */
+export function agentSupportsMidTurnSteering(
+  agent: Pick<AgentInfo, 'promptInputFormat'> | null | undefined,
+): boolean {
+  return agent?.promptInputFormat === 'stream-json';
 }
 
 export interface AgentsResponse {

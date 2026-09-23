@@ -74,6 +74,7 @@ function mergeMissingFallbackModelMetadata(
   if (!fallback) return model;
   const fallbackSpeedTiers = fallback.additionalSpeedTiers;
   const fallbackServiceTiers = fallback.serviceTierOptions;
+  const fallbackReasoningOptions = fallback.reasoningOptions;
   const needsSpeedTiers =
     (!model.additionalSpeedTiers || model.additionalSpeedTiers.length === 0) &&
     Array.isArray(fallbackSpeedTiers) &&
@@ -82,7 +83,11 @@ function mergeMissingFallbackModelMetadata(
     (!model.serviceTierOptions || model.serviceTierOptions.length === 0) &&
     Array.isArray(fallbackServiceTiers) &&
     fallbackServiceTiers.length > 0;
-  if (!needsSpeedTiers && !needsServiceTiers) return model;
+  const needsReasoningOptions =
+    (!model.reasoningOptions || model.reasoningOptions.length === 0) &&
+    Array.isArray(fallbackReasoningOptions) &&
+    fallbackReasoningOptions.length > 0;
+  if (!needsSpeedTiers && !needsServiceTiers && !needsReasoningOptions) return model;
   return {
     ...model,
     ...(needsSpeedTiers
@@ -90,6 +95,9 @@ function mergeMissingFallbackModelMetadata(
       : {}),
     ...(needsServiceTiers
       ? { serviceTierOptions: cloneModelOptions(fallbackServiceTiers) }
+      : {}),
+    ...(needsReasoningOptions
+      ? { reasoningOptions: cloneModelOptions(fallbackReasoningOptions) }
       : {}),
   };
 }
@@ -140,6 +148,20 @@ export function isKnownServiceTier(
   return Boolean(
     model?.serviceTierOptions?.some((tier) => tier.id === serviceTier),
   );
+}
+
+export function isKnownReasoningEffort(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+  reasoningEffort: string | null | undefined,
+  scope?: string | null,
+): boolean {
+  if (!reasoningEffort) return false;
+  const modelOptions = findKnownModel(def, modelId, scope)?.reasoningOptions;
+  if (Array.isArray(modelOptions)) {
+    return modelOptions.some((option) => option.id === reasoningEffort);
+  }
+  return Boolean(def.reasoningOptions?.some((option) => option.id === reasoningEffort));
 }
 
 export function resolveModelForServiceTier(

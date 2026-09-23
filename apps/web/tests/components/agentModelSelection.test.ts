@@ -3,6 +3,7 @@ import {
   agentModelIsSelectable,
   defaultAgentModelId,
   effectiveAgentModelChoice,
+  effectiveAgentModelId,
   normalizeAgentModelChoice,
 } from '../../src/components/agentModelSelection';
 import type { AgentInfo } from '../../src/types';
@@ -61,6 +62,7 @@ describe('agent model selection', () => {
 
     expect(normalizeAgentModelChoice(amrAgent, choice)).toBeNull();
     expect(effectiveAgentModelChoice(amrAgent, choice)).toEqual(choice);
+    expect(effectiveAgentModelId(amrAgent, choice)).toBe('glm-5');
   });
 
   it('does not select a disabled model as the AMR default when every catalog row is locked', () => {

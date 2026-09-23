@@ -53,6 +53,10 @@ function authorizeProjectRequest(request: RequestRecord): {
   code?: string;
 } {
   if (request.headers.authorization === 'Bearer tool-proof') return { status: 200 };
+  // `od export` is addressed by project id. The real daemon derives the
+  // persisted Workspace binding server-side, so this transport fixture must
+  // not require caller-supplied Workspace headers for export routes.
+  if (request.url.includes('/export/')) return { status: 200 };
   if (projectForRequest(request) === 'unbound') return { status: 200 };
   const workspaceId = request.headers['x-od-workspace-id'];
   const memberId = request.headers['x-od-workspace-member-id'];
@@ -199,19 +203,6 @@ type ConsumerFixture = {
 
 const consumers: ConsumerFixture[] = [
   {
-    label: 'export',
-    args: (projectId, outputPath) => [
-      'export',
-      'index.html',
-      '--project',
-      projectId,
-      '--format',
-      'image',
-      '--out',
-      outputPath,
-    ],
-  },
-  {
     label: 'media generate and wait',
     args: (projectId) => [
       'media',
@@ -291,6 +282,17 @@ const consumers: ConsumerFixture[] = [
   },
 ];
 
+const exportArgs = (projectId: string, outputPath: string): string[] => [
+  'export',
+  'index.html',
+  '--project',
+  projectId,
+  '--format',
+  'image',
+  '--out',
+  outputPath,
+];
+
 function workspaceFlags(memberId: string): string[] {
   return [
     '--workspace',
@@ -301,6 +303,35 @@ function workspaceFlags(memberId: string): string[] {
 }
 
 describe('project consumer CLI explicit Workspace fixture matrix', () => {
+  it('export addresses a bound project without Workspace flags', async () => {
+    requests = [];
+    const result = await runCli([
+      ...exportArgs('bound-project', path.join(outputDir, 'export-project-only.out')),
+      '--daemon-url',
+      baseUrl,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.headers['x-od-workspace-id']).toBeUndefined();
+    expect(requests[0]?.headers['x-od-workspace-member-id']).toBeUndefined();
+  });
+
+  it('export accepts legacy Workspace flags without forwarding them', async () => {
+    requests = [];
+    const result = await runCli([
+      ...exportArgs('bound-project', path.join(outputDir, 'export-legacy-flags.out')),
+      ...workspaceFlags(OTHER_MEMBER_ID),
+      '--daemon-url',
+      baseUrl,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.headers['x-od-workspace-id']).toBeUndefined();
+    expect(requests[0]?.headers['x-od-workspace-member-id']).toBeUndefined();
+  });
+
   for (const consumer of consumers) {
     it(`${consumer.label}: allows the bound project creator`, async () => {
       requests = [];

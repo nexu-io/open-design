@@ -1,17 +1,7 @@
 // @vitest-environment jsdom
-//
-// The message-center panel moved behind two external openers on the rail (the
-// signed-in account menu's 消息中心 row and the signed-out rail item), with
-// `MessageCenter hideTrigger`. `hideTrigger` leaves the component's internal
-// `triggerRef` unattached, so `closePanel()` had nothing to restore focus to:
-// opening the panel focuses the portaled dialog, and closing it unmounted the
-// focused node and dropped keyboard focus to the document. Both openers also
-// have to advertise the dialog they own (`aria-haspopup="dialog"` plus the
-// `aria-expanded` state) — the built-in bell already did.
-//
-// Focus must return to a control that is still mounted after the close: the
-// signed-in row lives in a hover menu that unmounts before the panel opens, so
-// the account trigger is the stable host control there.
+// The signed-in dock bell and the signed-out local-dock bell are stable
+// external openers. Closing MessageCenter must return focus to the initiating
+// control.
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
@@ -80,35 +70,35 @@ afterEach(() => {
 });
 
 describe('EntryNavRail message-center openers', () => {
-  it('returns focus to the account trigger when the panel closes with Escape', async () => {
+  it('returns focus to the dock bell when the panel close button is clicked', async () => {
     renderRail(teamContext());
-    const accountTrigger = screen.getByTestId('entry-nav-account');
+    const accountBell = screen.getByTestId('entry-nav-account-message-center');
 
-    fireEvent.click(accountTrigger);
-    fireEvent.click(screen.getByTestId('account-menu-message-center'));
+    fireEvent.click(screen.getByTestId('entry-nav-account-message-center'));
     await waitFor(() => expect(screen.getByTestId('message-center-dialog')).toBeTruthy());
 
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: '关闭消息中心' }));
 
     expect(screen.queryByTestId('message-center-dialog')).toBeNull();
-    expect(document.activeElement).toBe(accountTrigger);
+    expect(document.activeElement).toBe(accountBell);
   });
 
-  it('returns focus to the account trigger when the panel closes via the backdrop', async () => {
+  it('returns focus to the dock bell when the panel closes via the backdrop', async () => {
     renderRail(teamContext());
-    const accountTrigger = screen.getByTestId('entry-nav-account');
+    const accountBell = screen.getByTestId('entry-nav-account-message-center');
 
-    fireEvent.click(accountTrigger);
-    fireEvent.click(screen.getByTestId('account-menu-message-center'));
+    // Same one-click opener as above; the backdrop path must hand focus back
+    // to the same trigger.
+    fireEvent.click(screen.getByTestId('entry-nav-account-message-center'));
     const dialog = await waitFor(() => screen.getByTestId('message-center-dialog'));
 
     fireEvent.mouseDown(screen.getByTestId('message-center-backdrop'));
 
     expect(dialog.isConnected).toBe(false);
-    expect(document.activeElement).toBe(accountTrigger);
+    expect(document.activeElement).toBe(accountBell);
   });
 
-  it('returns focus to the signed-out rail opener when the panel closes', async () => {
+  it('returns focus to the signed-out dock bell when the panel closes', async () => {
     renderRail(null);
     const railOpener = screen.getByTestId('entry-nav-message-center');
 
@@ -132,9 +122,8 @@ describe('EntryNavRail message-center openers', () => {
     signedOut.unmount();
 
     renderRail(teamContext());
-    fireEvent.click(screen.getByTestId('entry-nav-account'));
-    const menuRow = screen.getByTestId('account-menu-message-center');
-    expect(menuRow.getAttribute('aria-haspopup')).toBe('dialog');
-    expect(menuRow.getAttribute('aria-expanded')).toBe('false');
+    const accountBell = screen.getByTestId('entry-nav-account-message-center');
+    expect(accountBell.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(accountBell.getAttribute('aria-expanded')).toBe('false');
   });
 });

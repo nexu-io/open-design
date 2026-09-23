@@ -68,6 +68,11 @@ describe('createWorkspaceInvite', () => {
 
   it.each([
     ['invite_duplicate', 'active_pending_invite'],
+    // B's wire code when the address is already an ACTIVE member. Missing from
+    // the allowlist it degraded to `create_409` and the dialog told the user to
+    // retry a conflict retrying can never clear (V0.19.1 acceptance bug
+    // recvrovm9Bcyy0).
+    ['invite_existing_member', 'already_member'],
     ['already_member', 'already_member'],
     ['active_pending_invite', 'active_pending_invite'],
     ['workspace_seat_limit_reached', 'workspace_seat_limit_reached'],

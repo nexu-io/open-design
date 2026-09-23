@@ -35,6 +35,7 @@ function setupDeckBridge(bodyHtml: string) {
     pretendToBeVisual: true,
   });
   const win = dom.window;
+  win.scrollTo = vi.fn() as typeof win.scrollTo;
   const parentPostMessage = vi.fn();
   // jsdom defaults `window.parent` to `window` itself for top-level
   // documents; replace it with a stub that has a spied postMessage so
@@ -69,6 +70,69 @@ function postSlide(win: ReturnType<typeof setupDeckBridge>['win'], action: 'next
 }
 
 describe('deck bridge — nested slide markup (#1530)', () => {
+  it('does not claim ordinary prototype annotations as deck navigation state', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(
+      '<main><h1 data-screen-label="Hero title">Prototype headline</h1>' +
+      '<button data-screen-label="CTA">Buy now</button></main>',
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 0 });
+  });
+
+  it('does not combine numbered screen sections from different parents', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(
+      '<main><section data-screen-label="01 Cover">One</section>' +
+      '<div><section data-screen-label="02 Agenda">Two</section></div></main>',
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 0 });
+  });
+
+  it('keeps containerless multi-screen legacy decks navigable', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(
+      '<main><section data-screen-label="01 Cover">One</section>' +
+      '<section data-screen-label="02 Agenda">Two</section></main>',
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 2 });
+  });
+
+  it('counts persisted deck pages that use data-screen-label instead of .slide', async () => {
+    // Runtime-managed decks persist this marker even when their generated
+    // page classes do not include `.slide`. The thumbnail parser already
+    // recognises it; the iframe bridge must use the same contract or Remix
+    // opens with an empty left preview rail.
+    const { win, parentPostMessage } = setupDeckBridge(`
+      <main class="deck-stage">
+        <section data-screen-label="Intro">One</section>
+        <section data-screen-label="Plan">Two</section>
+      </main>
+    `);
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 2 });
+  });
+
+  it('counts fixed-canvas slide-frame pages once a remixed project is declared as a deck', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(`
+      <main>
+        <section class="slide-frame">One</section>
+        <section class="slide-frame">Two</section>
+      </main>
+    `);
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 2 });
+  });
+
   it('counts nested .slide elements through a fallback when no structured container matches', async () => {
     // 8 slides nested two levels deep — none of `.deck > .slide`,
     // `.deck-stage > .slide`, `.deck-shell > .slide`, or `body > .slide`
@@ -250,6 +314,80 @@ describe('deck bridge — nested slide markup (#1530)', () => {
 
     expect(bodyScrollTo).toHaveBeenCalledWith({ left: 1000, behavior: 'smooth' });
     expect(htmlScrollTo).toHaveBeenCalledWith({ left: 1000, behavior: 'smooth' });
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 3 });
+  });
+
+  it('navigates vertically stacked deck pages through the thumbnail bridge', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(`
+      <style>
+        html, body { margin: 0; width: 100%; }
+        body { overflow-x: hidden; overflow-y: auto; scroll-snap-type: y mandatory; }
+        .slide { width: 100vw; height: 100vh; scroll-snap-align: start; }
+      </style>
+      <section class="slide">One</section>
+      <section class="slide">Two</section>
+      <section class="slide">Three</section>
+    `);
+    Object.defineProperty(win, 'innerHeight', { configurable: true, value: 700 });
+    Object.defineProperties(win.document.body, {
+      scrollHeight: { configurable: true, value: 2100 },
+      clientHeight: { configurable: true, value: 700 },
+    });
+    Object.defineProperties(win.document.documentElement, {
+      scrollHeight: { configurable: true, value: 2100 },
+      clientHeight: { configurable: true, value: 700 },
+    });
+    const bodyScrollTo = vi.fn();
+    const htmlScrollTo = vi.fn((options?: ScrollToOptions | number) => {
+      const top = typeof options === 'number' ? 0 : Number(options?.top || 0);
+      win.document.documentElement.scrollTop = top;
+    });
+    win.scrollTo = vi.fn((options?: ScrollToOptions | number) => {
+      const top = typeof options === 'number' ? 0 : Number(options?.top || 0);
+      win.document.documentElement.scrollTop = top;
+    }) as typeof win.scrollTo;
+    win.document.body.scrollTo = bodyScrollTo;
+    win.document.documentElement.scrollTo = htmlScrollTo;
+
+    postSlide(win, 'next');
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 450));
+
+    expect(win.scrollTo).toHaveBeenCalledWith({ top: 700, behavior: 'smooth' });
+    expect(htmlScrollTo).toHaveBeenCalledWith({ top: 700, behavior: 'smooth' });
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 3 });
+  });
+
+  it('falls back to one visible page when a sandbox ignores root scrolling APIs', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(`
+      <style>
+        body { display: flex; overflow-x: auto; overflow-y: hidden; }
+        .slide { flex: 0 0 100vw; width: 100vw; height: 100vh; }
+      </style>
+      <section class="slide">One</section>
+      <section class="slide">Two</section>
+      <section class="slide">Three</section>
+      <div id="counter">1 / 3</div>
+    `);
+    Object.defineProperty(win, 'innerWidth', { configurable: true, value: 1000 });
+    Object.defineProperties(win.document.body, {
+      scrollWidth: { configurable: true, value: 3000 },
+      clientWidth: { configurable: true, value: 1000 },
+    });
+    Object.defineProperties(win.document.documentElement, {
+      scrollWidth: { configurable: true, value: 3000 },
+      clientWidth: { configurable: true, value: 1000 },
+    });
+    win.scrollTo = vi.fn() as typeof win.scrollTo;
+    win.document.body.scrollTo = vi.fn();
+    win.document.documentElement.scrollTo = vi.fn();
+
+    postSlide(win, 'next');
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 500));
+
+    const slides = Array.from(win.document.querySelectorAll<HTMLElement>('.slide'));
+    expect(slides[0]!.style.display).toBe('none');
+    expect(slides[1]!.style.display).toBe('');
+    expect(win.document.getElementById('counter')?.textContent).toBe('2 / 3');
     expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 3 });
   });
 

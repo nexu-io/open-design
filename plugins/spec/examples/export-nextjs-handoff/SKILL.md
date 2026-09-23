@@ -1,6 +1,6 @@
 ---
 name: export-nextjs-handoff
-description: Use this plugin when the user wants an accepted Open Design artifact converted into a Next.js App Router handoff with clean components, styles, assets, and implementation notes.
+description: Use this plugin when the user wants an accepted OpenDesign artifact converted into a Next.js App Router handoff with clean components, styles, assets, and implementation notes.
 license: MIT
 metadata:
   author: open-design-spec

@@ -4,8 +4,8 @@ description: |
   Browser automation CLI for AI agents. Use when the user needs to inspect,
   test, or automate browser behavior: navigating pages, filling forms,
   clicking buttons, taking screenshots, extracting page data, reading selected
-  Open Design browser-tab context, testing web apps, dogfooding Open Design
-  previews, QA, bug hunts, or reviewing app quality. Prefer local Open Design
+  OpenDesign browser-tab context, testing web apps, dogfooding OpenDesign
+  previews, QA, bug hunts, or reviewing app quality. Prefer local OpenDesign
   preview URLs unless the user explicitly asks for external browsing.
 triggers:
   - "browser"
@@ -45,7 +45,7 @@ od:
 
 # Agent Browser
 
-Use `agent-browser` for local Open Design preview validation: inspect rendered
+Use `agent-browser` for local OpenDesign preview validation: inspect rendered
 state, click/type when requested, and capture one screenshot when visual evidence
 matters. Keep the browser local-first unless the user explicitly asks for
 external browsing.
@@ -89,7 +89,7 @@ a temp file the same way.
 
 ## Browser Context Extraction
 
-For selected Open Design browser tabs and browser-use/browser-harness-style
+For selected OpenDesign browser tabs and browser-use/browser-harness-style
 tasks, collect the smallest useful evidence first:
 
 1. Confirm the target with `agent-browser get title` and `agent-browser get url`.
@@ -100,7 +100,7 @@ tasks, collect the smallest useful evidence first:
 4. For logos, fonts, colors, images, motion code, OG metadata, page structure,
    and accessibility checks, prefer DOM/CSS/accessibility evidence from the
    attached browser over guessing from the rendered screenshot alone.
-5. If the selected Open Design context only provided a URL/title and no browser
+5. If the selected OpenDesign context only provided a URL/title and no browser
    automation tool is attached, say that directly and do not invent page
    internals.
 
@@ -115,7 +115,7 @@ screenshots.
 `agent-browser open` before `agent-browser connect`; doing so can make the CLI
 auto-launch Chrome and re-enter the crash path.
 
-Do not run Open Design's own daemon CLI as a browser automation tool. Commands
+Do not run OpenDesign's own daemon CLI as a browser automation tool. Commands
 such as `od browser snapshot`, `daemon-cli.mjs browser snapshot`, or
 `$OD_NODE_BIN $OD_BIN browser snapshot` are not valid browser tools; they can be
 misinterpreted as daemon startup and open an internal `127.0.0.1:<port>` service
@@ -162,7 +162,7 @@ If Chrome exits before CDP is ready or reports `DevToolsActivePort`, report:
 Lightpanda is optional. Do not try `--engine lightpanda` unless
 `command -v lightpanda` succeeds.
 
-## Open Design Smoke Path
+## OpenDesign Smoke Path
 
 Use a temp home and stable session:
 
@@ -182,7 +182,7 @@ cleanup_agent_browser() {
 trap cleanup_agent_browser EXIT INT TERM
 ```
 
-With the Open Design preview at `http://127.0.0.1:17573/`, run:
+With the OpenDesign preview at `http://127.0.0.1:17573/`, run:
 
 ```bash
 if ! curl -fsS http://127.0.0.1:9223/json/version | rg -q webSocketDebuggerUrl; then
@@ -209,8 +209,8 @@ agent-browser snapshot
 agent-browser screenshot /tmp/od-agent-browser.png
 ```
 
-Expected success: title `Open Design`, current URL under `127.0.0.1:17573`,
-visible Open Design UI text in the snapshot, and a screenshot at
+Expected success: title `OpenDesign`, current URL under `127.0.0.1:17573`,
+visible OpenDesign UI text in the snapshot, and a screenshot at
 `/tmp/od-agent-browser.png`.
 
 ## Workflow

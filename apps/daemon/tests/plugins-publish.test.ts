@@ -59,7 +59,7 @@ describe('buildPublishLink', () => {
     expect(link.prBody).toContain('npx skills add open-design/sample-plugin');
   });
 
-  it('builds an Open Design registry submission URL', () => {
+  it('builds an OpenDesign registry submission URL', () => {
     // The dedicated `open-design/plugin-registry` repo per
     // docs/plans/plugin-registry.md §1.2 is the long-term target; until that
     // operational launch step happens, submissions land in `nexu-io/open-design`

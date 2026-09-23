@@ -3,7 +3,7 @@
 ## Purpose
 
 The runtime adapter layer lets the daemon drive locally installed AI-agent
-CLIs through one Open Design run contract. It resolves and probes each CLI,
+CLIs through one OpenDesign run contract. It resolves and probes each CLI,
 builds a runtime-specific invocation, delivers the composed prompt, normalizes
 the runtime's output, and publishes run events to the web UI and `od` CLI.
 

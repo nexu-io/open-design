@@ -82,7 +82,11 @@ beforeEach(async () => {
   await mkdir(projectCwd, { recursive: true });
   db = new Database(':memory:');
   db.exec(`
-    CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT);
+    CREATE TABLE projects (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      metadata_json TEXT
+    );
     CREATE TABLE conversations (id TEXT PRIMARY KEY, project_id TEXT, title TEXT);
   `);
   migratePlugins(db);

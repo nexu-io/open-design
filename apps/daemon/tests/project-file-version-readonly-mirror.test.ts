@@ -32,10 +32,10 @@
 // entry stays open per recvq56vFjQKfT), it just gets the truthful empty
 // history instead of a fabricated entry, and leaves nothing behind on disk.
 //
-// A persisted Workspace binding also means a headerless caller is not allowed
-// to enter this data plane. It must prove the exact Workspace/member pair;
-// absence of identity must neither expose history nor fabricate a local
-// baseline version.
+// A persisted Workspace binding lets the daemon derive read authority for a
+// headerless browser request. That derived read must still remain read-only:
+// absence of an explicit writer identity must neither fabricate a local
+// baseline version nor write into the mirror.
 
 import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -44,6 +44,8 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { openDatabase, updateProject, updateWorkspaceProject } from '../src/db.js';
+import { SHARED_PROJECT_PLACEHOLDER_METADATA_KEY } from '../src/collab/shared-project-placeholder.js';
 
 const WORKSPACE_ID = 'ws-readonly-mirror';
 const OWNER_MEMBER_ID = 'member-owner-readonly-mirror';
@@ -89,10 +91,9 @@ describe('version history on a readonly shared mirror', () => {
   }
 
   /**
-   * A team-bound project owned by `OWNER_MEMBER_ID`, seeded only through the
-   * production create endpoint so the workspace binding is the one the daemon
-   * writes itself (`created_by_workspace_member_id = OWNER_MEMBER_ID`) rather
-   * than a row a test reached into sqlite to forge.
+   * A team-bound project owned by `OWNER_MEMBER_ID`. The production create
+   * endpoint establishes the exact owner binding first; the fixture then marks
+   * that same row as a pulled Team mirror without invoking the remote hub.
    *
    * Content is then written straight to the project directory instead of
    * through the file-write API, because that API bootstraps a version of its
@@ -110,6 +111,15 @@ describe('version history on a readonly shared mirror', () => {
     expect(created.status).toBe(200);
     projectsToClean.push(id);
 
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(projectsRoot(), { dataDir });
+    expect(updateWorkspaceProject(db, WORKSPACE_ID, id, {
+      visibility: 'team',
+      syncState: 'synced',
+      resourceHubResourceId: `hub-${id}`,
+    })).not.toBeNull();
+
     const dir = path.join(projectsRoot(), id);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(
@@ -119,6 +129,15 @@ describe('version history on a readonly shared mirror', () => {
     );
     await fs.rm(path.join(dir, '.file-versions'), { recursive: true, force: true });
     return id;
+  }
+
+  async function stampAsUnmaterializedPlaceholder(projectId: string): Promise<void> {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(projectsRoot(), { dataDir });
+    expect(updateProject(db, projectId, {
+      metadata: { [SHARED_PROJECT_PLACEHOLDER_METADATA_KEY]: Date.now() },
+    })).not.toBeNull();
   }
 
   function memberHeaders(memberId: string, role: 'owner' | 'member') {
@@ -165,18 +184,38 @@ describe('version history on a readonly shared mirror', () => {
     expect(await versionRootExists(projectId)).toBe(true);
   });
 
-  it('rejects a headerless caller for a Workspace-bound project without writing', async () => {
+  it('derives a headerless read for a Workspace-bound project without writing', async () => {
     const projectId = await seedTeamProject();
     expect(await versionRootExists(projectId)).toBe(false);
 
-    const response = await fetch(
-      `${baseUrl}/api/projects/${projectId}/files/index.html/versions`,
-    );
+    const body = await getVersions(projectId);
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+    expect(body.versions).toEqual([]);
+    expect(await versionRootExists(projectId)).toBe(false);
+  });
+
+  it('keeps the placeholder stamp fail-closed even if its creator was accidentally promoted', async () => {
+    const projectId = await seedTeamProject();
+    await stampAsUnmaterializedPlaceholder(projectId);
+
+    const rename = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        ...memberHeaders(OWNER_MEMBER_ID, 'owner'),
+      },
+      body: JSON.stringify({ name: 'Must not land before materialization' }),
     });
+    expect(rename.status).toBe(409);
+    expect(await rename.json()).toMatchObject({
+      error: { code: 'PROJECT_MATERIALIZATION_PENDING' },
+    });
+
+    const versions = await getVersions(
+      projectId,
+      memberHeaders(OWNER_MEMBER_ID, 'owner'),
+    );
+    expect(versions.versions).toEqual([]);
     expect(await versionRootExists(projectId)).toBe(false);
   });
 });

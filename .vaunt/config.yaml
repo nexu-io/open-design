@@ -1,6 +1,6 @@
-# Open Design · Vaunt contributor recognition config
+# OpenDesign · Vaunt contributor recognition config
 #
-# Maps the Open Design 5-tier system (Spark / Signal / Node / Beacon / Nova)
+# Maps the OpenDesign 5-tier system (Spark / Signal / Node / Beacon / Nova)
 # to Vaunt's achievement + point-action model so Vaunt can:
 #   1. Backfill historical PR / review / issue / discussion / comment data
 #   2. Compute cumulative points per contributor against our scoring rules
@@ -17,7 +17,7 @@
 version: 0.0.1
 
 # ───────────────────────────────────────────────────────────────────────
-# Point actions — translate every Open Design contribution event into
+# Point actions — translate every OpenDesign contribution event into
 # the point value defined in scoring.ts. Vaunt then aggregates these via
 # sum() to drive tier achievements.
 #
@@ -134,7 +134,7 @@ achievements:
   - achievement:
       name: Spark
       icon: https://raw.githubusercontent.com/nexu-io/open-design/main/.vaunt/icons/spark.png
-      description: Lit the first spark — your first contribution to Open Design.
+      description: Lit the first spark — your first contribution to OpenDesign.
       triggers:
         # Any single contribution event qualifies for Spark.
         # Intentionally redundant triggers cover every entry path so brand-new

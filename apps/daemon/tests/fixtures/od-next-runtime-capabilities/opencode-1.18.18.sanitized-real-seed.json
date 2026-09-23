@@ -1,0 +1,289 @@
+{
+  "fixtureKind": "sanitized_real_best_effort",
+  "runtime": "native_opencode",
+  "cliVersion": "1.18.18",
+  "recordingDigest": "sha256:b1224716a340401879cfb2f366d1252e9f837ce24050d9b0dfa4430f89492fc5",
+  "anonymizationVersion": "od-runtime-evidence/v1",
+  "evidenceReview": "open_design_best_effort",
+  "note": "Locally recorded structural evidence reviewed by Open Design. It does not imply OpenCode upstream endorsement and is valid only for the exact reviewed tuple.",
+  "caseCoverage": [
+    {
+      "caseId": "main_run",
+      "outcome": "passed",
+      "minimumEvidence": "L0",
+      "source": "root_json_stream",
+      "evidence": {
+        "rootSessionId": "root-success",
+        "startedAtMs": 1786817049079,
+        "completedAtMs": 1786817058028,
+        "terminalRole": "assistant",
+        "terminalFinish": "stop",
+        "terminalError": false
+      }
+    },
+    {
+      "caseId": "tool",
+      "outcome": "passed",
+      "minimumEvidence": "L1",
+      "source": "root_task_tool_metadata",
+      "evidence": {
+        "rootSessionId": "root-success",
+        "childSessionId": "child-success",
+        "toolCallId": "call-success",
+        "status": "completed",
+        "startedAtMs": 1786817053114,
+        "endedAtMs": 1786817056110
+      }
+    },
+    {
+      "caseId": "child_success",
+      "outcome": "passed",
+      "minimumEvidence": "L2",
+      "source": "root_task_tool_and_child_export",
+      "evidence": {
+        "rootSessionId": "root-success",
+        "childSessionId": "child-success",
+        "toolCallId": "call-success",
+        "childTerminal": "completed",
+        "parentTerminal": "completed"
+      }
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "outcome": "passed",
+      "minimumEvidence": "L2",
+      "source": "root_task_tool_and_child_export",
+      "evidence": {
+        "rootSessionId": "root-failure",
+        "childSessionId": "child-failure",
+        "toolCallId": "call-failure",
+        "childTerminal": "failed",
+        "childTerminalAtMs": 1786817282929,
+        "parentTerminal": "completed",
+        "parentTerminalAtMs": 1786817285594,
+        "parentError": false
+      }
+    },
+    {
+      "caseId": "cancel",
+      "outcome": "passed",
+      "minimumEvidence": "L0",
+      "source": "open_design_process_group_cancel",
+      "nativeChildTerminal": "unavailable",
+      "limitation": "Abrupt native CLI termination leaves the root Task and Child tool running in the OpenCode export; Open Design therefore owns cancellation at the physical Run/process-group boundary and does not invent a Child terminal.",
+      "evidence": {
+        "hostRunStatus": "canceled",
+        "hostSignal": "SIGKILL",
+        "childExitedBeforeReturn": true,
+        "processGroupDescendantExited": true,
+        "verificationSuite": "tests/runtimes/runs.test.ts",
+        "verificationCase": "waits for a real process group to exit before returning canceled status"
+      }
+    },
+    {
+      "caseId": "timeout",
+      "outcome": "passed",
+      "minimumEvidence": "L0",
+      "source": "open_design_inactivity_watchdog",
+      "nativeChildTerminal": "unavailable",
+      "limitation": "OpenCode 1.18.18 has no stable native Task timeout terminal; the host records a failed task Run from the inactivity watchdog and leaves Child evidence unavailable.",
+      "evidence": {
+        "hostRunStatus": "failed",
+        "terminalTrigger": "inactivity_watchdog",
+        "errorCode": "AGENT_EXECUTION_FAILED",
+        "processGroupTerminationRequested": "SIGTERM",
+        "verificationSuite": "tests/chat-route.test.ts",
+        "verificationCase": "fails stalled json-stream runs after the inactivity timeout elapses"
+      }
+    },
+    {
+      "caseId": "resume",
+      "outcome": "passed",
+      "minimumEvidence": "L0",
+      "source": "root_task_id_reuse_and_child_export",
+      "evidence": {
+        "rootSessionId": "root-success",
+        "childSessionId": "child-success",
+        "priorToolCallId": "call-success",
+        "priorTaskId": null,
+        "priorEndedAtMs": 1786817056110,
+        "resumeToolCallId": "call-resume",
+        "resumeTaskId": "child-success",
+        "resumeStartedAtMs": 1786838918423,
+        "resumeEndedAtMs": 1786838920646,
+        "resumeTerminal": "completed"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "child_success",
+      "candidate": {
+        "adapterVersion": "od-opencode-child-evidence/v1",
+        "cliVersion": "1.18.18",
+        "rootSessionId": "root-success",
+        "childSessionId": "child-success",
+        "toolCallId": "call-success",
+        "state": "completed",
+        "observedAtMs": 1786817056110,
+        "startedAtMs": 1786817053114,
+        "endedAtMs": 1786817056110,
+        "promptHash": "fc9b6c72f15109309e4cd5d9c6a18e79093cc887b4d962c322b6c805de51cc3a",
+        "promptBytes": 88,
+        "model": {
+          "providerId": "openai",
+          "modelId": "gpt-5.6-sol"
+        }
+      },
+      "variant": "high",
+      "sanitizedChildExport": {
+        "info": {
+          "id": "child-success",
+          "parentID": "root-success",
+          "version": "1.18.18"
+        },
+        "messages": [
+          {
+            "info": {
+              "id": "assistant-success",
+              "sessionID": "child-success",
+              "role": "assistant",
+              "finish": "stop",
+              "time": {
+                "created": 1786817053124,
+                "completed": 1786817056105
+              },
+              "tokens": {
+                "total": 9018,
+                "input": 9011,
+                "output": 7,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 0
+                }
+              },
+              "providerID": "openai",
+              "modelID": "gpt-5.6-sol",
+              "variant": "high"
+            },
+            "parts": []
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "candidate": {
+        "adapterVersion": "od-opencode-child-evidence/v1",
+        "cliVersion": "1.18.18",
+        "rootSessionId": "root-failure",
+        "childSessionId": "child-failure",
+        "toolCallId": "call-failure",
+        "state": "failed",
+        "observedAtMs": 1786817282929,
+        "startedAtMs": 1786817282912,
+        "endedAtMs": 1786817282929,
+        "promptHash": "b2ebe006e96d3dee549c2114b4ea2d9c1e99c17599e74c50d9f754217cfbf0d9",
+        "promptBytes": 19,
+        "model": {
+          "providerId": "openai",
+          "modelId": "controlled-invalid-model"
+        }
+      },
+      "parentRecovered": true,
+      "sanitizedChildExport": {
+        "info": {
+          "id": "child-failure",
+          "parentID": "root-failure",
+          "version": "1.18.18"
+        },
+        "messages": [
+          {
+            "info": {
+              "id": "message-failure",
+              "sessionID": "child-failure",
+              "role": "user",
+              "time": {
+                "created": 1786817282915
+              }
+            },
+            "parts": []
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "resume",
+      "resumeLink": {
+        "priorToolCallId": "call-success",
+        "currentToolCallId": "call-resume",
+        "taskId": "child-success"
+      },
+      "candidate": {
+        "adapterVersion": "od-opencode-child-evidence/v1",
+        "cliVersion": "1.18.18",
+        "rootSessionId": "root-success",
+        "childSessionId": "child-success",
+        "toolCallId": "call-resume",
+        "state": "completed",
+        "observedAtMs": 1786838920646,
+        "startedAtMs": 1786838918423,
+        "endedAtMs": 1786838920646,
+        "promptHash": "dfb723c2ce5e7715cb833bf518d7f74ff545f8ec5a7e99363fe004e9cb4400fc",
+        "promptBytes": 59,
+        "model": {
+          "providerId": "openai",
+          "modelId": "gpt-5.6-sol"
+        }
+      },
+      "variant": "high",
+      "sanitizedChildExport": {
+        "info": {
+          "id": "child-success",
+          "parentID": "root-success",
+          "version": "1.18.18"
+        },
+        "messages": [
+          {
+            "info": {
+              "id": "user-resume",
+              "sessionID": "child-success",
+              "role": "user",
+              "time": {
+                "created": 1786838918430
+              }
+            },
+            "parts": []
+          },
+          {
+            "info": {
+              "id": "assistant-resume",
+              "sessionID": "child-success",
+              "role": "assistant",
+              "finish": "stop",
+              "time": {
+                "created": 1786838918442,
+                "completed": 1786838920639
+              },
+              "tokens": {
+                "total": 9046,
+                "input": 9039,
+                "output": 7,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 0
+                }
+              },
+              "providerID": "openai",
+              "modelID": "gpt-5.6-sol",
+              "variant": "high"
+            },
+            "parts": []
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 **Parent:** [`spec.md`](spec.md) · **Related:** [`deployment/docker.md`](deployment/docker.md) · [`deploy/README.md`](../deploy/README.md)
 
-Deploy Open Design on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
+Deploy OpenDesign on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
 
 ## Quick reference
 
@@ -48,7 +48,7 @@ Allowed origins (CORS, comma-separated, or empty) []:
 Memory limit [384m]:
 
 [open-design] Pulling image: ghcr.io/nexu-io/od:latest
-[open-design] Starting Open Design...
+[open-design] Starting OpenDesign...
 [open-design] Waiting for health check (up to 60s)...
 [open-design] Daemon is healthy (200 OK)
 ```
@@ -193,7 +193,7 @@ The container always binds `127.0.0.1:<port>:7456` — the daemon is never direc
 | systemd unit not created | `systemd` not found | Omit `--no-systemd` if systemd is available, or manage via Docker CLI |
 | `.env` has wrong port after re-install | Old backup not restored | Edit `deploy/.env` directly or delete it and re-run |
 | Container exits immediately | Image incompatibility | Check `docker compose -f deploy/docker-compose.yml logs` for errors |
-| `Authorization: Bearer <OD_API_TOKEN> required` on macOS | Docker Desktop bridge networking | Enable host networking — see [Docker Desktop on macOS](../deploy/README.md#docker-desktop-on-macos) |
+| Browser sign-in repeats | Username or token does not match | Use username `open-design` and the exact `OD_API_TOKEN` value from `deploy/.env`; recreate the container after changing it |
 
 ## References
 

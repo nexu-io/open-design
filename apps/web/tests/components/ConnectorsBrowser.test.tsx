@@ -764,7 +764,7 @@ describe('ConnectorsBrowser', () => {
         redirectUrl: 'https://example.com/oauth',
         expiresAt: '2026-05-08T10:00:00.000Z',
       },
-      error: 'Popup blocked. Allow popups for Open Design and try again.',
+      error: 'Popup blocked. Allow popups for OpenDesign and try again.',
     });
 
     render(<ConnectorsBrowser composioConfigured />);

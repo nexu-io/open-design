@@ -4,7 +4,7 @@
 // is hard-locked to http://127.0.0.1:56121/callback (Hermes itself runs
 // a short-lived listener on this port). We mirror the same shape so the
 // PoC can reuse the same client_id without re-registering with xAI.
-// Once Open Design has its own client_id, the daemon's normal HTTP port
+// Once OpenDesign has its own client_id, the daemon's normal HTTP port
 // can take over and this whole file goes away.
 //
 // The listener:
@@ -186,7 +186,7 @@ export async function startCallbackListener(
       if (err.code === 'EADDRINUSE') {
         reject(
           new Error(
-            `Port ${port} is already in use — close any other process listening on ${host}:${port} (e.g. an in-flight Hermes or Open Design OAuth flow) and try again`,
+            `Port ${port} is already in use — close any other process listening on ${host}:${port} (e.g. an in-flight Hermes or OpenDesign OAuth flow) and try again`,
           ),
         );
       } else {
@@ -225,19 +225,19 @@ export async function startCallbackListener(
 function renderResultPage(outcome: CallbackOutcome): string {
   if (outcome.kind === 'ok') {
     return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Open Design — xAI authorized</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>OpenDesign — xAI authorized</title></head>
 <body style="font:14px system-ui;padding:40px;max-width:480px;margin:auto;text-align:center;color:#222;">
   <h1 style="font-size:18px;margin:0 0 12px;">Authorized!</h1>
-  <p style="color:#666;">Open Design now has access to your SuperGrok subscription. You can close this tab and return to Open Design.</p>
+  <p style="color:#666;">OpenDesign now has access to your SuperGrok subscription. You can close this tab and return to OpenDesign.</p>
 </body></html>`;
   }
   const reason = escapeHtml(outcome.error || 'unknown error');
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Open Design — sign-in failed</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>OpenDesign — sign-in failed</title></head>
 <body style="font:14px system-ui;padding:40px;max-width:480px;margin:auto;text-align:center;color:#222;">
   <h1 style="font-size:18px;margin:0 0 12px;">Sign-in failed</h1>
   <p style="color:#c00;">${reason}</p>
-  <p style="color:#666;">Close this tab and click <em>Sign in with X</em> again in Open Design.</p>
+  <p style="color:#666;">Close this tab and click <em>Sign in with X</em> again in OpenDesign.</p>
 </body></html>`;
 }
 

@@ -1,0 +1,9 @@
+{
+  "name": "demo-atom",
+  "title": "Demo Atom",
+  "description": "An installable atom fixture.",
+  "tags": ["atom"],
+  "od": {
+    "kind": "atom"
+  }
+}

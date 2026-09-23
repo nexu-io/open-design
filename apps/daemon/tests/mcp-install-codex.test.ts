@@ -1,8 +1,14 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  createCodexCliInvocation,
   installCodexMcp,
   probeCodexInstall,
+  refreshOwnedCodexMcp,
   setCodexRunner,
   uninstallCodexMcp,
   type CodexRunner,
@@ -34,7 +40,59 @@ function makeStubRunner(impl: (call: RecordedCall) => Promise<{ exitCode: number
 
 afterEach(() => {
   setCodexRunner(null);
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
+});
+
+describe('codex-cli default runner', () => {
+  const originalPlatform = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform });
+  });
+
+  it('resolves a Windows npm .cmd shim through the shared safe invocation builder', () => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+
+    const invocation = createCodexCliInvocation(
+      ['mcp', 'get', 'open-design'],
+      { ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+      {},
+      () => 'C:\\Users\\Amy\\AppData\\Roaming\\npm\\codex.cmd',
+    );
+
+    expect(invocation).toEqual({
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: [
+        '/d',
+        '/s',
+        '/c',
+        '"C:\\Users\\Amy\\AppData\\Roaming\\npm\\codex.cmd mcp get open-design"',
+      ],
+      windowsVerbatimArguments: true,
+    });
+  });
+
+  it.runIf(process.platform === 'win32')('executes a real npm-style codex.cmd found on PATH', async () => {
+    const shimDir = mkdtempSync(path.join(tmpdir(), 'od-codex-shim-'));
+    try {
+      writeFileSync(
+        path.join(shimDir, 'codex.cmd'),
+        '@echo off\r\nif "%~1"=="mcp" if "%~2"=="get" exit /b 0\r\nexit /b 9\r\n',
+        'utf8',
+      );
+      vi.stubEnv('PATH', shimDir);
+      vi.stubEnv('PATHEXT', '.CMD');
+      vi.stubEnv('OD_AGENT_HOME', shimDir);
+
+      await expect(probeCodexInstall('open-design')).resolves.toEqual({
+        available: true,
+        installed: true,
+      });
+    } finally {
+      rmSync(shimDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('codex-cli probe', () => {
@@ -86,7 +144,7 @@ describe('codex-cli install', () => {
       name: 'open-design',
       command: '/path/to/node',
       args: ['/path/to/cli.js', 'mcp'],
-      env: { OD_DATA_DIR: '/tmp/od', OD_SIDECAR_IPC_PATH: '/tmp/sock' },
+      env: { OD_DATA_DIR: '/tmp/od', OD_TEST_CLIENT_CAPABILITY: 'opaque' },
     });
 
     expect(runner.calls).toHaveLength(1);
@@ -97,7 +155,7 @@ describe('codex-cli install', () => {
       '--env',
       'OD_DATA_DIR=/tmp/od',
       '--env',
-      'OD_SIDECAR_IPC_PATH=/tmp/sock',
+      'OD_TEST_CLIENT_CAPABILITY=opaque',
       '--',
       '/path/to/node',
       '/path/to/cli.js',
@@ -136,5 +194,62 @@ describe('codex-cli uninstall', () => {
     const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'Error: not found\n' }));
     setCodexRunner(runner);
     await expect(uninstallCodexMcp('open-design')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('refreshOwnedCodexMcp', () => {
+  const spec = {
+    name: 'open-design',
+    command: '/Applications/Open Design Prerelease.app/Contents/Frameworks/Helper',
+    args: ['/Applications/Open Design Prerelease.app/cli.js', 'mcp'],
+    env: { OD_MCP_BOOTSTRAP_ARGS: '["--headless","--od-mcp-managed"]' },
+  };
+  const existingJson = JSON.stringify({
+    name: 'open-design',
+    enabled: true,
+    transport: { type: 'stdio', command: '/old/Helper', args: ['/old/cli.js', 'mcp'], env: { OD_DATA_DIR: '/data/prerelease' } },
+  });
+
+  it('rewrites a registration that belongs to this install', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: existingJson, stderr: '' }));
+    setCodexRunner(runner);
+    const isOwned = vi.fn(() => true);
+    await expect(refreshOwnedCodexMcp(spec, isOwned)).resolves.toBe('refreshed');
+    expect(isOwned).toHaveBeenCalledWith({ command: '/old/Helper', args: ['/old/cli.js', 'mcp'], env: { OD_DATA_DIR: '/data/prerelease' } });
+    expect(runner.calls.map((call) => call.args.slice(0, 3))).toEqual([
+      ['mcp', 'get', 'open-design'],
+      ['mcp', 'add', 'open-design'],
+    ]);
+  });
+
+  it("leaves another install's registration untouched", async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: existingJson, stderr: '' }));
+    setCodexRunner(runner);
+    await expect(refreshOwnedCodexMcp(spec, () => false)).resolves.toBe('foreign');
+    // Only the read ran: nothing was written.
+    expect(runner.calls.map((call) => call.args)).toEqual([['mcp', 'get', 'open-design', '--json']]);
+  });
+
+  it('leaves a registration it cannot read untouched', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: 'not json', stderr: '' }));
+    setCodexRunner(runner);
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('unreadable');
+    expect(runner.calls).toHaveLength(1);
+  });
+
+  it('never creates a registration the user has not installed', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'not found' }));
+    setCodexRunner(runner);
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('absent');
+    expect(runner.calls).toHaveLength(1);
+  });
+
+  it('does nothing without a Codex CLI', async () => {
+    setCodexRunner({
+      async run() {
+        throw Object.assign(new Error('spawn codex ENOENT'), { code: 'ENOENT' });
+      },
+    });
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('unavailable');
   });
 });

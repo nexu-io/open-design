@@ -18,6 +18,7 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 
 import { HomeHero } from '../../src/components/HomeHero';
 import { I18nProvider } from '../../src/i18n';
+import { armCompletionFeedbackOnFirstGesture } from '../../src/utils/notifications';
 import {
   getHomeHeroEditor,
   setHomeHeroPrompt,
@@ -594,6 +595,16 @@ describe('HomeHero plugin picker', () => {
     // contract: a plain Enter through the editor command pipeline calls onSubmit
     // exactly once when the prompt has content.
     const onSubmit = vi.fn();
+    const onFeedbackActivation = vi.fn();
+    const disposeFeedbackActivation = armCompletionFeedbackOnFirstGesture(
+      {
+        soundEnabled: false,
+        successSoundId: 'ding',
+        failureSoundId: 'buzz',
+        desktopEnabled: false,
+      },
+      onFeedbackActivation,
+    );
     // `canSubmit` is derived from the `prompt` prop, so seed it via props (the
     // editor mirrors it through SeedingPlugin) rather than only the editor.
     render(
@@ -619,6 +630,8 @@ describe('HomeHero plugin picker', () => {
 
     pressEnterInHomeHero();
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onFeedbackActivation).toHaveBeenCalledWith({ desktopPermission: null });
+    disposeFeedbackActivation();
   });
 
   it('routes Enter to the open picker instead of picking before a query resolves', async () => {
@@ -739,7 +752,9 @@ describe('HomeHero plugin picker', () => {
     fireEvent.click(screen.getByTitle('Plugin: Prototype Plugin'));
     expect(onOpenPluginDetails).toHaveBeenCalledWith(active);
     const activeChipText = screen.getByTestId('home-hero-active-plugin').textContent;
-    expect(activeChipText).toContain('Prototype');
+    // The lead chip cuts the title to eight code points and ellipsises the
+    // rest, so the full name never eats the prompt's first line.
+    expect(activeChipText).toContain('Prototyp…');
     expect(activeChipText).not.toContain('Plugin');
   });
 

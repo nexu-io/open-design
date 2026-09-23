@@ -1,4 +1,4 @@
-import { arch, hostname, platform, release, totalmem, type } from "node:os";
+import { arch, platform, release, totalmem, type } from "node:os";
 
 import type { CollectedFile } from "./sources.js";
 
@@ -86,7 +86,7 @@ export function buildManifest(context: DiagnosticsContext, files: CollectedFile[
 
 export function buildMachineInfo(username: string | undefined): MachineInfo {
   return {
-    hostname: hostname(),
+    hostname: "[REDACTED]",
     platform: platform(),
     release: release(),
     arch: arch(),
@@ -96,7 +96,7 @@ export function buildMachineInfo(username: string | undefined): MachineInfo {
     pid: process.pid,
     ppid: process.ppid,
     cwd: process.cwd(),
-    username,
+    username: username ? "[REDACTED]" : undefined,
   };
 }
 

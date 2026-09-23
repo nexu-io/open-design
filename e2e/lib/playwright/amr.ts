@@ -4,7 +4,7 @@ import type {
   WorkspaceCollabContext,
   WorkspaceDirectoryItem,
 } from '@open-design/contracts';
-import { ensureRailOpen } from './rail.js';
+import { dismissWhatsNewPopup, ensureRailOpen } from './rail.js';
 import { T } from '@/timeouts';
 
 export const STORAGE_KEY = 'open-design:config';
@@ -23,6 +23,7 @@ type MockAmrPersonalWorkspaceOptions = {
   accountCredits?: number;
   accountPlan?: string;
   accountSummaryAvailable?: boolean;
+  workspaceBalanceAvailable?: boolean;
 };
 
 export const AMR_PERSONAL_WORKSPACE_ITEM = {
@@ -116,12 +117,53 @@ export async function mockAmrPersonalWorkspace(
   await page.route('**/api/workspace/billing**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (
-      request.method() !== 'GET'
-      || url.pathname !== '/api/workspace/billing'
-      || url.searchParams.get('scope') !== 'account'
-      || url.searchParams.size !== 1
-    ) {
+    if (request.method() !== 'GET' || url.pathname !== '/api/workspace/billing') {
+      await route.fallback();
+      return;
+    }
+    if (url.searchParams.get('scope') === 'workspace') {
+      const workspaceId = url.searchParams.get('workspaceId');
+      if (workspaceId !== AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId) {
+        await route.fulfill({ status: 404, json: { error: 'workspace_not_found' } });
+        return;
+      }
+      const observedAt = '2026-07-26T00:00:00.000Z';
+      await route.fulfill({
+        json: {
+          summary: null,
+          workspaceBalance: options.workspaceBalanceAvailable === false
+            ? null
+            : {
+                workspaceId,
+                workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+                balanceUsd: accountBalanceUsd,
+                billingScopeVersion: 2,
+                expiresAt: null,
+                updatedAt: observedAt,
+              },
+          workspaceRuntime: {
+            workspaceId,
+            workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+            status: 'fresh',
+            revision: '1',
+            observedAt,
+            softExpiresAt: '2099-07-26T00:00:30.000Z',
+            hardExpiresAt: '2099-07-26T00:02:00.000Z',
+            retryAt: null,
+            errorCode: null,
+            reason: 'authoritative-action-read',
+            sourceGapDetected: false,
+          },
+          authoritativeWorkspaceRead: {
+            workspaceId,
+            workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+            observedAt,
+          },
+        },
+      });
+      return;
+    }
+    if (url.searchParams.get('scope') !== 'account' || url.searchParams.size !== 1) {
       await route.fallback();
       return;
     }
@@ -170,12 +212,12 @@ export async function mockAmrPersonalWorkspace(
 }
 
 export async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
 }
 
 export async function dismissPrivacyDialog(page: Page) {
   const privacySurface = page
-    .getByRole('region', { name: /Help us improve Open Design/i })
+    .getByRole('region', { name: /Help us improve OpenDesign/i })
     .or(page.locator('.privacy-consent-banner'))
     .first();
   await privacySurface.waitFor({ state: 'visible', timeout: 1_000 }).catch(() => {});
@@ -341,6 +383,7 @@ export async function openSettingsDialog(page: Page) {
     if (await dialog.isVisible().catch(() => false)) return dialog;
 
     await dismissPrivacyDialog(page);
+    await dismissWhatsNewPopup(page);
     if (await settingsTrigger.isVisible({ timeout: 1_000 }).catch(() => false)) {
       await settingsTrigger.evaluate((element: HTMLElement) => element.click());
     } else if (!(await openSettingsFromProjectSurface(page))) {

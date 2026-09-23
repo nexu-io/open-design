@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { streamViaDaemon } from '../../providers/daemon';
 import { listMessages, saveMessage } from '../../state/projects';
-import { appendErrorStatusEvent, runFailureFieldsFromError } from '../../runtime/chat-events';
+import {
+  appendErrorStatusEvent,
+  runFailureFieldsFromError,
+  stderrTailFromError,
+} from '../../runtime/chat-events';
 import { agentModelDisplayName } from '../../utils/agentLabels';
 import { randomUUID } from '../../utils/uuid';
 import { effectiveAgentModelChoice } from '../agentModelSelection';
@@ -71,6 +75,8 @@ export interface UseConversationChatResult {
   error: string | null;
   /** True until the initial message load resolves. */
   loading: boolean;
+  /** A failed authoritative transcript read must never be treated as empty history. */
+  sendDisabled: boolean;
   onSend: (
     prompt: string,
     attachments: ChatAttachment[],
@@ -90,6 +96,8 @@ export function useConversationChat(
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const messageScopeKey = `${projectId}\u0000${conversationId}`;
+  const [messagesReadyScopeKey, setMessagesReadyScopeKey] = useState<string | null>(null);
 
   // Keep the latest config/agent map in refs so the stable `onSend` callback
   // always reads the current agent selection without re-subscribing the SSE.
@@ -97,7 +105,13 @@ export function useConversationChat(
   ctxRef.current = ctx;
   const messagesRef = useRef<ChatMessage[]>(messages);
   messagesRef.current = messages;
+  const messagesReadyScopeKeyRef = useRef<string | null>(null);
 
+  // Keep terminal callbacks tied to their request even after its live
+  // controller is released. A subsequent request or scope retires this owner.
+  const requestOwnerRef = useRef<AbortController | null>(null);
+  const currentScopeRef = useRef(messageScopeKey);
+  currentScopeRef.current = messageScopeKey;
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
   // Coalesces streamed deltas into ~one React update per animation frame
@@ -108,35 +122,46 @@ export function useConversationChat(
   // Load the conversation's persisted messages on mount / conversation switch.
   useEffect(() => {
     let cancelled = false;
+    setStreaming(false);
     setLoading(true);
     setMessages([]);
     setError(null);
+    setMessagesReadyScopeKey(null);
+    messagesReadyScopeKeyRef.current = null;
     void (async () => {
-      const list = await listMessages(
-        projectId,
-        conversationId,
-        ctx.workspaceContext,
-      );
-      if (cancelled) return;
-      setMessages(list);
-      setLoading(false);
+      try {
+        const list = await listMessages(
+          projectId,
+          conversationId,
+          ctx.workspaceContext,
+        );
+        if (cancelled) return;
+        setMessages(list);
+        setMessagesReadyScopeKey(messageScopeKey);
+        messagesReadyScopeKeyRef.current = messageScopeKey;
+        setLoading(false);
+      } catch (loadError) {
+        if (cancelled) return;
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : 'Could not load messages for this conversation.',
+        );
+        setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
-    };
-  }, [projectId, conversationId, ctx.workspaceContext]);
-
-  // Tear down the live subscription when the tab unmounts. The daemon run
-  // keeps going; we only stop the browser-side SSE.
-  useEffect(() => {
-    return () => {
+      // Navigation retires only the browser subscription, not the daemon run.
+      // Release admission before another scope loads, and reject old callbacks.
+      requestOwnerRef.current = null;
       abortRef.current?.abort();
       abortRef.current = null;
       cancelRef.current = null;
       textBufferRef.current?.cancel();
       textBufferRef.current = null;
     };
-  }, []);
+  }, [projectId, conversationId, ctx.workspaceContext, messageScopeKey]);
 
   const persist = useCallback(
     (message: ChatMessage) => {
@@ -168,6 +193,10 @@ export function useConversationChat(
         sessionMode,
         workspaceContext,
       } = ctxRef.current;
+      if (messagesReadyScopeKeyRef.current !== messageScopeKey) return;
+      // This controller is installed synchronously before dispatch, so two
+      // activations in one React turn cannot admit two replacement requests.
+      if (abortRef.current) return;
       if (cfg.mode !== 'daemon') {
         setError('Side Chat needs a local agent. Pick one in the top bar.');
         return;
@@ -201,7 +230,9 @@ export function useConversationChat(
             ...(attachments.length > 0 ? { attachments } : {}),
             ...(commentAttachments.length > 0 ? { commentAttachments } : {}),
           };
-      const assistantId = retryTarget?.failedAssistant.id ?? randomUUID();
+      // A retry is a new attempt. The previous failure remains an immutable
+      // diagnostic record in both the transcript and persistence.
+      const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -209,7 +240,7 @@ export function useConversationChat(
         agentId: cfg.agentId,
         agentName: assistantAgentName,
         events: [],
-        createdAt: retryTarget?.failedAssistant.createdAt ?? startedAt,
+        createdAt: startedAt,
         runStatus: 'running',
         startedAt,
       };
@@ -217,7 +248,13 @@ export function useConversationChat(
       const history = retryTarget
         ? [...retryTarget.priorMessages, userMsg]
         : [...messagesRef.current, userMsg];
-      setMessages([...history, assistantMsg]);
+      // Provider context repeats the original request without its failed
+      // output. The visible transcript retains that failed attempt unchanged.
+      const nextMessages = retryTarget
+        ? [...messagesRef.current, assistantMsg]
+        : [...history, assistantMsg];
+      messagesRef.current = nextMessages;
+      setMessages(nextMessages);
       setStreaming(true);
       setError(null);
       if (!retryTarget) persist(userMsg);
@@ -226,38 +263,52 @@ export function useConversationChat(
       const cancelController = new AbortController();
       abortRef.current = controller;
       cancelRef.current = cancelController;
+      requestOwnerRef.current = controller;
+      const ownsScope = () => requestOwnerRef.current === controller
+        && currentScopeRef.current === messageScopeKey
+        && ctxRef.current.workspaceContext === workspaceContext;
+      const acceptsCallback = () => ownsScope() && !controller.signal.aborted;
+      const updateOwnedAssistant = (updater: (previous: ChatMessage) => ChatMessage) => {
+        if (!ownsScope()) return;
+        updateAssistant(assistantId, (previous) => ownsScope() ? updater(previous) : previous);
+      };
 
       // Frame-batch this run's text deltas. flush() applies any pending content
       // before cancel() tears down, so a terminal status that races onDone
       // can't drop the tail of the answer.
       textBufferRef.current?.cancel();
       const textBuffer = createBufferedTextUpdates({
-        updateMessage: (updater) => updateAssistant(assistantId, updater),
+        updateMessage: updateOwnedAssistant,
         // Side chat persists at done/error (+ onRunCreated), not mid-stream.
         persistSoon: () => {},
       });
       textBufferRef.current = textBuffer;
 
       const clearRefs = () => {
+        if (!ownsScope()) return;
         if (abortRef.current === controller) abortRef.current = null;
         if (cancelRef.current === cancelController) cancelRef.current = null;
-        textBufferRef.current?.flush();
-        textBufferRef.current?.cancel();
-        textBufferRef.current = null;
+        textBuffer.flush();
+        textBuffer.cancel();
+        if (textBufferRef.current === textBuffer) textBufferRef.current = null;
         setStreaming(false);
       };
 
       const handlers = {
         onDelta: (delta: string) => {
+          if (!acceptsCallback()) return;
           textBuffer.appendContent(delta);
         },
         onAgentEvent: (ev: AgentEvent) => {
+          if (!acceptsCallback()) return;
           textBuffer.appendEvent(ev);
         },
         onDone: () => {
+          if (!acceptsCallback()) return;
           textBuffer.flush();
           const endedAt = Date.now();
           setMessages((curr) => {
+            if (!ownsScope()) return curr;
             const next = curr.map((m) =>
               m.id === assistantId
                 ? { ...m, endedAt, runStatus: resolveSucceededRunStatus(m.runStatus) }
@@ -270,6 +321,7 @@ export function useConversationChat(
           clearRefs();
         },
         onError: (err: Error) => {
+          if (!acceptsCallback()) return;
           textBuffer.flush();
           const endedAt = Date.now();
           const code = (err as Error & { code?: string }).code;
@@ -277,9 +329,16 @@ export function useConversationChat(
           const failure = runFailureFieldsFromError(err);
           setError(err.message);
           setMessages((curr) => {
+            if (!ownsScope()) return curr;
             const next = curr.map((m) => {
               if (m.id !== assistantId) return m;
-              const withError = appendErrorStatusEvent(m, err.message, code, failure);
+              const withError = appendErrorStatusEvent(
+                m,
+                err.message,
+                code,
+                failure,
+                stderrTailFromError(err),
+              );
               return {
                 ...withError,
                 endedAt,
@@ -318,19 +377,22 @@ export function useConversationChat(
         locale: loc,
         sessionMode,
         onRunCreated: (runId) => {
-          updateAssistant(assistantId, (prev) => ({
+          if (!acceptsCallback()) return;
+          updateOwnedAssistant((prev) => ({
             ...prev,
             runId,
             runStatus: 'queued',
           }));
           setMessages((curr) => {
+            if (!ownsScope()) return curr;
             const pinned = curr.find((m) => m.id === assistantId);
             if (pinned) persist(pinned);
             return curr;
           });
         },
         onRunStatus: (runStatus) => {
-          updateAssistant(assistantId, (prev) => ({
+          if (!acceptsCallback()) return;
+          updateOwnedAssistant((prev) => ({
             ...prev,
             runStatus,
             endedAt: isTerminalRunStatus(runStatus) ? prev.endedAt ?? Date.now() : prev.endedAt,
@@ -338,11 +400,12 @@ export function useConversationChat(
           if (isTerminalRunStatus(runStatus)) clearRefs();
         },
         onRunEventId: (lastRunEventId) => {
-          updateAssistant(assistantId, (prev) => ({ ...prev, lastRunEventId }));
+          if (!acceptsCallback()) return;
+          updateOwnedAssistant((prev) => ({ ...prev, lastRunEventId }));
         },
       });
     },
-    [projectId, conversationId, persist, updateAssistant],
+    [projectId, conversationId, messageScopeKey, persist, updateAssistant],
   );
 
   const onSend = useCallback(
@@ -378,5 +441,14 @@ export function useConversationChat(
     });
   }, [persist]);
 
-  return { messages, streaming, error, loading, onSend, onRetry, onStop };
+  return {
+    messages,
+    streaming,
+    error,
+    loading,
+    sendDisabled: messagesReadyScopeKey !== messageScopeKey,
+    onSend,
+    onRetry,
+    onStop,
+  };
 }

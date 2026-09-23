@@ -15,8 +15,10 @@ export interface WorkspaceHubSubscriptionManagerOptions {
  */
 export class WorkspaceHubSubscriptionManager {
   private billingWorkspaceIds = new Set<string>();
+  private readonly eventWorkspaceReferences = new Map<string, number>();
   private readonly subscribers = new Map<string, HubEventsSubscriber>();
   private disposed = false;
+  private environmentGeneration = 0;
   private readonly maxSubscribers: number;
 
   constructor(private readonly options: WorkspaceHubSubscriptionManagerOptions) {
@@ -39,16 +41,79 @@ export class WorkspaceHubSubscriptionManager {
     return [...this.subscribers.keys()].sort();
   }
 
+  /**
+   * Keep an upstream carrier for a locally connected Workspace EventSource.
+   * The returned release is idempotent because Express may emit both `finish`
+   * and `close` for one response.
+   */
+  retainEventInterest(workspaceIdInput: string): () => void {
+    this.assertUsable();
+    const workspaceId = workspaceIdInput.trim();
+    if (!workspaceId) return () => undefined;
+    this.eventWorkspaceReferences.set(
+      workspaceId,
+      (this.eventWorkspaceReferences.get(workspaceId) ?? 0) + 1,
+    );
+    this.reconcile();
+    const environmentGeneration = this.environmentGeneration;
+    let released = false;
+    return () => {
+      if (
+        released ||
+        this.disposed ||
+        environmentGeneration !== this.environmentGeneration
+      ) {
+        return;
+      }
+      released = true;
+      const remaining = (this.eventWorkspaceReferences.get(workspaceId) ?? 1) - 1;
+      if (remaining > 0) {
+        this.eventWorkspaceReferences.set(workspaceId, remaining);
+      } else {
+        this.eventWorkspaceReferences.delete(workspaceId);
+      }
+      this.reconcile();
+    };
+  }
+
+  /** Re-resolve every live stream after the signed-in credential changes. */
+  refreshEndpoints(): void {
+    this.assertUsable();
+    for (const subscriber of this.subscribers.values()) {
+      subscriber.refreshEndpoint();
+    }
+  }
+
+  /**
+   * Drop every scope retained under the previous daemon-global AMR profile.
+   * Workspace ids are environment-owned, so neither billing leases nor open
+   * renderer EventSources may carry an id across a profile switch.
+   */
+  resetForEnvironmentChange(): void {
+    this.assertUsable();
+    this.environmentGeneration += 1;
+    for (const subscriber of this.subscribers.values()) subscriber.stop();
+    this.subscribers.clear();
+    this.billingWorkspaceIds.clear();
+    this.eventWorkspaceReferences.clear();
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     for (const subscriber of this.subscribers.values()) subscriber.stop();
     this.subscribers.clear();
     this.billingWorkspaceIds.clear();
+    this.eventWorkspaceReferences.clear();
   }
 
   private reconcile(): void {
-    const ordered = [...this.billingWorkspaceIds];
+    // A visible browser stream gets first claim on the bounded upstream pool;
+    // billing-only interests then fill the remaining capacity.
+    const ordered = [
+      ...this.eventWorkspaceReferences.keys(),
+      ...this.billingWorkspaceIds,
+    ];
     const desired = new Set<string>();
     for (const workspaceId of ordered) {
       if (desired.size >= this.maxSubscribers) break;

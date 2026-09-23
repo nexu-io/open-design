@@ -42,7 +42,7 @@ export const XAI_OAUTH_REDIRECT_PATH = '/callback';
 /**
  * PoC client_id reused from NousResearch/hermes-agent. xAI does not yet
  * publish a public application registration flow that we know of; once
- * an Open Design client_id is provisioned, replace this constant.
+ * an OpenDesign client_id is provisioned, replace this constant.
  */
 export const XAI_OAUTH_CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
 

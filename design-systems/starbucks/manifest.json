@@ -3,10 +3,10 @@
   "id": "starbucks",
   "name": "Starbucks",
   "category": "E-Commerce & Retail",
-  "description": "Bundled Open Design package for Starbucks, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "description": "Bundled OpenDesign package for Starbucks, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
   "source": {
     "type": "bundled",
-    "origin": "Open Design curated bundled fixture"
+    "origin": "OpenDesign curated bundled fixture"
   },
   "files": {
     "design": "DESIGN.md",

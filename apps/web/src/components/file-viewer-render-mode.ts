@@ -50,6 +50,10 @@ export interface UrlLoadDecision {
   tweaksBridge?: boolean;
   /** User explicitly opted into the inline path via ?forceInline=1. */
   forceInline: boolean;
+  /** The artifact needs the opaque-origin Web Storage/history sandbox shim. */
+  needsSandboxShim?: boolean;
+  /** The daemon-served URL response includes the sandbox shim. */
+  urlSandboxGuard?: boolean;
   /**
    * The source references project files by site-root path (`/assets/x.css`),
    * confirmed against the project's file list (see
@@ -64,6 +68,8 @@ export interface UrlLoadDecision {
    * so `injectPreviewFocusGuard` can suppress the focus grab.
    */
   needsFocusGuard?: boolean;
+  /** The daemon-served URL response includes the focus guard. */
+  urlFocusGuard?: boolean;
   /**
    * The HTML source contains a self-redirecting directive (a
    * `<meta http-equiv="refresh">`, or a load-time `location` navigation /
@@ -72,6 +78,8 @@ export interface UrlLoadDecision {
    * buildSrcdoc) is present to detect and break the loop.
    */
   needsRedirectGuard?: boolean;
+  /** The daemon-served URL response includes the redirect-loop guard. */
+  urlRedirectGuard?: boolean;
 }
 
 /**
@@ -112,11 +120,12 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // the artifact ships a `.tw-panel`.
   if (d.tweaksBridge) return false;
   if (d.forceInline) return false;
-  if (d.needsFocusGuard) return false;
-  // A self-redirecting document must go through srcDoc so buildSrcdoc's
-  // redirect-loop guard is in place; URL-load serves it raw with no guard and
-  // the iframe reloads itself forever (nexu-io/open-design#710).
-  if (d.needsRedirectGuard) return false;
+  if (d.needsSandboxShim && !d.urlSandboxGuard) return false;
+  if (d.needsFocusGuard && !d.urlFocusGuard) return false;
+  // A self-redirecting document needs the redirect-loop guard on whichever
+  // transport owns the document, or the iframe can reload itself forever
+  // (nexu-io/open-design#710).
+  if (d.needsRedirectGuard && !d.urlRedirectGuard) return false;
   // Root-relative project asset refs only resolve after the srcDoc pipeline
   // normalizes them (normalizeRootRelativeProjectAssetRefs); the URL-load
   // path serves the document untouched and the browser 404s each asset.
@@ -148,16 +157,14 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  * Return true when the HTML source contains patterns that fail under the
  * URL-load iframe's bare `sandbox="allow-scripts"` (no `allow-same-origin`).
  *
- * The srcDoc path runs `injectSandboxShim` (see
- * `apps/web/src/runtime/srcdoc.ts`) before any user script, which polyfills
- * `localStorage` / `sessionStorage` so artifacts that read them at mount
- * don't throw `SecurityError` and unmount the React tree. The URL-load path
- * serves raw HTML untouched, so artifacts that touch sandbox-blocked Web
- * Storage at startup go blank.
+ * The preview needs `injectSandboxShim` before any user script, which
+ * polyfills `localStorage` / `sessionStorage` so artifacts that read them at
+ * mount don't throw `SecurityError` and unmount the React tree. Settled,
+ * bounded on-disk HTML can receive this guard from the daemon URL response;
+ * in-memory or large streaming HTML remains on srcDoc.
  *
  * Scope is narrow on purpose. This helper detects three reliable signals
- * visible in the *document* source and routes those artifacts back through
- * srcDoc by toggling `forceInline`:
+ * visible in the *document* source and requests the corresponding guard:
  *
  *   - `<script type="text/babel">` (quoted or unquoted): Babel-standalone
  *     XHR-fetches and evals sibling `.jsx`/`.tsx` files at runtime.
@@ -169,12 +176,11 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  *     parent string scan can't see the linked subresource's body, and
  *     agent-emitted artifacts commonly read Web Storage from an external
  *     `boot.js` / `app.js` at module eval (issue #2361). Conservatively
- *     route any external script through srcDoc so the shim is in place
+ *     guard any external script response so the shim is in place
  *     before that read happens. The alternative — fetching every script
  *     URL ahead of the iframe and scanning it — would duplicate work the
  *     browser is about to do and add round trips on every preview load,
- *     so the heuristic favors a few extra srcDoc-mode previews over those
- *     additional requests.
+ *     so the heuristic favors a passive guard over those additional requests.
  *
  * Remaining known limitation: dynamically injected scripts
  * (`document.createElement('script'); s.src = '…'; head.appendChild(s)`)
@@ -186,14 +192,13 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  *
  * Pure string scan — caller passes the same `source` already fetched for
  * preview rendering, so this adds no extra I/O. Heuristic by design: false
- * positives just take the (slightly slower but safer) srcDoc path; false
- * negatives are the same blank-preview the user already hits.
+ * positives add a passive guard to that preview; false negatives are the same
+ * blank-preview the user already hits.
  */
 /**
  * Return true when the HTML source may call `.focus()` at load time, which
- * would steal focus from the host page in a URL-loaded iframe. The srcDoc
- * path injects `injectPreviewFocusGuard` to suppress this; URL-load has no
- * such guard, so we force the srcDoc path instead.
+ * would steal focus from the host page in a URL-loaded iframe. The daemon URL
+ * response or srcDoc path injects `injectPreviewFocusGuard` to suppress this.
  *
  * Detection covers two cases:
  *
@@ -202,8 +207,7 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  *   2. External `<script src=...>` references — we cannot inspect the linked
  *      file's content, so we conservatively assume it may call focus.
  *
- * False positives just route the artifact through the slightly slower srcDoc
- * path, which is the safe direction.
+ * False positives add a passive focus guard, which is the safe direction.
  */
 export function htmlNeedsFocusGuard(source: string): boolean {
   if (/\.\s*focus\s*\(/i.test(source)) return true;
@@ -273,26 +277,22 @@ export function htmlNeedsSandboxShim(source: string): boolean {
 /**
  * Return true when the HTML source contains a self-redirecting directive that
  * can loop forever and freeze the preview iframe (nexu-io/open-design#710).
- * When true, FileViewer forces the srcDoc path so buildSrcdoc's
- * `injectPreviewRedirectGuard` is present to detect and break the loop — the
- * URL-load path serves the document untouched and has no such guard.
+ * When true, FileViewer requires `injectPreviewRedirectGuard` on whichever
+ * transport owns the document so the loop can be detected and broken.
  *
  * Detection covers the two families that produce the freeze:
  *
  *   1. `<meta http-equiv="refresh">` — the canonical HTML redirect; a
  *      self-target or a cycle reloads the frame endlessly.
- *   2. Load-time `location` navigation — `location.reload()`,
+ *   2. Inline load-time `location` navigation — `location.reload()`,
  *      `location.replace(...)`, `location.assign(...)`, or assigning
  *      `location`/`location.href`/`window.location`. Any of these run at parse
- *      time can re-navigate the frame in a loop. External `<script src=...>`
- *      already routes through srcDoc via `htmlNeedsSandboxShim` /
- *      `htmlNeedsFocusGuard`, so a redirect hidden in a linked file is covered
- *      too.
+ *      time can re-navigate the frame in a loop. A redirect hidden exclusively
+ *      in an external script is not statically visible to this source scan.
  *
  * Pure string scan over the same `source` already fetched for preview — no
- * extra I/O. Heuristic by design: a false positive just takes the (guarded,
- * slightly slower) srcDoc path, which is the safe direction; a false negative
- * is the same unguarded preview as before.
+ * extra I/O. Heuristic by design: a false positive adds a passive guard; a
+ * false negative is the same unguarded preview as before.
  */
 export function htmlNeedsRedirectGuard(source: string | null | undefined): boolean {
   if (!source) return false;

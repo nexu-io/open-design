@@ -222,7 +222,7 @@ describe('MemorySection', () => {
     const entry = {
       id: 'project_design_agent_goal',
       name: 'Design agent goal',
-      description: 'Open Design should evolve from accepted work',
+      description: 'OpenDesign should evolve from accepted work',
       type: 'project',
       body: '- Keep design-system extraction in the loop',
       updatedAt: Date.now(),
@@ -314,7 +314,7 @@ describe('MemorySection', () => {
     const entry = {
       id: 'project_design_agent_goal',
       name: 'Design agent goal',
-      description: 'Open Design should evolve from accepted work',
+      description: 'OpenDesign should evolve from accepted work',
       type: 'project',
       body: '- Keep design-system extraction in the loop',
       updatedAt: Date.now(),

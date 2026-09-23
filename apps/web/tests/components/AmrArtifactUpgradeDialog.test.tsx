@@ -48,11 +48,14 @@ describe('AmrArtifactUpgradeDialog', () => {
     expect(plansCta.querySelector('svg')).toBeNull();
     fireEvent.click(plansCta);
 
-    expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('billing=plan'),
-      '_blank',
-      'noopener,noreferrer',
+    const [url, target, features] = open.mock.calls[0] ?? [];
+    const plansUrl = new URL(String(url));
+    expect(`${plansUrl.origin}${plansUrl.pathname}`).toBe(
+      'https://open-design.ai/cloud/dashboard',
     );
+    expect(plansUrl.searchParams.get('billing')).toBe('plan');
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
   });
 
   it('restarts the seven-day offer countdown at the cycle boundary', () => {

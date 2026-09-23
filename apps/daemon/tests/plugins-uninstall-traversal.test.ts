@@ -24,7 +24,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer } from '../src/server.js';
-import { defaultRegistryRoots } from '../src/plugins/registry.js';
+import {
+  defaultRegistryRoots,
+  resolvePluginFolder,
+  upsertInstalledPlugin,
+} from '../src/plugins/registry.js';
+import { openDatabase } from '../src/db.js';
 
 let server: http.Server;
 let baseUrl: string;
@@ -32,6 +37,7 @@ let shutdown: (() => Promise<void> | void) | undefined;
 let scratchRoot: string;
 let outsideDir: string;
 let markerPath: string;
+let orphanFolder: string;
 
 beforeAll(async () => {
   // A directory entirely outside OD_DATA_DIR, standing in for any victim
@@ -50,6 +56,26 @@ beforeAll(async () => {
   baseUrl = started.url;
   server = started.server;
   shutdown = started.shutdown;
+
+  // Seed the safe control through the same resolved registry record shape as
+  // a legacy local install. Merely dropping a folder after startup does not
+  // make it an installed plugin and correctly returns 404.
+  const pluginsRoot = defaultRegistryRoots().userPluginsRoot;
+  orphanFolder = path.join(pluginsRoot, 'orphan-plugin');
+  await mkdir(orphanFolder, { recursive: true });
+  await writeFile(
+    path.join(orphanFolder, 'open-design.json'),
+    JSON.stringify({ name: 'orphan-plugin', title: 'Orphan plugin', version: '0.0.1' }),
+  );
+  const resolved = await resolvePluginFolder({
+    folder: orphanFolder,
+    folderId: 'orphan-plugin',
+    sourceKind: 'local',
+    source: orphanFolder,
+  });
+  if (!resolved.ok) throw new Error(resolved.errors.join('; '));
+  const db = openDatabase(process.cwd(), { dataDir: process.env.OD_DATA_DIR! });
+  upsertInstalledPlugin(db, resolved.record);
 });
 
 afterAll(async () => {
@@ -81,9 +107,6 @@ describe('POST /api/plugins/:id/uninstall — traversal in plugin id', () => {
 
   it('control: a safe id still removes only its own folder inside the registry root', async () => {
     const pluginsRoot = defaultRegistryRoots().userPluginsRoot;
-    const orphanFolder = path.join(pluginsRoot, 'orphan-plugin');
-    await mkdir(orphanFolder, { recursive: true });
-    await writeFile(path.join(orphanFolder, 'open-design.json'), '{}');
 
     const resp = await fetch(`${baseUrl}/api/plugins/orphan-plugin/uninstall`, { method: 'POST' });
 

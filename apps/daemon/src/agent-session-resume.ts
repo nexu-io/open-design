@@ -13,6 +13,7 @@ import {
   parseStableSections,
   type StableSectionHashes,
 } from './prompts/stable-sections.js';
+import { scanRunEventsForUsageAnalytics } from './run-analytics-observability.js';
 
 type SqliteDb = Database.Database;
 
@@ -27,8 +28,17 @@ export interface AgentResumeContext {
   newSessionId: string;
   /** True when a prior session id exists AND it is still safe to resume. */
   isResuming: boolean;
+  /**
+   * The assistant turn the stored session last produced. Unlike the fields
+   * above this is reported even when the guard REJECTED the session: it is the
+   * anchor for "which request was that session working on", which a refused
+   * continuation turn needs in order to reseed context.
+   */
+  storedLastMessageId: string | null;
   /** Hash of the stable instruction block last sent on this session, or null. */
   storedStablePromptHash: string | null;
+  /** Last effective input usage reported for this exact resumed session. */
+  storedInputTokens: number | null;
   /**
    * Per-section digests behind `storedStablePromptHash`, for naming which input
    * drifted when the hash no longer matches. Diagnostic only — never an input
@@ -39,7 +49,127 @@ export interface AgentResumeContext {
   invalidationReason: ResumeInvalidationReason | null;
 }
 
+/**
+ * Tracks input usage for one physical agent session attempt. Logical Run
+ * retries retain their event history, so a different session needs a fresh
+ * tracker; only an exact-session continuation may seed the retained value.
+ */
+export function createPhysicalAgentSessionUsageTracker(
+  retainedInputTokens: number | null = null,
+): {
+  observe(event: string, data: unknown): void;
+  inputTokens(): number | null;
+} {
+  const usageEvents: Array<{ event: string; data: unknown }> = [];
+  const bounded = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isSafeInteger(value) &&
+      value >= 0 && value <= 1_000_000_000
+      ? value
+      : null;
+  let latestInputTokens = bounded(retainedInputTokens);
+  return {
+    observe(event, data) {
+      if (
+        event !== 'agent' ||
+        !data ||
+        typeof data !== 'object' ||
+        Array.isArray(data) ||
+        (data as Record<string, unknown>).type !== 'usage'
+      ) {
+        return;
+      }
+      usageEvents.push({ event, data });
+      const usage = scanRunEventsForUsageAnalytics(usageEvents, null, 0);
+      latestInputTokens = bounded(
+        usage.input_tokens_effective ?? usage.input_tokens,
+      );
+    },
+    inputTokens: () => latestInputTokens,
+  };
+}
+
 export type CapturedAgentSessionResult = 'stored' | 'cleared' | 'skipped';
+
+export type AgentResumeTranscriptMode = 'resume-session' | 'full-transcript';
+
+export interface AgentResumePromptPolicy {
+  mode: AgentResumeTranscriptMode;
+  /** Stored upstream handle to continue this turn, or null when reseeding. */
+  resumeSessionId: string | null;
+  /** True only when the daemon also asks the agent to resume native state. */
+  skipTranscript: boolean;
+  /** True for every guard miss, missing handle, unsupported adapter, or create turn. */
+  requiresFullTranscript: boolean;
+  invalidationReason: ResumeInvalidationReason | null;
+}
+
+export interface AgentResumeFailurePolicy {
+  resumeFailed: boolean;
+  /** Clear the persisted handle before the next attempt. */
+  clearStaleSession: boolean;
+  /** Re-run this turn fresh so the daemon sends the full transcript. */
+  autoReseedFullTranscript: boolean;
+  reason: 'resume_failed' | null;
+}
+
+/**
+ * Shared transcript policy for resumable adapters. Native continuation and
+ * transcript skipping are coupled: if the daemon cannot prove it is resuming a
+ * valid upstream session this turn, the prompt path must recompose the full
+ * transcript.
+ */
+export function resolveAgentResumePromptPolicy(
+  ctx: Pick<AgentResumeContext, 'isResuming' | 'resumeSessionId' | 'invalidationReason'>,
+): AgentResumePromptPolicy {
+  const canResume =
+    ctx.isResuming === true
+    && typeof ctx.resumeSessionId === 'string'
+    && ctx.resumeSessionId.length > 0
+    && ctx.invalidationReason == null;
+  if (canResume) {
+    return {
+      mode: 'resume-session',
+      resumeSessionId: ctx.resumeSessionId,
+      skipTranscript: true,
+      requiresFullTranscript: false,
+      invalidationReason: null,
+    };
+  }
+  return {
+    mode: 'full-transcript',
+    resumeSessionId: null,
+    skipTranscript: false,
+    requiresFullTranscript: true,
+    invalidationReason: ctx.invalidationReason ?? null,
+  };
+}
+
+/**
+ * Shared fallback policy for a resume target that no longer exists upstream.
+ * Only a run that actually attempted native resume may clear the stored handle
+ * and auto-reseed; fresh/create turns must ignore matching prose in stdout.
+ */
+export function resolveAgentResumeFailurePolicy(input: {
+  agentId: string;
+  stderr: string;
+  stdout?: string;
+  isResuming: boolean;
+  resumeSessionId: string | null | undefined;
+}): AgentResumeFailurePolicy {
+  const attemptedResume =
+    input.isResuming === true
+    && typeof input.resumeSessionId === 'string'
+    && input.resumeSessionId.length > 0;
+  const resumeFailed =
+    attemptedResume &&
+    isAgentResumeFailure(input.agentId, input.stderr, input.stdout ?? '');
+  return {
+    resumeFailed,
+    clearStaleSession: resumeFailed,
+    autoReseedFullTranscript: resumeFailed,
+    reason: resumeFailed ? 'resume_failed' : null,
+  };
+}
 
 /**
  * Resume identity guard. A stored upstream session is only safe to continue
@@ -121,9 +251,56 @@ export function resolveAgentResumeContext(
     resumeSessionId: resumable ? storedSessionId : null,
     newSessionId: randomUUID(),
     isResuming: resumable,
+    storedLastMessageId: record?.lastMessageId ?? null,
     storedStablePromptHash: resumable ? (record?.stablePromptHash ?? null) : null,
+    storedInputTokens: resumable ? (record?.lastInputTokens ?? null) : null,
     storedStableSections: resumable ? parseStableSections(record?.stablePromptSections) : null,
     invalidationReason,
+  };
+}
+
+/**
+ * Whether a continuation turn must be handed the request it is continuing.
+ *
+ * "Continue the run" sends a directive, not a request: *continue where you left
+ * off; otherwise complete the original request*. That sentence is only
+ * answerable inside the session that heard the original request. Two surfaces
+ * offer it — the chat error card and `od run continue` — and neither can tell
+ * whether the session will actually be continued: they see `resumable` (and, in
+ * the UI, agent identity), while `evaluateResumeInvalidation` above ALSO
+ * compares the stored model, cwd and cursor. Changing the model in Settings
+ * between the failure and the click is enough to diverge them.
+ *
+ * When they do diverge the daemon opens a fresh session, and the directive lands
+ * somewhere that has never seen the request it names. Callers that ship a full
+ * rendered transcript in `message` are unaffected (the transcript survives the
+ * non-resume branch); callers that send only the directive are not, so the
+ * daemon reseeds the request itself from persisted history.
+ *
+ * Deliberately requires a stored session WITH a cursor: that cursor is the exact
+ * anchor for "which request", and without one there is nothing to be precise
+ * about — guessing a request would be worse than sending none.
+ */
+export function resolveResumeContinuationSeed(input: {
+  /** The caller declared this turn's message is a continuation directive. */
+  isContinuation: boolean;
+  /** The daemon could not continue a stored session on this turn. */
+  requiresFullTranscript: boolean;
+  /** Stored handle at resolve time — present even when the guard rejected it. */
+  storedSessionId: string | null;
+  /** Stored resume cursor; the assistant turn the refused session produced. */
+  storedLastMessageId: string | null;
+}): { required: boolean; anchorAssistantMessageId: string | null } {
+  const required =
+    input.isContinuation === true
+    && input.requiresFullTranscript === true
+    && typeof input.storedSessionId === 'string'
+    && input.storedSessionId.length > 0
+    && typeof input.storedLastMessageId === 'string'
+    && input.storedLastMessageId.length > 0;
+  return {
+    required,
+    anchorAssistantMessageId: required ? input.storedLastMessageId : null,
   };
 }
 
@@ -150,6 +327,7 @@ export function persistCapturedAgentSession(
     model?: string | null;
     cwd?: string | null;
     lastMessageId?: string | null;
+    lastInputTokens?: number | null;
   },
 ): CapturedAgentSessionResult {
   if (!input.conversationId) return 'skipped';
@@ -163,6 +341,7 @@ export function persistCapturedAgentSession(
       model: input.model ?? null,
       cwd: input.cwd ?? null,
       lastMessageId: input.lastMessageId ?? null,
+      lastInputTokens: input.lastInputTokens ?? null,
     });
     return 'stored';
   }
@@ -292,7 +471,7 @@ export function isOpencodeResumeFailure(text: string): boolean {
 
 /**
  * Per-agent dispatch for "the session/thread I asked to resume is gone".
- * Generalizes the resume-fallback so every `resumesSessionViaCli` adapter
+ * Generalizes resume-fallback classification so every native-resume adapter
  * routes through one decision point in server.ts. Unknown agents return false
  * (no fallback) — a new resume-capable adapter must opt in here explicitly.
  *
@@ -307,6 +486,9 @@ export function isAgentResumeFailure(
   stderr: string,
   stdout = '',
 ): boolean {
+  if (agentId === 'deepseek-harness') {
+    return /DSH_PROFILE_RESUME_(?:REJECTED|MISMATCH)/.test(`${stderr}\n${stdout}`);
+  }
   if (agentId === 'codex') return isCodexResumeFailure(stderr);
   if (agentId === 'opencode') return isOpencodeResumeFailure(stderr);
   if (agentId === 'amr') {

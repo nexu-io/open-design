@@ -5,7 +5,7 @@ import {
   OPEN_DESIGN_TELEMETRY_RELAY_URLS,
 } from '../../src/integrations/telemetry-relay.js';
 
-describe('Open Design telemetry relay URLs', () => {
+describe('OpenDesign telemetry relay URLs', () => {
   it('keeps production on telemetry.open-design.ai', () => {
     expect(OPEN_DESIGN_TELEMETRY_RELAY_URLS.prod).toBe(
       'https://telemetry.open-design.ai/api/langfuse',

@@ -1,24 +1,25 @@
+import { assertPackagedSidecarRuntime } from "../resources/runtime-manifest.js";
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { hashJson, hashPath, type CacheNode, ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import { hashJson, hashPath, type CacheNode, ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
 import {
   assertNodePtyRuntime,
   validateNodePtyRuntime,
 } from "../node-pty-runtime.js";
-import { winResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versions.js";
+import { winResources } from "../resources/index.js";
+import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versioning/index.js";
 import {
   WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
   WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
   WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
   shouldUseWinStandalonePrebundle,
-} from "../win-prebundle.js";
+} from "./prebundle.js";
 import {
   buildCustomWinNsisInstaller,
   hashWinNsisBasePayloadInputs,
@@ -70,7 +71,7 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const WIN_ARCHIVE_CACHE_VERSION = 3;
-const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 8;
+const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 9;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
 
 async function hashWinNsisInstallerImplementation(config: ToolPackConfig): Promise<string> {
@@ -102,7 +103,11 @@ async function assertWebStandaloneOutput(config: ToolPackConfig): Promise<void> 
   throw new Error("Next.js standalone server output was not produced under apps/web/.next/standalone");
 }
 
-async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPaths): Promise<string> {
+async function writeWebStandaloneHookConfig(
+  config: ToolPackConfig,
+  paths: WinPaths,
+  hyperframesRuntimeSourceRoot: string,
+): Promise<string> {
   const webRoot = join(config.workspaceRoot, "apps", "web");
   await assertWebStandaloneOutput(config);
 
@@ -112,6 +117,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPa
     `${JSON.stringify(
       {
         auditReportPath: paths.webStandaloneHookAuditPath,
+        hyperframesRuntimeSourceRoot,
         pruneCopiedSharp: true,
         pruneRootNext: true,
         pruneRootSharp: true,
@@ -167,7 +173,7 @@ async function runElectronBuilderRaw(
   const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
   const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
     ? await runSegment("electron-builder-raw:write-web-standalone-hook-config", async () =>
-      writeWebStandaloneHookConfig(config, paths)
+      writeWebStandaloneHookConfig(config, paths, projectDir)
     )
     : null;
   const builderConfig = {
@@ -565,6 +571,10 @@ export async function runElectronBuilder(
     node: "win.electron-builder-dir-base",
     packagedVersion: versionCore,
   });
+  const assertSidecarRuntime = (unpackedRoot: string) => assertPackagedSidecarRuntime(winUnpackedAppRoot(unpackedRoot), [
+    "main.cjs",
+    ...(usePrebundle ? [WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH].map((entry) => entry.slice("app/".length)) : []),
+  ]);
   const auditOutput = "web-standalone-after-pack-audit.json";
   const node = {
     id: "win.electron-builder-dir",
@@ -574,7 +584,10 @@ export async function runElectronBuilder(
       const validationError = await validateWinUnpackedNodePtyRuntime(
         join(entryRoot, "builder", "win-unpacked"),
       );
-      return validationError == null ? null : { reason: validationError };
+      if (validationError != null) return { reason: validationError };
+      try { await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked")); }
+      catch (error) { return { reason: String(error) }; }
+      return null;
     },
     build: async ({ entryRoot }: { entryRoot: string }): Promise<ElectronBuilderDirCacheMetadata> => {
       const packagedAppRoot = await getPackagedAppRoot();
@@ -584,6 +597,7 @@ export async function runElectronBuilder(
         packagedAppRoot,
       );
       await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
+      await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked"));
       return { packagedAppKey, packagedVersion };
     },
   };
@@ -609,6 +623,7 @@ export async function runElectronBuilder(
               );
               segments.push(...rawSegments);
               await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
+              await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked"));
             });
             return { packagedAppKey, packagedVersion };
           },
@@ -622,6 +637,7 @@ export async function runElectronBuilder(
   const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
   await runSegment("electron-builder-dir:validate-node-pty-runtime", async () => {
     await assertWinUnpackedNodePtyRuntime(cachedUnpackedRoot);
+    await assertSidecarRuntime(cachedUnpackedRoot);
   });
   await runSegment("electron-builder-dir:prepare-namespace", async () => {
     if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {

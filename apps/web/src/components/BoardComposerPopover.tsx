@@ -428,6 +428,7 @@ export function BoardComposerPopover({
   onRemoveMember,
   onHoverMember,
   onDeleteComment,
+  onViewAllComments,
   images = [],
   existingImages = [],
   onAttachImages,
@@ -461,6 +462,8 @@ export function BoardComposerPopover({
   onRemoveMember: (elementId: string) => void;
   onHoverMember?: (elementId: string | null) => void;
   onDeleteComment?: (commentId: string) => void | Promise<boolean | void>;
+  /** Opens the all-comments side panel without closing this popover. */
+  onViewAllComments?: (returnFocusTarget?: HTMLElement | null) => void;
   /** Object-URL thumbnails for images the user attached to this comment. */
   images?: { file: File; url: string }[];
   /** Already-saved attachment thumbnails (read-only) for a re-opened comment. */
@@ -671,6 +674,17 @@ export function BoardComposerPopover({
           <span className="comment-popover-title" title={target.label || target.elementId}>
             {target.label || target.elementId}
           </span>
+          {onViewAllComments ? (
+            <button
+              type="button"
+              className="comment-popover-view-all"
+              data-testid="comment-popover-view-all"
+              onClick={(event) => onViewAllComments(event.currentTarget)}
+            >
+              {t('chat.comments.viewAll')}
+              <Icon name="chevron-right" size={12} />
+            </button>
+          ) : null}
         </div>
       ) : null}
       {/* Everything above the action row scrolls; the action row itself lives

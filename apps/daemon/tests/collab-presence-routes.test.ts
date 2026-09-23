@@ -16,7 +16,10 @@ import {
   registerCollabPresenceRoutes,
 } from '../src/routes/collab-presence.js';
 import { verifyWorkspaceRequestContext } from '../src/collab/request-workspace-context.js';
-import { createCachedWorkspaceDirectoryFetcher } from '../src/collab/vela-workspace-context.js';
+import {
+  createCachedWorkspaceDirectoryFetcher,
+  createWorkspaceDirectoryAuthorityBroker,
+} from '../src/collab/vela-workspace-context.js';
 
 let server: http.Server | null = null;
 
@@ -34,6 +37,7 @@ async function startPresenceServer(
     isProjectShared?: (projectId: string) => Promise<boolean>;
     cloudAuthorizesProjectPresence?: (projectId: string) => boolean;
     verifyWorkspaceRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceRequest'];
+    verifyWorkspaceLeaveRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceLeaveRequest'];
     verifyWorkspaceReadRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceReadRequest'];
     presenceListCacheFreshMs?: number;
     presenceListCacheNow?: () => number;
@@ -50,6 +54,9 @@ async function startPresenceServer(
       : {}),
     ...(options.verifyWorkspaceRequest
       ? { verifyWorkspaceRequest: options.verifyWorkspaceRequest }
+      : {}),
+    ...(options.verifyWorkspaceLeaveRequest
+      ? { verifyWorkspaceLeaveRequest: options.verifyWorkspaceLeaveRequest }
       : {}),
     ...(options.verifyWorkspaceReadRequest
       ? { verifyWorkspaceReadRequest: options.verifyWorkspaceReadRequest }
@@ -1025,13 +1032,17 @@ describe('collab presence routes', () => {
     expect(listPresence).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps heartbeat and leave on fresh authority and publishes their latest result', async () => {
+  it('uses independent heartbeat and leave authority gates and publishes their latest result', async () => {
     const context = teamContext();
     const verifyWorkspaceRequest = vi.fn(async () => ({
       ok: true as const,
       context,
     }));
     const verifyWorkspaceReadRequest = vi.fn(async () => ({
+      ok: true as const,
+      context,
+    }));
+    const verifyWorkspaceLeaveRequest = vi.fn(async () => ({
       ok: true as const,
       context,
     }));
@@ -1044,6 +1055,7 @@ describe('collab presence routes', () => {
       { heartbeatPresence, listPresence, leavePresence },
       {
         verifyWorkspaceRequest,
+        verifyWorkspaceLeaveRequest,
         verifyWorkspaceReadRequest,
         cloudAuthorizesProjectPresence: () => true,
       },
@@ -1062,9 +1074,69 @@ describe('collab presence routes', () => {
     })).status).toBe(200);
     expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([]);
 
-    expect(verifyWorkspaceRequest).toHaveBeenCalledTimes(2);
+    expect(verifyWorkspaceRequest).toHaveBeenCalledOnce();
+    expect(verifyWorkspaceLeaveRequest).toHaveBeenCalledOnce();
     expect(verifyWorkspaceReadRequest).toHaveBeenCalledTimes(2);
     expect(listPresence).not.toHaveBeenCalled();
+  });
+
+  it('lets leave bypass the outage lease opened by a failed heartbeat authority probe', async () => {
+    const context = teamContext();
+    const directoryItem = {
+      workspaceId: context.workspaceId,
+      workspaceName: context.workspaceName ?? context.workspaceId,
+      workspaceType: context.workspaceType,
+      workspaceMemberId: context.workspaceMemberId,
+      role: context.role,
+      memberStatus: context.memberStatus,
+      lifecycleState: context.lifecycleState,
+    };
+    const fetchDirectory = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false as const, items: [] })
+      .mockResolvedValueOnce({ ok: true as const, items: [directoryItem] });
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'presence-leave-account',
+      failureBackoffMinMs: 60_000,
+      failureBackoffMaxMs: 60_000,
+      random: () => 0,
+    });
+    const verify = (
+      req: unknown,
+      fetchWorkspaceDirectory: typeof authority.fresh,
+    ) => verifyWorkspaceRequestContext({ req, fetchWorkspaceDirectory });
+    const leavePresence = vi.fn(async () => []);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence: vi.fn(async () => []),
+        leavePresence,
+      },
+      {
+        verifyWorkspaceRequest: (req) => verify(req, authority.backgroundFresh),
+        verifyWorkspaceLeaveRequest: (req) => verify(req, authority.fresh),
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+    const headers = {
+      'x-od-workspace-id': context.workspaceId,
+      'x-od-workspace-member-id': context.workspaceMemberId,
+    };
+
+    expect((await api.json('/api/projects/p1/presence/heartbeat', {
+      method: 'POST',
+      headers,
+      body: { memberId: context.workspaceMemberId },
+    })).status).toBe(503);
+    expect((await api.json('/api/projects/p1/presence/leave', {
+      method: 'POST',
+      headers,
+      body: { memberId: context.workspaceMemberId },
+    })).status).toBe(200);
+
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+    expect(leavePresence).toHaveBeenCalledTimes(1);
   });
 
   it('returns a retryable 503 without relay side effects when Workspace authority is unavailable', async () => {
@@ -1152,5 +1224,19 @@ describe('createCollabPresenceCloudClient', () => {
       'list:p1:ws-for-p1',
       'leave:p1:ws-for-p1',
     ]);
+  });
+
+  it('fails closed instead of issuing a headerless cloud call without a scope', () => {
+    const transport = {
+      heartbeatPresence: vi.fn(async () => []),
+      listPresence: vi.fn(async () => []),
+      leavePresence: vi.fn(async () => []),
+    };
+    const cloud = createCollabPresenceCloudClient(transport, () => undefined);
+
+    expect(() => cloud!.listPresence('p1')).toThrow(expect.objectContaining({
+      code: 'workspace_scope_unavailable',
+    }));
+    expect(transport.listPresence).not.toHaveBeenCalled();
   });
 });

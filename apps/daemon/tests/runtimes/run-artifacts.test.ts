@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countDesignSystemPreviewModules,
   countNewArtifacts,
+  countWrittenFiles,
   deriveActivationMilestones,
   didRunCreateDesignSystemFile,
   runAskedUserQuestion,
@@ -228,6 +229,34 @@ describe('countNewArtifacts', () => {
   });
 });
 
+describe('countWrittenFiles', () => {
+  it('counts writes of ANY extension, closing the md/docx/code blind spot', () => {
+    // The motivating case for `run_finished.files_written_count`: a run whose
+    // deliverable is `PROMPTS.md` reported artifact_count 0 and looked like a
+    // pure chat turn. The all-types counter must see it.
+    const events = [
+      ...pair('Write', '/proj/PROMPTS.md'),
+      ...pair('Write', '/proj/data.json'),
+      ...pair('Edit', '/proj/index.html'),
+    ];
+    expect(countNewArtifacts(events)).toBe(1); // html only
+    expect(countWrittenFiles(events)).toBe(3); // every written file
+  });
+
+  it('keeps the shared failure-pairing and dedup semantics', () => {
+    const id = freshId();
+    expect(
+      countWrittenFiles([
+        ...pair('Write', '/proj/notes.md', true), // failed write: no count
+        ...unfinished('Write', '/proj/pending.md'), // still in flight: no count
+        ...pair('Write', '/proj/brief.md', false, `${id}-a`),
+        ...pair('Edit', '/proj/brief.md', false, `${id}-b`), // same path: once
+        ...pair('Read', '/proj/brief.md'), // read-only op: never counts
+      ]),
+    ).toBe(1);
+  });
+});
+
 describe('didRunCreateDesignSystemFile', () => {
   it('is true when the run wrote a DESIGN.md', () => {
     expect(
@@ -356,6 +385,34 @@ describe('runAskedUserQuestion', () => {
       runAskedUserQuestion([
         { event: 'agent', data: { type: 'text_delta', delta: 'ask a <question-form id="q">{"questions":[' } },
         { event: 'agent', data: { type: 'text_delta', delta: '{"question":"X"}]}</question-form>' } },
+      ]),
+    ).toBe(true);
+  });
+
+  it('reassembles a legacy child-tag form split across text_delta chunks', () => {
+    expect(
+      runAskedUserQuestion([
+        {
+          event: 'agent',
+          data: {
+            type: 'text_delta',
+            delta: '<question-form id="audio"><question-se',
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'text_delta',
+            delta: 'lect id="format" label="Format"><option value="mp3">MP3</option>',
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'text_delta',
+            delta: '</question-select><question-text id="mood" label="Mood" /></question-form>',
+          },
+        },
       ]),
     ).toBe(true);
   });

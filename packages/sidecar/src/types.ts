@@ -8,20 +8,24 @@
  * Pure type declarations with no runtime code and no dependency on sibling files.
  */
 
-/** Minimal shape of a sidecar process stamp: the five identity fields. */
-export type SidecarStampShape = {
+/** Identity fields needed by runtime/path consumers, without transport. */
+export type RuntimeIdentityShape = {
   app: string;
-  ipc: string;
   mode: string;
-  namespace: string;
   source: string;
+};
+
+/** Legacy layout-contract input retained privately for path compatibility. */
+export type RuntimeLayoutStampShape = RuntimeIdentityShape & {
+  ipc: string;
+  namespace: string;
 };
 
 /**
  * Host-supplied contract: default path/namespace values, env var names, and the
  * normalizers that validate/canonicalize app, namespace, source, and full stamp.
  */
-export type SidecarContractDescriptor<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type SidecarContractDescriptor<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   defaults: {
     host: string;
     ipcBase: string;
@@ -43,21 +47,21 @@ export type SidecarContractDescriptor<TStamp extends SidecarStampShape = Sidecar
 };
 
 /** Inputs for resolving the effective namespace (explicit, env, or default). */
-export type NamespaceResolutionOptions<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type NamespaceResolutionOptions<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   contract: SidecarContractDescriptor<TStamp>;
   env?: NodeJS.ProcessEnv;
   namespace?: string | null;
 };
 
 /** Inputs for resolving a source-scoped runtime root under a project. */
-export type ProjectRuntimePathRequest<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type ProjectRuntimePathRequest<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   contract: SidecarContractDescriptor<TStamp>;
   projectRoot: string;
   source: TStamp["source"] | string;
 };
 
 /** Inputs for resolving the sidecar base (explicit, env, or project-derived). */
-export type BaseResolutionOptions<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type BaseResolutionOptions<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   base?: string | null;
   contract: SidecarContractDescriptor<TStamp>;
   env?: NodeJS.ProcessEnv;
@@ -66,19 +70,19 @@ export type BaseResolutionOptions<TStamp extends SidecarStampShape = SidecarStam
 };
 
 /** Inputs for resolving a namespace-scoped path from a base + namespace. */
-export type RuntimePathRequest<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type RuntimePathRequest<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   base: string;
   contract: SidecarContractDescriptor<TStamp>;
   namespace: string;
 };
 
 /** {@link RuntimePathRequest} plus a run id, for a per-run runtime root. */
-export type RuntimeRootRequest<TStamp extends SidecarStampShape = SidecarStampShape> = RuntimePathRequest<TStamp> & {
+export type RuntimeRootRequest<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = RuntimePathRequest<TStamp> & {
   runId: string;
 };
 
 /** Inputs for resolving an app's IPC socket/pipe path. */
-export type AppIpcPathRequest<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type AppIpcPathRequest<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   app: TStamp["app"] | string;
   contract: SidecarContractDescriptor<TStamp>;
   env?: NodeJS.ProcessEnv;
@@ -86,24 +90,23 @@ export type AppIpcPathRequest<TStamp extends SidecarStampShape = SidecarStampSha
 };
 
 /** Inputs for resolving an app-scoped runtime dir/file under a namespace root. */
-export type AppRuntimePathRequest<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type AppRuntimePathRequest<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   app: TStamp["app"] | string;
   contract: SidecarContractDescriptor<TStamp>;
   namespaceRoot: string;
 };
 
 /** The resolved live runtime context of a bootstrapped sidecar process. */
-export type SidecarRuntimeContext<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type SidecarRuntimeContext<TStamp extends RuntimeIdentityShape = RuntimeIdentityShape> = {
   app: TStamp["app"];
   base: string;
-  ipc: string;
   mode: TStamp["mode"];
   namespace: string;
   source: TStamp["source"];
 };
 
 /** Inputs for composing the env a child sidecar is launched with. */
-export type SidecarLaunchEnvRequest<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type SidecarLaunchEnvRequest<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   base: string;
   contract: SidecarContractDescriptor<TStamp>;
   extraEnv?: NodeJS.ProcessEnv;
@@ -111,7 +114,7 @@ export type SidecarLaunchEnvRequest<TStamp extends SidecarStampShape = SidecarSt
 };
 
 /** Inputs for bootstrapping a sidecar runtime from a stamp + env. */
-export type BootstrapSidecarRuntimeOptions<TStamp extends SidecarStampShape = SidecarStampShape> = {
+export type BootstrapSidecarRuntimeOptions<TStamp extends RuntimeLayoutStampShape = RuntimeLayoutStampShape> = {
   app: TStamp["app"] | string;
   base?: string | null;
   contract: SidecarContractDescriptor<TStamp>;

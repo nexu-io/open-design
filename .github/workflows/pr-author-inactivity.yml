@@ -70,6 +70,7 @@ jobs:
               'exempt-from-stale',
               'looper:worker-ready',
               'needs-design-review',
+              'needs-maintainer-check',
               'needs-maintainer-merge',
               'needs-qa',
               'needs-qa-validation',

@@ -46,7 +46,7 @@
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   color: var(--text);
   overflow: hidden;
@@ -75,7 +75,7 @@
   color: var(--text-muted);
   transition: transform 160ms var(--ease-out);
 }
-.ds-picker-trigger.empty .ds-picker-title { color: var(--text-muted); font-weight: 500; }
+.ds-picker-trigger.empty .ds-picker-title { color: var(--text-muted); font-weight: 600; }
 
 /* Avatar — square with 2x2 swatch grid (or "none" diagonal slash). */
 .ds-avatar {
@@ -209,7 +209,7 @@
 .ds-picker-mode-btn {
   padding: 3px 12px !important;
   font-size: 12px !important;
-  font-weight: 500;
+  font-weight: 600;
   border: none !important;
   background: transparent !important;
   color: var(--text-muted) !important;
@@ -268,7 +268,7 @@
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   color: var(--text);
   overflow: hidden;
@@ -540,7 +540,7 @@
   padding: 6px 4px 8px;
   font-size: 12px;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
   flex: 0 0 auto;
   white-space: nowrap;
   transition: none;
@@ -736,7 +736,7 @@
   margin: 0;
   font-size: 14px;
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
   max-width: 480px;
   word-break: break-word;
 }
@@ -1081,7 +1081,7 @@
   border: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.3;
   white-space: nowrap;
   transform-origin: left center;
@@ -1217,7 +1217,7 @@ button.connector-action {
   gap: 6px;
   padding: 5px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: var(--radius);
   transition: transform 120ms var(--ease-out), background 140ms var(--ease-out), border-color 140ms var(--ease-out);
 }
@@ -1444,7 +1444,7 @@ button.connector-action.is-loading {
   color: var(--text-muted);
   font: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.005em;
   padding: 5px 12px;
   border-radius: var(--radius-pill);

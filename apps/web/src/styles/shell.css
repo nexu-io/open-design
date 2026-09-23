@@ -37,7 +37,15 @@
   backdrop-filter: none;
   overflow: hidden;
 }
+/* The shell grid owns exactly two layout children: the tabs chrome and the
+   body. Pin each to its row so any non-layout shell child falls into a
+   zero-height implicit row instead of auto-placing into (and stealing) the
+   1fr body row. */
+.workspace-shell > .workspace-tabs-chrome {
+  grid-row: 1;
+}
 .workspace-shell__body {
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -68,9 +76,17 @@
   border-bottom: 0;
   user-select: none;
   -webkit-app-region: drag;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   z-index: 120;
+}
+.workspace-chrome-account-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: 12px;
+  -webkit-app-region: no-drag;
 }
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);
@@ -457,7 +473,7 @@ html.od-radial-open .workspace-shell {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
 }
 /* Hairline between the home icon and the sidebar toggle in the pinned pill. */
@@ -490,6 +506,40 @@ html.od-radial-open .workspace-shell {
   border-color: transparent;
   color: var(--text);
   box-shadow: none;
+}
+/* Home glyph riding the chrome's corner buttons (pinned Home pill + the
+   docked-mode stand-in). Plain currentColor icon, sized to match the old
+   14-16px chrome icons. */
+.workspace-chrome-logo {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  user-select: none;
+}
+/* Home view with the rail open: the logo has nothing to do (collapse lives in
+   the rail's search row) — drop the button affordance so it reads as a mark,
+   not a control. */
+.workspace-tab__rail-toggle.is-inert {
+  cursor: default;
+}
+.workspace-tab__rail-toggle.is-inert:hover:not(:disabled) {
+  background: transparent;
+}
+/* Collapsed rail: hovering the corner swaps the logo for the expand-sidebar
+   glyph, so the button telegraphs its one action. The rail-open (.is-inert)
+   button never swaps — it is a mark, not a control. */
+.workspace-chrome-logo-swap {
+  display: none;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+.workspace-tab__rail-toggle:not(.is-inert):hover .workspace-chrome-logo {
+  display: none;
+}
+.workspace-tab__rail-toggle:not(.is-inert):hover .workspace-chrome-logo-swap {
+  display: block;
 }
 .workspace-tab__close {
   width: 18px;
@@ -719,8 +769,9 @@ html.od-radial-open .workspace-shell {
   --app-chrome-traffic-margin: 0px; /* Set to 8px on macOS */
   display: flex;
   align-items: center;
-  min-height: 48px;
-  padding: 5px 14px;
+  /* 44px top chrome per design (OPEND-3111); the 32px controls center in it. */
+  min-height: 44px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   gap: 12px;
@@ -817,7 +868,7 @@ html.od-radial-open .workspace-shell {
   padding: 0 12px;
   border-radius: var(--radius);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -908,54 +959,36 @@ html.od-radial-open .workspace-shell {
   right: 0;
   left: auto;
 }
-.comment-left-host .comment-side-header {
-  min-height: 40px;
-}
-.comment-left-host .comment-side-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: 16px 12px;
-}
 .comment-side-composer {
   flex: 0 0 auto;
   padding: 12px;
   border-top: 1px solid var(--border);
   background: var(--bg-panel);
 }
-/* Unified share/export/send popover ported from the design demo's file
-   "分享" menu: a tabbed popover ("Share link" / "Export" / "Send to...") whose
-   Share-link tab carries the "Who can access" access-level dropdown. */
+/* Share and Export are separate header buttons that share one popover shell
+   (the popover swaps its panel instead of remounting, so switching intents
+   keeps the menu anchored in place). The 0.18.0 three-tab strip that lived
+   inside this popover is gone — handoff is a standalone header control now. */
+/* Doubled class beats `.share-menu`'s `display: inline-block` in
+   viewer/tools.css, which is imported after this sheet — without the flex
+   display the Share and Export buttons render flush against each other. */
+.share-menu.chrome-share-menu--unified {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .chrome-share-menu--unified .chrome-unified-popover {
-  width: min(360px, calc(100vw - 32px));
-  min-width: min(320px, calc(100vw - 32px));
+  /* Hug the content instead of a fixed 360px: the rows are short labels, so a
+     fixed width left a wide empty gutter on the right. The floor keeps narrow
+     menus (Export) from looking cramped; the ceiling keeps long ones (a
+     published URL, deploy labels) from running off the viewport. */
+  width: max-content;
+  min-width: min(248px, calc(100vw - 32px));
+  max-width: min(360px, calc(100vw - 32px));
   padding: 6px;
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-md);
-}
-.chrome-unified-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-}
-.chrome-unified-tabs button {
-  min-height: 32px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.chrome-unified-tabs button.is-active {
-  background: var(--bg-panel);
-  color: var(--text-strong);
-  box-shadow: var(--shadow-xs);
 }
 .chrome-unified-panel {
   display: flex;
@@ -968,6 +1001,9 @@ html.od-radial-open .workspace-shell {
 }
 .chrome-access-select {
   position: relative;
+  /* Inset to the rows' own 10px so the access control lines up with the
+     publish / deploy / save rows below it. */
+  padding: 0 10px 8px;
 }
 .chrome-access-trigger,
 .chrome-access-options button {
@@ -1016,30 +1052,6 @@ html.od-radial-open .workspace-shell {
   background: color-mix(in srgb, var(--accent) 6%, var(--bg));
   color: var(--text-strong);
 }
-.chrome-share-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-subtle) 72%, var(--bg-panel));
-}
-.chrome-share-card__header {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
-}
-.chrome-share-card__header .share-menu-text > span {
-  color: var(--text-strong);
-  font-size: 13px;
-  font-weight: 650;
-}
-.chrome-share-card__header .share-menu-text small {
-  font-size: 12px;
-  line-height: 1.35;
-}
 .chrome-publish-url {
   overflow: hidden;
   padding: 7px 8px;
@@ -1058,14 +1070,69 @@ html.od-radial-open .workspace-shell {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
 }
-/* Why a publish attempt failed. Wraps: the copy is a sentence, not a code. */
+/* De-shelled publish hero: no grey card — a vertical stack of the primary
+   button, a muted one-line hint, and (when relevant) the error line, sharing
+   the panel's plain visual language. */
+/* Published state: the link + its actions are content, not a menu row, so
+   they keep a column layout inset to the same 10px as the rows around them. */
+.chrome-publish-plain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 10px 8px;
+}
+/* A section label that carries a trailing "?" — used where the explanation is
+   state-dependent (access control) or is something the user wants to read
+   BEFORE acting (publish). Both keep the "?" on the label rather than inside
+   the actionable row, so reading the help can never trigger the action. */
+.share-menu-section-label--help {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Trailing "?" — pushed to the end of its label/row; its od-tooltip carries the
+   explanation. It is a real <button> so keyboard and touch users can reach the
+   explanation at all: the tooltip layer opens on `focusin`, which a <span> can
+   never receive, and touch has no hover path. That means it must also shed the
+   global button box (36px tall, bordered, filled) to stay an inline glyph. */
+.share-menu-help {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: help;
+}
+.share-menu-help:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.share-menu-help:active:not(:disabled) {
+  transform: none;
+}
+/* Inherits primitives.css's `button:focus-visible` ring; only the radius is set
+   so the outline hugs the round glyph. */
+.share-menu-help:focus-visible {
+  border-radius: 4px;
+}
+.share-menu-item:hover:not(:disabled) .share-menu-help {
+  color: var(--text);
+}
+/* Why a publish attempt failed. Wraps: the copy is a sentence, not a code.
+   Sits outside the row, so it carries the rows' own horizontal inset. */
 .chrome-publish-error {
   margin: 0;
+  padding: 0 10px 4px;
   color: var(--danger, #d64545);
   font-size: 12px;
   line-height: 1.35;
 }
-.chrome-publish-primary,
 .chrome-publish-button {
   display: inline-flex;
   align-items: center;
@@ -1080,14 +1147,6 @@ html.od-radial-open .workspace-shell {
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
-}
-/* Hover inverts the resting pair: ink-dark fill with the brand-green icon +
-   label on top (same ink-pill-with-green-label recipe as the launcher's
-   active chip and the move-to-team confirm). */
-.chrome-publish-primary:hover:not(:disabled) {
-  background: #202020;
-  border-color: #202020;
-  color: var(--brand);
 }
 .chrome-publish-button--ghost {
   border-color: var(--border);
@@ -1104,19 +1163,6 @@ html.od-radial-open .workspace-shell {
 }
 body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
   display: none;
-}
-.chrome-unified-panel--handoff {
-  padding-top: 10px;
-}
-.chrome-unified-panel--handoff .handoff-wrap {
-  width: 100%;
-  display: block;
-}
-.chrome-unified-panel--handoff .handoff-wrap--embedded .handoff-menu {
-  position: static;
-  width: 100%;
-  max-height: min(56vh, 460px);
-  box-shadow: none;
 }
 .artifact-version-panel {
   position: fixed;
@@ -1174,6 +1220,11 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Two controls that do opposite things: one leaves the panel open and sends
+   the version to a new window, the other closes the panel. They share chrome
+   but not a name — spelling them the same way is what let the open control's
+   ambiguous glyph go unnoticed in review (OPEND-2160). */
+.artifact-version-panel__open,
 .artifact-version-panel__close {
   width: 28px;
   height: 28px;
@@ -1442,6 +1493,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   align-items: center;
   gap: 6px;
 }
+.artifact-version-panel__open:disabled,
 .artifact-version-panel__close:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -1830,9 +1882,12 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
      280px min-width kept forcing the menu wide. */
   min-width: 0;
   padding: 6px;
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
+  /* Flat elevated surface, no glass: the popover opens over the composer's
+     own translucent card, and a second blur layer there read as a smeared
+     patch instead of a menu (per the #8113 Demo). */
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
@@ -1854,7 +1909,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
 }
 .avatar-popover-head .who { font-weight: 600; font-size: 13px; }
 .avatar-popover-head .where { font-size: 12px; color: var(--text-muted); }
-/* Open Design (AMR) account row.
+/* OpenDesign (AMR) account row.
 
    This row is a container, not a single button: the icon+name+plan+balance
    block is the agent selector, while Upgrade stays a sibling link so it never
@@ -1962,7 +2017,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   overflow: hidden;
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1985,7 +2040,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
 .avatar-amr-row__stat-label {
   flex: 0 0 auto;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
 }
 .avatar-amr-row__stat-value {
@@ -2011,7 +2066,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   background: var(--accent);
   color: #fff;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1;
   /* The actual fix for the vertically-stacked label. */
@@ -2182,7 +2237,7 @@ a.avatar-item:visited {
   color: var(--accent);
   font-weight: 600;
 }
-/* Plan-gated Open Design models. They stay listed (so users can see what a
+/* Plan-gated OpenDesign models. They stay listed (so users can see what a
    higher plan unlocks) but read as unavailable; clicking one opens the plans
    page instead of selecting a model the run would reject. */
 .avatar-model-option.is-locked {
@@ -2243,7 +2298,7 @@ a.avatar-item:visited {
 .env-pill-dot[data-mode="api"] {
   background: linear-gradient(135deg, #1c1b1a 0%, #4b4948 100%);
 }
-.env-pill-label { font-weight: 500; font-size: 12px; }
+.env-pill-label { font-weight: 600; font-size: 12px; }
 .env-pill-meta {
   font-size: 12px; color: var(--text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
@@ -2264,11 +2319,11 @@ a.avatar-item:visited {
 @property --project-chat-handle-width {
   syntax: '<length>';
   inherits: true;
-  initial-value: 8px;
+  initial-value: 4px;
 }
 .split {
   --project-chat-panel-width: 460px;
-  --project-chat-handle-width: 8px;
+  --project-chat-handle-width: 4px;
   --project-workspace-panel-track: minmax(400px, 1fr);
   display: grid;
   /* Always three tracks — collapsing never drops to a 1-column layout.
@@ -2305,6 +2360,14 @@ a.avatar-item:visited {
 }
 .split.is-resizing-chat iframe {
   pointer-events: none;
+}
+.split.split-settling {
+  /* A surface's first measured width write (`writeProjectSplitLayout`,
+     `animate: false`): the `clientWidth` read that fed it already forced a
+     style pass with the provisional width, so the transition above would
+     otherwise run from that value on every mount (OPEND-3207). The class is
+     on for exactly that write and comes off in the same task. */
+  transition: none;
 }
 .split.is-resizing-chat .workspace,
 .split.is-resizing-chat .viewer,
@@ -2343,6 +2406,22 @@ a.avatar-item:visited {
   flex: 1 1 auto;
   min-width: 0;
 }
+/* OPEND-2170 · creation hand-off (owner: ProjectView `creationHandoff`).
+   While a Home send's first transcript settles, the hand-off's chat card
+   (`[data-creation-handoff]`, a ProjectCreationPendingChat) is the column's
+   in-flow pane and the real ChatPane keeps its layout underneath, hidden:
+   it must stay mounted (stream subscription, auto-send) but must not paint
+   its own spinner / skeleton / empty log through the translucent material.
+   `top` matches `.split-chat-tabs-dock { height: 48px }` in routines.css. */
+.split-chat-slot--creation-handoff > .pane:not([data-creation-handoff]) {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .split-edit-divider {
   grid-column: 2;
   width: 8px;
@@ -2351,27 +2430,63 @@ a.avatar-item:visited {
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
 }
-.comment-left-host {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
+/* Full-screen preview: the chat column (the comment panel's usual dock) is
+   hidden, so the panel floats as a card over the workspace instead of being
+   occluded by it. Fixed to the viewport's right edge, clear of the workspace
+   chrome rows above. */
+.comment-float-host {
+  position: fixed;
+  z-index: 60;
+  top: 96px;
+  right: 16px;
+  bottom: 16px;
   display: flex;
-  width: 100%;
-  height: 100%;
+  width: min(360px, calc(100vw - 32px));
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
 }
-.comment-left-host > .comment-side-dock {
+/* The floating comments card lives outside the workspace grid, so it does not
+   naturally reduce the preview's layout width. Reserve the card's 360px width,
+   its 16px viewport inset, and the same 12px breathing room as the local dock
+   while the portal is populated. Keeping the reservation on `.viewer-body`
+   makes the iframe, annotation overlays, and composer popover share one
+   unobstructed coordinate space; the toolbar may continue beneath the float.
+   Preserve a small usable canvas on narrow split layouts instead of allowing
+   padding to consume the whole viewer. */
+.split:has(> .comment-float-host:not(:empty)) .viewer-body {
+  box-sizing: border-box;
+  padding-right: max(0px, min(388px, calc(100% - 160px)));
+}
+/* The portal target is pre-mounted so opening comments never waits a frame
+   for parent state. An empty host must be visually and interactively absent. */
+.comment-float-host:empty {
+  display: none;
+}
+/* Collapsed: the host steps back to a bare frame around the 42px rail — the
+   rail brings its own pill chrome, and it sizes off the host's height, so
+   only the width and the card decoration come off here. */
+.comment-float-host:has(.comment-side-rail) {
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.comment-float-host > .comment-side-dock {
   flex: 1 1 auto;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
 }
-.comment-left-host > .comment-side-panel,
-.comment-left-host > .comment-side-dock > .comment-side-panel {
+.comment-float-host > .comment-side-panel,
+.comment-float-host > .comment-side-dock > .comment-side-panel {
   position: relative;
   top: auto;
   right: auto;
@@ -2385,16 +2500,18 @@ a.avatar-item:visited {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  background: transparent;
   z-index: 20;
 }
-.comment-left-host .comment-side-header {
+.comment-float-host .comment-side-header {
   min-height: 40px;
 }
-.comment-left-host .comment-side-list {
+.comment-float-host .comment-side-list {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 16px 12px;
+  padding: 16px 12px 12px;
 }
+
 .comment-side-composer {
   flex: 0 0 auto;
   padding: 12px;
@@ -2416,8 +2533,8 @@ a.avatar-item:visited {
   grid-column: 2;
   position: relative;
   z-index: 45;
-  width: 8px;
-  min-width: 8px;
+  width: var(--project-chat-handle-width, 4px);
+  min-width: 0;
   height: 100%;
   cursor: col-resize;
   background: transparent;
@@ -2431,8 +2548,10 @@ a.avatar-item:visited {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -10px;
-  right: -10px;
+  /* Keep the chat-side scroll edge entirely outside the resize hitbox in
+     both directions; extra grab room belongs on the workspace side only. */
+  inset-inline-start: 0;
+  inset-inline-end: -8px;
   cursor: col-resize;
 }
 .split-resize-handle::after {
@@ -2467,4 +2586,9 @@ a.avatar-item:visited {
 }
 .split-resize-handle:focus-visible {
   outline: none;
+}
+/* Keep the resize hit area out of persistent message navigation markers:
+   whenever the rail is mounted, the handle's chat-side edge stays flush. */
+.split:has(.chat-message-rail) > .split-resize-handle::before {
+  inset-inline-start: 0;
 }

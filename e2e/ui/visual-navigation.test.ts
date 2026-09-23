@@ -14,7 +14,6 @@ test('[P2] captures the projects page surface', async ({ page }) => {
 
   await ensureRailOpen(page);
   const legacyProjectsNav = page.getByTestId('entry-nav-projects');
-  const teamProjectsNav = page.getByTestId('entry-nav-all-projects');
   if (await legacyProjectsNav.isVisible().catch(() => false)) {
     await legacyProjectsNav.click();
     await expect(page).toHaveURL(/\/projects$/);
@@ -22,13 +21,12 @@ test('[P2] captures the projects page surface', async ({ page }) => {
     await expect(projects.getByRole('heading', { name: 'Projects' })).toBeVisible();
     await expect(projects.getByText('Launchpad dashboard').first()).toBeVisible();
   } else {
-    if (await teamProjectsNav.isVisible().catch(() => false)) {
-      await teamProjectsNav.click();
-      await expect(page.getByRole('heading', { name: /all projects|全部项目/i })).toBeVisible();
-    } else {
-      await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
-      await expect(page.getByText('Launchpad dashboard').first()).toBeVisible();
-    }
+    // The 全部项目 destination (OPEND-3108): one page in every workspace,
+    // listing every local project on its opening 最近浏览过 tab.
+    await page.getByTestId('entry-nav-drafts').click();
+    await expect(page).toHaveURL(/\/drafts$/);
+    await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
+    await expect(page.getByText('Launchpad dashboard').first()).toBeVisible();
   }
   await waitForVisualFonts(page);
 
@@ -41,7 +39,6 @@ test('[P2] captures the projects kanban surface', async ({ page }) => {
 
   await ensureRailOpen(page);
   const legacyProjectsNav = page.getByTestId('entry-nav-projects');
-  const teamProjectsNav = page.getByTestId('entry-nav-all-projects');
   if (await legacyProjectsNav.isVisible().catch(() => false)) {
     await legacyProjectsNav.click();
     const projects = page.getByTestId('entry-view-projects');
@@ -49,13 +46,12 @@ test('[P2] captures the projects kanban surface', async ({ page }) => {
     await expect(projects.getByTestId('designs-view-kanban')).toHaveAttribute('aria-pressed', 'true');
     await expect(projects.getByText('Launchpad dashboard').first()).toBeVisible();
   } else {
-    if (await teamProjectsNav.isVisible().catch(() => false)) {
-      await teamProjectsNav.click();
-      await expect(page.getByRole('heading', { name: /all projects|全部项目/i })).toBeVisible();
-    } else {
-      await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
-      await expect(page.getByText('Launchpad dashboard').first()).toBeVisible();
-    }
+    // The 全部项目 destination (OPEND-3108): one page in every workspace,
+    // listing every local project on its opening 最近浏览过 tab.
+    await page.getByTestId('entry-nav-drafts').click();
+    await expect(page).toHaveURL(/\/drafts$/);
+    await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
+    await expect(page.getByText('Launchpad dashboard').first()).toBeVisible();
   }
   await waitForVisualFonts(page);
 
@@ -116,16 +112,23 @@ test('[P2] captures the plugins page surface', async ({ page }) => {
   await captureVisual(page, 'visual-plugins');
 });
 
-// #5517 drops 连接器 from the settings nav. The section still renders, but its
-// only remaining UI entry is the new-project panel's "manage" link, which shows
-// solely once a connector is already configured — so there is no unconditional
-// path a visual capture can drive. Restore these when an entry point returns.
-test.skip('[P2] captures the integrations page surface', async ({ page }) => {
+test('[P2] captures the integrations page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  const dialog = await openSettingsSection(page, 'settings-nav-connectors');
-  await expect(dialog.getByTestId('connector-grid-wrap')).toBeVisible();
+  // Navigated directly: the composer "+" menu no longer carries a connectors
+  // row to reach this page through. The page mounts on its default (MCP) tab,
+  // so the connectors tab is clicked the way the MCP capture below clicks
+  // its own; the click also absorbs the cold-load wait a bare assertion
+  // cannot.
+  await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('integrations-tab-connectors').click();
+  await expect(page).toHaveURL(/\/integrations$/);
+  await expect(page.getByTestId('integrations-tab-connectors')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByTestId('connector-grid-wrap')).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-integrations');
@@ -142,13 +145,20 @@ test('[P2] captures the integrations use everywhere surface', async ({ page }) =
   await captureVisual(page, 'visual-integrations-use-everywhere');
 });
 
-// Skipped for the same reason as the integrations capture above.
-test.skip('[P2] captures the integrations MCP surface', async ({ page }) => {
+test('[P2] captures the integrations MCP surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  const dialog = await openSettingsSection(page, 'settings-nav-connectors');
-  await expect(dialog.getByText(/Composio|Connectors/i).first()).toBeVisible();
+  // Navigated directly: the composer "+" menu no longer carries an MCP row to
+  // reach this page through.
+  await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('integrations-tab-mcp').click();
+  await expect(page).toHaveURL(/\/integrations$/);
+  await expect(page.getByTestId('integrations-tab-mcp')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('heading', { name: 'External MCP servers' })).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-integrations-mcp');
@@ -156,9 +166,9 @@ test.skip('[P2] captures the integrations MCP surface', async ({ page }) => {
 
 async function openSettingsSection(page: import('@playwright/test').Page, testId: string) {
   // #5971 deleted the rail-footer settings chip (`entry-settings-button`).
-  // `openSettingsDialog` owns every remaining entry point — the rail's
-  // `entry-nav-settings` item when signed out, the account menu when signed in
-  // — including the rail-open handling this used to do by hand.
+  // `openSettingsDialog` owns every remaining entry point — chiefly the rail's
+  // own item under 插件, which now renders in both identity states — including
+  // the rail-open handling this used to do by hand.
   const dialog = await openSettingsDialog(page);
   await dialog.getByTestId(testId).click();
   return dialog;

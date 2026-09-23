@@ -1,0 +1,104 @@
+name: convergence-exact.atom
+
+# Exact releases publish reusable, release-neutral Shell scenes through an
+# isolated trusted consumer. Pull-request CI keeps its own convergence fossil.
+on:
+  workflow_run:
+    workflows: [release-exact]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: convergence-exact-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish reusable exact scene results
+    if: >-
+      ${{
+        github.repository == 'nexu-io/open-design'
+        && github.event.workflow_run.name == 'release-exact'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.head_repository.full_name == github.repository
+        && github.event.workflow_run.event == 'workflow_dispatch'
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout trusted exact convergence code
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+
+      - name: Check trusted exact convergence contracts
+        run: |
+          python3 .github/scripts/handoff.py self-check
+          python3 .github/scripts/convergence.py --config .github/config/convergence-exact.json validate
+
+      - name: Resolve exact convergence handoff
+        id: artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/handoff.py resolve-run-artifact convergence exact-scenes
+
+      - name: Download exact convergence handoff
+        if: ${{ steps.artifact.outputs.found == 'true' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/handoff-convergence
+          github-token: ${{ github.token }}
+
+      - name: Validate exact producing run and control plane
+        if: ${{ steps.artifact.outputs.found == 'true' }}
+        id: trust
+        run: >-
+          python3 .github/scripts/convergence.py
+          --config .github/config/convergence-exact.json
+          admit --handoff-root "$RUNNER_TEMP/handoff-convergence"
+
+      - name: Resolve publication configuration
+        if: ${{ steps.trust.outputs.publish == 'true' }}
+        id: storage
+        env:
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
+        run: python3 .github/scripts/convergence.py --config .github/config/convergence-exact.json storage-status
+
+      - name: Download current-run exact scene artifacts
+        if: ${{ steps.storage.outputs.configured == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 .github/scripts/convergence.py
+          --config .github/config/convergence-exact.json
+          stage-products
+          --candidate "${{ steps.trust.outputs.candidate }}"
+          --output-dir "$RUNNER_TEMP/convergence-products"
+
+      - name: Publish immutable exact scene results
+        if: ${{ steps.storage.outputs.configured == 'true' }}
+        env:
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
+        run: >-
+          python3 .github/scripts/convergence.py
+          --config .github/config/convergence-exact.json
+          publish
+          --candidate "${{ steps.trust.outputs.candidate }}"
+          --output-dir "$RUNNER_TEMP/convergence-publication"
+          --products-root "$RUNNER_TEMP/convergence-products"

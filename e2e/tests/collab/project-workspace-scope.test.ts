@@ -1,21 +1,17 @@
 // @vitest-environment node
 
-// A project's workspace scope is durable project authority, not navigation
-// state. `GET /api/projects/:id/workspace-scope` therefore reads only the
-// persisted binding plus the membership directory. A genuinely unbound legacy
+// A project's workspace scope is durable local project attribution, not
+// navigation state. `GET /api/projects/:id/workspace-scope` therefore reads the
+// persisted binding without making local rendering depend on Vela. An unbound legacy
 // project stays unbound even when the caller's left rail currently selects a
 // Team or Personal workspace; borrowing that selection would make a tab switch
 // silently retarget later runs, writes, and billing.
 //
 // Two boundaries are pinned here:
 //
-//   * `unavailable` — a project pinned to workspace X, read by a caller whose
-//     selected workspace is Y, must keep answering X/`unavailable`. The scope
-//     carries `workspaceMemberId`, which is the billing subject; resolving it
-//     to Y would bill Y's wallet for X's project. All three of its return sites
-//     keep today's exact behavior, and the two that differ in cause — the
-//     directory was never read, versus it was read and does not list this
-//     membership — are both pinned below. Neither gains a fallback.
+//   * a project pinned to workspace X keeps answering X even when the directory
+//     is down or the caller's selected workspace is Y. Billing and cloud
+//     mutations perform their own authorization at their actual boundary.
 //   * an unbound project never gains a workspace from request headers, whether
 //     those headers name a live membership, a removed membership, or nothing.
 //
@@ -269,7 +265,7 @@ describe('project workspace scope is independent from the caller selection', () 
   );
 
   test(
-    'a bound project stays unavailable when the membership directory cannot be read at all',
+    'a bound project keeps its local scope when the membership directory cannot be read',
     { timeout: 240_000 },
     async () => {
       const suite = await createSmokeSuite('collab-project-scope-directory-unreadable');
@@ -287,12 +283,12 @@ describe('project workspace scope is independent from the caller selection', () 
           );
           const scope = await readScope(webUrl, bound, workspaceHeaders(TEAM));
 
-          // The caller names the very workspace this project is pinned to, and
-          // it STILL does not resolve: nothing confirmed the membership. This
-          // is `unavailable`'s other cause, and the fix leaves it alone.
-          expect(scope.kind).toBe('unavailable');
+          expect(scope.kind).toBe('team');
           expect(scope.workspaceId).toBe(TEAM.workspaceId);
-          expect(scope.context).toBeNull();
+          expect(scope.context).toMatchObject({
+            workspaceId: TEAM.workspaceId,
+            workspaceMemberId: TEAM.workspaceMemberId,
+          });
 
           // An UNBOUND project in the same outage still has nowhere to fall
           // back to: an unreadable directory cannot confirm the caller's own

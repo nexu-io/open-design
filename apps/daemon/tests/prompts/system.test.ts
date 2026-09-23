@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { INTEGRATIONS_MCP_PATH } from '@open-design/contracts';
 
 import {
   composeSystemPrompt,
@@ -97,8 +98,31 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('`zh-CN` (Simplified Chinese)');
     expect(prompt).toContain('快速简报 — 30 秒');
     expect(prompt).toContain('目标用户');
-    expect(prompt).toContain('视觉调性');
+    /* 这里原本钉的是 `视觉调性` —— 调性题的中文文案。OPEND-2760 把设计风格
+       选择整题下线后,那一行连同它那串风格选项(`编辑 / 杂志感`、`现代极简`…)
+       一起从样例里撤走,否则 zh-CN 用户的提示词里等于还摆着一份风格菜单。
+       改钉 `品牌背景` —— 品牌题按裁决保留,同样能证明样例块确实注入了。 */
+    expect(prompt).toContain('品牌背景');
+    expect(prompt).not.toContain('视觉调性');
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
+  });
+
+  /**
+   * OPEND-2707。本地化清单是每题副标题的**第三个入口**:它既不点 `help` 的名,
+   * 也不摆一个键位,只是在「这些控件文案都要翻译」的枚举里夹了一项 "helper text"
+   * —— 而那正是在告诉模型「一道题是有一段 helper text 的」。题面撤了、这一项
+   * 还留着,模型照样会造一段出来,然后写完丢掉。
+   *
+   * 保留的枚举项(titles / question labels / placeholders / option labels)全部
+   * 仍然会渲染,一个都不能顺手删掉 —— 这条用例同时守住那一边。
+   */
+  it('本地化清单不再把每题副标题列成一种要翻译的控件文案', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-CN' });
+
+    expect(prompt).not.toContain('helper text');
+    expect(prompt).toContain(
+      '`<question-form>` titles, question labels, placeholders, and option labels',
+    );
   });
 
   it('keeps Plan mode tied to the real Todo card in filesystem runs', () => {
@@ -231,7 +255,7 @@ describe('composeSystemPrompt', () => {
         skillMode: surface,
         metadata: { kind: surface } as any,
       });
-      expect(prompt).not.toContain('# Open Design Charter');
+      expect(prompt).not.toContain('# OpenDesign Charter');
       expect(prompt).not.toContain('## Requirements Clarification Phase');
       expect(prompt).not.toContain('## Delivery');
       // Nor the Ask-mode charter (fourth-round finding): CHAT_MODE_OVERRIDE
@@ -241,8 +265,18 @@ describe('composeSystemPrompt', () => {
     }
     // Non-media slim runs keep the charter head.
     const design = composeSystemPrompt({ promptCoreVariant: 'slim' });
-    expect(design).toContain('# Open Design Charter');
+    expect(design).toContain('# OpenDesign Charter');
     expect(design).toContain('## Requirements Clarification Phase');
+  });
+
+  it('pins Cloud nano-banana shorthand and forbids reading generated media bytes back into context', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'image',
+      metadata: { kind: 'image', imageModel: 'vela/nano-banana-2' } as any,
+    });
+
+    expect(prompt).toContain('`nano-banana` and `nano-banana-2` mean');
+    expect(prompt).toContain('Do not call `Read` on the generated image');
   });
 
   it('injects the html-in-canvas preflight for the hyperframes skill', () => {
@@ -259,8 +293,10 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('## Active skill — hyperframes');
     expect(prompt).toContain('**Pre-flight (do this before any other tool):**');
     expect(prompt).toContain('`references/html-in-canvas.md`');
+    expect(prompt).toContain('`"$OD_NODE_BIN" "$OD_BIN" media scaffold`');
     expect(prompt).toContain('media generate --surface video --model hyperframes-html --composition-dir <rel>');
-    expect(prompt).toContain('Do not run `npx hyperframes render` yourself');
+    expect(prompt).toContain('Do not run HyperFrames `render` yourself');
+    expect(prompt).not.toContain('npx hyperframes');
     expect(prompt).not.toContain('intentionally rejected for this model');
     expect(prompt).not.toContain('AGENT_RENDERED');
     expect(prompt).not.toContain('rendered by you directly via npx');
@@ -268,8 +304,10 @@ describe('composeSystemPrompt', () => {
 
   it('keeps both hyperframes skill copies aligned with the daemon render handoff', () => {
     for (const markdown of [hyperframesSkillMarkdown, officialHyperframesSkillMarkdown]) {
+      expect(markdown).toContain('"$OD_NODE_BIN" "$OD_BIN" media scaffold');
       expect(markdown).toContain('media generate --surface video --model hyperframes-html --composition-dir <rel>');
-      expect(markdown).toContain('Do not run `npx hyperframes render`');
+      expect(markdown).toContain('Do not run HyperFrames `render`');
+      expect(markdown).not.toContain('npx hyperframes');
       expect(markdown).not.toContain('AGENT_RENDERED');
       expect(markdown).not.toContain('rendered by you directly via npx');
       expect(markdown).not.toContain('dispatcher path returns a 400');
@@ -339,6 +377,28 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('no dark-on-dark labels');
   });
 
+  it('ships new Agent decks with OD Deck Protocol v1', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("data.type !== 'od:slide'");
+    expect(prompt).toContain('go(target);');
+    expect(prompt).toContain("type: 'od:slide-state'");
+    expect(prompt).toContain('## Final handoff — filesystem');
+    expect(prompt).toMatch(/Summarize the written or changed deck file/i);
+  });
+
+  it('ships plain API decks through a final text artifact instead of a file summary', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck', streamFormat: 'plain' });
+
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain('## Final handoff — text artifact');
+    expect(prompt).toContain('MUST contain exactly one `<artifact type="text/html">...</artifact>` block');
+    expect(prompt).not.toContain('## Final handoff — filesystem');
+    expect(prompt).not.toContain('summarize the written or changed deck file');
+  });
+
   it('injects nested-diagram discipline only through deck surfaces', () => {
     const heading = '## Nested / concentric diagram discipline';
 
@@ -371,19 +431,103 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('filesystem execution profile');
       expect(prompt).toContain("runtime's native tool-call interface");
       expect(prompt).toContain('Never type a tool invocation into assistant text');
-      expect(prompt).toContain('This tool-call rule does not apply to Open Design UI markup');
+      expect(prompt).toContain('This tool-call rule does not apply to OpenDesign UI markup');
       expect(prompt).toContain('emit the complete `<question-form>...</question-form>` block directly');
       expect(prompt).toContain('Do not output generated source code in a `<artifact type="text/html">...</artifact>` block.');
+    });
+
+    it('uses Vela media defaults only for AMR and forbids direct Vela calls', () => {
+      const amrPrompt = composeSystemPrompt({
+        agentId: 'amr',
+        metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
+      });
+      expect(amrPrompt).toContain('Image model: `vela/gpt-image-2`');
+      expect(amrPrompt).toContain(
+        'Video model: `vela/doubao-seedance-2-0-260128`',
+      );
+      expect(amrPrompt).toContain('### OpenDesign Cloud media defaults');
+      expect(amrPrompt).not.toContain('### Run-scoped BYOK media defaults');
+      expect(amrPrompt).toContain('Never invoke the `vela` CLI directly');
+      expect(amrPrompt).toContain('trusted Workspace attribution');
+
+      const claudePrompt = composeSystemPrompt({ agentId: 'claude' });
+      expect(claudePrompt).not.toContain('Image model: `vela/gpt-image-2`');
+      expect(claudePrompt).toContain('`--model flux-pro-ultra`');
+    });
+
+    it('keeps image completion copy concrete while retaining internal diagnostics', () => {
+      const imagePrompt = composeSystemPrompt({
+        agentId: 'amr',
+        locale: 'zh-CN',
+        metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
+      });
+      expect(imagePrompt).toContain('reply exactly `图片已生成`');
+      expect(imagePrompt).toContain('`error.nextStep`');
+      expect(imagePrompt).toContain(
+        '图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。',
+      );
+      expect(imagePrompt).toContain('tool output and daemon logs');
+      expect(imagePrompt).not.toContain('the filename, the model used');
+      expect(imagePrompt).not.toContain('surface them verbatim to the user');
+      expect(imagePrompt).not.toContain('quote the real stderr / exit code');
+
+      const prototypePrompt = composeSystemPrompt({
+        agentId: 'amr',
+        locale: 'zh-CN',
+        metadata: { kind: 'prototype' } as any,
+      });
+      expect(prototypePrompt).toContain('reply exactly `图片已生成`');
+      expect(prototypePrompt).toContain('`error.nextStep`');
+      expect(prototypePrompt).toContain(
+        '图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。',
+      );
+      expect(prototypePrompt).toContain('IMAGE_MODEL="vela/gpt-image-2"');
+      expect(prototypePrompt).not.toContain(
+        'For the best fal image model use `--model flux-pro-ultra`',
+      );
+    });
+
+    // The classified-failure branch has to reach the prompt the DAEMON
+    // composes, not just the copy in packages/contracts. Reclassifying a
+    // provider verdict from wording is what used to hide the real next step.
+    it('preserves the classified failure routing in both prompts', () => {
+      for (const metadata of [
+        { kind: 'image', imageModel: 'vela/gpt-image-2' },
+        { kind: 'prototype' },
+      ]) {
+        const prompt = composeSystemPrompt({
+          agentId: 'amr',
+          locale: 'zh-CN',
+          metadata: metadata as any,
+        });
+        expect(prompt).toContain('图片模型的额度用完了 —— 重试不会恢复,去充值或换一个图片模型。');
+        expect(prompt.replace(/\s+/g, ' ')).toContain(
+          'never re-derive a verdict from wording, HTTP status, a placeholder/stub',
+        );
+      }
     });
 
     it('prioritizes question forms over native tool calls when clarifying', () => {
       const prompt = composeSystemPrompt({ agentId: 'amr' });
       expect(prompt).toContain('## Structured clarification on any turn');
-      expect(prompt).toContain('`<question-form>` is assistant text for the Open Design UI, not a native tool call');
+      expect(prompt).toContain('`<question-form>` is assistant text for the OpenDesign UI, not a native tool call');
       expect(prompt).toContain(
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
       );
       expect(prompt).toContain('Do not stop after an introductory sentence such as "先确认一下方向："');
+    });
+
+    /**
+     * T69(2026-09-07):设计风格选择题从提示词整题下线,产品逐字「**不问了**」。
+     * 原用例守的是「裸 Ask 模式里也要保留 host 目录那条边界说明」——
+     * 那条说明本身就是在**教模型这个能力存在**,现在连它一起撤。
+     */
+    it('裸 Ask 模式里也不再提设计风格选择题', () => {
+      const prompt = composeSystemPrompt({ sessionMode: 'chat' });
+      // 防真空:那一整段结构化澄清的授权还在,不是因为整段没composed 才绿
+      expect(prompt).toContain('## Structured clarification on any turn');
+      expect(prompt).not.toContain('direction-cards');
+      expect(prompt).not.toContain('project-kind visual catalog');
     });
 
     it('pins filesystem artifact handoff for other CLI agents too', () => {
@@ -474,7 +618,10 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'image' },
         mediaExecution: { mode: 'disabled' },
       });
-      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).toContain('OpenDesign-owned media execution is **disabled for this run**');
+      expect(prompt).toContain('use the fixed `unsupported` sentence');
+      expect(prompt).toContain('这次任务里不能生成图片 —— 需要图片的话,新建一个图片项目再试。');
+      expect(prompt).not.toContain('describe the intended creative brief');
       expect(prompt).not.toContain('## Media generation contract');
       expect(prompt).not.toContain('External MCP servers — already authenticated');
     });
@@ -499,7 +646,12 @@ describe('composeSystemPrompt', () => {
         '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication`',
       );
       expect(directive).toContain('localhost:<random>/callback');
-      expect(directive).toContain('Settings → External MCP');
+      // Reconnect lives in the top-level Integrations view, NOT in Settings:
+      // `mcpClient` kept its Settings render block but lost its sidebar nav
+      // item, so "Settings → External MCP" named a place users cannot navigate
+      // to. Asserted through the contract so this cannot drift again.
+      expect(directive).toContain(INTEGRATIONS_MCP_PATH);
+      expect(directive).not.toContain('Settings → External MCP');
     });
 
     it('skips entries with blank ids and emits nothing when none remain', () => {

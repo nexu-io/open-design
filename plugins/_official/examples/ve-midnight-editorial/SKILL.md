@@ -3,9 +3,9 @@ name: ve-midnight-editorial
 en_name: "Present a Financial Review like a Startup CFO"
 zh_name: "像创业公司 CFO 一样做财务复盘"
 description: |
-  Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Built as a decision-grade data & finance deck for board, leadership.
+  OpenDesign's financial review: runway, burn, and the sustainability plan that keeps the project independent. Built as a decision-grade data & finance deck for board, leadership.
 en_description: |
-  Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Built as a decision-grade data & finance deck for board, leadership.
+  OpenDesign's financial review: runway, burn, and the sustainability plan that keeps the project independent. Built as a decision-grade data & finance deck for board, leadership.
 zh_description: |
   像创业公司 CFO 一样做财务复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -42,7 +42,7 @@ od:
     zh-CN: "用「午夜金辉」把我的内容做成一套电影级编辑刊风格的深色单文件 HTML 幻灯片。先确认主题、观众和页数，然后从种子 example.html 出发——完整保留 navy+金的明暗双主题 token 表、Instrument Serif 戏剧 display 字阶、金色光晕与角标装饰、交错转场和 SlideEngine 运行时，只替换幻灯片内容，使用真实内容，不要 lorem ipsum。"
   category: "data-finance"
   scenario: "finance"
-  example_prompt: "Create \"Present a Financial Review like a Startup CFO\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Audience: board, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
+  example_prompt: "Create \"Present a Financial Review like a Startup CFO\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: OpenDesign's financial review: runway, burn, and the sustainability plan that keeps the project independent. Audience: board, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 
 # Midnight Editorial（午夜金辉）

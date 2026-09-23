@@ -6,11 +6,11 @@ import {
   resolveLauncherVersionPaths,
 } from "@open-design/launcher-proto";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
-} from "../launcher-layout.js";
+} from "../launcher/layout.js";
 import { execFileAsync } from "./commands.js";
 import { resolveMacInstallIdentity } from "./identity.js";
 import { readPackagedVersion } from "./manifest.js";

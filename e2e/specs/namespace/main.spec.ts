@@ -40,7 +40,7 @@ type SseEvent = {
 };
 
 describe('namespace isolation spec', () => {
-  test('keeps namespace in lifecycle infrastructure while daemon clients use URL or concrete IPC transport', async () => {
+  test('keeps namespace in lifecycle infrastructure while daemon clients use URL or an opaque sidecar capability', async () => {
     const suite = await createSmokeSuite('namespace-isolation');
 
     await suite.with.toolsDev(async ({ runtime, status, webUrl }) => {
@@ -52,11 +52,14 @@ describe('namespace isolation spec', () => {
       expect(daemonStatus).not.toHaveProperty('namespace');
 
       const installInfo = await requestJson<McpInstallInfoResponse>(webUrl, '/api/mcp/install-info');
-      const ipcPath = installInfo.env.OD_SIDECAR_IPC_PATH;
-      if (typeof ipcPath !== 'string' || ipcPath.length === 0) {
-        throw new Error('MCP install-info did not include OD_SIDECAR_IPC_PATH');
+      const clientEndpoint = installInfo.env.OD_SIDECAR_CLIENT_ENDPOINT;
+      if (typeof clientEndpoint !== 'string' || clientEndpoint.length === 0) {
+        throw new Error('MCP install-info did not include the opaque sidecar client capability');
       }
-      expect(ipcPath).toEqual(expect.any(String));
+      expect(Object.keys(installInfo.env).sort()).toEqual([
+        'OD_DATA_DIR',
+        'OD_SIDECAR_CLIENT_ENDPOINT',
+      ]);
       expect(installInfo.args).not.toContain('--daemon-url');
       expect(installInfo.env.OD_DATA_DIR).toBe(suite.dataDir);
       expect(installInfo.env).not.toHaveProperty('OD_NAMESPACE');
@@ -69,7 +72,7 @@ describe('namespace isolation spec', () => {
           OD_DATA_DIR: suite.dataDir,
           OD_NAMESPACE: 'wrong-daemon-namespace',
           OD_SIDECAR_IPC_BASE: path.join(suite.scratchDir, 'wrong-ipc-base'),
-          OD_SIDECAR_IPC_PATH: ipcPath,
+          OD_SIDECAR_CLIENT_ENDPOINT: clientEndpoint,
           OD_SIDECAR_NAMESPACE: 'wrong-sidecar-namespace',
         },
       );
@@ -79,7 +82,7 @@ describe('namespace isolation spec', () => {
 
       const rejected = await runDaemonCliExpectFailure(
         ['daemon', 'status', '--json', '--namespace', 'should-not-parse'],
-        { OD_SIDECAR_IPC_PATH: ipcPath },
+        { OD_SIDECAR_CLIENT_ENDPOINT: clientEndpoint },
       );
       expect(`${rejected.stdout}\n${rejected.stderr}`).toContain('unknown flag: --namespace');
 
@@ -110,7 +113,6 @@ describe('namespace isolation spec', () => {
         installInfo: {
           args: installInfo.args,
           envKeys: Object.keys(installInfo.env).sort(),
-          ipcPath,
         },
         plugin: pluginInfo,
         runtime,

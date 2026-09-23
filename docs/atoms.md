@@ -1,13 +1,13 @@
 # First-party atom catalog
 
-> The atomic capabilities Open Design exposes to plugins.
+> The atomic capabilities OpenDesign exposes to plugins.
 > Spec: [`docs/plugins-spec.md`](plugins-spec.md) §10.
 > Source of truth: [`apps/daemon/src/plugins/atoms.ts`](../apps/daemon/src/plugins/atoms.ts).
 > Live discovery: `GET /api/atoms`, `od atoms list --json`, and
 > `od atoms info <id>` for the bundled `SKILL.md` body.
 
 A **plugin** assembles atoms into ordered stages (`od.pipeline.stages[].atoms[]`).
-The Open Design daemon is responsible for resolving each atom into a system-prompt
+The OpenDesign daemon is responsible for resolving each atom into a system-prompt
 fragment, tool gating, and (when applicable) GenUI surface declarations. Plugins
 never own the atom implementations; they only reference them by id.
 
@@ -28,7 +28,7 @@ never own the atom implementations; they only reference them by id.
 | id | label | task kinds |
 | --- | --- | --- |
 | `discovery-question-form` | Discovery question form — structured clarification protocol for unresolved material requirements on any turn. | `new-generation`, `tune-collab` |
-| `direction-picker` | Direction picker — optional 3–5 direction comparison when the user explicitly requests alternatives. | `new-generation`, `tune-collab` |
+| `direction-picker` | Direction picker — optional Host-owned visual catalog when the user explicitly requests alternatives. | `new-generation`, `tune-collab` |
 | `todo-write` | Todo write — TodoWrite-driven plan. | all |
 | `file-read` / `file-write` / `file-edit` | File ops on the project cwd. | all |
 | `research-search` | Research search — Tavily-backed shallow research. | `new-generation` |

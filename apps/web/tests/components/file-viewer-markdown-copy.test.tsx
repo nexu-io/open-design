@@ -182,7 +182,7 @@ describe('FileViewer markdown code block copy', () => {
     ]);
   });
 
-  it('renders relative markdown images with the bound Workspace navigation scope', async () => {
+  it('renders relative markdown images with server-derived project authority', async () => {
     mockedFetchProjectFileText.mockResolvedValue('![Team image](./relative.png)');
     const context = teamWorkspaceContext();
 
@@ -193,7 +193,7 @@ describe('FileViewer markdown code block copy', () => {
 
     await waitFor(() => {
       expect(container.querySelector('img[alt="Team image"]')?.getAttribute('src')).toBe(
-        '/api/projects/project-1/raw/relative.png?workspaceId=workspace-team&workspaceMemberId=member-1',
+        '/api/projects/project-1/raw/relative.png',
       );
     });
   });

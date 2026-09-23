@@ -148,13 +148,8 @@ describe('AMR runtime def', () => {
     expect(def?.streamFormat).toBe('acp-json-rpc');
   });
 
-  it('builds the documented `vela agent run --runtime opencode` argv', () => {
-    expect(amrAgentDef.buildArgs()).toEqual([
-      'agent',
-      'run',
-      '--runtime',
-      'opencode',
-    ]);
+  it('builds the documented `vela agent run` argv', () => {
+    expect(amrAgentDef.buildArgs()).toEqual(['agent', 'run']);
   });
 
   it('fails closed instead of exposing static stale fallback models', () => {
@@ -202,6 +197,10 @@ describe('AMR runtime def', () => {
       'public_model_glm_5_1          vela',
       'public_model_claude_opus_4_6  vela',
       'public_model_gpt_image_2      vela',
+      'public_model_nano_banana_2    vela',
+      'public_model_nano_banana_2_lite vela',
+      'public_model_seedream_5_0     vela',
+      'public_model_seedream_5_0_pro vela',
       'vela/kimi-k2.6                vela',
       'public_model_seedance_2       vela',
       'public_model_deepseek_v3_2    vela',
@@ -216,6 +215,10 @@ describe('AMR runtime def', () => {
     ]);
     expect(models.every((model) => !model.label.includes('vela/'))).toBe(true);
     expect(models.map((model) => model.id)).not.toContain('gpt-image-2');
+    expect(models.map((model) => model.id)).not.toContain('nano-banana-2');
+    expect(models.map((model) => model.id)).not.toContain('nano-banana-2-lite');
+    expect(models.map((model) => model.id)).not.toContain('seedream-5-0');
+    expect(models.map((model) => model.id)).not.toContain('seedream-5-0-pro');
     expect(models.map((model) => model.id)).not.toContain('seedance-2');
   });
 
@@ -230,9 +233,17 @@ describe('AMR runtime def', () => {
           enabled: true,
           default: true,
           cost: { input: 0.14, output: 0.28 },
-          metadata: { cost: 'low', capability: 'standard' },
+          metadata: {
+            cost: 'low',
+            capability: 'standard',
+            contextWindowTokens: 200_000,
+          },
         },
         { id: 'gpt-image-2' },
+        { id: 'nano-banana-2' },
+        { id: 'nano-banana-2-lite' },
+        { id: 'seedream-5.0' },
+        { id: 'seedream-5.0-pro' },
         { id: 'deepseek-v4-flash' },
       ],
     }), 'remote');
@@ -244,12 +255,20 @@ describe('AMR runtime def', () => {
         default: true,
         inputPriceUsdPerMillion: 0.14,
         outputPriceUsdPerMillion: 0.28,
-        metadata: { cost: 'low', capability: 'standard' },
+        metadata: {
+          cost: 'low',
+          capability: 'standard',
+          contextWindowTokens: 200_000,
+        },
       },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
       { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code', enabled: false },
     ]);
     expect(models.map((m) => m.id)).not.toContain('gpt-image-2');
+    expect(models.map((m) => m.id)).not.toContain('nano-banana-2');
+    expect(models.map((m) => m.id)).not.toContain('nano-banana-2-lite');
+    expect(models.map((m) => m.id)).not.toContain('seedream-5.0');
+    expect(models.map((m) => m.id)).not.toContain('seedream-5.0-pro');
     expect(models.map((m) => m.id)).not.toContain('public_model_kimi_k2_7_code');
     expect(() => parseVelaModelJson(JSON.stringify({ source: 'preset', data: [] }), 'remote'))
       .toThrow(/expected remote/);

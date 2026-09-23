@@ -24,8 +24,11 @@ describe('exportRoutePath', () => {
     expect(exportRoutePath('image')).toBe('export/image');
   });
 
-  it('every supported export format maps to a screenshot-renderer route', () => {
-    // None of the formats may fall through to the generic vector `/export` route.
+  it('routes html to the headless standalone bundler', () => {
+    expect(exportRoutePath('html')).toBe('export/html');
+  });
+
+  it('every supported export format maps to a dedicated route', () => {
     for (const format of EXPORT_FORMATS) {
       const route = exportRoutePath(format);
       expect(route.startsWith('export/')).toBe(true);
@@ -106,6 +109,9 @@ describe('buildExportCliRequestBody', () => {
     );
     expect(() => resolveExportCliDeckMode({ format: 'pptx', page: true })).toThrow(
       /not valid with --format pptx/,
+    );
+    expect(() => resolveExportCliDeckMode({ format: 'html', deck: true })).toThrow(
+      /not valid with --format html/,
     );
   });
 });

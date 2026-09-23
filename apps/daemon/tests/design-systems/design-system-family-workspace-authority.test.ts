@@ -355,7 +355,7 @@ describe('Design System route family exact Workspace authority', () => {
     expect(calls.static).not.toHaveBeenCalled();
   });
 
-  it('accepts exact query scope for browser-owned showcase and static requests', async () => {
+  it('accepts exact query scope without consulting the remote Workspace directory', async () => {
     const { baseUrl, calls, verifyWorkspaceRequestAuthority } =
       await startAuthorityServer();
     const scope =
@@ -375,14 +375,14 @@ describe('Design System route family exact Workspace authority', () => {
     expect(calls.static).toHaveBeenCalledWith(
       DESIGN_SYSTEM_ID,
       'system/kit.html',
-      { workspaceId: WORKSPACE_ID, exactTeam: false },
+      { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, exactTeam: false },
     );
     expect(calls.static).toHaveBeenCalledWith(
       DESIGN_SYSTEM_ID,
       'tokens.css',
-      { workspaceId: WORKSPACE_ID, exactTeam: false },
+      { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, exactTeam: false },
     );
-    expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(2);
+    expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
   });
 
   it('rejects bound mutations before their first side effect', async () => {

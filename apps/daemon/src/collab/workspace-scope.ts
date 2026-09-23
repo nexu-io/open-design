@@ -2,8 +2,8 @@
 // call, per the B-line explicit-workspace handoff. B's account-level Active
 // Workspace is shared mutable state across a user's devices; a daemon task
 // that re-read it per tick could silently flip workspaces mid-flight. The
-// client therefore pins its own scope with a fixed priority and only lets the
-// server's Active Workspace apply when it genuinely has no opinion:
+// client therefore pins its own scope with a fixed priority and never asks the
+// server to infer a workspace from account-global state:
 //
 //   1. `explicit`            — the id this specific call was asked to target;
 //   2. `projectWorkspaceId`  — the workspace a project belongs to (its shared
@@ -13,19 +13,18 @@
 //                              (workspace-selection.json);
 //   4. `envWorkspaceId`      — a VELA_WORKSPACE_ID inherited from the spawn
 //                              environment;
-//   5. none                  — send no header; the server resolves its stored
-//                              Active Workspace (`source: 'server-current'`).
+//   5. none                  — unresolved; the caller must fail closed or skip
+//                              the workspace-scoped operation.
 //
-// The resolver is pure: it never invents an id and never mutates server state
-// (resource calls must NOT PUT /workspaces/current — only an explicit user
-// switch does).
+// The resolver is pure: it never invents an id and never reads or mutates
+// server-side workspace-selection state.
 
 export type WorkspaceScopeSource =
   | 'explicit'
   | 'project'
   | 'local-selection'
   | 'environment'
-  | 'server-current';
+  | 'unresolved';
 
 export interface WorkspaceScope {
   workspaceId?: string;
@@ -48,5 +47,5 @@ export function resolveWorkspaceScope(inputs: WorkspaceScopeInputs): WorkspaceSc
   if (local) return { workspaceId: local, source: 'local-selection' };
   const env = inputs.envWorkspaceId?.trim();
   if (env) return { workspaceId: env, source: 'environment' };
-  return { source: 'server-current' };
+  return { source: 'unresolved' };
 }

@@ -18,7 +18,7 @@ as regras pelas quais todos jogam.
 |---|---|
 | **Contributor** | Qualquer pessoa com pelo menos 1 merged PR. Sem permissões especiais. |
 | **External Maintainer** | Um contribuidor da comunidade promovido conforme as regras abaixo. Pode revisar, dar approve, fechar/reabrir issues e fazer self-assign de issues. **Não pode clicar no merge button** — isso fica com o Core Team. |
-| **Core Team** | Time interno do Open Design. Possui acesso total de escrita ao repositório e é a autoridade final em decisões de governança. Composição mantida internamente. |
+| **Core Team** | Time interno do OpenDesign. Possui acesso total de escrita ao repositório e é a autoridade final em decisões de governança. Composição mantida internamente. |
 
 O restante deste documento trata dos **External Maintainers**, salvo indicação em contrário.
 

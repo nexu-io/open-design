@@ -7,6 +7,8 @@ import {
   amrPlansUrlForWorkspace,
   amrProfileBadgeLabel,
   amrRechargeUrlForProfile,
+  formatModelWindowRetryAt,
+  modelWindowLimitCopy,
   resolveRunFailureUi,
   setRuntimeAmrConsoleOrigin,
 } from '../../src/runtime/amr-guidance';
@@ -27,11 +29,11 @@ describe('amrRechargeUrlForProfile', () => {
   // entry this module builds therefore targets `/dashboard`, not `/wallet`.
   it('targets the console dashboard on every AMR profile', () => {
     expect(DEFAULT_AMR_RECHARGE_URL).toBe(
-      'https://open-design.ai/amr/dashboard?source=open_design',
+      'https://open-design.ai/cloud/dashboard?source=open_design',
     );
     expect(amrRechargeUrlForProfile('prod')).toBe(DEFAULT_AMR_RECHARGE_URL);
     expect(amrRechargeUrlForProfile('test')).toBe(
-      'https://vela.powerformer.net/dashboard?source=open_design',
+      'https://open-design.powerformer.net/cloud/dashboard?source=open_design',
     );
     expect(amrRechargeUrlForProfile('local')).toBe(
       'http://localhost:5173/dashboard?source=open_design',
@@ -91,16 +93,16 @@ describe('amr-guidance origin literals', () => {
     // Exactly three: the public prod console, the local dev server, and the one
     // grandfathered internal entry that predates this rule. A fourth means
     // someone hardcoded an environment hostname instead of injecting it.
+    // (Was four while a public Pricing literal lived here; T54 routed 升级 back
+    // onto the profile's own console and the literal went with it.)
     expect(origins).toHaveLength(3);
   });
 });
 
 describe('workspace-scoped AMR URLs', () => {
-  // `billing=plan` is the console's own state-aware upgrade intent: its
-  // dashboard resolves it against the workspace's real subscription state
-  // (personal → the personal plan modal, team → checkout or change-plan), so
-  // this client does not have to guess which dialog to ask for.
-  it('pins console and plans links to the exact workspace', () => {
+  // T54 (product 2026-09-06): plan discovery goes back onto the workspace's own
+  // console plan surface. Full coverage in `amr-plans-console-deeplink.test.ts`.
+  it('pins both console links to the workspace', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
       `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
@@ -117,6 +119,56 @@ describe('workspace-scoped AMR URLs', () => {
   });
 });
 
+// The Home composer's send path never reaches `resolveRunFailureUi` — it fails
+// before a run exists, and its catch-all prints `err.message` verbatim, which is
+// how an English gateway sentence ends up on a localized Home screen. Both
+// surfaces therefore read the window limit through this one helper.
+describe('modelWindowLimitCopy', () => {
+  it('reads the window limit and its reset instant off the upstream sentence', () => {
+    expect(
+      modelWindowLimitCopy(
+        'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z. This request was not charged to Wallet Credits.',
+      ),
+    ).toEqual({
+      messageKey: 'chat.runError.modelWindowLimitMessage',
+      retryAt: '2026-08-12T06:34:47Z',
+    });
+  });
+
+  it('falls back to the no-time copy when no instant is readable', () => {
+    expect(
+      modelWindowLimitCopy('[code=model_limit_exceeded] rolling window in effect'),
+    ).toEqual({ messageKey: 'chat.runError.modelWindowLimitMessageNoTime' });
+  });
+
+  it('leaves every other failure alone', () => {
+    expect(modelWindowLimitCopy('Could not create project')).toBeNull();
+    expect(modelWindowLimitCopy('insufficient wallet balance')).toBeNull();
+    expect(modelWindowLimitCopy(null)).toBeNull();
+  });
+});
+
+describe('formatModelWindowRetryAt', () => {
+  it('renders the gateway instant in the reader locale', () => {
+    const formatted = formatModelWindowRetryAt('2026-08-12T06:34:47Z', 'en-US');
+    expect(formatted).not.toBe('2026-08-12T06:34:47Z');
+    expect(formatted).toMatch(/Aug/);
+  });
+
+  it('returns the input untouched rather than rendering "Invalid Date"', () => {
+    expect(formatModelWindowRetryAt('not-an-instant', 'en-US')).toBe('not-an-instant');
+  });
+});
+
+/*
+ * ⚠️ OPEND-2772 之后 `cloudSwitchCta` 的判据只剩**一条**:这一轮跑在谁身上。
+ *
+ * 它以前叫 `showSwitchCard`,由每一条映射自己挑「要不要在报错卡下面再挂一张推荐
+ * 卡」。产品 2026-09-07 把 2026-08-26 的 §6.Z 推翻掉了(原话「主 cta 都是切换至
+ * cloud」「8-26 推翻掉吧」),第二张卡删掉、CTA 收进报错卡的主按钮位,并且**铺到
+ * 所有报错**。所以下面这批断言从 `false` 翻成 `true`(或按 agent 分)不是放宽,
+ * 而是这条不变式换了主人:非 Cloud 一律 true,Cloud 一律 false。
+ */
 describe('resolveRunFailureUi', () => {
   // RATE_LIMITED / UPSTREAM_UNAVAILABLE (non-antigravity): still promote AMR as
   // the steadier hosted alternative, but now also name the failure type and
@@ -129,38 +181,44 @@ describe('resolveRunFailureUi', () => {
       primaryAction: 'retry',
       titleKey: 'chat.runError.title.rateLimited',
       messageKey: 'chat.runError.rateLimitedMessage',
-      showSwitchCard: true,
+      cloudSwitchCta: true,
     });
     const upstream = resolveRunFailureUi('UPSTREAM_UNAVAILABLE', null, 'claude');
     expect(upstream).toMatchObject({
       primaryAction: 'retry',
       titleKey: 'chat.runError.title.upstreamUnavailable',
       messageKey: 'chat.runError.upstreamUnavailableMessage',
-      showSwitchCard: true,
+      cloudSwitchCta: true,
     });
-    expect(resolveRunFailureUi('UNAUTHORIZED', null, null).showSwitchCard).toBe(true);
+    expect(resolveRunFailureUi('UNAUTHORIZED', null, null).cloudSwitchCta).toBe(true);
   });
 
   // #895 follow-up: the daemon's fine-grained failure_detail can refine — and
   // even override — a too-coarse error_code. A hard quota and a transient 429
   // both arrive as RATE_LIMITED, but retrying a hard quota is futile, so it must
-  // drop Retry (primaryAction 'none') and name a distinct "quota exhausted" type
-  // while still promoting the hosted-AMR switch card.
+  // drop Retry and name a distinct "quota exhausted" type while still promoting
+  // the hosted-AMR switch card.
+  //
+  // Ladder rung 3 (§6.Z names S08 here): topping up with the provider or
+  // swapping keys isn't something we can do for the user, so the way out is the
+  // hosted alternative — the switch card below IS this card's primary action,
+  // which is why `primaryAction` reads `switch-to-cloud` and the card itself
+  // draws no button of its own.
   it('overrides a coarse RATE_LIMITED code with hard-quota / workspace-credits detail', () => {
     const hard = resolveRunFailureUi('RATE_LIMITED', 'hard_quota', 'claude');
     expect(hard).toMatchObject({
-      primaryAction: 'none',
+      primaryAction: 'switch-to-cloud',
       titleKey: 'chat.runError.title.quotaExhausted',
       messageKey: 'chat.runError.quotaExhaustedMessage',
       secondaryRetry: false,
-      showSwitchCard: true,
+      cloudSwitchCta: true,
     });
     const workspace = resolveRunFailureUi('RATE_LIMITED', 'workspace_credits_exhausted', 'claude');
     expect(workspace).toMatchObject({
-      primaryAction: 'none',
+      primaryAction: 'switch-to-cloud',
       titleKey: 'chat.runError.title.quotaExhausted',
       messageKey: 'chat.runError.workspaceCreditsMessage',
-      showSwitchCard: true,
+      cloudSwitchCta: true,
     });
   });
 
@@ -171,7 +229,7 @@ describe('resolveRunFailureUi', () => {
     expect(transient).toMatchObject({
       primaryAction: 'retry',
       titleKey: 'chat.runError.title.rateLimited',
-      showSwitchCard: true,
+      cloudSwitchCta: true,
     });
   });
 
@@ -184,11 +242,28 @@ describe('resolveRunFailureUi', () => {
       primaryAction: 'retry',
       titleKey: 'chat.runError.title.cliMissing',
       messageKey: 'chat.runError.cliMissingMessage',
-      showSwitchCard: false,
+      cloudSwitchCta: true,
     });
   });
 
   // Antigravity's per-model quota flow (terminal switch-model) must still win
+  // A clarification answer submitted after the daemon's OD Next protocol gate
+  // already settled the task (blocked, or otherwise past this round) 409s with
+  // STRATEGY_TASK_STATE_MISMATCH. That is a task-lifecycle verdict, not an
+  // engine failure, so it must render dedicated halted-task copy for every
+  // agent instead of the generic "task failed" card.
+  it('maps a strategy-task state mismatch to dedicated halted-task copy', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('STRATEGY_TASK_STATE_MISMATCH', null, agent)).toMatchObject({
+        primaryAction: 'retry',
+        titleKey: 'chat.runError.title.strategyTaskHalted',
+        messageKey: 'chat.runError.strategyTaskStateMismatchMessage',
+        secondaryRetry: false,
+        cloudSwitchCta: agent !== 'amr',
+      });
+    }
+  });
+
   // over the generic hard-quota detail override — its bespoke handling is
   // resolved before the detail layer.
   it('keeps the antigravity terminal switch-model flow even with a hard_quota detail', () => {
@@ -197,7 +272,7 @@ describe('resolveRunFailureUi', () => {
   });
 
   // #895 long tail: lower-frequency failure_detail values the daemon already
-  // classifies (timeout, empty output, stale resumed session, missing Git Bash)
+  // classifies (timeout, empty output, stale resumed session)
   // now map to a named type + actionable copy with a plain Retry, for any agent —
   // the AGENT_EXECUTION_FAILED code alone would only show the raw stderr.
   it('maps long-tail failure_detail values to a named type + retry guidance for any agent', () => {
@@ -206,7 +281,6 @@ describe('resolveRunFailureUi', () => {
       ['inactivity_timeout', 'chat.runError.title.timedOut', 'chat.runError.inactivityTimeoutMessage'],
       ['empty_output', 'chat.runError.title.emptyOutput', 'chat.runError.emptyOutputMessage'],
       ['session_resume_expired', 'chat.runError.title.sessionExpired', 'chat.runError.sessionExpiredMessage'],
-      ['git_bash_missing', 'chat.runError.title.gitBashMissing', 'chat.runError.gitBashMissingMessage'],
     ];
     for (const [detail, titleKey, messageKey] of cases) {
       for (const agent of ['claude', 'codex', 'amr', null]) {
@@ -215,24 +289,41 @@ describe('resolveRunFailureUi', () => {
           titleKey,
           messageKey,
           secondaryRetry: false,
-          showSwitchCard: false,
+          cloudSwitchCta: agent !== 'amr',
         });
       }
     }
   });
 
+  it('suppresses only the Git Bash card while retaining its failure mapping for every agent', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'git_bash_missing', agent)).toMatchObject({
+        suppressCard: true,
+        primaryAction: 'retry',
+        secondaryRetry: false,
+        cloudSwitchCta: agent !== 'amr',
+        titleKey: 'chat.runError.title.gitBashMissing',
+        messageKey: 'chat.runError.gitBashMissingMessage',
+      });
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'cli_not_installed', agent).suppressCard)
+        .not.toBe(true);
+    }
+  });
+
   // A cpu_unsupported crash (bundled agent binary requires AVX2, this CPU has
   // none) is deterministic: retry re-runs the same binary on the same CPU, and
-  // switching hosted models doesn't replace the runtime binary. So: guidance
-  // copy only — no Retry button, no AMR promotion — for every agent.
+  // switching hosted models doesn't replace the runtime binary — the binary that
+  // cannot start IS the hosted runtime. No Retry, no AMR promotion, for every
+  // agent. Ladder rung 4, so the standing 〔Contact support〕 secondary is
+  // promoted to primary rather than leaving a card with nothing on it.
   it('maps cpu_unsupported to update guidance without retry or switch card', () => {
     for (const agent of ['claude', 'codex', 'amr', null]) {
       expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'cpu_unsupported', agent)).toMatchObject({
-        primaryAction: 'none',
+        primaryAction: 'contact-support',
         titleKey: 'chat.runError.title.cpuUnsupported',
         messageKey: 'chat.runError.cpuUnsupportedMessage',
         secondaryRetry: false,
-        showSwitchCard: false,
+        cloudSwitchCta: agent !== 'amr',
       });
     }
   });
@@ -240,15 +331,24 @@ describe('resolveRunFailureUi', () => {
   // Agent-agnostic root-cause codes (#895): each carries a named failure type +
   // actionable fix, resolved the same way for any agent, with a plain Retry and
   // no AMR promotion (these aren't "switch to hosted model" cases).
+  //
+  // `AGENT_RUNTIME_DEF_INVALID` used to be in this list and no longer is: the
+  // user cannot self-repair a bad runtime definition and a new run re-reads the
+  // same file, so it moved to ladder rung 4 (catalogue R-031: flow F10,
+  // "retryable: no"). Its own assertion lives in run-error-ladder.test.ts.
   it('maps agent-agnostic root-cause codes to a named type + guidance for any agent', () => {
     const cases: Array<[string, string, string | null]> = [
-      ['ARTIFACT_NOT_FOUND', 'chat.runError.title.artifactMissing', null],
+      // S23 的正文以前是 null,卡面因此落到兜底那句「这次没能顺利完成」——
+      // 一次**正常结束**的任务被说成失败。产品文档 S23 有终稿,现在补上了。
+      [
+        'ARTIFACT_NOT_FOUND',
+        'chat.runError.title.artifactMissing',
+        'chat.runError.artifactMissingMessage',
+      ],
       ['AGENT_UNAVAILABLE', 'chat.runError.title.cliMissing', 'chat.runError.cliMissingMessage'],
       ['AGENT_PROMPT_TOO_LARGE', 'chat.runError.title.promptTooLarge', 'chat.runError.promptTooLargeMessage'],
-      ['AMR_MODEL_UNAVAILABLE', 'chat.runError.title.modelUnavailable', 'chat.runError.modelUnavailableMessage'],
       ['TOOL_LOOP_DETECTED', 'chat.runError.title.toolLoop', 'chat.runError.toolLoopMessage'],
       ['ROLE_MARKER_HALLUCINATION', 'chat.runError.title.outputInvalid', 'chat.runError.outputInvalidMessage'],
-      ['AGENT_RUNTIME_DEF_INVALID', 'chat.runError.title.runtimeConfig', 'chat.runError.runtimeConfigMessage'],
     ];
     for (const [code, titleKey, messageKey] of cases) {
       for (const agent of ['claude', 'codex', 'amr', 'antigravity', null]) {
@@ -258,16 +358,112 @@ describe('resolveRunFailureUi', () => {
           titleKey,
           messageKey,
           secondaryRetry: false,
-          showSwitchCard: false,
+          cloudSwitchCta: agent !== 'amr',
         });
       }
     }
   });
 
+  /*
+   * 设计原则四:「重试只在有用时出现」。模型已经下线 / 不在套餐里,重试会用同一个
+   * 模型再跑一次,结果必然一样 —— 那颗按钮是假的。产品 2026-08-26 裁决:这一档
+   * 改成「换个模型」。
+   *
+   * 这一条从上面那张「一律 retry」的表里摘出来单列,就是为了让它不能被悄悄挪回去。
+   */
+  it('offers switch-model (never a dead retry) when the model itself is unavailable', () => {
+    for (const agent of ['claude', 'codex', 'amr', 'antigravity', null]) {
+      const ui = resolveRunFailureUi('AMR_MODEL_UNAVAILABLE', null, agent);
+      expect(ui).toMatchObject({
+        primaryAction: 'switch-model',
+        titleKey: 'chat.runError.title.modelUnavailable',
+        messageKey: 'chat.runError.modelUnavailableMessage',
+        secondaryRetry: false,
+        cloudSwitchCta: agent !== 'amr',
+      });
+      expect(ui.primaryAction).not.toBe('retry');
+    }
+  });
+
+  // An ACP agent that answered `initialize` and then refused `session/new`
+  // (Kimi Code 0.37.x / 0.38.0). The daemon names it with a code and ships the
+  // runtime identity as data; the sentence the user reads is this map's job.
+  // Before this, the daemon wrote an English paragraph into `run.error` and the
+  // card printed it verbatim — untranslated in every non-English UI, and
+  // duplicated because the paragraph also restated the raw agent line the
+  // details block already shows.
+  describe('AGENT_CLI_SESSION_REFUSED', () => {
+    it('renders localized copy naming the agent that refused', () => {
+      const ui = resolveRunFailureUi(
+        'AGENT_CLI_SESSION_REFUSED',
+        'agent_protocol_error',
+        'kimi',
+        'json-rpc id 2: Internal error',
+      );
+      expect(ui).toMatchObject({
+        primaryAction: 'retry',
+        titleKey: 'chat.runError.title.cliSessionRefused',
+        messageKey: 'chat.runError.cliSessionRefusedMessage',
+        secondaryRetry: false,
+        cloudSwitchCta: true,
+      });
+      // One sentence, no interpolated build number. Naming the version this run
+      // started with needs a pre-spawn `--version` read the failure path does
+      // not buy; the copy says "the installed version" and stays true. Pinned
+      // so a re-land of that work cannot quietly leave a `{version}` slot in
+      // the rendered string with nothing to fill it.
+      expect(ui.messageVars?.version).toBeUndefined();
+    });
+
+    it('takes no CLI build to render — it is the same card either way', () => {
+      const withRaw = resolveRunFailureUi(
+        'AGENT_CLI_SESSION_REFUSED',
+        'agent_protocol_error',
+        'kimi',
+        'json-rpc id 2: Internal error',
+      );
+      const withoutRaw = resolveRunFailureUi(
+        'AGENT_CLI_SESSION_REFUSED',
+        'agent_protocol_error',
+        'kimi',
+        null,
+      );
+      expect(withoutRaw).toEqual(withRaw);
+    });
+
+    it('resolves the same way for every agent, hosted AMR included', () => {
+      for (const agent of ['kimi', 'devin', 'amr', 'antigravity', null]) {
+        expect(
+          resolveRunFailureUi('AGENT_CLI_SESSION_REFUSED', 'agent_protocol_error', agent, null),
+        ).toMatchObject({
+          titleKey: 'chat.runError.title.cliSessionRefused',
+          messageKey: 'chat.runError.cliSessionRefusedMessage',
+        });
+      }
+    });
+
+    it('leaves the neighbouring handshake causes on their own cards', () => {
+      // #7303 round 2: an ACP CLI can fail the same handshake because the user
+      // is signed out, throttled, out of credit, or the upstream is down. Those
+      // arrive with their own codes and must never inherit "change your CLI".
+      const neighbours: Array<[string, string]> = [
+        ['AGENT_AUTH_REQUIRED', 'chat.runError.title.signInRequired.other'],
+        ['UNAUTHORIZED', 'chat.runError.title.signInRequired.other'],
+        ['RATE_LIMITED', 'chat.runError.title.rateLimited'],
+        ['UPSTREAM_UNAVAILABLE', 'chat.runError.title.upstreamUnavailable'],
+      ];
+      for (const [code, titleKey] of neighbours) {
+        const ui = resolveRunFailureUi(code, null, 'kimi', null);
+        expect(ui.titleKey).toBe(titleKey);
+        expect(ui.messageKey).not.toBe('chat.runError.cliSessionRefusedMessage');
+      }
+    });
+  });
+
   it('shows plain retry (no card) for generic non-AMR failures', () => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', null, 'claude');
-    expect(ui).toMatchObject({ primaryAction: 'retry', showSwitchCard: false, messageKey: null });
-    expect(resolveRunFailureUi('AGENT_UNAVAILABLE', null, 'codex').showSwitchCard).toBe(false);
+    expect(ui).toMatchObject({ primaryAction: 'retry', cloudSwitchCta: true, messageKey: null });
+    expect(resolveRunFailureUi('AGENT_UNAVAILABLE', null, 'codex').cloudSwitchCta).toBe(true);
   });
 
   it('localizes a mid-stream connection drop for any agent, no AMR promotion', () => {
@@ -277,7 +473,24 @@ describe('resolveRunFailureUi', () => {
         primaryAction: 'retry',
         messageKey: 'chat.connectionDropped',
         secondaryRetry: false,
-        showSwitchCard: false,
+        cloudSwitchCta: true,
+      });
+    }
+  });
+
+  it('localizes a classified stream disconnect instead of exposing raw SDK text', () => {
+    for (const agent of ['amr', 'codex', 'claude', null]) {
+      const ui = resolveRunFailureUi(
+        'AGENT_EXECUTION_FAILED',
+        'stream_disconnected',
+        agent,
+        'stream disconnected before completion: Transport error',
+      );
+      expect(ui).toMatchObject({
+        primaryAction: 'retry',
+        titleKey: 'chat.runError.title.connectionDropped',
+        messageKey: 'chat.connectionDropped',
+        cloudSwitchCta: agent !== 'amr',
       });
     }
   });
@@ -286,15 +499,15 @@ describe('resolveRunFailureUi', () => {
     const ui = resolveRunFailureUi('AMR_AUTH_REQUIRED', null, 'amr');
     expect(ui).toMatchObject({
       primaryAction: 'authorize',
-      titleKey: 'chat.runError.title.signInRequired',
+      titleKey: 'chat.runError.title.signInRequired.amr',
       // AMR-specific sign-in copy; single CTA, no AMR promotion card.
       messageKey: 'chat.runError.signInMessage.amr',
       secondaryRetry: false,
-      showSwitchCard: false,
+      cloudSwitchCta: false,
     });
   });
 
-  // PRD "需要登录" — non-AMR agents. Open Design can't sign in for them (their
+  // PRD "需要登录" — non-AMR agents. OpenDesign can't sign in for them (their
   // login lives in the user's own terminal), so the card shows the {agent}
   // sign-in copy, a plain Retry primary, and promotes AMR via the switch card.
   it('shows sign-in copy + retry + AMR promotion for non-AMR AGENT_AUTH_REQUIRED / UNAUTHORIZED', () => {
@@ -303,10 +516,10 @@ describe('resolveRunFailureUi', () => {
         const ui = resolveRunFailureUi(code, null, agent);
         expect(ui).toMatchObject({
           primaryAction: 'retry',
-          titleKey: 'chat.runError.title.signInRequired',
+          titleKey: 'chat.runError.title.signInRequired.other',
           messageKey: 'chat.runError.signInMessage.other',
           secondaryRetry: false,
-          showSwitchCard: true,
+          cloudSwitchCta: true,
         });
       }
     }
@@ -325,7 +538,7 @@ describe('resolveRunFailureUi', () => {
       primaryAction: 'recharge',
       messageKey: 'chat.amrError.balanceMessage',
       secondaryRetry: true,
-      showSwitchCard: false,
+      cloudSwitchCta: false,
     });
   });
 
@@ -333,16 +546,96 @@ describe('resolveRunFailureUi', () => {
     const ui = resolveRunFailureUi('AMR_TIER_UPGRADE_REQUIRED', null, 'amr');
     expect(ui).toMatchObject({
       primaryAction: 'upgrade',
-      titleKey: 'chat.amrBalanceGate.title',
-      messageKey: null,
+      titleKey: 'chat.runError.title.tierUpgradeRequired',
+      messageKey: 'chat.runError.tierUpgradeRequiredMessage',
       secondaryRetry: true,
-      showSwitchCard: false,
+      cloudSwitchCta: false,
     });
   });
 
   it('falls back to plain retry for other AMR failures', () => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', null, 'amr');
-    expect(ui).toMatchObject({ primaryAction: 'retry', showSwitchCard: false });
+    expect(ui).toMatchObject({ primaryAction: 'retry', cloudSwitchCta: false });
+  });
+
+  // vela's rolling 5-hour model window resets on its own, so the card must name
+  // the wait — not fall through to the generic "task failed" title with the raw
+  // English upstream sentence as its body, which is what every AMR failure
+  // outside the three account codes used to get.
+  it('names the model window limit and carries the reset instant for AMR', () => {
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'model_window_limit',
+      'amr',
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z. This request was not charged to Wallet Credits.',
+    );
+    expect(ui).toMatchObject({
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.modelWindowLimit',
+      messageKey: 'chat.runError.modelWindowLimitMessage',
+      cloudSwitchCta: false,
+    });
+    expect(ui.messageVars?.retryAt).toBe('2026-08-12T06:34:47Z');
+  });
+
+  it('explains an AMR membership concurrency limit and preserves its reset instant', () => {
+    const ui = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'membership_concurrency_limit',
+      'amr',
+      '[code=tier_limit_exceeded] membership concurrency limit exceeded: 3/2 resets 2026-08-25T10:42:00Z',
+    );
+    expect(ui).toMatchObject({
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.membershipConcurrencyLimit',
+      messageKey: 'chat.runError.membershipConcurrencyLimitMessage',
+      messageVars: { retryAt: '2026-08-25T10:42:00Z' },
+      secondaryRetry: false,
+      cloudSwitchCta: false,
+    });
+  });
+
+  it('keeps membership concurrency guidance when no reset instant is readable', () => {
+    const ui = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'membership_concurrency_limit',
+      'amr',
+      '[code=tier_limit_exceeded] membership concurrency limit exceeded: 3/2',
+    );
+    expect(ui.messageKey).toBe(
+      'chat.runError.membershipConcurrencyLimitMessageNoTime',
+    );
+    expect(ui.messageVars?.retryAt).toBeUndefined();
+  });
+
+  // Same classification without a readable instant (older CLI, or upstream
+  // wording drift) must still get the localized copy — just the variant that
+  // does not promise a time.
+  it('degrades to the no-time copy when the reset instant is unreadable', () => {
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'model_window_limit',
+      'amr',
+      'You have reached the 5-hour usage limit for Kimi K2.6.',
+    );
+    expect(ui.titleKey).toBe('chat.runError.title.modelWindowLimit');
+    expect(ui.messageKey).toBe('chat.runError.modelWindowLimitMessageNoTime');
+    expect(ui.messageVars?.retryAt).toBeUndefined();
+  });
+
+  // The window limit is agent-neutral: it comes from the hosted gateway, so the
+  // AMR branch's catch-all "generic + raw English" fallthrough must not be the
+  // thing that decides how it reads. Same classification, same card, whichever
+  // agent carried the request.
+  it('names the model window limit for non-AMR agents too', () => {
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'model_window_limit',
+      'claude',
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z.',
+    );
+    expect(ui.titleKey).toBe('chat.runError.title.modelWindowLimit');
+    expect(ui.messageVars?.retryAt).toBe('2026-08-12T06:34:47Z');
   });
 
   // PR #3157: Antigravity's `agy -p` cannot complete Google Sign-In on
@@ -357,9 +650,9 @@ describe('resolveRunFailureUi', () => {
     const ui = resolveRunFailureUi('AGENT_AUTH_REQUIRED', null, 'antigravity');
     expect(ui).toMatchObject({
       primaryAction: 'launch-terminal-auth',
-      messageKey: null,
+      messageKey: 'chat.runError.signInMessage.other',
       secondaryRetry: true,
-      showSwitchCard: false,
+      cloudSwitchCta: true,
     });
   });
 
@@ -377,7 +670,7 @@ describe('resolveRunFailureUi', () => {
       primaryAction: 'launch-terminal-switch-model',
       messageKey: null,
       secondaryRetry: true,
-      showSwitchCard: false,
+      cloudSwitchCta: true,
     });
   });
 

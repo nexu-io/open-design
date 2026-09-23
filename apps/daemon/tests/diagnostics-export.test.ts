@@ -1,3 +1,5 @@
+import { createDiagnosticsEvidence, createEvidenceCheckpointWriter } from '../src/services/diagnostics-evidence.js';
+import { collectSystemEnvironment } from '../src/services/diagnostics-environment.js';
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -10,14 +12,16 @@ import {
   APP_KEYS,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
-  type SidecarStamp,
+  type LegacySidecarRuntimeLayout,
 } from '@open-design/sidecar-proto';
 import type { SidecarRuntimeContext } from '@open-design/sidecar';
 
 import {
   STANDALONE_LAUNCH_WARNING,
   createDiagnosticsExportHandler,
+  resolveDaemonPreviousLogPath,
 } from '../src/diagnostics-export.js';
+import { createDaemonHealth } from '../src/services/daemon-health.js';
 
 interface MockResponse {
   status(code: number): MockResponse;
@@ -44,6 +48,47 @@ interface DiagnosticsManifestFile {
 }
 
 describe('diagnostics export handler — non-sidecar launch', () => {
+  it('exports failure-time workspace/proxy evidence and the previous process checkpoint through the existing handler', async () => {
+    const root = join(tmpdir(), `od-diag-environment-${randomUUID()}`);
+    const evidence = createDiagnosticsEvidence({
+      collect: () => collectSystemEnvironment({ platform: 'linux', env: {}, interfaces: () => ({}) }),
+      write: createEvidenceCheckpointWriter(root),
+    });
+    try {
+      const prior = createEvidenceCheckpointWriter(root);
+      await prior(JSON.stringify({ marker: 'prior-process-evidence' }));
+      evidence.observeContext({ workspaceId: 'team-1', memberId: 'member-1', workspaceType: 'team' });
+      evidence.record({ source: 'team-projects', timedOut: true, workspaceId: 'team-1', env: { HTTPS_PROXY: 'http://user:private-password@localhost:7890' } });
+      await evidence.refresh();
+      await evidence.flush();
+      const handler = createDiagnosticsExportHandler({ runtime: null, projectRoot: root, dataDir: root, evidence });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const current = await zip.file('summary/environment-evidence.json')!.async('string');
+      expect(JSON.parse(current).context).toMatchObject({ workspaceId: 'team-1', memberId: 'member-1', workspaceType: 'team' });
+      expect(JSON.parse(current).failures[0]).toMatchObject({ source: 'team-projects', code: 'timeout', count: 1 });
+      expect(current).not.toContain('private-password');
+      const previous = await zip.file('logs/diagnostics/environment-evidence.previous.json')!.async('string');
+      expect(previous).toContain('prior-process-evidence');
+    } finally { evidence.close(); await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('includes bounded environment and failure evidence in the exported ZIP', async () => {
+    const handler = createDiagnosticsExportHandler({ runtime: null, projectRoot: '/tmp/test-project' });
+    const res = mockResponse();
+    await handler({} as never, res as never, () => undefined);
+    expect(res.capturedStatus).toBe(200);
+    const zip = await JSZip.loadAsync(res.capturedPayload!);
+    const entry = zip.file('summary/environment-evidence.json');
+    expect(entry).not.toBeNull();
+    const summary = JSON.parse(await entry!.async('string'));
+    expect(summary.limits).toMatchObject({ failures: 100, bytes: 262144 });
+    expect(summary.coverage.actualNetworkRoute).toBe('not-observed');
+    expect(summary.coverage.vpn).toBe('not-determined');
+  });
+
   // Reviewer-requested regression spec: `runDaemonCliStartup()` calls
   // `startDaemonRuntime()` without a runtime context, so plain `od` users
   // hit the diagnostics handler with `options.runtime == null`. The bundle
@@ -91,6 +136,56 @@ describe('diagnostics export handler — non-sidecar launch', () => {
       manifest.files.filter((file) => file.name.startsWith('logs/')),
     ).toEqual([]);
   });
+
+  it('reports the AMR session from the Settings-backed agent environment', async () => {
+    const dataDir = join(tmpdir(), `od-diag-amr-settings-${randomUUID()}`);
+    const runtimeKey = 'settings-only-runtime-key';
+    try {
+      await mkdir(dataDir, { recursive: true });
+      await writeFile(
+        join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'local',
+              VELA_LINK_URL: 'https://settings-only.example.test/link',
+              VELA_RUNTIME_KEY: runtimeKey,
+            },
+          },
+        }),
+        'utf8',
+      );
+
+      const handler = createDiagnosticsExportHandler({
+        runtime: null,
+        projectRoot: '/tmp/test-project',
+        dataDir,
+      });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const runtimeHealthRaw = await zip.file('summary/runtime-health.json')!.async('string');
+      const runtimeHealth = JSON.parse(runtimeHealthRaw) as {
+        amr: {
+          profile?: string;
+          loggedIn?: boolean;
+          sessionState?: string;
+          credentialRevision?: string;
+        };
+      };
+      expect(runtimeHealth.amr).toMatchObject({
+        profile: 'local',
+        loggedIn: true,
+        sessionState: 'authenticated',
+        credentialRevision: expect.any(String),
+      });
+      expect(runtimeHealthRaw).not.toContain(runtimeKey);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('diagnostics export handler — packaged (runtime) layout', () => {
@@ -101,6 +196,39 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
   // `<namespaceRoot>/logs`. The old `resolveNamespaceRoot(base, namespace)`
   // resolved the daemon log to `<namespaceRoot>/runtime/<namespace>/logs/...`
   // → ENOENT, so the bundle silently captured nothing.
+  it('resolves the daemon previous.log that the bundle reads, and nothing without a sidecar runtime', () => {
+    const namespaceRoot = join(tmpdir(), 'namespaces', 'release-stable');
+    const runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> = {
+      app: APP_KEYS.DAEMON,
+      base: join(namespaceRoot, 'runtime'),
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace: 'release-stable',
+      source: SIDECAR_SOURCES.PACKAGED,
+    };
+    expect(resolveDaemonPreviousLogPath(runtime)).toBe(join(namespaceRoot, 'logs', APP_KEYS.DAEMON, 'previous.log'));
+    expect(resolveDaemonPreviousLogPath(null)).toBeNull();
+  });
+
+  it('bundles the daemon health checkpoint of this and the previous process', async () => {
+    const root = join(tmpdir(), `od-diag-health-${randomUUID()}`);
+    try {
+      const prior = createDaemonHealth({ dataRoot: root, instrumentProcess: false });
+      prior.markCleanShutdown();
+      const current = createDaemonHealth({ dataRoot: root, instrumentProcess: false });
+      const handler = createDiagnosticsExportHandler({ runtime: null, projectRoot: root, dataDir: root });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const latest = JSON.parse(await zip.file('logs/diagnostics/daemon-health.latest.json')!.async('string'));
+      const previous = JSON.parse(await zip.file('logs/diagnostics/daemon-health.previous.json')!.async('string'));
+      expect(latest.bootId).toBe(current.bootId);
+      expect(previous).toMatchObject({ bootId: prior.bootId, state: 'clean_shutdown' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('captures the daemon log from the real <namespaceRoot>/logs tree', async () => {
     const root = join(tmpdir(), `od-diag-${randomUUID()}`);
     const namespaceRoot = join(root, 'namespaces', 'release-stable');
@@ -110,11 +238,10 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
       await mkdir(dirname(daemonLogPath), { recursive: true });
       await writeFile(daemonLogPath, `${marker}\n`, 'utf8');
 
-      const runtime: SidecarRuntimeContext<SidecarStamp> = {
+      const runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> = {
         app: APP_KEYS.DAEMON,
         // packaged launches children with base == <namespaceRoot>/runtime
         base: join(namespaceRoot, 'runtime'),
-        ipc: '/tmp/od-diag-test-daemon.sock',
         mode: SIDECAR_MODES.RUNTIME,
         namespace: 'release-stable',
         source: SIDECAR_SOURCES.PACKAGED,
@@ -160,10 +287,9 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
       await writeFile(join(daemonLogDir, 'latest.log'), 'fresh session line\n', 'utf8');
       await writeFile(join(daemonLogDir, 'previous.log'), `${previousMarker}\n`, 'utf8');
 
-      const runtime: SidecarRuntimeContext<SidecarStamp> = {
+      const runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> = {
         app: APP_KEYS.DAEMON,
         base: join(namespaceRoot, 'runtime'),
-        ipc: '/tmp/od-diag-prev.sock',
         mode: SIDECAR_MODES.RUNTIME,
         namespace: 'release-stable',
         source: SIDECAR_SOURCES.PACKAGED,
@@ -204,10 +330,9 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
       await mkdir(daemonLogDir, { recursive: true });
       await writeFile(join(daemonLogDir, 'latest.log'), 'first-launch session\n', 'utf8');
 
-      const runtime: SidecarRuntimeContext<SidecarStamp> = {
+      const runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> = {
         app: APP_KEYS.DAEMON,
         base: join(namespaceRoot, 'runtime'),
-        ipc: '/tmp/od-diag-noprev.sock',
         mode: SIDECAR_MODES.RUNTIME,
         namespace: 'release-stable',
         source: SIDECAR_SOURCES.PACKAGED,
@@ -252,10 +377,9 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
         // any read of it now fail with EACCES rather than ENOENT.
         await chmod(daemonLogDir, 0o000);
 
-        const runtime: SidecarRuntimeContext<SidecarStamp> = {
+        const runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> = {
           app: APP_KEYS.DAEMON,
           base: join(namespaceRoot, 'runtime'),
-          ipc: '/tmp/od-diag-prevdenied.sock',
           mode: SIDECAR_MODES.RUNTIME,
           namespace: 'release-stable',
           source: SIDECAR_SOURCES.PACKAGED,
@@ -292,10 +416,9 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
       await mkdir(dirname(daemonLogPath), { recursive: true });
       await writeFile(daemonLogPath, 'daemon ok\n', 'utf8');
 
-      const runtime: SidecarRuntimeContext<SidecarStamp> = {
+      const runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> = {
         app: APP_KEYS.DAEMON,
         base: join(namespaceRoot, 'runtime'),
-        ipc: '/tmp/od-diag-missing.sock',
         mode: SIDECAR_MODES.RUNTIME,
         namespace: 'release-beta',
         source: SIDECAR_SOURCES.PACKAGED,
@@ -360,10 +483,16 @@ describe('diagnostics export handler — run event logs', () => {
 
       const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string')) as {
         files: { name: string; bytes: number; error?: string }[];
+        warnings: string[];
       };
       const runFile = manifest.files.find((file) => file.name === 'runs/run-3165/events.jsonl');
       expect(runFile?.error).toBeUndefined();
       expect(runFile?.bytes ?? 0).toBeGreaterThan(0);
+      expect(
+        manifest.warnings.some((warning) =>
+          warning.includes('may contain conversation content and artifact excerpts'),
+        ),
+      ).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -1,4 +1,4 @@
-# 贡献指南 · Contributing to Open Design
+# 贡献指南 · Contributing to OpenDesign
 
 谢谢你愿意参与。OD 是有意做小的 —— 大部分价值在 **文件** 里（skill、design system、提示词片段），而不是框架代码。这意味着收益最高的贡献往往就是一个文件夹、一份 Markdown，或者一个 PR 大小的 adapter。
 
@@ -235,7 +235,10 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 除此之外：
 
 - **不要写废话注释。** 不要 `// 引入这个模块`、不要 `// 遍历元素`。如果代码本身一眼能读，注释就是噪音。注释只用来说明非显而易见的意图、或者代码本身表达不出来的约束。
-- **`apps/web/src/` 用 TypeScript。** Daemon (`apps/daemon/`) 是纯 ESM JavaScript，类型重要的地方用 JSDoc —— 保持这样。
+- **TypeScript-first。** 项目自有的入口、模块、脚本、测试、报告器和配置均使用
+  TypeScript，包括 `apps/web/src/` 和 `apps/daemon/src/` 中的代码。仅允许出于
+  以下明确理由新增 `.js`、`.mjs` 或 `.cjs` 文件：生成文件、纳入仓库的第三方
+  代码，或有明确文档说明的兼容性需要；这些文件还必须通过 `pnpm guard`。
 - **不要随便加顶层依赖。** PR 描述里至少要有一段，说明引入它能换到什么、又新增了多少 bundle 字节。[`package.json`](../../package.json) 的依赖少是有意为之。
 - **推之前跑 `pnpm typecheck`。** CI 会跑；挂了会换来一句「请修一下」。
 

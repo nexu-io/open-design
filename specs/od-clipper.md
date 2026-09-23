@@ -1,6 +1,6 @@
 ---
 name: OD Library and Clipper
-overview: 为 Open Design 新增一个全局资源库（OD Library，全系统统一资产登记中心）与 Chrome MV3 浏览器采集插件（OD Clipper）。资源库记录所有来源的资产（插件采集 / 手动上传 / Agent 任务上传或生成 / 设计系统提取），每条资产带来源标识与回链（可跳回对应 Agent 任务或设计系统），打通「采集/入库 → 可视化标记 → 语义检索 → 一键应用到设计稿 → 沉淀设计系统 → 一键产出 PPT/落地页/海报等材料」的持续积累闭环，遵循 HTTP + CLI + Web UI 三轨闭环与 daemon 数据目录契约。
+overview: 为 OpenDesign 新增一个全局资源库（OD Library，全系统统一资产登记中心）与 Chrome MV3 浏览器采集插件（OD Clipper）。资源库记录所有来源的资产（插件采集 / 手动上传 / Agent 任务上传或生成 / 设计系统提取），每条资产带来源标识与回链（可跳回对应 Agent 任务或设计系统），打通「采集/入库 → 可视化标记 → 语义检索 → 一键应用到设计稿 → 沉淀设计系统 → 一键产出 PPT/落地页/海报等材料」的持续积累闭环，遵循 HTTP + CLI + Web UI 三轨闭环与 daemon 数据目录契约。
 todos:
   - id: phase0
     content: Phase 0 地基：在 packages/contracts/src/api/library.ts 定义 DTO（含 storage/sources/LibrarySourceKind）；在 apps/daemon/src/db.ts 新增 library_assets/library_asset_sources/library_embeddings/library_tasks/library_tokens/library_digests 表；新增 LIBRARY_DIR 解析（派生自 RUNTIME_DATA_DIR）与内容寻址存储 helper；实现集中索引函数 registerLibraryAsset（按 content_hash 幂等合并 + 追加来源）；搭建富化任务骨架（仿 media-tasks.ts）。

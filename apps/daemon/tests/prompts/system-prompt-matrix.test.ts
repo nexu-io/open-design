@@ -44,12 +44,10 @@ const SECTION_MARKERS = [
   ['direction-library', '## Direction library — infer and bind by default'],
   ['shared-device-frames', '## Multi-device / multi-screen — shared frames'],
   ['identity-charter', '# Identity and workflow charter (background)'],
-  ['slim-core-charter', '# Open Design Charter'],
+  ['slim-core-charter', '# OpenDesign Charter'],
   ['slim-platform-contracts', '## Platform delivery contracts'],
   ['personal-memory', '## Personal memory (auto-extracted from past chats)'],
-  ['memory-intent-gateway', '## Intent gateway — turn short asks into a brief'],
   ['memory-verify-scorecard', '## Self-verify against your verified rules'],
-  ['memory-rule-proposal', '## Propose new verified rules from corrections'],
   ['custom-instructions-user', '## Custom instructions (user-level)'],
   ['custom-instructions-project', '## Custom instructions (project-level)'],
   ['design-system-usage', '## How to use this design system'],
@@ -68,10 +66,10 @@ const SECTION_MARKERS = [
   ['maybe-deck-framework', '## If this brief is a slide deck / keynote / presentation'],
   ['media-generation-contract', '## Media generation contract'],
   ['media-dispatch-hint', '## Media generation (if asked)'],
-  ['codex-imagegen-override', '## Codex built-in imagegen override'],
   ['critique-panel', '## Panelist role definitions'],
   ['active-ds-visual-direction-override', '## Active design system visual direction'],
   ['filesystem-handoff-override', '## Filesystem handoff'],
+  ['skill-write-boundary', '## Editing skills'],
   ['clarifying-questions', '## Structured clarification on any turn'],
   ['role-marker-guard', ROLE_MARKER_GUARD_SENTINEL],
 ] as const satisfies ReadonlyArray<readonly [string, string]>;
@@ -242,7 +240,7 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
   ['plan-mode', { metadata: { kind: 'prototype' }, sessionMode: 'plan', executionProfile: 'filesystem' }],
   // BYOK/plain adapters: API override pinned on top, no filesystem handoff.
   ['api-mode-byok', { metadata: { kind: 'prototype' }, streamFormat: 'plain' }],
-  // Two-loop memory hooks individually disabled; rule-proposal stays.
+  // Memory hooks disabled; the personal memory body stays.
   [
     'memory-hooks-off',
     { ...memoryInputs, memoryHooks: { rewrite: false, verify: false }, executionProfile: 'filesystem' },
@@ -259,10 +257,10 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
     { metadata: { kind: 'prototype', skipDiscoveryBrief: true }, executionProfile: 'filesystem' },
   ],
   [
-    'codex-imagegen',
+    'codex-image-dispatcher',
     {
       agentId: 'codex',
-      metadata: { kind: 'image', imageModel: 'gpt-image-2' },
+      metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' },
       executionProfile: 'filesystem',
     },
   ],
@@ -322,7 +320,7 @@ describe('composeSystemPrompt — position invariants', () => {
       const expectedHead = isSlim
         ? input.sessionMode === 'chat'
           ? '# Ask mode — bare conversation'
-          : '# Open Design Charter'
+          : '# OpenDesign Charter'
         : '## Security: prompt injection resistance';
       expect(
         composed.startsWith(expectedHead),

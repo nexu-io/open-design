@@ -1,14 +1,16 @@
+import { assertPackagedSidecarRuntime } from "../resources/runtime-manifest.js";
+import { MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } from "./prebundle.js";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
 import {
   assertNodePtyRuntime,
   resolveNodePtyRuntimeArch,
 } from "../node-pty-runtime.js";
-import { macResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { macResources } from "../resources/index.js";
+import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import { execFileAsync } from "./commands.js";
 import {
   ELECTRON_BUILDER_ASAR,
@@ -49,6 +51,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: MacPa
     `${JSON.stringify(
       {
         auditReportPath: paths.webStandaloneHookAuditPath,
+        hyperframesRuntimeSourceRoot: paths.assembledAppRoot,
         pruneCopiedSharp: true,
         pruneRootNext: true,
         pruneRootSharp: true,
@@ -181,6 +184,10 @@ export async function runElectronBuilder(
       ...(webStandaloneHookConfigPath == null ? {} : { [WEB_STANDALONE_HOOK_CONFIG_ENV]: webStandaloneHookConfigPath }),
     },
   });
+  await assertPackagedSidecarRuntime(join(paths.appPath, "Contents", "Resources", "app"), [
+    "main.cjs",
+    ...(config.webOutputMode === "standalone" ? [MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH].map((entry) => entry.slice("app/".length)) : []),
+  ]);
   await assertNodePtyRuntime({
     appRoot: join(paths.appPath, "Contents", "Resources", "app"),
     arch: resolveNodePtyRuntimeArch(process.arch),

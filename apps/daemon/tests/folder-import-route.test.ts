@@ -981,6 +981,25 @@ describe('POST /api/import/folder', () => {
     expect(archive.status).toBe(400);
   });
 
+  it('does not follow descendant file symlinks while streaming an imported-folder archive', async () => {
+    const real = makeFolder();
+    const outside = makeFolder();
+    await writeFile(path.join(real, 'index.html'), '<!doctype html>');
+    await writeFile(path.join(outside, 'secret.txt'), 'must not enter archive');
+    try {
+      symlinkSync(path.join(outside, 'secret.txt'), path.join(real, 'secret-link.txt'));
+    } catch {
+      return;
+    }
+    const importResp = await importFolder({ baseDir: real });
+    const { project } = (await importResp.json()) as { project: { id: string } };
+    const archive = await fetch(`${baseUrl}/api/projects/${project.id}/archive`);
+
+    expect(archive.status).toBe(200);
+    const zip = await JSZip.loadAsync(await archive.arrayBuffer());
+    expect(Object.keys(zip.files)).not.toContain('secret-link.txt');
+  });
+
   // Regression for the patch-metadata wipe. updateProject() replaces
   // metadata wholesale, so a normal UI patch that omits baseDir would
   // silently detach the project from its imported folder. Verify the

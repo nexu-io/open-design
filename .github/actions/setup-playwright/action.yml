@@ -99,6 +99,28 @@ runs:
         package_dir="${PACKAGE_JSON_PATH%/*}"
         pnpm -C "$package_dir" exec playwright install chromium
 
+    - name: Pin Blacksmith apt mirror to the canonical archive
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
+      shell: bash
+      env:
+        RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
+      run: |
+        # Blacksmith VMs resolve apt through a mirrorlist of third-party
+        # university mirrors. When one goes down, apt retries it for every
+        # index file before falling back, so the `apt-get update` inside
+        # `playwright install --with-deps` hangs until the job timeout.
+        # Browser OS deps are NOT fully preinstalled on the Blacksmith image
+        # (xvfb, fonts, libasound are missing), so apt must stay in the path;
+        # pin the canonical archive so it stays deterministic instead.
+        case "$RUNNER_LABELS_JSON" in
+          *'"blacksmith-'*) ;;
+          *) exit 0 ;;
+        esac
+        mirrorlist=/etc/apt/blacksmith-ubuntu-mirrors.txt
+        if [ -f "$mirrorlist" ]; then
+          printf 'http://archive.ubuntu.com/ubuntu\tpriority:1\n' | sudo tee "$mirrorlist"
+        fi
+
     - name: Install Playwright browsers
       if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
       shell: bash

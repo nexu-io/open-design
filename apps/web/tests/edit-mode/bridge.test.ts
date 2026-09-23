@@ -507,6 +507,64 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('hands capability-scoped preview links to the host without losing their project path', () => {
+    const posts: Array<{ type?: string; fileName?: string }> = [];
+    const dom = new JSDOM(
+      `<base href="http://localhost/api/projects/project-1/preview/scope-1/pages/"><main data-od-source-path="path-0"><a href="profile.html?variant=a">Profile</a></main>${buildManualEditBridge(false)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; fileName?: string });
+    }) as typeof dom.window.parent.postMessage;
+    const link = dom.window.document.querySelector('a')!;
+    const click = new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+
+    link.dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(posts).toContainEqual({
+      type: 'od:preview-open-file',
+      fileName: 'pages/profile.html',
+      search: '?variant=a',
+      hash: '',
+    });
+
+    dom.window.close();
+  });
+
+  it('keeps a nested preview directory inside the project-relative link path', () => {
+    const posts: Array<{ type?: string; fileName?: string }> = [];
+    const dom = new JSDOM(
+      `<base href="http://localhost/api/projects/project-1/preview/scope-1/preview/pages/index.html"><main data-od-source-path="path-0"><a href="profile.html">Profile</a></main>${buildManualEditBridge(false)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; fileName?: string });
+    }) as typeof dom.window.parent.postMessage;
+    const link = dom.window.document.querySelector('a')!;
+    const click = new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+
+    link.dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(posts).toContainEqual({
+      type: 'od:preview-open-file',
+      fileName: 'preview/pages/profile.html',
+      search: '',
+      hash: '',
+    });
+
+    dom.window.close();
+  });
+
   it('drag-repositions an element via pointer drag and posts od-edit-drag-commit', () => {
     const posts: Array<{ type?: string; id?: string; transform?: string }> = [];
     const dom = new JSDOM(

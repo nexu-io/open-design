@@ -74,7 +74,7 @@ afterEach(() => {
 const cfg = { disabledDesignSystems: [] } as unknown as AppConfig;
 
 describe('DesignSystemsSection rename (issue #2811)', () => {
-  it('renames an editable design system from Settings', async () => {
+  it('renames an editable design system through the internal component', async () => {
     render(<DesignSystemsSection cfg={cfg} setCfg={() => {}} />);
 
     const renameButton = await screen.findByRole('button', {

@@ -2,9 +2,9 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
-import { resolveMacInstallIdentity } from "../src/mac/identity.js";
-import { resolveMacPaths } from "../src/mac/paths.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { resolveMacInstallIdentity } from "@/mac/identity.js";
+import { resolveMacPaths } from "@/mac/paths.js";
 
 function makeConfig(root: string, namespace: string): ToolPackConfig {
   return {

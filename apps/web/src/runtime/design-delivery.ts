@@ -1,4 +1,8 @@
 import type { ChatSessionMode } from '@open-design/contracts';
+import {
+  containsQuestionFormAsk,
+  containsUnrenderableQuestionForm,
+} from '../artifacts/question-form';
 import type { AgentEvent, ChatMessage } from '../types';
 import { hasFileMutationToolUse } from './file-ops';
 import { unfinishedTodosFromEvents } from './todos';
@@ -18,6 +22,8 @@ export interface DesignDeliveryInput {
   events: AgentEvent[] | undefined;
   producedFileCount: number;
   traceObjectFileCount: number;
+  /** Authoritative artifact count reported by the daemon at run finalization. */
+  artifactCount?: number;
   persistenceSucceeded?: boolean;
   persistenceFailed?: boolean;
 }
@@ -37,8 +43,15 @@ export function isRetryableAssistantTerminalFailure(
   );
 }
 
+/**
+ * A bare open-tag scan is not enough: a turn that needed no clarification can
+ * narrate its decision straight into a `<question-form>` tag, and treating
+ * that prose as an ask latches the turn to `awaiting_input` no matter what it
+ * delivered. Share the form protocol's own body precondition instead of
+ * growing a second regex here.
+ */
 function asksForUserInput(content: string): boolean {
-  return /<(?:question-form|ask-question)\b/i.test(content);
+  return containsQuestionFormAsk(content);
 }
 
 function isIntermediateDesignTurn(
@@ -83,12 +96,14 @@ export function resolveDesignDeliveryOutcome(
   if (
     input.producedFileCount > 0 ||
     input.traceObjectFileCount > 0 ||
+    (input.artifactCount ?? 0) > 0 ||
     input.persistenceSucceeded ||
     hasLiveArtifactDelivery(input.events)
   ) {
     return 'delivered';
   }
   if (input.persistenceFailed) return 'delivery_failed';
+  if (containsUnrenderableQuestionForm(input.content)) return 'no_result';
   if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
     return 'report_only';
   }

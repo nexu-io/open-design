@@ -26,7 +26,7 @@ od:
 
 # Last30Days Research Skill
 
-This skill adapts the upstream Last30Days workflow for Open Design. It includes
+This skill adapts the upstream Last30Days workflow for OpenDesign. It includes
 the runtime-minimum Python engine under `scripts/`, but it does not add slash
 commands, provider settings, daemon routes, bundled API keys, or browser/social
 connectors outside the copied engine.

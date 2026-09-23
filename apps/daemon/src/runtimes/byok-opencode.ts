@@ -74,11 +74,16 @@ export function buildOpenCodeByokProviderConfig(
   const config = {
     provider: {
       [BYOK_OPENCODE_PROVIDER_ID]: {
-        name: 'Open Design BYOK',
+        name: 'OpenDesign BYOK',
         ...providerEntry,
         models: {
           [rawModel]: {
             name: rawModel,
+            // BYOK capability is unknown, not text-only. Allow OpenCode to
+            // forward images (including later Read tool results) and let the
+            // configured endpoint validate them. This run-scoped transport
+            // policy is not a persisted claim about the model's capabilities.
+            modalities: { input: ['text', 'image'], output: ['text'] },
             limit: {
               context: DEFAULT_CONTEXT_TOKEN_LIMIT,
               output: DEFAULT_OUTPUT_TOKEN_LIMIT,

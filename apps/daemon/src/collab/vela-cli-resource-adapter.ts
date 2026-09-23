@@ -31,6 +31,9 @@ const PROJECT_KIND = 'project';
 // Give the transport a generous 6x envelope for large snapshots, but never
 // let a wedged Vela child hold the per-project materialization lock forever.
 const RESOURCE_PULL_TIMEOUT_MS = 30_000;
+// One batch may carry up to 128 destinations. Blob work is still bounded
+// inside Vela, but the aggregate can legitimately outlive one small pull.
+const RESOURCE_PULL_BATCH_TIMEOUT_MS = 120_000;
 // A push uploads the author's full member-mirror snapshot; on a slow uplink a
 // large project can legitimately take minutes, so this budget exists only to
 // reap a truly wedged child — it must stay far above any honest upload time.
@@ -45,6 +48,7 @@ const RESOURCE_METADATA_TIMEOUT_MS = 60_000;
 // snapshot-redact) keep their historical unbounded behavior.
 const RESOURCE_COMMAND_TIMEOUTS_MS: Readonly<Record<string, number>> = {
   pull: RESOURCE_PULL_TIMEOUT_MS,
+  'pull-batch': RESOURCE_PULL_BATCH_TIMEOUT_MS,
   push: RESOURCE_PUSH_TIMEOUT_MS,
   head: RESOURCE_METADATA_TIMEOUT_MS,
   shared: RESOURCE_METADATA_TIMEOUT_MS,
@@ -54,6 +58,7 @@ const MEMBER_MIRROR_EXCLUDED_ENTRIES = [
   '.file-versions',
   '.live-artifacts',
   '.od-skills',
+  '.od-frames',
   '.git',
   'node_modules',
   '.npmrc',
@@ -96,7 +101,7 @@ const MEMBER_MIRROR_EXCLUDED_PREFIXES = ['.env', 'deriveddata-/'] as const;
  * one flat list:
  *
  * - {@link MEMBER_MIRROR_EXCLUDED_ENTRIES} — secret-bearing entries
- *   (credentials, tool state, Open Design private bookkeeping). These must
+ *   (credentials, tool state, OpenDesign private bookkeeping). These must
  *   never leave the author's machine whether they are a file, a directory, or
  *   a symlink, so they are sent bare and match any entry of that name.
  * - {@link IGNORED_PROJECT_DIR_NAMES} — generated/installed/cache trees the
@@ -112,7 +117,7 @@ const MEMBER_MIRROR_EXCLUDED_PREFIXES = ['.env', 'deriveddata-/'] as const;
  * contain a slash, so the rule matches nothing and the tree is published in
  * full — the pre-optimization payload, never a missing file. Once the CLI
  * understands the form, the same push starts skipping those directories with
- * no further Open Design change. A new `--exclude-dir` flag could NOT degrade
+ * no further OpenDesign change. A new `--exclude-dir` flag could NOT degrade
  * this way: older CLIs reject unknown flags, which would fail every publish.
  */
 export const MEMBER_MIRROR_PUSH_EXCLUDED_ENTRIES: readonly string[] = (() => {
@@ -131,6 +136,14 @@ export type RunVelaResource = (
   args: string[],
   workspaceId?: string,
 ) => Promise<string>;
+
+export interface VelaResourcePullBatchRequest {
+  key: string;
+  kind: 'design_system' | 'plugin' | 'skill';
+  resourceId: string;
+  dir: string;
+  ref: string;
+}
 
 export interface VelaCliResourceAdapterOptions {
   /** The project's source directory to publish (managed-project root). */
@@ -371,6 +384,22 @@ export const runVelaResourceCommand: RunVelaResource = (args, workspaceId) => {
     },
   );
 };
+
+/** Run one workspace-scoped batch through stdin to avoid argv size limits. */
+export function runVelaResourceBatchCommand(
+  requests: readonly VelaResourcePullBatchRequest[],
+  workspaceId: string,
+): Promise<string> {
+  const workspaceOptions = velaWorkspaceCommandOptions(workspaceId);
+  return runVelaCommand(
+    ['resource', 'pull-batch', '--requests-file', '-', '--json'],
+    {
+      ...workspaceOptions,
+      timeoutMs: RESOURCE_PULL_BATCH_TIMEOUT_MS,
+      input: JSON.stringify({ requests }),
+    },
+  );
+}
 
 const defaultRunVelaResource: RunVelaResource = runVelaResourceCommand;
 

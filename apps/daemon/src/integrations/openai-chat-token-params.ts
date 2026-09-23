@@ -33,6 +33,17 @@ export function buildMaxCompletionTokensParam(
   return { max_completion_tokens: maxTokens };
 }
 
+const AZURE_OPENAI_HOST_SUFFIXES = [
+  '.openai.azure.com',
+  '.services.ai.azure.com',
+  '.cognitiveservices.azure.com',
+] as const;
+
+export function isAzureOpenAIHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase().replace(/\.$/, '');
+  return AZURE_OPENAI_HOST_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
+}
+
 export function isUnsupportedMaxTokensError(detail: string): boolean {
   const normalized = detail.toLowerCase();
   return (

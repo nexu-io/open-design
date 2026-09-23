@@ -2,11 +2,11 @@
 
 语言：[English](PUBLISHING-REGISTRIES.md) | 简体中文
 
-Open Design 插件刻意设计成一个文件夹可以跨多个 agent 生态流转。最稳妥的发布模型是：
+OpenDesign 插件刻意设计成一个文件夹可以跨多个 agent 生态流转。最稳妥的发布模型是：
 
-1. 把公开 GitHub 仓库或 Open Design PR 作为 source of truth。
+1. 把公开 GitHub 仓库或 OpenDesign PR 作为 source of truth。
 2. 保持 `SKILL.md` 可移植、适合 registry 读取。
-3. 添加 `open-design.json` 作为 Open Design sidecar。
+3. 添加 `open-design.json` 作为 OpenDesign sidecar。
 4. 本地验证通过后，再发布或登记到外部 registry。
 
 各 registry 的规则可能变化，运行 publish 命令前一定要查看目标 registry 的当前文档。
@@ -14,8 +14,8 @@ Open Design 插件刻意设计成一个文件夹可以跨多个 agent 生态流�
 ## 推荐发布顺序
 
 1. 本地验证插件文件夹。
-2. 推送公开 GitHub 仓库，或向 Open Design 打开 PR。
-3. 在 README 中添加 Open Design 和通用 Agent Skills 客户端的安装说明。
+2. 推送公开 GitHub 仓库，或向 OpenDesign 打开 PR。
+3. 在 README 中添加 OpenDesign 和通用 Agent Skills 客户端的安装说明。
 4. 添加 registry 专属 badge 或链接。
 5. 发布到符合目标用户的 registry。
 6. 在 README 和 PR body 中记录所有已发布 URL。
@@ -24,7 +24,7 @@ Open Design 插件刻意设计成一个文件夹可以跨多个 agent 生态流�
 
 | 目标 | 适合场景 | 源形态 | 发布策略 |
 | --- | --- | --- | --- |
-| Open Design | OD marketplace、composer chips、pipelines、GenUI、artifact provenance | `SKILL.md` + `open-design.json` | 向 Open Design 提 PR，或发布指向插件仓库的 marketplace index entry。 |
+| OpenDesign | OD marketplace、composer chips、pipelines、GenUI、artifact provenance | `SKILL.md` + `open-design.json` | 向 OpenDesign 提 PR，或发布指向插件仓库的 marketplace index entry。 |
 | skills.sh | 面向多种编码 agent 的 Agent Skills 发现 | 包含 `SKILL.md` 的公开 Git repo 或 subpath | 确保 `npx skills add owner/repo` 可用，添加 skills.sh badge，并写清 README。 |
 | ClawHub | 让 OpenClaw 用户从 registry 安装 skills 或 OpenClaw plugins | skill 使用 `SKILL.md` 文件夹；plugin 使用 OpenClaw package metadata | `SKILL.md` 文件夹使用 `clawhub skill publish ./my-skill`。只有同时提供 OpenClaw plugin metadata 时，才使用 `clawhub package publish ... --family code-plugin`。 |
 | 独立 GitHub | source of truth 和广泛 agent 兼容 | 可移植文件夹或 mono-repo subpath | 打 tag、写安装命令、维护 changelog。 |
@@ -39,7 +39,7 @@ npx skills add https://github.com/owner/repo/tree/main/path/to/skill
 npx skills add ./my-local-skills
 ```
 
-对 Open Design 插件作者：
+对 OpenDesign 插件作者：
 
 - 确保 repo 或 subpath 包含合法 `SKILL.md`。
 - 保持 `open-design.json` 为纯增量；通用 skill 客户端应能忽略它。
@@ -75,7 +75,7 @@ clawhub skill publish ./my-skill \
   --changelog "Initial release"
 ```
 
-普通 Open Design 插件应优先走这个路径，因为它们以 `SKILL.md` 为核心。
+普通 OpenDesign 插件应优先走这个路径，因为它们以 `SKILL.md` 为核心。
 
 只有当你明确发布 OpenClaw code plugin，并提供 OpenClaw compatibility metadata 时，才使用 OpenClaw package 路径：
 
@@ -89,7 +89,7 @@ clawhub package publish <source> --family code-plugin
 - 保持 `SKILL.md` metadata 准确。
 - 在 README 和 skill 正文中声明所需环境变量、工具、权限、connectors 或 network access。
 - 公开 listing 前先跑 dry run 或 inspect。
-- 链回 canonical GitHub repo 和 Open Design PR。
+- 链回 canonical GitHub repo 和 OpenDesign PR。
 - changelog 诚实且版本化。
 - `open-design.json` 的 `specVersion` 保持为规范包版本；每次可发布的行为变化都 bump 插件 `version`。
 
@@ -111,8 +111,8 @@ clawhub package publish <source> --family code-plugin
 ## Registry publishing
 
 - Canonical source:
-- Open Design PR:
-- Open Design specVersion:
+- OpenDesign PR:
+- OpenDesign specVersion:
 - Plugin version:
 - Marketplace catalog version:
 - skills.sh install:

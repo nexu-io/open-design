@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
   ChatSessionMode,
+  CreateProjectExampleReference,
   InstalledPluginRecord,
   ProjectKind,
   ProjectMetadata,
+  ProjectScenarioTaskProfile,
+  LocalCatalogScope,
   RunContextSelection,
 } from '@open-design/contracts';
 import {
@@ -30,10 +33,22 @@ import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 export interface PluginLoopSubmit {
   prompt: string;
   pluginId: string | null;
+  pluginSelectionProvenance?: 'automatic-default';
+  /** Exact product-owned OD Next route; absent for ordinary plugin routing. */
+  automaticStrategyTaskProfile?: ProjectScenarioTaskProfile | null;
+  /**
+   * Identity of the official example card the user picked under a task type.
+   * Sent INSTEAD of `pluginId`/`appliedPluginSnapshotId`, and only alongside
+   * `automaticStrategyTaskProfile` — the example is a look, not a strategy.
+   */
+  exampleReference?: CreateProjectExampleReference | null;
+  /** Exact identity of the local catalogue record selected by the user. */
+  pluginSource?: string | null;
   // Marketplace trust of the routed plugin (official / community / …), used
   // to attribute project_create_result to a plugin type. Null when no plugin.
   pluginType?: string | null;
   skillId?: string | null;
+  skillCatalogScope?: LocalCatalogScope | null;
   appliedPluginSnapshotId: string | null;
   pluginTitle: string | null;
   taskKind: string | null;
@@ -43,6 +58,7 @@ export interface PluginLoopSubmit {
   contextConnectors?: Array<{ id: string; name: string; provider?: string; category?: string; status?: string; accountLabel?: string }> | null;
   initialRunContext?: RunContextSelection | null;
   designSystemId?: string | null;
+  designSystemCatalogScope?: LocalCatalogScope | null;
   // Stage B of plugin-driven-flow-plan: when the user picked a Home
   // chip the rail tells the submit handler which `ProjectKind` to
   // stamp on the new project's metadata. The daemon-side default

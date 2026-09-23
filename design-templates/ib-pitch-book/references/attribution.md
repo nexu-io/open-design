@@ -14,11 +14,11 @@ This skill adapts the workflow scope of **Pitch Agent** from:
 - The upstream Apache-2.0 project is credited in `SKILL.md` frontmatter and this
   notice file.
 
-## What is original to Open Design
+## What is original to OpenDesign
 
 - `example.html` visual system, fictional NorthPeak / Hartfield content,
   slide-by-slide copy, tables, styling, and JavaScript.
-- `assets/template.html` seed deck shell and Open Design-specific workflow
+- `assets/template.html` seed deck shell and OpenDesign-specific workflow
   instructions.
 - The local references in this folder, except where they describe the adapted
   upstream workflow scope.
@@ -30,6 +30,6 @@ modifying the skill. If future edits copy upstream source text, code, prompts,
 or documentation more directly, preserve the upstream Apache-2.0 license notice
 for those adapted portions and document the copied files / sections here.
 
-The Open Design skill bundle (`SKILL.md`, `example.html`, `assets/template.html`,
-and references in this folder) is contributed under Open Design's repository
+The OpenDesign skill bundle (`SKILL.md`, `example.html`, `assets/template.html`,
+and references in this folder) is contributed under OpenDesign's repository
 license except for the adapted workflow ideas noted above.

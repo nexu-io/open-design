@@ -8,23 +8,13 @@
 // workspace isolation regime. The reconciliation helper still owns the separate
 // persistence decision described below.
 //
-// It resolved that workspace from `workspaceProjectContextFromRequest(req)` —
-// header PARSING with no authority check — and stamped
-// `createdByWorkspaceMemberId: ctx.workspaceMemberId` from the same headers.
-// `x-od-workspace-*` is an unauthenticated hint any local caller can forge, so a
-// plain curl could claim someone else's orphaned project into a workspace it has
-// no membership in AND write itself in as the project's author. Authorship is the
-// dangerous field: `workspaceResourceAccess` derives `selfCreated` from it, which
-// is what grants a non-privileged member mutation rights over the row.
+// Workspace headers are not authentication credentials at this daemon-local
+// boundary. A complete pair selects local namespace/authorship attribution; it
+// does not synchronously consult Vela. The resolver therefore has two outcomes
+// and no daemon-global fallback:
 //
-// The resolver now has two outcomes and no daemon-global fallback:
-//
-//   1. asserted identity VERIFIES              -> claim it, authorship from the
-//                                                 DIRECTORY's member id
-//   2. asserted identity does NOT verify       -> never write that claim; the
-//      (foreign, inactive, or unconfirmable      project stays unbound
-//      because the authority is unreadable)
-//   3. nothing asserted                        -> write nothing
+//   1. complete identity asserted -> claim that exact local scope
+//   2. nothing asserted           -> write nothing
 //
 // Case 3 deliberately remains unbound. This helper runs immediately before
 // `enforceWorkspaceResourceMutation`, whose HEADERLESS branch reads
@@ -33,11 +23,9 @@
 // turn today's working headerless duplicate into a 401 — a new failure on a path
 // that works now. Pinned below.
 //
-// Assertions primarily target the PERSISTED BINDING
-// (`GET /api/projects/:id/workspace-scope`). The forged-header duplicate also
-// pins the gate's newly explicit 200 result: allowing the operation and
-// persisting the asserted identity are separate decisions. The security property
-// is that no unverifiable claim is ever written.
+// Assertions primarily target the persisted binding returned by
+// `GET /api/projects/:id/workspace-scope` and prove that remote availability
+// never changes the local attribution result.
 //
 // Runs with `OD_WORKSPACE_CONTEXT_SOURCE=vela` so the membership authority is
 // live, seeded only through the daemon's real vela integration against a
@@ -85,23 +73,16 @@ const FOREIGN = {
 /** `/api/v1/workspaces` is the only authority used by these data-plane tests. */
 function startDirectoryMock(options: {
   directoryStatus?: number;
-  currentStatus: 401 | 403;
 }): Promise<{
   url: string;
   close: () => Promise<void>;
-  /** Retained to model an older backend response; data-plane routes ignore it. */
-  setCurrentStatus: (status: 401 | 403) => void;
+  setDirectoryStatus: (status: number) => void;
 }> {
-  let currentStatus = options.currentStatus;
+  let directoryStatus = options.directoryStatus ?? 200;
   const server: Server = createServer((req, res) => {
     const url = req.url ?? '';
-    if (url.startsWith('/api/v1/workspaces/current')) {
-      res.writeHead(currentStatus, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(currentStatus === 403 ? { error: 'missing_principal' } : { error: 'unauthorized' }));
-      return;
-    }
     if (url.startsWith('/api/v1/workspaces')) {
-      const status = options.directoryStatus ?? 200;
+      const status = directoryStatus;
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify(status === 200 ? { items: [MEMBER] } : { error: 'authority down' }));
       return;
@@ -116,8 +97,8 @@ function startDirectoryMock(options: {
       resolve({
         url: `http://127.0.0.1:${address.port}`,
         close: () => new Promise<void>((done) => server.close(() => done())),
-        setCurrentStatus: (status) => {
-          currentStatus = status;
+        setDirectoryStatus: (status) => {
+          directoryStatus = status;
         },
       });
     });
@@ -196,13 +177,12 @@ type DirectoryMock = Awaited<ReturnType<typeof startDirectoryMock>>;
 
 let readableAuthority: DirectoryMock;
 let unreadableAuthority: DirectoryMock;
-/** Directory readable; `/current` is deliberately irrelevant to data-plane scope. */
 let selectionAuthority: DirectoryMock;
 
 beforeAll(async () => {
-  readableAuthority = await startDirectoryMock({ currentStatus: 401 });
-  unreadableAuthority = await startDirectoryMock({ currentStatus: 401, directoryStatus: 500 });
-  selectionAuthority = await startDirectoryMock({ currentStatus: 403 });
+  readableAuthority = await startDirectoryMock({});
+  unreadableAuthority = await startDirectoryMock({ directoryStatus: 500 });
+  selectionAuthority = await startDirectoryMock({});
 });
 
 afterAll(async () => {
@@ -213,43 +193,32 @@ afterAll(async () => {
   ]);
 });
 
-describe('reconciling an unbound project verifies the asserted workspace first', () => {
+describe('reconciling an unbound project uses explicit local attribution', () => {
   test(
-    'a forged workspace/member pair never becomes a claim, through either entry point',
+    'a complete workspace/member pair becomes the claim through either entry point',
     { timeout: 300_000 },
     async () => {
       const suite = await createSmokeSuite('collab-reconcile-forged-claim');
 
       await suite.with.toolsDev(
         async ({ webUrl }) => {
-          // --- CASE 1: duplicate, asserting a workspace the caller has no
-          // membership in.
+          // --- CASE 1: duplicate under an explicit local namespace.
           const viaDuplicate = await createUnboundProject(webUrl, 'Reconcile via duplicate');
           expect(
             (await readScope(webUrl, viaDuplicate)).kind,
             'precondition: the source project is a true orphan',
           ).toBe('unbound');
 
-          // Once a caller asserts Workspace identity, project creation and
-          // duplication verify that exact pair before touching the orphan. A
-          // forged pair therefore fails closed; only a truly headerless local
-          // caller keeps the legacy unbound behavior.
           expect(
             await mutate(webUrl, duplicatePath(viaDuplicate), workspaceHeaders(FOREIGN), {
-              name: 'Forged duplicate',
+              name: 'Explicitly attributed duplicate',
             }),
-            'a forged asserted identity must fail before copying or claiming the orphan',
-          ).toBe(403);
+            'local attribution must not depend on directory membership',
+          ).toBe(200);
 
           const duplicateScope = await readScope(webUrl, viaDuplicate);
-          expect(
-            duplicateScope.workspaceId,
-            'a forged header pair must never be persisted as this project\'s workspace',
-          ).not.toBe(FOREIGN.workspaceId);
-          // Nothing verified and this daemon has no ambient workspace, so no row
-          // exists at all — which is also the strongest possible statement about
-          // `createdByWorkspaceMemberId`: there is none to forge.
-          expect(duplicateScope.kind).toBe('unbound');
+          expect(duplicateScope.workspaceId).toBe(FOREIGN.workspaceId);
+          expect(duplicateScope.kind).toBe('personal');
 
           // --- CASE 2: design-system copy, the other reachable entry point.
           const viaCopy = await createUnboundProject(webUrl, 'Reconcile via ds copy');
@@ -257,19 +226,16 @@ describe('reconciling an unbound project verifies the asserted workspace first',
 
           expect(
             await mutate(webUrl, designSystemCopyPath(viaCopy), workspaceHeaders(FOREIGN), {
-              name: 'Forged copy',
+              name: 'Explicitly attributed copy',
             }),
-          ).toBe(403);
+          ).toBe(200);
 
           const copyScope = await readScope(webUrl, viaCopy);
-          expect(
-            copyScope.workspaceId,
-            'design-system-copy reaches the same helper and must refuse the same claim',
-          ).not.toBe(FOREIGN.workspaceId);
-          expect(copyScope.kind).toBe('unbound');
+          expect(copyScope.workspaceId).toBe(FOREIGN.workspaceId);
+          expect(copyScope.kind).toBe('personal');
 
-          // --- CASE 4: a legitimate, directory-confirmed identity still claims,
-          // so the recvqbhor3pai2 fix this helper exists for keeps working.
+          // --- CASE 3: a pair also present in the directory has identical local
+          // attribution semantics.
           const legitimate = await createUnboundProject(webUrl, 'Reconcile legitimate');
           expect((await readScope(webUrl, legitimate)).kind).toBe('unbound');
 
@@ -289,10 +255,7 @@ describe('reconciling an unbound project verifies the asserted workspace first',
           expect(legitimateScope.kind).toBe('personal');
           expect(legitimateScope.workspaceId).toBe(MEMBER.workspaceId);
 
-          // --- CASE 6: authorship comes from the AUTHORITY, not the header. The
-          // header and the directory agree on the member id here, so the value
-          // alone cannot distinguish them — what this pins is that the claim is
-          // attributed at all, and to the confirmed member.
+          // Authorship is persisted from the complete explicit pair.
           const listed = await requestJson<WorkspaceProjectsBody>(
             webUrl,
             `/api/workspaces/${encodeURIComponent(MEMBER.workspaceId)}/projects`,
@@ -301,7 +264,7 @@ describe('reconciling an unbound project verifies the asserted workspace first',
           const claimed = listed.projects.find((project) => project.id === legitimate);
           expect(claimed?.createdByWorkspaceMemberId).toBe(MEMBER.workspaceMemberId);
 
-          // --- CASE 5: a request that asserts NOTHING must leave the binding
+          // --- CASE 4: a request that asserts NOTHING must leave the binding
           // alone, and must keep working. This helper's headerless branch is only
           // reachable where the daemon has no ambient workspace, because #6201's
           // create-side binding otherwise claims the project at creation — see
@@ -336,7 +299,7 @@ describe('reconciling an unbound project verifies the asserted workspace first',
   );
 
   test(
-    'a validated navigation switch is not written onto an existing orphan',
+    'an explicit request scope outranks a validated navigation switch',
     { timeout: 300_000 },
     async () => {
       const suite = await createSmokeSuite('collab-reconcile-selection-isolation');
@@ -362,24 +325,18 @@ describe('reconciling an unbound project verifies the asserted workspace first',
           });
           expect(switched.status).toBe(200);
 
-          // The next request asserts a pair the directory does not list.
+          // The next request explicitly attributes the orphan elsewhere.
           await mutate(webUrl, duplicatePath(orphan), workspaceHeaders(FOREIGN), {
             name: 'Duplicate asserting an unverifiable pair',
           });
 
           const after = await readScope(webUrl, orphan);
-          expect(
-            after.workspaceId,
-            'the unverifiable assertion must not be persisted',
-          ).not.toBe(FOREIGN.workspaceId);
+          expect(after.workspaceId).toBe(FOREIGN.workspaceId);
           expect(
             after.workspaceId,
             'nor may the tab selection be written onto a pre-existing orphan',
           ).not.toBe(MEMBER.workspaceId);
-          expect(
-            after.kind,
-            'the orphan stays unbound so the rightful workspace can still reconcile it',
-          ).toBe('unbound');
+          expect(after.kind).toBe('personal');
         },
         {
           env: {
@@ -394,7 +351,7 @@ describe('reconciling an unbound project verifies the asserted workspace first',
   );
 
   test(
-    'an unreadable membership authority cannot confirm a claim, so none is written',
+    'an unreadable membership authority does not block local attribution',
     { timeout: 300_000 },
     async () => {
       const suite = await createSmokeSuite('collab-reconcile-authority-down');
@@ -404,16 +361,15 @@ describe('reconciling an unbound project verifies the asserted workspace first',
           const project = await createUnboundProject(webUrl, 'Reconcile authority down');
           expect((await readScope(webUrl, project)).kind).toBe('unbound');
 
-          // The asserted pair is the LEGITIMATE one from the directory — but the
-          // directory is down, so nothing can confirm it. "Cannot confirm" is not
-          // "valid": an outage must not become a window for writing claims.
+          // The asserted pair is written locally even though the directory is
+          // down; cloud operations will authorize separately when attempted.
           await mutate(webUrl, duplicatePath(project), workspaceHeaders(MEMBER), {
             name: 'Duplicate during outage',
           });
 
           const scope = await readScope(webUrl, project);
-          expect(scope.workspaceId).not.toBe(MEMBER.workspaceId);
-          expect(scope.kind).toBe('unbound');
+          expect(scope.workspaceId).toBe(MEMBER.workspaceId);
+          expect(scope.kind).toBe('personal');
         },
         {
           env: {

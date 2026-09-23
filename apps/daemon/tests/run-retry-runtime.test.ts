@@ -4,7 +4,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 
@@ -27,6 +27,7 @@ type RunStatus = {
   signal: string | null;
   error: string | null;
   errorCode: string | null;
+  terminalTrigger: string | null;
   eventsLogPath: string;
 };
 
@@ -52,6 +53,11 @@ describe('same-run retry runtime', () => {
   const originalEnv = snapshotEnv();
   let started: StartedServer | null = null;
   let binDir: string | null = null;
+
+  beforeEach(() => {
+    // These plain-reply fixtures exercise transport retries without an OD Next task.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+  });
 
   afterEach(async () => {
     await Promise.resolve(started?.shutdown?.());
@@ -228,6 +234,7 @@ describe('same-run retry runtime', () => {
 
     const run = await createAndWaitForRun(started.url, 'amr');
     expect(run.status).toBe('succeeded');
+    expect(run.terminalTrigger).toBeNull();
 
     const events = await readRunEvents(run.eventsLogPath);
     expect(events.filter((event) => event.event === 'start')).toHaveLength(2);
@@ -239,6 +246,7 @@ describe('same-run retry runtime', () => {
       failure_category: 'timeout',
       failure_detail: 'inactivity_timeout',
       failure_stage: 'first_token_wait',
+      terminal_trigger: 'first_output_deadline',
       retry_reason: 'transient_failure',
     });
     expect(events.find((event) => event.event === 'run_retry_finished')?.data).toMatchObject({
@@ -321,6 +329,7 @@ describe('same-run retry runtime', () => {
     const run = await createAndWaitForRun(started.url, 'amr');
     expect(run.status).toBe('failed');
     expect(run.error).toContain('without emitting a first output');
+    expect(run.terminalTrigger).toBe('first_output_deadline');
 
     const events = await readRunEvents(run.eventsLogPath);
     expect(events.filter((event) => event.event === 'start')).toHaveLength(2);
@@ -652,6 +661,7 @@ function snapshotEnv(): Record<string, string | undefined> {
     OPEN_DESIGN_TELEMETRY_RELAY_URL: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL,
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
+    OD_NEXT_STRATEGY_ROLLOUT: process.env.OD_NEXT_STRATEGY_ROLLOUT,
     OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS: process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS,
     OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS: process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS,
     OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS: process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS,
@@ -694,6 +704,12 @@ if (process.argv.includes('--version')) {
 }
 if (process.argv.includes('--help')) {
   console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]');
+  process.exit(0);
+}
+// Auxiliary daemon invocations (memory extraction / title generation) must
+// not consume the chat-attempt counter.
+if (!process.argv.includes('--session-id') && !process.argv.includes('--resume')) {
+  process.stdout.write('{"entries":[]}');
   process.exit(0);
 }
 let attempts = 0;

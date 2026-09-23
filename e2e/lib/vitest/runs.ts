@@ -13,6 +13,8 @@ export type ChatRunCreateBody = {
   projectId: string;
   reasoning?: string | null;
   skillId?: string | null;
+  /** Client-minted id for this turn's user row; the daemon pins it on create. */
+  userMessageId?: string;
   toolBundle?: {
     mcpServers?: Array<Record<string, unknown>>;
   };
@@ -23,6 +25,7 @@ export type ChatRunStatusBody = {
   assistantMessageId: string | null;
   conversationId: string | null;
   createdAt: number;
+  errorCode?: string | null;
   exitCode?: number | null;
   failureAction?: string | null;
   id: string;

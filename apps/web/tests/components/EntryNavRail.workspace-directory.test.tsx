@@ -56,6 +56,33 @@ function teamContext(): WorkspaceCollabContext {
 
 const originalFetch = globalThis.fetch;
 
+class OpeningEventSource {
+  static instances: OpeningEventSource[] = [];
+  readonly listeners = new Map<string, Set<(event: MessageEvent) => void>>();
+  onopen: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  constructor(readonly url: string) {
+    OpeningEventSource.instances.push(this);
+    queueMicrotask(() => this.onopen?.());
+  }
+
+  addEventListener(name: string, listener: EventListenerOrEventListenerObject) {
+    const callback = listener as (event: MessageEvent) => void;
+    const current = this.listeners.get(name) ?? new Set();
+    current.add(callback);
+    this.listeners.set(name, current);
+  }
+
+  emit(name: string, data: unknown) {
+    for (const listener of this.listeners.get(name) ?? []) {
+      listener({ data: JSON.stringify(data) } as MessageEvent);
+    }
+  }
+
+  close() {}
+}
+
 /** Directory reads resolve only when released, so "before the network answers" is observable. */
 function installGatedFetch() {
   const releases: Array<() => void> = [];
@@ -99,16 +126,58 @@ function renderRail() {
 
 beforeEach(() => {
   resetWorkspaceDirectoryCache();
+  OpeningEventSource.instances = [];
+  vi.stubGlobal('EventSource', OpeningEventSource as unknown as typeof EventSource);
 });
 
 afterEach(() => {
   cleanup();
   globalThis.fetch = originalFetch;
   resetWorkspaceDirectoryCache();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('workspace switcher directory', () => {
+  it('refreshes a remotely-created workspace while the switcher stays closed', async () => {
+    let items = DIRECTORY;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/workspace/directory')) {
+        return new Response(JSON.stringify({ items }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as typeof fetch;
+
+    renderRail();
+    await waitFor(() => expect(OpeningEventSource.instances).toHaveLength(1));
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/workspace/directory',
+      { cache: 'no-store' },
+    ));
+    expect(document.querySelector('.entry-nav-rail__team-menu')).toBeNull();
+
+    items = [
+      ...DIRECTORY,
+      {
+        workspaceId: 'ws-remote',
+        workspaceName: 'Remote-created team',
+        workspaceType: 'team',
+        workspaceMemberId: 'wm-remote',
+        role: 'owner',
+      },
+    ];
+    OpeningEventSource.instances[0]?.emit('workspace-directory-changed', {
+      type: 'workspace-directory-changed',
+      at: Date.now(),
+    });
+    await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.filter(
+      ([input]) => String(input).includes('/api/workspace/directory'),
+    )).toHaveLength(2));
+
+    fireEvent.click(screen.getByTestId('workspace-switcher'));
+    await waitFor(() => expect(menu().getByText('Remote-created team')).toBeTruthy());
+  });
+
   it('keeps actions outside the scrollable workspace list when the directory exceeds five items', async () => {
     const manyWorkspaces = Array.from({ length: 7 }, (_, index) => ({
       workspaceId: index === 0 ? 'ws-team' : `ws-${index + 1}`,

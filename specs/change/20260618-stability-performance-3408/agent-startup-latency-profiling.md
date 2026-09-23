@@ -70,7 +70,7 @@ Why are cache hit rate low and follow-up turns not faster? Three structural prob
 The only thing that might survive is the flattened transcript text (append-only), but a hit requires: ① the daemon freezes the volatile system blocks ahead of it (problem 1) so the prefix is byte-stable across turns, and ② the request still falls within TTL (problem 3). The gateway side is **already handled** — the AMR spec ground-checked that Vela Link injects `cache_control` itself (`bifrostengine/prompt_cache.go`), so there is **no ACP passthrough condition to satisfy**; the only gateway-side gap is TTL/provider coverage, which folds into ②. Today ① is not done and ② defaults to 5min, so the transcript prefix does not hit cross-turn.
 
 ### Experiment source (honest labels)
-- ✅ **Real production client**: cache hit/miss TTFT and cross-turn hit rate above come from PostHog `run_finished` (real Open Design client telemetry).
+- ✅ **Real production client**: cache hit/miss TTFT and cross-turn hit rate above come from PostHog `run_finished` (real OpenDesign client telemetry).
 - ✅ **Latest origin/main code verification**: all three Root cause points were checked against real code.
 - ❌ **Invalidated**: an early local bare `claude -p` setup/model breakdown **did not go through the daemon** and does not represent the real path; discarded. Real subsegment breakdown must be measured inside the daemon by Phase 1 instrumentation.
 

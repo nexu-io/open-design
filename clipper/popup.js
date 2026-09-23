@@ -1,6 +1,6 @@
-// Open Design web clipper popup. Thin UI over the service worker message API.
+// OpenDesign web clipper popup. Thin UI over the service worker message API.
 //
-// Zero-config: no pairing. The popup just probes whether Open Design is running
+// Zero-config: no pairing. The popup just probes whether OpenDesign is running
 // and lets you capture. The daemon URL lives under "Advanced" for the rare case
 // you ran the daemon on a non-default port.
 
@@ -136,7 +136,7 @@ function render(connected) {
   status.dataset.paired = connected ? 'true' : 'false';
   $('hint').hidden = connected;
   // Capture stays available even when disconnected; the buttons surface a clear
-  // "Open Design not running" message instead of being hidden, so it never feels broken.
+  // "OpenDesign not running" message instead of being hidden, so it never feels broken.
 }
 
 function renderToolbar(visible) {

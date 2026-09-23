@@ -1,5 +1,5 @@
 name: 💡 Feature request
-description: Suggest a new feature or improvement for Open Design.
+description: Suggest a new feature or improvement for OpenDesign.
 labels: ["enhancement"]
 body:
   - type: markdown

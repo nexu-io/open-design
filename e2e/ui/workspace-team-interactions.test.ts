@@ -1,8 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 
 import { expect, test } from '@/playwright/suite';
 import { applyStandardMocks } from '@/playwright/mock-factory';
-import { ensureRailOpen } from '@/playwright/rail';
+import { ensureRailOpen, openTeamProjectsTab } from '@/playwright/rail';
 import { T } from '@/timeouts';
 
 type WorkspaceRole = 'owner' | 'member';
@@ -99,8 +100,8 @@ const TEAM_FULL: WorkspaceFixture = {
 const TEAM_UNKNOWN_SEATS: WorkspaceFixture = {
   ...TEAM_OWNER,
   workspaceName: 'Seat state loading',
-  // Deliberately model the pre-authority window. The production resolver must
-  // not infer spare capacity from permissions alone.
+  // Deliberately model the directory-only context, where invite permission is
+  // known but seat capacity remains authoritative at invite submission time.
   seatSummary: undefined as never,
 };
 
@@ -112,6 +113,7 @@ type WorkspaceMocks = {
   activeWorkspaceId: () => string;
   setCurrent: (workspace: WorkspaceFixture) => void;
   setBalance: (balanceUsd: string) => void;
+  setDirectoryUnavailable: (unavailable: boolean) => void;
 };
 
 type WorkspaceProjectMove = {
@@ -158,7 +160,7 @@ test('[P0] workspace switcher changes identity, returns Home, and exposes team n
   await ensureRailOpen(page);
 
   await expect(page.getByTestId('workspace-switcher')).toContainText('Ada workspace');
-  await expect(page.getByTestId('entry-nav-drafts')).toContainText('Personal projects');
+  await expect(page.getByTestId('entry-nav-drafts')).toContainText('All projects');
   await expect(page.getByTestId('entry-nav-all-projects')).toHaveCount(0);
 
   await page.getByTestId('entry-nav-design-systems').click();
@@ -181,9 +183,10 @@ test('[P0] workspace switcher changes identity, returns Home, and exposes team n
   await expect(page.getByTestId('workspace-switcher')).toContainText('Atlas Team');
   await expect(page.getByTestId('entry-view-home')).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByTestId('entry-nav-drafts')).toContainText('Personal projects');
-  await expect(page.getByTestId('entry-nav-all-projects')).toContainText('Team projects');
-  await expect(page.getByTestId('entry-nav-all-projects')).toBeVisible();
+  // One 全部项目 entry in a team workspace too (OPEND-3108): 团队项目 is a tab
+  // on that page, not a second rail destination.
+  await expect(page.getByTestId('entry-nav-drafts')).toContainText('All projects');
+  await expect(page.getByTestId('entry-nav-all-projects')).toHaveCount(0);
 
   await page.getByTestId('workspace-switcher').click();
   await expect(
@@ -313,6 +316,9 @@ test('[P0] workspace switch clears the previous project list before the next sco
 
   await gotoHome(page);
   await ensureRailOpen(page);
+  // A workspace-bound Home carries no project grid any more (#7635 /
+  // OPEND-2683); 草稿 is the grid the switch has to clear.
+  await page.getByTestId('entry-nav-drafts').click();
   await expect(visibleProjectCard(page, PERSONAL_DRAFT.id)).toBeVisible();
 
   await page.getByTestId('workspace-switcher').click();
@@ -324,6 +330,9 @@ test('[P0] workspace switch clears the previous project list before the next sco
   await expect(visibleProjectCard(page, SWITCHED_TEAM_DRAFT.id)).toHaveCount(0);
 
   releaseTeamProjects();
+  // The switch lands on Home; the new scope's grid is on 草稿 again.
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-drafts').click();
   await expect(visibleProjectCard(page, SWITCHED_TEAM_DRAFT.id)).toBeVisible();
   await expect(visibleProjectCard(page, PERSONAL_DRAFT.id)).toHaveCount(0);
 });
@@ -407,13 +416,13 @@ test('[P0] switching teams invalidates the shared-project catalog instead of reu
 
   await gotoHome(page);
   await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-all-projects').click();
+  await openTeamProjectsTab(page);
   await expect(visibleProjectCard(page, atlasShared.projectId)).toBeVisible();
 
   await page.getByTestId('workspace-switcher').click();
   await page.getByRole('menu').getByRole('menuitem', { name: 'Beacon Team' }).click();
   await expect(page.getByTestId('workspace-switcher')).toContainText('Beacon Team');
-  await page.getByTestId('entry-nav-all-projects').click();
+  await openTeamProjectsTab(page);
 
   await expect(visibleProjectCard(page, beaconShared.projectId)).toBeVisible();
   await expect(visibleProjectCard(page, atlasShared.projectId)).toHaveCount(0);
@@ -548,6 +557,8 @@ test('[P0] account replacement never paints the previous account workspace or pr
 
   await gotoHome(page);
   await ensureRailOpen(page);
+  // Same reason as above: the grid lives on 草稿 for a workspace-bound Home.
+  await page.getByTestId('entry-nav-drafts').click();
   await expect(visibleProjectCard(page, accountA.project.id)).toBeVisible();
   await expect(page.getByTestId('workspace-switcher')).toContainText(
     accountA.workspace.workspaceName,
@@ -564,7 +575,7 @@ test('[P0] account replacement never paints the previous account workspace or pr
   await expect(page.getByText(accountA.project.name, { exact: true })).toHaveCount(0);
 
   releaseAccountBProjects();
-  await page.getByText('Loading Open Design…').waitFor({
+  await page.getByText('Loading OpenDesign…').waitFor({
     state: 'hidden',
     timeout: T.long,
   });
@@ -572,6 +583,8 @@ test('[P0] account replacement never paints the previous account workspace or pr
   await expect(page.getByTestId('workspace-switcher')).toContainText(
     accountB.workspace.workspaceName,
   );
+  // The reload lands on Home; account B's grid is on 草稿 again.
+  await page.getByTestId('entry-nav-drafts').click();
   await expect(visibleProjectCard(page, accountB.project.id)).toBeVisible();
   await expect(visibleProjectCard(page, accountA.project.id)).toHaveCount(0);
 });
@@ -580,6 +593,7 @@ test('[P1] two windows for one account keep Personal and Team billing scopes iso
   context,
   page: personalPage,
 }) => {
+  test.fail(true, 'The #5517 account menu no longer exposes either Personal or Team credit balances.');
   const teamPage = await context.newPage();
   await applyStandardMocks(teamPage);
   let teamBalanceUsd = '19.00';
@@ -747,7 +761,7 @@ test('[P0] full team routes every invite entry to Vela seat resolution without o
     `workspaceId=${TEAM_FULL.workspaceId}`,
   );
 
-  await page.getByTestId('entry-nav-all-projects').click();
+  await openTeamProjectsTab(page);
   await page.getByRole('button', { name: 'Invite teammates' }).click();
   await expect(page.getByRole('dialog', { name: 'Invite members' })).toHaveCount(0);
   await expect.poll(() => inviteUrls(page)).toHaveLength(2);
@@ -805,7 +819,7 @@ test('[P1] an already-open full team restores the local invite flow when a seat 
   await expect.poll(() => inviteUrls(page)).toHaveLength(1);
 });
 
-test('[P0] unknown team seat state fails closed across rail and project surfaces', async ({
+test('[P0] unknown team seat state keeps local invite available across rail and project surfaces', async ({
   page,
 }) => {
   await wireWorkspaceMocks(page, TEAM_UNKNOWN_SEATS, [TEAM_UNKNOWN_SEATS]);
@@ -820,12 +834,14 @@ test('[P0] unknown team seat state fails closed across rail and project surfaces
   await ensureRailOpen(page);
 
   await page.getByTestId('workspace-switcher').click();
-  await expect(
-    page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }),
-  ).toHaveCount(0);
-  await page.locator('.entry-nav-rail__menu-backdrop').click({ position: { x: 2, y: 2 } });
-  await page.getByTestId('entry-nav-all-projects').click();
-  await expect(page.getByRole('button', { name: 'Invite teammates' })).toHaveCount(0);
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Invite members' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+
+  await openTeamProjectsTab(page);
+  await page.getByRole('button', { name: 'Invite teammates' }).click();
+  await expect(dialog).toBeVisible();
 });
 
 test('[P0] ordinary team member sees team projects but no invite or workspace-admin actions', async ({
@@ -835,7 +851,7 @@ test('[P0] ordinary team member sees team projects but no invite or workspace-ad
   await gotoHome(page);
   await ensureRailOpen(page);
 
-  await expect(page.getByTestId('entry-nav-all-projects')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-drafts')).toBeVisible();
   await expect(page.getByTestId('entry-nav-workspace-settings')).toHaveCount(0);
 
   await page.getByTestId('workspace-switcher').click();
@@ -847,7 +863,7 @@ test('[P0] ordinary team member sees team projects but no invite or workspace-ad
   await expect(menu.getByRole('menuitem', { name: 'Invite colleague' })).toHaveCount(0);
 });
 
-test('[P0] locked workspace removes invite and sharing capabilities while preserving the recovery settings exit', async ({
+test('[P0] locked workspace removes invite and sharing capabilities and keeps the projects entry', async ({
   page,
 }) => {
   await wireWorkspaceMocks(page, TEAM_LOCKED, [TEAM_LOCKED]);
@@ -860,10 +876,10 @@ test('[P0] locked workspace removes invite and sharing capabilities while preser
     page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }),
   ).toHaveCount(0);
 
-  const settingsExit = page.getByTestId('entry-nav-workspace-settings');
-  await expect(settingsExit).toBeVisible();
-  await expect(settingsExit).toHaveAttribute('href', TEAM_LOCKED.workspaceSettingsUrl);
-  await expect(page.getByTestId('entry-nav-all-projects')).toBeVisible();
+  // OPEND-3257: the rail no longer links out to workspace settings in any
+  // workspace; the locked recovery path lives in the account menu instead.
+  await expect(page.getByTestId('entry-nav-workspace-settings')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-drafts')).toBeVisible();
 });
 
 test('[P0] an already-open locked workspace restores invite and sharing actions when authority unlocks', async ({
@@ -964,10 +980,14 @@ test('[P1] visible workspace allowance refreshes in place without reloading the 
 }) => {
   const workspaceMocks = await wireWorkspaceMocks(page, TEAM_OWNER, [TEAM_OWNER]);
   await gotoHome(page);
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-account').evaluate((element: HTMLButtonElement) => {
-    element.click();
-  });
+  const pill = page.getByTestId('entry-top-right-credits');
+  await pill.focus();
+  const billingPanel = page.getByTestId('entry-top-right-credits-panel');
+  await expect(billingPanel).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(billingPanel.getByRole('button', { name: 'Upgrade', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('entry-nav-credits-row')).toBeFocused();
   const credits = page.getByTestId('entry-nav-credits-row');
   await expect(credits).toContainText('$0.00');
   const documentMarker = await page.evaluate(() => {
@@ -1129,7 +1149,10 @@ test('[P0] project card moves into team space and back with scoped requests and 
   await gotoHome(page);
   await ensureRailOpen(page);
 
+  // 全部项目 opens on 最近浏览过, which spans both sides of the share; the
+  // 个人项目 tab is where a move must take the card away from (OPEND-3108).
   await page.getByTestId('entry-nav-drafts').click();
+  await page.getByTestId('recent-projects-collection-personalProjects').click();
   const card = projectCard(page);
   await expect(card).toBeVisible();
 
@@ -1150,7 +1173,7 @@ test('[P0] project card moves into team space and back with scoped requests and 
   });
   await expect(card).toHaveCount(0);
 
-  await page.getByTestId('entry-nav-all-projects').click();
+  await openTeamProjectsTab(page);
   const sharedCard = projectCard(page);
   await expect(sharedCard).toBeVisible();
   await expect(sharedCard.getByText('Shared', { exact: true }).first()).toBeVisible();
@@ -1167,7 +1190,7 @@ test('[P0] project card moves into team space and back with scoped requests and 
   ]);
   await expect(sharedCard).toHaveCount(0);
 
-  await page.getByTestId('entry-nav-drafts').click();
+  await page.getByTestId('recent-projects-collection-personalProjects').click();
   await expect(projectCard(page)).toBeVisible();
   await expect(projectCard(page).getByText('Shared', { exact: true })).toHaveCount(0);
 });
@@ -1235,7 +1258,7 @@ test('[P0] failed first-open materialization releases the shared-project card fo
 
   await gotoHome(page);
   await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-all-projects').click();
+  await openTeamProjectsTab(page);
   const card = visibleProjectCard(page, remoteProject.projectId);
   const openButton = card.locator('.recent-projects__card-main');
   await expect(card).toBeVisible();
@@ -1244,7 +1267,10 @@ test('[P0] failed first-open materialization releases the shared-project card fo
   await expect.poll(() => pullAttempts).toBe(1);
   await expect(openButton).not.toHaveAttribute('aria-busy', 'true');
   await expect(card).toBeVisible();
-  await expect(page).toHaveURL(/\/all-projects$/);
+  // A failed pull leaves the user on the 团队项目 tab of 全部项目 (OPEND-3108:
+  // the page is `/drafts`; the old `/all-projects` grid is this tab now).
+  await expect(page).toHaveURL(/\/drafts$/);
+  await expect(page.getByTestId('recent-projects-collection-teamProjects')).toHaveAttribute('aria-checked', 'true');
 
   await openButton.click();
   await expect.poll(() => pullAttempts).toBe(2);
@@ -1362,6 +1388,150 @@ test('[P0] inbound shared-project transfer shows syncing instead of a false empt
   ]));
 });
 
+test('[P0] Team first open mounts ProjectView before background materialization and stays fail-closed', async ({
+  page,
+}) => {
+  await wireWorkspaceMocks(page, TEAM_MEMBER, [TEAM_MEMBER]);
+  const remoteProject = teamProject(
+    'ui-progressive-first-open',
+    'Progressive launch artifact',
+    'ui-remote-owner',
+  );
+  const placeholder = {
+    ...LOCAL_TEAM_DRAFT,
+    id: remoteProject.projectId,
+    name: remoteProject.name,
+  };
+  let bootstrapAccepted = false;
+  let materialized = false;
+  let bootstrapAttempts = 0;
+  let legacyPullAttempts = 0;
+  let statusAttempts = 0;
+  let releaseBackgroundPull!: () => void;
+  const backgroundPullGate = new Promise<void>((resolve) => {
+    releaseBackgroundPull = resolve;
+  });
+
+  await page.route('**/api/workspace/projects/team', async (route) => {
+    await route.fulfill({ json: { projects: [remoteProject] } });
+  });
+  await page.route(`**/api/workspaces/${TEAM_MEMBER.workspaceId}/projects**`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        projects: bootstrapAccepted
+          ? [scopedProjectSummary(placeholder, TEAM_MEMBER, 'team')]
+          : [],
+      },
+    });
+  });
+  await page.route(`**/api/projects/${remoteProject.projectId}/**`, async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+    if (pathname.endsWith('/collab/bootstrap') && request.method() === 'PUT') {
+      bootstrapAttempts += 1;
+      bootstrapAccepted = true;
+      await route.fulfill({
+        status: 202,
+        json: { ok: true, awaitingFirstMaterialization: true },
+      });
+      return;
+    }
+    if (pathname.endsWith('/workspace-scope') && request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          scope: {
+            kind: 'team',
+            projectId: remoteProject.projectId,
+            workspaceId: TEAM_MEMBER.workspaceId,
+            visibility: 'team',
+            context: TEAM_MEMBER,
+          },
+        },
+      });
+      return;
+    }
+    if (pathname.endsWith('/collab/status') && request.method() === 'GET') {
+      statusAttempts += 1;
+      await route.fulfill({
+        json: {
+          publishedVersion: 7,
+          materializedVersion: materialized ? 7 : null,
+          awaitingFirstMaterialization: !materialized,
+          syncState: 'synced',
+          ownerMemberId: remoteProject.ownerMemberId,
+          ownerDisplayName: 'Remote Owner',
+          contentTransferState: {
+            status: materialized ? 'idle' : 'downloading',
+            generation: 1,
+            expectedVersion: 7,
+          },
+        },
+      });
+      return;
+    }
+    if (pathname.endsWith('/collab/pull') && request.method() === 'POST') {
+      legacyPullAttempts += 1;
+      await backgroundPullGate;
+      await route.fulfill({ json: { ok: true, materializedVersion: 7 } });
+      return;
+    }
+    if (pathname.endsWith('/files') && request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          files: materialized
+            ? [{ name: 'index.html', path: 'index.html', type: 'file', size: 76 }]
+            : [],
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.route(`**/api/projects/${remoteProject.projectId}`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    if (!bootstrapAccepted) {
+      await route.fulfill({ status: 404, json: { error: 'PROJECT_NOT_FOUND' } });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        project: {
+          ...placeholder,
+          workspaceId: TEAM_MEMBER.workspaceId,
+        },
+      },
+    });
+  });
+
+  await gotoHome(page);
+  await ensureRailOpen(page);
+  await openTeamProjectsTab(page);
+  await visibleProjectCard(page, remoteProject.projectId)
+    .locator('.recent-projects__card-main')
+    .click();
+
+  await expect.poll(() => bootstrapAttempts).toBe(1);
+  await expect(page).toHaveURL(new RegExp(`/projects/${remoteProject.projectId}$`));
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+  await expect(page.getByTestId('design-files-tab')).toBeVisible();
+  await expect(page.getByTestId('design-files-syncing')).toBeVisible();
+  await expect(page.getByTestId('design-files-empty')).toHaveCount(0);
+  await expect(page.getByText('New sketch', { exact: true })).toHaveCount(0);
+  await expect.poll(() => legacyPullAttempts).toBe(1);
+
+  materialized = true;
+  releaseBackgroundPull();
+  await expect(page.getByTestId('design-files-syncing')).toHaveCount(0, { timeout: T.long });
+  await expect.poll(() => statusAttempts).toBeGreaterThan(1);
+});
+
 test('[P0] successful first-open materialization opens one read-only local mirror with the catalog title', async ({
   page,
 }) => {
@@ -1446,7 +1616,7 @@ test('[P0] successful first-open materialization opens one read-only local mirro
 
   await gotoHome(page);
   await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-all-projects').click();
+  await openTeamProjectsTab(page);
   const card = visibleProjectCard(page, remoteProject.projectId);
   await expect(card).toContainText(remoteProject.name);
 
@@ -1454,13 +1624,76 @@ test('[P0] successful first-open materialization opens one read-only local mirro
 
   await expect.poll(() => pullAttempts).toBe(1);
   await expect(page).toHaveURL(new RegExp(`/projects/${remoteProject.projectId}$`));
-  await expect(page.getByText(remoteProject.name, { exact: true }).first()).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toHaveText(remoteProject.name);
   await expect(page.getByText('Stale pulled title', { exact: true })).toHaveCount(0);
 
   await page.goto('/all-projects');
   await expect(visibleProjectCard(page, remoteProject.projectId)).toHaveCount(1);
   await expect(visibleProjectCard(page, remoteProject.projectId)).toContainText(remoteProject.name);
   await expect.poll(() => pullAttempts).toBe(1);
+});
+
+test('[P0] an open Team project stays usable while Workspace authority retries a 503', async ({
+  page,
+}) => {
+  // The ambient shell has already switched to B while this still-open project
+  // remains bound to A. That mismatch is what makes the project route own an
+  // independent directory revalidation instead of borrowing ambient context.
+  await pinWindowWorkspace(page, TEAM_SECOND);
+  const workspaceMocks = await wireWorkspaceMocks(
+    page,
+    TEAM_SECOND,
+    [TEAM_OWNER, TEAM_SECOND],
+  );
+
+  const projectId = randomUUID();
+  const created = await page.request.post('/api/projects', {
+    headers: {
+      'x-od-workspace-id': TEAM_OWNER.workspaceId,
+      'x-od-workspace-type': TEAM_OWNER.workspaceType,
+      'x-od-workspace-member-id': TEAM_OWNER.workspaceMemberId,
+      'x-od-workspace-role': TEAM_OWNER.role,
+      'x-od-workspace-member-status': TEAM_OWNER.memberStatus,
+      'x-od-workspace-lifecycle-state': TEAM_OWNER.lifecycleState,
+      'x-od-workspace-can-share-projects': 'true',
+      'x-od-workspace-can-write-synced-files': 'true',
+    },
+    data: {
+      id: projectId,
+      name: 'Workspace authority continuity',
+      designSystemId: null,
+      skillId: null,
+      metadata: { kind: 'prototype' },
+      pendingPrompt: null,
+    },
+  });
+  expect(created.ok()).toBe(true);
+
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+
+  workspaceMocks.setDirectoryUnavailable(true);
+  const failedRevalidation = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/workspace/directory'
+      && response.status() === 503;
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+  await failedRevalidation;
+  await expect(page.getByTestId('project-workspace-recovery-tip')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
+
+  workspaceMocks.setDirectoryUnavailable(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+  await expect(page.getByTestId('project-workspace-recovery-tip')).toHaveCount(0, {
+    timeout: T.long,
+  });
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
 function workspace(
@@ -1504,6 +1737,7 @@ async function wireWorkspaceMocks(
 ): Promise<WorkspaceMocks> {
   let current = initial;
   let balanceUsd = '0.00';
+  let directoryUnavailable = false;
   const activeBodies: WorkspaceMocks['activeBodies'] = [];
   const inviteBodies: WorkspaceMocks['inviteBodies'] = [];
 
@@ -1546,6 +1780,13 @@ async function wireWorkspaceMocks(
       return;
     }
     if (pathname === '/api/workspace/directory' && method === 'GET') {
+      if (directoryUnavailable) {
+        await route.fulfill({
+          status: 503,
+          json: { error: 'workspace authority temporarily unavailable' },
+        });
+        return;
+      }
       await route.fulfill({
         json: {
           items: directory.map(directoryItem),
@@ -1625,6 +1866,9 @@ async function wireWorkspaceMocks(
     },
     setBalance: (nextBalanceUsd) => {
       balanceUsd = nextBalanceUsd;
+    },
+    setDirectoryUnavailable: (unavailable) => {
+      directoryUnavailable = unavailable;
     },
   };
 }
@@ -1780,7 +2024,7 @@ async function wireMultiWindowWorkspaceAuthority(
 
 async function gotoHome(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({
+  await page.getByText('Loading OpenDesign…').waitFor({
     state: 'hidden',
     timeout: T.long,
   });
@@ -1789,12 +2033,17 @@ async function gotoHome(page: Page): Promise<void> {
   await expect(page.getByTestId('workspace-switcher')).toBeAttached();
 }
 
+/**
+ * Put the billing card on screen. It hangs under the top-right credits pill
+ * (hover-opened) now, not inside the rail's account menu, so the rail state
+ * does not matter here.
+ */
 async function openAccountMenu(page: Page): Promise<void> {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-account').evaluate((element: HTMLButtonElement) => {
-    element.click();
-  });
-  await expect(page.getByTestId('entry-nav-credits-row')).toBeVisible();
+  // Bounded: a fixture with no billing answer must fail the assertion, not
+  // the test's own timeout (the two-windows spec is a `test.fail` that relies
+  // on an ordinary failure here).
+  await page.getByTestId('entry-top-right-credits').hover({ timeout: T.medium });
+  await expect(page.getByTestId('entry-nav-credits-row')).toBeVisible({ timeout: 1_000 });
 }
 
 async function inviteUrls(page: Page): Promise<string[]> {

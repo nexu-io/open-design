@@ -2,7 +2,7 @@ import { runVelaCommand } from './integrations/vela-command.js';
 
 /**
  * `od resource` is a compatibility entry point for the login-backed Vela
- * resource drive. Open Design intentionally owns no Resource Hub credentials
+ * resource drive. OpenDesign intentionally owns no Resource Hub credentials
  * or content-addressed transfer implementation.
  */
 export async function runResource(args: string[]): Promise<void> {

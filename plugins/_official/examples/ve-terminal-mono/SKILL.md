@@ -3,9 +3,9 @@ name: ve-terminal-mono
 en_name: "Teach an AI CLI Workflow like a Developer-Tools Educator"
 zh_name: "像开发者工具讲师一样教 AI CLI 工作流"
 description: |
-  Open Design from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Built as a decision-grade AI literacy deck for developers, power users.
+  OpenDesign from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Built as a decision-grade AI literacy deck for developers, power users.
 en_description: |
-  Open Design from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Built as a decision-grade AI literacy deck for developers, power users.
+  OpenDesign from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Built as a decision-grade AI literacy deck for developers, power users.
 zh_description: |
   像开发者工具讲师一样教 AI CLI 工作流——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -38,7 +38,7 @@ od:
     zh-CN: "用「等宽终端 Terminal Mono」主题把我的内容做成开发者原生的单文件 HTML 幻灯片：近黑 #0a0e14 底色、全 Geist Mono 等宽排印（标题用大号 weight-400 而非粗体）、Dracula 绿 #50fa7b 点缀、微点阵背景、低透明度绿色描边，scroll-snap 翻页 + SlideEngine 键盘导航 + hash 路由，prefers-color-scheme 自动亮色模式。从 example.html 出发只替换内容，保留设计系统。"
   category: "ai-literacy"
   scenario: "ai"
-  example_prompt: "Create \"Teach an AI CLI Workflow like a Developer-Tools Educator\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Audience: developers, power users. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
+  example_prompt: "Create \"Teach an AI CLI Workflow like a Developer-Tools Educator\" as a decision-grade AI literacy deck in this template's own visual system. Subject: OpenDesign from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Audience: developers, power users. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 
 # Terminal Mono（等宽终端）

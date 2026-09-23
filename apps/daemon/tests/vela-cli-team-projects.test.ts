@@ -495,7 +495,7 @@ describe('Vela CLI team-project catalog adapter', () => {
     ]);
   });
 
-  it('hides catalog rows whose project bytes are not synced yet', async () => {
+  it('uses published availability instead of the latest sync attempt for display', async () => {
     const catalog = createVelaCliTeamProjectCatalog({
       supportsTeamProjects: () => true,
       run: async () => JSON.stringify({
@@ -505,13 +505,15 @@ describe('Vela CLI team-project catalog adapter', () => {
             ownerMemberId: 'wm-owner',
             displayName: 'Pending Upload',
             syncState: 'pending_upload',
+            publishedVersionId: null,
             createdAt: '2026-07-01T00:00:00.000Z',
           },
           {
             projectId: 'failed',
             ownerMemberId: 'wm-owner',
-            displayName: 'Failed Upload',
+            displayName: 'Last Published Version',
             syncState: 'failed',
+            publishedVersionId: 'version-1',
             createdAt: '2026-07-01T00:00:00.000Z',
           },
           {
@@ -519,6 +521,7 @@ describe('Vela CLI team-project catalog adapter', () => {
             ownerMemberId: 'wm-owner',
             displayName: 'Ready Project',
             syncState: 'synced',
+            publishedVersionId: 'version-2',
             createdAt: '2026-07-01T00:00:00.000Z',
           },
         ],
@@ -527,6 +530,13 @@ describe('Vela CLI team-project catalog adapter', () => {
 
     await expect(catalog.list('team-selected')).resolves.toEqual([
       {
+        projectId: 'failed',
+        ownerMemberId: 'wm-owner',
+        sharedAt: '2026-07-01T00:00:00.000Z',
+        name: 'Last Published Version',
+        createdAt: Date.parse('2026-07-01T00:00:00.000Z'),
+      },
+      {
         projectId: 'synced',
         ownerMemberId: 'wm-owner',
         sharedAt: '2026-07-01T00:00:00.000Z',
@@ -534,6 +544,82 @@ describe('Vela CLI team-project catalog adapter', () => {
         createdAt: Date.parse('2026-07-01T00:00:00.000Z'),
       },
     ]);
+  });
+
+  it('keeps old Vela responses compatible without treating a first failed publish as readable', async () => {
+    const catalog = createVelaCliTeamProjectCatalog({
+      supportsTeamProjects: () => true,
+      run: async () => JSON.stringify({
+        projects: [
+          {
+            projectId: 'legacy-minimal',
+            ownerMemberId: 'wm-owner',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            projectId: 'legacy-failed-after-success',
+            ownerMemberId: 'wm-owner',
+            syncState: 'failed',
+            lastSyncedVersionId: 'version-1',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            projectId: 'legacy-first-failure',
+            ownerMemberId: 'wm-owner',
+            syncState: 'failed',
+            lastSyncedVersionId: null,
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            projectId: 'legacy-synced',
+            ownerMemberId: 'wm-owner',
+            syncState: 'synced',
+            lastSyncedVersionId: null,
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+
+    await expect(catalog.list('team-selected')).resolves.toEqual([
+      expect.objectContaining({ projectId: 'legacy-minimal' }),
+      expect.objectContaining({ projectId: 'legacy-failed-after-success' }),
+      expect.objectContaining({ projectId: 'legacy-synced' }),
+    ]);
+  });
+
+  it('preserves whether publishedVersionId is absent, null, or a version id', async () => {
+    const client = createVelaCliTeamProjectCatalogClient({
+      supportsTeamProjects: () => true,
+      run: async () => JSON.stringify({
+        projects: [
+          {
+            id: 'legacy', workspaceId: 'team-a', projectId: 'legacy',
+            resourceId: 'resource-legacy', ownerMemberId: 'owner', syncState: 'synced',
+            createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            id: 'empty', workspaceId: 'team-a', projectId: 'empty',
+            resourceId: 'resource-empty', ownerMemberId: 'owner', syncState: 'failed',
+            publishedVersionId: null,
+            createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            id: 'published', workspaceId: 'team-a', projectId: 'published',
+            resourceId: 'resource-published', ownerMemberId: 'owner', syncState: 'failed',
+            publishedVersionId: 'version-1',
+            createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+
+    const records = await client.list({
+      memberId: 'reader', teamId: 'team-a', role: 'member', lifecycleState: 'active',
+    });
+    expect(records[0]).not.toHaveProperty('publishedVersionId');
+    expect(records[1]).toHaveProperty('publishedVersionId', null);
+    expect(records[2]).toHaveProperty('publishedVersionId', 'version-1');
   });
 
   it('uses Vela team-project commands for upsert and remove', async () => {

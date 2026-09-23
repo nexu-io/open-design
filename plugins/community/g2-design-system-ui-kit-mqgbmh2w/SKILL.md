@@ -1,6 +1,6 @@
 # G2 Design System UI Kit
 
-Use this skill when generating Open Design artifacts that should follow the HiCatcat G2 AR glasses HUD design system. This plugin packages a browser-reviewable UI kit, local token CSS, and modular React role components.
+Use this skill when generating OpenDesign artifacts that should follow the HiCatcat G2 AR glasses HUD design system. This plugin packages a browser-reviewable UI kit, local token CSS, and modular React role components.
 
 ## Structure
 
@@ -34,4 +34,4 @@ Do not invent off-token accent colors, glassmorphism, or landing-page hero compo
 
 ## Provenance
 
-Formalized by Open Design from candidate 33633026-3f08-4a00-86c8-1bbd1d3e1ce4 and corrected so every referenced file is packaged in this plugin folder.
+Formalized by OpenDesign from candidate 33633026-3f08-4a00-86c8-1bbd1d3e1ce4 and corrected so every referenced file is packaged in this plugin folder.

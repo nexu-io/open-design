@@ -7,6 +7,135 @@ import {
 } from '../src/run-diagnostics.js';
 
 describe('run diagnostics', () => {
+  it('summarizes tool execution lifecycle evidence with bounded low-cardinality fields', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'agent',
+          data: {
+            type: 'diagnostic',
+            name: 'tool_execution_lifecycle',
+            schema: 'vela.tool_execution_lifecycle',
+            version: 1,
+            toolCallIdHash: 'acp_deadbeefdeadbeefdeadbeef',
+            trigger: 'deadline',
+            terminal: 'interrupted',
+            droppedEvents: 2,
+            events: [
+              { phase: 'kill_requested' },
+              { phase: 'kill_sent' },
+              { phase: 'close', stdoutClosed: true, stderrClosed: false },
+            ],
+            toolTerminal: { source: 'processor_cleanup', confirmed: false },
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      tool_execution_lifecycle_seen: true,
+      tool_execution_lifecycle_count_bucket: '1',
+      tool_execution_trigger: 'deadline',
+      tool_execution_terminal: 'interrupted',
+      tool_terminal_source: 'processor_cleanup',
+      tool_kill_outcome: 'sent',
+      tool_child_close_seen: true,
+      tool_stdout_close_seen: true,
+      tool_stderr_close_seen: false,
+      tool_execution_evidence_incomplete: true,
+    });
+    expect(JSON.stringify(result)).not.toContain('acp_deadbeefdeadbeefdeadbeef');
+  });
+
+  it('aggregates only the latest lifecycle snapshot for each tool execution', () => {
+    const toolCallIdHash = 'acp_0123456789abcdef01234567';
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'agent',
+          data: {
+            type: 'diagnostic',
+            name: 'tool_execution_lifecycle',
+            schema: 'vela.tool_execution_lifecycle',
+            version: 1,
+            toolCallIdHash,
+            terminal: 'running',
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'diagnostic',
+            name: 'tool_execution_lifecycle',
+            schema: 'vela.tool_execution_lifecycle',
+            version: 1,
+            toolCallIdHash,
+            trigger: 'exit',
+            terminal: 'returned',
+            events: [{ phase: 'close', stdoutClosed: true, stderrClosed: true }],
+            toolTerminal: { source: 'tool_result', confirmed: true },
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      tool_execution_lifecycle_count_bucket: '1',
+      tool_execution_terminal: 'returned',
+      tool_execution_evidence_incomplete: false,
+    });
+  });
+
+  it('bounds lifecycle aggregation to the latest 64 distinct diagnostics', () => {
+    const events = Array.from({ length: 100 }, (_, index) => ({
+      event: 'agent',
+      data: {
+        type: 'diagnostic',
+        name: 'tool_execution_lifecycle',
+        schema: 'vela.tool_execution_lifecycle',
+        version: 1,
+        toolCallIdHash: `acp_${index.toString(16).padStart(24, '0')}`,
+        trigger: index < 36 ? 'deadline' : 'exit',
+        terminal: 'returned',
+        events: [{ phase: 'close', stdoutClosed: true, stderrClosed: true }],
+        toolTerminal: { source: 'tool_result', confirmed: true },
+      },
+    }));
+
+    expect(summarizeRunDiagnosticsForAnalytics({ events })).toMatchObject({
+      tool_execution_lifecycle_count_bucket: 'gt_20',
+      tool_execution_trigger: 'exit',
+      tool_execution_terminal: 'returned',
+      tool_terminal_source: 'tool_result',
+      tool_execution_evidence_incomplete: false,
+    });
+  });
+
+  it('ignores arbitrary persisted diagnostic objects without blocking run_finished', () => {
+    const circular: Record<string, unknown> = { command: 'cat /private/secret' };
+    circular.self = circular;
+    const events = [{
+      event: 'agent',
+      data: {
+        type: 'diagnostic',
+        name: 'tool_execution_lifecycle',
+        schema: 'vela.tool_execution_lifecycle',
+        version: 1,
+        toolCallIdHash: 'acp_0123456789abcdef01234567',
+        trigger: 'exit',
+        terminal: 'returned',
+        events: [{ phase: 'close', stdoutClosed: true, stderrClosed: true }],
+        toolTerminal: { source: 'tool_result', confirmed: true },
+        metadata: circular,
+      },
+    }];
+
+    expect(() => summarizeRunDiagnosticsForAnalytics({ events })).not.toThrow();
+    const serialized = JSON.stringify(summarizeRunDiagnosticsForAnalytics({ events }));
+    expect(serialized).not.toContain('/private/secret');
+    expect(serialized).not.toContain('command');
+  });
+
   it('summarizes stderr into redacted bounded tails for Langfuse', () => {
     const events = Array.from({ length: 25 }, (_, i) => ({
       event: 'stderr',
@@ -373,5 +502,113 @@ describe('run diagnostics', () => {
     });
     expect(JSON.stringify(result)).not.toContain('customer');
     expect(JSON.stringify(result)).not.toContain('custom.plugin.event');
+  });
+
+  it('summarizes only bounded prompt_budget_v1 fields for run_finished', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'agent',
+          data: {
+            type: 'diagnostic',
+            name: 'prompt_budget_v1',
+            source: 'acp-json-rpc',
+            schemaVersion: 1,
+            frameBytes: 228,
+            promptBytes: 24,
+            promptTokenEstimate: 8,
+            tokenEstimateMethod: 'utf8_bytes_div_3_ceil_v1',
+            sessionMode: 'resume',
+            modelId: 'claude-opus-5',
+            contextWindowSource: 'model_metadata',
+            contextWindowTokens: 200_000,
+            priorSessionUsageSource: 'agent_session',
+            priorSessionInputTokens: 123_456,
+            prompt: 'must-not-reach-run-finished',
+            sessionId: 'private-session-id',
+            command: 'cat private.env',
+            path: '/private/customer/workspace',
+            headers: { authorization: 'Bearer secret' },
+            toolInput: { token: 'secret' },
+            toolOutput: 'secret output',
+          },
+        },
+      ],
+      exitCode: 0,
+      signal: null,
+    });
+
+    expect(result).toMatchObject({
+      prompt_budget_version: 'prompt_budget_v1',
+      prompt_frame_bytes: 228,
+      prompt_bytes: 24,
+      prompt_token_estimate: 8,
+      prompt_token_estimate_method: 'utf8_bytes_div_3_ceil_v1',
+      prompt_session_mode: 'resume',
+      prompt_model_id: 'claude-opus-5',
+      prompt_context_window_source: 'model_metadata',
+      prompt_context_window_tokens: 200_000,
+      prompt_prior_session_usage_source: 'agent_session',
+      prompt_prior_session_input_tokens: 123_456,
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('must-not-reach');
+    expect(serialized).not.toContain('private-session-id');
+    expect(serialized).not.toContain('cat private.env');
+    expect(serialized).not.toContain('/private/customer');
+    expect(serialized).not.toContain('authorization');
+    expect(serialized).not.toContain('secret output');
+  });
+
+  it('drops prompt budget diagnostics whose required numbers exceed the bound', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [{
+        event: 'agent',
+        data: {
+          type: 'diagnostic',
+          name: 'prompt_budget_v1',
+          schemaVersion: 1,
+          frameBytes: 1_000_000_001,
+          promptBytes: 24,
+          promptTokenEstimate: 8,
+          tokenEstimateMethod: 'utf8_bytes_div_3_ceil_v1',
+        },
+      }],
+      exitCode: 0,
+      signal: null,
+    });
+
+    expect(result.prompt_budget_version).toBeUndefined();
+    expect(result.prompt_frame_bytes).toBeUndefined();
+  });
+
+  it('keeps the retained prompt budget after more than 2,000 later events', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: Array.from({ length: 2_001 }, () => ({
+        event: 'agent',
+        data: { type: 'status', label: 'working' },
+      })),
+      promptBudgetDiagnostics: {
+        prompt_budget_version: 'prompt_budget_v1',
+        prompt_frame_bytes: 228,
+        prompt_bytes: 24,
+        prompt_token_estimate: 8,
+        prompt_token_estimate_method: 'utf8_bytes_div_3_ceil_v1',
+        prompt_session_mode: 'new',
+        prompt_model_id: 'claude-opus-5',
+        prompt_context_window_source: 'model_metadata',
+        prompt_context_window_tokens: 200_000,
+        prompt_prior_session_usage_source: 'unknown',
+      },
+      exitCode: 0,
+      signal: null,
+    });
+
+    expect(result).toMatchObject({
+      prompt_budget_version: 'prompt_budget_v1',
+      prompt_frame_bytes: 228,
+      prompt_bytes: 24,
+      prompt_model_id: 'claude-opus-5',
+    });
   });
 });

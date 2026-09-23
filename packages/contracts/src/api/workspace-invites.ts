@@ -45,6 +45,14 @@ const WORKSPACE_INVITE_CREATE_ERROR_ALIASES: Readonly<
   Record<string, WorkspaceInviteCreateErrorCode>
 > = {
   already_member: 'already_member',
+  // B's wire code for "this address is already an ACTIVE member of the
+  // workspace". Its create path resolves the email hash against the member
+  // table before minting an invite and rejects with 409
+  // `{"error":"invite_existing_member"}` — no seat is consumed. Without this
+  // alias the code fell through to the transport-shaped `create_409`, and the
+  // dialog told the user to "try again later" for a conflict that retrying can
+  // never resolve.
+  invite_existing_member: 'already_member',
   active_pending_invite: 'active_pending_invite',
   invite_duplicate: 'active_pending_invite',
   workspace_seat_limit_reached: 'workspace_seat_limit_reached',

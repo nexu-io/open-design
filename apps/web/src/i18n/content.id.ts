@@ -21,7 +21,7 @@ export const ID_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'CLI otomasi browser untuk AI agent. Gunakan saat pengguna perlu memeriksa,\nmenguji, atau mengotomatiskan perilaku browser: menavigasi halaman, mengisi formulir,\nmengeklik tombol, mengambil tangkapan layar, mengekstrak data halaman, membaca konteks tab browser\nOpen Design yang dipilih, menguji aplikasi web, dogfooding pratinjau\nOpen Design, QA, perburuan bug, atau meninjau kualitas aplikasi. Utamakan URL pratinjau\nOpen Design lokal kecuali pengguna secara eksplisit meminta penjelajahan eksternal.',
+      'CLI otomasi browser untuk AI agent. Gunakan saat pengguna perlu memeriksa,\nmenguji, atau mengotomatiskan perilaku browser: menavigasi halaman, mengisi formulir,\nmengeklik tombol, mengambil tangkapan layar, mengekstrak data halaman, membaca konteks tab browser\nOpenDesign yang dipilih, menguji aplikasi web, dogfooding pratinjau\nOpenDesign, QA, perburuan bug, atau meninjau kualitas aplikasi. Utamakan URL pratinjau\nOpenDesign lokal kecuali pengguna secara eksplisit meminta penjelajahan eksternal.',
     examplePrompt:
       'CLI otomasi browser untuk AI agent.',
   },
@@ -849,7 +849,7 @@ export const ID_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      'Entri UI/UX Pro Max khusus katalog. Template, data, dan alur kerja pencarian upstream lengkap tidak disertakan dalam Open Design.',
+      'Entri UI/UX Pro Max khusus katalog. Template, data, dan alur kerja pencarian upstream lengkap tidak disertakan dalam OpenDesign.',
     examplePrompt:
       'Entri UI/UX Pro Max khusus katalog.',
   },
@@ -959,6 +959,7 @@ export const ID_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': 'Bentuk 3D lembut dan membulat yang menyerupai tanah liat lentur dengan elemen ceria menggembung dan permukaan penuh warna.',
   'clean': 'Desain yang berfokus pada kesederhanaan dengan ruang kosong yang luas, tipografi yang mudah dibaca, dan palet warna terbatas untuk mengurangi kekacauan visual.',
   'clickhouse': 'Basis data analitik cepat. Bergaya dokumentasi teknis dengan aksen kuning.',
+  'cloudflare-kumo': 'Sistem komponen Cloudflare untuk aplikasi web modern: token semantik terang/gelap, tipografi Inter yang ringkas, permukaan netral berlapis, kontrol aksesibel, dan panduan warna siap bagan.',
   'cohere': 'Platform AI enterprise. Gradien yang hidup, estetika dasbor yang kaya data.',
   'coinbase': 'Bursa kripto. Identitas biru yang bersih, berfokus pada kepercayaan, bernuansa institusional.',
   'colorful': 'Palet dan gradien yang hidup serta kontras tinggi untuk pengalaman pengguna yang menarik, berkesan, dan modern.',

@@ -14,18 +14,19 @@ import { T } from '@/timeouts';
 
 const AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design AMR',
+  name: 'OpenDesign AMR',
   bin: 'vela',
   available: true,
   version: 'test',
   models: [{ id: 'default', label: 'Default' }],
 };
 
-async function seedBalanceFailure(page: Page, locale: 'en' | 'zh-CN') {
+async function seedCloudRunFailure(page: Page, locale: 'en' | 'zh-CN') {
+  // Use an ordinary run error: insufficient balance belongs to the separate
+  // quota-card workflow covered by amr-run-failure-recovery.test.ts.
   await page.addInitScript((nextLocale) => {
     window.localStorage.setItem('open-design:locale', nextLocale);
     window.localStorage.setItem('open-design:locale-source', 'manual');
-    window.localStorage.setItem('open-design.project.chatPanelWidth', '320');
   }, locale);
   await routeAgents(page, [AMR_AGENT]);
   await page.route('**/api/skills', (route) => route.fulfill({ json: { skills: [] } }));
@@ -100,8 +101,8 @@ async function seedBalanceFailure(page: Page, locale: 'en' | 'zh-CN') {
           {
             kind: 'status',
             label: 'error',
-            detail: 'AMR Cloud reported insufficient balance.',
-            code: 'AMR_INSUFFICIENT_BALANCE',
+            detail: 'The model provider is temporarily unavailable.',
+            code: 'UPSTREAM_UNAVAILABLE',
           },
         ],
       },
@@ -115,29 +116,46 @@ async function seedBalanceFailure(page: Page, locale: 'en' | 'zh-CN') {
   await gotoProject(page, projectId);
   const split = page.locator('.split');
   await expect(split).toBeVisible({ timeout: T.long });
-  await split.evaluate((element) => {
-    (element as HTMLElement).style.setProperty('--project-chat-panel-width', '320px');
+  const resizeHandle = page.getByRole('separator', {
+    name: locale === 'zh-CN' ? '调整聊天面板大小' : 'Resize chat panel',
+    exact: true,
   });
+  await expect(resizeHandle).toBeVisible();
+  await resizeHandle.press('Home');
+  await expect(resizeHandle).toHaveAttribute('aria-valuemin', /^\d+$/);
+  const minimumWidth = (await resizeHandle.getAttribute('aria-valuemin'))!;
+  expect(Number(minimumWidth)).toBeGreaterThan(0);
+  await expect(resizeHandle).toHaveAttribute('aria-valuenow', minimumWidth);
+  await expect.poll(async () => {
+    const bounds = await split.locator('.split-chat-slot').boundingBox();
+    return Math.round(bounds?.width ?? 0);
+  }).toBe(Number(minimumWidth));
 }
 
 async function expectActionsContained(
   card: Locator,
-  primaryAction: Locator,
-  retryAction: Locator,
-  options: { sameRow?: boolean } = {},
+  actionLabels: string[],
 ) {
-  await expect(primaryAction).toBeVisible();
-  await expect(retryAction).toBeVisible();
-  await primaryAction.click({ trial: true });
-  await retryAction.click({ trial: true });
+  const footer = card.locator('[data-user-action-footer="true"]');
+  await expect(footer.getByRole('button')).toHaveText(actionLabels);
+  for (const name of actionLabels) {
+    const action = footer.getByRole('button', { name, exact: true });
+    await expect(action).toBeVisible();
+    await action.click({ trial: true });
+  }
 
   const layout = await card.evaluate((element) => {
+    // `RunErrorCard` 把动作直接排在 `[data-user-action-footer]` 这一层。
+    // 旧的 `UserActionCard` 在 footer 里另包了一个 `div.actions`(所以原来取的是
+    // `:scope > div:last-child`);换组件之后那个 div 没了,再按老选择器取会取到
+    // null、一颗按钮都数不到 —— 这个 P1 布局守卫会在不报错的情况下什么都不守。
     const footer = element.querySelector<HTMLElement>('[data-user-action-footer="true"]');
-    const actions = footer?.querySelector<HTMLElement>(':scope > div:last-child') ?? null;
+    const actions = footer;
     const buttons = actions
       ? Array.from(actions.querySelectorAll<HTMLElement>('button'))
       : [];
     const cardRect = element.getBoundingClientRect();
+    const slotRect = element.closest('.split-chat-slot')?.getBoundingClientRect();
     const actionRect = actions?.getBoundingClientRect() ?? null;
     return {
       cardClientWidth: element.clientWidth,
@@ -148,12 +166,16 @@ async function expectActionsContained(
       actionRight: actionRect?.right ?? -1,
       cardLeft: cardRect.left,
       cardRight: cardRect.right,
+      slotLeft: slotRect?.left ?? -1,
+      slotRight: slotRect?.right ?? -1,
+      slotWidth: slotRect?.width ?? -1,
       buttons: buttons.map((button) => {
         const rect = button.getBoundingClientRect();
         return {
           left: rect.left,
           right: rect.right,
           top: rect.top,
+          bottom: rect.bottom,
           width: rect.width,
           height: rect.height,
         };
@@ -161,46 +183,48 @@ async function expectActionsContained(
     };
   });
 
-  // The 320px split leaves 274px of content width inside the real error card.
-  // Pin that geometry so a wider test viewport cannot hide this regression.
-  expect(layout.cardClientWidth).toBe(274);
+  // Home reached the product's advertised minimum, confirmed by the actual
+  // slot above. Measure containment without forcing an unreachable CSS width.
+  expect(layout.cardClientWidth).toBeGreaterThan(0);
+  expect(layout.cardClientWidth).toBeLessThanOrEqual(layout.slotWidth);
+  expect(layout.cardLeft).toBeGreaterThanOrEqual(layout.slotLeft);
+  expect(layout.cardRight).toBeLessThanOrEqual(layout.slotRight);
   expect(layout.cardScrollWidth).toBe(layout.cardClientWidth);
   expect(layout.actionScrollWidth).toBeLessThanOrEqual(layout.actionClientWidth);
   expect(layout.actionLeft).toBeGreaterThanOrEqual(layout.cardLeft);
   expect(layout.actionRight).toBeLessThanOrEqual(layout.cardRight);
-  expect(layout.buttons).toHaveLength(2);
+  // OPEND-2807/G16: Contact + Export + Retry for a failed Cloud run.
+  // Balance-specific actions and Switch to Cloud do not belong on this card.
+  expect(layout.buttons).toHaveLength(3);
   for (const button of layout.buttons) {
     expect(button.width).toBeGreaterThan(0);
     expect(button.height).toBeGreaterThan(0);
     expect(button.left).toBeGreaterThanOrEqual(layout.cardLeft);
     expect(button.right).toBeLessThanOrEqual(layout.cardRight);
   }
-  if (options.sameRow) {
-    expect(layout.buttons[0]?.top).toBe(layout.buttons[1]?.top);
+  // The actual narrow-card layout stacks the three actions without overlap.
+  for (let index = 1; index < layout.buttons.length; index += 1) {
+    const previous = layout.buttons[index - 1];
+    const current = layout.buttons[index];
+    if (!previous || !current) {
+      throw new Error(`Missing error-card action geometry at index ${index}`);
+    }
+    expect(current.top).toBeGreaterThanOrEqual(previous.bottom);
+    expect(current.left).toBe(previous.left);
+    expect(current.right).toBe(previous.right);
   }
 }
 
-test('[P1] zh-CN balance recovery actions stay inside a narrow ChatPane', async ({ page }) => {
-  await seedBalanceFailure(page, 'zh-CN');
+test('[P1] zh-CN Cloud run recovery actions stay inside a narrow ChatPane', async ({ page }) => {
+  await seedCloudRunFailure(page, 'zh-CN');
 
   const card = runErrorCard(page);
-  const recharge = card.getByRole('button', { name: '充值' });
-  const retry = card.getByRole('button', { name: '重试' });
-  await expectActionsContained(card, recharge, retry, { sameRow: true });
+  await expectActionsContained(card, ['联系我们', '导出日志', '重试']);
 });
 
-test('[P1] expanded English balance actions stay inside a narrow ChatPane', async ({ page }) => {
-  await seedBalanceFailure(page, 'en');
+test('[P1] English Cloud run recovery actions stay inside a narrow ChatPane', async ({ page }) => {
+  await seedCloudRunFailure(page, 'en');
 
   const card = runErrorCard(page);
-  const recharge = card.getByRole('button', { name: 'Top up' });
-  await expect(recharge).toBeVisible({ timeout: T.long });
-  await recharge.evaluate((button) => {
-    button.textContent = 'Top up Open Design Cloud balance';
-  });
-  const expandedRecharge = card.getByRole('button', {
-    name: 'Top up Open Design Cloud balance',
-  });
-  const retry = card.getByRole('button', { name: 'Retry' });
-  await expectActionsContained(card, expandedRecharge, retry);
+  await expectActionsContained(card, ['Contact us', 'Export logs', 'Retry']);
 });

@@ -139,7 +139,7 @@ against a design-template id continue to compose its instructions.
 
 ### Runtime resource staging
 
-Open Design does not distribute an active bundle by symlinking it into every
+OpenDesign does not distribute an active bundle by symlinking it into every
 agent's global configuration. Before a project run, the daemon makes a real
 copy of every active skill/template with side files under the project's
 `.od-skills/` alias. The prompt preamble advertises that CWD-relative copy and
@@ -182,7 +182,7 @@ The daemon normalizes `od.mode` to one of seven values. These values classify bo
 - **Purpose:** classify a functional workflow that creates, extracts, audits,
   or transforms design-system material.
 - **Output:** defined by the skill. A portable workflow may emit only
-  `DESIGN.md`; current Open Design import/create flows build a package with
+  `DESIGN.md`; current OpenDesign import/create flows build a package with
   `manifest.json`, `DESIGN.md`, `tokens.css`, and optional rich resources.
 - **Schema:** no fixed nine headings. Repository packages require substantive
   coverage and keep prose synchronized with the token contract; see
@@ -294,13 +294,13 @@ the only path authority.
 
 The upstream-inspired bundle ships at
 [`design-templates/guizang-ppt/`](../design-templates/guizang-ppt/) with its
-license preserved and Open Design metadata applied:
+license preserved and OpenDesign metadata applied:
 
 1. The daemon lists it through `/api/design-templates`, independently of the
    functional `/api/skills` registry.
 2. The user opens the Deck creation tab and selects the guizang template from
    the rendering catalogue.
-3. Open Design stores the selected template id as the project's primary
+3. OpenDesign stores the selected template id as the project's primary
    `skillId`. The daemon's combined skill-like resolver loads that template's
    `SKILL.md` and resources; it does not also inject the Deck tab's default
    functional skill.

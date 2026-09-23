@@ -5,7 +5,7 @@ description: |
   banded retro sun under a neon starfield, all from one fragment shader. No
   textures. Rendered as a single self-contained `index.html`. Use when the
   brief asks for "synthwave", "outrun", "retro 80s", "neon grid", "perspective
-  grid", "vaporwave", or a retro-futuristic hero. Open Design serves this in
+  grid", "vaporwave", or a retro-futuristic hero. OpenDesign serves this in
   powered-preview mode so the GPU stack actually runs.
 triggers:
   - "synthwave"
@@ -38,7 +38,7 @@ Produce a single self-contained `index.html` that renders a real-time synthwave 
 
 ## Why this is a powered artifact
 
-Open Design detects `getContext('webgl2')` and renders this file in **powered preview** — a cross-origin-isolated iframe with `allow-same-origin`. The full GPU pipeline is available; you do not need to work around the opaque sandbox.
+OpenDesign detects `getContext('webgl2')` and renders this file in **powered preview** — a cross-origin-isolated iframe with `allow-same-origin`. The full GPU pipeline is available; you do not need to work around the opaque sandbox.
 
 ## Resource map
 

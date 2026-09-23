@@ -83,6 +83,20 @@ describe('KNOWN_PROVIDERS', () => {
 
     expect(defaultKnownProviderModel(ollamaCloud)).toBe('gpt-oss:120b');
   });
+
+  it('defaults OpenRouter to a live model and records retired defaults', () => {
+    const openRouter = KNOWN_PROVIDERS.find(
+      (provider) => provider.label === 'OpenRouter',
+    );
+
+    expect(defaultKnownProviderModel(openRouter)).toBe(
+      'anthropic/claude-sonnet-4.6',
+    );
+    expect(openRouter?.retiredModels).toEqual([
+      'anthropic/claude-3.7-sonnet',
+      'anthropic/claude-3.5-sonnet',
+    ]);
+  });
 });
 
 vi.stubGlobal('localStorage', {
@@ -973,6 +987,33 @@ afterEach(() => {
 });
 
 describe('loadConfig', () => {
+  it('enables completion sound and desktop notifications for a fresh config', () => {
+    expect(loadConfig().notifications).toEqual({
+      soundEnabled: true,
+      successSoundId: 'ding',
+      failureSoundId: 'buzz',
+      desktopEnabled: true,
+    });
+  });
+
+  it('preserves an explicit saved notification opt-out', () => {
+    store.set('open-design:config', JSON.stringify({
+      notifications: {
+        soundEnabled: false,
+        successSoundId: 'ding',
+        failureSoundId: 'buzz',
+        desktopEnabled: false,
+      },
+    }));
+
+    expect(loadConfig().notifications).toEqual({
+      soundEnabled: false,
+      successSoundId: 'ding',
+      failureSoundId: 'buzz',
+      desktopEnabled: false,
+    });
+  });
+
   it('migrates legacy OpenAI-compatible API configs to an explicit apiProtocol', () => {
     const legacyConfig: Partial<AppConfig> = {
       mode: 'api',
@@ -1033,6 +1074,25 @@ describe('loadConfig', () => {
     expect(
       config.byokProviderConfigDrafts?.[`openai:${moonshotBaseUrl}`]?.apiConfig.model,
     ).toBe('kimi-k2.6');
+    expect(config.configMigrationVersion).toBe(3);
+  });
+
+  it('migrates the retired OpenRouter default from migration version 3', () => {
+    const openRouterBaseUrl = 'https://openrouter.ai/api/v1';
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'sk-or-test',
+      baseUrl: openRouterBaseUrl,
+      model: 'anthropic/claude-3.7-sonnet',
+      apiProviderBaseUrl: openRouterBaseUrl,
+      configMigrationVersion: 3,
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+
+    const config = loadConfig();
+
+    expect(config.model).toBe('anthropic/claude-sonnet-4.6');
     expect(config.configMigrationVersion).toBe(3);
   });
 

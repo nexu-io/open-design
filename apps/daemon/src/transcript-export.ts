@@ -56,6 +56,7 @@ import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { listMessages } from './db.js';
 import { projectDir } from './projects.js';
 
 const SCHEMA_VERSION = 2;
@@ -239,6 +240,13 @@ export function exportProjectTranscript(
 
     for (const conv of conversations) {
       const rows = messageStmt.all(conv.id) as MessageRow[];
+      // Raw message columns are only a terminal snapshot now. During an
+      // active run, durable deltas live in message_event_batches; reuse the
+      // canonical read path so an on-demand export matches the transcript the
+      // chat UI can already reconstruct without forcing an early fold.
+      const materializedMessages = new Map(
+        listMessages(db, conv.id).map((message) => [String(message.id), message]),
+      );
       const messages: BuiltMessage[] = rows.map((row) => {
         const parsed = parseEvents(row.eventsJson);
         if (parsed.reason === 'malformed' || parsed.reason === 'not_array') {
@@ -251,9 +259,20 @@ export function exportProjectTranscript(
               `events_json is non-null but ${parsed.reason}; falling back to content.`,
           );
         }
-        const blocks = coalesceBlocks(parsed.events);
-        if (blocks.length === 0 && typeof row.content === 'string' && row.content.length > 0) {
-          blocks.push({ type: 'text', text: row.content });
+        const materialized = materializedMessages.get(row.id);
+        const materializedEvents = Array.isArray(materialized?.events)
+          ? materialized.events as PersistedAgentEvent[]
+          : parsed.events;
+        const materializedContent = typeof materialized?.content === 'string'
+          ? materialized.content
+          : row.content;
+        const blocks = coalesceBlocks(materializedEvents);
+        if (
+          blocks.length === 0 &&
+          typeof materializedContent === 'string' &&
+          materializedContent.length > 0
+        ) {
+          blocks.push({ type: 'text', text: materializedContent });
         }
 
         const attachments = parseAttachments(row.attachmentsJson);

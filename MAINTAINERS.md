@@ -17,7 +17,7 @@ the rules everyone plays by.
 |---|---|
 | **Contributor** | Anyone with at least 1 merged PR. No special permissions. |
 | **External Maintainer** | A community contributor promoted under the rules below. Can review, approve, close/reopen issues, and self-assign issues. **Cannot click the merge button** — that stays with the Core Team. |
-| **Core Team** | Open Design's internal team. Holds full repository write access and is the final authority on governance decisions. Roster maintained internally. |
+| **Core Team** | OpenDesign's internal team. Holds full repository write access and is the final authority on governance decisions. Roster maintained internally. |
 
 The rest of this document is about **External Maintainers** unless stated otherwise.
 

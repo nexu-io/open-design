@@ -2,11 +2,11 @@
 
 Language: English | [简体中文](PUBLISHING-REGISTRIES.zh-CN.md)
 
-Open Design plugins are intentionally shaped so one folder can travel across multiple agent ecosystems. The safest publishing model is:
+OpenDesign plugins are intentionally shaped so one folder can travel across multiple agent ecosystems. The safest publishing model is:
 
-1. Keep the source of truth in a public GitHub repository or in an Open Design PR.
+1. Keep the source of truth in a public GitHub repository or in an OpenDesign PR.
 2. Keep `SKILL.md` portable and registry-friendly.
-3. Add `open-design.json` as the Open Design sidecar.
+3. Add `open-design.json` as the OpenDesign sidecar.
 4. Publish or list the same source in external registries only after local validation passes.
 
 Registry rules can change, so always check the target registry docs before running a publish command.
@@ -14,8 +14,8 @@ Registry rules can change, so always check the target registry docs before runni
 ## Recommended Release Order
 
 1. Validate the plugin folder locally.
-2. Push a public GitHub repository or open an Open Design PR.
-3. Add README install instructions for Open Design and generic Agent Skills clients.
+2. Push a public GitHub repository or open an OpenDesign PR.
+3. Add README install instructions for OpenDesign and generic Agent Skills clients.
 4. Add registry-specific badges or links.
 5. Publish to registries that match the plugin's audience.
 6. Record every published URL in the README and PR body.
@@ -24,7 +24,7 @@ Registry rules can change, so always check the target registry docs before runni
 
 | Target | Best for | Source shape | Publish strategy |
 | --- | --- | --- | --- |
-| Open Design | OD marketplace, composer chips, pipelines, GenUI, artifact provenance | `SKILL.md` + `open-design.json` | Open a PR to Open Design or publish a marketplace index entry pointing to the plugin repo. |
+| OpenDesign | OD marketplace, composer chips, pipelines, GenUI, artifact provenance | `SKILL.md` + `open-design.json` | Open a PR to OpenDesign or publish a marketplace index entry pointing to the plugin repo. |
 | skills.sh | Agent Skills discovery across many coding agents | Public Git repo or subpath containing `SKILL.md` | Make `npx skills add owner/repo` work, add the skills.sh badge, and keep the README clear. |
 | ClawHub | OpenClaw users who install skills or OpenClaw plugins from a registry | `SKILL.md` folder for skills; OpenClaw package metadata for plugins | Use `clawhub skill publish ./my-skill` for skill folders. Use `clawhub package publish ... --family code-plugin` only when you also ship OpenClaw plugin metadata. |
 | Standalone GitHub | Source of truth and broad agent compatibility | Portable folder or mono-repo subpath | Tag releases, document install commands, and keep changelogs. |
@@ -39,7 +39,7 @@ npx skills add https://github.com/owner/repo/tree/main/path/to/skill
 npx skills add ./my-local-skills
 ```
 
-For Open Design plugin authors:
+For OpenDesign plugin authors:
 
 - Ensure the repo or subpath contains a valid `SKILL.md`.
 - Keep `open-design.json` additive; generic skill clients should be able to ignore it.
@@ -75,7 +75,7 @@ clawhub skill publish ./my-skill \
   --changelog "Initial release"
 ```
 
-Use this path for normal Open Design plugins because they are centered on `SKILL.md`.
+Use this path for normal OpenDesign plugins because they are centered on `SKILL.md`.
 
 Only use the OpenClaw package path when you intentionally ship an OpenClaw code plugin with OpenClaw compatibility metadata:
 
@@ -89,7 +89,7 @@ For ClawHub-ready skills:
 - Keep `SKILL.md` metadata accurate.
 - Declare required environment variables, tools, permissions, connectors, or network access in the README and skill body.
 - Run the dry run or inspect command before making a listing public.
-- Link back to the canonical GitHub repo and Open Design PR.
+- Link back to the canonical GitHub repo and OpenDesign PR.
 - Keep changelog text honest and versioned.
 - Keep `open-design.json` `specVersion` fixed to the spec kit version and bump plugin `version` for every publishable behavior change.
 
@@ -111,8 +111,8 @@ Public skill registries are supply-chain surfaces. Before publishing:
 ## Registry publishing
 
 - Canonical source:
-- Open Design PR:
-- Open Design specVersion:
+- OpenDesign PR:
+- OpenDesign specVersion:
 - Plugin version:
 - Marketplace catalog version:
 - skills.sh install:

@@ -1,11 +1,11 @@
 ---
-title: Open Design 0.15.0
+title: OpenDesign 0.15.0
 description: Cost Less. Ship Faster. OD's DeepSeek Moment.
 ---
 
-# Open Design 0.15.0 — Cost Less. Ship Faster. OD’s DeepSeek Moment
+# OpenDesign 0.15.0 — Cost Less. Ship Faster. OD’s DeepSeek Moment
 
-Open Design 0.15.0 optimizes the Design System Prompt to make everyday design tasks faster and more efficient. In representative evaluation runs, time to first token was **49.5% shorter**, end-to-end duration was **21.2% shorter**, and average input-token use was **25.1% lower**. The broader creative workflow is smoother too—from building and presenting decks, to cloning public websites from a URL, to understanding and recovering from failed tasks.
+OpenDesign 0.15.0 optimizes the Design System Prompt to make everyday design tasks faster and more efficient. In representative evaluation runs, time to first token was **49.5% shorter**, end-to-end duration was **21.2% shorter**, and average input-token use was **25.1% lower**. The broader creative workflow is smoother too—from building and presenting decks, to cloning public websites from a URL, to understanding and recovering from failed tasks.
 
 ## ✨ New
 
@@ -21,11 +21,11 @@ Open Design 0.15.0 optimizes the Design System Prompt to make everyday design ta
 
 ### 🌐 Website Clone
 
-- **Start cloning a website with a URL, not a blank prompt.** Website Clone is now a first-class entry point on Home and in the Library: choose the capability, paste a public URL, and Open Design creates the project with the right context.
+- **Start cloning a website with a URL, not a blank prompt.** Website Clone is now a first-class entry point on Home and in the Library: choose the capability, paste a public URL, and OpenDesign creates the project with the right context.
 
 - **The cloning process leaves an audit trail.** The workflow first inspects page structure, routes, assets, and interactions. The generated project retains NOTES.md-style documentation describing its approach, asset sources, and known differences.
 
-- **Results are both more useful and more responsible.** Generated sites are ready for local preview and do not carry over third-party analytics or advertising scripts. For complex targets such as login-walled sites, Open Design explains the limitations instead of pretending the clone is complete.
+- **Results are both more useful and more responsible.** Generated sites are ready for local preview and do not carry over third-party analytics or advertising scripts. For complex targets such as login-walled sites, OpenDesign explains the limitations instead of pretending the clone is complete.
 
 ### 💬 Motion and Examples
 

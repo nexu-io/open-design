@@ -16,7 +16,7 @@ const heroLogotypeSvg = read('../../public/logo-03.svg');
 // channel as the glyph mask it assembles out of coloured blocks.
 const heroPixelScanSvg = read('../../public/logo-scan.svg');
 
-// The current Open Design brand glyph is the ink superellipse tile introduced
+// The current OpenDesign brand glyph is the ink superellipse tile introduced
 // with the landing-page rebrand (landing PR #3444): its outline starts with
 // this path command in every export of the mark.
 const CURRENT_GLYPH_PATH_PREFIX = 'M41 0.726562';
@@ -41,11 +41,17 @@ describe('Home logo assets', () => {
   it('renders the brand mark on the Home hero', () => {
     // #5517: the hero renders the shipped logotype image (not the glyph pair).
     expect(heroLogotypeSvg).toContain('<svg');
-    // Round 7: the hero mounts the animated PixelScanLogo component instead of
-    // a plain <img>; the logotype now ships as the pixel-scan engine's sample
-    // source (logo-scan.svg) rather than an inline `src="/logo-03.svg"`.
+    // The hero header is a plain headline now (per product): the animated
+    // pixel-scan wordmark came off it, so the hero mounts neither that
+    // component nor any of the retired logotype images. The assets themselves
+    // still ship — the rail, the tab chrome and the installers read them.
     expect(heroPixelScanSvg).toContain('<svg');
-    expect(homeHeroSource).toContain('<PixelScanLogo');
+    expect(homeHeroSource).not.toContain('<PixelScanLogo');
+    // The headline still comes from `homeHero.title`; it just renders through
+    // the rotating-noun path now (a locale opts in by writing `{word}` into its
+    // own string, so the key stays the single source for the sentence).
+    expect(homeHeroSource).toContain("t('homeHero.title')");
+    expect(homeHeroSource).toContain('<RotatingTitleWord');
     expect(homeHeroSource).not.toContain('src="/logo-03.svg"');
     expect(homeHeroSource).not.toContain('src="/app-icon.svg"');
 

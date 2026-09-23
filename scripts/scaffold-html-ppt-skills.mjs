@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Scaffold one Open Design skill per upstream html-ppt full-deck template.
+// Scaffold one OpenDesign skill per upstream html-ppt full-deck template.
 //
 // Each generated `skills/html-ppt-<name>/SKILL.md` ships only frontmatter +
 // a short body. Authoring guidance, layouts, themes, and animations live in

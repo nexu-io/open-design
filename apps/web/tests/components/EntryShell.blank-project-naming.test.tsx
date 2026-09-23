@@ -10,7 +10,7 @@
 // no-name create path (`handleCreateProjectFromDesignSystem`, the New Project
 // panel's blank pick), which already tag `nameSource: 'generated'`.
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -31,6 +31,7 @@ import {
   fetchProjectFiles,
   invalidateProjectFilesCache,
 } from '../../src/providers/registry';
+
 
 const originalFetch = globalThis.fetch;
 const originalResizeObserver = globalThis.ResizeObserver;
@@ -77,8 +78,9 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-// Drafts / All-projects are workspace-only views: EntryShell redirects them
-// back to Home once the workspace-context read resolves with nothing. Give
+// All-projects is a workspace-only view: EntryShell redirects it back to Home
+// once the workspace-context read resolves with nothing (Drafts stays, as the
+// local project list, since OPEND-3140). Give
 // every test a resolved team context up front — the real bug reproduces
 // inside a team workspace ("OD Feature Team" in the live acceptance check) —
 // so the empty-state CTA renders deterministically instead of racing a
@@ -171,6 +173,8 @@ function renderAt(path: string, overrides: Partial<React.ComponentProps<typeof E
     onConfigPersist: vi.fn(),
     onRefreshAgents: vi.fn(() => [cliAgent()]),
     onCreateProject: vi.fn(() => Promise.resolve(true)),
+    onBeginProjectCreation: () => ({ projectId: 'optimistic-project', rollback: () => undefined }),
+    onAmrBalanceGateBlockChange: () => undefined,
     onCreatePluginShareProject: vi.fn(),
     onImportClaudeDesign: vi.fn(),
     onOpenProject: vi.fn(),
@@ -210,8 +214,71 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('EntryShell signed-out recent projects', () => {
+  const localProject = {
+    id: 'local-project', name: 'Local project', skillId: null,
+    designSystemId: null, createdAt: 1, updatedAt: 1,
+  };
+  beforeEach(() => {
+    // The rail is collapsed (aria-hidden) on a fresh profile; dock it open so
+    // role queries can reach its rows.
+    window.localStorage.setItem('od.entry.railOpen', 'true');
+    globalThis.fetch = vi.fn(async () => jsonResponse({ context: null, projects: [], plugins: [] }));
+  });
+  afterEach(() => {
+    window.localStorage.removeItem('od.entry.railOpen');
+  });
+
+  // OPEND-3140: the local shell lists its projects in the rail's 最近项目
+  // section, not in a Home grid, and the rail row's menu drives the same
+  // rename handler the grid used to.
+  it('lists local projects in the rail, not on Home, and renames from the rail row', async () => {
+    const props = renderAt('/', { projects: [localProject] });
+    const home = screen.getByTestId('entry-view-home');
+    const row = await screen.findByTestId('entry-nav-recent-item');
+    expect(row.textContent).toContain('Local project');
+    expect(home.querySelector('.recent-projects')).toBeNull();
+    expect(screen.queryByTestId('recent-projects-strip')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('entry-nav-recent-more'));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Rename' }));
+    const input = screen.getByRole('textbox', { name: 'Rename' }) as HTMLInputElement;
+    expect(input.value).toBe('Local project');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'Renamed local project' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    expect(props.onRenameProject).toHaveBeenCalledWith('local-project', 'Renamed local project');
+  });
+
+  it('opens the 项目 page from the rail with the local catalogue', async () => {
+    renderAt('/', { projects: [localProject] });
+    await screen.findByTestId('entry-nav-recent-item');
+    fireEvent.click(screen.getByTestId('entry-nav-drafts'));
+    expect(window.location.pathname).toBe('/drafts');
+    const strip = await screen.findByTestId('recent-projects-strip');
+    expect(within(strip).getByText('Local project')).toBeTruthy();
+  });
+
+  // OPEND-2793 (product decision B): the community gallery browses without a
+  // docked composer until phase three gives it a template-bound shape. The
+  // `dock` variant of HomeView stays in the codebase; Community just no longer
+  // mounts it, so the grid can use the full page height.
+  it('renders the Community gallery without a docked composer', async () => {
+    renderAt('/community', { projects: [localProject] });
+    await screen.findByTestId('entry-view-home');
+    expect(screen.queryByTestId('community-composer-dock')).toBeNull();
+    // Home's own composer is still the single composer in the shell.
+    expect(screen.getAllByTestId('home-hero-composer-card')).toHaveLength(1);
+  });
+});
+
 describe('EntryShell team project content readiness', () => {
-  it('renders another member\'s catalog name and timestamp on Home instead of the fresh pulled placeholder', async () => {
+  // The grid this reads lives on 全部项目 now: with a cloud identity Home carries
+  // no recent-projects grid any more (#7635 / OPEND-2683 — the rail's 最近项目
+  // section is the entry there), so the catalog-name-over-placeholder rule is
+  // asserted on the team grid surface instead.
+  it('renders another member\'s catalog name and timestamp on 全部项目 instead of the fresh pulled placeholder', async () => {
     const catalogUpdatedAt = Date.now() - (2 * 24 * 60 * 60 * 1000);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
@@ -236,7 +303,7 @@ describe('EntryShell team project content readiness', () => {
       return jsonResponse({});
     }) as typeof fetch;
 
-    renderAt('/', {
+    renderAt('/all-projects', {
       projects: [{
         id: 'shared-pulled',
         name: '共享项目',
@@ -293,9 +360,12 @@ describe('EntryShell team project content readiness', () => {
       onTeamProjectContentReady,
     });
 
-    const activeCard = await screen.findByRole('button', {
-      name: /Ready shared project/,
-    });
+    // Scoped to the project grid: the rail's 最近浏览过 list names the same
+    // projects, so an unscoped lookup matches the card AND its rail row.
+    const activeCard = await within(document.querySelector('main') as HTMLElement).findByRole(
+      'button',
+      { name: /Ready shared project/ },
+    );
     fireEvent.click(activeCard);
 
     await waitFor(() => {
@@ -440,7 +510,10 @@ describe('EntryShell team project content readiness', () => {
       onTeamProjectContentReady,
     });
 
-    expect(await screen.findByText('Ready shared project')).toBeTruthy();
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
     expect(MockWorkspaceEventSource.instances).toHaveLength(1);
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
@@ -486,7 +559,7 @@ describe('EntryShell team project content readiness', () => {
     ).toBe(false);
   });
 
-  it('falls back to POST pull when ready hydration does not succeed', async () => {
+  it('bootstraps a progressive open when ready hydration does not succeed', async () => {
     vi.stubGlobal('EventSource', MockWorkspaceEventSource as unknown as typeof EventSource);
     const workspace = teamContext();
     const materializedFile = {
@@ -498,7 +571,7 @@ describe('EntryShell team project content readiness', () => {
       kind: 'code' as const,
       mime: 'text/html',
     };
-    let pullSucceeded = false;
+    let bootstrapSucceeded = false;
     const requests: Array<{
       url: string;
       method: string;
@@ -531,12 +604,12 @@ describe('EntryShell team project content readiness', () => {
           }],
         });
       }
-      if (pathname.endsWith('/collab/pull') && init?.method === 'POST') {
-        pullSucceeded = true;
-        return jsonResponse({ ok: true });
+      if (pathname.endsWith('/collab/bootstrap') && init?.method === 'PUT') {
+        bootstrapSucceeded = true;
+        return jsonResponse({ ok: true, awaitingFirstMaterialization: true }, 202);
       }
       if (pathname.endsWith('/files')) {
-        return jsonResponse({ files: pullSucceeded ? [materializedFile] : [] });
+        return jsonResponse({ files: bootstrapSucceeded ? [materializedFile] : [] });
       }
       return jsonResponse({});
     }) as typeof fetch;
@@ -558,7 +631,10 @@ describe('EntryShell team project content readiness', () => {
       fresh: true,
     })).resolves.toEqual([]);
 
-    expect(await screen.findByText('Ready shared project')).toBeTruthy();
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
         type: 'team-project-content-ready',
@@ -571,7 +647,7 @@ describe('EntryShell team project content readiness', () => {
     fireEvent.click(screen.getByTitle('Ready shared project'));
     expect(
       requests.some(({ url, method }) =>
-        method === 'POST' && url.includes('/api/projects/shared-ready/collab/pull')),
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
     ).toBe(false);
     await act(async () => {
       finishHydration(false);
@@ -590,14 +666,14 @@ describe('EntryShell team project content readiness', () => {
     expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
     expect(
       requests.some(({ url, method }) =>
-        method === 'POST' && url.includes('/api/projects/shared-ready/collab/pull')),
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
     ).toBe(true);
-    const pullRequest = requests.find(
+    const bootstrapRequest = requests.find(
       ({ url, method }) =>
-        method === 'POST'
-        && url.includes('/api/projects/shared-ready/collab/pull'),
+        method === 'PUT'
+        && url.includes('/api/projects/shared-ready/collab/bootstrap'),
     );
-    expect(pullRequest).toMatchObject({
+    expect(bootstrapRequest).toMatchObject({
       workspaceId: 'ws-1',
       workspaceMemberId: 'wm-1',
     });
@@ -648,7 +724,10 @@ describe('EntryShell team project content readiness', () => {
       onTeamProjectContentReady,
     });
 
-    expect(await screen.findByText('Ready shared project')).toBeTruthy();
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
         type: 'team-project-content-ready',
@@ -673,7 +752,12 @@ describe('EntryShell team project content readiness', () => {
         }),
       });
     });
-    expect(await screen.findByText('Member B')).toBeTruthy();
+    // Barrier: the member switch must land in the shell before the click
+    // below, or it would capture wm-1. The account name is no longer rendered
+    // as visible text (320a36ac1 made the trigger avatar-only and moved the
+    // name into the hover menu) — it survives as the trigger's aria-label,
+    // which is the same value in the always-mounted chrome.
+    expect(await screen.findByLabelText('Member B')).toBeTruthy();
 
     fireEvent.click(screen.getByTitle('Ready shared project'));
     await waitFor(() => expect(onOpenProject).toHaveBeenCalledWith(
@@ -689,7 +773,7 @@ describe('EntryShell team project content readiness', () => {
     expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
     expect(
       requests.some(({ url, method }) =>
-        method === 'POST' && url.includes('/api/projects/shared-ready/collab/pull')),
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
     ).toBe(true);
     expect(onTeamProjectContentReady).toHaveBeenCalledTimes(1);
   });
@@ -716,7 +800,10 @@ describe('EntryShell team project content readiness', () => {
     renderAt('/all-projects', { onTeamProjectContentReady });
 
     await waitFor(() => expect(MockWorkspaceEventSource.instances).toHaveLength(1));
-    await screen.findByText('Ma Shu');
+    // Barrier: wait for the workspace context to land before dispatching the
+    // readiness event. Read it off the account trigger's aria-label — the
+    // avatar-only trigger (320a36ac1) no longer prints the name as text.
+    await screen.findByLabelText('Ma Shu');
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
         type: 'team-project-content-ready',
@@ -734,7 +821,10 @@ describe('EntryShell team project content readiness', () => {
         name: 'Ready shared project',
       }],
     }));
-    expect(await screen.findByText('Ready shared project')).toBeTruthy();
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
     await waitFor(() => {
       expect(onTeamProjectContentReady).toHaveBeenCalledWith('shared-ready', 'ws-1', 'wm-1');
     });

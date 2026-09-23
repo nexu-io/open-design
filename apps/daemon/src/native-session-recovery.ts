@@ -9,7 +9,10 @@ import type {
   NativeSessionRecoveryReason,
 } from '@open-design/contracts';
 import type { ResumeInvalidationReason } from './agent-session-resume.js';
-import type { RuntimeAgentDef } from './runtimes/types.js';
+import {
+  runtimeResumesSessionById,
+  type RuntimeAgentDef,
+} from './runtimes/types.js';
 
 function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -24,9 +27,10 @@ function handleKindForAgent(agentId: string | null): NativeSessionHandleKind {
 }
 
 function handleKindForRuntime(
-  def: Pick<RuntimeAgentDef, 'id' | 'capturesSessionIdFromStream' | 'resumesSessionViaAcpLoad'>,
+  def: Pick<RuntimeAgentDef, 'id' | 'capturesSessionIdFromStream' | 'resumesSessionViaAcpLoad' | 'resumesSessionViaProfileStdio'>,
 ): NativeSessionHandleKind {
   if (def.resumesSessionViaAcpLoad === true) return 'acp-session-handle';
+  if (def.resumesSessionViaProfileStdio === true) return 'profile-session-id';
   if (def.id === 'pi') return 'session-file-path';
   if (def.capturesSessionIdFromStream === true) return 'cli-thread-id';
   return handleKindForAgent(def.id);
@@ -50,11 +54,12 @@ export function redactNativeSessionHandle(input: {
 }
 
 function acquisitionForRuntime(
-  def: Pick<RuntimeAgentDef, 'id' | 'resumesSessionViaCli' | 'capturesSessionIdFromStream' | 'resumesSessionViaAcpLoad'>,
+  def: Pick<RuntimeAgentDef, 'id' | 'resumesSessionViaCli' | 'resumesSessionViaProfileStdio' | 'capturesSessionIdFromStream' | 'resumesSessionViaAcpLoad'>,
   supported: boolean,
 ): NativeSessionAcquisitionMode {
   if (!supported) return 'none';
   if (def.resumesSessionViaAcpLoad === true) return 'acp-session-load';
+  if (def.resumesSessionViaProfileStdio === true) return 'profile-session-frame';
   if (def.id === 'pi') return 'session-file-discovered';
   if (def.capturesSessionIdFromStream === true) return 'stream-captured';
   if (def.resumesSessionViaCli === true) return 'daemon-specified';
@@ -62,13 +67,14 @@ function acquisitionForRuntime(
 }
 
 function continuationForRuntime(
-  def: Pick<RuntimeAgentDef, 'id' | 'resumesSessionViaCli' | 'resumesSessionViaAcpLoad'>,
+  def: Pick<RuntimeAgentDef, 'id' | 'resumesSessionViaCli' | 'resumesSessionViaProfileStdio' | 'resumesSessionViaAcpLoad'>,
   supported: boolean,
 ): NativeSessionContinuationMode {
   if (!supported) return 'none';
   if (def.resumesSessionViaAcpLoad === true) return 'acp-session-load';
+  if (def.resumesSessionViaProfileStdio === true) return 'profile-stdio-resume';
   if (def.id === 'pi') return 'session-file-resume';
-  if (def.resumesSessionViaCli === true) return 'native-resume-by-id';
+  if (runtimeResumesSessionById(def)) return 'native-resume-by-id';
   return 'unknown';
 }
 
@@ -77,7 +83,7 @@ function guardReason(reason: ResumeInvalidationReason | null | undefined): Nativ
 }
 
 export function initialNativeSessionRecoveryMetadata(input: {
-  agent: Pick<RuntimeAgentDef, 'id' | 'resumesSessionViaCli' | 'capturesSessionIdFromStream' | 'resumesSessionViaAcpLoad'>;
+  agent: Pick<RuntimeAgentDef, 'id' | 'resumesSessionViaCli' | 'resumesSessionViaProfileStdio' | 'capturesSessionIdFromStream' | 'resumesSessionViaAcpLoad'>;
   supportsSessionResume: boolean;
   isResuming: boolean;
   resumeSessionId: string | null | undefined;

@@ -85,6 +85,13 @@ describe('AgentIcon', () => {
     expect(markup).not.toContain('agent-icon-fallback');
   });
 
+  it('reuses the DeepSeek brand asset for the DeepSeek Harness runtime', () => {
+    const markup = renderToStaticMarkup(<AgentIcon id="deepseek-harness" size={24} />);
+
+    expect(markup).toContain('src="/agent-icons/deepseek.svg"');
+    expect(markup).not.toContain('agent-icon-fallback');
+  });
+
   it('renders monochrome SVGs as a CSS-masked <span> so they pick up theme color', () => {
     // cursor-agent.svg ships with `fill="currentColor"` and would lose its
     // ink under a dark theme if loaded through `<img>` (which would make

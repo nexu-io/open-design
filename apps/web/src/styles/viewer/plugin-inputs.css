@@ -134,7 +134,7 @@
 }
 .settings-skills .skills-file-entry-directory {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 .settings-skills .skills-file-size {
   margin-left: auto;
@@ -195,7 +195,7 @@
 
   background: transparent;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.5;
   color: var(--text-muted);
   cursor: pointer;
@@ -353,7 +353,7 @@
 
 .mcp-json-helper-toggle-text {
 	font-size: 12px;
-	font-weight: 500;
+	font-weight: 600;
 	line-height: 1.5;
 
 	color: inherit;

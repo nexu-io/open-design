@@ -6,6 +6,7 @@ import {
   fetchVelaBillingSummary,
   fetchVelaWorkspaceBillingProjection,
   fetchVelaWorkspaceBalance,
+  isVelaWorkspaceAuthorizationError,
   parseBillingCatalog,
   parseBillingSummary,
   parseWorkspaceBillingSnapshot,
@@ -275,6 +276,22 @@ describe('vela billing 收口', () => {
         },
       }),
     ).rejects.toThrow('control key expired');
+  });
+
+  it('recognizes old and new CLI authorization envelopes without classifying timeouts', () => {
+    expect(
+      isVelaWorkspaceAuthorizationError(
+        new Error(
+          'fetch workspace billing snapshot: API request failed with status 403: workspace_not_authorized',
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isVelaWorkspaceAuthorizationError(
+        Object.assign(new Error('denied'), { code: 'auth_required' }),
+      ),
+    ).toBe(true);
+    expect(isVelaWorkspaceAuthorizationError(new Error('request timed out'))).toBe(false);
   });
 
   it('maps the vela team billing catalog JSON into client catalog data', () => {

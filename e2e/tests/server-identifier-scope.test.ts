@@ -30,28 +30,25 @@ import { describe, expect, it } from 'vitest';
  *
  * ## Why this lives in `e2e/tests/` and not `apps/daemon/tests/`
  *
- * A guard is worth exactly the lane that runs it. `ci.yml`'s daemon lane
- * executes one file — `tests/project-watchers.test.ts` — and that exclusive
- * invocation is itself pinned by the certain-exempt consumption guard
- * (`workflowRunsOnlyAllowedDaemonTest` in
- * `scripts/check-certain-exempt-consumption.ts`), so widening it is a coupled
- * policy change, not a lane edit. A daemon-hosted guard therefore protects
- * nothing on the merge gate.
+ * A guard is worth exactly the lane that runs it. The daemon lane now executes
+ * the complete package suite in four shards, so a daemon-hosted regression
+ * would also protect the merge gate. This check remains here as a lightweight,
+ * independent structural guard because it does not boot a daemon and runs in
+ * the broader E2E Vitest lane.
  *
  * `e2e/tests/` closes that gap, and the closure is structural rather than
  * incidental:
  *
  * - Any change under `apps/daemon/src/` matches the `certain-daemon-core` rule
- *   in `scripts/scopes.ts`, whose effects include `ui_p0_validation_required`;
+ *   in `.github/config/scopes.json`, whose effects include `ui_p0_validation_required`;
  *   `run_e2e_vitest` is `isFull || web_tests_required ||
  *   ui_p0_validation_required`. So a `server.ts`-only change arms the `E2E
  *   Vitest` lane even at the merge queue's `certain` threshold — the strictest
  *   context there is. An unresolved file list escalates fail-closed to full,
  *   which arms it too.
- * - That wiring cannot rot silently. The `daemon core boundary` guard
- *   (`scripts/lib/guard/scope.ts`) asserts `ci.yml` still contains both
- *   `run_e2e_vitest == 'true'` and `pnpm --filter @open-design/e2e test`, and
- *   it runs in the always-on policy floor.
+ * - Direct `scopes.py plan` tests pin that routing, while the workflow topology
+ *   test pins the `e2e_vitest` hash-run identity and package command. Those are
+ *   planner contract tests, not an independent proof that authorizes the plan.
  *
  * The placement also follows the root `AGENTS.md` boundary rule — cross-app and
  * repository-resource consistency checks belong here, not inside an app package

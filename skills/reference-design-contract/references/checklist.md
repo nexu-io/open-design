@@ -4,7 +4,7 @@ Use this checklist before final handoff.
 
 ## P0 gates
 
-- [ ] `DESIGN.md` exists and uses the nine standard Open Design headings.
+- [ ] `DESIGN.md` exists and uses the nine standard OpenDesign headings.
 - [ ] `design-contract.md` names the target artifact, audience, and evidence used.
 - [ ] Every reference is split into `Keep`, `Change`, and `Do not copy`.
 - [ ] Inferences are labeled; unverified brand facts are not presented as truth.

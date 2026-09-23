@@ -81,7 +81,7 @@ describe("desktop updater config", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       });
 
-      expect(config.channel).toBe(DESKTOP_UPDATE_CHANNELS.PREVIEW);
+      expect(config.channel).toBe("preview");
       expect(config.metadataUrl).toContain("/preview/latest/metadata.json");
     } finally {
       rmSync(root, { force: true, recursive: true });

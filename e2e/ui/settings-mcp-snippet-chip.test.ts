@@ -1,5 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
+import { suppressWhatsNew } from '../lib/playwright/mock-factory.js';
 
 // Regression for #4509: the MCP server setup snippet renders inside a dark
 // `<pre><code>` block, but the inner `<code>` used to inherit the global
@@ -11,6 +13,10 @@ import { T } from '@/timeouts';
 const STORAGE_KEY = 'open-design:config';
 
 test.beforeEach(async ({ page }) => {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx) and its backdrop sits
+  // at z-index 1500 — above the z-index 120 chrome that owns the rail/settings
+  // controls this spec clicks. A live release card would swallow those clicks.
+  await suppressWhatsNew(page);
   await page.addInitScript((key) => {
     window.localStorage.setItem(key, JSON.stringify({
       mode: 'api', apiProtocol: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.deepseek.com',
@@ -28,26 +34,16 @@ test.beforeEach(async ({ page }) => {
 test('[P1] MCP server snippet code stays transparent, not the inline-code chip (#4509)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-  }
 
-  const shortcut = process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma';
-  await page.keyboard.press(shortcut);
-  await expect(page.locator('.modal-backdrop .modal-settings')).toBeVisible({ timeout: T.short });
+  const settings = await openSettingsDialog(page);
+  await settings.getByRole('button', { name: /^MCP server\b/ }).click();
 
-  // Open the "MCP server" section — Claude Code is the default client, so its
-  // `claude mcp add-json` snippet renders without further interaction.
-  await page.locator('.settings-nav-item', { hasText: 'MCP server' }).click();
-
-  const code = page.locator('.modal-settings pre code').first();
+  const code = settings.locator('pre code').filter({ hasText: 'claude mcp add-json' });
   await expect(code).toBeVisible({ timeout: T.short });
 
-  const style = await code.evaluate((el: Element) => {
-    const cs = getComputedStyle(el);
-    return { background: cs.backgroundColor, padding: cs.padding };
+  const style = await code.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return { background: computed.backgroundColor, padding: computed.padding };
   });
 
   // Transparent (Chromium reports `rgba(0, 0, 0, 0)`) — the inline-code chip
@@ -126,19 +122,18 @@ test('[P1] MCP OAuth connect callback updates status and supports disconnect', a
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.medium });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
 
-  const shortcut = process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma';
-  await page.keyboard.press(shortcut);
-  const settings = page.locator('.modal-backdrop .modal-settings');
-  await expect(settings).toBeVisible({ timeout: T.short });
-  await settings.locator('.settings-nav-item', { hasText: 'External MCP' }).click();
+  await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
+  const integrations = page.locator('.integrations-view');
+  await expect(integrations).toBeVisible({ timeout: T.medium });
+  await integrations.getByTestId('integrations-tab-mcp').click();
 
-  const row = page.locator('.mcp-row', { hasText: 'OAuth Server' });
+  const row = integrations.locator('.mcp-row', { hasText: 'OAuth Server' });
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Expand this MCP server' }).click();
   const oauth = page.locator('.mcp-oauth-control').first();

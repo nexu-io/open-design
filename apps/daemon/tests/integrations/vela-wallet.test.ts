@@ -51,6 +51,25 @@ afterEach(() => {
 });
 
 describe('createVelaWalletSnapshotReader balance validation', () => {
+  it('reads only the authenticated Vela wallet balance', async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        balanceUsd: '0.00',
+        updatedAt: '2026-08-23T00:00:00.000Z',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const reader = createVelaWalletSnapshotReader({ fetch: fetchMock as typeof fetch });
+
+    await expect(reader.read()).resolves.toMatchObject({
+      status: 'available',
+      balanceUsd: '0.00',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     { label: 'missing', balanceUsd: undefined },
     { label: 'numeric', balanceUsd: 20 },

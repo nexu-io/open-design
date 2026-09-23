@@ -3,15 +3,16 @@ import type {
   PreviewComment,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { projectKindFromMetadataToTrackingOrLegacyDefault } from '@open-design/contracts/analytics';
 import type { RouteDeps } from '../../server-context.js';
 import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-resource-mutation.js';
-import { isProjectCommentAnchorConversationId } from '../../db.js';
+import { getProject, isProjectCommentAnchorConversationId } from '../../db.js';
 
 export type ProjectCommentWorkspaceContextResolution =
   | { ok: true; context: WorkspaceCollabContext | null }
   | {
       ok: false;
-      status: 400 | 403 | 503;
+      status: 400 | 401 | 403 | 503;
       code: string;
       message: string;
       retryable?: true;
@@ -61,6 +62,15 @@ export interface RegisterProjectCommentRoutesDeps extends RouteDeps<'db' | 'proj
    * and fail-closed on every write.
    */
   resolveReadWorkspaceContext?: (
+    req: Request,
+    projectId: string,
+  ) => Promise<ProjectCommentWorkspaceContextResolution>;
+  /**
+   * Fresh cloud authority used only before pulling remote comment state. Local
+   * list/create/edit/delete paths use the persisted project binding and must
+   * remain available while the membership directory is offline.
+   */
+  resolveFreshWorkspaceContext?: (
     req: Request,
     projectId: string,
   ) => Promise<ProjectCommentWorkspaceContextResolution>;
@@ -378,7 +388,9 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     await ctx.onCommentsRead?.(
       req.params.id,
       workspaceResolution.context,
-      () => resolveRequestWorkspaceContext(req, req.params.id),
+      () => ctx.resolveFreshWorkspaceContext
+        ? ctx.resolveFreshWorkspaceContext(req, req.params.id)
+        : resolveRequestWorkspaceContext(req, req.params.id),
     );
     res.json({
       comments: commentsAreProjectScoped(
@@ -465,6 +477,7 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
       // Only a genuinely new, successfully persisted comment is counted.
       // Edits reuse this POST route with an id and must not inflate creation.
       if (comment && !requestedId) {
+        const project = getProject(db, req.params.id);
         const localBinding = typeof getWorkspaceProjectByProjectId === 'function'
           ? getWorkspaceProjectByProjectId(db, req.params.id) as
               | { createdByWorkspaceMemberId?: string | null }
@@ -493,6 +506,8 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
             result: 'success',
             target_project_relation: targetProjectRelation,
             comment_level: 'top_level',
+            project_id: req.params.id,
+            project_kind: projectKindFromMetadataToTrackingOrLegacyDefault(project?.metadata),
             ...(workspaceContext
               ? {
                   workspace_key: workspaceContext.workspaceId,

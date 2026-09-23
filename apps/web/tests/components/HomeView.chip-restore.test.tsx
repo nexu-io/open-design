@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate, homeTemplateTrigger } from '../helpers/home-template-picker';
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -143,19 +144,6 @@ function stubAnimationFrame() {
   });
 }
 
-// Mirrors HomeView.prefill.test.tsx's local helper: the inline template rail
-// was replaced by the composer footer's radial Template picker (#5517).
-async function pickHomeTemplate(id: string) {
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  const wedge = await screen.findByTestId(`home-hero-template-wedge-${id}`);
-  await waitFor(() =>
-    expect(screen.getByTestId(`home-hero-template-wedge-${id}`).getAttribute('aria-disabled')).not.toBe('true'),
-  );
-  fireEvent.click(wedge);
-}
-
 function fetchMockFor(plugins: unknown[]) {
   return vi.fn<typeof fetch>(async (url) => {
     if (typeof url === 'string' && url === '/api/plugins') {
@@ -192,17 +180,16 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 
     await screen.findByTestId('home-hero-input');
     await pickHomeTemplate('prototype');
 
-    // 'UI Mockup' is the current en localization of the `prototype` chip
-    // (homeHero.chip.prototype) — not literal string 'Prototype'.
+    // 'Prototype' is the current en localization of the `prototype` chip
+    // (homeHero.chip.prototype).
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
 
     // Real teardown — the same kind of unmount App.tsx performs when
@@ -216,23 +203,55 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 
     await screen.findByTestId('home-hero-input');
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
-    // The restore resolves the plugin's snapshot the same way a fresh chip
-    // click does (see the effect's docblock for why it doesn't defer).
+    // Restoring a persisted type is background hydration, not a submit: defer
+    // the plugin apply until the user actually sends, and leave the type
+    // reversible meanwhile. With a type restored the row is retired, so the
+    // pill's clear is what must stay live.
+    expect(homeTemplateTrigger()).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),
+      ),
+    ).toBe(false);
+  });
+
+  it.each(['mobile', 'wireframe'])('migrates the legacy top-level %s chip into a nested Prototype scene', async (legacyChipId) => {
+    window.localStorage.setItem(
+      'open-design:home-composer:chip',
+      JSON.stringify({
+        chipId: legacyChipId,
+        pluginId: 'example-web-prototype',
+        projectKind: 'prototype',
+      }),
+    );
+    const fetchMock = fetchMockFor([WEB_PROTOTYPE_PLUGIN]);
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
     await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(
-          ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),
-        ),
-      ).toBe(true);
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+      expect(JSON.parse(window.localStorage.getItem('open-design:home-composer:chip') ?? '{}'))
+        .toMatchObject({ chipId: 'prototype', prototypeSubtypeId: legacyChipId });
     });
+    expect(fetchMock.mock.calls.some(
+      ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),
+    )).toBe(false);
   });
 
   it('silently drops a persisted chip pointing at a since-uninstalled plugin', async () => {
@@ -251,7 +270,6 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 

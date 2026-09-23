@@ -7,7 +7,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectSearchModal } from '../../src/components/ProjectSearchModal';
+import {
+  buildProjectSearchCatalog,
+  ProjectSearchModal,
+} from '../../src/components/ProjectSearchModal';
 import { I18nProvider } from '../../src/i18n';
 import type { Project } from '../../src/types';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
@@ -70,6 +73,26 @@ function activeName(): string | undefined {
 }
 
 describe('ProjectSearchModal keyboard navigation', () => {
+  it('searches personal drafts together with shared workspace projects', () => {
+    const personalProject = project('personal-white-shoes', '白色慢跑鞋棚拍商品图', 4_000);
+    const sharedProject = project('shared-blue-shoes', '共享蓝色跑鞋', 3_000);
+    const projects = buildProjectSearchCatalog([personalProject], [sharedProject]);
+
+    renderPalette(vi.fn(), vi.fn(), projects);
+    fireEvent.change(screen.getByTestId('project-search-input'), {
+      target: { value: '白色' },
+    });
+
+    expect(screen.getByTestId('project-search-item-personal-white-shoes')).toBeTruthy();
+  });
+
+  it('uses the shared catalog card when the same project appears twice', () => {
+    const localCard = project('shared-project', 'Stale local title', 1_000);
+    const sharedCard = project('shared-project', 'Current shared title', 2_000);
+
+    expect(buildProjectSearchCatalog([localCard], [sharedCard])).toEqual([sharedCard]);
+  });
+
   it('highlights the top match first and walks the list with the arrow keys', () => {
     renderPalette();
     const input = screen.getByTestId('project-search-input');
@@ -138,7 +161,7 @@ describe('ProjectSearchModal keyboard navigation', () => {
     expect(activeName()).toBeUndefined();
   });
 
-  it('scopes Team project cover URLs for browser-owned image loads', () => {
+  it('uses server-derived project authority for Team project cover URLs', () => {
     const teamProject = {
       ...project('team-project', 'Team project', 4_000),
       metadata: {
@@ -150,7 +173,7 @@ describe('ProjectSearchModal keyboard navigation', () => {
 
     const image = screen.getByTestId('project-search-item-team-project').querySelector('img');
     expect(image?.getAttribute('src')).toBe(
-      '/api/projects/team-project/raw/cover.png?workspaceId=workspace-team&workspaceMemberId=member-1&v=4000',
+      '/api/projects/team-project/raw/cover.png?v=4000',
     );
   });
 });

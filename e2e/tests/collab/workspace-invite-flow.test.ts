@@ -108,23 +108,6 @@ beforeAll(async () => {
       return;
     }
 
-    if (req.url === '/api/v1/workspaces/current' && req.method === 'GET') {
-      const controlKey = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() ?? '';
-      const context = acceptedControlKeys.has(controlKey) || (inviteAccepted && controlKey !== 'e2e-invite-owner-control-key')
-        ? { ...INVITEE_CONTEXT, workspaceName: 'Invited team' }
-        : controlKey === 'e2e-invite-owner-control-key'
-          ? { ...OWNER_CONTEXT, workspaceName: 'Invited team' }
-          : null;
-      if (!context) {
-        res.writeHead(403, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'missing_principal' }));
-        return;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(context));
-      return;
-    }
-
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: 'not found' }));
   });

@@ -112,6 +112,20 @@ describe('applied plugin snapshot workspace isolation', () => {
     expect(team.status).toBe(200);
   });
 
+  it('derives project authority when a bound snapshot read has no Workspace headers', async () => {
+    const personal = await fetch(
+      `${baseUrl}/api/applied-plugins/${snapshotId('snapshot-personal-project')}`,
+    );
+    const team = await fetch(
+      `${baseUrl}/api/applied-plugins/${snapshotId('snapshot-team-project')}/canon`,
+    );
+
+    expect(personal.status).toBe(200);
+    expect(team.status).toBe(200);
+    expect(await personal.text()).toContain('personal-private-input');
+    expect(await team.text()).toContain('team-private-input');
+  });
+
   it('filters the global list by exact Workspace/member while retaining Team snapshots', async () => {
     const owner = await fetch(`${baseUrl}/api/applied-plugins`, {
       headers: headers('snapshot-owner'),

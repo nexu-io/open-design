@@ -7,7 +7,7 @@
 <!--
   Self-contained Web Worker demo. A background worker integrates a 12,000-body
   swirling particle simulation and writes positions into a SharedArrayBuffer;
-  the main thread only reads + draws. Open Design renders this in "powered
+  the main thread only reads + draws. OpenDesign renders this in "powered
   preview" mode because it calls `new Worker(...)` and `SharedArrayBuffer` —
   the opaque preview sandbox blocks both. If SharedArrayBuffer is unavailable
   the worker transfers a plain buffer instead, so it degrades gracefully.

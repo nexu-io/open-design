@@ -144,6 +144,7 @@ definitions currently group by transport as follows:
 | `qoder-stream-json` | `qoder` |
 | `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
 | `pi-rpc` | `pi` |
+| `dsh-profile-jsonl` | `deepseek-harness` |
 | `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `grok-build`, `qwen` |
 
 `byok-opencode` is the API-backed OpenCode-compatible profile rather than an
@@ -219,14 +220,32 @@ the active-run staging implementation is in
 
 ### 5.3 Codex
 
-- A new session runs `codex exec --json --skip-git-repo-check` with the
-  effective sandbox configuration, create-only `-C`/`--add-dir` arguments,
-  and optional model/reasoning overrides. The composed prompt is written to
-  stdin.
+- The default transport runs the installed CLI's built-in `codex app-server`
+  over stdio JSON-RPC; no separate app-server installation or patched Codex
+  binary is required. New sessions use `thread/start`, follow-up turns use
+  `thread/resume`, and prompts arrive through `turn/start`.
+- Official file previews use `item/fileChange/patchUpdated`. The daemon enables
+  `features.apply_patch_streaming_events` per thread only when the running
+  server's initialize response identifies a stable version >= **0.123.0**.
+  [Upstream 0.123.0](https://github.com/openai/codex/releases/tag/rust-v0.123.0)
+  first wired the event through app-server (#18289); 0.122.0 only had the
+  internal event. Older, unknown, and prerelease versions keep the existing
+  completed-file behavior without receiving this feature override. This is a
+  preview capability floor, not a new minimum version for running Codex.
+- A patch preview creates one lightweight Write/Edit row per file as soon as
+  its path is available, before the full patch finishes generating. Final
+  events settle the same row with diff statistics and execution status.
+  This covers `apply_patch`, not arbitrary shell command arguments. The
+  upstream feature remains opt-in; absence of preview events does not block
+  completion. See [patch-stream validation](testing/codex-patch-streaming.md).
+- `OD_CODEX_TRANSPORT=exec-json` selects the legacy transport:
+  `codex exec --json --skip-git-repo-check` with the effective sandbox,
+  create-only `-C`/`--add-dir`, and optional model/reasoning overrides.
+  This transport does not carry early patch previews.
 - [`runtimes/json-event-stream.ts`](../apps/daemon/src/runtimes/json-event-stream.ts)
   parses Codex's structured JSON events; this is not a regex-based plain-text
   adapter. The parser captures `thread.started.thread_id`.
-- Follow-up turns use `codex exec resume --json ... <thread-id>`. Resume uses
+- Legacy follow-up turns use `codex exec resume --json ... <thread-id>`. Resume uses
   `-c sandbox_mode=...` because Codex rejects create-only `--sandbox`, `-C`,
   and `--add-dir` flags on `exec resume`.
 - Detection uses `codex login status` for auth and `codex debug models` for
@@ -258,7 +277,7 @@ the active-run staging implementation is in
   daemon does not generate a `.cursorrules` file.
 - `--workspace` chooses the starting workspace; `--force` and optional
   `--trust` are part of the non-interactive authority posture described in
-  §10, not a filesystem sandbox supplied by Open Design.
+  §10, not a filesystem sandbox supplied by OpenDesign.
 
 ### 5.6 OpenCode
 
@@ -350,7 +369,70 @@ the active-run staging implementation is in
   shared failure classifier emits DeepSeek-specific guidance for those two
   configuration paths instead of returning the raw non-actionable error.
 
-### 5.12 Plain stream artifact handoff
+### 5.12 DeepSeek Harness
+
+- OpenDesign launches the user's official `dsh` installation; it does not
+  bundle Harness or Node. Install the tested DSH release first and use
+  `DSH_BIN` only when its executable is outside the daemon's PATH.
+  OpenDesign publishes checksum-verifying bootstrap installers for users who
+  do not already have the compatible Node, DSH, and pnpm toolchain. They place
+  an OD-discoverable launcher in the user's local bin directory and open the
+  Harness Web UI for provider setup after installation:
+
+  ```sh
+  curl -fsSL 'https://open-design.ai/install-dsh.sh?version=1' | sh
+  ```
+
+  ```powershell
+  & ([scriptblock]::Create((irm 'https://open-design.ai/install-dsh.ps1?version=1')))
+  ```
+
+  From Windows Command Prompt, the equivalent bootstrap is:
+
+  ```bat
+  curl -fsSL "https://open-design.ai/install-dsh.cmd?version=1" -o "%TEMP%\install-dsh.cmd" && call "%TEMP%\install-dsh.cmd"
+  ```
+
+  Pass `--no-launch` to the downloaded POSIX script or `-NoLaunch` to the
+  downloaded PowerShell script for unattended installation. The installers
+  pin the exact versions in the adapter's compatibility policy and do not use
+  a global npm install.
+- The adapter also requires an OpenDesign-owned Harness profile named
+  `open-design`. The package source lives at
+  [`packages/dsh-runtime`](../packages/dsh-runtime). Packaged OD builds embed
+  an exact tarball and SHA-256 manifest for this thin component; they do not
+  depend on a public npm release at setup time. Repository developers may pack
+  and install the same source manually:
+
+  ```sh
+  pnpm --filter @open-design/dsh-runtime build
+  pnpm -C packages/dsh-runtime pack --pack-destination <temporary-directory>
+  dsh plugin --profile open-design add <temporary-directory>/open-design-dsh-runtime-0.1.0.tgz
+  dsh --profile open-design --probe
+  dsh --profile open-design --models
+  ```
+
+- Detection first checks `dsh --version`, then requires the profile's strict
+  protocol-generation handshake. When `dsh` exists but the profile is missing
+  or incompatible, DeepSeek Harness stays in the normal **Your CLIs** list with
+  a setup-required state. Selecting it opens an explicit confirmation dialog;
+  confirmation installs the embedded component through the user's `dsh`,
+  rescans, selects, and connection-tests it. Cancelling changes nothing. Only a
+  missing `dsh` executable belongs in the installable-agent group.
+- Each OD run starts a fresh `dsh --profile open-design --stdio` process. The
+  JSONL profile protocol creates a Harness session on the first turn and cold
+  resumes that exact session on later turns. This is profile-stdio resume, not
+  a CLI resume flag and not ACP.
+- Text, thinking, tool calls/results, usage, cancellation, and terminal status
+  are structured. Harness writes ordinary files in the OD project cwd, so the
+  existing watcher and artifact preview own delivery.
+- Phase one uses credentials already configured for Harness or inherited as
+  `DEEPSEEK_API_KEY`; OpenDesign neither stores nor reads back the secret.
+- Model detection comes from `dsh --profile open-design --models`. Each model
+  may expose its own reasoning-effort choices; OD validates and forwards only
+  one of the choices advertised for that selected model.
+
+### 5.13 Plain stream artifact handoff
 
 Adapters with `streamFormat: 'plain'` do not expose structured file-write tool calls to the daemon. Their stdout is still a valid artifact handoff when the model emits Anthropic-style source blocks:
 
@@ -408,7 +490,7 @@ Cancel the existing run separately if it should stop. There is no
 
 ## 8. Selection and failure recovery
 
-Open Design does not implement an ordered cross-agent fallback chain. A chat
+OpenDesign does not implement an ordered cross-agent fallback chain. A chat
 request explicitly names its agent, and a crash, auth failure, timeout, or
 invalid invocation remains a failure for that run. The user can select another
 agent and send the request again, but the daemon does not silently—or through a
@@ -443,7 +525,7 @@ path.
 
 The daemon delegates policy enforcement to each CLI, but its headless arg
 builders intentionally choose non-interactive permission modes. The effective
-project cwd is an execution root, not a uniform Open Design sandbox, and
+project cwd is an execution root, not a uniform OpenDesign sandbox, and
 external-directory flags can widen a CLI's reach.
 
 - Claude runs with `--permission-mode bypassPermissions`; Cursor runs with
@@ -523,9 +605,33 @@ The engine is agent-agnostic: it iterates `AGENT_DEFS` and reads fields. A commu
 - **Usage and cost coverage.** Parsers preserve `usage` and reported cost when
   a CLI exposes them (for example Claude, Codex, OpenCode, and Qoder), and
   those events feed persisted run messages and lifecycle analytics. Coverage
-  is runtime-dependent; Open Design does not invent token or billing data when
+  is runtime-dependent; OpenDesign does not invent token or billing data when
   a CLI omits it.
 - **Windows support.** PATH scanning and `spawn` semantics differ on Windows. Definitions
   that accept stdin should set `promptViaStdin`; argv-only definitions must declare and
   enforce a prompt budget so Windows' command-line limit fails observably before spawn.
 - **Docker-contained agents.** Some users run Claude Code in a container. Adapter needs a "remote" mode — probably same interface but talks over SSH. Phase 2+.
+
+### AMR compaction continuation (ACP extension v1)
+
+The shared contract lives in `packages/contracts/src/api/amr-continuation.ts`.
+An AMR `initialize` response must advertise both `loadSession` and
+`agentCapabilities._meta["com.open-design.nativeSessionContinue"].version = 1`.
+A structured `OPENCODE_COMPACTION_CONTINUATION_INCOMPLETE` prompt error can
+supply the durable session ID and exact user/assistant message cursor only
+when every observed tool result is terminal. The daemon independently checks
+its tool frames before closing unfinished rows.
+
+The daemon waits for the previous process tree to become quiescent, loads the
+same durable session in a new process, and sends `_session/continue` with only
+that cursor. Vela calls OpenCode's guarded `POST /session/:sessionID/continue`;
+OpenCode rechecks persisted history and committed tools under its serialized
+runner and continues the model loop without inserting a user prompt. This
+requires matching Vela and OpenCode implementations; ordinary `session/load`
+alone is insufficient.
+
+At most one native continuation is allowed per physical Run. Cancellation,
+missing or changed history, outstanding/unknown tools, unsupported versions,
+and exhausted recovery stop with failure. Legacy compaction failure wording
+is classified but never authorizes reseeding or full prompt replay. The same
+daemon behavior serves web and `od` callers through the existing run API.

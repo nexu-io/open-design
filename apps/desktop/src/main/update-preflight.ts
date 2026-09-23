@@ -20,13 +20,13 @@ export function updateRestartSafetyError(safety: Exclude<UpdateRestartSafety, { 
     return {
       code: UPDATE_RESTART_BLOCKED_ERROR_CODE,
       details: { activeRunCount: safety.activeRunCount },
-      message: `Open Design is still working on ${safety.activeRunCount} active task${safety.activeRunCount === 1 ? "" : "s"}.`,
+      message: `OpenDesign is still working on ${safety.activeRunCount} active task${safety.activeRunCount === 1 ? "" : "s"}.`,
     };
   }
   return {
     code: UPDATE_RESTART_UNKNOWN_ERROR_CODE,
     details: { activeRunCount: null },
-    message: "Open Design could not confirm whether tasks are still running.",
+    message: "OpenDesign could not confirm whether tasks are still running.",
   };
 }
 

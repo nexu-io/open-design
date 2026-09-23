@@ -1,6 +1,6 @@
 // Daemon-side compatibility guard for older Vela/OpenCode stderr behavior.
 // These lifecycle lines are not failures and should not become structured
-// error events in Open Design. Real AMR/OpenCode failures should continue to
+// error events in OpenDesign. Real AMR/OpenCode failures should continue to
 // arrive structured from Vela where possible; this filter only keeps known
 // bootstrap noise out of user-visible and persisted stderr surfaces.
 function isAmrOpenCodeBootstrapStderrLine(line: string): boolean {

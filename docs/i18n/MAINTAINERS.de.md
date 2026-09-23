@@ -15,7 +15,7 @@ Dieses Dokument legt die Regeln dafür fest, wie man Maintainer von `nexu-io/ope
 |---|---|
 | **Contributor** | Jede Person mit mindestens 1 merged PR. Keine besonderen Berechtigungen. |
 | **External Maintainer** | Ein Community-Beitragender, der nach den unten aufgeführten Regeln befördert wurde. Kann Reviews durchführen, approven, issues schließen/wiedereröffnen und sich issues selbst zuweisen. **Kann den merge button nicht klicken** — dies bleibt dem Core Team vorbehalten. |
-| **Core Team** | Das interne Team von Open Design. Verfügt über vollen Schreibzugriff auf das Repository und ist die letzte Instanz bei Governance-Entscheidungen. Die Zusammensetzung wird intern verwaltet. |
+| **Core Team** | Das interne Team von OpenDesign. Verfügt über vollen Schreibzugriff auf das Repository und ist die letzte Instanz bei Governance-Entscheidungen. Die Zusammensetzung wird intern verwaltet. |
 
 Der Rest dieses Dokuments bezieht sich auf **External Maintainers**, sofern nicht anders angegeben.
 

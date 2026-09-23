@@ -43,7 +43,7 @@ export interface RunLike {
 }
 
 export interface RunWaiter {
-  wait(run: RunLike): Promise<{ status: string }>;
+  wait(run: RunLike): Promise<{ status: string; cancelOrigin?: string | null }>;
 }
 
 export interface SkillPluginCandidateLike {
@@ -112,7 +112,7 @@ export function githubRepoNameFromPluginName(name: string): string {
 
 export const PLUGIN_SHARE_ACTION_LABELS: Record<PluginShareAction, string> = {
   'publish-github': 'Publish to GitHub',
-  'contribute-open-design': 'Contribute to Open Design',
+  'contribute-open-design': 'Contribute to OpenDesign',
 };
 
 export const USER_PLUGIN_SOURCE_KINDS = new Set([
@@ -159,10 +159,10 @@ export function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }: Pl
   const title = sourcePlugin.title || sourcePlugin.id;
   if (action === 'publish-github') {
     return [
-      `Publish the local Open Design plugin "${title}" as a new public GitHub repository.`,
+      `Publish the local OpenDesign plugin "${title}" as a new public GitHub repository.`,
       '',
       `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-      'Use the local daemon share endpoint so the publish flow runs through Open Design\'s validated GitHub path:',
+      'Use the local daemon share endpoint so the publish flow runs through OpenDesign\'s validated GitHub path:',
       '',
       '```bash',
       `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/publish-github" \\`,
@@ -176,10 +176,10 @@ export function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }: Pl
     ].join('\n');
   }
   return [
-    `Open a pull request to add the local Open Design plugin "${title}" to the Open Design repository.`,
+    `Open a pull request to add the local OpenDesign plugin "${title}" to the OpenDesign repository.`,
     '',
     `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-    'Use the local daemon share endpoint so the contribution flow runs through Open Design\'s validated GitHub path:',
+    'Use the local daemon share endpoint so the contribution flow runs through OpenDesign\'s validated GitHub path:',
     '',
     '```bash',
     `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/contribute-open-design" \\`,
@@ -272,6 +272,20 @@ export function reconcileAssistantMessageOnRunEnd(
             SET run_status = ?, ended_at = COALESCE(ended_at, ?)
           WHERE id = ? AND run_status IN ('queued', 'running')`,
       ).run(finalStatus.status, Date.now(), run.assistantMessageId);
+      // Who cancelled, recorded separately from the status latch above.
+      // The latch only fires while the row is still queued/running, and the
+      // client often writes `canceled` first (it stops its own stream); the
+      // origin would then never land. It is written unconditionally for a
+      // cancelled run because it is the daemon's own answer to a question the
+      // client cannot answer for itself — `runStatus: 'canceled'` alone cannot
+      // tell a user's Stop from a shutdown or project cleanup, and the pause
+      // line in chat treats `user_stop` as proof.
+      if (finalStatus.status === 'canceled' && finalStatus.cancelOrigin) {
+        db.prepare(`UPDATE messages SET cancel_origin = ? WHERE id = ?`).run(
+          finalStatus.cancelOrigin,
+          run.assistantMessageId,
+        );
+      }
     })
     .catch((err: Error) => {
       console.warn('[runs] message reconciliation failed', err);
@@ -407,7 +421,7 @@ export function upsertSkillPluginCandidateAssistantMessage(
   upsertMessage(db, run.conversationId, {
     id: messageId,
     role: 'assistant',
-    content: `Open Design found reusable skill material that can become a plugin: ${candidate.title}`,
+    content: `OpenDesign found reusable skill material that can become a plugin: ${candidate.title}`,
     events: [{
       kind: 'plugin_candidate',
       candidateId: candidate.id,

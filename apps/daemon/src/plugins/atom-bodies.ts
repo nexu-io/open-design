@@ -55,6 +55,48 @@ export async function loadAtomBodies(
   return out;
 }
 
+/**
+ * Strict bundled-only variant for the OD Next recipe gate. Unlike the legacy
+ * loader it never falls back to a community record with the same atom id and
+ * surfaces unreadable bodies as an error instead of silently dropping them.
+ */
+export async function loadBundledAtomBodiesStrict(
+  db: SqliteDb,
+  atomIds: ReadonlyArray<string>,
+): Promise<AtomBodyEntry[]> {
+  const out: AtomBodyEntry[] = [];
+  for (const requestedId of atomIds) {
+    const id = requestedId.toLowerCase();
+    const bundled = db
+      .prepare(
+        `SELECT id FROM installed_plugins WHERE id = ? AND source_kind = 'bundled' LIMIT 1`,
+      )
+      .get(id) as { id?: string } | undefined;
+    if (!bundled?.id) continue;
+    const plugin = getInstalledPlugin(db, bundled.id);
+    if (
+      !plugin
+      || plugin.sourceKind !== 'bundled'
+      || plugin.id !== id
+    ) {
+      throw new Error(`Bundled atom identity is invalid: ${id}`);
+    }
+    let raw: string;
+    try {
+      raw = await fsp.readFile(path.join(plugin.fsPath, 'SKILL.md'), 'utf8');
+    } catch (error) {
+      throw new Error(
+        `Bundled atom body is unavailable: ${id}`,
+        { cause: error },
+      );
+    }
+    const body = stripFrontmatter(raw).trim();
+    if (!body) throw new Error(`Bundled atom body is empty: ${id}`);
+    out.push({ atomId: id, pluginId: plugin.id, body });
+  }
+  return out;
+}
+
 function preferBundledPlugin(db: SqliteDb, id: string) {
   // Look first for a bundled record with the requested id.
   const bundled = db

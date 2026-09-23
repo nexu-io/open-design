@@ -12,6 +12,7 @@ import type {
 import {
   handoffTargetIdToTracking,
   type TrackingArtifactKind,
+  type TrackingProjectKind,
 } from '@open-design/contracts/analytics';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
@@ -81,7 +82,7 @@ const CLI_ORDER = [
 ];
 
 const FALLBACK_CLI_TARGETS: CliTarget[] = [
-  { id: 'amr', name: 'Open Design', bin: 'vela', available: false },
+  { id: 'amr', name: 'OpenDesign', bin: 'vela', available: false },
   { id: 'claude', name: 'Claude Code', bin: 'claude', available: false },
   { id: 'codex', name: 'Codex CLI', bin: 'codex', available: false },
   { id: 'opencode', name: 'OpenCode', bin: 'opencode-cli', available: false },
@@ -106,6 +107,7 @@ const FALLBACK_CLI_TARGETS: CliTarget[] = [
 
 interface Props {
   projectId: string;
+  projectKind: TrackingProjectKind;
   projectName?: string;
   projectDir?: string | null;
   agents?: AgentInfo[];
@@ -115,7 +117,7 @@ interface Props {
   artifactId?: string;
   artifactKind?: TrackingArtifactKind;
   // Retained on the props contract for the callers that still pass them
-  // (FileViewer / ProjectView). No longer read here since the Open Design
+  // (FileViewer / ProjectView). No longer read here since the OpenDesign
   // Cloud website link was removed from the CLI tab (acceptance #101).
   metricsConsent?: boolean;
   installationId?: string | null;
@@ -163,7 +165,7 @@ function writePreferredFramework(id: string): void {
 }
 
 function cliDisplayName(agent: Pick<CliTarget, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : agent.name;
+  return agent.id === 'amr' ? 'OpenDesign' : agent.name;
 }
 
 function mergeCliTargets(agents: AgentInfo[] | undefined): CliTarget[] {
@@ -192,6 +194,48 @@ function mergeCliTargets(agents: AgentInfo[] | undefined): CliTarget[] {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+const HOST_PLATFORMS: ReadonlyArray<HostEditorsResponse['platform']> = [
+  'darwin',
+  'win32',
+  'linux',
+  'unknown',
+];
+
+// `fetchHostEditors` casts the raw `/api/editors` JSON to `HostEditorsResponse`
+// without checking it, and this button now mounts in the viewer chrome on every
+// artifact — so a host that answers off-contract must not be able to take the
+// viewer down with it. These two helpers state the invariant the render path
+// relies on: `editors` is always an array whose entries each have a non-empty
+// string `id` (React key, icon lookup, preference storage, open-in request body)
+// and `label` (rendered text) plus a boolean `available`; `platform` is always
+// one of the four values the fallback control branches on. Entries that cannot
+// satisfy that are dropped rather than rendered half-formed.
+function normalizeHostEditors(value: unknown): HostEditor[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const editors: HostEditor[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const candidate = entry as Partial<HostEditor>;
+    if (typeof candidate.id !== 'string' || candidate.id.length === 0) continue;
+    if (typeof candidate.label !== 'string' || candidate.label.length === 0) continue;
+    // A duplicate id would collide as a React key and as a `data-testid`.
+    if (seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    editors.push({
+      ...(candidate as HostEditor),
+      available: candidate.available === true,
+    });
+  }
+  return editors;
+}
+
+function normalizeHostPlatform(value: unknown): HostEditorsResponse['platform'] {
+  return HOST_PLATFORMS.includes(value as HostEditorsResponse['platform'])
+    ? (value as HostEditorsResponse['platform'])
+    : 'unknown';
 }
 
 type T = ReturnType<typeof useT>;
@@ -290,6 +334,7 @@ ${labels.projectId}: ${projectId}
 
 export function HandoffButton({
   projectId,
+  projectKind,
   projectName,
   projectDir,
   agents,
@@ -308,7 +353,7 @@ export function HandoffButton({
   const fireHandoff = (
     props: Omit<
       Parameters<typeof trackHandoffClick>[1],
-      'page_name' | 'area' | 'artifact_id' | 'artifact_kind'
+      'page_name' | 'area' | 'artifact_id' | 'artifact_kind' | 'project_id' | 'project_kind'
     >,
   ) => {
     trackHandoffClick(analytics.track, {
@@ -316,6 +361,8 @@ export function HandoffButton({
       area: 'handoff',
       artifact_id: artifactId,
       artifact_kind: artifactKind,
+      project_id: projectId,
+      project_kind: projectKind,
       ...props,
     });
   };
@@ -337,8 +384,13 @@ export function HandoffButton({
     fetchHostEditors()
       .then((resp) => {
         if (cancelled) return;
-        setEditors(resp.editors);
-        setPlatform(resp.platform);
+        // The daemon contract always carries `editors`, but the button now
+        // mounts in the viewer chrome on every artifact, so a malformed host
+        // response must degrade to "no editors" instead of crashing the viewer.
+        const body: Partial<HostEditorsResponse> | null =
+          typeof resp === 'object' && resp !== null ? resp : null;
+        setEditors(normalizeHostEditors(body?.editors));
+        setPlatform(normalizeHostPlatform(body?.platform));
         setLoaded(true);
       })
       .catch(() => {

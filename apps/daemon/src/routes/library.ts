@@ -673,7 +673,8 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
       });
       // A capture opened as an editable page is a project the user will
       // immediately chat into, so it needs the same home workspace every other
-      // created project gets — an unbound one is denied its first run outright.
+      // created project gets; otherwise it can only use the account-scoped
+      // local run lane and has no durable Workspace for later mutations.
       bindCreatedProjectToWorkspace(
         (input) => ensureWorkspaceProject(db, input),
         createWorkspace.context,

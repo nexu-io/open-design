@@ -32,23 +32,6 @@ export function Skeleton({ width, height = 14, radius = 6, className }: Skeleton
 }
 
 /**
- * Card-shaped skeleton tuned for the DesignsTab grid. Renders a thumb area
- * over the row of meta lines so the empty grid feels like content is
- * arriving rather than missing.
- */
-export function DesignCardSkeleton() {
-  return (
-    <div className="design-card design-card-skeleton" aria-hidden>
-      <div className="design-card-thumb skeleton-shimmer" />
-      <div className="design-card-meta-block">
-        <Skeleton height={13} width="65%" />
-        <Skeleton height={11} width="45%" />
-      </div>
-    </div>
-  );
-}
-
-/**
  * Centered overlay used while bootstrap data loads (agents, skills, design
  * systems, project list). Sits inside a flex/grid parent and grows with it.
  */

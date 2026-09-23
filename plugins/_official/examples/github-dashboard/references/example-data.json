@@ -124,7 +124,7 @@
     {
       "typeText": "ISSUE",
       "typeClass": "issue",
-      "title": "Fix Open Design not reading the latest model list from Codex CLI",
+      "title": "Fix OpenDesign not reading the latest model list from Codex CLI",
       "label": "bug",
       "labelClass": "danger-pill",
       "author": "shangxinyu1",

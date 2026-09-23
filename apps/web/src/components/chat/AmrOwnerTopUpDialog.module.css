@@ -1,0 +1,227 @@
+/*
+ * 「找所有者充值」弹窗。
+ *
+ * ⚠️ **2026-09-07:骨架换了。** 原来这张卡跟 `SupportDialog` 走(340 宽、
+ * 一条带分隔线的标题栏、左对齐正文、右下角一颗小按钮)。产品这天给了这张卡
+ * 自己的稿子(`topup-reminder2.html`),量下来它属于**另一族** ——
+ * `AmrBalanceDialog` / `AmrArtifactUpgradeDialog` 那族「邀请卡」:
+ * 满幅插画 + 居中大标题 + 居中正文 + 整宽胶囊 CTA。
+ *
+ * 下面每一个数都是把稿子灌进真 Chrome、`getComputedStyle` 量出来的,不是
+ * 照着截图估的:只 diff CSS 文本会漏掉层叠反转,这个仓库在这上面栽过。
+ *
+ *   遮罩   rgba(32,32,32,.42) + blur(4px),padding 16
+ *   卡片   min(480px, 100vw-32px) / radius 12 / #fafafa / shadow-lg / padding 36 24 24
+ *   横幅   margin -36 -24 24(正好抵掉卡片内距)/ 480×205.71 / 不裁切
+ *   标题   18 / 600 / lh 1.3 / -0.01em / 居中
+ *   正文   13.5 / 400 / lh 1.6 / #5c5c5c / 居中 / 下留 18
+ *   名字   13.5 / 700 / #202020
+ *   按钮   整宽 / 40 高 / 胶囊 / 13.5 / 600
+ *   关闭   28×28 / top 10 right 10 / radius 4 / #5c5c5c
+ *
+ * 稿子里的色号和圆角逐字节就是产品 token 的快照(#202020/#5c5c5c/#fafafa/
+ * #ededed/#353535/4/8/12/999、`--shadow-lg` 两段阴影一个数不差),所以这里
+ * 全部走接缝的 `--chat-*` 映射,不抄字面值(§2)。
+ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  /*
+   * 模态档 —— 和 `SupportDialog` 逐字同一个数,因为它们在同一层里出现。
+   *
+   * 原来这里是 40,压不住同屏任何一层:真机 `elementFromPoint` 探到右上角
+   * `.entry-top-right-cluster` 是 **150**、输入框 `.chat-composer-fixed-layer`
+   * 是 **45**(`styles/chat.css`)。于是遮罩像漏了两个洞 —— 输入框和右上角
+   * 照常亮着,而这张弹窗服务的正是 OPEND-2722(团队成员额度不足找所有者充值),
+   * 用户看到的是一个被戳穿的遮罩。`SupportDialog` 2026-08-27 被报的是逐字同一件事。
+   *
+   * 取 1500 是**跟 `SupportDialog` 对齐**,而它当初取 1500 是跟聊天区另一个真模态
+   * `.staged-preview-modal`(1200)对齐 —— 不自立一个刚好够用的数字,那种数字
+   * 会在下一个人抬高某层 chrome 时再坏一次。
+   *
+   * 守护:`tests/components/chat/chat-overlay-layer.test.ts`(按目录扫描,
+   * 不是钉死某个文件 —— 这个缺陷当初就是因为守护只守 `SupportDialog` 一个文件才漏的)。
+   */
+  z-index: 1500;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  /*
+   * 稿子实测 `rgba(32, 32, 32, 0.42)`。原来是 26% —— 同一个式子、同一枚变量,
+   * 只有比例不同。42% 之外还多一层 4px 模糊:这张卡是「你现在做不了这件事」
+   * 的硬阻断,背后的工作区要糊掉,不能还看得清在等什么。
+   *
+   * ⚠️ `--chat-text-strong` 这一枚是 seam 测试的锚点(它按 `.overlay` 块里
+   * 出现的 `var(--chat-*)` 自动扫清单),换掉它会让那条断言改去量别的东西。
+   */
+  background: color-mix(in srgb, var(--chat-text-strong) 42%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* 就地形态:陈列页那一格,遮罩只糊自己这一格(同 SupportDialog)。 */
+.overlayInline {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  border-radius: var(--chat-radius);
+}
+
+.modal {
+  /* `.close` 绝对定位压在插画右上角,定位上下文就是这张卡。 */
+  position: relative;
+  /*
+   * 稿子写的是 `width: min(480px, calc(100vw - 32px))`,实测 480 宽。
+   * 这里拆成 `100% + max-width`:遮罩自己有 16px 内距,可用宽本来就是
+   * `100vw - 32px`,两种写法**算出来是同一个数**;拆开的好处是 jsdom
+   * 读得出 `max-width`(`min()` 它整条丢掉),回归测试才量得到这一档。
+   */
+  width: 100%;
+  max-width: 480px;
+  /* 上面这 36 和左右这 24,是横幅那条负外边距要抵掉的三个数 —— 改一个就得改两处。 */
+  padding: 36px 24px 24px;
+  border-radius: var(--chat-radius-lg);
+  /* 稿子是 `--panel`(#fafafa),不是纯白;整张卡比页面底浅一档。 */
+  background: var(--chat-bg-panel);
+  box-shadow: var(--chat-shadow-lg);
+  /* 横幅靠这条裁出卡片的圆角,自己不重复画一遍 radius。 */
+  overflow: hidden;
+  animation: amr-owner-modal-pop var(--chat-dur-enter) var(--chat-ease-out);
+}
+
+/* 稿子:`scale(.97) + opacity 0` 起手。绝不从 `scale(0)` 起(根 AGENTS.md)。 */
+@keyframes amr-owner-modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal {
+    animation: none;
+  }
+}
+
+/*
+ * 满幅插画。负外边距正好抵掉 `.modal` 的上/左/右内距,于是它出血到卡片三边;
+ * 底下留 24 到标题。做法和兄弟弹窗 `AmrBalanceDialog.module.css` 的 `.banner`
+ * 逐字同一套,不另造。
+ */
+.banner {
+  margin: -36px -24px 24px;
+  overflow: hidden;
+  /* JPEG 解码完成前垫的底,免得先闪一下白。稿子 `.media-panel` 上就是这块。 */
+  background: var(--chat-banner-ground);
+}
+
+/* 不裁切:`width:100%` + `height:auto` 保住 1680×720 的固有比例(480 → 205.71)。 */
+.bannerImage {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.close {
+  position: absolute;
+  /* 压在插画上面 —— 插画自己不建层叠上下文,但 `.banner` 的 overflow 会。 */
+  z-index: 2;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--chat-radius-sm);
+  background: transparent;
+  color: var(--chat-text-muted);
+  cursor: pointer;
+  transition: background-color var(--chat-dur-quick) var(--chat-ease-out),
+    color var(--chat-dur-quick) var(--chat-ease-out);
+}
+
+.close:hover {
+  background: var(--chat-bg-subtle);
+  color: var(--chat-text-strong);
+}
+
+.title {
+  margin: 0 0 10px;
+  font-size: var(--chat-t-dialog-title);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--chat-text-strong);
+  text-align: center;
+}
+
+.message {
+  margin: 0 0 18px;
+  font-size: var(--chat-t-dialog-body);
+  /* 接缝的排版基线是 500;这一族的正文稿子给的是 400,显式压回去。 */
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--chat-text-muted);
+  text-align: center;
+  /* 两行的句子断在词组边界上,别断成「请联系团队所有 / 者」。 */
+  text-wrap: balance;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Owner 名字那一段。稿子 `.owner-name { color: var(--ink); font-weight: 700 }`
+ * —— 比正文深一档、重三档,这样「该找谁」一眼能挑出来。
+ */
+.ownerName {
+  font-weight: 700;
+  color: var(--chat-text-strong);
+}
+
+/*
+ * 「知道了」。
+ *
+ * 用的是 `Button variant="primary"`(胶囊、深底白字),这里只接管**盒子**:
+ * 整宽、40 高、13.5 字号,外加稿子那层悬浮阴影 —— 和兄弟弹窗
+ * `AmrBalanceDialog.module.css` 的 `.cta` 是同一份配方(`inset` 高光 +
+ * `--accent` 调色的投影 + hover 抬 1px + active 缩到 .98),稿子实测那三段
+ * 逐字节对得上。
+ *
+ * 顶上那道高光,兄弟弹窗写的是 `color-mix(in srgb, #fff 12%, transparent)`。
+ * 这里改走 `--chat-bg`:亮色下它就是 `#fff`,**结果逐字节相同、零漂移**,
+ * 但不在组件里落一个字面色号(§2),而且暗色下会跟着翻 —— 那时主按钮是浅底,
+ * 高光本来就该是深的。
+ *
+ * ⚠️ 选择器写成 `.modal .cta`(0,2,0)而不是裸 `.cta`(0,1,0):Button 自己的
+ * `.button` / `.primary` 都是 0,1,0,平级时谁赢取决于两份 CSS Module 进 bundle
+ * 的**先后**。descendant 那一层把它抬到必胜,不押层叠顺序的注。
+ */
+.modal .cta {
+  width: 100%;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--chat-radius-pill);
+  font-size: var(--chat-t-dialog-body);
+  font-weight: 600;
+  justify-content: center;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chat-bg) 12%, transparent),
+    0 8px 20px color-mix(in srgb, var(--chat-accent) 20%, transparent);
+  transition: background-color var(--chat-dur-quick) var(--chat-ease-out),
+    transform 160ms var(--chat-ease-out), box-shadow 160ms var(--chat-ease-out);
+}
+
+.modal .cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chat-bg) 12%, transparent),
+    0 10px 24px color-mix(in srgb, var(--chat-accent) 26%, transparent);
+}
+
+.modal .cta:active:not(:disabled) {
+  transform: scale(0.98);
+}

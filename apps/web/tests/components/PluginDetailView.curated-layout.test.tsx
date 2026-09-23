@@ -185,7 +185,7 @@ describe('PluginDetailView curated installed-extension layout', () => {
     const skills = screen.getByRole('region', { name: /knowledge skills/i });
     expect(within(skills).getByText('skills/source-review/SKILL.md')).toBeTruthy();
     expect(screen.getByText('@OpenDesign')).toBeTruthy();
-    expect(screen.getByText('Open Design official')).toBeTruthy();
+    expect(screen.getByText('OpenDesign official')).toBeTruthy();
 
     const advanced = screen.getByTestId('plugin-meta-advanced');
     expect(advanced).not.toHaveAttribute('open');
@@ -248,7 +248,7 @@ describe('PluginDetailView curated installed-extension layout', () => {
     expect(screen.getByRole('region', { name: /快捷命令/ })).toBeTruthy();
     expect(screen.getByRole('region', { name: /数据连接/ })).toBeTruthy();
     expect(screen.getByRole('region', { name: /知识技能/ })).toBeTruthy();
-    expect(screen.getByText('Open Design 官方')).toBeTruthy();
+    expect(screen.getByText('OpenDesign 官方')).toBeTruthy();
     expect(screen.getByText('@OpenDesign')).toBeTruthy();
   });
 

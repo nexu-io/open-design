@@ -1,3 +1,5 @@
+import { useExperienceError } from '../observability/use-experience-error';
+import type { RecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
 import {
   memo,
   useCallback,
@@ -7,6 +9,7 @@ import {
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { Button } from '@open-design/components';
@@ -157,6 +160,7 @@ import { LibraryPicker } from './LibraryPicker';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { SketchEnginePrewarm } from './SketchEnginePrewarm';
+import { useWorkspaceTabsDockRef } from './workspaceTabsDock';
 import {
   emptySketchScene,
   isSketchJsonFileName,
@@ -167,6 +171,7 @@ import {
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
+import { runProgressSteps } from '../runtime/run-progress';
 import type { CommentSendResult } from './comment-send-result';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -221,11 +226,28 @@ interface Props {
   onRefreshFiles: (
     options?: { fresh?: boolean },
   ) => Promise<FileRefreshResult | void> | FileRefreshResult | void;
+  onManualFileWritten?: (file: ProjectFile) => void;
   isDeck: boolean;
   streaming?: boolean;
+  /**
+   * True while a run of the current conversation is actually in flight: its
+   * events are streaming, or an active run is attached and waiting to.
+   *
+   * Deliberately separate from `streaming`, which is the composer's
+   * "actions disabled" state and is also true for a read-only viewer of a
+   * shared project, a conversation still loading, or a run with no billable
+   * principal. The Design Files building preview keys off THIS flag: a page
+   * only "takes shape" while something is writing it, and a viewer with no run
+   * in flight must see the file grid, not a live preview captioned "thinking".
+   */
+  runInFlight?: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
-  openRequest?: { name: string; nonce: number } | null;
+  // `openBatch`, when present, is the complete ordered list of files to open as
+  // tabs in one commit — a finished turn's artifacts (OPEND-2588). `name` is
+  // still the one that ends up active, and is opened whether or not the batch
+  // names it.
+  openRequest?: { name: string; nonce: number; openBatch?: readonly string[] } | null;
   browserOpenRequest?: BrowserOpenRequest | null;
   // Browser tab whose <webview> must stay mounted even while another workspace
   // tab is active. Set for programmatic brand extraction: the chat "Continue
@@ -235,10 +257,10 @@ interface Props {
   pinnedBrowserTabId?: string | null;
   // Open the named file AND surface its Share/Export menu. Drives the chat-side
   // "Share" next-step action without a dedicated share backend.
-  shareRequest?: { name: string; nonce: number } | null;
+  shareRequest?: { name: string; nonce: number; anchorId?: string } | null;
   // Open the named file AND surface its Download/Export menu. Drives the
   // chat-side "Download" next-step action.
-  downloadRequest?: { name: string; nonce: number } | null;
+  downloadRequest?: { name: string; nonce: number; anchorId?: string } | null;
   // Flip a deck preview to a given slide when a queued chat send starts. Mirrors
   // `shareRequest`: the named file is activated (if open) and the matching
   // FileViewer consumes the nonce to navigate.
@@ -331,6 +353,8 @@ interface Props {
   onConversationSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
   onNewConversation?: () => void;
   activeConversationChat?: ActiveConversationChatState;
+  onSwitchConversationToCloud?: (conversationId: string, message: ChatMessage) => void;
+  chatRecoveryActionsBlockedReason?: RecoveryActionBlockReason | null;
   onActiveContextChange?: (context: WorkspaceContextItem | null) => void;
   onWorkspaceContextsChange?: (contexts: WorkspaceContextItem[]) => void;
   messages?: ChatMessage[];
@@ -356,6 +380,10 @@ interface Props {
    * true, edit affordances are withheld and a notice explains why.
    */
   viewerOnly?: boolean;
+  /** First-open placeholder: do not mount cached/write-capable workspace tabs. */
+  materializationPending?: boolean;
+  /** See DesignFilesPanel's `filesAuthoritative`. */
+  filesAuthoritative?: boolean;
   /** Optional override for the read-only notice text. */
   readonlyNotice?: string;
   /**
@@ -366,6 +394,12 @@ interface Props {
    * have not yet been published. Null once caught up / not a shared project.
    */
   fileSyncBadge?: FileSyncBadgeState | null;
+}
+
+function noop(): void {}
+
+function rejectRenameWhileMaterializing(): null {
+  return null;
 }
 
 interface SketchState {
@@ -448,6 +482,15 @@ const BROWSER_KEEPALIVE_CAP = 3;
 // it again even when `src` is byte-identical, so tab A -> tab B -> tab A used
 // to refetch both artifacts and briefly return to a blank/loading preview.
 const HTML_VIEWER_KEEPALIVE_CAP = 3;
+const RETAINED_VIEWER_INACTIVE_STYLE = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  overflow: 'hidden',
+  opacity: 0,
+  pointerEvents: 'none',
+} satisfies CSSProperties;
 const QUICK_SWITCHER_DOCUMENT_CLASS = 'od-quick-switcher-open';
 const SKETCH_AUTOSAVE_DELAY_MS = 800;
 
@@ -596,7 +639,7 @@ const COMMUNITY_PAGE_PRESETS: ProjectPagePreset[] = [
   {
     id: 'community-open-design-landing',
     category: 'prototype',
-    title: pageText('Open Design Landing', 'Open Design 落地页', 'Open Design 落地頁'),
+    title: pageText('OpenDesign Landing', 'OpenDesign 落地页', 'OpenDesign 落地頁'),
     description: pageText(
       'Editorial landing page with a strong hero, proof points, and product narrative.',
       '带强主视觉、信任证明和产品叙事的编辑风落地页。',
@@ -1281,8 +1324,10 @@ export function FileWorkspace({
   filesRefreshKey = 0,
   filesGeneration,
   onRefreshFiles,
+  onManualFileWritten,
   isDeck,
   streaming,
+  runInFlight = false,
   commentQueueOnSend = false,
   commentSendDisabled = false,
   openRequest,
@@ -1344,6 +1389,8 @@ export function FileWorkspace({
   onConversationSessionModeChange,
   onNewConversation,
   activeConversationChat,
+  onSwitchConversationToCloud,
+  chatRecoveryActionsBlockedReason,
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
@@ -1351,6 +1398,8 @@ export function FileWorkspace({
   fileActionsBefore,
   headerActions,
   viewerOnly = false,
+  materializationPending = false,
+  filesAuthoritative = true,
   readonlyNotice,
   fileSyncBadge = null,
 }: Props) {
@@ -1388,6 +1437,19 @@ export function FileWorkspace({
   const [activeTab, setActiveTab] = useState<string>(
     tabsState.active ?? defaultRootTab,
   );
+  // `materializationPending` can briefly become true again while the router
+  // commits a file-tab URL. Once this project has rendered real workspace
+  // content, that transient revalidation must not tear down retained viewers:
+  // doing so destroys iframe browsing contexts, edit sessions, and toolbar
+  // portals for a single frame. A genuinely new project still gets the
+  // first-materialization loading surface because its id has not been marked
+  // ready in this component instance.
+  const materializedProjectRef = useRef<string | null>(
+    materializationPending ? null : projectId,
+  );
+  if (!materializationPending) materializedProjectRef.current = projectId;
+  const initialMaterializationPending =
+    materializationPending && materializedProjectRef.current !== projectId;
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   const fileSyncBadgeLabel = fileSyncBadge
@@ -1402,6 +1464,7 @@ export function FileWorkspace({
 
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  useExperienceError(uploadError, 'workspace_upload', projectId);
   // The folder the Design Files panel is currently viewing (synced via
   // onCurrentDirChange). New files — uploads, pastes, sketches, dropped files —
   // are created under this folder instead of the project root.
@@ -1472,6 +1535,8 @@ export function FileWorkspace({
   const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
   const projectShareRef = useRef<HTMLDivElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
+  // Focus-mode dock host for the workspace tab strip (workspaceTabsDock.ts).
+  const focusTabsDockRef = useWorkspaceTabsDockRef();
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
   const openFileRef = useRef<(name: string) => void>(() => {});
@@ -1608,6 +1673,22 @@ export function FileWorkspace({
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
     [files],
   );
+
+  // What the Design Files building preview shows while a run is in flight:
+  // what the run is doing right now, and the steps behind it. Recomputed per
+  // streamed event by design — a tool call landing IS the update the pane is
+  // there to show.
+  const runSteps = useMemo(() => runProgressSteps(messages), [messages]);
+  const runStartedAt = useMemo(() => {
+    if (!runInFlight) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]!;
+      if (message.role === 'user') return null;
+      if (message.role !== 'assistant') continue;
+      return message.endedAt ? null : message.startedAt ?? null;
+    }
+    return null;
+  }, [messages, runInFlight]);
 
   // Known-file set for the side chat's file-link routing — same shape
   // ProjectView feeds its primary ChatPane.
@@ -2019,6 +2100,11 @@ export function FileWorkspace({
       setPersistedActive(name);
       return;
     }
+    const batch = openRequest.openBatch;
+    if (batch && batch.length > 0) {
+      openFiles(batch, name);
+      return;
+    }
     openFile(name, { forcePersist: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
@@ -2103,6 +2189,33 @@ export function FileWorkspace({
       setActiveTab(name);
     });
   }
+  // Open several files as tabs in ONE commit and activate `focusName`.
+  //
+  // A loop over openFile() cannot express this: each call activates what it
+  // opens, so the last file would take the focus that auto-open deliberately
+  // assigned (OPEND-2588), and every call after the first would be dropped
+  // whenever `afterActiveManualEditSettles` defers them — it keeps only the
+  // newest deferred activation. Files already open are left alone rather than
+  // duplicated, which is what makes a re-open of something the turn already
+  // surfaced mid-stream a no-op.
+  function openFiles(names: readonly string[], focusName: string) {
+    afterActiveManualEditSettles(() => {
+      setUploadError(null);
+      const currentTabs = tabsStateRef.current.tabs;
+      const nextTabs = [...currentTabs];
+      for (const name of [...names, focusName]) {
+        if (name && !nextTabs.includes(name)) nextTabs.push(name);
+      }
+      const openedNewTab = nextTabs.length !== currentTabs.length;
+      const nextBrowserTabs = openedNewTab
+        ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+        : browserTabs;
+      if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
+      commitTabsState(workspaceTabsState(nextTabs, focusName, nextBrowserTabs));
+      setActiveTab(focusName);
+    });
+  }
+
   openFileRef.current = openFile;
 
   const handleBrowserPageSnapshotToast = useCallback((event: BrowserPageSnapshotToastEvent) => {
@@ -2660,6 +2773,7 @@ export function FileWorkspace({
       workspaceContext,
     );
     if (!file) return;
+    onManualFileWritten?.(file);
     await onRefreshFiles();
     await refreshProjectFolders();
     openFile(file.name, { forcePersist: true });
@@ -3016,15 +3130,11 @@ export function FileWorkspace({
   const htmlViewerFileSnapshots = htmlViewerFileSnapshotsRef.current.files;
   for (const candidate of visibleFiles) {
     if (candidate.kind !== 'html') continue;
-    // Hidden viewers keep the last file revision they actually rendered.
-    // Updating mtime under an inactive iframe changes its src and defeats the
-    // keep-alive. Adopt the newest revision exactly when that tab activates.
-    if (
-      candidate.name === activeHtmlViewerFile?.name
-      || !htmlViewerFileSnapshots.has(candidate.name)
-    ) {
-      htmlViewerFileSnapshots.set(candidate.name, candidate);
-    }
+    // Retained viewers stay mounted at the real viewport size, so let them
+    // consume file revisions while inactive. They can finish the one required
+    // navigation behind the active tab; activation then remains a pure
+    // visibility swap instead of combining resize + navigation in one frame.
+    htmlViewerFileSnapshots.set(candidate.name, candidate);
   }
   useEffect(() => {
     setLiveHtmlViewerFileNames([]);
@@ -3263,6 +3373,21 @@ export function FileWorkspace({
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
 
+  const activeTabHasRenderableSurface =
+    (activeTab === DESIGN_SYSTEM_TAB && Boolean(designSystemProject))
+    || (isBrowserTabId(activeTab) && browserTabs.some((tab) => tab.id === activeTab))
+    || isTerminalTabId(activeTab)
+    || (isSideChatTabId(activeTab) && Boolean(chatConfig) && Boolean(chatAgentsById))
+    || activeLiveArtifact !== null
+    || activeFile !== null;
+  // A persisted file tab can outlive its file. The tab strip hides that stale
+  // entry, so keeping it as the visual active target would leave the fixed
+  // Design Files tab as the only visible tab while the body tells the user to
+  // open Design Files. Treat the root as the display fallback without erasing
+  // persisted state: an in-flight file refresh may still restore the target.
+  const designFilesTabActive =
+    activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface;
+
   // Identity-stable props for the memoized FileViewer. Without these, every
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
   // toggles) would hand FileViewer fresh object/function identities and drag
@@ -3277,11 +3402,21 @@ export function FileWorkspace({
     return byFile;
   }, [previewComments]);
   const activeFileShareRequest = useMemo(
-    () => (shareRequest ? { name: shareRequest.name, request: { nonce: shareRequest.nonce } } : null),
+    () => (shareRequest
+      ? {
+          name: shareRequest.name,
+          request: { nonce: shareRequest.nonce, anchorId: shareRequest.anchorId },
+        }
+      : null),
     [shareRequest],
   );
   const activeFileDownloadRequest = useMemo(
-    () => (downloadRequest ? { name: downloadRequest.name, request: { nonce: downloadRequest.nonce } } : null),
+    () => (downloadRequest
+      ? {
+          name: downloadRequest.name,
+          request: { nonce: downloadRequest.nonce, anchorId: downloadRequest.anchorId },
+        }
+      : null),
     [downloadRequest],
   );
   const activeFileSlideNavRequest = useMemo(
@@ -3315,6 +3450,7 @@ export function FileWorkspace({
         file.name === 'brand.html' ? onBrandExtractionStopRequest : undefined
       }
       onFileSaved={refreshFilesWithoutResult}
+      onFileWritten={onManualFileWritten}
       onOpenFileReplacing={stableOpenFileReplacing}
       commentPortalId={workspaceActive ? commentPortalId : undefined}
       onCommentModeChange={workspaceActive ? onCommentModeChange : undefined}
@@ -3359,7 +3495,7 @@ export function FileWorkspace({
         tabId: activeTab,
       };
     }
-    if (activeTab === DESIGN_FILES_TAB) {
+    if (designFilesTabActive) {
       // Nothing to reference yet — don't auto-stage an empty "Design files" chip.
       if (designFilesTabIsEmpty) return null;
       const trimmedDir = uploadDir.trim();
@@ -3368,7 +3504,7 @@ export function FileWorkspace({
         id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
         kind: trimmedDir ? 'folder' : 'design-files',
         label,
-        tabId: activeTab,
+        tabId: DESIGN_FILES_TAB,
         ...(trimmedDir ? { path: trimmedDir } : {}),
         ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
       };
@@ -3434,6 +3570,7 @@ export function FileWorkspace({
     browserTabs,
     conversations,
     designFilesTabIsEmpty,
+    designFilesTabActive,
     designSystemProject,
     resolvedDir,
     t,
@@ -3691,7 +3828,7 @@ export function FileWorkspace({
     let frame = 0;
     const measure = () => {
       frame = 0;
-      setTabsOverflowing(tabBar.scrollWidth > tabBar.clientWidth + 1);
+      setTabsOverflowing(measureWorkspaceTabBarAfterResize(tabBar));
     };
     const requestMeasure = () => {
       if (frame) window.cancelAnimationFrame(frame);
@@ -3869,6 +4006,17 @@ export function FileWorkspace({
             <Icon name="chevron-right" size={15} />
           </button>
         ) : null}
+        {/* Focus mode keeps the project tab strip on this same row (the chat
+            column — its usual dock — is collapsed): the strip portals in here,
+            between the expand-chat control and the file tabs, so the chrome
+            row above stays Home + account only. See workspaceTabsDock.ts. */}
+        {focusMode ? (
+          <div
+            className="ws-tabs-project-dock"
+            data-testid="workspace-tabs-dock-focus"
+            ref={focusTabsDockRef}
+          />
+        ) : null}
         <div
           ref={tabsBarRef}
           className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
@@ -3893,7 +4041,7 @@ export function FileWorkspace({
             clearTabDragState();
           }}
         >
-          {designSystemProject ? (
+          {!initialMaterializationPending && designSystemProject ? (
             <button
               type="button"
               className={`ws-tab design-system-tab ${activeTab === DESIGN_SYSTEM_TAB ? 'active' : ''}`}
@@ -3912,9 +4060,9 @@ export function FileWorkspace({
           ) : null}
           <button
             type="button"
-            className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
+            className={`ws-tab design-files-tab ${initialMaterializationPending || designFilesTabActive ? 'active' : ''}`}
             role="tab"
-            aria-selected={activeTab === DESIGN_FILES_TAB}
+            aria-selected={initialMaterializationPending || designFilesTabActive}
             aria-label={designFilesTabTitle}
             tabIndex={0}
             data-testid="design-files-tab"
@@ -3930,7 +4078,7 @@ export function FileWorkspace({
             </span>
             <span className="ws-tab-label">{designFilesTabLabel}</span>
           </button>
-          {visibleOrderedWorkspaceTabs.map((entry) => {
+          {!initialMaterializationPending ? visibleOrderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
               const browserUrl = browserTab.url?.trim() ?? '';
@@ -4016,9 +4164,9 @@ export function FileWorkspace({
                 onDragEnd={handlers.onDragEnd}
               />
             );
-          })}
+          }) : null}
         </div>
-        <div className="ws-add-tab">
+        {!initialMaterializationPending ? <div className="ws-add-tab">
           <button
             ref={launcherBtnRef}
             type="button"
@@ -4034,11 +4182,11 @@ export function FileWorkspace({
           >
             <Icon name="plus" size={15} />
           </button>
-        </div>
+        </div> : null}
         {/* Pinned to the right for project/file actions; the tab launcher sits
             next to the file tabs so its spatial relationship stays clear. */}
         <div className="ws-tabs-actions">
-          {fileActionsBefore ? (
+          {!initialMaterializationPending && fileActionsBefore ? (
             <div className="ws-tabs-file-actions-before">{fileActionsBefore}</div>
           ) : null}
           {/* Pure portal host. Whatever file is open owns these actions and
@@ -4052,12 +4200,12 @@ export function FileWorkspace({
             data-app-chrome-file-actions="true"
             hidden={!viewerFileActive}
           />
-          {headerActions ? (
+          {!initialMaterializationPending && headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
         </div>
       </div>
-      {launcherOpen ? (
+      {!initialMaterializationPending && launcherOpen ? (
         <TabLauncherMenu
           anchor={launcherBtnRef.current}
           files={visibleFiles}
@@ -4107,10 +4255,16 @@ export function FileWorkspace({
           />
         </div>
       ) : null}
-      {viewerOnly ? (
+      {/* The banner asserts a reason ("this is a shared project"), so it renders
+          only when the caller knows one. `viewerOnly` is fail-closed and is also
+          true while ownership is still unproven -- falling back to the generic
+          copy there told a personal project's owner it was someone else's
+          shared project for as long as the workspace context took to resolve
+          (OPEND-2283). Controls stay disabled either way; only the claim waits. */}
+      {viewerOnly && readonlyNotice && !initialMaterializationPending ? (
         <div className="workspace-readonly-notice" role="status">
           <Icon name="lock" size={14} />
-          <span>{readonlyNotice ?? t('workspace.readonlyNotice')}</span>
+          <span>{readonlyNotice}</span>
         </div>
       ) : null}
       <div className="ws-body">
@@ -4133,7 +4287,7 @@ export function FileWorkspace({
             </button>
           </div>
         ) : null}
-        {browserTabs.filter((browserTab) => mountedBrowserTabIds.has(browserTab.id)).map((browserTab) => (
+        {!initialMaterializationPending ? browserTabs.filter((browserTab) => mountedBrowserTabIds.has(browserTab.id)).map((browserTab) => (
           <div
             key={`${projectId}:${browserTab.id}`}
             className={`ws-browser-panel ${activeTab === browserTab.id ? 'active' : ''}`}
@@ -4170,8 +4324,28 @@ export function FileWorkspace({
               }}
             />
           </div>
-        ))}
-        {activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
+        )) : null}
+        {initialMaterializationPending ? (
+          <DesignFilesPanel
+            projectId={projectId}
+            projectKind={projectKind}
+            viewerOnly
+            downloadPending
+            files={[]}
+            folders={[]}
+            liveArtifacts={[]}
+            onRefreshFiles={noop}
+            onOpenFile={noop}
+            onOpenLiveArtifact={noop}
+            onRenameFile={rejectRenameWhileMaterializing}
+            onDeleteFile={noop}
+            onDeleteFiles={noop}
+            onUpload={noop}
+            onUploadFiles={noop}
+            onPaste={noop}
+            onNewSketch={noop}
+          />
+        ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
           <DesignSystemProjectPanel
             projectId={projectId}
             system={designSystemProject}
@@ -4196,16 +4370,20 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : activeTab === DESIGN_FILES_TAB ? (
+        ) : designFilesTabActive ? (
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
+            projectKind={projectKind}
             filesRefreshKey={filesRefreshKey}
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
+            filesAuthoritative={filesAuthoritative}
             rootDirName={rootDirName}
             reloading={reloading}
-            running={Boolean(streaming)}
+            running={runInFlight}
+            runStartedAt={runStartedAt}
+            runSteps={runSteps}
             files={visibleFiles}
             folders={projectFolders}
             liveArtifacts={liveArtifactEntries}
@@ -4221,6 +4399,8 @@ export function FileWorkspace({
                   page_name: 'file_manager',
                   area: 'file_manager',
                   element: 'open_sketch',
+                  project_id: projectId,
+                  project_kind: projectKind,
                 });
               }
               openFile(name);
@@ -4232,6 +4412,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'delete',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               void handleDelete(name);
             }}
@@ -4240,6 +4422,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'delete',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               return handleDeleteMany(names);
             }}
@@ -4248,6 +4432,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'upload',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               fileInputRef.current?.click();
             }}
@@ -4257,6 +4443,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'paste',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               void createMarkdownDocument();
             }}
@@ -4265,6 +4453,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'new_sketch',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               void startNewSketch();
             }}
@@ -4273,6 +4463,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'new_browser',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               openBrowserTab();
             }}
@@ -4281,6 +4473,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'create_design_system',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               setPendingDesignSystemCreateEntry('project_canvas');
               navigate({ kind: 'design-system-create' });
@@ -4294,6 +4488,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'library',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               setShowLibraryPicker(true);
             }}
@@ -4325,6 +4521,7 @@ export function FileWorkspace({
                   area: 'sketch_editor',
                   result: result === false ? 'failed' : 'success',
                   project_id: projectId,
+                  project_kind: projectKind,
                 });
                 return result;
               }}
@@ -4335,6 +4532,7 @@ export function FileWorkspace({
                   area: 'sketch_editor',
                   result: result === false ? 'failed' : 'success',
                   project_id: projectId,
+                  project_kind: projectKind,
                 });
                 return result;
               }}
@@ -4365,6 +4563,8 @@ export function FileWorkspace({
             onSessionModeChange={onConversationSessionModeChange}
             onNewConversation={onNewConversation}
             activeConversationChat={activeConversationChat}
+            onSwitchConversationToCloud={onSwitchConversationToCloud}
+            recoveryActionsBlockedReason={chatRecoveryActionsBlockedReason}
             onRequestOpenFile={openFile}
           />
         ) : isTerminalTabId(activeTab) ? (
@@ -4401,7 +4601,7 @@ export function FileWorkspace({
             .
           </div>
         )}
-        {mountedHtmlViewerFiles.map((file) => {
+        {!initialMaterializationPending ? mountedHtmlViewerFiles.map((file) => {
           const workspaceActive = activeHtmlViewerFile?.name === file.name;
           return (
             <div
@@ -4419,23 +4619,14 @@ export function FileWorkspace({
                 minHeight: 0,
                 ...(workspaceActive
                   ? {}
-                  : {
-                      position: 'absolute',
-                      left: '-100000px',
-                      top: 0,
-                      width: 1,
-                      height: 1,
-                      overflow: 'hidden',
-                      visibility: 'hidden',
-                      pointerEvents: 'none',
-                    }),
+                  : RETAINED_VIEWER_INACTIVE_STYLE),
               }}
             >
               {renderFileViewer(file, workspaceActive)}
             </div>
           );
-        })}
-        {viewerFile ? (
+        }) : null}
+        {!initialMaterializationPending && viewerFile ? (
           <div
             ref={(element) => {
               syncInertAttribute(element, !viewerFileActive);
@@ -4449,23 +4640,14 @@ export function FileWorkspace({
               minHeight: 0,
               ...(viewerFileActive
                 ? {}
-                : {
-                    position: 'absolute',
-                    left: '-100000px',
-                    top: 0,
-                    width: 1,
-                    height: 1,
-                    overflow: 'hidden',
-                    visibility: 'hidden',
-                    pointerEvents: 'none',
-                  }),
+                : RETAINED_VIEWER_INACTIVE_STYLE),
             }}
           >
             {renderFileViewer(viewerFile, viewerFileActive)}
           </div>
         ) : null}
       </div>
-      <PageCreatorDialog
+      {!initialMaterializationPending ? <PageCreatorDialog
         open={pageCreatorOpen}
         t={t}
         locale={locale}
@@ -4481,17 +4663,17 @@ export function FileWorkspace({
         onClose={() => {
           if (!pageCreating) setPageCreatorOpen(false);
         }}
-      />
-      <input
+      /> : null}
+      {!initialMaterializationPending ? <input
         ref={fileInputRef}
         type="file"
         multiple
         data-testid="design-files-upload-input"
         style={{ display: 'none' }}
         onChange={handleFilePicked}
-      />
+      /> : null}
       <AnimatePresence>
-        {showLibraryPicker ? (
+        {!initialMaterializationPending && showLibraryPicker ? (
           <LibraryPicker
             onClose={() => setShowLibraryPicker(false)}
             onConfirm={async (assets) => {
@@ -4521,7 +4703,7 @@ export function FileWorkspace({
         ) : null}
       </AnimatePresence>
       <AnimatePresence>
-        {quickSwitcherOpen ? (
+        {!initialMaterializationPending && quickSwitcherOpen ? (
           <QuickSwitcher
             projectId={projectId}
             files={visibleFiles}
@@ -6634,6 +6816,12 @@ function projectPageKindForCommunityPlugin(record: InstalledPluginRecord): Proje
   switch (primaryCategory) {
     case 'prototype':
       return 'prototype';
+    case 'document':
+      return 'document';
+    // GPU scenes are prototypes on the project page, as on Home (the `webgl`
+    // chip creates them with `projectKind: 'prototype'`).
+    case 'webgl':
+      return 'prototype';
     case 'live-artifact':
       return 'liveArtifact';
     case 'deck':
@@ -6890,7 +7078,7 @@ function initialPrototypePage(title: string, body = DEFAULT_PROTOTYPE_PAGE_BODY)
   <main>
     <section class="hero">
       <div>
-        <div class="eyebrow">Open Design</div>
+        <div class="eyebrow">OpenDesign</div>
         <h1>${safeTitle}</h1>
         <p>${safeBody}</p>
       </div>
@@ -7032,7 +7220,7 @@ function initialSlidesPage(title: string, body = DEFAULT_SLIDES_PAGE_BODY): stri
   <div class="deck-shell">
     <main class="deck-stage" id="deck-stage">
       <section class="slide active cover" data-screen-label="01 Cover">
-        <div class="kicker">Open Design deck</div>
+        <div class="kicker">OpenDesign deck</div>
         <h1>${safeTitle}</h1>
         <p class="body">${safeBody}</p>
         <div class="num">01</div>
@@ -7170,7 +7358,7 @@ function initialDocumentPage(title: string, body = DEFAULT_DOCUMENT_PAGE_BODY): 
 </head>
 <body>
   <article>
-    <div class="meta">Open Design document</div>
+    <div class="meta">OpenDesign document</div>
     <h1>${safeTitle}</h1>
     <p>${safeBody}</p>
     <h2>Purpose</h2>
@@ -8416,6 +8604,19 @@ export function scrollWorkspaceTabIntoView(
   } else if (tabRect.right > barRect.right) {
     tabBar.scrollLeft += tabRect.right - barRect.right;
   }
+}
+
+/**
+ * Re-measure the strip after its workspace track changes width. Resizing the
+ * split does not change `activeTab`, so the active-tab effect above does not
+ * run; without this resize path the viewport can clip all but the filename's
+ * ellipsis even though the tab itself still preserves its icon and close
+ * control at the intended width.
+ */
+export function measureWorkspaceTabBarAfterResize(tabBar: HTMLDivElement): boolean {
+  const activeTab = tabBar.querySelector<HTMLElement>('.ws-tab.active');
+  if (activeTab) scrollWorkspaceTabIntoView(tabBar, activeTab);
+  return tabBar.scrollWidth > tabBar.clientWidth + 1;
 }
 
 export function scrollWorkspaceTabsWithWheel(

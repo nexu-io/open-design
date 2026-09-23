@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { releaseChannelDescriptor } from "@open-design/release";
 
 import { optional, required, writeJson } from "../storage/common.ts";
-import { assertReleaseNotePlanPolicy } from "./policy.ts";
+import { reportReleaseNotePolicyWarnings, reviewReleaseNotePlanPolicy } from "./policy.ts";
 import { discoverReleaseNotePlan } from "./source.ts";
 
 const channel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
@@ -12,7 +12,10 @@ const sourceRoot = resolve(optional("RELEASE_NOTE_SOURCE_ROOT", "docs/CHANGELOG"
 const planPath = required("RELEASE_NOTE_PLAN_PATH");
 
 const plan = discoverReleaseNotePlan({ channel, releaseVersion, sourceRoot });
-assertReleaseNotePlanPolicy(plan, channel);
+// prepare owns the reporting: it is the first release-note command every
+// channel runs, so publish/verify enforce the same policy without repeating
+// the annotation.
+reportReleaseNotePolicyWarnings(reviewReleaseNotePlanPolicy(plan, channel));
 writeJson(planPath, plan);
 
 if (plan.state === "absent") {

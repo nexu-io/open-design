@@ -231,7 +231,7 @@ jobs:
                   template: 'blue',
                   title: {
                     tag: 'plain_text',
-                    content: 'Open Design E2E Coverage 24h Reminder',
+                    content: 'OpenDesign E2E Coverage 24h Reminder',
                   },
                 },
                 elements: [

@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppliedPluginSnapshot } from '@open-design/contracts';
 import { diffSnapshots } from '../src/plugins/snapshot-diff.js';
+import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 
 const make = (over: Partial<AppliedPluginSnapshot> = {}): AppliedPluginSnapshot => ({
   snapshotId: 'snap-1',
@@ -22,6 +23,28 @@ const make = (over: Partial<AppliedPluginSnapshot> = {}): AppliedPluginSnapshot 
   status: 'fresh',
   ...over,
 });
+
+function strategy(profileDigest: string) {
+  const assetDigests = [
+    { path: './SKILL.md', sha256: 'a'.repeat(64) },
+    { path: './profiles/prototype.md', sha256: profileDigest },
+  ];
+  return {
+    schema: 'open-design.applied-strategy/v2' as const,
+    id: 'od-next-strategy' as const,
+    version: '2.0.0',
+    packageHash: strategyPackageHashFromDigests(assetDigests),
+    assetDigests,
+    selectedTaskProfile: {
+      taskType: 'prototype' as const,
+      version: '2.0.0',
+      path: './profiles/prototype.md',
+      sha256: profileDigest,
+    },
+    taskProfileVersions: ['2.0.0'],
+    promptRecipe: 'od-next-plan-build-v2' as const,
+  };
+}
 
 describe('diffSnapshots — equivalence + invariance', () => {
   it('reports digestEqual=true and zero entries on byte-equal snapshots', () => {
@@ -55,6 +78,23 @@ describe('diffSnapshots — input map', () => {
     const e = r.entries.find((x) => x.field === 'inputs');
     expect(e?.kind).toBe('changed');
     expect(e?.summary).toMatch(/1 added.*1 removed.*1 changed/);
+  });
+});
+
+describe('diffSnapshots — strategy identity', () => {
+  it('reports only strategy identity, package hash, and selected profile digest drift', () => {
+    const a = make({ strategy: strategy('b'.repeat(64)) });
+    const b = make({ strategy: strategy('c'.repeat(64)) });
+    const report = diffSnapshots({ a, b });
+
+    expect(report.entries.map((entry) => entry.field)).toContain(
+      'strategy.packageHash',
+    );
+    expect(report.entries.map((entry) => entry.field)).toContain(
+      'strategy.selectedTaskProfile.sha256',
+    );
+    expect(JSON.stringify(report)).not.toContain('asset body');
+    expect(report.entries.some((entry) => entry.field.includes('assetDigests'))).toBe(false);
   });
 });
 

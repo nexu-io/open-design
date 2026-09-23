@@ -46,6 +46,13 @@
    to the right (it stays docked until the user collapses it again). */
 .entry-shell--no-header .entry {
   grid-template-columns: 0 minmax(0, 1fr);
+  /* The single row must be the shell's height and nothing more (OPEND-2757).
+     Without it the row is an implicit `auto` track, which sizes to its tallest
+     item — and the rail's column is content-sized, so a long 最近项目 list grew
+     the row past the window and carried the footer's Discord / X / mail links
+     off screen with it. `minmax(0, 1fr)` pins the track to the container, so
+     the rail's flex chain below actually has a height to shrink to. */
+  grid-template-rows: minmax(0, 1fr);
   /* Collapse: hold the horizontal squeeze until the rows have cascaded out
      top-to-bottom (see the staggered rail-row fade below), otherwise the
      0-width clip would swallow the lower rows before their turn. */
@@ -64,12 +71,24 @@
    track is 0-wide so the rail is clipped away, expanded it occupies the rail
    width. */
 .entry-nav-rail {
+  /* The ink the 最近浏览过 heading and the project rows under it share (per
+     product: 未选中的颜色和「最近浏览过」这一档一样). #5c5c5c (per product), a
+     flat opaque grey rather than an alpha: the rail is a frosted panel, so a
+     translucent ink took its tone from whatever scrolled under it and read
+     washed-out over the pale page. Dark mode keeps the alpha below; #5c5c5c is
+     far too dark on that ground. */
+  --rail-ink-quiet: #5c5c5c;
   /* Fill the grid track (0 collapsed → rail width expanded) rather than a
      fixed width, so a 0-wide track truly hides the rail instead of letting a
      56px rail overflow it. The rail box itself is a transparent container; the
      visible surface is the floating `.entry-nav-rail__panel` inside it. */
   width: 100%;
   min-width: 0;
+  /* A grid item's automatic minimum is its content height; this is the top
+     of the flex chain that lets the recent list shrink (see
+     `.entry-nav-rail__recent-list`), so it has to opt out like every box
+     below it. */
+  min-height: 0;
   border-right: 0;
   background: transparent;
   display: flex;
@@ -82,12 +101,28 @@
      the topbar toggle's fade-out and caused a flash on expand. */
   pointer-events: none;
 }
+/* Dark mode keeps a derived alpha: over the dark panel a mix off --text
+   (#ededed) lands where it should. Only the light theme pins a literal. */
+[data-theme="dark"] .entry-nav-rail {
+  --rail-ink-quiet: color-mix(in srgb, var(--text) 52%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .entry-nav-rail {
+    --rail-ink-quiet: color-mix(in srgb, var(--text) 52%, transparent);
+  }
+}
 /* The whole sidebar reads as one floating layer: the content sits in a panel
    inset from the grid-track edges (margin) with rounded corners + elevation,
    instead of a flush docked column separated by divider lines. */
 .entry-nav-rail__panel {
   flex: 1 1 auto;
   min-height: 0;
+  /* Size container for the rows inside it: the rail is draggable now, so the
+     account dock's social row drops its labels by MEASURING this box rather
+     than by testing the window (a media query cannot see a width the user
+     dragged). */
+  container-type: inline-size;
+  container-name: entry-rail-panel;
   /* No explicit width: as a stretch flex child it fills the rail minus its
      horizontal margins (so margin insets it without overflowing the track). */
   display: flex;
@@ -95,82 +130,46 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* Top margin 0: the tab bar already contributes a 10px gap below the tabs
-     (its bottom padding), so the single visible gap between the tabs and this
-     rail card stays 10px instead of doubling to 20 (tab 10 + rail 10). */
-  margin: 0 10px 10px;
-  /* Bottom padding trimmed 12 → 5 so the account row's gap to the panel's
-     bottom edge (trigger padding 4 + footer padding 6 + 5 + 1px stroke = 16px)
-     matches its 16px left/right inset. */
-  padding: 10px 0 5px;
+  /* 12px side gutters (per product): to the window's left edge and — through
+     the right margin — to the content card beside it. The bottom gutter is 8
+     (OPEND-3116, design spec): the OpenDesign / account row at the foot of
+     the column sits 8px off the window's bottom edge. Top margin 0: the tab
+     bar already contributes a 10px gap below the tabs (its bottom padding),
+     so the single visible gap between the tabs and this column stays 10px
+     instead of adding the rail's own inset on top of it. */
+  margin: 0 12px 8px;
+  /* No padding at all. Bottom: the account row's bottom edge is set by the
+     margin above alone — nothing pads it further up. (It used to sit flush
+     with the content card's bottom edge, both boxes carrying 12px; the rail's
+     8px gutter per OPEND-3116 now lands the row 4px below the card's edge —
+     the card's own margin is the design's call, not this rule's.) Top: the
+     workspace switcher leads the column flush with the
+     panel's top edge (per product) — the 10px that used to sit here was the
+     tab bar's own 10px bottom gap added a second time, exactly what the margin
+     note above says this box does not do. */
+  padding: 0;
   position: relative;
-  /* Craft-style milky frost (material.css thin tier): soft white surface over
-     the wash/wallpaper with a saturated blur, instead of fully clear glass. */
-  /* White frost: pure-white base at 65% alpha, so the card reads white but
-     keeps the frosted-glass translucency (the panel's material-thin backdrop
-     blur below does the frosting). */
-  --rail-surface: rgba(255, 255, 255, 0.65);
-  background: var(--rail-surface);
-  -webkit-backdrop-filter: var(--material-thin-backdrop);
-  backdrop-filter: var(--material-thin-backdrop);
-  /* The stroke is the gradient ring painted by ::after below — the real
-     border stays transparent so the box metrics don't change. */
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  /* Whisper elevation: the floating panel only needs a hairline lift — the
-     md shadow read as a wide gray halo on the light ground. */
-  box-shadow: var(--shadow-sm);
-}
-/* Gradient rim, Craft-style: a light edge that is brightest along the top
-   and fades down the sides (glass-refract ring tokens, so dark mode halves
-   it automatically). Painted as a masked overlay so only the 1px ring shows
-   and the frosted surface underneath stays untouched. */
-.entry-nav-rail__panel::after {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    var(--glass-refract-ring-top) 0%,
-    var(--glass-refract-ring-edge) 42%,
-    var(--glass-refract-ring-edge) 68%,
-    var(--glass-refract-ring-bottom) 100%
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-}
-/* Material spec fallbacks: drop the translucency to a solid per-theme surface
-   when the user reduces transparency or the browser lacks backdrop-filter. */
-@media (prefers-reduced-transparency: reduce) {
-  .entry-nav-rail__panel {
-    --rail-surface: var(--bg);
-    background: var(--rail-surface);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-color: color-mix(in srgb, var(--border) 66%, transparent);
-  }
-  .entry-nav-rail__panel::after {
-    display: none;
-  }
-}
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .entry-nav-rail__panel {
-    --rail-surface: var(--bg);
-    background: var(--rail-surface);
-    border-color: color-mix(in srgb, var(--border) 66%, transparent);
-  }
-  .entry-nav-rail__panel::after {
-    display: none;
-  }
+  /* No card of its own (per product): the rail sits flat on the entry ground,
+     and the single base card on this screen is the content column's
+     (`.entry-main--scroll` below). The milky-frost surface, the masked
+     gradient rim, the whisper shadow and the 1px transparent stroke this
+     panel used to carry are all gone with it, along with the
+     reduced-transparency / no-backdrop-filter fallbacks — nothing is painted
+     here any more.
+
+     Nothing being painted is also why this box is now exactly the row column:
+     with no stroke of its own and no padding on the group inside it (below),
+     the panel's border box IS the rows' box, so a row sits at this margin's
+     12px from the window edge — the same gutter the content card keeps on the
+     other side. */
+  /* Still a containing block for `position: fixed` descendants. The frost's
+     backdrop-filter used to make it one as a side effect, which is what kept
+     the workspace-switcher / account-menu click-catchers
+     (`.entry-nav-rail__menu-backdrop`, fixed + inset 0) scoped to THIS column.
+     Without it they spread over the viewport and swallowed every click on the
+     content beside the rail while a menu was open. A no-op transform restores
+     that scope without painting anything. */
+  transform: translateZ(0);
 }
 .entry-nav-rail.is-open {
   pointer-events: auto;
@@ -190,43 +189,51 @@
 
 /* ── Collapse cascade ──────────────────────────────────────────────────────
    Clicking collapse plays a top-to-bottom sequence: each rail row fades and
-   lifts a few px, staggered by its document order (search → nav items → team
-   items → footer), so the sidebar empties from the top down before the track
-   squeezes shut. Expanding is instant (no per-row delay) to stay snappy. */
-.entry-nav-rail__group > .entry-nav-rail__search,
-.entry-nav-rail__group > .entry-nav-rail__btn,
-.entry-nav-rail__group > .entry-nav-rail__team-wrap,
-.entry-nav-rail__section-divider,
+   lifts a few px, staggered by its VISUAL order (workspace switcher → search
+   row → nav items → team items → footer), so the sidebar empties from the
+   top down before the track squeezes shut. Expanding is instant (no per-row
+   delay) to stay snappy.
+
+   Two structural facts drive the selectors, and both have drifted before —
+   revisit them when the rail's tree changes again:
+   • both trees nest 项目…设置 (and 最近项目) inside .entry-nav-rail__team-section
+     — signed in it follows .entry-nav-rail__team-wrap, signed out it follows
+     社区 directly (OPEND-3140) — so those rows fade INDIVIDUALLY (the wrapper
+     itself must not also fade, or the block would double-fade and pop out of
+     order);
+   • the search box sits inside .entry-nav-rail__search-row (search +
+     collapse control), so the ROW is the faded unit, not the box. */
+.entry-nav-rail__group > *,
+.entry-nav-rail__team-section > *,
 .entry-nav-rail__footer {
   transition:
     opacity 150ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__search,
-.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__btn,
-.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__team-wrap,
-.entry:not(.entry--rail-open) .entry-nav-rail__section-divider,
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:not(.entry-nav-rail__team-section),
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *,
 .entry:not(.entry--rail-open) .entry-nav-rail__footer {
   opacity: 0;
   transform: translateY(-4px);
 }
 /* Per-row stagger — applied only while collapsing so the cascade runs
-   top→bottom. Our rail keeps every row (search → nav items → team switcher →
-   team items → divider …) as direct children of one __group, so a single
-   nth-child run covers the whole sequence (the designer branch split this
-   across a group + team-section pair). Child 1 is the brand slot, which does
-   not fade, so the sequence starts at child 2. */
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(2) { transition-delay: 0ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(3) { transition-delay: 15ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(4) { transition-delay: 30ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(5) { transition-delay: 45ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(6) { transition-delay: 60ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(7) { transition-delay: 75ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(8) { transition-delay: 90ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(9) { transition-delay: 105ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(10) { transition-delay: 120ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(11) { transition-delay: 135ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(n + 12) { transition-delay: 150ms; }
+   top→bottom. Direct group rows first (signed-in: switcher, 首页, 社区;
+   signed-out: 首页, 社区), then the section's rows… */
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(1) { transition-delay: 0ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(2) { transition-delay: 15ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(3) { transition-delay: 30ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(4) { transition-delay: 45ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(5) { transition-delay: 60ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(6) { transition-delay: 75ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(7) { transition-delay: 90ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(n + 8) { transition-delay: 105ms; }
+/* …then the team-section rows pick the sequence up where the group left off
+   (the section is group child 5, delay 60ms — its rows continue from 75ms). */
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(1) { transition-delay: 75ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(2) { transition-delay: 90ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(3) { transition-delay: 105ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(4) { transition-delay: 120ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(n + 5) { transition-delay: 135ms; }
 .entry:not(.entry--rail-open) .entry-nav-rail__footer { transition-delay: 165ms; }
 /* Footer finale: after the rows have cascaded out top-to-bottom, the account
    底卡 does NOT fade up with them — it stays fully opaque and slides left as
@@ -237,15 +244,14 @@
   transform: translateX(-36px);
 }
 @media (prefers-reduced-motion: reduce) {
-  .entry-nav-rail__group > .entry-nav-rail__search,
-  .entry-nav-rail__group > .entry-nav-rail__btn,
-  .entry-nav-rail__group > .entry-nav-rail__team-wrap,
-  .entry-nav-rail__section-divider,
+  .entry-nav-rail__group > *,
+  .entry-nav-rail__team-section > *,
   .entry-nav-rail__footer {
     transition: none;
     transform: none;
   }
-  .entry:not(.entry--rail-open) .entry-nav-rail__group > * { transition-delay: 0ms; }
+  .entry:not(.entry--rail-open) .entry-nav-rail__group > *,
+  .entry:not(.entry--rail-open) .entry-nav-rail__team-section > * { transition-delay: 0ms; }
   .entry:not(.entry--rail-open) .entry-nav-rail__footer { transition-delay: 0ms; }
   .entry-shell--no-header .entry { transition-delay: 0ms; }
 }
@@ -261,6 +267,15 @@
   .entry--rail-open .entry-nav-rail {
     overflow: hidden;
     pointer-events: none;
+  }
+  /* …and the content card takes over the left gutter, exactly as it does when
+     the user collapses the rail themselves. It cannot inherit that rule: the
+     auto-collapse deliberately KEEPS `.entry--rail-open` on the element so
+     widening restores the rail as it was, so `.entry:not(.entry--rail-open)
+     .entry-main--scroll` never matches at this width — and the card sat flush
+     against the window edge while the right side kept its 12. */
+  .entry-shell--no-header .entry.entry--rail-open .entry-main--scroll {
+    margin-left: 12px;
   }
 }
 /* Topbar panel toggle — the single affordance left visible when the rail
@@ -312,7 +327,11 @@
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  padding: 0 10px;
+  /* No horizontal inset: the rows measure their 12px to the window edge (and
+     to the content card on the other side) off the panel's margin alone —
+     see the note on `.entry-nav-rail__panel`. Rows carry their own 10px text
+     padding, so labels still breathe inside their hover fill. */
+  padding: 0;
 }
 .entry-nav-rail__footer {
   position: relative;
@@ -357,8 +376,39 @@
 .entry-nav-rail__footer .entry-rail-actions:empty {
   display: none;
 }
-.entry-nav-rail__footer:has(> .entry-rail-actions:empty) {
-  padding-bottom: 0;
+/* Community/contact links (Discord / X / mail), the footer's last
+   row. They moved here out of the account menu so the rail's bottom strip
+   carries something instead of reading as a dead white band. */
+.entry-nav-rail__social {
+  order: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 18px);
+  margin: 0 auto;
+  padding: 2px 0 2px;
+}
+.entry-nav-rail__social-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--text-soft);
+  text-decoration: none;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.entry-nav-rail__social-btn:hover {
+  background: var(--vibrancy-fill-secondary);
+  color: var(--text);
+}
+.entry-nav-rail__social-btn svg,
+.entry-nav-rail__social-btn .od-icon { color: inherit; }
+.entry-nav-rail__social-btn .entry-nav-rail__menu-x {
+  flex: 0 0 auto;
+  color: inherit;
 }
 .entry-nav-rail__footer .entry-nav-rail__account {
   order: 2;
@@ -375,24 +425,19 @@
 .entry-rail-actions .use-everywhere-chip {
   justify-content: center;
 }
-.entry-rail-actions .entry-help-menu {
-  align-self: center;
-  display: block;
-  width: 30px;
-  flex: 0 0 30px;
-}
 .entry-local-mode-tip {
-  position: absolute;
-  left: var(--spacing-8, 8px);
-  right: var(--spacing-8, 8px);
-  /* Anchored to the footer (position: relative), whose bottom edge sits the
-     panel's 5px bottom padding + 1px ring above the panel's visible edge —
-     3 + 5 + 1 = 9px, matching the sides' 8 + 1px ring inset. */
-  bottom: 3px;
+  /* In flow, not absolute. It used to be anchored to the footer's bottom edge
+     (position: absolute; bottom: 3px; z-index: 2), which was harmless while
+     the footer had nothing else in it. The footer now ends with the social
+     row, and an opaque card pinned over that same bottom strip hid the
+     Discord, X and mail links from exactly the signed-out users this
+     card is shown to. Sitting in flow (order 2, above the social row's 3)
+     keeps both reachable and lets the footer size itself. */
+  order: 2;
   display: grid;
   gap: 8px;
-  width: auto;
-  margin: 0;
+  width: calc(100% - var(--spacing-16, 16px));
+  margin: 0 auto;
   padding: 8px;
   box-sizing: border-box;
   border: 1px solid var(--border);
@@ -515,6 +560,39 @@
     color-mix(in srgb, var(--bg-muted) 84%, var(--bg-panel));
   animation: entry-rail-account-skeleton-sheen 1.55s cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
+
+.entry-rail-account-recovery {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 18px);
+  min-height: 34px;
+  margin: 0 auto;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.entry-rail-account-recovery__spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 30%, transparent);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  animation: entry-rail-account-recovery-spin 900ms linear infinite;
+}
+
+@keyframes entry-rail-account-recovery-spin {
+  to { transform: rotate(360deg); }
+}
+
+.entry-rail-account-recovery__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 [data-theme="dark"] .entry-rail-account-skeleton__avatar,
 [data-theme="dark"] .entry-rail-account-skeleton__name {
   background:
@@ -609,99 +687,6 @@
   transform: translateY(-50%) translateX(0);
 }
 
-/* ---------- Help launcher + flyout popover ----------
-   Lives in `.entry-nav-rail__footer` and floats to the right of the
-   rail so the menu stays inside the viewport even when the rail is
-   anchored at the bottom-left of the window. */
-.entry-help-menu {
-  position: relative;
-  display: inline-flex;
-}
-.entry-rail-actions .entry-help-menu__trigger {
-  width: 100%;
-  height: 29px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
-  box-shadow: none;
-  gap: 0;
-  justify-content: center;
-}
-.entry-rail-actions .entry-help-menu__trigger:hover {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  border-color: transparent;
-  color: var(--text-strong);
-}
-.entry-help-popover {
-  position: absolute;
-  left: calc(100% + 12px);
-  bottom: 0;
-  z-index: 70;
-  min-width: 220px;
-  padding: 6px;
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  border: 1px solid var(--material-separator);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.entry-help-popover__item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  font-size: 13px;
-  color: var(--text);
-  text-decoration: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
-}
-.entry-help-popover__item:hover {
-  background: var(--bg-subtle);
-  color: var(--text-strong);
-}
-.entry-help-popover__social-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(58px, auto);
-  gap: 4px;
-}
-.entry-help-popover__item--social {
-  min-width: 0;
-}
-.entry-help-popover__item--social span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.entry-help-popover__icon {
-  width: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.entry-help-popover__divider {
-  height: 1px;
-  background: var(--border-soft);
-  margin: 4px 6px;
-}
-[dir='rtl'] .entry-help-popover {
-  left: auto;
-  right: calc(100% + 12px);
-}
-[dir='rtl'] .entry-help-popover__item {
-  flex-direction: row-reverse;
-  text-align: right;
-}
-
 /* Positioning host for the update-ready indicator and its panel. The
    indicator's own look lives in UpdaterPopup.module.css; `.updater-popup`
    anchors against this box (see styles/workspace/mention-home.css). */
@@ -749,19 +734,37 @@
 .entry-nav-rail__btn {
   appearance: none;
   width: 100%;
-  height: 33px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  /* 10px of inset, except the LEADING edge, which carries 16 (per product):
+     the icon reads as indented from the row's fill rather than hugging it, and
+     the row's height is its content plus the vertical 10 (18px icon + 20 = 38)
+     rather than a pinned box. The old 33px height is what made the vertical
+     inset 8 — half the slack left over after the icon — while the sides
+     carried 10. `height: auto` is required, not incidental: primitives.css
+     sets a blanket `button { height: 36px }`, which took over the moment the
+     explicit 33 went away and squeezed the padded box back to 36 (the icon
+     then centred on it and overflowed its own content box). */
+  height: auto;
+  padding: 10px 10px 10px 16px;
+  /* No border: it was a 1px transparent ring no state ever paints (both the
+     hover and active rules below only re-assert `transparent`), and on a
+     border-box element it stole a pixel from every side — the inset measured
+     17, not the 16 the padding asks for. */
+  border: 0;
+  /* 12 (per product, read off the selected row). It lives on the base rule,
+     not on `.is-active`: this radius is the shape of the ROW'S FILL, and hover
+     paints that same fill — scoping it to the selected state alone would make
+     a row change shape as the pointer crosses it. */
+  border-radius: 12px;
   background: transparent;
   /* The workspace console entries (成员/数据大盘/Workspace 设置) render as
      anchors; the UA underline breaks the uniform nav-item look (#5517 rail
      items are plain). */
   text-decoration: none;
-  /* Unselected: label matches the icon's muted tone (one uniform color); hover
-     steps up to --text-strong, selection goes near-black on light gray.
-     68% lands the blend on the --text-soft step (52% read too faint). */
-  color: color-mix(in srgb, var(--text) 68%, transparent);
+  /* Unselected ink (per product: 选中和未选中要做出区分) — the rail's shared
+     quiet tone, the one the 最近浏览过 heading and its project rows carry, well
+     clear of the selected row's #121212. See `--rail-ink-quiet` on
+     `.entry-nav-rail`. */
+  color: var(--rail-ink-quiet);
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -778,19 +781,8 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 18px;
-  /* Tracks the unselected label tone above. */
-  color: color-mix(in srgb, var(--text) 68%, transparent);
-}
-/* Unread marker on a rail item's icon — same 6px red dot as the account
-   menu's `__menu-item-dot`, pinned to the glyph's top-right corner. */
-.entry-nav-rail__btn-dot {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--red);
+  /* Tracks the label tone above — one ink for the whole row. */
+  color: inherit;
 }
 .entry-nav-rail__btn-icon > svg {
   width: 18px;
@@ -804,16 +796,506 @@
 }
 .entry-nav-rail__btn-label {
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.entry-nav-rail__btn.is-active .entry-nav-rail__btn-icon {
-  color: var(--selected);
+
+/* ── 最近浏览过 (rail section under 插件) ─────────────────────────────────
+   A disclosure, not a destination: the head row toggles, the rows below open
+   projects. It borrows the nav row's geometry so the section reads as part of
+   the same list rather than a panel dropped into it. */
+.entry-nav-rail__recent {
+  display: flex;
+  flex-direction: column;
+  /* 16px between 插件 and this heading (per product, down from 24). The group
+     above already puts 2px between its children (`.entry-nav-rail__group`'s
+     gap), so the margin carries the remainder — written as the subtraction so
+     the total stays 16 if that gap ever moves. */
+  margin-top: calc(16px - 2px);
+}
+.entry-nav-rail__recent-head {
+  appearance: none;
+  width: 100%;
+  /* Same leading inset as a destination row (per product: 左边对齐和首页的
+     选项) — the heading starts on 插件's icon column, not indented under its
+     label. The chevron is no longer in that column either; it moved to the
+     row's trailing edge. */
+  height: auto;
+  /* 38 tall, the destinations' own row height (per product: 整个的高度都是 38).
+     A min-height rather than a fixed one: the box is a flex row that centres
+     its contents, so it grows rather than clipping if the title ever wraps. */
+  min-height: 38px;
+  padding: 8px 10px 8px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  /* Title left, chevron hard right. */
+  justify-content: space-between;
+  gap: 9px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  /* The rail's shared quiet ink — this heading is where that tone came from
+     (per product), and the unselected rows above and below now match it. */
+  color: var(--rail-ink-quiet);
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.entry-nav-rail__recent-head:hover:not(:disabled) {
+  /* The same fill 首页 wears when it is the selected destination (per product):
+     the ink at 10%, not --bg-subtle. See `.entry-nav-rail__btn.is-active`. */
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text-strong);
+}
+.entry-nav-rail__recent-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+}
+.entry-nav-rail__recent-title {
+  /* 13/500 (per product) — the destinations above read 13/600, so this sits on
+     the same size and one weight lighter: a heading for the rows under it, not
+     another place to go. */
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-nav-rail__recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0 0;
+  display: flex;
+  flex-direction: column;
+  /* 2px between the rows (per product) — the same rhythm the destinations
+     above keep. */
+  gap: 2px;
+  /* Every recent project is listed (OPEND-2757: no more 8-row cap), so the
+     LIST scrolls rather than the rail. The cap is ~11 rows on a desktop
+     window — 11 × 38px rows + 10 × 2px gaps + the 2px top padding — and a
+     shorter window pulls it down further through the flex chain above
+     (`min-height: 0` on every ancestor up to the group), so the fixed rows
+     below the list (workspace settings, the footer) never get pushed out or
+     covered. Under the cap the box is content-sized: no scrollbar, no slack. */
+  min-height: 0;
+  max-height: calc(11 * 38px + 10 * 2px + 2px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+/* The flex chain that lets the list above shrink with the window: each box
+   between the group and the list opts out of the `min-height: auto` floor and
+   passes the constraint down. The section and the disclosure never GROW —
+   `flex: 0 1 auto` — so a short list still leaves the rail exactly as it was. */
+.entry-nav-rail__team-section {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.entry-nav-rail__recent {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.entry-nav-rail__recent > .accordion-collapsible {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.entry-nav-rail__recent > .accordion-collapsible > .accordion-collapsible-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* One recent row: the name button, the ⋮ trigger that overlays its trailing
+   edge, and the hover preview that escapes the rail. `position: relative` is
+   what the last two anchor to. */
+.entry-nav-rail__recent-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+/* ⋮ appears on hover / while its own menu is open. It OVERLAYS the name rather
+   than taking a column, so a row's text keeps the full width when the pointer
+   is elsewhere — the names are long and already ellipsized. */
+.entry-nav-rail__recent-more {
+  position: absolute;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms var(--ease-out), visibility 0s linear 120ms;
+}
+.entry-nav-rail__recent-row:hover .entry-nav-rail__recent-more,
+.entry-nav-rail__recent-more:focus-visible,
+.entry-nav-rail__recent-more[aria-expanded='true'] {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+/* The ⋮ clears its own space by SHORTENING the name (per product: 为最右侧的
+   按钮预留位置), so the name simply ellipsizes earlier while the row is hovered
+   or its menu is open. This replaced a right-to-left mask ramp: a mask applies
+   to the whole button, which faded the row's own hover fill out with the text
+   and made the pill look cut short — the fill has to stay whole, and the ink
+   that remains has to stay at full strength. */
+.entry-nav-rail__recent-row:hover .entry-nav-rail__recent-item,
+.entry-nav-rail__recent-row:focus-within .entry-nav-rail__recent-item {
+  /* 6 (the ⋮'s own inset) + 24 (its box) + 6 of air. */
+  padding-right: 36px;
+}
+.entry-nav-rail__recent-more:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-strong);
+}
+/* Inline rename: the input stands in the row's own box so committing does not
+   shift the list. */
+.entry-nav-rail__recent-rename {
+  width: 100%;
+  height: 38px;
+  padding: 10px 10px 10px 16px;
+  /* #DBDBDB (per product) — written as `--border`, the token that already holds
+     exactly that value, rather than as a literal. */
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  /* No fill of its own (per product: 修改名称的时候不要下边的白底) — the rail's
+     frosted panel shows through and the ring alone marks the field. --bg-app is
+     opaque white, which cut a solid card into a translucent column. */
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  outline: none;
+}
+/* The ring you actually SEE, because this field is autofocused the moment it
+   opens — and primitives.css carries a blanket `input:focus { border-color:
+   var(--selected) }` (#353535), which at (0,1,1) out-ranks the (0,1,0) class
+   rule above. That near-black is what made the field read as a black-outlined
+   box; the rule above was never the one on screen. `.class:focus` is (0,2,0)
+   and takes it back. Same token as the resting state — the field marks itself
+   by being a field, not by darkening on focus. */
+.entry-nav-rail__recent-rename:focus {
+  border-color: var(--border);
+}
+/* Opens in the hover preview's slot — beside the row, over the content column
+   (per product: 弹窗的位置就是预览图的位置). Fixed + portalled to <body>, with
+   `top`/`left` measured off the row when the ⋮ is pressed, exactly like the
+   preview it replaces. */
+.entry-nav-rail__recent-menu {
+  position: fixed;
+  transform: translateY(-50%);
+  z-index: 1200;
+  min-width: 140px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--material-separator);
+  /* 12px (per product) — `--radius-lg`, the same corner the hover preview that
+     shares this slot takes, so the two popups cannot read as different
+     surfaces. It was `--radius` (8). */
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated, var(--bg-panel));
+  box-shadow: var(--shadow-md);
+}
+.entry-nav-rail__recent-menu button {
+  display: flex;
+  align-items: center;
+  /* primitives.css centres every button's content; a menu row reads as a list,
+     so it starts at the leading edge instead. */
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  padding: 7px 8px;
+  border: 0;
+  /* The hover fill takes the CARD's corner, not a tighter one of its own (per
+     product: hover 的按钮圆角和外边白色框一致) — same token as the menu above,
+     so the two can never drift apart. */
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  /* 13 (per product, was 12). The marks beside it are already 14 — see
+     `RenameMark` / `DeleteMark` / the export glyph in RailRecentRow.tsx, all
+     drawn at that size — so the row now reads label-and-mark at one weight
+     instead of a 14px glyph over a 12px word. */
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.entry-nav-rail__recent-menu button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text-strong);
+}
+/* 删除 reads as the destructive item (red ink, red-tinted hover), the same
+   treatment the project cards' menu gives theirs. It no longer arms in place:
+   the confirmation is the shared delete dialog (OPEND-2797). */
+.entry-nav-rail__recent-menu button.is-danger {
+  color: var(--red, #f04142);
+}
+.entry-nav-rail__recent-menu button.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red, #f04142) 12%, transparent);
+  color: var(--red, #f04142);
+}
+.entry-nav-rail__recent-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* A failed move to the team space is reported inside the menu, under the item
+   that asked for it — the project cards keep theirs in the same place. */
+.entry-nav-rail__recent-menu-error {
+  padding: 4px 8px 6px;
+  max-width: 220px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--red, #f04142);
+}
+/* The preview floats OUT of the rail, over the content column: the rail panel
+   is only ~212px wide and a legible cover needs more than that. `left: 100%`
+   anchors it to the row's trailing edge; the panel above it does not clip
+   (the rail's overflow is only clamped while collapsed, and a collapsed rail
+   has no rows to hover). */
+.entry-nav-rail__recent-preview {
+  /* Fixed + portalled to <body>: `top`/`left` come from the row's own rect at
+     hover time (see RailRecentRow). Absolute inside the rail put it behind the
+     content column whatever its z-index. */
+  position: fixed;
+  transform: translateY(-50%);
+  z-index: 1200;
+  /* 216 — 180 + 20% (per product), 180 itself having come down from 232. */
+  width: 216px;
+  /* A card again, because it has something to say now (per product: 和这个一样
+     样式): the row's ellipsized name wraps in here with the last-touched time
+     under it, which is what the removed OS tooltip used to answer. It spent a
+     round as a bare plate — right while the popup was only a picture. Radius
+     16 outside / 8 inside with 8px of padding keeps the two concentric. */
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-xxlarge);
+  background: var(--bg-elevated, var(--bg-panel));
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
+.entry-nav-rail__recent-preview-plate {
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  /* Inside the card again: no edge or lift of its own (the card carries both),
+     and the inner half of the concentric pair — 8 + the card's 8px padding =
+     the card's 16. */
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  display: grid;
+  place-items: center;
+  /* The HTML frame below is absolute and scales against the plate's width
+     (`cqw`), so the plate is both its containing block and its container. */
+  position: relative;
+  container-type: inline-size;
+}
+/* A deck's cover slide is 16:9 in a 16:10 plate; the grid frames decks on
+   white, so the letterbox band above and below reads as the same white stage
+   rather than as a strip of tint. */
+.entry-nav-rail__recent-preview-plate.is-deck {
+  background: #fff;
+}
+/* An HTML cover, rendered the way the projects grid renders one
+   (`.recent-projects__thumb-iframe`): the document is laid out at a 1280px
+   desktop width and scaled down to the plate, so a page that would collapse
+   at 200px keeps its real composition. Inert twice over — the card itself
+   has no pointer events, and the frame repeats it so nothing inside the
+   document can ever be the hover target. Hidden (`visibility`) until its
+   document loads; the glyph keeps the plate meanwhile (see
+   `HoverHtmlCover`). */
+.entry-nav-rail__recent-preview-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  /* 1280 × 800 = the plate's own 16:10, so a plain page fills it exactly. */
+  height: 800px;
+  border: 0;
+  background: #fff;
+  pointer-events: none;
+  transform-origin: 0 0;
+  transform: scale(calc(100cqw / 1280px));
+}
+/* The deck cover document fixes its stage at 1280 × 720 (`deckPreviewSrcDoc`),
+   so the frame takes that size and is centred in the 16:10 plate instead of
+   sitting on its top edge with the band all at the bottom. The translate is
+   half of the SCALED height: with the origin at 0 0 a percentage translate
+   would measure the unscaled 720. */
+.entry-nav-rail__recent-preview-frame.is-deck {
+  height: 720px;
+  top: 50%;
+  transform: translateY(calc(-360px * (100cqw / 1280px))) scale(calc(100cqw / 1280px));
+}
+.entry-nav-rail__recent-preview-plate img,
+.entry-nav-rail__recent-preview-plate video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+.entry-nav-rail__recent-preview-glyph {
+  color: var(--text-faint);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+}
+/* Up to TWO lines of the full name, then an ellipsis (per product: 最多两行
+   名称). Long names are the reason this card exists at all — the row can only
+   ever show a prefix — but a card that grew without bound would cover the
+   column it floats over, and with the timestamp line gone the name is the
+   card's whole text. */
+.entry-nav-rail__recent-preview-name {
+  margin: 0;
+  /* 4px in from the plate's edges on both sides (per product: 文本向内收 4px
+     和预览图比). The plate is a filled rectangle and the text is loose ink —
+     sharing an edge, the ink reads as if it were sticking out. */
+  padding: 0 4px;
+  /* #848484 (per product) — written as the token that already IS that value
+     (tokens.css `--text-soft`), not as a literal, so the one definition keeps
+     carrying it. Two steps down from --text-strong: the card is a read-out of
+     a name the row had to clip, not a heading. */
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  /* Project names are often one unbroken token (a slug, a path); without this
+     they would overflow the clamp instead of wrapping inside it. */
+  overflow-wrap: anywhere;
+}
+.entry-nav-rail__recent-item {
+  appearance: none;
+  width: 100%;
+  /* A LEFT-ALIGNED flex row (glyph + name), spelled out rather than inherited:
+     primitives.css sets every button to `inline-flex` + `justify-content:
+     center`, which would centre the pair in the row. The name's truncation
+     moved onto `__recent-name` with it — a flex item has no line box of its
+     own to ellipsize, so the rule has to sit on the span that holds the text. */
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  /* The destinations' icon→label gap, so a project name lands on the same
+     column as 插件's label. */
+  gap: 9px;
+  height: auto;
+  /* Flush with the destinations' own leading inset (per product: 左边对齐和
+     首页的选项), so the row's GLYPH starts on the same column as 插件's puzzle
+     mark — and, since the glyph slot repeats the destinations' 18 + 9, the name
+     behind it lands on the labels' column. One left edge either way. */
+  /* 38 tall, matching the destinations and the heading above (per product).
+     This row is `display: block` (see above), so the height comes from an
+     explicit line box plus symmetric padding — 10 + 18 + 10 — rather than from
+     a flex centre it cannot use. */
+  padding: 10px 10px 10px 16px;
+  line-height: 18px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  /* Same ink as the UNSELECTED destinations above (per product: 未选中的和最近
+     浏览过的颜色一致) — one quiet column from 首页 down to the last project;
+     only `.entry-nav-rail__btn.is-active` sits darker than it. */
+  color: var(--rail-ink-quiet);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  overflow: hidden;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+/* The leading glyph's slot: the folder, or this project's live run status when
+   it has one (RailRecentRow). Same 18px box the destinations' icons occupy
+   (`.entry-nav-rail__btn-icon`) — that is what puts both columns of glyphs, and
+   therefore both columns of text, on one edge. Fixed width so a 14px status orb
+   and a 16px folder never shift the name sideways as a run starts. */
+.entry-nav-rail__recent-icon {
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Tracks the row's ink, hover included. */
+  color: inherit;
+}
+.entry-nav-rail__recent-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A completed, unread project keeps its folder and adds this notice at the
+   row's end (OPEND-3133): a 6px disc in the design's blue, pushed to the right
+   edge by `margin-left: auto` whatever the name's length. The row's hover
+   padding (see `.entry-nav-rail__recent-row:hover .entry-nav-rail__recent-item`)
+   moves it left of the ⋮ so the two never overlap. A literal blue rather than
+   `--accent`: this is the design's notice colour, the same in both themes. */
+.entry-nav-rail__recent-unread {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #1F68FE;
+}
+.entry-nav-rail__recent-item:hover:not(:disabled) {
+  /* Same fill as the section heading above it and as 首页 when it is the
+     selected destination (per product): the ink at 10%, not --bg-subtle. See
+     `.entry-nav-rail__btn.is-active`. */
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text-strong);
+}
+/* Selected ink is #121212 (per product), darker than `--selected`'s #353535.
+   A literal rather than a token change: `--selected` is the app-wide selected
+   ink and other surfaces read it — only the rail's own selected row moves.
+   The label is set explicitly too: it inherits from `.entry-nav-rail__btn`,
+   which the `.is-active` rule further down paints `var(--selected)`, so
+   leaving it out would have darkened the icon and left the text behind.
+   Dark mode keeps the token; #121212 is invisible on the dark ground. */
+.entry-nav-rail__btn.is-active .entry-nav-rail__btn-icon,
+.entry-nav-rail__btn.is-active .entry-nav-rail__btn-label {
+  color: #121212;
 }
 .entry-nav-rail__btn.is-active .entry-nav-rail__btn-label {
-  font-weight: 400;
+  font-weight: 600;
+}
+/* Dark mode only has to move the SELECTED row: every unselected row carries
+   `--rail-ink-quiet`, which the rail redefines for dark up top.
+   #121212 is invisible on the dark ground, so the selected row takes
+   --text-strong (#fafafa) — the same "one step brighter than its neighbours"
+   relationship the light theme draws. */
+[data-theme="dark"] .entry-nav-rail__btn.is-active .entry-nav-rail__btn-icon,
+[data-theme="dark"] .entry-nav-rail__btn.is-active .entry-nav-rail__btn-label {
+  color: var(--text-strong);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .entry-nav-rail__btn.is-active .entry-nav-rail__btn-icon,
+  html:not([data-theme]) .entry-nav-rail__btn.is-active .entry-nav-rail__btn-label {
+    color: var(--text-strong);
+  }
 }
 
 /* Search box */
@@ -821,15 +1303,16 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  /* No top margin: the search box's gap to the rail's top edge (panel
-     padding-top 10px + 1px stroke = 11px) then matches its 11px left/right
-     inset, instead of the extra 4px pushing it to 15px. */
   margin: 0 0 10px;
 }
 .entry-nav-rail__search-row .entry-nav-rail__search {
-  flex: 1;
+  /* Icon-sized at rest, matching the collapse control's 34px square. */
+  flex: 0 0 auto;
+  width: 34px;
   min-width: 0;
   margin: 0;
+  padding: 0;
+  justify-content: center;
 }
 .entry-nav-rail__search {
   display: flex;
@@ -838,11 +1321,12 @@
   height: 34px;
   margin: 4px 0 10px;
   padding: 0 10px;
-  /* White to match the rail surface; a border keeps the input visible on it. */
-  border: 1px solid var(--border);
+  /* No stroke or fill: at rest this is just the magnifier sitting on the rail,
+     matching the collapse control beside it. */
+  border: 0;
   border-radius: var(--radius-large, 8px);
-  background: var(--rail-surface, #fff);
-  color: var(--text-soft);
+  background: transparent;
+  color: var(--text-muted);
   transition:
     background-color var(--duration-ultra-fast) var(--curve-easy-ease),
     border-color var(--duration-ultra-fast) var(--curve-easy-ease),
@@ -856,27 +1340,123 @@
   cursor: pointer;
   text-align: left;
 }
-.entry-nav-rail__search:hover {
-  border-color: var(--border-strong);
+/* Search + rail-collapse in one row, icon-only: the search is a magnifier the
+   size of the collapse control beside it. The row owns the vertical margins
+   the lone search box used to carry. */
+.entry-nav-rail__search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 10px;
 }
-.entry-nav-rail__search:focus-visible {
-  outline: none;
-  border-color: var(--border-strong);
-}
-.entry-nav-rail__search-placeholder {
-  flex: 1 1 auto;
+.entry-nav-rail__search-row .entry-nav-rail__search {
+  /* Icon-sized at rest (see the sizing rule above); this later duplicate must
+     not put `flex: 1` back or the control stretches across the row again. */
+  flex: 0 0 auto;
+  width: 34px;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-faint);
-  font-size: 13px;
+  margin: 0;
+  padding: 0;
+  justify-content: center;
 }
-/* ⌘K shortcut hint pinned to the right of the search box. Taller (24px in the
-   34px box) so it hugs closer to the top/bottom edges instead of floating. */
+.entry-nav-rail__collapse {
+  appearance: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Holds the row's trailing edge now that the search no longer flexes into
+     it. */
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-large, 8px);
+  background: transparent;
+  color: var(--text-muted);
+  /* Anchors the stacked glyph pair below. */
+  position: relative;
+}
+/* Open/collapsed glyphs are both mounted and stacked in the toggle; the
+   current one is shown, the other waits at 90% behind it. The swap is a
+   cross-fade + settle rather than a pop: enter ~200ms, exit ~140ms, both on the
+   ease-out curve (AGENTS.md "UI animation philosophy"), never from scale(0). */
+.entry-nav-rail__collapse-glyph {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.entry-nav-rail__collapse-glyph.is-current {
+  opacity: 1;
+  transform: none;
+  transition-duration: 200ms, 200ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .entry-nav-rail__collapse-glyph {
+    transition: none;
+  }
+}
+/* Search + collapse take the SAME fill as the rail's selected nav row —
+   `--text-strong` at 10% (per product: 这几个 icon 的选中和 hover 都和首页的
+   选中底色一致). They used to take `--bg-fill-secondary` (black at 6%), a
+   near-miss that read as a slightly different gray next to it.
+   These two rules also dress the pair once they are relocated into the top
+   chrome row (see the note below), so this covers both placements. Keep in
+   step with `.entry-nav-rail__btn.is-active`. */
+/* `:not(:disabled)` is NOT decoration — it is what makes this rule land.
+   primitives.css carries `button:hover:not(:disabled) { background:
+   var(--bg-subtle) }` at specificity (0,2,1); a plain `.class:hover` is
+   (0,2,0) and quietly loses to it, so every one of these controls was showing
+   the primitive's #ededed no matter what was written here. Matching its
+   `:not(:disabled)` takes these to (0,3,0) and they win. */
+.entry-nav-rail__collapse:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text);
+}
+.entry-nav-rail__search:hover:not(:disabled),
+.entry-nav-rail__search:focus-visible:not(:disabled) {
+  outline: none;
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text);
+}
+/* Same two controls, relocated into the chrome row where the pinned Home tab
+   used to sit (per product: 搜索和收起跟 home icon 一起放在顶部). The row rules
+   above still dress them; this only re-parks the cluster — no vertical margins
+   (the chrome row centres it) and a tight gap so the icons read as one group.
+   Must stay after the rules it narrows — equal specificity, so source order
+   decides. */
+.workspace-tabs-rail-actions {
+  flex: 0 0 auto;
+  gap: 4px;
+  /* The cluster's first glyph sits on the same vertical axis as the rail's
+     首页 icon below it (per product). Since OPEND-2685 that first control is
+     the rail toggle (search second), so the toggle is what lines up with the
+     column — and, on macOS, what sits right after the traffic lights. The
+     strip already insets this cluster 10px, and the control's own 34px hit box
+     centres its glyph 17px in, so the remainder lives here. */
+  margin: 0 0 0 14.8px;
+}
+.workspace-tabs-rail-actions .entry-nav-rail__collapse {
+  margin-left: 0;
+}
+.workspace-tabs-rail-actions .entry-nav-rail__search:hover,
+.workspace-tabs-rail-actions .entry-nav-rail__search:focus-visible {
+  width: 34px;
+  padding: 0;
+}
+/* ⌘K is a reminder, not a label: it stays out of the resting control and
+   appears once the pointer (or keyboard focus) is already on it. Taller (24px
+   in the 34px box) so it hugs the top/bottom edges instead of floating. */
 .entry-nav-rail__search-kbd {
   flex: 0 0 auto;
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
   min-width: 30px;
@@ -887,9 +1467,13 @@
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   letter-spacing: 0.02em;
+}
+.entry-nav-rail__search:hover .entry-nav-rail__search-kbd,
+.entry-nav-rail__search:focus-visible .entry-nav-rail__search-kbd {
+  display: inline-flex;
 }
 .entry-nav-rail__search input {
   appearance: none;
@@ -934,14 +1518,20 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
+  /* Same box as the nav rows below (per product: 和社区一样的高度和圆角).
+     Pinned rather than derived: those rows are `height: auto` around an 18px
+     icon plus 10px of vertical padding, and this one carries a 24px avatar —
+     the same recipe would make it 44. 38 is their resolved height, and the
+     hover/selected fill both wear is the same, so the two now read as one
+     stack instead of a shorter, squarer control sitting above it. */
+  height: 38px;
   margin: 2px 0 4px;
   padding: 0 10px;
   color: var(--text-strong);
 }
 .entry-nav-rail__team-avatar {
-  width: 19px;
-  height: 19px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text);
@@ -949,7 +1539,7 @@
   place-items: center;
   font-size: 12px;
   font-weight: 700;
-  flex: 0 0 19px;
+  flex: 0 0 24px;
   overflow: hidden;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 78%, transparent);
 }
@@ -961,13 +1551,23 @@
 }
 .entry-nav-rail__team-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .entry-nav-rail__team svg { color: var(--text-soft); }
+/* The caret's slot, copied from `.entry-nav-rail__recent-chevron` so the two
+   disclosures in this rail hold their glyph the same way: a fixed 14px box that
+   never shrinks, which is what keeps › and ⌄ — different advance widths — from
+   nudging the workspace name as the menu opens and closes. */
+.entry-nav-rail__team-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+}
 
 /* Section label (e.g. 更多) */
 .entry-nav-rail__section {
@@ -986,20 +1586,29 @@
   background: var(--border-soft, rgba(0, 0, 0, 0.08));
 }
 .entry-nav-rail__btn:not(.is-active):hover {
-  /* Only the fill changes on hover — the label keeps its resting color so
-     text doesn't shift tone under the pointer. */
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+  /* ONE hover for the whole rail (OPEND-2700): the same fill and the same
+     ink step the 最近浏览过 heading and its project rows take under the
+     pointer (`.entry-nav-rail__recent-head:hover`), so 个人项目 and the
+     section below it light up identically. The Demo left this row at
+     `--text` 5% with no ink change while the rows under it took 10% + a
+     darker ink — the two read as two different controls in one column. The
+     selected row still stands apart through its ink (#121212) and weight. */
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text-strong);
   border-color: transparent;
 }
 .entry-nav-rail__btn.is-active {
-  /* Selected = one step above the lightest surface gray (--bg-subtle #ededed)
-     under the spec's selection color (--selected #353535) for label + icon. */
-  background: var(--bg-subtle);
+  /* Selected = the ink at 10% (per product: #202020 @ 10%), which is exactly
+     what --text-strong resolves to in light. Written as the token rather than
+     the literal so dark inverts with the rest of the theme (#fafafa there) —
+     a 10% veil of near-black would be invisible on the dark ground. Label +
+     icon keep the spec's --selected. */
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
   color: var(--selected);
   border-color: transparent;
 }
 .entry-nav-rail__btn.is-active:hover {
-  background: var(--bg-subtle);
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
   border-color: transparent;
 }
 .entry-nav-rail__btn:focus-visible {
@@ -1046,23 +1655,37 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  /* Never a horizontal page scrollbar. Leaving overflow-x unset makes the
+     spec coerce it from `visible` to `auto` (because overflow-y is auto), so
+     decorative bleed — the home hero's type fan spreads wider than its
+     column by design — grew a full-width scrollbar at the page bottom.
+     Off-edge content clips instead, which is what a bleed should do. */
+  overflow-x: hidden;
   /* Always reserve the scrollbar's width so switching between views/tabs with
      different content heights (e.g. Community categories) can't toggle the
      scrollbar and shift the centered content sideways — that read as a jitter. */
   scrollbar-gutter: stable;
 }
 
+/* Top-right cluster inside the tabs chrome's dedicated no-drag actions host:
+   campaign badge on the left, account module on the right, one flex row. */
+.entry-top-right-cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* app-region is not inherited, so keep every interactive descendant explicit. */
+.entry-top-right-cluster,
+.entry-top-right-cluster * {
+  -webkit-app-region: no-drag;
+}
+
 .entry-deepseek-campaign-badge {
-  position: fixed;
-  /* Portaled to document.body. Must clear .workspace-tabs-chrome (z-index: 120). */
-  z-index: 150;
-  top: 18px;
-  right: 22px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
-  padding: 7px 11px 7px 13px;
+  min-height: 26px;
+  padding: 4px 11px 4px 13px;
   border: 1px solid color-mix(in srgb, var(--brand) 42%, var(--border));
   border-radius: var(--radius-pill);
   color: var(--brand-text);
@@ -1078,7 +1701,10 @@
   cursor: pointer;
   pointer-events: auto;
   -webkit-app-region: no-drag;
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .entry-deepseek-campaign-badge::before {
@@ -1107,8 +1733,6 @@
 
 @media (max-width: 760px) {
   .entry-deepseek-campaign-badge {
-    top: 12px;
-    right: 12px;
     max-width: calc(100vw - 88px);
   }
 }
@@ -1145,25 +1769,74 @@
   backdrop-filter: var(--material-ultrathin-backdrop, none);
 }
 .entry-main--scroll {
-  /* Transparent: the UltraThin ground now lives on .workspace-shell
-     (shell.css) so the strip / rail gutter / content read as one continuous
-     surface with no gray frame around the scroll area. */
-  background: transparent;
+  /* Content card — the main column's own base card (per product: the rail
+     sits flat, and this is the one card on the screen): a milky-frost
+     surface, a 16px corner, a whisper elevation, and a vertical box (flush
+     top, 12px bottom) that ends on the same line as the rail column beside
+     it. Right inset 12px mirrors the rail's left one; the left stays 0
+     because the 12px gutter to the rail is the rail's own right margin (it
+     grows to 12px here when the rail collapses, below).
+
+     This replaces the earlier "no frame around the scroll area, one
+     continuous surface" treatment.
+
+     The 1px rim is an inset box-shadow rather than a masked pseudo-element:
+     this element is the scroll container, where an absolutely positioned
+     pseudo scrolls away with the content, and `::before` is already taken by
+     the top scroll-fade band above. */
+  margin: 0 12px 12px 0;
+  --entry-content-surface: rgba(255, 255, 255, 0.85);
+  --entry-content-ring: var(--glass-refract-ring-edge);
+  background: var(--entry-content-surface);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
+  border-radius: 16px;
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px var(--entry-content-ring);
   padding: 0;
   /* Used by descendants (e.g. the plugins-home Scenario row) to
      pin themselves directly below the sticky topbar. Mirrors the
      topbar's vertical footprint (12px top + 32px chip). */
   --entry-topbar-h: 44px;
 }
+/* Rail collapsed: its track is 0-wide and its column is clipped away, so the
+   left gutter has to come from this card instead. */
+.entry:not(.entry--rail-open) .entry-main--scroll {
+  margin-left: 12px;
+}
+/* Material spec fallbacks: drop the translucency to a solid surface and take
+   the rim down to the neutral border ladder. */
+@media (prefers-reduced-transparency: reduce) {
+  .entry-main--scroll {
+    --entry-content-surface: var(--bg);
+    --entry-content-ring: color-mix(in srgb, var(--border) 66%, transparent);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .entry-main--scroll {
+    --entry-content-surface: var(--bg);
+    --entry-content-ring: color-mix(in srgb, var(--border) 66%, transparent);
+  }
+}
 .entry-main__inner {
   width: 100%;
-  /* Wider cap + tighter side padding so the content hugs closer to the rail
-     instead of leaving a large centered left margin on wide screens. */
-  max-width: 1600px;
+  /* The cap is on the CONTENT column, so it carries the gutters with it:
+     1600 + 24 + 24. Written as 1600px flat it silently capped content at
+     1552 (border-box eats the padding) AND, once it bound, its own `auto`
+     margins added to the gutter. With the gutters inside the cap, the inner
+     fills the card at any width up to 1648 and the gutter is exactly what
+     `padding` says. */
+  max-width: calc(1600px + 48px);
   margin: 0 auto;
-  /* Compact rhythm: tighter side inset toward the rail and smaller section
-     gaps so list views read denser. */
-  padding: 12px 16px 48px;
+  /* One number for all four sides of the entry gutter (per product 2026-08-25:
+     社区 / 全部项目 / 设计体系 / 插件 all sit 24px off the card): 24 to the
+     card's top edge and 24 to its left/right. The titles sit flush at this
+     container's top-left, so the number lives here rather than on each page.
+     The bottom stays deeper — it is scroll runout, not a gutter. */
+  padding: 24px 24px 48px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -1179,22 +1852,12 @@
    gallery can fit 4-5 preview tiles per row on desktop displays
    while the hero card self-constrains to a readable column. */
 .entry-main__inner--wide {
-  max-width: 1600px;
-}
-/* Uniform left/right gutters across the home view AND the wide sub-views
-   (全部项目 / 草稿 / design-systems / …): the recent-projects grid and the
-   project lists all breathe away from the window edges by the same 35px, so
-   switching between 最近 and 全部项目 keeps the same side inset. Trimmed from
-   48px so the content sits ~13px closer to the rail (measured left spacing
-   ~73px → ~60px). */
-.entry-main__inner {
-  padding-left: 35px;
-  padding-right: 35px;
+  max-width: calc(1600px + 48px);
 }
 @media (max-width: 900px) {
   .entry-main__inner {
-    padding-left: 20px;
-    padding-right: 20px;
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }
 
@@ -1664,6 +2327,15 @@
   flex: 0 0 20px;
   object-fit: contain;
 }
+/* The model brand mark sits in the same 20px slot the agent logo uses, so the
+   chip keeps its width whichever of the two it happens to be showing. */
+.inline-switcher__chip-model-logo {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  object-fit: contain;
+}
 .inline-switcher__chip-icon .agent-icon-mono,
 .inline-switcher__agent .agent-icon-mono {
   display: inline-block;
@@ -1697,17 +2369,6 @@
 }
 .inline-switcher__chip-sep {
   color: var(--text-faint);
-}
-/* Hairline splitting the agent (logo + status dot) from the model name, so the
-   compact chip reads as two groups rather than one run. Same treatment as
-   `.home-hero__workdir-divider` in the composer row beside it; the chip's own
-   gap does the spacing. */
-.inline-switcher__chip-divider {
-  flex: 0 0 auto;
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  opacity: 0.7;
 }
 .inline-switcher__chip-primary {
   min-width: 0;
@@ -1743,11 +2404,6 @@
     0 0 0 4px color-mix(in srgb, var(--danger, #dc2626) 12%, transparent);
   pointer-events: none;
 }
-.inline-switcher__amr-reminder-dot--chip {
-  top: -2px;
-  right: -2px;
-}
-
 /* Popover */
 .inline-switcher__popover {
   position: absolute;
@@ -1913,6 +2569,20 @@
   object-fit: contain;
   display: block;
 }
+/* A row with no model-specific brand mark falls back to `<AgentIcon>`, which
+   carries `.agent-icon` — and the chip's own rule above
+   (`.inline-switcher__agent .agent-icon`) pins that class to 20px. Two class
+   selectors beat the one-class-plus-element pair above, so those rows rendered
+   a 20px mark beside the 16px provider marks and the column looked ragged.
+   AgentIcon's `width`/`height` are HTML attributes (presentational hints), so
+   they lose to any rule at all and cannot settle this either.
+   Named explicitly at three classes so this wins on specificity rather than on
+   source order. */
+.inline-switcher__agent .inline-switcher__agent-logo .agent-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
 .inline-switcher--compact .inline-switcher__agent:hover:not(:disabled) {
   border: none;
   background: var(--bg-subtle);
@@ -1964,26 +2634,6 @@
   text-align: left;
 }
 
-.inline-switcher__campaign-badge {
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  border-radius: 999px;
-  color: #153406;
-  background: #68f22e;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.4;
-  cursor: help;
-  outline: none;
-}
-.inline-switcher__campaign-badge.is-restricted {
-  color: #5f645d;
-  background: #e4e7e2;
-}
-.inline-switcher__campaign-badge.is-unpaid {
-  color: #5f645d;
-  background: #eceeeb;
-}
 .inline-switcher__chip[data-campaign-highlight='true'] {
   border-color: var(--accent);
   animation: deepseek-campaign-chip-pulse 760ms cubic-bezier(0.23, 1, 0.32, 1) 2;
@@ -2370,7 +3020,6 @@
   bottom: -12px;
   z-index: 1;
   background: var(--bg-elevated);
-  border-top: 1px solid var(--border-soft);
   margin-top: 2px;
   padding: 8px 4px;
   display: inline-flex;
@@ -2382,6 +3031,24 @@
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
+}
+/* The divider above this row is a pseudo-element, NOT the button's own
+   `border-top` (per product: 分割线不要用按钮的描边). A border belongs to the
+   control's box, so it read as the button being outlined rather than as the
+   popover being divided.
+   It is inset rather than full-bleed (per product: 不要贯穿): the line sits
+   4px inside the button's own edges, so it reads as a rule between two groups
+   of rows and never touches the popover's wall. Because it rides the sticky
+   button, it stays pinned to the bottom while the model list scrolls under. */
+.inline-switcher__more::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 4px;
+  right: 4px;
+  height: 1px;
+  background: var(--border-soft);
+  pointer-events: none;
 }
 .inline-switcher__more:hover {
   color: var(--text-strong);
@@ -2422,7 +3089,38 @@
   width: 168px;
   height: auto;
   display: block;
-  object-fit: contain;
+}
+.entry-blank__mark-line {
+  stroke-width: 0.78;
+  /* pathLength=1 normalizes every stroke, so dasharray 1 = the full path.
+     Resting offset 0 keeps the mark fully drawn — identical before, during
+     idle, and after the hover demo. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+.entry-blank__mark-line--cursor {
+  stroke-width: 0.7;
+}
+/* Hovering the mark replays a draw-on demo (outline → circle → cursor).
+   It settles at the resting frame; nothing about the mark persists changed. */
+@media (prefers-reduced-motion: no-preference) {
+  .entry-blank__mark:hover .entry-blank__mark-line {
+    animation: entry-blank-mark-draw 760ms var(--ease-out) backwards;
+  }
+  .entry-blank__mark:hover .entry-blank__mark-line:nth-child(2) {
+    animation-delay: 120ms;
+  }
+  .entry-blank__mark:hover .entry-blank__mark-line:nth-child(3) {
+    animation-delay: 260ms;
+  }
+}
+@keyframes entry-blank-mark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 .entry-blank__desc {
   margin: 0;
@@ -3355,6 +4053,10 @@
 .onboarding-view__agent-chip {
   display: flex;
   align-items: center;
+  /* The global `button` primitive centers its flex line. These chips are
+     fixed-width grid cells, so a centered line offsets each icon+name group
+     by a different amount and the two columns read ragged. */
+  justify-content: flex-start;
   gap: 9px;
   min-width: 0;
   min-height: 48px;
@@ -4913,8 +5615,7 @@
 .entry-rail-actions .entry-x-badge__label,
 .entry-rail-actions .entry-mail-badge__label,
 .entry-rail-actions .entry-star-badge__label,
-.entry-rail-actions .entry-star-badge__sep,
-.entry-rail-actions .entry-help-menu__label {
+.entry-rail-actions .entry-star-badge__sep {
   display: none;
 }
 .entry-rail-actions .entry-discord-badge__icon,
@@ -5522,35 +6223,132 @@
   }
 }
 
-/* ---- Account switcher (top of rail) ---- */
+/* ---- Account dock (foot of the nav column) ---- */
+/* Portal host for the account module (owned by `EntryTopRightCluster`).
+   Transparent to layout so the account block below behaves as a direct flex
+   child of `.entry-nav-rail__group`. */
+.entry-nav-rail__account-host {
+  display: contents;
+}
+
+/* Bottom dock: the social links stack directly above the identity row, and the
+   pair sinks to the foot of the nav column together. The auto margin lives
+   here, so `.entry-nav-rail__account` inside it gives up its own. */
+.entry-nav-rail__account-dock {
+  order: 99;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.entry-nav-rail__account-dock .entry-nav-rail__account {
+  order: 0;
+  margin: 0;
+  padding-top: 0;
+}
+
+.entry-nav-rail__account-dock .entry-nav-rail__menu-social {
+  /* Icon only (OPEND-3180): the three squares sit left-aligned on the
+     identity row's edge at one equal gap, rather than spreading across the
+     dock the way the labelled links did. No side inset, so the first square
+     starts where the account trigger starts and its glyph lands on the
+     avatar's own left edge (28px square, 16px glyph → 6px in, the trigger's
+     6px side padding). */
+  padding: 0;
+  justify-content: flex-start;
+}
+
 .entry-nav-rail__account {
   position: relative;
   display: flex;
-  /* Credits chip stacks above the avatar row (chip is order: -1 below). */
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+  /* One row: identity, message centre, then the update slot at the outer edge.
+     Only the identity column is elastic — the two after it hold fixed slots, so
+     a long account name truncates instead of pushing them off the rail. (This
+     was a column back when the credits chip stacked above the avatar; that chip
+     now lives in the top-right cluster.) */
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   order: 99;
   margin: auto 0 0;
   padding-top: var(--spacing-10);
 }
-/* Update-ready strip: its own line directly above the identity row, with the
-   rocket pushed to the right edge (`flex-end` rather than a hardcoded side, so
-   RTL follows the writing direction). The rocket used to sit BELOW the account
-   row, in `.entry-nav-rail__footer` (#5517 fallout).
+
+/* Message centre: a fixed square slot beside the identity, matching the rail
+   nav items' quiet icon treatment. */
+.entry-nav-rail__account-bell {
+  position: relative;
+  flex: 0 0 auto;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.entry-nav-rail__account-bell:hover,
+.entry-nav-rail__account-bell:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-strong);
+}
+
+/* The shared dot is authored for menu ROWS, where `margin-left: auto` pushes it
+   to the trailing edge. On the square bell it has to pin to the glyph instead. */
+.entry-nav-rail__account-bell .entry-nav-rail__menu-item-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  margin-left: 0;
+}
+/* Local account dock (OPEND-3140): the signed-out rail renders the same dock
+   in its FOOTER, under the sign-in card, so the identity row is the rail's
+   last line on both branches. The footer centres its children at
+   `calc(100% - 18px)`; the dock takes that width and its rows stretch to it. */
+.entry-nav-rail__footer .entry-nav-rail__account-dock {
+  order: 3;
+  width: calc(100% - 18px);
+  margin: 0 auto;
+}
+.entry-nav-rail__footer .entry-nav-rail__account-dock .entry-nav-rail__account {
+  width: auto;
+}
+/* The local identity has no initial to show: a quiet terminal glyph on the
+   panel tint, the same 25px rounded square the avatar occupies. Doubled
+   class so it outranks the avatar's own gradient, declared later. */
+.entry-nav-rail__account-avatar.entry-nav-rail__account-avatar--local {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+}
+.entry-nav-rail__account-trigger:hover .entry-nav-rail__account-avatar--local {
+  color: var(--text-strong);
+}
+/* Update-ready slot: an independent top-right cluster item immediately AFTER
+   the credits/avatar capsule when present. Signed-out shells keep the same
+   top-right position without rendering an account capsule.
 
    This stays a global selector next to the rest of the account block rather
    than a CSS Module: its only child is `.entry-updater-menu`, itself a global
    positioning contract, so a module would need a `:global()` escape to reach
    it.
 
-   `:empty` is load-bearing, not tidiness. The strip is mounted unconditionally
-   so it remains the trigger's immediately-preceding sibling, and the updater
-   host renders nothing until an installer is downloaded and unopened — so
-   without this rule an idle rail would reserve a row of height plus the
-   container's 6px `gap` above the account, shifting the whole account area for
-   a control that is not there. `display: none` (not `height: 0`) is what drops
-   it out of flex layout so the `gap` collapses with it. */
+   `:empty` is load-bearing, not tidiness. The slot is mounted unconditionally
+   so the cluster's shape is stable, and the updater host renders nothing until
+   an installer is downloaded and unopened — so without this rule an idle
+   cluster would reserve its gap for a control that is not there.
+   `display: none` (not `width: 0`) is what drops it out of flex layout so the
+   `gap` collapses with it. */
 .entry-nav-rail__account-updater {
   display: flex;
   align-items: center;
@@ -5622,13 +6420,16 @@
   flex: 0 0 24px;
 }
 .entry-nav-rail__account-name {
-  font-size: 13px;
-  font-weight: 500;
   flex: 0 1 auto;
+  min-width: 0;
+  /* Pushes the fixed slots after it (bell, updater) to the row's far edge. */
   margin-right: auto;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
 }
 .entry-nav-rail__account-trigger svg { color: var(--text-soft); }
 /* The membership wordmark reads as a solid black mark, not a muted glyph. */
@@ -5877,6 +6678,231 @@
   top: auto;
   bottom: calc(100% + 4px);
 }
+/* Floating account module inside the credits/avatar capsule: compact trigger
+   with a downward, right-aligned menu instead of the rail-bottom upward one. */
+.entry-nav-rail__account--floating {
+  order: 0;
+  margin: 0;
+  padding-top: 0;
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+}
+/* One capsule for credits + avatar (per product: 头像和积分合并成一个胶囊).
+   The capsule owns the shared pill material; the two segments inside are
+   chrome-free click targets — the credits text jumps to the billing console,
+   the avatar opens the account menu. With no credits segment (billing
+   unavailable) the capsule collapses to a 26px circle around the avatar.
+   No padding: the avatar sits flush against the capsule border, so the shell
+   adds no visible air above or below the head (per feedback: 头像外的壳不能
+   比头像高出一圈). */
+/* Credits and the avatar read as two separate controls (per product): the
+   wrapper is a bare flex row — each child paints its own surface. */
+/* Standalone GitHub star chip in the top-right cluster, sitting between the
+   campaign badge and the account capsule. Same pill material as the capsule
+   so the three read as one row of chips. */
+.entry-top-right-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Shared cluster row height — see .entry-deepseek-campaign-badge. */
+  min-height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-strong);
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.entry-top-right-github svg {
+  color: var(--text-soft);
+}
+.entry-top-right-github:hover {
+  border-color: var(--border-strong);
+}
+
+/* Hover region + positioning context for the billing panel that hangs under
+   the credits / 升级 pill (per product: 黑色卡片在右上角的升级下边显示). The
+   anchor wraps the pill AND the panel, so the pointer crossing from one to the
+   other never leaves it. */
+.entry-top-right-credits-anchor {
+  position: relative;
+  display: inline-flex;
+  /* The cluster lays its children out in a row; this wrapper must not change
+     the pill's own box, only give it a parent. */
+  align-items: center;
+}
+
+.entry-top-right-credits-panel {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  /* Right-aligned with the pill: the cluster sits in the window's top-right
+     corner, so a left-aligned or centred panel would hang off the edge. */
+  right: 0;
+  /* The card's own width, not the pill's — the pill is as narrow as "升级" and
+     the plan row inside needs room for the tier label plus its wordmark. */
+  width: 232px;
+  /* 6px of visual gap, paid as PADDING rather than margin/offset so the strip
+     between pill and panel is still inside the anchor and the pointer can
+     cross it without arming the close timer. */
+  padding-top: 6px;
+}
+
+/* The card carries its own ink-black ground; inside the menu it also kept a
+   6px tail before the rows under it, which out here is a stray gap under a
+   floating panel. */
+.entry-top-right-credits-panel .entry-nav-rail__menu-credits {
+  margin-bottom: 0;
+  box-shadow: var(--shadow-lg);
+}
+
+.entry-top-right-account-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* The capsule holds the credits segment alone now — the avatar moved to the
+     rail — so it no longer keeps the 3px right inset that used to hug the
+     avatar circle. Padded evenly instead: 10px of ink gutter on the sides
+     (plus the 1px border); vertically the shared row height does the work, so
+     the vertical inset is 0 — a 24px credits segment plus the 1px borders
+     already fits inside 28px, and any padding here would push the capsule
+     taller than the chips beside it. */
+  /* Shared cluster row height — see .entry-deepseek-campaign-badge. */
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+/* Avatar-only trigger at the capsule's right end: a circle sized to the
+   capsule's inner height — the name/email/plan all live in the hover menu. */
+.entry-nav-rail__account--floating .entry-nav-rail__account-trigger {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+}
+.entry-nav-rail__account--floating .entry-nav-rail__account-avatar {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  font-size: 11px;
+}
+/* Credits segment, left of the avatar inside the capsule. */
+.entry-top-right-credits {
+  appearance: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Chrome-free segment inside the shared capsule — the wrapper
+     (.entry-top-right-account-pill) owns the pill material. */
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.entry-top-right-credits svg {
+  color: var(--text-soft);
+}
+/* No hover fill on the credits segment — the shared capsule stays calm;
+   the pointer cursor alone signals clickability. Needs an explicit :hover
+   override: the primitives.css `button:hover:not(:disabled)` gray fill
+   outranks the bare class rule above. */
+.entry-top-right-credits:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Free plan: the capsule stops reporting a balance and becomes the upgrade
+   CTA — saturated green ground, near-black ink and spark mark on it (per
+   product). The ground goes on the WRAPPER because that is what owns the pill
+   material; the segment inside stays chrome-free. The frosted translucency
+   goes with it: it exists to let the wash through a near-white capsule, and
+   over an opaque green it only muddies the colour. */
+.entry-top-right-account-pill--upgrade {
+  background: var(--upgrade-ground);
+  border-color: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* The svg rule needs the extra class: `.entry-top-right-credits svg` above
+   paints every glyph in this segment --text-soft at (0,2,0). */
+.entry-top-right-account-pill--upgrade .entry-top-right-credits,
+.entry-top-right-account-pill--upgrade .entry-top-right-credits svg {
+  color: var(--upgrade-ink);
+}
+
+.entry-top-right-account-pill--upgrade .entry-top-right-credits:hover:not(:disabled) {
+  background: transparent;
+  color: var(--upgrade-ink);
+}
+/* Doubled class on the container: the rail-era
+   `.entry-nav-rail__account .entry-nav-rail__account-menu` sizing rule
+   (left/right: 0, min-width: 0) sits LATER in this file at equal
+   specificity, so the floating variant needs one extra class to win. */
+.entry-nav-rail__account.entry-nav-rail__account--floating .entry-nav-rail__account-menu {
+  /* 100% is the 24px trigger row nested flush inside the capsule (1px
+     border only) — +7px keeps a ~6px visible gap below the capsule edge. */
+  top: calc(100% + 7px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  /* The containing block is now just the pill (~100px), so shrink-to-fit
+     would crush the menu into a one-word-per-line column. max-content frees
+     the width from that cap; the viewport clamp keeps it on screen. */
+  width: max-content;
+  min-width: 200px;
+  max-width: min(232px, calc(100vw - 44px));
+}
+/* Narrow floating menu: the head name must truncate instead of driving the
+   menu width (the email row below it already does). */
+.entry-nav-rail__account.entry-nav-rail__account--floating .entry-nav-rail__account-head-name {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The hover bridge spans the float gap. The rail menu opened UPWARD (bridge
+   below, top: 100%); the floating menu opens DOWNWARD, so the 6px gap to
+   cover sits ABOVE the menu. */
+.entry-nav-rail__account.entry-nav-rail__account--floating .entry-nav-rail__account-menu::before {
+  content: '';
+  position: absolute;
+  top: auto;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
 .entry-nav-rail__team-menu {
   left: 0;
   right: 0;
@@ -5920,13 +6946,28 @@
   width: auto;
   min-width: 0;
   box-sizing: border-box;
+  /* EntryNavRail measures the room left inside the rail card and sets
+     `max-height` inline (a CSS length cannot name that height). Scroll the
+     overflow rather than letting the menu run past the card's top edge. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 /* Invisible hover bridge over the 4px float gap, so moving the pointer from
-   the avatar row up into the menu never leaves the hover region. */
-.entry-nav-rail__account .entry-nav-rail__account-menu::before {
+   the avatar row up into the menu never leaves the hover region.
+
+   It hangs off the CONTAINER, not the menu (OPEND-3153): the menu is an
+   `overflow-y: auto` box, and an absolutely positioned child sitting below its
+   bottom edge extends the scrollable area by exactly its own height — 8px of
+   overflow, so a scrollbar appeared at every window height even though the
+   menu never needed one. Rising from the container's top edge (`bottom:
+   100%`) it covers the same gap plus 4px of the menu, contributes to nobody's
+   overflow, and — gated on the open state — never sits over the social row
+   above the identity row while the menu is closed. */
+.entry-nav-rail__account.is-menu-open::before {
   content: '';
   position: absolute;
-  top: 100%;
+  bottom: 100%;
   left: 0;
   right: 0;
   height: 8px;
@@ -5947,21 +6988,49 @@
   flex: 0 0 auto;
   background: var(--bg-elevated);
 }
-/* Left-aligned identity header (small avatar beside the name/email stack),
-   closed off by a dashed rule — mirrors the reference account menu. */
+/* Avatar over the name (per product: 头像和名称上下结构) rather than beside it,
+   and the stack centred on the menu card it sits in (per product: 和外边的白色
+   的卡片居中对齐) rather than ragged left. A single column, so the name and the
+   email below it keep the full menu width instead of the ~34px-narrower track
+   the avatar used to reserve — the email is the long one and it stops
+   truncating as early. */
 .entry-nav-rail__account-head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 9px;
-  row-gap: 2px;
-  align-items: center;
-  justify-items: start;
-  padding: 6px 6px 10px;
-  border-bottom: 1px dashed var(--material-separator);
+  /* The identity block is its own tinted card inset in the menu (per product:
+     头像那个模块下边是一个灰色的底, Chrome's profile menu as the reference) —
+     the grey sits UNDER the avatar/name/email, and the rows below stay on the
+     menu's plain ground. Inset, so it reads as a card rather than a banner: it
+     sits inside the menu's 6px padding on every side, with a radius one step
+     down from the menu's 12 so the two corners nest.
+     #EDEDED per product (was #F7F7F7, which at 3 steps off the menu's own
+     #fafafa was too close to read as a separate surface). Through the token
+     rather than the literal: --bg-subtle IS #ededed in light and steps to
+     #494949 in dark, so the card stays a lighter block on the darker menu
+     there instead of shipping a near-white slab. */
+  background: var(--bg-subtle);
   margin-bottom: 6px;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* The rows BELOW this block stay left-aligned — they are icon + label lines,
+     and centring them would leave their glyphs on a ragged column. Only the
+     identity block centres. */
+  text-align: center;
+  gap: 2px;
+  /* Enough air around the stack that the fill reads as a card rather than a
+     highlight bar, no more: 16/18 was the tallest thing in the menu, and the
+     menu is bounded by the rail's height (OPEND-3153 — every row has to stay
+     on screen without scrolling in a regular window; OPEND-3141 owns the
+     larger redesign of this block). */
+  padding: 12px 12px 14px;
+  /* No dashed rule any more — the card's own fill is what separates the block
+     from the rows, and a hairline along the bottom edge of a filled card reads
+     as a seam in it. */
 }
 .entry-nav-rail__account-head-avatar {
-  grid-row: 1 / span 2;
+  /* Its own row now; the 6px separates it from the name under it (the flex
+     gap above carries the name→email 2px). */
+  margin-bottom: 6px;
   width: 34px;
   height: 34px;
   border-radius: 8px;
@@ -5972,7 +7041,16 @@
   font-size: 14px;
   font-weight: 700;
 }
-.entry-nav-rail__account-head-name { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.entry-nav-rail__account-head-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .entry-nav-rail__account-head-email {
   font-size: 12px;
   color: var(--text-muted);
@@ -6005,39 +7083,54 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Text glyph standing in for the X (Twitter) icon; sized like the 19px icon
-   slot so the label column stays aligned with icon rows. */
+/* X's own mark (inline SVG — it is not in the Remix set the Icon component
+   draws from). Sized in the markup like its Discord / mail neighbours; the
+   colour rides the link so hover moves all three together. */
 .entry-nav-rail__menu-x {
-  flex: 0 0 19px;
-  text-align: center;
-  font-weight: 700;
-  color: var(--text-soft);
+  flex: 0 0 auto;
+  display: block;
+  color: inherit;
 }
-/* Icon-only social row (Discord / X) below the GitHub Star row: the labels
-   are dropped and the two links sit side by side as compact icon buttons.
-   Zero side padding keeps the first icon centered on the same column as the
-   19px icon slot of the full rows above. */
+/* Icon-only social row (Discord / X / mail, OPEND-3180): the labels are gone
+   and the three links sit side by side as equal square icon targets, one gap
+   apart. Zero side padding keeps the first icon on the same column as the
+   avatar in the identity row below. */
 .entry-nav-rail__menu-social {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .entry-nav-rail__menu-social-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 30px;
+  /* The same square the message-centre bell occupies on the identity row,
+     so the two rows share one rhythm and the 16px glyph sits 6px in — on the
+     avatar's left edge. */
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border-radius: var(--radius-md);
   color: var(--text-soft);
   text-decoration: none;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .entry-nav-rail__menu-social-btn:hover {
   background: var(--vibrancy-fill-secondary);
   color: var(--text);
 }
+/* All three marks at 16 (per product), pinned here rather than left to the
+   markup: `<Icon>` writes width/height as HTML ATTRIBUTES, which are
+   presentational hints and lose to any rule at all — so the size only holds as
+   long as nothing else in the cascade reaches these glyphs. */
 .entry-nav-rail__menu-social-btn svg,
-.entry-nav-rail__menu-social-btn .od-icon { color: inherit; }
+.entry-nav-rail__menu-social-btn .od-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: inherit;
+}
 /* GitHub 按钮附带实时 star 数时放开固定宽度，图标 + 数字并排 */
 .entry-nav-rail__menu-social-btn:has(.entry-nav-rail__menu-social-count) {
   width: auto;
@@ -6191,7 +7284,14 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   width: 100%;
   text-align: left;
 }
-.entry-nav-rail__team:hover { background: var(--bg-subtle); border-radius: var(--radius); }
+/* Same fill 首页 wears as the selected destination (OPEND-3113): the ink at
+   10%, not --bg-subtle — see `.entry-nav-rail__btn.is-active`. The switcher
+   sits directly above that row, and a flat grey next to the ink veil read as
+   two different controls in one column. */
+.entry-nav-rail__team:hover {
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  border-radius: var(--radius);
+}
 .entry-nav-rail__team-avatar--alt { background: #6c3aa6; }
 .entry-nav-rail__team-plan {
   margin-left: auto;
@@ -6804,7 +7904,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
 .entry-invite__backdrop {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--text-strong) 34%, transparent);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }
@@ -7427,229 +8527,6 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   box-shadow: 0 0 0 2px var(--bg-panel) inset;
 }
 
-/* ── Insufficient-credits upgrade dialog ── */
-.credit-upgrade {
-  position: relative;
-  width: 100%;
-  max-width: 500px;
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-  padding: 28px 28px 24px;
-  border-radius: var(--radius-lg, 16px);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  box-shadow: 0 22px 58px rgba(0, 0, 0, 0.2);
-  animation: entry-invite-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.credit-upgrade__badge {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
-  color: var(--accent-strong);
-}
-.credit-upgrade__title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-strong);
-}
-.credit-upgrade__subtitle {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-muted);
-}
-.credit-upgrade__options {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 4px 0;
-}
-.credit-upgrade__auto {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  margin: 8px 0 2px;
-}
-.credit-upgrade__payment,
-.credit-upgrade__auto-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 12px);
-  background: var(--bg-subtle);
-}
-.credit-upgrade__payment {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 13px 14px;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text-muted);
-}
-.credit-upgrade__payment-button {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 8px);
-  background: var(--bg-panel);
-  color: var(--text-strong);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 120ms, background 120ms, transform 120ms;
-}
-.credit-upgrade__payment-button:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  transform: translateY(-1px);
-}
-.credit-upgrade__auto-card {
-  padding: 14px;
-}
-.credit-upgrade__section-title {
-  margin: 0 0 14px;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-strong);
-}
-.credit-upgrade__limit-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-.credit-upgrade__limit {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 9px);
-  background: var(--bg-panel);
-  color: var(--text-strong);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color 120ms, background 120ms, color 120ms, box-shadow 120ms;
-}
-.credit-upgrade__limit:hover {
-  border-color: var(--border-strong);
-}
-.credit-upgrade__limit.is-active {
-  border-color: var(--text-strong);
-  background: var(--text-strong);
-  color: #fff;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--text-strong) 14%, transparent);
-}
-.credit-upgrade__limit--wide {
-  grid-column: span 3;
-}
-.credit-upgrade__cycle {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  margin-bottom: 4px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
-  align-self: center;
-}
-.credit-upgrade__cycle-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 120ms, color 120ms;
-}
-.credit-upgrade__cycle-tab.is-active {
-  background: var(--bg-panel);
-  color: var(--text-strong);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-.credit-upgrade__cycle-save {
-  font-size: 12px;
-  font-weight: 700;
-  color: #10b981;
-}
-.credit-upgrade__option-unit {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-left: 1px;
-}
-.credit-upgrade__option {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 8px);
-  background: var(--bg-panel);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 120ms, background 120ms;
-}
-.credit-upgrade__option:hover { border-color: var(--border-strong); }
-.credit-upgrade__option.is-active {
-  border-color: var(--accent);
-  background: var(--accent-tint, color-mix(in srgb, var(--accent) 8%, transparent));
-}
-.credit-upgrade__option-radio {
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid var(--border-strong);
-  transition: border-color 120ms, box-shadow 120ms;
-}
-.credit-upgrade__option.is-active .credit-upgrade__option-radio {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 3px var(--accent);
-}
-.credit-upgrade__option-text {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.credit-upgrade__option-label { font-size: 14px; font-weight: 600; color: var(--text-strong); }
-.credit-upgrade__option-desc { font-size: 12px; color: var(--text-muted); }
-.credit-upgrade__option-price { font-size: 14px; font-weight: 700; color: var(--text-strong); }
-.credit-upgrade__prorate {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.credit-upgrade__foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 6px;
-}
-
 /* ── Demo celebration toast (plan upgrade / credit pack) ── */
 .demo-celebrate-toast {
   position: fixed;
@@ -7935,7 +8812,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
    workspace menu meta, InviteDialog art, InlineModelSwitcher account block.
    Sourced verbatim from pre-integration 37f7510f4. ---- */
 
-/* Account row: Open Design login/plan, lifted out of the agent card so the
+/* Account row: OpenDesign login/plan, lifted out of the agent card so the
    agent name is never truncated. */
 .inline-switcher__account {
   order: 0;
@@ -7951,7 +8828,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
     border-color 120ms var(--ease-out);
 }
 
-/* The Open Design entry is also the agent selector now: hovering the clickable
+/* The OpenDesign entry is also the agent selector now: hovering the clickable
    area previews selectability, and the active agent gets the same accent
    highlight the grid rows use. */
 .inline-switcher__account:has(.inline-switcher__account-select:hover):not(.is-active) {
@@ -8024,7 +8901,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   min-width: 0;
 }
 
-/* Balance shown as a muted subtitle line under the Open Design name. Each
+/* Balance shown as a muted subtitle line under the OpenDesign name. Each
    stat is "label value"; the gap (not a literal separator) keeps them apart. */
 .inline-switcher__account-subtitle {
   display: flex;
@@ -8265,12 +9142,15 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   inset: 0;
   z-index: 400;
   display: flex;
-  /* Centered card (no blur) — a light dim keeps the palette legible over the
-     page without hazing it. */
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: color-mix(in srgb, #000 12%, transparent);
+  /* Same scrim treatment every other modal backdrop uses (per product: 所有弹窗
+     统一): the page's own blur under a dim, not a dim alone — this was the one
+     dialog scrim in the app that dimmed without blurring. */
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   animation: project-search-fade 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 @keyframes project-search-fade {

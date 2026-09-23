@@ -5,7 +5,9 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(15, 15, 15, 0.38);
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .modal {
@@ -35,7 +37,7 @@
   margin: 0;
   color: var(--text-strong);
   font-size: 16px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .close {
@@ -115,12 +117,28 @@
   grid-template-columns: auto 1fr auto;
   gap: 10px;
   align-items: center;
-  padding: 10px;
+  /* The row is a <button>, so the global primitive (styles/primitives.css)
+     hands it `height: 36px; line-height: 1; white-space: nowrap`. Two lines of
+     text plus the 28px icon need ~54px, so the box was shorter than its
+     content: the content overflowed evenly above and below, the border
+     framed only the title band, and the overflow drew over the neighbouring
+     rows' meta text (OPEND-2787). The row must size to its content, and the
+     three states below share this one box — hover and selected only recolour
+     it, so nothing shifts when a row is picked. */
+  height: auto;
+  min-height: 0;
+  /* `.list` is a column flexbox capped at 380px, and `min-height: 0` above
+     makes the row a shrinkable flex item — with a dozen projects every row
+     was squeezed to ~31px and the two lines spilled out again (OPEND-2787,
+     second pass). The row keeps its content height; the list scrolls. */
+  flex: 0 0 auto;
+  padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: transparent;
   color: var(--text);
   font: inherit;
+  line-height: normal;
   text-align: left;
   cursor: pointer;
 }
@@ -161,6 +179,7 @@
   color: var(--text-strong);
   font-size: 13.5px;
   font-weight: 600;
+  line-height: 18px;
 }
 
 .itemMeta {
@@ -169,14 +188,20 @@
   white-space: nowrap;
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 16px;
 }
 
+/* Sits in the third grid column, centred by the row's `align-items`; it is
+   shorter than the two text lines so it never sets the row's height. */
 .currentTag {
+  flex: 0 0 auto;
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 .empty {

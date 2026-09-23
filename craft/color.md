@@ -5,7 +5,7 @@ design system supplies the palette tokens; this file enforces how to
 *use* them.
 
 > Adapted from [refero_skill](https://github.com/referodesign/refero_skill)
-> (MIT). All examples reference Open Design's standard tokens
+> (MIT). All examples reference OpenDesign's standard tokens
 > (`--bg`, `--surface`, `--fg`, `--muted`, `--border`, `--accent`).
 
 ## Palette structure

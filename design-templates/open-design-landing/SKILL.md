@@ -3,11 +3,10 @@ name: open-design-landing
 description: >
   Produce a world-class single-page editorial landing site in the
   Atelier Zero visual language (Monocle / Apartamento / Études editorial
-  collage) — the same aesthetic Open Design uses for its own marketing
+  collage) — the same aesthetic OpenDesign uses for its own marketing
   surface. The agent fills a typed `inputs.json` from a brand brief,
   optionally generates 16 collage assets via gpt-image-2, then runs a
-  pure-function composer that emits a self-contained HTML file; a
-  separate path can mirror the Astro marketing site in `apps/landing-page/`.
+  pure-function composer that emits a self-contained HTML file.
   Drop-in scroll-reveal motion and a
   Headroom-style sticky nav are wired automatically.
 triggers:
@@ -71,13 +70,11 @@ inputs:
 parameters:
   output_format:
     type: enum
-    values: [standalone-html, nextjs-app, both]
+    values: [standalone-html]
     default: standalone-html
     description: >
-      `standalone-html` writes one self-contained .html (CSS inlined,
-      scripts inline, images relative). `nextjs-app` is the historical
-      enum label for cloning the Astro-based `apps/landing-page/` tree and
-      wiring the same content. `both` writes both products into the output dir.
+      Writes one self-contained .html (CSS inlined, scripts inline,
+      images relative).
   image_strategy:
     type: enum
     values: [generate, placeholder, bring-your-own]
@@ -94,13 +91,9 @@ parameters:
     description: "Provider for `image_strategy: generate`. fal.ai is faster."
 outputs:
   - path: <out>/index.html
-    when: output_format in [standalone-html, both]
     description: Self-contained HTML with Atelier Zero CSS inlined.
   - path: <out>/assets/*.png (or *.svg)
     description: 16 collage assets, generated or placeholder per strategy.
-  - path: <out>/nextjs/
-    when: output_format in [nextjs-app, both]
-    description: Astro static tree mirroring apps/landing-page (folder name is historical).
 capabilities_required:
   - file-write
   - http-fetch        # only when image_strategy=generate
@@ -121,7 +114,7 @@ Tight + Playfair Display, italic serif emphasis spans, dotted hairline
 rules, coral terminating dots, scroll-reveal motion, and 16 surreal
 collage plates.
 
-This is the canonical Open Design marketing-page recipe — the example
+This is the canonical OpenDesign marketing-page recipe — the example
 output is the very page you see at [open-design](https://github.com/nexu-io/open-design).
 
 The skill is fully **parameterized**. The agent fills one typed
@@ -184,7 +177,7 @@ The eight question groups, in order:
 | 8     | `cta` + `footer.{columns[4],mega}`                      | All         | Mega kicker is a `MixedText` like the headlines |
 
 Open [`inputs.example.json`](./inputs.example.json) for a complete
-worked example (Open Design itself).
+worked example (OpenDesign itself).
 
 ### 2. Decide the image strategy
 
@@ -240,23 +233,9 @@ self-contained HTML file. The page includes:
 - The full Atelier Zero stylesheet, inlined.
 - All section markup with `data-reveal` attributes for staggered
   scroll motion.
-- Inline IntersectionObserver script (mirrors
-  `apps/landing-page/app/_components/reveal-root.tsx`).
+- Inline IntersectionObserver script for `[data-reveal]`.
 - Inline Headroom nav script (mirrors `header.tsx`).
 - Inline GitHub star-count fetcher (auto-detects from `brand.primary_url`).
-
-### 4. (Optional) Mirror the deployable Astro site
-
-For deployable production output, **fork the `apps/landing-page/`**
-package: copy it into your workspace, align `app/page.tsx` with content
-from your `inputs.json`, and copy your `<out>/assets/*.png` into the
-paths expected by `app/image-assets.ts` / R2 URLs. Build with
-`pnpm --filter @open-design/landing-page build` for a static `out/`
-export ready for any CDN.
-
-> A future iteration may bundle a composer that emits the full
-> `apps/landing-page/` tree from `inputs.json` in one command. Until
-> then, fork-and-edit is the supported path.
 
 ---
 
@@ -285,14 +264,14 @@ design-templates/open-design-landing/
 ├── README.md                # quick-start
 ├── schema.ts                # typed inputs (single source of truth)
 ├── styles.css               # Atelier Zero stylesheet (single source of truth)
-├── inputs.example.json      # Open Design as the worked example
+├── inputs.example.json      # OpenDesign as the worked example
 ├── example.html             # canonical rendering (regenerated from inputs.example.json)
 ├── scripts/
 │   ├── compose.ts           # inputs.json + styles.css → index.html
 │   ├── imagegen.ts          # gpt-image-2 wrapper (fal.ai)
 │   └── placeholder.ts       # SVG paper-textured frames
 └── assets/
-    ├── *.png                # 16 collage plates (Open Design instance)
+    ├── *.png                # 16 collage plates (OpenDesign instance)
     ├── image-manifest.json  # slot → file/dimensions/prompt mapping
     └── imagegen-prompts.md  # human-readable prompt pack
 ```
@@ -309,12 +288,10 @@ design-templates/open-design-landing/
 - **Do not** wrap the composed HTML in a framework that injects its
   own stylesheet ordering — Atelier Zero relies on stylesheet-order
   cascade for paper texture and z-index of side rails.
-- **Do not** add a separate stylesheet file for the Astro landing-page
-  fork; copy `styles.css` verbatim into `app/globals.css` so visual parity
-  stays one-to-one.
+- **Do not** add a separate stylesheet file that reorders Atelier Zero
+  cascade; keep `styles.css` as the single visual source.
 
 ## See also
 
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — token spec.
-- [`apps/landing-page/`](../../apps/landing-page/) — deployable Astro static counterpart.
 - [`design-templates/open-design-landing-deck/`](../open-design-landing-deck/) — sibling slides skill that reuses this design system.
