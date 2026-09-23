@@ -217,6 +217,10 @@ interface Props {
   connectorOptions?: ConnectorDetail[];
   pendingPluginId: string | null;
   pendingChipId: string | null;
+  // True while Home is still choosing the composer's initial task type (first
+  // visit default, restored draft, or host handoff). The task-type picker stays
+  // disabled until then, so the commit that enables it already names the type.
+  typeSelectionPending?: boolean;
   submitDisabled?: boolean;
   // True while the submitted run is being handed to project creation. This is
   // a logical single-flight guard only: the optimistic route owns progress, so
@@ -397,6 +401,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     connectorOptions = EMPTY_CONNECTOR_OPTIONS,
     pendingPluginId,
     pendingChipId,
+    typeSelectionPending = false,
     submitDisabled = false,
     submitting = false,
     onPickPlugin,
@@ -2347,7 +2352,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             <TemplatePicker
               templates={templateChips}
               onPick={handlePickTaskChip}
-              disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
+              disabled={pluginsLoading || typeSelectionPending || pendingChipId !== null || pendingPluginId !== null}
               activeChipId={activeChipId}
               labelFor={(id) => homeHeroChipLabel(id, t)}
             />
