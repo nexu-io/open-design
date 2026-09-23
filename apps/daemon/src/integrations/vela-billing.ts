@@ -72,7 +72,9 @@ export function parseBillingPreflight(
       !plan || plan.workspaceId !== workspaceId || !date(plan.generatedAt) ||
       typeof plan.eligible !== 'boolean' ||
       (plan.tier !== null && !['go', 'plus', 'pro', 'max'].includes(plan.tier)) ||
-      !Array.isArray(plan.windows) || !plan.windows.every((w) =>
+      !Array.isArray(plan.windows) ||
+      (raw.funding === 'coding_plan' && plan.windows.length === 0) ||
+      !plan.windows.every((w) =>
           typeof w.policyId === 'string' && w.policyId.length > 0 &&
           Number.isSafeInteger(w.durationSeconds) && w.durationSeconds > 0 &&
           ['activity_triggered', 'anchored_recurring'].includes(w.resetMode) &&

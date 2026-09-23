@@ -280,10 +280,13 @@ export async function hasAmrFundingRecovered(
     includePreflight: true,
   }).catch(() => null);
   if (!snapshot) return false;
-  if (snapshot.preflight)
-    return (
-      snapshot.preflight.funding === 'wallet' ||
-      (snapshot.preflight.funding === 'coding_plan' && snapshot.preflight.modelCovered === true)
+  if (snapshot.preflight) {
+    const { funding, modelCovered, codingPlan } = snapshot.preflight;
+    return funding === 'wallet' || Boolean(
+      funding === 'coding_plan' && modelCovered === true && codingPlan?.eligible &&
+      codingPlan.windows?.length > 0 && codingPlan.windows.every((window) =>
+        /^\d+$/.test(window.remainingCredits) && BigInt(window.remainingCredits) > 0n),
     );
+  }
   return (amrWalletBalanceUsd(snapshot) ?? 0) > 0;
 }

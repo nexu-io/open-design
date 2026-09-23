@@ -85,6 +85,18 @@ describe('Vela billing preflight adapter', () => {
       ).toBeNull();
     }
   });
+  it('rejects coding-plan funding without any quota windows', () => {
+    const emptyPlan = { ...preview, codingPlan: { ...preview.codingPlan, windows: [] } };
+    expect(parseBillingPreflight(JSON.stringify(emptyPlan), 'ws', 'model')).toBeNull();
+  });
+  it.each(['wallet', 'gateway'])('preserves an empty pool with %s funding', (funding) => {
+    const emptyPlan = {
+      ...preview,
+      funding,
+      codingPlan: { ...preview.codingPlan, eligible: false, tier: null, windows: [] },
+    };
+    expect(parseBillingPreflight(JSON.stringify(emptyPlan), 'ws', 'model')).toEqual(emptyPlan);
+  });
   it('preserves authorization failures', async () => {
     await expect(
       fetchVelaBillingPreflight('ws', null, {

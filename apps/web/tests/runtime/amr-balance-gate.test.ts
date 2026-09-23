@@ -458,6 +458,22 @@ describe('amrBalanceGateFromMemory', () => {
 
 describe('funding recovery', () => {
   const scope = { workspaceType: 'team' as const, workspaceId: 'ws', workspaceMemberId: 'member' };
+  const codingPlan = {
+    workspaceId: 'ws',
+    generatedAt: new Date().toISOString(),
+    eligible: true,
+    tier: 'go',
+    windows: [{
+      policyId: '5h',
+      durationSeconds: 18_000,
+      resetMode: 'activity_triggered',
+      usedCredits: '0',
+      remainingCredits: '100',
+      limitCredits: '100',
+      windowStart: null,
+      resetsAt: null,
+    }],
+  };
   it.each([
     { funding: 'coding_plan', modelCovered: true, recovered: true },
     { funding: 'wallet', modelCovered: false, recovered: true },
@@ -466,12 +482,27 @@ describe('funding recovery', () => {
   ])('requires positive funding evidence: $funding / $modelCovered', async ({ funding, modelCovered, recovered }) => {
     const fetcher = vi.fn(async (_url: string) => new Response(JSON.stringify({
       ...authoritativeWorkspaceBillingResponse('ws', 'member', '0'),
-      preflight: { workspaceId: 'ws', workspaceMemberId: 'member', modelId: 'model', generatedAt: new Date().toISOString(), funding, modelCovered },
+      preflight: { workspaceId: 'ws', workspaceMemberId: 'member', modelId: 'model', generatedAt: new Date().toISOString(), funding, modelCovered, codingPlan },
     })));
     vi.stubGlobal('fetch', fetcher);
     expect(await hasAmrFundingRecovered(scope, 'model')).toBe(recovered);
     expect(String(fetcher.mock.calls[0]?.[0])).toContain('includePreflight=1');
     expect(String(fetcher.mock.calls[0]?.[0])).toContain('modelId=model');
+  });
+  it.each([
+    { ...codingPlan, windows: [] },
+    { ...codingPlan, eligible: false },
+    { ...codingPlan, windows: [{ ...codingPlan.windows[0], remainingCredits: '0' }] },
+  ])('does not recover without usable coding-plan quota', async (plan) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      ...authoritativeWorkspaceBillingResponse('ws', 'member', '0'),
+      preflight: {
+        workspaceId: 'ws', workspaceMemberId: 'member', modelId: 'model',
+        generatedAt: new Date().toISOString(), funding: 'coding_plan', modelCovered: true,
+        codingPlan: plan,
+      },
+    }))));
+    expect(await hasAmrFundingRecovered(scope, 'model')).toBe(false);
   });
   it('does not recover on old capability or a mismatched model/member', async () => {
     for (const preflight of [undefined,
