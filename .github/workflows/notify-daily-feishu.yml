@@ -93,8 +93,8 @@ jobs:
     uses: ./.github/workflows/release-beta.yml
     secrets: inherit
     with:
-      enable_mac_arm64: true
-      enable_win_x64: true
+      profile: publish
+      targets: all
       force: ${{ needs.resolve.outputs.force == 'true' }}
       promote: ${{ needs.resolve.outputs.promote == 'true' }}
       ref: ${{ needs.resolve.outputs.ref }}

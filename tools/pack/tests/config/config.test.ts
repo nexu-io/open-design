@@ -85,6 +85,23 @@ describe("resolveToolPackConfig win build target", () => {
   });
 });
 
+describe("resolveToolPackConfig payload profile", () => {
+  it("defaults to the complete payload", () => {
+    expect(resolveToolPackConfig("mac", { namespace: "payload-full" }).payloadProfile).toBe("full");
+  });
+
+  it("accepts only the isolated without-web-daemon probe", () => {
+    expect(resolveToolPackConfig("mac", {
+      namespace: "payload-probe",
+      payloadProfile: "without-web-daemon",
+    }).payloadProfile).toBe("without-web-daemon");
+    expect(() => resolveToolPackConfig("mac", {
+      namespace: "payload-invalid",
+      payloadProfile: "desktop-only",
+    })).toThrow(/unsupported --payload-profile value/);
+  });
+});
+
 describe("resolveToolPackConfig cache root", () => {
   it("keeps the default cache outside custom tools-pack roots", () => {
     const config = resolveToolPackConfig("win", {

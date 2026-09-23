@@ -311,8 +311,9 @@ describe("release workflows", () => {
   });
 
   it("requires Vela CLI for every beta desktop packaging target", async () => {
-    const [beta, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, desktopUpdater, installUnsafeDmg] = await Promise.all([
+    const [beta, betaExecutionPlan, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, desktopUpdater, installUnsafeDmg] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/scripts/release/execution_plan.py", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/src/metadata/prepare-stable.ts", import.meta.url), "utf8"),
@@ -343,14 +344,14 @@ describe("release workflows", () => {
     expect(countOccurrences(macX64, "--require-vela-cli")).toBe(1);
     expect(countOccurrences(win, "--require-vela-cli")).toBe(2);
     expect(mac.match(/RELEASE_ARTIFACT_MODE: dmg-and-payload/g)?.length ?? 0).toBe(2);
-    expect(macX64.match(/RELEASE_ARTIFACT_MODE: \$\{\{ inputs\.mac_x64_target == 'all' && 'all' \|\| 'dmg-and-payload' \}\}/g)?.length ?? 0).toBe(2);
+    expect(macX64.match(/RELEASE_ARTIFACT_MODE: \$\{\{ fromJSON\(needs\.release_prepare\.outputs\.execution_plan\)\.platforms\.mac_x64\.target == 'all' && 'all' \|\| 'dmg-and-payload' \}\}/g)?.length ?? 0).toBe(2);
     expect(macX64.match(/RELEASE_REPORT_DIR: \$\{\{ runner\.temp \}\}\/release-report\/mac_x64/g)?.length ?? 0).toBe(2);
     expect(macX64).toContain("RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_x64-report.zip");
     expect(mac).toContain("exec tools-pack mac package");
     expect(mac).toContain("build_args+=(--signed --notarize)");
     expect(mac).toContain("Build beta mac_arm64 update fixture");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_arm64_update_fixture.outputs.update_build_json_path }}");
-    expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}");
+    expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_arm64.smokeMode == 'full' && fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_arm64.updateMetadataUrl == '' && fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_arm64.updateTargetVersion == '' && 'tools-serve' || '' }}");
     expect(mac).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
     expect(macX64).toContain('"$RELEASE_EXECUTOR_ROOT/pack/dist/index.mjs" mac package');
     expect(macX64).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
@@ -362,15 +363,14 @@ describe("release workflows", () => {
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}"');
     expect(buildMac).not.toContain("::warning::Expected Electron framework symlink");
     expect(beta).not.toContain("REQUIRE_VELA_CLI: \"true\"");
-    expect(beta).toContain("release-beta publish requires win_x64_target=nsis or all");
-    expect(beta).toContain("mac_arm64_update_metadata_url:");
-    expect(beta).toContain("win_x64_update_metadata_url:");
-    expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
-    expect(beta).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
-    expect(beta).toContain("POSTHOG_KEY: ${{ inputs.publish && secrets.POSTHOG_KEY || '' }}");
-    expect(beta).toContain("POSTHOG_HOST: ${{ inputs.publish && vars.POSTHOG_HOST || '' }}");
-    expect(beta).toContain("POSTHOG_CLI_API_KEY: ${{ inputs.publish && secrets.POSTHOG_CLI_API_KEY || '' }}");
-    expect(beta).toContain("POSTHOG_CLI_PROJECT_ID: ${{ inputs.publish && vars.POSTHOG_CLI_PROJECT_ID || '' }}");
+    expect(betaExecutionPlan).toContain("publishing win_x64 requires target nsis or all");
+    expect(betaExecutionPlan).toContain('"updateMetadataUrl": ""');
+    expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_arm64.updateMetadataUrl }}");
+    expect(beta).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.win_x64.updateMetadataUrl }}");
+    expect(beta).toContain("POSTHOG_KEY: ${{ inputs.profile == 'publish' && secrets.POSTHOG_KEY || '' }}");
+    expect(beta).toContain("POSTHOG_HOST: ${{ inputs.profile == 'publish' && vars.POSTHOG_HOST || '' }}");
+    expect(beta).toContain("POSTHOG_CLI_API_KEY: ${{ inputs.profile == 'publish' && secrets.POSTHOG_CLI_API_KEY || '' }}");
+    expect(beta).toContain("POSTHOG_CLI_PROJECT_ID: ${{ inputs.profile == 'publish' && vars.POSTHOG_CLI_PROJECT_ID || '' }}");
     expect(beta).not.toContain("publish-beta-metadata.ts");
     expect(beta).not.toContain("verify-beta-metadata.ts");
     expect(beta).not.toContain("summary-beta.ts");
@@ -420,7 +420,7 @@ describe("release workflows", () => {
     expect(desktopUpdater).toContain('execFileAsync("xattr", ["-dr", attribute, input.destinationRoot])');
     expect(desktopUpdater).toContain("com.apple.macl");
     expect(installUnsafeDmg).toContain("com.apple.macl");
-    expect(win).toContain("WIN_INCLUDE_ZIP: ${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}");
+    expect(win).toContain("WIN_INCLUDE_ZIP: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.win_x64.target == 'all' || fromJSON(needs.release_prepare.outputs.execution_plan).platforms.win_x64.target == 'zip' }}");
     expect(prepareMac).not.toContain("required RELEASE_ASSET_SUFFIX");
     expect(prepareMac).toContain('RELEASE_ASSET_SUFFIX="${RELEASE_ASSET_SUFFIX:-}"');
     expect(prepareWin).toContain("[AllowEmptyString()]");
@@ -874,7 +874,7 @@ describe("release workflows", () => {
 
     // beta and prerelease are validation lanes and stay dispatch-driven, so an
     // operator can aim a build at feature-test or test.
-    expect(beta).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
+    expect(beta).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).release.amrProfile }}");
     expect(prerelease).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
     expect(beta).toContain(
       "(inputs.amr_profile == 'prod' || inputs.amr_profile == '') && secrets.VELA_WEB_URL_PROD || ''",

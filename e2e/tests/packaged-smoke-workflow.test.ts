@@ -71,6 +71,7 @@ const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py"
 const convergenceScriptPath = join(workspaceRoot, ".github", "scripts", "convergence.py");
 const r2PythonLibPath = join(workspaceRoot, ".github", "scripts", "lib", "r2.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
+const releaseBetaExecutionPlanPath = join(workspaceRoot, ".github", "scripts", "release", "execution_plan.py");
 const dailyBetaRecoveryScriptPath = join(
   workspaceRoot,
   "tools/release/src/metadata/recover-beta.ts",
@@ -186,6 +187,30 @@ function parseGithubOutput(raw: string): Record<string, string> {
         return [line.slice(0, sep), line.slice(sep + 1)];
       }),
   );
+}
+
+async function runBetaExecutionPlan(
+  inputs: Record<string, string | boolean>,
+  requests: Record<string, unknown> = {},
+  contribution = true,
+): Promise<Record<string, unknown>> {
+  const root = await mkdtemp(join(tmpdir(), "od-release-execution-plan-"));
+  const output = join(root, "output");
+  try {
+    await execFileAsync("python3", [releaseBetaExecutionPlanPath, "github-output"], {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        GITHUB_OUTPUT: output,
+        RELEASE_CONTRIBUTION: String(contribution),
+        RELEASE_INPUTS_JSON: JSON.stringify(inputs),
+        RELEASE_REQUESTS_JSON: JSON.stringify(requests),
+      },
+    });
+    return JSON.parse(parseGithubOutput(await readFile(output, "utf8")).execution_plan!) as Record<string, unknown>;
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
 }
 
 async function gitPatchId(mode: "--stable" | "--verbatim", diff: string): Promise<string> {
@@ -2299,18 +2324,19 @@ process.stdin.on("end", () => {
   });
 
   it("[P2] defaults beta mac delivery to notarized artifacts", async () => {
-    const [beta, prerelease] = await Promise.all([
+    const [beta, prerelease, plan] = await Promise.all([
       readFile(releaseBetaWorkflowPath, "utf8"),
       readFile(releasePrereleaseWorkflowPath, "utf8"),
+      runBetaExecutionPlan({ profile: "publish", targets: "default", promote: true }),
     ]);
     const defaults = (workflow: string, input: string) =>
       [...workflow.matchAll(new RegExp(`^      ${input}:\\n(?:(?:        .*|)\\n)*?        default: ([^\\n]+)`, "gm"))]
         .map((match) => match[1]?.replaceAll('"', ""));
-    expect(defaults(beta, "enable_mac_x64")).toEqual(defaults(prerelease, "enable_mac_x64"));
+    expect((plan.platforms as Record<string, Record<string, unknown>>).mac_x64!.enabled).toBe(true);
     for (const platform of ["mac_arm64", "mac_x64"]) {
-      expect(defaults(beta, `${platform}_sign_mode`)).toEqual(["notarize", "notarize"]);
-      expect(defaults(beta, `${platform}_target`)).toEqual(["all", "all"]);
-      expect(defaults(beta, `${platform}_smoke_mode`)).toEqual(["core", "core"]);
+      expect((plan.platforms as Record<string, Record<string, unknown>>)[platform]).toMatchObject({
+        enabled: true, signMode: "notarize", smokeMode: "core", target: "all",
+      });
     }
     expect(defaults(prerelease, "mac_sign_mode")).toEqual(["sign-only", "sign-only"]);
     expect(beta).toContain("run: pnpm exec tools-release prepare beta");
@@ -2319,9 +2345,9 @@ process.stdin.on("end", () => {
 
   it("[P1] defaults beta mac compression to the measured fast path and uploads identical mac sourcemaps once", async () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
-    expect(workflow.match(/^      mac_compression:$/gm)).toHaveLength(2);
-    expect(workflow.match(/^        default: store$/gm)).toHaveLength(2);
-    expect(workflow.match(/--mac-compression "\$\{\{ inputs\.mac_compression \}\}"/g)).toHaveLength(3);
+    const plan = await runBetaExecutionPlan({ profile: "publish", targets: "default", promote: true });
+    expect((plan.release as Record<string, unknown>).macCompression).toBe("store");
+    expect(workflow.match(/--mac-compression "\$\{\{ fromJSON\(needs\.release_prepare\.outputs\.execution_plan\)\.release\.macCompression \}\}"/g)).toHaveLength(3);
     expect(workflow).not.toContain("--mac-compression normal");
 
     const arm = betaPlatformBuild(workflow, "mac_arm64");
@@ -2329,7 +2355,7 @@ process.stdin.on("end", () => {
     const windows = betaPlatformBuild(workflow, "win_x64");
     expect(arm).toContain('OD_WEB_SOURCEMAP_UPLOAD: "true"');
     expect(arm).toContain('OD_WEB_SOURCEMAP_UPLOAD: "false"');
-    expect(intel).toContain("OD_WEB_SOURCEMAP_UPLOAD: ${{ !inputs.enable_mac_arm64 }}");
+    expect(intel).toContain("OD_WEB_SOURCEMAP_UPLOAD: ${{ !fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_arm64.enabled }}");
     expect(windows).not.toContain("OD_WEB_SOURCEMAP_UPLOAD");
   });
 
@@ -2350,7 +2376,7 @@ process.stdin.on("end", () => {
       const job = betaPlatformBuild(workflow, target);
       if (target === "mac_x64" || target === "win_x64") {
         expect(job).toContain('name: "[prepare] Full smoke dependencies"');
-        expect(job).toContain("if: ${{ (inputs." + target + "_smoke_mode == 'full') }}");
+        expect(job).toContain(`if: \${{ (fromJSON(needs.release_prepare.outputs.execution_plan).platforms.${target}.smokeMode == 'full') }}`);
         expect(job).toContain("uses: ./.github/actions/setup-workspace");
         expect(job).toContain(target === "mac_x64"
           ? '"$RELEASE_EXECUTOR_ROOT/pack/dist/index.mjs" mac package'
@@ -2595,7 +2621,7 @@ process.stdin.on("end", () => {
     expect(releasePrepare.indexOf("pnpm exec tools-release prepare beta")).toBeLessThan(
       releasePrepare.indexOf("pnpm exec tools-release prepare-release-note"),
     );
-    expect(releasePrepare).toContain("if: ${{ inputs.publish }}\n        env:\n          RELEASE_CHANNEL: beta");
+    expect(releasePrepare).toContain("if: ${{ fromJSON(steps.execution_plan.outputs.execution_plan).release.publish }}\n        env:\n          RELEASE_CHANNEL: beta");
     expect(workflowJob(workflow, "source_mac_arm64")).toContain("- release_prepare");
     expect(workflowJob(workflow, "build_mac_arm64")).toContain("- release_prepare");
     expect(workflow).not.toContain("  plan_tests:");
@@ -2607,9 +2633,9 @@ process.stdin.on("end", () => {
     for (const target of ["mac_arm64", "mac_x64", "win_x64"]) {
       const job = workflow.slice(workflow.indexOf(`\n  smoke_${target}:`)).split(/\n  [a-z_0-9]+:/)[1];
       expect(job).toContain("always() && !cancelled()");
-      expect(job).toContain(`inputs.${target}_smoke_mode == 'core'`);
+      expect(job).toContain(`needs.release_prepare.outputs.run_smoke_${target} == 'true'`);
       expect(job).toContain("ref: ${{ needs.release_prepare.outputs.commit }}");
-      expect(job).toContain("inputs.publish && needs.publish.outputs.version_metadata_url != ''");
+      expect(job).toContain("needs.publish.outputs.version_metadata_url != ''");
       expect(job).toContain("tools-release artifact resolve");
       expect(job).toContain("tools-pack stage-artifact");
       expect(job).toContain("EXPECTED_CHANNEL: beta");
@@ -2623,27 +2649,37 @@ process.stdin.on("end", () => {
     expect(workflow).not.toMatch(/release-beta-(tests|smoke)\.yml/);
   });
 
-  it("[P1] preserves beta publish and build-only inputs while allowing a zero-target test run", async () => {
+  it("[P1] freezes compact beta intent into job gates while allowing a tests-only profile", async () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
-    expect(workflow).toContain("      publish:\n        description:");
-    expect(workflow).not.toContain("delivery_mode:");
+    const dispatch = sectionBetween(workflow, "  workflow_dispatch:", "  workflow_call:");
+    expect([...dispatch.matchAll(/^      ([a-z_]+):$/gm)].map((match) => match[1])).toEqual([
+      "profile", "targets", "ref", "release_version", "force", "amr_profile", "plan_overrides",
+    ]);
+    for (const retired of ["enable_mac_arm64", "enable_mac_x64", "enable_win_x64", "publish", "mac_compression"]) {
+      expect(dispatch).not.toContain(`      ${retired}:`);
+    }
     const prepare = workflowJob(workflow, "release_prepare");
-    expect(prepare).toContain('if [ "${{ inputs.publish }}" = "true" ] && [ "${{ inputs.enable_mac_arm64 }}" != "true" ]');
+    expect(prepare).toContain(".github/scripts/release/execution_plan.py");
+    expect(prepare).toContain("execution_plan: ${{ steps.execution_plan.outputs.execution_plan }}");
+    const validatePlan = await runBetaExecutionPlan({ profile: "validate", targets: "default", promote: true });
+    expect((validatePlan.release as Record<string, unknown>).publish).toBe(false);
+    expect(Object.values(validatePlan.platforms as Record<string, Record<string, unknown>>).every((item) => item.enabled === false)).toBe(true);
     const tests = workflowJob(workflow, "test");
     expect(tests).toContain("needs: [release_prepare, common]");
     expect(tests).not.toContain("- build_mac_arm64");
     expect(tests).not.toContain("- publish");
     for (const target of ["mac_arm64", "mac_x64", "win_x64"]) {
-      expect(workflowJob(workflow, `source_${target}`)).toContain(`inputs.enable_${target}`);
-      expect(workflowJob(workflow, `build_${target}`)).toContain(`inputs.enable_${target}`);
+      expect(workflowJob(workflow, `source_${target}`)).toContain(`needs.release_prepare.outputs.run_source_${target} == 'true'`);
+      expect(workflowJob(workflow, `build_${target}`)).toContain(`needs.release_prepare.outputs.run_build_${target} == 'true'`);
     }
     const publish = workflowJob(workflow, "publish");
-    expect(publish).toContain("inputs.publish &&");
+    expect(publish).toContain("needs.release_prepare.outputs.run_publish == 'true'");
+    expect(publish).toContain("Validate planned platform results");
     expect(publish).not.toContain("- test");
     for (const target of ["mac_arm64", "mac_x64", "win_x64"]) {
       const smoke = workflowJob(workflow, `smoke_${target}`);
       expect(smoke).toContain("needs: [release_prepare, publish, test]");
-      expect(smoke).toContain("inputs.publish");
+      expect(smoke).toContain(`needs.release_prepare.outputs.run_smoke_${target} == 'true'`);
     }
   });
 
@@ -2657,17 +2693,31 @@ process.stdin.on("end", () => {
 
   it("[P2] confines the mac x64 DMG probe to nonpublishing diagnostics", async () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
-    expect(workflow).toContain("      mac_x64_dmg_probe:");
-    expect(workflow).toContain("      mac_x64_dmg_preflight:");
-    expect(workflow).toContain("        default: false");
+    const plan = await runBetaExecutionPlan({ profile: "mac-x64-dmg-probe", targets: "default", promote: true });
+    expect(plan).toMatchObject({
+      profile: "mac-x64-dmg-probe",
+      release: { publish: false, promote: false },
+      platforms: { mac_x64: { enabled: true, dmgProbe: true, dmgPreflight: true, smokeMode: "skip" } },
+      jobs: { test: false, build_mac_x64: true, publish: false },
+    });
     const build = workflowJob(workflow, "build_mac_x64");
-    expect(build).toContain("- name: Prepare mac_x64 DMG probe\n        if: ${{ inputs.mac_x64_dmg_probe && !inputs.publish }}");
-    expect(build).toContain("- name: Replay mac_x64 DMG copy\n        if: ${{ inputs.mac_x64_dmg_probe && !inputs.publish && steps.mac_x64_tools_pack_build.outcome == 'success' }}");
+    expect(build).toContain("- name: Prepare mac_x64 DMG probe\n        if: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_x64.dmgProbe && !fromJSON(needs.release_prepare.outputs.execution_plan).release.publish }}");
+    expect(build).toContain("- name: Replay mac_x64 DMG copy\n        if: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_x64.dmgProbe && !fromJSON(needs.release_prepare.outputs.execution_plan).release.publish && steps.mac_x64_tools_pack_build.outcome == 'success' }}");
     expect(build).toContain("--count 3 --filesystem-control");
     expect(build).toContain("dmg-probe/replay-results.jsonl");
     expect(build).toContain("dmg-probe/phases.jsonl");
     expect(build).toContain("dmg-probe/preflight.jsonl");
     expect(build).toContain("dmg-probe/fs-usage*.log");
+    const payloadPlan = await runBetaExecutionPlan({
+      profile: "mac-x64-payload-probe", targets: "default", promote: true,
+    });
+    expect(payloadPlan).toMatchObject({
+      release: { publish: false, promote: false },
+      platforms: { mac_x64: { enabled: true, payloadProfile: "without-web-daemon", smokeMode: "skip" } },
+      jobs: { test: false, build_mac_x64: true, publish: false },
+    });
+    expect(build).toContain('--payload-profile "${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_x64.payloadProfile }}"');
+    expect(build).toContain("Preserve nonpublishing mac_x64 artifacts");
   });
 
   it("[P2] excludes Linux from stable planning, builds, outputs, and publication", async () => {
@@ -2717,7 +2767,7 @@ process.stdin.on("end", () => {
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: mac_arm64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: win_x64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: mac_x64");
-    expect(releaseBetaWorkflow).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}");
+    expect(releaseBetaWorkflow).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_arm64.smokeMode == 'full' && fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_arm64.updateMetadataUrl == '' && fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_arm64.updateTargetVersion == '' && 'tools-serve' || '' }}");
     const betaWinJob = betaPlatformBuild(releaseBetaWorkflow, "win_x64");
     expect(betaWinJob).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(betaWinJob).toContain('"$env:RELEASE_EXECUTOR_ROOT\\pack\\dist\\index.mjs", "win", "build"');
@@ -2798,14 +2848,15 @@ process.stdin.on("end", () => {
     const manualSteps = workflow.split("\n      - name: ").filter((step) => step.startsWith("Upload") && step.includes("for manual distribution\n"));
     expect(manualSteps).toHaveLength(2);
     for (const step of manualSteps) {
-      expect(step).toContain("!cancelled() && !inputs.publish");
+      expect(step).toContain("!cancelled() && !fromJSON(needs.release_prepare.outputs.execution_plan).release.publish");
       expect(step).toContain("uses: actions/upload-artifact");
       expect(step).not.toContain("RELEASE_STORAGE");
       expect(step).not.toContain("tools-release");
     }
     for (const target of ["mac_arm64", "mac_x64", "win_x64"]) {
       const smoke = workflow.slice(workflow.indexOf("\n  smoke_" + target + ":")).split(/\n  [a-z_0-9]+:/)[1]!;
-      expect(smoke).toContain("inputs.publish && needs.publish.outputs.version_metadata_url != ''");
+      expect(smoke).toContain(`needs.release_prepare.outputs.run_smoke_${target} == 'true'`);
+      expect(smoke).toContain("needs.publish.outputs.version_metadata_url != ''");
       expect(smoke).toContain("tools-pack stage-artifact");
     }
   });
@@ -3004,7 +3055,7 @@ process.stdin.on("end", () => {
     expect(betaWorkflow).toContain(
       "RELEASE_BRANCH: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}",
     );
-    expect(publisherGuard).toContain("if: ${{ inputs.publish }}");
+    expect(publisherGuard).toContain("if: ${{ fromJSON(steps.execution_plan.outputs.execution_plan).release.publish }}");
     expect(publisherGuard).toContain('built_sha="$(git rev-parse HEAD)"');
     expect(publisherGuard).toContain(
       'main_sha="$(git ls-remote origin refs/heads/main | awk \'{print $1}\')"',
@@ -3019,9 +3070,9 @@ process.stdin.on("end", () => {
     expect(betaWorkflow).not.toContain("OPEN_DESIGN_RECOVER_FOREIGN_BETA");
     expect(metadataJob).toContain("branch: ${{ steps.identity.outputs.branch }}");
     expect(metadataJob).toContain("commit: ${{ steps.identity.outputs.commit }}");
-    expect(metadataJob).toContain(`promote: \${{ inputs.promote || !contains(toJSON(inputs), '"promote":') }}`);
-    expect(betaWorkflow).toContain("value: ${{ inputs.mac_arm64_smoke_mode == 'core' && jobs.smoke_mac_arm64.outputs.smoke_result || jobs.build_mac_arm64.outputs.smoke_result }}");
-    expect(betaWorkflow).toContain("value: ${{ inputs.win_x64_smoke_mode == 'core' && jobs.smoke_win_x64.outputs.smoke_result || jobs.build_win_x64.outputs.smoke_result }}");
+    expect(metadataJob).toContain("promote: ${{ fromJSON(steps.execution_plan.outputs.execution_plan).release.promote }}");
+    expect(betaWorkflow).toContain("value: ${{ jobs.release_prepare.outputs.mac_arm64_smoke_mode == 'core' && jobs.smoke_mac_arm64.outputs.smoke_result || jobs.build_mac_arm64.outputs.smoke_result }}");
+    expect(betaWorkflow).toContain("value: ${{ jobs.release_prepare.outputs.win_x64_smoke_mode == 'core' && jobs.smoke_win_x64.outputs.smoke_result || jobs.build_win_x64.outputs.smoke_result }}");
     expect(betaWorkflow).toContain(
       "value: ${{ jobs.publish.outputs.mac_arm64_url || jobs.build_mac_arm64.outputs.url }}",
     );
@@ -3044,7 +3095,7 @@ process.stdin.on("end", () => {
     expect(winJob).toContain("id: win_x64_platform_outputs");
 
     const publishJob = workflowJob(betaWorkflow, "publish");
-    expect(publishJob).toContain("needs.release_prepare.outputs.promote == 'true'");
+    expect(publishJob).toContain("needs.release_prepare.outputs.run_publish == 'true'");
     expect(publishJob).not.toContain("actions/download-artifact");
     expect(publishJob).not.toContain("Cleanup workflow artifacts");
     for (const target of ["mac_arm64", "mac_x64", "win_x64"]) {
@@ -3713,7 +3764,7 @@ process.stdin.on("end", () => {
     const macX64Job = betaPlatformBuild(workflow, "mac_x64");
     const prepareStep = sectionBetween(macX64Job, "      - name: Prepare mac_x64 assets", "      - name: Publish mac_x64 platform");
     const publishStep = macX64Job.slice(macX64Job.indexOf("      - name: Publish mac_x64 platform"));
-    const artifactMode = "RELEASE_ARTIFACT_MODE: ${{ inputs.mac_x64_target == 'all' && 'all' || 'dmg-and-payload' }}";
+    const artifactMode = "RELEASE_ARTIFACT_MODE: ${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_x64.target == 'all' && 'all' || 'dmg-and-payload' }}";
 
     expect(prepareStep).toContain(artifactMode);
     expect(publishStep).toContain(artifactMode);
@@ -4241,14 +4292,22 @@ function expectChannelWorkflowNamespaces(
 }
 
 function expectWindowsUpdaterSmokeContract(workflow: string, channel: "beta" | "preview" | "prerelease" | "stable"): void {
-  expect(workflow).toContain("win_x64_smoke_mode:");
-  expect(workflow).toContain("win_x64_update_metadata_url:");
-  expect(workflow).toContain("win_x64_update_target_version:");
-  expect(workflow).toMatch(/win_x64_smoke_mode:[\s\S]*?options:[\s\S]*?- skip[\s\S]*?- core[\s\S]*?- full[\s\S]*?default: core/);
-  expect(workflow).toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.win_x64_smoke_mode }}");
-  expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' && 'tools-serve' || '' }}");
-  expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
-  expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}");
+  if (channel === "beta") {
+    const win = "fromJSON(needs.release_prepare.outputs.execution_plan).platforms.win_x64";
+    expect(workflow).toContain(`OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: \${{ ${win}.smokeMode }}`);
+    expect(workflow).toContain(`OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: \${{ ${win}.smokeMode == 'full' && ${win}.updateMetadataUrl == '' && ${win}.updateTargetVersion == '' && 'tools-serve' || '' }}`);
+    expect(workflow).toContain(`OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: \${{ ${win}.updateMetadataUrl }}`);
+    expect(workflow).toContain(`OD_PACKAGED_E2E_WIN_UPDATE_VERSION: \${{ ${win}.updateTargetVersion }}`);
+  } else {
+    expect(workflow).toContain("win_x64_smoke_mode:");
+    expect(workflow).toContain("win_x64_update_metadata_url:");
+    expect(workflow).toContain("win_x64_update_target_version:");
+    expect(workflow).toMatch(/win_x64_smoke_mode:[\s\S]*?options:[\s\S]*?- skip[\s\S]*?- core[\s\S]*?- full[\s\S]*?default: core/);
+    expect(workflow).toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.win_x64_smoke_mode }}");
+    expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' && 'tools-serve' || '' }}");
+    expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
+    expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}");
+  }
   if (channel === "stable") {
     expect(workflow).toContain("Build stable win_x64 update fixture");
     expect(workflow).toContain('full Windows stable smoke requires stable version x.y.z');
