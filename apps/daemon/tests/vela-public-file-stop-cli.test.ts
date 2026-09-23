@@ -12,6 +12,8 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN).each([200, 403])('runs production stop 
   if (!binary) throw new Error('explicit test CLI required');
   const root = await mkdtemp(path.join(tmpdir(), 'od-go-stop-'));
   const requests: Array<{ url: string | undefined; method: string | undefined; bearer: string | undefined; workspace: string | string[] | undefined; body: string }> = [];
+  const resourceId = 'project-file-' + Buffer.from(JSON.stringify(['workspace', 'owner', 'project', 'index.html'])).toString('base64url');
+  let reason = '';
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
@@ -21,7 +23,8 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN).each([200, 403])('runs production stop 
       res.end(JSON.stringify({ items: [{ workspaceId: 'workspace', workspaceName: 'W', workspaceType: 'personal', workspaceMemberId: 'owner', role: 'member', memberStatus: 'active', lifecycleState: 'active' }] }));
     } else {
       res.statusCode = status;
-      res.end(JSON.stringify(status === 200 ? { status: 'stopped' } : { error: 'forbidden', message: 'synthetic private diagnostic' }));
+      if (status === 200) reason = req.method === 'DELETE' ? 'source_deleted' : 'stopped_by_owner';
+      res.end(JSON.stringify(status === 200 ? { resource: { id: resourceId, teamId: 'workspace', ownerMemberId: 'owner', deletedAt: '2026-09-23T00:00:00Z' } } : { error: 'forbidden', message: 'synthetic private diagnostic' }));
     }
   });
   try {
@@ -37,8 +40,9 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN).each([200, 403])('runs production stop 
     else await expect(operation!.stop()).rejects.toThrow(/^PUBLIC_FILE_STOP_FAILED$/);
     expect(requests).toHaveLength(2);
     expect(requests[0]).toMatchObject({ url: '/api/v1/workspaces', method: 'GET', bearer: 'Bearer synthetic-original-key' });
-    expect(requests[1]).toMatchObject({ url: '/api/v1/collab/shares/a%2Fb/stop', method: 'POST', bearer: 'Bearer synthetic-original-key', workspace: 'workspace' });
-    expect(JSON.parse(requests[1]!.body)).toEqual({ projectId: 'project' });
+    expect(requests[1]).toMatchObject({ url: `/api/v1/resources/${resourceId}`, method: 'DELETE', bearer: 'Bearer synthetic-original-key', workspace: 'workspace' });
+    expect(requests[1]!.body).toBe('');
+    expect(reason).toBe(status === 200 ? 'source_deleted' : '');
     expect(await readdir(root)).toEqual([]);
   } finally {
     server.closeAllConnections();
