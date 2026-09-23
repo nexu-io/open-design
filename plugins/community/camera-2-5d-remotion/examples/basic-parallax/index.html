@@ -718,6 +718,10 @@
             <div class="telemetry-label">Rot Z</div>
             <div class="telemetry-value" id="val-rot-z">0.0°</div>
           </div>
+          <div class="telemetry-card" style="grid-column: span 3; display: flex; justify-content: space-between; align-items: center;">
+            <div class="telemetry-label" style="margin-bottom: 0;">Curve / Easing</div>
+            <div class="telemetry-value" id="val-easing-curve" style="font-size: 11px;">easeInOut</div>
+          </div>
         </div>
       </div>
 
@@ -850,10 +854,17 @@
   </div>
 
   <script>
-    // Canonical Scene Data definition
-    const sceneData = {
+    // Canonical Scene Data definition adhering to scene-spec.md v1.0.0
+    const CANONICAL_SCENE_DATA = {
+      $schema: "../../references/scene-spec.md",
       schemaVersion: "1.0.0",
-      canvas: { width: 1080, height: 1920 },
+      name: "basic-parallax",
+      title: "Basic Parallax 2.5D Camera Example",
+      canvas: {
+        width: 1080,
+        height: 1920,
+        aspectRatio: "9:16"
+      },
       fps: 30,
       durationInFrames: 90,
       camera: {
@@ -867,13 +878,54 @@
         ]
       },
       layers: [
-        { id: "headline-foreground", position: [0, -380, 100], rotation: [0, 0, 0], scale: 1, opacity: 1 },
-        { id: "main-product-card", position: [0, 70, 0], rotation: [0, 0, 0], scale: 1, opacity: 1 },
-        { id: "grid-ambient-background", position: [0, 0, -300], rotation: [0, 0, 0], scale: 1.28, opacity: 1 }
+        {
+          id: "headline-foreground",
+          name: "Headline & Badges (Foreground)",
+          type: "text",
+          position: [0, -380, 100],
+          rotation: [0, 0, 0],
+          scale: 1,
+          anchorPoint: [0.5, 0.5],
+          opacity: 1,
+          keyframes: []
+        },
+        {
+          id: "main-product-card",
+          name: "Interactive SaaS Glass Card (Middle)",
+          type: "container",
+          position: [0, 70, 0],
+          rotation: [0, 0, 0],
+          scale: 1,
+          anchorPoint: [0.5, 0.5],
+          opacity: 1,
+          keyframes: []
+        },
+        {
+          id: "grid-ambient-background",
+          name: "Deep Perspective Grid & Nebula (Background)",
+          type: "background",
+          position: [0, 0, -300],
+          rotation: [0, 0, 0],
+          scale: 1.28,
+          anchorPoint: [0.5, 0.5],
+          opacity: 1,
+          keyframes: []
+        }
+      ],
+      presets: [
+        "parallax-push",
+        "push-in",
+        "orbit-left",
+        "orbit-right",
+        "subtle-drift",
+        "pull-out"
       ]
     };
 
-    // Preset Keyframe Definitions
+    // Deep clone of scene data for runtime manipulation
+    const sceneData = JSON.parse(JSON.stringify(CANONICAL_SCENE_DATA));
+
+    // Preset Keyframe Definitions with explicit easing per segment
     const PRESETS = {
       "parallax-push": [
         { frame: 0, position: [0, 0, 900], rotation: [0, 0, 0], easing: "easeInOut" },
@@ -913,9 +965,29 @@
     let loop = true;
     let animationTimer = null;
 
-    // Cubic bezier easeInOut equivalent to Remotion Easing.inOut(Easing.cubic)
-    function easeInOutCubic(t) {
-      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    /**
+     * Resolves keyframe easing function matching the Remotion integration reference
+     * (references/remotion-integration.md) and Remotion's Easing API.
+     * 
+     * Supported Curves:
+     * - "linear":    f(t) = t
+     * - "easeIn":    f(t) = t^2 (Remotion Easing.in(Easing.quad))
+     * - "easeOut":   f(t) = t * (2 - t) (Remotion Easing.out(Easing.quad))
+     * - "easeInOut": f(t) = cubic inOut (Remotion Easing.inOut(Easing.cubic))
+     * - default:     "easeInOut" with fallback to cubic inOut
+     */
+    function resolveEasing(name) {
+      switch (name) {
+        case 'linear':
+          return (t) => t;
+        case 'easeIn':
+          return (t) => t * t;
+        case 'easeOut':
+          return (t) => t * (2 - t);
+        case 'easeInOut':
+        default:
+          return (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+      }
     }
 
     function lerp(start, end, progress) {
@@ -939,7 +1011,11 @@
 
       const duration = Math.max(1, kf1.frame - kf0.frame);
       const rawProgress = Math.min(1, Math.max(0, (frame - kf0.frame) / duration));
-      const easedProgress = easeInOutCubic(rawProgress);
+      
+      // Select segment easing with defined fallback matching integration reference
+      const easingName = kf0.easing || "easeInOut";
+      const easingFn = resolveEasing(easingName);
+      const easedProgress = easingFn(rawProgress);
 
       const posX = lerp(kf0.position[0], kf1.position[0], easedProgress);
       const posY = lerp(kf0.position[1], kf1.position[1], easedProgress);
@@ -949,7 +1025,50 @@
       const rotY = lerp(kf0.rotation[1], kf1.rotation[1], easedProgress);
       const rotZ = lerp(kf0.rotation[2], kf1.rotation[2], easedProgress);
 
-      return { posX, posY, posZ, rotX, rotY, rotZ };
+      return { posX, posY, posZ, rotX, rotY, rotZ, easingName, rawProgress, easedProgress };
+    }
+
+    /**
+     * Generates portable scene data conforming strictly to references/scene-spec.md v1.0.0
+     * Includes all mandatory layer fields (type, id, position, rotation, scale, opacity, anchorPoint, keyframes)
+     */
+    function exportSceneData() {
+      return {
+        $schema: "../../references/scene-spec.md",
+        schemaVersion: "1.0.0",
+        name: sceneData.name || "basic-parallax",
+        title: sceneData.title || "Basic Parallax 2.5D Camera Example",
+        canvas: {
+          width: sceneData.canvas.width || 1080,
+          height: sceneData.canvas.height || 1920,
+          aspectRatio: sceneData.canvas.aspectRatio || "9:16"
+        },
+        fps: sceneData.fps || 30,
+        durationInFrames: sceneData.durationInFrames || 90,
+        camera: {
+          perspective: sceneData.camera.perspective || 1200,
+          initialPosition: [...activeKeyframes[0].position],
+          initialRotation: [...activeKeyframes[0].rotation],
+          keyframes: activeKeyframes.map(kf => ({
+            frame: kf.frame,
+            position: [...kf.position],
+            rotation: [...kf.rotation],
+            easing: kf.easing || "easeInOut"
+          }))
+        },
+        layers: sceneData.layers.map(layer => ({
+          id: layer.id,
+          name: layer.name,
+          type: layer.type, // Mandatory field per scene-spec.md
+          position: [...layer.position],
+          rotation: [...layer.rotation],
+          scale: layer.scale,
+          anchorPoint: layer.anchorPoint ? [...layer.anchorPoint] : [0.5, 0.5],
+          opacity: layer.opacity,
+          keyframes: layer.keyframes ? [...layer.keyframes] : []
+        })),
+        presets: Object.keys(PRESETS)
+      };
     }
 
     // DOM References
@@ -966,6 +1085,7 @@
     const valRotX = document.getElementById("val-rot-x");
     const valRotY = document.getElementById("val-rot-y");
     const valRotZ = document.getElementById("val-rot-z");
+    const valEasingCurve = document.getElementById("val-easing-curve");
     const modalEl = document.getElementById("json-modal");
     const jsonCodeBox = document.getElementById("json-code-box");
     const btnViewJson = document.getElementById("btn-view-json");
@@ -973,7 +1093,7 @@
 
     function renderFrame(f) {
       currentFrame = f;
-      const { posX, posY, posZ, rotX, rotY, rotZ } = evaluateCamera(f);
+      const { posX, posY, posZ, rotX, rotY, rotZ, easingName } = evaluateCamera(f);
 
       // Invert camera transform onto world coordinate space
       const baseZ = 900;
@@ -987,6 +1107,9 @@
       valRotX.textContent = `${rotX.toFixed(1)}°`;
       valRotY.textContent = `${rotY.toFixed(1)}°`;
       valRotZ.textContent = `${rotZ.toFixed(1)}°`;
+      if (valEasingCurve) {
+        valEasingCurve.textContent = easingName;
+      }
 
       scrubberEl.value = f;
       lblFrame.textContent = f;
@@ -1042,15 +1165,18 @@
         if (PRESETS[presetKey]) {
           activeKeyframes = PRESETS[presetKey];
           sceneData.camera.keyframes = activeKeyframes;
+          sceneData.camera.initialPosition = [...activeKeyframes[0].position];
+          sceneData.camera.initialRotation = [...activeKeyframes[0].rotation];
           currentFrame = 0;
           renderFrame(0);
         }
       });
     });
 
-    // JSON Modal export
+    // JSON Modal export with complete validated schema
     btnViewJson.addEventListener("click", () => {
-      jsonCodeBox.textContent = JSON.stringify(sceneData, null, 2);
+      const exportedData = exportSceneData();
+      jsonCodeBox.textContent = JSON.stringify(exportedData, null, 2);
       modalEl.classList.add("open");
     });
 
@@ -1061,6 +1187,96 @@
     modalEl.addEventListener("click", (e) => {
       if (e.target === modalEl) modalEl.classList.remove("open");
     });
+
+    /**
+     * Regression and Behavior Checks
+     * - Validates exported scene structure against scene-spec contract
+     * - Verifies non-default easing curves (linear, easeIn, easeOut, easeInOut, fallback)
+     * - Verifies Pull Out preset's ease-out curve evaluates accurately
+     */
+    function runRegressionCheck() {
+      const results = {
+        passed: true,
+        errors: [],
+        checks: []
+      };
+
+      function assert(condition, message) {
+        if (!condition) {
+          results.passed = false;
+          results.errors.push(message);
+          console.error("❌ [Assertion Failed]", message);
+        } else {
+          results.checks.push(message);
+        }
+      }
+
+      // Check 1: Exported Scene Contract Check
+      const exported = exportSceneData();
+      assert(exported.schemaVersion === "1.0.0", "schemaVersion must be 1.0.0");
+      assert(exported.canvas && exported.canvas.width === 1080 && exported.canvas.height === 1920, "canvas dimensions must be 1080x1920");
+      assert(exported.fps === 30, "fps must be 30");
+      assert(exported.durationInFrames === 90, "durationInFrames must be 90");
+      assert(exported.camera && exported.camera.perspective === 1200, "camera perspective must be 1200");
+      assert(Array.isArray(exported.camera.keyframes) && exported.camera.keyframes.length >= 2, "camera keyframes must be an array with >= 2 entries");
+      
+      // Mandatory layer fields check
+      const validTypes = ["text", "container", "image", "video", "background", "vector"];
+      assert(Array.isArray(exported.layers) && exported.layers.length === 3, "scene must have 3 layers");
+      exported.layers.forEach(layer => {
+        assert(typeof layer.id === "string" && layer.id.length > 0, `Layer id must be a non-empty string, got ${layer.id}`);
+        assert(typeof layer.type === "string" && validTypes.includes(layer.type), `Layer type must be a valid enum, got ${layer.type}`);
+        assert(Array.isArray(layer.position) && layer.position.length === 3, `Layer ${layer.id} position must be [x,y,z]`);
+        assert(Array.isArray(layer.rotation) && layer.rotation.length === 3, `Layer ${layer.id} rotation must be [rx,ry,rz]`);
+        assert(typeof layer.scale === "number", `Layer ${layer.id} scale must be numeric`);
+        assert(typeof layer.opacity === "number" && layer.opacity >= 0 && layer.opacity <= 1, `Layer ${layer.id} opacity must be 0-1`);
+        assert(Array.isArray(layer.anchorPoint) && layer.anchorPoint.length === 2, `Layer ${layer.id} anchorPoint must be [ax,ay]`);
+      });
+
+      // Check 2: Easing Curve Behavior Checks
+      const linear = resolveEasing("linear");
+      const easeIn = resolveEasing("easeIn");
+      const easeOut = resolveEasing("easeOut");
+      const easeInOut = resolveEasing("easeInOut");
+      const fallback = resolveEasing(undefined);
+
+      assert(Math.abs(linear(0.5) - 0.5) < 0.001, "linear(0.5) must be 0.5");
+      assert(Math.abs(easeIn(0.5) - 0.25) < 0.001, "easeIn(0.5) must be 0.25 (quad)");
+      assert(Math.abs(easeOut(0.5) - 0.75) < 0.001, "easeOut(0.5) must be 0.75 (quad out)");
+      assert(Math.abs(easeInOut(0.5) - 0.5) < 0.001, "easeInOut(0.5) must be 0.5 (cubic inOut)");
+      assert(Math.abs(fallback(0.5) - 0.5) < 0.001, "fallback easing must default to easeInOut");
+      assert(easeOut(0.5) > easeInOut(0.5), "easeOut must progress faster at midpoint than easeInOut");
+      assert(easeIn(0.5) < easeInOut(0.5), "easeIn must progress slower at midpoint than easeInOut");
+
+      // Check 3: Pull Out Preset Non-Default Curve Behavior
+      const pullOutKfs = PRESETS["pull-out"];
+      assert(pullOutKfs[0].easing === "easeOut", "pull-out first keyframe must declare easeOut curve");
+      
+      // Temporarily evaluate pull-out at frame 30 (midpoint of 0-60 frame segment)
+      const prevKfs = activeKeyframes;
+      activeKeyframes = pullOutKfs;
+      const pullOutMid = evaluateCamera(30);
+      activeKeyframes = prevKfs;
+
+      // At frame 30, rawProgress = 0.5. With easeOut, progress = 0.75.
+      // PosZ should be 560 + (950 - 560) * 0.75 = 560 + 292.5 = 852.5
+      assert(Math.abs(pullOutMid.posZ - 852.5) < 0.01, `pull-out frame 30 posZ must be 852.5 with easeOut, got ${pullOutMid.posZ}`);
+      assert(pullOutMid.easingName === "easeOut", `pull-out frame 30 easingName must be easeOut, got ${pullOutMid.easingName}`);
+
+      if (results.passed) {
+        console.log(`✓ [2.5D Rig Regression Check] Passed all ${results.checks.length} assertions.`);
+      } else {
+        console.error(`❌ [2.5D Rig Regression Check] Failed ${results.errors.length} assertions:`, results.errors);
+      }
+
+      return results;
+    }
+
+    // Run regression check on initialization and expose globally
+    window.__SCENE_REGRESSION_RESULTS__ = runRegressionCheck();
+    window.__resolveEasing = resolveEasing;
+    window.__evaluateCamera = evaluateCamera;
+    window.__exportSceneData = exportSceneData;
 
     // Initial render
     renderFrame(0);
