@@ -197,6 +197,110 @@ describe("ProductionCampaignHover", () => {
 		expect(layerImage?.isConnected).toBe(true);
 		rects.mockRestore();
 	});
+	// OPEND-3374 at the hover pair. Its key carried BOTH decision ids, so either
+	// credential rotating rebuilt both hosts.
+	it("REGRESSION: a network outage that outlives the server credentials does not remount the hover pair", async () => {
+		useRealOverlay.current = true;
+		vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+		const rects = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1, item: () => null } as unknown as DOMRectList);
+		const mount = vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(async function (this: OpenDesignTouchpointElement, entryUrl: string) {
+			const image = document.createElement("img");
+			image.src = entryUrl;
+			this.shadowRoot?.replaceChildren(image);
+		});
+		let online = true;
+		let credential = "1";
+		const requests: string[] = [];
+		const longLived = (placementKey: string) => {
+			const now = Date.now();
+			return decision(placementKey, {
+				touchpointDecisionId: `decision-${placementKey}-${credential}`,
+				serverTime: new Date(now).toISOString(),
+				authorizationExpiresAt: new Date(now + 30 * 60_000).toISOString(),
+				endsAt: new Date(now + 40 * 60_000).toISOString(),
+			});
+		};
+		const fetchMock = vi.fn(async (url: string) => {
+			requests.push(url);
+			if (!online) throw new TypeError("Failed to fetch");
+			return new Response(JSON.stringify(longLived(url.includes("hover-entry") ? "opend.home.hover-entry" : "opend.home.hover-layer")), { status: 200 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		render(<ProductionCampaignHover authenticated sessionSubject="account-a" />);
+		const root = await screen.findByTestId("cms-hover-overlay-root");
+		const [entry, layer] = Array.from(root.querySelectorAll<OpenDesignTouchpointElement>("opend-touchpoint"));
+		if (!entry || !layer) throw new Error("expected paired hover elements");
+		await waitFor(() => expect(mount).toHaveBeenCalledTimes(2));
+		online = false;
+		await act(async () => { await vi.advanceTimersByTimeAsync(90_000); });
+		online = true;
+		credential = "2";
+		requests.length = 0;
+		// OPEND-3436: a client in offline fallback revalidates on the reconnection
+		// itself rather than on the next poll tick, so the event a real network
+		// restore fires is now what drives recovery. What this case is about —
+		// the host is not rebuilt across the outage — is unchanged.
+		act(() => { window.dispatchEvent(new Event("online")); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => {});
+		expect(requests.some((url) => url.includes("activeDecisionId=decision-opend.home.hover-entry-1"))).toBe(true);
+		expect(Array.from(root.querySelectorAll("opend-touchpoint"))).toEqual([entry, layer]);
+		expect(mount).toHaveBeenCalledTimes(2);
+		rects.mockRestore();
+	});
+
+	// The hover key was the one that needed arguing rather than deleting. It
+	// carried the ENTRY's content id and both decision ids — the layer's content
+	// id was never in it, so the layer's identity rode on its credential. Once
+	// the credentials leave the key, a layer whose content is swapped underneath
+	// has to be caught by the layer's own content id, or the pair keeps showing
+	// content the server has replaced. (The claim that the two content ids are
+	// always equal is a server-side property this side cannot check — and these
+	// fixtures, which give each placement its own version, assume they are not.)
+	it("still remounts the pair when only the layer's content version changes", async () => {
+		useRealOverlay.current = true;
+		vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+		const rects = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1, item: () => null } as unknown as DOMRectList);
+		const mount = vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(async function (this: OpenDesignTouchpointElement, entryUrl: string) {
+			const image = document.createElement("img");
+			image.src = entryUrl;
+			this.shadowRoot?.replaceChildren(image);
+		});
+		let layerVersion = "version-opend.home.hover-layer";
+		const longLived = (placementKey: string) => {
+			const now = Date.now();
+			const base = decision(placementKey, {
+				serverTime: new Date(now).toISOString(),
+				authorizationExpiresAt: new Date(now + 30 * 60_000).toISOString(),
+				endsAt: new Date(now + 40 * 60_000).toISOString(),
+			});
+			return placementKey === "opend.home.hover-layer"
+				? { ...base, content: { ...base.content, id: layerVersion } }
+				: base;
+		};
+		const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(longLived(url.includes("hover-entry") ? "opend.home.hover-entry" : "opend.home.hover-layer")), { status: 200 }));
+		vi.stubGlobal("fetch", fetchMock);
+		render(<ProductionCampaignHover authenticated sessionSubject="account-a" />);
+		const root = await screen.findByTestId("cms-hover-overlay-root");
+		const [entry, layer] = Array.from(root.querySelectorAll<OpenDesignTouchpointElement>("opend-touchpoint"));
+		if (!entry || !layer) throw new Error("expected paired hover elements");
+		await waitFor(() => expect(mount).toHaveBeenCalledTimes(2));
+		layerVersion = "version-opend.home.hover-layer-2";
+		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => {});
+		await waitFor(() => expect(mount).toHaveBeenCalledTimes(4));
+		// The mocked verifier names each Blob after the content it verified, so
+		// the layer's rendered bytes say which version actually reached the
+		// screen. Stale content here is the whole risk of dropping the layer's
+		// credential from the key without naming its content version.
+		const rebuiltLayer = Array.from(root.querySelectorAll<OpenDesignTouchpointElement>("opend-touchpoint"))[1];
+		expect(rebuiltLayer?.shadowRoot?.querySelector("img")).toHaveAttribute(
+			"src",
+			"blob:version-opend.home.hover-layer-2",
+		);
+		rects.mockRestore();
+	});
+
 	it("keeps the real Test overlay's Shadow DOM and expanded layer across host rerenders", async () => {
 		useRealOverlay.current = true;
 		vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
