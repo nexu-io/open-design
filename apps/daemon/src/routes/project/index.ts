@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { ProjectPublicFileStopPendingError } from '../../collab/project-public-file-stop.js';
+import { ProjectPublicFileStopPendingError, type PublicFileDeleteTarget } from '../../collab/project-public-file-stop.js';
 import type { ProjectDeleteResponse } from '@open-design/contracts';
 import { publicFileMutationHandler } from '../public-file-mutation-handler.js';
 import type { PublicFileMutations } from '../../collab/public-file-mutations.js';
@@ -5803,7 +5803,7 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 
 export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {
   publicFileMutations?: PublicFileMutations;
-  stopPublicFilesBeforeDelete?: (projectId: string, filePath?: string) => Promise<void>;
+  stopPublicFilesBeforeDelete?: (projectId: string, target?: PublicFileDeleteTarget) => Promise<void>;
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
@@ -6692,7 +6692,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete('/api/projects/:id/folders', async (req, res) => {
+  app.delete('/api/projects/:id/folders', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
       const { path: folderPath } = req.body || {};
       if (typeof folderPath !== 'string' || !folderPath.trim()) {
@@ -6712,6 +6712,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
+      const target = await resolveProjectFilePath(PROJECTS_DIR, project.id, folderPath, project.metadata);
+      if (!target.name || !(await ctx.node.fs.stat(target.filePath)).isDirectory()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'target must be a non-root folder');
+      }
+      await ctx.stopPublicFilesBeforeDelete?.(project.id, { folderPath: target.name });
       await deleteProjectFolder(
         PROJECTS_DIR,
         req.params.id,
@@ -6724,7 +6729,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
-  });
+  }));
 
   app.get('/api/projects/:id/design-system-package-audit', async (req, res) => {
     try {

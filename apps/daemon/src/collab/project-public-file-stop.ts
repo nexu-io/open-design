@@ -1,6 +1,15 @@
 import type { ProjectDeleteShareResidual } from '@open-design/contracts';
 import type { PreparePublicFileStop, PublicFilePublicationScope, StopQueuePublicFilePublicationStore } from './public-file-publication-store.js';
 
+export type PublicFileDeleteTarget = string | { folderPath: string };
+
+/** Folder boundaries are path segments, never bare string prefixes. */
+export function matchesPublicFileDeleteTarget(filePath: string, target?: PublicFileDeleteTarget): boolean {
+  if (target === undefined) return true;
+  if (typeof target === 'string') return filePath === target;
+  return target.folderPath.length > 0 && filePath.startsWith(`${target.folderPath}/`);
+}
+
 /** Internal handoff only: this error does not assert local deletion succeeded.
  * The deletion owner must finish its local work before returning ok: true.
  */
@@ -19,11 +28,11 @@ export class ProjectPublicFileStopPendingError extends Error {
  * this deletion attempt: an older response must never erase a newer witness.
  */
 export function createProjectPublicFileStop(store: StopQueuePublicFilePublicationStore, prepare: PreparePublicFileStop) {
-  return async (scope: Omit<PublicFilePublicationScope, 'filePath'>, filePath?: string): Promise<void> => {
+  return async (scope: Omit<PublicFilePublicationScope, 'filePath'>, target?: PublicFileDeleteTarget): Promise<void> => {
     // File deletion shares the same identity, revision and durable retry rules,
     // but must never revoke a sibling file's publication.
     const selectedPublications = () => store.listByProject(scope)
-      .filter(file => filePath === undefined || file.filePath === filePath);
+      .filter(file => matchesPublicFileDeleteTarget(file.filePath, target));
     let pending = false;
     const targets = selectedPublications().map((file) => {
       const key = { ...scope, filePath: file.filePath, slug: file.slug };
