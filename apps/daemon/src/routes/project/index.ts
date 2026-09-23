@@ -7218,7 +7218,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
+        // Never expose filesystem error messages: they contain daemon-owned paths.
+        status === 404 ? 'file not found'
+          : err instanceof ProjectPublicFileStopPendingError ? 'PUBLIC_FILE_STOP_PENDING'
+          : 'file could not be deleted',
       );
     }
   }));
@@ -7931,7 +7934,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
+        // Never expose filesystem error messages: they contain daemon-owned paths.
+        status === 404 ? 'file not found'
+          : err instanceof ProjectPublicFileStopPendingError ? 'PUBLIC_FILE_STOP_PENDING'
+          : 'file could not be deleted',
       );
     }
   }));
