@@ -41,6 +41,7 @@ import {
   type DiagnosticsEvidence,
 } from './services/diagnostics-evidence.js';
 import { diagnosticId } from './services/diagnostics-environment.js';
+import { daemonHealthPaths } from './services/daemon-health.js';
 import { readVelaLoginStatus } from './integrations/vela.js';
 
 interface ResolvedDiagnosticsAgentEnvironment {
@@ -145,6 +146,32 @@ async function shouldListOptionalSource(path: string): Promise<boolean> {
     return true;
   } catch (error) {
     return (error as NodeJS.ErrnoException | null)?.code !== "ENOENT";
+  }
+}
+
+/**
+ * The daemon's rotated prior-session log (see `openLog` in
+ * apps/packaged/src/sidecars.ts), resolved exactly as the bundle does, or null
+ * for launchers that keep none (standalone `od`; tools-dev appends instead).
+ */
+export function resolveDaemonPreviousLogPath(
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null,
+): string | null {
+  if (runtime == null) return null;
+  try {
+    const namespaceRoot = resolveRuntimeNamespaceRoot({
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      runtime,
+      runtimeMode: SIDECAR_MODES.RUNTIME,
+    });
+    const latest = resolveLogFilePath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      runtimeRoot: namespaceRoot,
+    });
+    return `${dirname(latest)}/previous.log`;
+  } catch {
+    return null;
   }
 }
 
@@ -263,6 +290,12 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         for (const [name, absolutePath] of [['latest', paths.current], ['previous', paths.previous]] as const) {
           if (await shouldListOptionalSource(absolutePath)) sources.push({
             name: `logs/diagnostics/environment-evidence.${name}.json`, absolutePath, kind: 'json', tailBytes: 256 * 1024,
+          });
+        }
+        const health = daemonHealthPaths(options.dataDir);
+        for (const [name, absolutePath] of [['latest', health.current], ['previous', health.previous]] as const) {
+          if (await shouldListOptionalSource(absolutePath)) sources.push({
+            name: `logs/diagnostics/daemon-health.${name}.json`, absolutePath, kind: 'json', tailBytes: 256 * 1024,
           });
         }
       }
