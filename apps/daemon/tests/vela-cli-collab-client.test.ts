@@ -13,6 +13,16 @@ import {
 } from '../src/collab/vela-cli-collab-client.js';
 
 describe('Vela CLI collaboration client inbound comments', () => {
+  it('maps authoritative nested author key into the local cloud merge contract', async () => {
+    const key = 'b'.repeat(64);
+    const client = createVelaCliCollabClient({ run: async () => JSON.stringify({
+      comments: [{ id: 'visitor', authorKind: 'user', authorAppUserId: 'account',
+        author: { authorKey: key, displayName: 'Visitor' } }], latestSeq: 1,
+    }) });
+    const result = await client.pullComments('personal-ws', 'p', 0);
+    expect(result.comments[0]).toMatchObject({ authorKey: key, authorDisplayName: 'Visitor' });
+    expect(result.comments[0]?.authorAppUserId).toBe('account');
+  });
   it.each(['team-space', 'personal-space'])('requests both author kinds without rewriting their identities in %s', async (workspaceId) => {
     const comments = [
       { id: 'member-comment', authorKind: 'member', memberId: 'same-id', authorAppUserId: null },

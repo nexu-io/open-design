@@ -42,6 +42,27 @@ type PullCommentsWire = {
   latestSeq?: unknown;
 };
 
+/** Retain the service's author snapshot rather than hashing local identity IDs. */
+function toCloudComment(value: unknown): CollabCloudComment {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value as CollabCloudComment;
+  }
+  const wire = value as CollabCloudComment & { author?: unknown };
+  const author = wire.author && typeof wire.author === 'object' && !Array.isArray(wire.author)
+    ? wire.author as { authorKey?: unknown; displayName?: unknown }
+    : null;
+  if (!author) return wire;
+  return {
+    ...wire,
+    ...(typeof author.authorKey === 'string' && author.authorKey.trim()
+      ? { authorKey: author.authorKey }
+      : {}),
+    ...(typeof author.displayName === 'string' && author.displayName.trim()
+      ? { authorDisplayName: author.displayName }
+      : {}),
+  };
+}
+
 export interface VelaCliPresenceHeartbeatInput {
   member: CollabPresenceMember;
   clientId?: string;
@@ -154,7 +175,7 @@ export function createVelaCliCollabClient(options: VelaCliCollabClientOptions = 
         'member,user',
       ], _teamId);
       const comments = Array.isArray(payload.comments)
-        ? (payload.comments as CollabCloudComment[])
+        ? payload.comments.map(toCloudComment)
         : [];
       return {
         comments,
