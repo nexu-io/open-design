@@ -39,7 +39,7 @@ export class ProductionMarkerStream {
   }
 
   get ready(): boolean {
-    return this.matches === 1 && this.lastWasMarker;
+    return this.matches >= 1 && this.lastWasMarker;
   }
 
   private line(line: string): string {

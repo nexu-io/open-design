@@ -1,3 +1,4 @@
+import { strategyTaskProvesDelivery } from '@open-design/contracts';
 import type {
   ChatRunStatusResponse,
   StrategyTaskProjectionV2,
@@ -57,8 +58,8 @@ export function strategyBlockedMessageFields(
  *
  * `blocked` terminates the turn's question form (above). A marker-based task
  * may complete without a usable deliverable, so only stamp delivery when the
- * host's file check did not fail. Historical projections omit this flag and
- * retain their existing completed-means-delivered interpretation.
+ * host's file check explicitly succeeded. Missing historical evidence does not
+ * imply delivery.
  *
  * Every surface observing a task projection (run-status probe, SSE settle,
  * reattach) derives its message stamp here, so the three cannot drift. Returns
@@ -72,7 +73,7 @@ export function strategySettledMessageFields(
   | null {
   const blocked = strategyBlockedMessageFields(strategyTask);
   if (blocked) return blocked;
-  if (strategyTask?.terminal && strategyTask.outcome === 'completed' && strategyTask.deliverableValid !== false) {
+  if (strategyTaskProvesDelivery(strategyTask)) {
     return { strategyTaskDelivered: true };
   }
   return null;

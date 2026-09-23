@@ -843,6 +843,28 @@ describe('durable strategy task store', () => {
     })).toThrow(/terminal/i);
   });
 
+  it('migrates old task blocks once without rewriting physical Run evidence', () => {
+    const task = createTask(db, snapshot);
+    db.prepare(`UPDATE strategy_task_executions SET outcome = 'blocked',
+      blocked_reason_codes_json = ?, blocked_visible_text = ? WHERE task_execution_id = ?`)
+      .run(JSON.stringify(['old_contract_invalid']), 'Historical diagnostic', task.taskExecutionId);
+    db.prepare(`UPDATE strategy_task_runs SET settlement_reason = 'run_failed' WHERE run_id = ?`).run(task.latestRunId);
+    const runDir = path.join(tempDir, 'runs', task.latestRunId);
+    fs.mkdirSync(runDir, { recursive: true });
+    const physical = JSON.stringify({ status: 'failed', error: 'real process error' });
+    fs.writeFileSync(path.join(runDir, 'state.json'), physical);
+    closeDatabase();
+    db = openDatabase(tempDir, { dataDir: tempDir });
+    const migrated = getStrategyTaskExecution(db, task.taskExecutionId)!;
+    expect(migrated).toMatchObject({ outcome: 'completed', deliverableValid: false, revision: task.revision + 1 });
+    expect(migrated.runs[0]?.settlementReason).toBe('ended');
+    expect(db.prepare('SELECT blocked_visible_text FROM strategy_task_executions WHERE task_execution_id = ?').get(task.taskExecutionId))
+      .toEqual({ blocked_visible_text: 'Historical diagnostic' });
+    migrateStrategyTaskStore(db);
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)?.revision).toBe(migrated.revision);
+    expect(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).toBe(physical);
+  });
+
   it('leaves an unmapped ordinary physical Run untouched during startup reconciliation', async () => {
     const task = createTask(db, snapshot);
     const runDir = path.join(tempDir, 'runs', 'ordinary-run');
@@ -927,7 +949,7 @@ describe('durable strategy task store', () => {
   });
 
   it.each([
-    ['running', 'blocked'],
+    ['running', 'completed'],
     ['canceled', 'canceled'],
   ] as const)(
     'reconciles a persisted %s physical Run after a real SQLite restart to %s',
@@ -982,7 +1004,7 @@ describe('durable strategy task store', () => {
     },
   );
 
-  it('persists blocked attribution when startup reconciliation interrupts a running Run', async () => {
+  it('ends the task while retaining the physical failure when startup interrupts a Run', async () => {
     const task = createTask(db, snapshot, 'run-interrupted');
     closeDatabase();
 
@@ -1010,10 +1032,9 @@ describe('durable strategy task store', () => {
     });
 
     const persisted = getStrategyTaskExecution(db, task.taskExecutionId);
-    expect(persisted?.outcome).toBe('blocked');
-    expect(persisted?.blockedContext).toEqual({
-      reasonCodes: ['od_next_physical_run_interrupted'],
-      visibleText: null,
-    });
+    expect(persisted?.outcome).toBe('completed');
+    expect(persisted?.blockedContext).toBeUndefined();
+    expect(persisted?.runs.at(-1)).toMatchObject({ settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } });
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).status).toBe('failed');
   });
 });

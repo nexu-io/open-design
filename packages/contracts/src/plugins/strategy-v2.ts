@@ -45,6 +45,7 @@ export type StrategyRouteV2 = z.infer<typeof StrategyRouteV2Schema>;
 export const StrategyExecutionModeV2Schema = z.enum(['simple', 'complex']);
 export type StrategyExecutionModeV2 = z.infer<typeof StrategyExecutionModeV2Schema>;
 
+// `completed` means orchestration ended; physical Run status owns success/failure.
 export const StrategyOutcomeV2Schema = z.enum([
   'clarification_required',
   'plan_ready',
@@ -329,13 +330,30 @@ const StrategyTaskBlockedContextV2Schema = z.object({
 }).strict();
 export type StrategyTaskBlockedContextV2 = z.infer<typeof StrategyTaskBlockedContextV2Schema>;
 
-/** Host observations, not model declarations or file-delivery verdicts. */
-export const StrategySettlementReasonV2Schema = z.enum([
-  'production_ready', 'deliverable_valid', 'question', 'plan_only',
-  'truncated', 'todo_unfinished', 'text_only', 'empty_reply',
-  'run_failed', 'canceled', 'interrupted',
-]);
+/** The host's routing action; independent of execution success and file facts. */
+export const StrategySettlementReasonV2Schema = z.enum(['question', 'continued', 'ended']);
 export type StrategySettlementReasonV2 = z.infer<typeof StrategySettlementReasonV2Schema>;
+
+/** Unknown historical facts stay absent rather than being inferred from an outcome. */
+export const StrategySettlementFactsV2Schema = z.object({
+  physicalStatus: z.enum(['succeeded', 'failed', 'canceled']).optional(),
+  deliverableValid: z.boolean().optional(),
+  truncated: z.boolean().optional(),
+  todoUnfinished: z.boolean().optional(),
+  askedUserQuestion: z.boolean().optional(),
+  productionReady: z.boolean().optional(),
+  emptyReply: z.boolean().optional(),
+  executionIntent: StrategyExecutionIntentV2Schema.optional(),
+}).strict();
+export type StrategySettlementFactsV2 = z.infer<typeof StrategySettlementFactsV2Schema>;
+
+/** Read old persisted reasons without continuing to write overlapping categories. */
+export function normalizeStrategySettlementReason(value: unknown): StrategySettlementReasonV2 {
+  if (value === 'production_ready') return 'continued';
+  if (['deliverable_valid', 'plan_only', 'truncated', 'todo_unfinished', 'text_only',
+    'empty_reply', 'run_failed', 'canceled', 'interrupted'].includes(String(value))) return 'ended';
+  return StrategySettlementReasonV2Schema.parse(value);
+}
 
 export const StrategyTaskProjectionV2Schema = z.object({
   taskExecutionId: z.string().min(1),
@@ -357,7 +375,8 @@ export const StrategyTaskProjectionV2Schema = z.object({
   /** Host file observation, independent of terminal turn status. Absent on old tasks. */
   deliverableValid: z.boolean().optional(),
   /** Reason for the viewed physical round ending; absent before settlement. */
-  settlementReason: StrategySettlementReasonV2Schema.optional(),
+  settlementReason: z.preprocess(normalizeStrategySettlementReason, StrategySettlementReasonV2Schema).optional(),
+  settlementFacts: StrategySettlementFactsV2Schema.optional(),
   terminal: z.boolean(),
   blockedContext: StrategyTaskBlockedContextV2Schema.optional(),
 }).strict().superRefine((value, context) => {

@@ -541,7 +541,7 @@ import {
 } from './strategies/od-next/initial-prompt-bundle-service.js';
 import { createOdNextRunProtocol } from './strategies/od-next/protocol.js';
 import {
-  blockAutomaticContinuation,
+  endFailedAutomaticContinuation,
   prepareAutomaticStrategyContinuation,
   projectStrategyTask,
 } from './strategies/od-next/automatic-simple-production.js';
@@ -11937,8 +11937,8 @@ export async function startServer({
       && !agentResumeCtx.isResuming
       && !strategyRunMapping?.coldStartFinalText
     ) {
-      const blocked = blockAutomaticContinuation(db, { runId: run.id });
-      if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+      const ended = endFailedAutomaticContinuation(db, { runId: run.id });
+      if (ended) run.strategyTask = projectStrategyTask(ended, run.id);
       throw new Error(
         'OD Next continuation requires the locked native session; cold re-seeding is forbidden.',
       );
@@ -16123,8 +16123,8 @@ export async function startServer({
         if (strategyTaskAtStart && ((!isOdNextInitialRun && !safeColdProduction)
           || resumeSideEffects.toolCallSeen || resumeSideEffects.artifactWriteSeen
           || resumeSideEffects.liveArtifactSeen || resumeSideEffects.userVisibleOutputSeen)) {
-          const blocked = blockAutomaticContinuation(db, { runId: run.id });
-          if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+          const ended = endFailedAutomaticContinuation(db, { runId: run.id });
+          if (ended) run.strategyTask = projectStrategyTask(ended, run.id);
           send('error', createSseErrorPayload(
             'AGENT_SESSION_RESUME_FAILED',
             'The OD Next native session is unavailable and a safe cold restart cannot be proven.',

@@ -23,18 +23,29 @@ describe('plan continuation marker', () => {
   it.each([
     'Plan only.',
     `Plan.\n<od-production-ready key="0000" />`,
+    `Plan.\n${marker}\n<od-production-ready key="0000" />`,
+    `${marker}\nPlan.`,
     `Plan.\n\`\`\`xml\n${marker}\n\`\`\``,
     `Plan.\n> ${marker}`,
     `Plan.\n    ${marker}`,
     `Example: ${marker}`,
-    `Plan.\n${marker}\n${marker}`,
     `Plan.\n${marker}\nOne more question.`,
     `Plan.\n<od-production-ready key="${key}"`,
     marker,
-  ])('does not continue for a missing, quoted, stale, duplicate or incomplete signal: %s', text => {
+  ])('does not continue for a missing, quoted, stale or incomplete signal: %s', text => {
     const stream = createOdNextRunProtocol(null, key);
     for (const char of text) stream.push(char);
     expect(stream.finish().parsed.productionReady).toBe(false);
+  });
+  it('accepts duplicate current markers at the end, including fragmented streams', () => {
+    const text = `Plan.\n${marker}\n${marker}\n`;
+    for (let split = 0; split <= text.length; split++) {
+      const stream = createOdNextRunProtocol(null, key);
+      const visible = stream.push(text.slice(0, split)) + stream.push(text.slice(split));
+      const result = stream.finish();
+      expect(result.parsed.productionReady).toBe(true);
+      expect(visible + result.visibleTail).toBe('Plan.\n');
+    }
   });
   it('cannot authorize production from a marker hidden in a retired block', () => {
     for (const close of ['', '</open-design-runtime-state>']) {

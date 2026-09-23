@@ -125,13 +125,26 @@ describe('run analytics lifecycle', () => {
   it('records text-only settlement as a normal successful reply', async () => {
     const h = harness();
     h.lifecycle.install({
-      run: fakeRun({ strategyTask: { terminal: true, outcome: 'completed', settlementReason: 'text_only', deliverableValid: false } }),
+      run: fakeRun({ strategyTask: { terminal: true, outcome: 'completed', settlementReason: 'ended', deliverableValid: false, settlementFacts: { physicalStatus: 'succeeded', deliverableValid: false } } }),
       body: { agentId: 'codex' }, requestAnalyticsContext: CONTEXT as never,
     });
     await settled(h, 'run_created');
     h.settle({ status: 'succeeded' });
     const finished = await settled(h, 'run_finished');
-    expect(finished.properties).toMatchObject({ result: 'success', od_next_settlement_reason: 'text_only' });
+    expect(finished.properties).toMatchObject({ result: 'success', od_next_settlement_reason: 'ended', od_next_settlement_facts: { physicalStatus: 'succeeded', deliverableValid: false } });
+    expect(finished.properties.od_next_blocked_reason_code).toBeUndefined();
+  });
+
+  it('reports a physical failure even when orchestration has ended normally', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ strategyTask: { terminal: true, outcome: 'completed', settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } } }),
+      body: { agentId: 'codex' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'failed' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ result: 'failed', od_next_settlement_reason: 'ended', od_next_settlement_facts: { physicalStatus: 'failed' } });
     expect(finished.properties.od_next_blocked_reason_code).toBeUndefined();
   });
 

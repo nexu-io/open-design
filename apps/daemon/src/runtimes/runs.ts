@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import {
-  strategyTaskProvesDelivery,
   todoSnapshotHasUnfinishedWork,
   turnEndedByAskingUser,
 } from '@open-design/contracts';
@@ -1629,17 +1628,9 @@ export function createChatRunService({
     // if the last TodoWrite looked done. Absence of any TodoWrite snapshot keeps
     // the flag false, so a text-only answer stays "Completed".
     //
-    // A settled strategy verdict outranks the TodoWrite narration: the task
-    // reaches `completed` only once the deliverable was verified on disk, and
-    // the agent's own checklist is routinely left with a stale `pending` item.
-    // Truncation stays an independent term — a cut-off generation is unfinished
-    // whatever verdict was recorded.
-    // The normal composer teaches the model this run's nonce; a matching
-    // marker plus conclusion is therefore stronger than a stale self-reported
-    // Todo snapshot. OD Next's frozen Harness prompt currently bypasses that
-    // per-turn instruction, so its normal completion authority remains
-    // strategyTaskProvesDelivery below (the marker path is unreachable unless
-    // a future frozen bundle explicitly adopts the protocol).
+    // File evidence and task completion do not cancel unfinished todos.
+    // Keep the existing authenticated completion signal and question handoff;
+    // truncation remains independent and always counts as unfinished.
     const authenticatedDoneProvesDelivery =
       status === 'succeeded' && run.authenticatedDoneConclusion === true;
     // A clarification turn writes its plan, asks its question, and exits 0. It
@@ -1655,8 +1646,8 @@ export function createChatRunService({
       status === 'succeeded' && turnEndedByAskingUser(run.askUserScanText);
     // Counter-evidence the host holds against its own turn. It is a term of its
     // own, deliberately OUTSIDE the marker/todo clause below, because that whole
-    // clause is the agent's account of its own work: the completion marker, the
-    // strategy verdict and the TodoWrite snapshot can each veto "unfinished",
+    // clause is the agent's account of its own work: the completion marker and
+    // TodoWrite snapshot can each veto "unfinished",
     // and a run that apologised for a failed generation reached `succeeded` with
     // a green check because the marker vetoed a `cancelled` todo. A failure the
     // daemon watched happen is not something the turn's own narration may
@@ -1669,8 +1660,7 @@ export function createChatRunService({
     run.endedWithUnfinishedWork =
       Boolean(run.truncatedMidTurn)
       || hostRecordedDeliveryFailure
-      || (!strategyTaskProvesDelivery(run.strategyTask)
-        && !authenticatedDoneProvesDelivery
+      || (!authenticatedDoneProvesDelivery
         && !endedByAskingUser
         && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
     // Commit the terminal Run snapshot before exposing its terminal event. The

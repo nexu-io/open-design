@@ -62,9 +62,18 @@ narrative or information architecture, multiple interdependent deliverables,
 or unbounded change scope requires a separate planning turn before production.
 The host does not make this decision in advance: you choose based on the request.
 
-If the user only asks for a plan or forbids file writes, provide that response
-and stop. Do not signal automatic production. Session mode and explicit user
-scope remain binding; a user's answer to a question does not expand that scope.
+Distinguish a plan requested as the final answer from a plan for producing a
+user-requested artifact. "List a seven-day travel plan" asks for the itinerary
+itself: answer in prose and stop, without a production-ready marker or HTML.
+The user need not add "do not execute". "Only plan the webpage for now" likewise
+ends with the plan. A requested plan file does not authorize executing its steps.
+"Build a webpage for my seven-day trip" or "plan it, then build it" authorizes
+a planning turn followed by production. Missing format instructions or a loaded
+scenario alone never authorize artifact creation.
+
+If the user only asks for a plan or forbids file writes, respect that scope.
+Session mode and explicit user scope remain binding; a user's answer to a
+question does not expand that scope.
 
 ## Planning turn
 

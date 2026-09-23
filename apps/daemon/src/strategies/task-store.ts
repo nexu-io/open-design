@@ -9,6 +9,9 @@ import {
   OD_NEXT_STRATEGY_ID,
   StrategyExecutionIntentV2Schema,
   StrategySettlementReasonV2Schema,
+  StrategySettlementFactsV2Schema,
+  normalizeStrategySettlementReason,
+  type StrategySettlementFactsV2,
   type StrategySettlementReasonV2,
   parseOdNextPromptBundleV1,
   parseOdNextPromptBundleV2,
@@ -86,6 +89,7 @@ export interface StrategyTaskRunMapping {
   coldStartFinalText?: StrategyTaskFinalTextIdentity;
   resumeFinalText?: StrategyTaskFinalTextIdentity;
   settlementReason?: StrategySettlementReasonV2;
+  settlementFacts?: StrategySettlementFactsV2;
 }
 
 export type StrategyTaskFinalTextKind = 'bundle' | 'turn';
@@ -204,6 +208,7 @@ export interface CompareAndTransitionStrategyTaskInput {
   updatedAt?: number;
   deliverableValid?: boolean;
   settlementReason?: StrategySettlementReasonV2;
+  settlementFacts?: StrategySettlementFactsV2;
 }
 
 export class InvalidStrategyTaskRecordError extends Error {
@@ -301,6 +306,7 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
   addColumnIfMissing(db, 'strategy_task_executions', 'deliverable_valid INTEGER');
   addColumnIfMissing(db, 'strategy_task_executions', 'continued_from_task_execution_id TEXT');
   addColumnIfMissing(db, 'strategy_task_runs', 'settlement_reason TEXT');
+  addColumnIfMissing(db, 'strategy_task_runs', 'settlement_facts_json TEXT');
   addColumnIfMissing(db, 'strategy_task_runs', 'cold_start_final_text_json TEXT');
   addColumnIfMissing(db, 'strategy_task_runs', 'resume_final_text_json TEXT');
   migrateIntentResolutionStore(db);
@@ -317,6 +323,11 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text_utf8_bytes INTEGER');
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text_sha256 TEXT');
   migrateFrozenSkillPackageStore(db);
+  // Retire the task-level failure verdict without rewriting any physical Run.
+  // Keep the old attribution columns as historical diagnostics, not live authority.
+  db.prepare(`UPDATE strategy_task_executions
+    SET outcome = 'completed', deliverable_valid = 0, revision = revision + 1
+    WHERE outcome = 'blocked'`).run();
 }
 
 export function createStrategyTaskExecution(
@@ -486,7 +497,7 @@ export function getStrategyTaskExecutionByRunId(
 export interface StrategyTaskTurnProjection {
   taskExecutionId: string;
   taskRunIndex: number;
-  /** The task settled `completed` — deliverable verified. Carried because the
+  /** The task ended with explicit verified file evidence. Carried because the
    *  messages table has no strategy column, so a reload has no other way to
    *  learn the verdict, and surfaces keyed off the agent's TodoWrite snapshot
    *  (the "continue remaining tasks" offer) would resurrect on every reload. */
@@ -551,7 +562,7 @@ export function strategyTaskTurnsForRunIds(
         turns.set(row['runId'], {
           taskExecutionId: row['taskExecutionId'],
           taskRunIndex: row['taskRunIndex'],
-          delivered: row['outcome'] === 'completed' && row['deliverableValid'] !== 0,
+          delivered: row['outcome'] === 'completed' && row['deliverableValid'] === 1,
           blocked: row['outcome'] === 'blocked',
           blockedText: row['outcome'] === 'blocked'
             && typeof row['blockedVisibleText'] === 'string'
@@ -682,7 +693,7 @@ export function compareAndTransitionStrategyTaskExecution(
       next.outcome,
       next.executionMode,
       next.executionIntent,
-      input.deliverableValid === undefined ? null : Number(input.deliverableValid),
+      input.deliverableValid === undefined ? (input.nextRun ? 0 : null) : Number(input.deliverableValid),
       blockedContext ? JSON.stringify(blockedContext.reasonCodes) : null,
       blockedContext ? blockedContext.visibleText : null,
       clarificationCount,
@@ -699,8 +710,10 @@ export function compareAndTransitionStrategyTaskExecution(
     }
 
     if (input.settlementReason) {
-      db.prepare('UPDATE strategy_task_runs SET settlement_reason = ? WHERE run_id = ?')
-        .run(StrategySettlementReasonV2Schema.parse(input.settlementReason), current.latestRunId);
+      db.prepare('UPDATE strategy_task_runs SET settlement_reason = ?, settlement_facts_json = ? WHERE run_id = ?')
+        .run(StrategySettlementReasonV2Schema.parse(input.settlementReason),
+          input.settlementFacts ? JSON.stringify(StrategySettlementFactsV2Schema.parse(input.settlementFacts)) : null,
+          current.latestRunId);
     }
     if (TERMINAL_OUTCOMES.has(next.outcome)) failIntentResolutionRecord(db, current.taskExecutionId);
     if (input.nextRun) {
@@ -785,9 +798,9 @@ export function cancelStrategyTaskExecution(
 
 /**
  * Converge a logical task after startup reconciles its latest physical Run.
- * Successful Runs still require Coordinator-owned protocol interpretation, so
- * this narrow bridge only maps process failure -> blocked and cancellation ->
- * canceled. Databases without Task06 tables are intentionally a no-op.
+ * Successful Runs still require Coordinator settlement; failures end the task
+ * while their error and retry authority remain on the physical Run. Cancellation
+ * keeps its distinct task outcome. Databases without Task06 tables are intentionally a no-op.
  */
 export function reconcileStrategyTaskRunTerminal(
   db: SqliteDb,
@@ -809,26 +822,24 @@ export function reconcileStrategyTaskRunTerminal(
       }
       const result = db.prepare(`
         UPDATE strategy_task_executions
-           SET revision = revision + 1, outcome = ?, updated_at = ?,
+           SET revision = revision + 1, outcome = ?, updated_at = ?, deliverable_valid = 0,
                blocked_reason_codes_json = ?, blocked_visible_text = NULL
          WHERE task_execution_id = ? AND revision = ?
            AND latest_run_id = ? AND outcome = 'running'
       `).run(
-        input.status === 'canceled' ? 'canceled' : 'blocked',
+        input.status === 'canceled' ? 'canceled' : 'completed',
         Math.max(
           current.updatedAt,
           normalizeTimestamp(input.updatedAt ?? Date.now(), 'updatedAt'),
         ),
-        input.status === 'canceled'
-          ? null
-          : JSON.stringify(['od_next_physical_run_interrupted']),
+        null,
         current.taskExecutionId,
         current.revision,
         input.runId,
       );
       if (result.changes === 1) {
-        db.prepare('UPDATE strategy_task_runs SET settlement_reason = ? WHERE run_id = ?')
-          .run(input.status === 'canceled' ? 'canceled' : 'interrupted', input.runId);
+        db.prepare('UPDATE strategy_task_runs SET settlement_reason = ?, settlement_facts_json = ? WHERE run_id = ?')
+          .run('ended', JSON.stringify({ physicalStatus: input.status }), input.runId);
         failIntentResolutionRecord(db, current.taskExecutionId);
       }
       return result.changes === 1;
@@ -915,11 +926,11 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
   const storedExecutionIntent = StrategyExecutionIntentV2Schema.parse(row['execution_intent'] ?? 'produce');
   const executionIntent = storedExecutionIntent;
   validateStoredState({ route, inputStage, outcome, executionMode, ...(executionIntent ? { executionIntent } : {}) });
-  const blockedContext = parseStoredBlockedContext(
+  const blockedContext = outcome === 'blocked' ? parseStoredBlockedContext(
     row['blocked_reason_codes_json'],
     row['blocked_visible_text'],
     outcome,
-  );
+  ) : null;
   // Retired model contracts are historical data only. Never gate reading a
   // conversation on their schema, hash, or relationship to execution state.
   const plan = readHistoricalPlan(row['plan_contract_json'], row['plan_contract_hash']);
@@ -933,6 +944,7 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
            final_text_utf8_bytes AS finalTextUtf8Bytes,
            final_text_sha256 AS finalTextSha256,
            settlement_reason AS settlementReason,
+           settlement_facts_json AS settlementFactsJson,
            cold_start_final_text_json AS coldStartFinalTextJson,
            resume_final_text_json AS resumeFinalTextJson,
            created_at AS createdAt
@@ -950,6 +962,7 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     finalTextUtf8Bytes: unknown;
     finalTextSha256: unknown;
     settlementReason: unknown;
+    settlementFactsJson: unknown;
     coldStartFinalTextJson: unknown;
     resumeFinalTextJson: unknown;
     createdAt: unknown;
@@ -1017,7 +1030,8 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
       finalText,
       ...(coldStartFinalText ? { coldStartFinalText } : {}),
       ...(resumeFinalText ? { resumeFinalText } : {}),
-      ...(mapping.settlementReason == null ? {} : { settlementReason: StrategySettlementReasonV2Schema.parse(mapping.settlementReason) }),
+      ...(mapping.settlementReason == null ? {} : { settlementReason: normalizeStrategySettlementReason(mapping.settlementReason) }),
+      ...(mapping.settlementFactsJson == null ? {} : { settlementFacts: StrategySettlementFactsV2Schema.parse(JSON.parse(requireStoredString(mapping.settlementFactsJson, 'settlement_facts_json'))) }),
     };
   });
   const initialRunId = requireStoredString(row['initial_run_id'], 'initial_run_id');
@@ -1625,7 +1639,7 @@ function validateStoredState(state: {
     if (
       state.inputStage !== 'request'
       || state.executionMode !== null
-      || !['running', 'canceled', 'blocked'].includes(state.outcome)
+      || !['running', 'completed', 'canceled', 'blocked'].includes(state.outcome)
     ) {
       throw new InvalidStrategyTaskRecordError(
         'An unlocked route is valid only for an initial request before routing.',

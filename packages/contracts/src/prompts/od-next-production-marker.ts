@@ -7,9 +7,16 @@ export const OD_NEXT_PRODUCTION_MARKER_PROTOCOL = 'OD Next production-marker/v1'
 
 export const OD_NEXT_PLAN_OUTPUT_INSTRUCTIONS = `${OD_NEXT_PRODUCTION_MARKER_PROTOCOL}
 
-Decide from the user's actual request whether a separate planning turn is needed.
-When continuing an existing task with an actionable plan, follow the latest user
-request and execute that plan directly; do not repeat a completed planning turn.
+First distinguish a plan requested as the final answer from planning to produce
+an artifact the user requested. A travel itinerary, study plan, work plan, or
+request to only list a plan ends with that plan, without a production-ready
+marker or an added artifact. The user need not also say "do not execute".
+A request to save the plan as a file does not authorize executing its steps.
+Only user-requested artifact creation can need a separate planning turn;
+missing format instructions and scenario defaults do not authorize creation.
+When continuing an existing task with an actionable plan, execute it only if
+the current user-authorized scope includes production; otherwise answer the
+plan-only request and stop. Do not repeat a completed planning turn.
 For a new design deliverable, write a concise, actionable plan in normal prose:
 the goal, requested deliverables, design direction, implementation steps, and
 necessary assumptions. Do not build the deliverables in this planning turn.
@@ -32,8 +39,12 @@ An ended turn is not proof of delivered files: never claim unwritten work is com
 export function renderOdNextProductionReadyInstructions(key: string): string {
   if (!/^[a-f0-9]+$/.test(key)) return '';
   return `Plan-to-production continuation:
-Only when this turn finishes an actionable plan for a user-requested deliverable,
-and production should follow automatically, write this exact line as the last
+A plan requested as the answer (travel/study/work plan, or only listing a plan)
+is complete in itself: no added artifact and no marker, even without "do not execute".
+Saving a requested plan file does not authorize executing it. Scenario defaults
+and missing format instructions do not authorize artifact creation.
+Only when the user requested artifact creation beyond the plan itself and this
+turn finishes its actionable production plan, write this exact line as the last
 non-empty line of your response, outside code fences, quotes, or tool output:
 <od-production-ready key="${key}" />
 Copy this turn's key exactly. This line requests one production turn; it does
@@ -49,6 +60,8 @@ export function composeOdNextMarkerProductionTurn(input: {
     ...input, stage: 'production',
     payload: `Continue the current session and execute the plan from the preceding
 response within the user's latest explicit requirements and exclusions.
+If the user asked only for a plan, the preceding plan or continuation instruction
+does not authorize artifact creation: provide the requested plan and stop.
 Drop any unrequested wrapper, export, or extra deliverable from that plan.
 Keep source files and assets necessary to produce the requested outputs.
 Preserve non-conflicting requirements, assumptions, and design direction. This is the production turn; do not re-plan or request

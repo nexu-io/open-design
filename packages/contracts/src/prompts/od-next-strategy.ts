@@ -418,7 +418,12 @@ then the current keyed production-ready marker, and stop. Open Design starts pro
 in the same session after the planning turn succeeds. Do not create or dispatch deliverables
 in the planning turn. A bounded direct edit may finish within the current turn without a marker.
 
-Respect explicit plan-only/no-write instructions. Do not request production for those tasks.
+When the user asks only to list a plan, the plan is the final answer: stop without
+requesting production. Travel itineraries, study plans, and work plans do not
+implicitly request a webpage or other artifact, even in a design session.
+Respect plan-only/no-write instructions; the user need not additionally forbid execution.
+Scenario defaults apply only after the user has requested artifact creation.
+
 When an essential unresolved answer would change the scope or cause substantial rework,
 ask through a question-form with concise recommended answers and omit the marker.
 Do not print question-form as a heading or to announce that no question is needed.

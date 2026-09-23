@@ -698,7 +698,7 @@ process.exit(127);
     expect(await readFile(path.join(cold.cwd, 'landing.html'), 'utf8')).toContain('Landing');
     const settled = getStrategyTaskExecution(database(), task.taskExecutionId)!;
     expect(settled.outcome).toBe('completed');
-    expect(settled.runs[0]?.settlementReason).toBe('production_ready');
+    expect(settled.runs[0]?.settlementReason).toBe('continued');
     expect(settled.runs).toHaveLength(2);
   });
 
@@ -711,7 +711,7 @@ process.exit(127);
     const task = getStrategyTaskExecution(database(), created.strategyTask!.taskExecutionId)!;
     const production = await waitForRunTerminal(started.url, task.latestRunId);
     expect(production.status).toBe('failed');
-    expect(production.strategyTask).toMatchObject({ outcome: 'blocked', settlementReason: 'run_failed' });
+    expect(production.strategyTask).toMatchObject({ outcome: 'completed', settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } });
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
   });
 
@@ -795,7 +795,7 @@ process.exit(127);
     const second = await postRun(started.url, publicRunRequest(fixture, 'Design another site from scratch.', 'repeat-second'));
     const task = await waitForTask(second.strategyTask!.taskExecutionId, 'completed');
     expect(task.runs).toHaveLength(2);
-    expect(task.runs[0]!.settlementReason).toBe('production_ready');
+    expect(task.runs[0]!.settlementReason).toBe('continued');
     expect(task.runs[1]!.inputStage).toBe('production');
     expect(task.runs[0]!.resumeFinalText).toBeDefined();
     const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
@@ -2261,9 +2261,10 @@ process.exit(127);
       exitCode: 0,
       strategyTask: {
         outcome: 'completed', terminal: true, inputStage: 'production',
-        deliverableValid: false, settlementReason: 'todo_unfinished',
+        deliverableValid: false, settlementReason: 'ended', settlementFacts: { todoUnfinished: true, deliverableValid: false },
       },
     });
+    expect(terminal.endedWithUnfinishedWork).toBe(true);
     expect(terminal.errorCode ?? null).toBeNull();
     expect(terminal.error ?? null).toBeNull();
     const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
@@ -2277,7 +2278,7 @@ process.exit(127);
       artifactCount: 0,
       strategyTask: {
         outcome: 'completed', inputStage: 'production',
-        deliverableValid: false, settlementReason: 'todo_unfinished',
+        deliverableValid: false, settlementReason: 'ended', settlementFacts: { todoUnfinished: true, deliverableValid: false },
       },
     });
     expect(end.strategyTask.blockedContext ?? null).toBeNull();
@@ -2293,7 +2294,7 @@ process.exit(127);
     const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
     expect(recovery?.properties).toMatchObject({
       result: 'success',
-      od_next_settlement_reason: 'todo_unfinished',
+      od_next_settlement_reason: 'ended', od_next_settlement_facts: { todoUnfinished: true, deliverableValid: false },
       rpc_close_reason: 'exit_0',
     });
     expect(recovery?.properties?.error_code).toBeUndefined();
@@ -2322,6 +2323,7 @@ process.exit(127);
       exitCode: 0,
       strategyTask: { outcome: 'completed', terminal: true, inputStage: 'request' },
     });
+    expect(terminal.endedWithUnfinishedWork).toBe(false);
     expect(terminal.errorCode ?? null).toBeNull();
     expect(terminal.error ?? null).toBeNull();
     const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
@@ -2352,7 +2354,7 @@ process.exit(127);
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
   }, 90_000);
 
-  it('blocks the durable task when the selected agent exits before publishing a session', async () => {
+  it('preserves physical Run failure without a duplicate task block when the selected agent exits before publishing a session', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.fail-start`, '1');
 
@@ -2368,12 +2370,12 @@ process.exit(127);
       errorCode: 'AGENT_EXECUTION_FAILED',
       strategyTask: {
         taskExecutionId: fixture.taskExecutionId,
-        outcome: 'blocked',
+        outcome: 'completed',
         terminal: true,
       },
     });
     expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)).toMatchObject({
-      outcome: 'blocked',
+      outcome: 'completed',
       latestRunId: fixture.initialRunId,
     });
   });
@@ -2488,12 +2490,8 @@ process.exit(127);
     expect(resumed[1]!.argv).toContain('resume');
   });
 
-  it('does not report unfinished work when the task delivered under a stale plan', async () => {
-    // QA on project 3ffc55f1: the turn wrote its deliverable and OD Next
-    // settled the task `completed`, but the agent's last plan snapshot still
-    // showed pending items. The Run was stamped endedWithUnfinishedWork, so the
-    // chat offered to "continue remaining tasks" on finished work — and taking
-    // that offer opened a second task that could only block on `no_artifact`.
+  it('preserves unfinished todos alongside file evidence without an extra automatic turn', async () => {
+    // A valid file proves an output exists, not that the remaining work is done.
     const fixture = await createFixture('repair');
     queueFixtureIds(fixture);
     await postRun(started!.url, createRunRequest(fixture, 'Build the coach prototype.'));
@@ -2507,22 +2505,22 @@ process.exit(127);
     // The stale snapshot really did reach the Run — otherwise this asserts nothing.
     const events = await readFile(terminal.eventsLogPath, 'utf8');
     expect(events).toContain('Deliver the runnable entry');
-    expect(terminal.endedWithUnfinishedWork).toBe(false);
+    expect(terminal.endedWithUnfinishedWork).toBe(true);
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
 
-    // …and it must survive a reload. The delivered verdict lives only in the
-    // task store — the messages table has no strategy column — so the
-    // conversation read path has to project it, or reopening the project
-    // brings the bogus "continue remaining tasks" offer straight back.
+    // Reload retains both facts: a file was delivered and todos remain unfinished.
     const reloaded = await fetch(
       `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
     );
     expect(reloaded.status).toBe(200);
     const { messages } = await reloaded.json() as {
-      messages: Array<{ role: string; runId?: string; strategyTaskDelivered?: boolean }>;
+      messages: Array<{ role: string; runId?: string; strategyTaskDelivered?: boolean; events?: unknown }>;
     };
     const deliveredTurn = messages.find((message) => message.runId === task.latestRunId);
     expect(deliveredTurn).toBeDefined();
     expect(deliveredTurn!.strategyTaskDelivered).toBe(true);
+    expect(contracts.eventsEndedWithUnfinishedWork(deliveredTurn!.events)).toBe(true);
   });
 
   async function createFixture(_mode: 'repair', { probeLogPath }: { probeLogPath?: string } = {}) {

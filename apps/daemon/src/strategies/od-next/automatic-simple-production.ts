@@ -31,7 +31,10 @@ export function projectStrategyTask(
   const viewedIndex = viewedRunId
     ? task.runs.findIndex((mapping) => mapping.runId === viewedRunId)
     : -1;
-  const settlementReason = task.runs[viewedRunId ? viewedIndex : task.runs.length - 1]?.settlementReason;
+  const viewedRound = task.runs[viewedRunId ? viewedIndex : task.runs.length - 1];
+  const settlementReason = viewedRound?.settlementReason;
+  const deliverableValid = viewedRound?.settlementFacts?.deliverableValid
+    ?? (viewedRound?.runId === task.latestRunId ? task.deliverableValid : undefined);
   const nextRunId = viewedIndex >= 0 ? task.runs[viewedIndex + 1]?.runId : undefined;
   const terminal = TERMINAL_OUTCOMES.has(task.outcome);
   const activeRunId = task.activeRunId ?? task.terminalRunId ?? task.latestRunId;
@@ -52,7 +55,8 @@ export function projectStrategyTask(
     },
     inputStage: task.inputStage,
     ...(settlementReason ? { settlementReason } : {}),
-    ...(task.deliverableValid === undefined ? {} : { deliverableValid: task.deliverableValid }),
+    ...(viewedRound?.settlementFacts ? { settlementFacts: viewedRound.settlementFacts } : {}),
+    ...(deliverableValid === undefined ? {} : { deliverableValid }),
     outcome: task.outcome,
     route: task.route,
     executionMode: task.executionMode,
@@ -110,14 +114,14 @@ export function completeAutomaticSimpleProduction(db: SqliteDb, input: {
   }).task;
 }
 /** Retain a stop for legacy mappings without recovery context or unsafe replay. */
-export function blockAutomaticContinuation(db: SqliteDb, input: {
+export function endFailedAutomaticContinuation(db: SqliteDb, input: {
   runId: string;
   updatedAt?: number;
 }): StrategyTaskExecutionRecord | null {
   const current = getStrategyTaskExecutionByRunId(db, input.runId);
   if (!current) return null;
   if (current.latestRunId !== input.runId || current.outcome !== 'running') return current;
-  console.warn('[od-next-task] blocked', {
+  console.warn('[od-next-task] continuation failed', {
     taskExecutionId: current.taskExecutionId,
     runId: input.runId,
     inputStage: current.inputStage,
@@ -126,16 +130,14 @@ export function blockAutomaticContinuation(db: SqliteDb, input: {
   return compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
     expectedRevision: current.revision,
-    settlementReason: 'run_failed',
+    deliverableValid: false,
+    settlementReason: 'ended',
+    settlementFacts: { physicalStatus: 'failed' },
     to: {
       route: current.route ?? 'full_plan',
       inputStage: current.inputStage,
-      outcome: 'blocked',
+      outcome: 'completed',
       executionMode: current.executionMode,
-    },
-    blockedContext: {
-      reasonCodes: ['od_next_native_session_continuity_unproven'],
-      visibleText: null,
     },
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
   });

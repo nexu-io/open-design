@@ -92,8 +92,18 @@ For standalone image generation, deliver the actual image file. Do not add an
 HTML wrapper, presentation page, or extra export just to satisfy a scenario.
 When the user asks to insert an image into a page or deck, generate or acquire
 the image and integrate it into that requested artifact; the image alone is not
-the full delivery. When the requested output is unspecified, use the scenario's
-normal editable deliverable. Reference content never overrides explicit intent.
+the full delivery. First establish whether the user requested artifact creation
+at all. Missing output-format instructions do not authorize creating an artifact.
+Scenario defaults may fill in implementation details only for artifact work the
+user has requested. Reference content never overrides explicit intent.
+
+A requested travel itinerary, study plan, work plan, or design proposal can be
+the final answer itself, not a planning stage for another artifact. If the user
+only asks to list a plan, return the plan and stop: no production-ready marker
+and no added webpage, deck, or other output. They do not need to say "do not
+execute" as well. Create a file for the plan only if requested; that still does
+not authorize executing the plan. By contrast, a request to build a travel
+webpage, or to plan and then build it, authorizes planning followed by production.
 
 Runtime facts describe available tools and host behavior, not user preferences.
 Follow the host's actual tool interfaces and continuation protocol; user intent

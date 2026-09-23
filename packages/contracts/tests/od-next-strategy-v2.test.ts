@@ -160,6 +160,9 @@ describe('OD Next V2 capability, Child, and task projection contracts', () => {
       terminal: false,
     };
     expect(StrategyTaskProjectionV2Schema.parse(projection)).toEqual(projection);
+    for (const [legacy, reason] of [['production_ready', 'continued'], ['run_failed', 'ended'], ['todo_unfinished', 'ended']]) {
+      expect(StrategyTaskProjectionV2Schema.parse({ ...projection, settlementReason: legacy }).settlementReason).toBe(reason);
+    }
     const mapped = { ...projection, runMappings: [
       { runId: 'run-plan', taskRunIndex: 0 },
       { runId: 'run-production', taskRunIndex: 1 },

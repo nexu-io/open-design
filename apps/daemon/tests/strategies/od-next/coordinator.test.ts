@@ -262,8 +262,8 @@ describe('OD Next planning coordinator', () => {
     expect(final.start).toBe(false);
     expect(final.result.action).toBe('completed'); expect(final.result.reasonCodes).toEqual([]);
     expect(final.result.task.runs).toHaveLength(2);
-    expect(projectStrategyTask(final.result.task, 'marker-request')).toMatchObject({ settlementReason: 'production_ready' });
-    expect(projectStrategyTask(final.result.task, 'marker-production')).toMatchObject({ settlementReason: 'text_only' });
+    expect(projectStrategyTask(final.result.task, 'marker-request')).toMatchObject({ settlementReason: 'continued' });
+    expect(projectStrategyTask(final.result.task, 'marker-production')).toMatchObject({ settlementReason: 'ended' });
     expect(StrategyTaskProjectionV2Schema.safeParse(projectStrategyTask(final.result.task)).success).toBe(true);
   });
 
@@ -291,14 +291,17 @@ describe('OD Next planning coordinator', () => {
     { text: 'Delivered', facts: { deliverableValid: true, todoUnfinished: true }, reason: 'deliverable_valid' },
     { text: '<question-form id="scope">{"questions":[{"id":"audience","label":"Who?"}]}</question-form>', facts: {}, reason: 'question' },
   ])('persists host settlement $reason without declaring delivery', ({ text, facts, reason }) => {
-    const { task, service } = markerHarness();
-    prepareAutomaticStrategyContinuation({
+    const { task, service, physical } = markerHarness();
+    const result = prepareAutomaticStrategyContinuation({
       db, service, task, parsed: markerReply(text), createMeta: () => ({}),
       completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, ...facts },
     });
+    expect(result.start).toBe(false);
+    expect(physical.size).toBe(0);
     const reloaded = getStrategyTaskExecution(db, task.taskExecutionId)!;
     expect(projectStrategyTask(reloaded)).toMatchObject({
-      outcome: 'completed', settlementReason: reason, deliverableValid: facts.deliverableValid === true,
+      outcome: 'completed', settlementReason: reason === 'question' ? 'question' : 'ended',
+      deliverableValid: facts.deliverableValid === true, settlementFacts: facts,
     });
   });
 
@@ -308,9 +311,9 @@ describe('OD Next planning coordinator', () => {
       db, service, task, parsed: markerReply(`Ready.\n${productionMarker}`), createMeta: () => ({}),
       completionEvidence: { physicalStatus: status, deliverableValid: true },
     });
-    expect(result.result.action).toBe(status === 'failed' ? 'blocked' : 'canceled');
+    expect(result.result.action).toBe(status === 'failed' ? 'completed' : 'canceled');
     expect(physical.size).toBe(0);
-    expect(projectStrategyTask(result.result.task).settlementReason).toBe(status === 'failed' ? 'run_failed' : 'canceled');
+    expect(projectStrategyTask(result.result.task).settlementReason).toBe('ended');
   });
 
   it.each(['succeeded', 'failed', 'canceled'] as const)('marker fallback persists physical %s separately from delivery', status => {
@@ -319,10 +322,59 @@ describe('OD Next planning coordinator', () => {
       runId: task.latestRunId, physicalStatus: status, deliverableValid: false,
     });
     expect(result).toMatchObject({
-      outcome: status === 'succeeded' ? 'completed' : status === 'failed' ? 'blocked' : 'canceled',
+      outcome: status === 'canceled' ? 'canceled' : 'completed',
       deliverableValid: false,
     });
     expect(projectStrategyTask(result!).deliverableValid).toBe(false);
+  });
+
+  it('does not inherit plan file evidence as production delivery', () => {
+    const { task, service } = markerHarness();
+    const next = prepareAutomaticStrategyContinuation({ db, service, task,
+      parsed: markerReply(`Ready.\n${productionMarker}`), createMeta: () => ({}),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: true },
+    });
+    expect(next.start).toBe(true);
+    expect(projectStrategyTask(next.result.task).deliverableValid).toBe(false);
+    expect(projectStrategyTask(next.result.task, task.latestRunId)).toMatchObject({
+      deliverableValid: true, settlementReason: 'continued', settlementFacts: { deliverableValid: true },
+    });
+  });
+
+  it('duplicate trailing current markers still claim exactly one production run', () => {
+    const { task, service, physical } = markerHarness();
+    const input = {
+      db, service, task, parsed: markerReply(`Ready.\n${productionMarker}\n${productionMarker}`),
+      createMeta: () => ({}),
+      completionEvidence: { physicalStatus: 'succeeded' as const, deliverableValid: false },
+    };
+    expect(prepareAutomaticStrategyContinuation(input).start).toBe(true);
+    expect(prepareAutomaticStrategyContinuation(input).start).toBe(false);
+    expect(physical.size).toBe(1);
+  });
+
+  it('records an ended task and failed physical status without a blocked projection', () => {
+    const { task } = markerHarness();
+    const settled = completeAutomaticSimpleProduction(db, {
+      runId: task.latestRunId, physicalStatus: 'failed', deliverableValid: false,
+    })!;
+    expect(projectStrategyTask(settled)).toMatchObject({
+      outcome: 'completed', terminal: true, settlementReason: 'ended',
+      settlementFacts: { physicalStatus: 'failed', deliverableValid: false },
+    });
+    expect(projectStrategyTask(settled).blockedContext).toBeUndefined();
+  });
+
+  it('records simultaneous file, truncation and todo facts without overwriting them', () => {
+    const { task, service } = markerHarness();
+    prepareAutomaticStrategyContinuation({
+      db, service, task, parsed: markerReply('Part of the deliverable is written.'), createMeta: () => ({}),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: true, truncated: true, todoUnfinished: true },
+    });
+    expect(projectStrategyTask(getStrategyTaskExecution(db, task.taskExecutionId)!)).toMatchObject({
+      settlementReason: 'ended',
+      settlementFacts: { physicalStatus: 'succeeded', deliverableValid: true, truncated: true, todoUnfinished: true },
+    });
   });
 
   it('marker protocol honors a locked plan-only task despite an emitted marker', () => {

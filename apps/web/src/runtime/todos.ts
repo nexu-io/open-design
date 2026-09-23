@@ -84,22 +84,11 @@ export function unfinishedTodosFromEvents(events: AgentEvent[] | undefined): Tod
 /**
  * Unfinished todos the user can still usefully be offered to continue.
  *
- * A stale TodoWrite snapshot is not sufficient grounds for the offer. Two
- * things outrank it, and both are the daemon's own rules read through the
- * canonical contract rather than restated here:
- *
- *  · a strategy task that already settled `completed` — a verdict the daemon
- *    only reaches after verifying the canonical deliverable on disk. The
- *    declared work IS done, and "continue" would open a fresh task with nothing
- *    left to write, which can only end blocked on `no_artifact`;
- *  · a turn that ended by ASKING (`turnEndedByAskingUser`). A clarification
- *    turn writes its plan, renders a `<question-form>`, and exits 0; its plan is
- *    the work the user's ANSWER will start. Judging it on the snapshot made the
- *    footer read "stopped with unfinished work" the moment the form was
- *    answered — under a turn that nothing had stopped (run
- *    441ff961-bd66-4c4a-91e7-812f1d489668: `succeeded`, code 0, no error) — and
- *    put "continue remaining" next to it, which would bypass the question the
- *    turn just asked.
+ * File delivery is an independent fact and cannot erase pending todos.
+ * A turn that ended by ASKING (`turnEndedByAskingUser`) waits for the answer.
+ * Its todo describes work to start after clarification, so offering a generic
+ * continuation would bypass the question. Failed and canceled runs retain
+ * their remaining work regardless of a question emitted along the way.
  *
  * This has to be decided HERE, not left to the daemon's `endedWithUnfinishedWork`
  * stamp: the footer never reads that flag, it re-derives the answer from the
@@ -121,7 +110,7 @@ export function continuableUnfinishedTodos(
       }
     | undefined,
 ): TodoItem[] {
-  if (!message || message.strategyTaskDelivered) return [];
+  if (!message) return [];
   if (turnRanToCleanEnd(message.runStatus) && messageEndedByAskingUser(message)) return [];
   return unfinishedTodosFromEvents(message.events);
 }

@@ -1,4 +1,4 @@
-import type { StrategySettlementReasonV2 } from '@open-design/contracts';
+import type { StrategySettlementReasonV2, StrategySettlementFactsV2 } from '@open-design/contracts';
 import type { OdNextReply } from './protocol.js';
 import type Database from 'better-sqlite3';
 import { countRenderableQuestionForms } from '../../question-form-detect.js';
@@ -25,29 +25,31 @@ export function settleMarkerTurn(db: Database.Database, input: {
   }
   const status = input.completionEvidence?.physicalStatus;
   const ready = status === 'succeeded' && markerMayContinue(task, input.parsed);
-  const outcome = status === 'canceled' ? 'canceled'
-    : status !== 'succeeded' ? 'blocked'
-      : ready ? 'plan_ready' : 'completed';
-  const reasonCodes = outcome === 'blocked' ? ['od_next_physical_run_not_succeeded'] : [];
-  const settlementReason: StrategySettlementReasonV2 = status === 'canceled' ? 'canceled'
-    : status !== 'succeeded' ? 'run_failed'
-      : ready ? 'production_ready'
-        : input.completionEvidence?.deliverableValid ? 'deliverable_valid'
-          : countRenderableQuestionForms(input.parsed.visibleText) > 0 ? 'question'
-            : input.completionEvidence?.truncated ? 'truncated'
-              : input.completionEvidence?.todoUnfinished ? 'todo_unfinished'
-                : task.executionIntent === 'plan_only' ? 'plan_only'
-                  : input.parsed.visibleText.trim() ? 'text_only' : 'empty_reply';
+  // Task state owns orchestration only; a failed physical Run stays failed.
+  const outcome = status === 'canceled' ? 'canceled' : ready ? 'plan_ready' : 'completed';
+  const reasonCodes: string[] = [];
+  const askedUserQuestion = countRenderableQuestionForms(input.parsed.visibleText) > 0;
+  const settlementReason: StrategySettlementReasonV2 = ready ? 'continued'
+    : status === 'succeeded' && askedUserQuestion ? 'question' : 'ended';
+  const settlementFacts: StrategySettlementFactsV2 = {
+    ...(status ? { physicalStatus: status } : {}),
+    ...(input.completionEvidence ? { deliverableValid: input.completionEvidence.deliverableValid } : {}),
+    ...(input.completionEvidence?.truncated === undefined ? {} : { truncated: input.completionEvidence.truncated }),
+    ...(input.completionEvidence?.todoUnfinished === undefined ? {} : { todoUnfinished: input.completionEvidence.todoUnfinished }),
+    askedUserQuestion,
+    productionReady: input.parsed.productionReady,
+    emptyReply: !input.parsed.visibleText.trim(),
+    ...(task.executionIntent ? { executionIntent: task.executionIntent } : {}),
+  };
   const settled = compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
     deliverableValid: input.completionEvidence?.deliverableValid === true,
-    settlementReason,
+    settlementReason, settlementFacts,
     to: {
       route: task.route ?? 'full_plan', inputStage: task.inputStage,
       outcome, executionMode: task.executionMode ?? (ready ? 'simple' : null),
       executionIntent: task.executionIntent ?? 'produce',
     },
-    ...(outcome === 'blocked' ? { blockedContext: { reasonCodes, visibleText: input.parsed.visibleText } } : {}),
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
   });
   return { action: outcome, task: settled, visibleText: input.parsed.visibleText, reasonCodes };

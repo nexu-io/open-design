@@ -1002,7 +1002,8 @@ describe('task observation rollout', () => {
         outcome: 'completed',
         executionMode: 'simple',
       },
-      settlementReason: 'text_only',
+      settlementReason: 'ended',
+      settlementFacts: { physicalStatus: 'succeeded', deliverableValid: true, todoUnfinished: true },
       updatedAt: 2_000,
     });
     const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
@@ -1043,7 +1044,7 @@ describe('task observation rollout', () => {
       body: { name?: string };
     }>;
     expect(batch.filter((event) => event.type === 'trace-create')).toHaveLength(1);
-    expect(batch.find(event => event.type === 'trace-create')?.body).toMatchObject({ metadata: { roundSettlements: [{ runId: 'run-production', reason: 'text_only' }] } });
+    expect(batch.find(event => event.type === 'trace-create')?.body).toMatchObject({ metadata: { roundSettlements: [{ runId: 'run-production', reason: 'ended', facts: { physicalStatus: 'succeeded', deliverableValid: true, todoUnfinished: true } }] } });
     expect(batch.filter((event) => event.type === 'span-create').map((event) => event.body.name))
       .toEqual([
         'strategy-stage:request',

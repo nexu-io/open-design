@@ -107,12 +107,12 @@ describe('strategyBlockedMessageFields', () => {
 });
 
 describe('strategySettledMessageFields', () => {
-  it('stamps a delivered flag for a completed task', () => {
+  it('does not infer delivery from a historical completed task without evidence', () => {
     expect(strategySettledMessageFields(blockedProjection({
       outcome: 'completed',
       terminal: true,
       blockedContext: undefined,
-    }))).toEqual({ strategyTaskDelivered: true });
+    }))).toBeNull();
   });
 
   it('does not claim delivery merely because a marker task ended', () => {
