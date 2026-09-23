@@ -218,7 +218,8 @@ async function startAuthority(callbacks: {
       }));
       return;
     }
-    if (req.url === '/api/v1/collab/events' && req.method === 'GET') {
+    const pathname = new URL(req.url ?? '/', 'http://authority.test').pathname;
+    if (pathname === '/api/v1/collab/events' && req.method === 'GET') {
       res.writeHead(200, {
         'cache-control': 'no-cache',
         connection: 'keep-alive',
