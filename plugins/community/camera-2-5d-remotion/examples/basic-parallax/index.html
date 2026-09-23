@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Basic Parallax 2.5D Camera — OpenDesign & Remotion</title>
+  <style>
+    :root {
+      --bg: #07090e;
+      --surface: #0f1422;
+      --surface-elevated: #161e31;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(56, 189, 248, 0.4);
+      --fg: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --purple: #818cf8;
+      --emerald: #10b981;
+      --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', 'IBM Plex Mono', Menlo, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-display);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Header Nav */
+    header {
+      height: 64px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(15, 20, 34, 0.85);
+      backdrop-filter: blur(16px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      color: #000;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--fg);
+    }
+
+    .meta-tags {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .meta-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .meta-pill span {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Main Stage Layout */
+    .studio-container {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 64px);
+    }
+
+    /* Left Control Sidebar */
+    .sidebar-controls {
+      width: 380px;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .control-section {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Preset Buttons */
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .preset-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .preset-btn span.name {
+      font-weight: 600;
+    }
+
+    .preset-btn span.desc {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .preset-btn:hover {
+      background: rgba(56, 189, 248, 0.08);
+      border-color: var(--accent);
+    }
+
+    .preset-btn.active {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    /* Coordinates Readout */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      font-family: var(--font-mono);
+    }
+
+    .telemetry-card {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      border-radius: 6px;
+    }
+
+    .telemetry-label {
+      font-size: 10px;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .telemetry-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* Depth Layer Switcher */
+    .layer-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .layer-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .layer-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .layer-chip {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    .chip-fg { background: var(--purple); }
+    .chip-mid { background: var(--accent); }
+    .chip-bg { background: var(--emerald); }
+
+    .layer-z-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Center Viewport Stage */
+    .viewport-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #04060a;
+      position: relative;
+      overflow: hidden;
+      padding: 24px;
+    }
+
+    /* 9:16 Canvas Wrapper */
+    .composition-canvas-scaler {
+      width: 378px;
+      height: 672px; /* 1080x1920 scaled down to ~35% for preview */
+      position: relative;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      overflow: hidden;
+      background: #000;
+    }
+
+    /* Native CSS 3D Camera Rig */
+    .camera-rig-viewport {
+      width: 1080px;
+      height: 1920px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: top left;
+      transform: scale(0.35); /* Fit to 378x672 */
+      perspective: 1200px;
+      perspective-origin: 50% 50%;
+      overflow: hidden;
+    }
+
+    .camera-rig-world {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-style: preserve-3d;
+      will-change: transform;
+    }
+
+    /* Layer Base Class */
+    .spatial-layer {
+      position: absolute;
+      transform-style: preserve-3d;
+      backface-visibility: hidden;
+      top: 50%;
+      left: 50%;
+      transition: outline 0.2s ease;
+    }
+
+    /* Layer 3: Background (Z = -300) */
+    #layer-background {
+      width: 1400px;
+      height: 2200px;
+      margin-left: -700px;
+      margin-top: -1100px;
+      background: radial-gradient(circle at 50% 45%, #18233c 0%, #080c16 70%, #030509 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ambient-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(56, 189, 248, 0.12) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(56, 189, 248, 0.12) 1px, transparent 1px);
+      background-size: 70px 70px;
+      mask-image: radial-gradient(ellipse 65% 55% at 50% 50%, #000 30%, transparent 80%);
+    }
+
+    .glow-orb {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, rgba(56, 189, 248, 0) 70%);
+      filter: blur(40px);
+    }
+
+    /* Layer 2: Middle SaaS Card (Z = 0) */
+    #layer-middle {
+      width: 820px;
+      height: 780px;
+      margin-left: -410px;
+      margin-top: -320px;
+    }
+
+    .glass-card {
+      width: 100%;
+      height: 100%;
+      background: rgba(22, 30, 49, 0.72);
+      backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 36px;
+      padding: 48px;
+      box-shadow: 
+        0 30px 60px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--emerald);
+      background: rgba(16, 185, 129, 0.12);
+      padding: 8px 16px;
+      border-radius: 9999px;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 10px var(--emerald);
+    }
+
+    .card-metric-num {
+      font-size: 76px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-top: 24px;
+    }
+
+    .card-metric-label {
+      font-size: 20px;
+      color: var(--muted);
+      margin-top: 8px;
+      font-weight: 500;
+    }
+
+    /* Waveform visual */
+    .waveform-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      height: 120px;
+      margin-top: 32px;
+      padding: 16px 20px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .wave-bar {
+      flex: 1;
+      background: linear-gradient(to top, var(--accent), var(--purple));
+      border-radius: 4px;
+      transition: height 0.2s ease;
+    }
+
+    /* Layer 1: Foreground Headline & Badges (Z = +100) */
+    #layer-foreground {
+      width: 860px;
+      margin-left: -430px;
+      margin-top: -720px;
+      text-align: center;
+    }
+
+    .hero-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(129, 140, 248, 0.15);
+      border: 1px solid rgba(129, 140, 248, 0.4);
+      color: #c7d2fe;
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 8px 20px;
+      border-radius: 9999px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+
+    .hero-headline {
+      font-size: 64px;
+      font-weight: 900;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      color: #ffffff;
+      text-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+    }
+
+    .hero-headline span.gradient {
+      background: linear-gradient(135deg, #38bdf8 0%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .floating-pill {
+      display: inline-block;
+      margin-top: 24px;
+      background: #0f172a;
+      border: 1.5px solid var(--accent);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      padding: 12px 28px;
+      border-radius: 9999px;
+      box-shadow: 0 20px 35px rgba(0, 0, 0, 0.7);
+    }
+
+    /* Debug wireframes */
+    body.wireframe-mode .spatial-layer {
+      outline: 2px dashed rgba(255, 255, 255, 0.4) !important;
+    }
+    body.wireframe-mode #layer-foreground {
+      outline-color: var(--purple) !important;
+    }
+    body.wireframe-mode #layer-middle {
+      outline-color: var(--accent) !important;
+    }
+    body.wireframe-mode #layer-background {
+      outline-color: var(--emerald) !important;
+    }
+
+    /* Bottom Timeline Bar */
+    .timeline-bar {
+      height: 84px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 20px;
+      z-index: 50;
+    }
+
+    .play-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none;
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      transition: transform 0.1s ease, background 0.15s ease;
+    }
+
+    .play-btn:hover {
+      transform: scale(1.05);
+      background: #7dd3fc;
+    }
+
+    .scrubber-track-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .scrubber-header {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .timeline-slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .timeline-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      cursor: pointer;
+    }
+
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toggle-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .toggle-btn.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Modal for scene.json inspect */
+    .json-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(10px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    .json-modal.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 760px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8);
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-content {
+      padding: 20px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.6;
+      background: #080c14;
+      color: #93c5fd;
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand-group">
+      <div class="brand-badge">2.5D Rig</div>
+      <h1 class="brand-title">camera-2-5d-remotion · Basic Parallax Prototype</h1>
+    </div>
+
+    <div class="meta-tags">
+      <div class="meta-pill">Canvas: <span>1080×1920 (9:16)</span></div>
+      <div class="meta-pill">FPS: <span>30</span></div>
+      <div class="meta-pill">Duration: <span>90 frames</span></div>
+      <button class="toggle-btn" id="btn-view-json">Export scene.json</button>
+    </div>
+  </header>
+
+  <div class="studio-container">
+    <!-- Left Sidebar -->
+    <aside class="sidebar-controls">
+      <!-- Camera Presets -->
+      <div class="control-section">
+        <div class="section-title">
+          <span>Camera Presets</span>
+          <span style="color: var(--accent); font-family: var(--font-mono);">13 Loaded</span>
+        </div>
+        <div class="preset-grid">
+          <button class="preset-btn active" data-preset="parallax-push">
+            <span class="name">parallax-push</span>
+            <span class="desc">Aproximação em ângulo oblíquo</span>
+          </button>
+          <button class="preset-btn" data-preset="push-in">
+            <span class="name">push-in</span>
+            <span class="desc">Dolly frontal suave</span>
+          </button>
+          <button class="preset-btn" data-preset="orbit-left">
+            <span class="name">orbit-left</span>
+            <span class="desc">Órbita dimensional</span>
+          </button>
+          <button class="preset-btn" data-preset="orbit-right">
+            <span class="name">orbit-right</span>
+            <span class="desc">Órbita dimensional direita</span>
+          </button>
+          <button class="preset-btn" data-preset="subtle-drift">
+            <span class="name">subtle-drift</span>
+            <span class="desc">Flutuação contínua</span>
+          </button>
+          <button class="preset-btn" data-preset="pull-out">
+            <span class="name">pull-out</span>
+            <span class="desc">Afastamento gradual</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Telemetry Readout -->
+      <div class="control-section">
+        <div class="section-title">Live Camera Telemetry</div>
+        <div class="telemetry-grid">
+          <div class="telemetry-card">
+            <div class="telemetry-label">Cam X</div>
+            <div class="telemetry-value" id="val-cam-x">0 px</div>
+          </div>
+          <div class="telemetry-card">
+            <div class="telemetry-label">Cam Y</div>
+            <div class="telemetry-value" id="val-cam-y">0 px</div>
+          </div>
+          <div class="telemetry-card">
+            <div class="telemetry-label">Cam Z</div>
+            <div class="telemetry-value" id="val-cam-z">900 px</div>
+          </div>
+          <div class="telemetry-card">
+            <div class="telemetry-label">Rot X</div>
+            <div class="telemetry-value" id="val-rot-x">0.0°</div>
+          </div>
+          <div class="telemetry-card">
+            <div class="telemetry-label">Rot Y</div>
+            <div class="telemetry-value" id="val-rot-y">0.0°</div>
+          </div>
+          <div class="telemetry-card">
+            <div class="telemetry-label">Rot Z</div>
+            <div class="telemetry-value" id="val-rot-z">0.0°</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spatial Layers -->
+      <div class="control-section">
+        <div class="section-title">Layer Depth Allocation</div>
+        <div class="layer-list">
+          <div class="layer-item">
+            <div class="layer-info">
+              <div class="layer-chip chip-fg"></div>
+              <span>Headline & Badges</span>
+            </div>
+            <span class="layer-z-badge" style="color: var(--purple);">Z = +100</span>
+          </div>
+          <div class="layer-item">
+            <div class="layer-info">
+              <div class="layer-chip chip-mid"></div>
+              <span>Interactive Glass Card</span>
+            </div>
+            <span class="layer-z-badge" style="color: var(--accent);">Z = 0</span>
+          </div>
+          <div class="layer-item">
+            <div class="layer-info">
+              <div class="layer-chip chip-bg"></div>
+              <span>Perspective Nebula Grid</span>
+            </div>
+            <span class="layer-z-badge" style="color: var(--emerald);">Z = -300</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Remotion Status -->
+      <div class="control-section" style="border-bottom: none;">
+        <div class="section-title">Remotion Compatibility</div>
+        <p style="font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 12px;">
+          Esta composição calcula transformações idênticas ao hook <code>interpolate()</code> do Remotion.
+        </p>
+        <div class="meta-pill" style="justify-content: center; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: var(--emerald);">
+          ✓ 100% Deterministic & Portable
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center Stage Viewport -->
+    <main class="viewport-stage">
+      <div class="composition-canvas-scaler">
+        <div class="camera-rig-viewport" id="viewport">
+          <div class="camera-rig-world" id="world">
+            
+            <!-- LAYER 3: BACKGROUND (Z = -300) -->
+            <div class="spatial-layer" id="layer-background" style="transform: translate3d(0, 0, -300px);">
+              <div class="ambient-grid"></div>
+              <div class="glow-orb"></div>
+            </div>
+
+            <!-- LAYER 2: MIDDLE (Z = 0) -->
+            <div class="spatial-layer" id="layer-middle" style="transform: translate3d(0, 70px, 0px);">
+              <div class="glass-card">
+                <div class="card-top">
+                  <div class="card-status">
+                    <div class="status-dot"></div>
+                    <span>Active 2.5D Rig</span>
+                  </div>
+                  <div style="font-family: var(--font-mono); font-size: 14px; color: var(--muted);">AE-CSS Bridge</div>
+                </div>
+
+                <div>
+                  <div class="card-metric-num">98.4%</div>
+                  <div class="card-metric-label">Parallax Motion Fidelity</div>
+                </div>
+
+                <div class="waveform-bars">
+                  <div class="wave-bar" style="height: 35%;"></div>
+                  <div class="wave-bar" style="height: 55%;"></div>
+                  <div class="wave-bar" style="height: 85%;"></div>
+                  <div class="wave-bar" style="height: 60%;"></div>
+                  <div class="wave-bar" style="height: 95%;"></div>
+                  <div class="wave-bar" style="height: 70%;"></div>
+                  <div class="wave-bar" style="height: 40%;"></div>
+                  <div class="wave-bar" style="height: 80%;"></div>
+                  <div class="wave-bar" style="height: 65%;"></div>
+                  <div class="wave-bar" style="height: 50%;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- LAYER 1: FOREGROUND (Z = +100) -->
+            <div class="spatial-layer" id="layer-foreground" style="transform: translate3d(0, -380px, 100px);">
+              <div class="hero-kicker">✦ After Effects Parallax</div>
+              <h2 class="hero-headline">
+                NEXT-GEN<br>
+                <span class="gradient">2.5D CAMERA</span>
+              </h2>
+              <div class="floating-pill">HTML / CSS / Remotion Native</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Bottom Timeline Bar -->
+  <footer class="timeline-bar">
+    <button class="play-btn" id="btn-play-pause">▶</button>
+
+    <div class="scrubber-track-container">
+      <div class="scrubber-header">
+        <div>Frame: <strong id="lbl-current-frame" style="color: var(--accent);">0</strong> / 90</div>
+        <div>Time: <strong id="lbl-current-time">0.00s</strong> (30 fps)</div>
+      </div>
+      <input type="range" min="0" max="90" value="0" class="timeline-slider" id="scrubber">
+    </div>
+
+    <div class="toggle-group">
+      <button class="toggle-btn" id="btn-toggle-wireframe">3D Wireframe</button>
+      <button class="toggle-btn active" id="btn-toggle-loop">Loop</button>
+    </div>
+  </footer>
+
+  <!-- JSON Modal -->
+  <div class="json-modal" id="json-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 style="font-size: 14px; font-weight: 600;">Exported scene.json (Remotion Portable Contract)</h3>
+        <button class="toggle-btn" id="btn-close-modal">Fechar</button>
+      </div>
+      <div class="modal-content" id="json-code-box"></div>
+    </div>
+  </div>
+
+  <script>
+    // Canonical Scene Data definition
+    const sceneData = {
+      schemaVersion: "1.0.0",
+      canvas: { width: 1080, height: 1920 },
+      fps: 30,
+      durationInFrames: 90,
+      camera: {
+        perspective: 1200,
+        initialPosition: [0, 0, 900],
+        initialRotation: [0, 0, 0],
+        keyframes: [
+          { frame: 0, position: [0, 0, 900], rotation: [0, 0, 0], easing: "easeInOut" },
+          { frame: 60, position: [100, -40, 550], rotation: [0, -4, 1], easing: "easeInOut" },
+          { frame: 90, position: [106, -42, 538], rotation: [0, -4.2, 1.05], easing: "easeOut" }
+        ]
+      },
+      layers: [
+        { id: "headline-foreground", position: [0, -380, 100], rotation: [0, 0, 0], scale: 1, opacity: 1 },
+        { id: "main-product-card", position: [0, 70, 0], rotation: [0, 0, 0], scale: 1, opacity: 1 },
+        { id: "grid-ambient-background", position: [0, 0, -300], rotation: [0, 0, 0], scale: 1.28, opacity: 1 }
+      ]
+    };
+
+    // Preset Keyframe Definitions
+    const PRESETS = {
+      "parallax-push": [
+        { frame: 0, position: [0, 0, 900], rotation: [0, 0, 0], easing: "easeInOut" },
+        { frame: 60, position: [100, -40, 550], rotation: [0, -4, 1], easing: "easeInOut" },
+        { frame: 90, position: [106, -42, 538], rotation: [0, -4.2, 1.05], easing: "easeOut" }
+      ],
+      "push-in": [
+        { frame: 0, position: [0, 0, 900], rotation: [0, 0, 0], easing: "easeInOut" },
+        { frame: 60, position: [0, 0, 550], rotation: [0, 0, 0], easing: "easeInOut" },
+        { frame: 90, position: [0, 0, 530], rotation: [0, 0, 0], easing: "easeOut" }
+      ],
+      "orbit-left": [
+        { frame: 0, position: [-80, 0, 900], rotation: [0, -4.5, 0], easing: "easeInOut" },
+        { frame: 60, position: [80, 0, 870], rotation: [0, 4.5, 0], easing: "easeInOut" },
+        { frame: 90, position: [90, 0, 865], rotation: [0, 5.0, 0], easing: "easeOut" }
+      ],
+      "orbit-right": [
+        { frame: 0, position: [80, 0, 870], rotation: [0, 4.5, 0], easing: "easeInOut" },
+        { frame: 60, position: [-80, 0, 900], rotation: [0, -4.5, 0], easing: "easeInOut" },
+        { frame: 90, position: [-90, 0, 905], rotation: [0, -5.0, 0], easing: "easeOut" }
+      ],
+      "subtle-drift": [
+        { frame: 0, position: [0, 0, 900], rotation: [0, 0, 0], easing: "easeInOut" },
+        { frame: 45, position: [20, -15, 870], rotation: [-0.5, 1.2, 0.3], easing: "easeInOut" },
+        { frame: 90, position: [-15, 12, 850], rotation: [0.4, -0.8, -0.2], easing: "easeInOut" }
+      ],
+      "pull-out": [
+        { frame: 0, position: [0, 0, 560], rotation: [0, 0, 0], easing: "easeOut" },
+        { frame: 60, position: [0, 0, 950], rotation: [0, 0, 0], easing: "easeInOut" },
+        { frame: 90, position: [0, 0, 980], rotation: [0, 0, 0], easing: "easeOut" }
+      ]
+    };
+
+    let activeKeyframes = PRESETS["parallax-push"];
+    let currentFrame = 0;
+    let isPlaying = true;
+    let loop = true;
+    let animationTimer = null;
+
+    // Cubic bezier easeInOut equivalent to Remotion Easing.inOut(Easing.cubic)
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function lerp(start, end, progress) {
+      return start + (end - start) * progress;
+    }
+
+    function evaluateCamera(frame) {
+      let seg = 0;
+      for (let i = 0; i < activeKeyframes.length - 1; i++) {
+        if (frame >= activeKeyframes[i].frame && frame <= activeKeyframes[i + 1].frame) {
+          seg = i;
+          break;
+        }
+        if (frame > activeKeyframes[i + 1].frame) {
+          seg = i;
+        }
+      }
+
+      const kf0 = activeKeyframes[seg];
+      const kf1 = activeKeyframes[seg + 1] || kf0;
+
+      const duration = Math.max(1, kf1.frame - kf0.frame);
+      const rawProgress = Math.min(1, Math.max(0, (frame - kf0.frame) / duration));
+      const easedProgress = easeInOutCubic(rawProgress);
+
+      const posX = lerp(kf0.position[0], kf1.position[0], easedProgress);
+      const posY = lerp(kf0.position[1], kf1.position[1], easedProgress);
+      const posZ = lerp(kf0.position[2], kf1.position[2], easedProgress);
+
+      const rotX = lerp(kf0.rotation[0], kf1.rotation[0], easedProgress);
+      const rotY = lerp(kf0.rotation[1], kf1.rotation[1], easedProgress);
+      const rotZ = lerp(kf0.rotation[2], kf1.rotation[2], easedProgress);
+
+      return { posX, posY, posZ, rotX, rotY, rotZ };
+    }
+
+    // DOM References
+    const worldEl = document.getElementById("world");
+    const scrubberEl = document.getElementById("scrubber");
+    const lblFrame = document.getElementById("lbl-current-frame");
+    const lblTime = document.getElementById("lbl-current-time");
+    const btnPlayPause = document.getElementById("btn-play-pause");
+    const btnWireframe = document.getElementById("btn-toggle-wireframe");
+    const btnLoop = document.getElementById("btn-toggle-loop");
+    const valCamX = document.getElementById("val-cam-x");
+    const valCamY = document.getElementById("val-cam-y");
+    const valCamZ = document.getElementById("val-cam-z");
+    const valRotX = document.getElementById("val-rot-x");
+    const valRotY = document.getElementById("val-rot-y");
+    const valRotZ = document.getElementById("val-rot-z");
+    const modalEl = document.getElementById("json-modal");
+    const jsonCodeBox = document.getElementById("json-code-box");
+    const btnViewJson = document.getElementById("btn-view-json");
+    const btnCloseModal = document.getElementById("btn-close-modal");
+
+    function renderFrame(f) {
+      currentFrame = f;
+      const { posX, posY, posZ, rotX, rotY, rotZ } = evaluateCamera(f);
+
+      // Invert camera transform onto world coordinate space
+      const baseZ = 900;
+      const worldTransform = `translate3d(${-posX}px, ${-posY}px, ${baseZ - posZ}px) rotateZ(${-rotZ}deg) rotateY(${-rotY}deg) rotateX(${-rotX}deg)`;
+      worldEl.style.transform = worldTransform;
+
+      // Update UI telemetry
+      valCamX.textContent = `${Math.round(posX)} px`;
+      valCamY.textContent = `${Math.round(posY)} px`;
+      valCamZ.textContent = `${Math.round(posZ)} px`;
+      valRotX.textContent = `${rotX.toFixed(1)}°`;
+      valRotY.textContent = `${rotY.toFixed(1)}°`;
+      valRotZ.textContent = `${rotZ.toFixed(1)}°`;
+
+      scrubberEl.value = f;
+      lblFrame.textContent = f;
+      lblTime.textContent = (f / 30).toFixed(2) + "s";
+    }
+
+    function tick() {
+      if (!isPlaying) return;
+      currentFrame++;
+      if (currentFrame > 90) {
+        if (loop) {
+          currentFrame = 0;
+        } else {
+          currentFrame = 90;
+          isPlaying = false;
+          btnPlayPause.textContent = "▶";
+        }
+      }
+      renderFrame(currentFrame);
+    }
+
+    // Interval at 30 fps (~33.3ms)
+    animationTimer = setInterval(tick, 1000 / 30);
+
+    // Event Listeners
+    btnPlayPause.addEventListener("click", () => {
+      isPlaying = !isPlaying;
+      btnPlayPause.textContent = isPlaying ? "⏸" : "▶";
+    });
+
+    scrubberEl.addEventListener("input", (e) => {
+      isPlaying = false;
+      btnPlayPause.textContent = "▶";
+      renderFrame(parseInt(e.target.value, 10));
+    });
+
+    btnLoop.addEventListener("click", () => {
+      loop = !loop;
+      btnLoop.classList.toggle("active", loop);
+    });
+
+    btnWireframe.addEventListener("click", () => {
+      document.body.classList.toggle("wireframe-mode");
+      btnWireframe.classList.toggle("active");
+    });
+
+    // Preset buttons
+    document.querySelectorAll(".preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        const presetKey = btn.dataset.preset;
+        if (PRESETS[presetKey]) {
+          activeKeyframes = PRESETS[presetKey];
+          sceneData.camera.keyframes = activeKeyframes;
+          currentFrame = 0;
+          renderFrame(0);
+        }
+      });
+    });
+
+    // JSON Modal export
+    btnViewJson.addEventListener("click", () => {
+      jsonCodeBox.textContent = JSON.stringify(sceneData, null, 2);
+      modalEl.classList.add("open");
+    });
+
+    btnCloseModal.addEventListener("click", () => {
+      modalEl.classList.remove("open");
+    });
+
+    modalEl.addEventListener("click", (e) => {
+      if (e.target === modalEl) modalEl.classList.remove("open");
+    });
+
+    // Initial render
+    renderFrame(0);
+  </script>
+</body>
+</html>

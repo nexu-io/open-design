@@ -1,0 +1,80 @@
+{
+  "$schema": "../../references/scene-spec.md",
+  "schemaVersion": "1.0.0",
+  "name": "basic-parallax",
+  "title": "Basic Parallax 2.5D Camera Example",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "aspectRatio": "9:16"
+  },
+  "fps": 30,
+  "durationInFrames": 90,
+  "camera": {
+    "perspective": 1200,
+    "initialPosition": [0, 0, 900],
+    "initialRotation": [0, 0, 0],
+    "keyframes": [
+      {
+        "frame": 0,
+        "position": [0, 0, 900],
+        "rotation": [0, 0, 0],
+        "easing": "easeInOut"
+      },
+      {
+        "frame": 60,
+        "position": [100, -40, 550],
+        "rotation": [0, -4, 1],
+        "easing": "easeInOut"
+      },
+      {
+        "frame": 90,
+        "position": [106, -42, 538],
+        "rotation": [0, -4.2, 1.05],
+        "easing": "easeOut"
+      }
+    ]
+  },
+  "layers": [
+    {
+      "id": "headline-foreground",
+      "name": "Headline & Badges (Foreground)",
+      "type": "text",
+      "position": [0, -380, 100],
+      "rotation": [0, 0, 0],
+      "scale": 1,
+      "anchorPoint": [0.5, 0.5],
+      "opacity": 1,
+      "keyframes": []
+    },
+    {
+      "id": "main-product-card",
+      "name": "Interactive SaaS Glass Card (Middle)",
+      "type": "container",
+      "position": [0, 70, 0],
+      "rotation": [0, 0, 0],
+      "scale": 1,
+      "anchorPoint": [0.5, 0.5],
+      "opacity": 1,
+      "keyframes": []
+    },
+    {
+      "id": "grid-ambient-background",
+      "name": "Deep Perspective Grid & Nebula (Background)",
+      "type": "background",
+      "position": [0, 0, -300],
+      "rotation": [0, 0, 0],
+      "scale": 1.28,
+      "anchorPoint": [0.5, 0.5],
+      "opacity": 1,
+      "keyframes": []
+    }
+  ],
+  "presets": [
+    "parallax-push",
+    "push-in",
+    "orbit-left",
+    "orbit-right",
+    "subtle-drift"
+  ]
+}
