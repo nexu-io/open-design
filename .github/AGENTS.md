@@ -50,6 +50,9 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 - `.github/workflows/` contains GitHub Actions workflow entrypoints.
 - `.github/actions/` contains reusable composite actions for workflow setup steps.
 - `.github/scripts/` contains workflow-owned scripts and contracts that are not general repo developer commands.
+- `.github/templates/` contains non-executable `.md` and `.txt` delivery templates rendered by
+  `.github/scripts/template.py`. Keep shell, expressions, conditionals, and structured JSON out of
+  these templates; workflow or domain scripts must calculate every explicit parameter.
 - `.github/scripts/release/` contains release workflow implementation helpers. Keep release-only helpers there and CI handoff helpers at `.github/scripts/`.
 - Root `scripts/` remains for repo-level developer checks, product scripts, and guard/test logic. Do not move workflow-only handoff glue there just to make it look more general.
 

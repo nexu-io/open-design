@@ -32,7 +32,7 @@ from lib.github import (
     download_artifact,
     event_payload,
     run_jobs,
-    unique_run_artifact,
+    latest_run_artifact,
 )
 from lib.r2 import R2Client, R2Credentials, R2Error, R2PreconditionFailed, self_check as r2_self_check
 from lib.workload_products import materialize_products
@@ -1641,6 +1641,8 @@ def validate_admitted_plan(
 
 
 def admit_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
+    if getattr(args, "isolated", False):
+        return admit_isolated_command(args, contract)
     payload = event_payload()
     context = workflow_run_context(payload)
     if context["head_repository"] != context["repository"]:
@@ -1695,6 +1697,45 @@ def admit_command(args: argparse.Namespace, contract: ConvergenceContract) -> in
     return 0
 
 
+def require_isolated_candidate(candidate: dict[str, Any]) -> None:
+    """Authorize same-run CI publication from the default branch only."""
+    payload = event_payload()
+    default_branch = payload.get("repository", {}).get("default_branch", "")
+    if (os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
+            or os.environ.get("GITHUB_REPOSITORY") != "nexu-io/open-design"
+            or os.environ.get("GITHUB_REF") != f"refs/heads/{default_branch}"):
+        raise ConfigError("isolated publication requires the authorized CI default branch")
+    context = producer_context(payload)
+    if (candidate.get("workflow") != "ci"
+            or candidate.get("policy") != "ci-v2"
+            or candidate.get("repositoryId") != context["repositoryId"]
+            or candidate.get("repository") != context["repository"]):
+        raise ConfigError("isolated candidate repository/workflow/policy differs")
+    provenance = candidate.get("provenance", {})
+    for field in ("event", "runId", "runAttempt", "headSha", "baseSha", "treeSha"):
+        if provenance.get(field) != context["provenance"][field]:
+            raise ConfigError(f"isolated candidate {field} differs from current run")
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "candidate.json"
+        write_json_atomic(path, candidate)
+        prepare_publication(path, Path(directory) / "receipts", require_urls=False)
+
+
+def admit_isolated_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
+    entries = handoff_contract.candidate_entry_dirs(args.handoff_root, "convergence")
+    if len(entries) != 1:
+        raise ConfigError("isolated publication requires exactly one successful gate handoff")
+    entry = handoff_contract.validate_convergence(entries[0])
+    candidate = load_json(Path(entry["candidate_path"]))
+    require_isolated_candidate(candidate)
+    if contract.workflow(candidate["workflow"]).policy != candidate["policy"]:
+        raise ConfigError("isolated policy differs from declaration")
+    root = args.root.resolve() if args.root else repository_root(__file__)
+    validate_admitted_plan(candidate, contract, root, candidate["provenance"]["treeSha"])
+    append_outputs({"candidate": entry["candidate_path"], "publish": "true"})
+    return 0
+
+
 def storage_config(*, required: bool) -> dict[str, str]:
     values = {key: os.environ.get(name, "") for key, name in STORAGE_ENV.items()}
     missing = [STORAGE_ENV[key] for key, value in values.items() if not value]
@@ -1721,7 +1762,7 @@ def stage_products_command(args: argparse.Namespace) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     staged = []
     for source in candidate_product_sources(args.candidate):
-        artifact = unique_run_artifact(repository, run_id, source)
+        artifact = latest_run_artifact(repository, run_id, source)
         if artifact is None:
             raise ConfigError(f"current-run product artifact is missing: {source}")
         destination = args.output_dir / f"{source}.zip"
@@ -1984,6 +2025,8 @@ def contribute_command(args: argparse.Namespace, contract: ConvergenceContract) 
 
 
 def publish_command(args: argparse.Namespace) -> int:
+    if getattr(args, "isolated", False):
+        require_isolated_candidate(load_json(args.candidate))
     storage = storage_config(required=True)
     origin = public_origin(storage["public_origin"])
     client = R2Client(
@@ -2147,6 +2190,7 @@ def parse_args() -> argparse.Namespace:
     batches.add_argument("--output-dir", type=Path, required=True)
     admit = sub.add_parser("admit")
     admit.add_argument("--handoff-root", type=Path, required=True)
+    admit.add_argument("--isolated", action="store_true")
     publication = sub.add_parser("prepare-publication")
     publication.add_argument("--candidate", type=Path, required=True)
     publication.add_argument("--output-dir", type=Path, required=True)
@@ -2160,6 +2204,7 @@ def parse_args() -> argparse.Namespace:
     publish.add_argument("--output-dir", type=Path, required=True)
     publish.add_argument("--products-root", type=Path, required=True)
     publish.add_argument("--timeout", type=float, default=15.0)
+    publish.add_argument("--isolated", action="store_true")
     publish.add_argument("--pending", type=Path, help="project consumer requests after trusted publication")
     return parser.parse_args()
 

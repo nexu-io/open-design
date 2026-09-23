@@ -14,17 +14,34 @@ from lib.github import append_outputs, append_summary
 
 
 CONFIDENCE = {"medium": 0, "certain": 1}
+DAEMON_UNIT_WORKLOADS = {f"daemon_unit_{shard}" for shard in range(1, 5)}
+WEB_WORKSPACE_WORKLOADS = {f"web_workspace_{shard}" for shard in range(1, 3)}
+UI_P0_WORKLOADS = {
+    "ui_p0_entry_settings",
+    "ui_p0_project_workspace",
+    "ui_p0_project_workspace_editor",
+    "ui_p0_project_collab",
+    "ui_p0_project_runtime",
+    "ui_p0_workspace_restoration",
+}
 WORKLOADS = {
+    "platform_build",
+    "platform_tests",
     "static_gate",
     "preflight",
     "workspace_unit_tests",
-    "daemon_unit_tests",
+    *DAEMON_UNIT_WORKLOADS,
     "windows_tools_pack_payload_tests",
-    "web_workspace_tests",
+    *WEB_WORKSPACE_WORKLOADS,
     "e2e_vitest",
     "playwright_critical",
-    "ui_p0",
+    *UI_P0_WORKLOADS,
     "playwright_visual",
+}
+SELECTION_ALIASES = {
+    "daemon_unit_tests": DAEMON_UNIT_WORKLOADS,
+    "web_workspace_tests": WEB_WORKSPACE_WORKLOADS,
+    "ui_p0": UI_P0_WORKLOADS,
 }
 
 
@@ -185,15 +202,17 @@ def enabled_workloads(outputs, ci_mode, full_lanes):
     broad = full_lanes or ci_mode == "hot" or any_scope
     ui_p0 = full_lanes or outputs["ui_p0_validation_required"]
     enabled = {
+        "platform_build": broad,
+        "platform_tests": broad,
         "static_gate": True,
         "preflight": True,
         "workspace_unit_tests": broad,
-        "daemon_unit_tests": outputs["daemon_tests_required"],
+        **{name: outputs["daemon_tests_required"] for name in DAEMON_UNIT_WORKLOADS},
         "windows_tools_pack_payload_tests": full_lanes or outputs["windows_tools_pack_payload_tests_required"],
-        "web_workspace_tests": full_lanes or outputs["web_tests_required"],
+        **{name: full_lanes or outputs["web_tests_required"] for name in WEB_WORKSPACE_WORKLOADS},
         "e2e_vitest": full_lanes or outputs["web_tests_required"] or outputs["ui_p0_validation_required"],
         "playwright_critical": outputs["ui_critical_validation_required"] and not ui_p0,
-        "ui_p0": ui_p0,
+        **{name: ui_p0 for name in UI_P0_WORKLOADS},
         "playwright_visual": full_lanes or outputs["visual_validation_required"],
     }
     if set(enabled) != WORKLOADS:
@@ -302,6 +321,7 @@ def emit_plan(plan, output_path=None):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     append_outputs({
+        "enabled": compact_json(plan["enabled"]),
         "scopes": compact_json(plan["scopes"]),
         "ui_p0_matrix": compact_json(plan["matrices"]["ui_p0"]),
         "visual_matrix": compact_json(plan["matrices"]["visual"]),
@@ -348,7 +368,19 @@ def main():
         return 0
     if args.command == "github-output":
         source, files, threshold, mode, full_lanes, derive, resolved = changed_files_for_environment()
-        emit_plan(build_plan(contract, files, source, threshold, mode, full_lanes, derive, resolved), args.output)
+        plan = build_plan(contract, files, source, threshold, mode, full_lanes, derive, resolved)
+        selection = os.environ.get("CI_WORKLOADS", "").strip()
+        if selection:
+            if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
+                raise ConfigError("explicit workload selection requires workflow_dispatch")
+            requested = set(selection.split(","))
+            if not requested.issubset(WORKLOADS | set(SELECTION_ALIASES)):
+                raise ConfigError("explicit selection contains unknown workload identities")
+            selected = set().union(*(SELECTION_ALIASES.get(name, {name}) for name in requested))
+            plan["enabled"] = {name: name in selected for name in WORKLOADS}
+            plan["source"] = "workflow_dispatch:selected"
+            plan["selection"] = sorted(requested)
+        emit_plan(plan, args.output)
         return 0
     files = list(args.files)
     if args.files_from:
