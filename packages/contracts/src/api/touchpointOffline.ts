@@ -68,9 +68,12 @@ export interface TouchpointOfflineReplay {
 	 *
 	 * Derived as `cachedServerTime + elapsed`, where `elapsed` is measured so it
 	 * can only ever increase: the maximum of an in-process monotonic reading and
-	 * a persisted wall-clock high-water mark. A device clock that steps BACK —
-	 * across a sleep, a dual boot, a deliberate change — therefore cannot buy a
-	 * single millisecond of extra display.
+	 * a persisted wall-clock high-water mark. Within a running daemon, a backward
+	 * clock step cannot extend display. After restart, if the startup wall time
+	 * is behind that persisted local-time mark, elapsed downtime is unknown and
+	 * the daemon refuses offline replay until a fresh server response establishes
+	 * a new baseline. A consistently offset device clock still supports replay;
+	 * the comparison is between local readings, not local and server time.
 	 */
 	effectiveServerTime: string;
 }

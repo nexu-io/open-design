@@ -497,86 +497,110 @@ describe('offline schedule cache', () => {
     ).toBeNull();
   });
 
-  // The high-water mark survives a restart, but on its own it cannot MEASURE
-  // anything while the wall clock sits behind it: `max` pins `now` to the mark
-  // and elapsed time stops accruing. `setSystemTime` moves only the wall clock
-  // here; `advanceTimersByTime` is what stands for real time passing.
-  it('counts real time that passes while the wall clock is wound back', () => {
+  it('counts elapsed time through an in-process clock rollback before the first replay', () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance'] });
     vi.setSystemTime(T0);
-    const before = createTouchpointContentCache(dataDir);
-    before.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
-    expect(before.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
 
-    // The clock is wound back far enough that it stays behind the mark for the
-    // whole run below, then the daemon restarts with nothing in memory.
+    vi.advanceTimersByTime(HOUR);
     vi.setSystemTime(T0 - 48 * HOUR);
-    const after = createTouchpointContentCache(dataDir);
-    // Nothing has been measured yet, so this first read is still authorized.
-    expect(after.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
-
-    // Twenty-five real hours pass. The wall clock is still behind the mark the
-    // whole time, so only the monotonic reading can see them — and they are
-    // enough to carry the activity past its own `endsAt`.
-    vi.advanceTimersByTime(25 * HOUR);
-    expect(Date.now()).toBeLessThan(T0);
-    expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+    expect(cache.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+    vi.advanceTimersByTime(23 * HOUR);
+    expect(cache.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
   });
 
-  // What the anchor does NOT recover: time the daemon was not running. No
-  // in-process monotonic source spans a restart, so a rollback that straddles
-  // downtime still buys display time — bounded by the DOWNTIME, not by the size
-  // of the rollback. This pins that bound, because the difference between the
-  // two is the whole argument for whether the residual is tolerable.
-  it('over-displays by the downtime, not by the size of the rollback', () => {
+  // A new process cannot measure the downtime hidden by a wall-clock rollback.
+  // Keep the bytes for online revalidation, but do not restore display authority.
+  it('refuses offline replay after downtime and rollback, even after the wall clock catches up', () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance'] });
     vi.setSystemTime(T0);
     const before = createTouchpointContentCache(dataDir);
     before.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
     expect(before.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
 
-    // One hour of downtime: real time passes with no instance alive to observe it.
     vi.advanceTimersByTime(HOUR);
-    // ...and the clock is wound back a full day before the daemon comes back.
     vi.setSystemTime(T0 + HOUR - 24 * HOUR);
     const after = createTouchpointContentCache(dataDir);
-    expect(after.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+    expect(after.held(MODAL)).not.toBeNull();
 
-    // `endsAt` is T0 + 24h. Real elapsed since the fetch is already 1h, so the
-    // activity truly ends after 23 more hours of uptime. Measure where it does.
-    vi.advanceTimersByTime(23 * HOUR - 60_000);
-    expect(after.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
-
-    // Still alive one minute past its real end — the unmeasured downtime.
-    vi.advanceTimersByTime(2 * 60_000);
-    expect(after.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
-
-    // And gone a minute after the downtime is repaid: 24h of uptime, not 24h
-    // past the rollback. The residual is one hour, the length of the downtime.
-    vi.advanceTimersByTime(HOUR);
+    // The server window has now ended, although wall time has only reached T0.
+    vi.advanceTimersByTime(23 * HOUR + 60_000);
+    expect(Date.now()).toBeGreaterThan(T0);
     expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
   });
 
-  // The device clock is an input, never the authority. Winding it back must not
-  // buy display time — across a restart included, which is the case a purely
-  // in-process monotonic reading cannot cover.
-  it('does not let a backwards system clock extend the window', () => {
+  it('refuses an uncertain restart even when its first replay is delayed until clock catch-up', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+    vi.setSystemTime(T0);
     const before = createTouchpointContentCache(dataDir);
     before.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
-    vi.setSystemTime(T0 + 12 * HOUR);
-    expect(before.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
-
-    // Restart with the clock wound back ten hours.
-    vi.setSystemTime(T0 + 2 * HOUR);
+    vi.advanceTimersByTime(HOUR);
+    vi.setSystemTime(T0 + HOUR - 24 * HOUR);
     const after = createTouchpointContentCache(dataDir);
-    const replayed = after.replayOffline(MODAL, 'upstream_unreachable') as Record<string, any> | null;
-    expect(replayed).not.toBeNull();
-    // Time already observed cannot be un-observed.
-    expect(Date.parse(replayed?.serverTime as string)).toBeGreaterThanOrEqual(T0 + 12 * HOUR);
-
-    // And an activity that ended while the clock was correct stays ended.
-    vi.setSystemTime(T0 + 30 * HOUR);
+    vi.advanceTimersByTime(23 * HOUR + 60_000);
     expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+  });
+
+  it('restores offline replay when an online response establishes a new clock baseline', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+    vi.setSystemTime(T0);
+    const before = createTouchpointContentCache(dataDir);
+    before.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    vi.advanceTimersByTime(HOUR);
+    vi.setSystemTime(T0 - 24 * HOUR);
+    const after = createTouchpointContentCache(dataDir);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+
+    vi.advanceTimersByTime(HOUR);
+    const refreshed = fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY, {
+      serverTime: iso(T0 + 2 * HOUR),
+    });
+    const held = after.held(MODAL)!;
+    const { content: _content, ...envelope } = refreshed;
+    const assembled = after.reassemble(MODAL, held, { ...envelope, contentOmitted: true });
+    expect(assembled).not.toBeNull();
+    after.remember(MODAL, assembled);
+    const replayed = after.replayOffline(MODAL, 'upstream_unreachable');
+    expect(replayed?.serverTime).toBe(iso(T0 + 2 * HOUR));
+    vi.advanceTimersByTime(22 * HOUR);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+  });
+
+  it('supports offline restart on a consistently slow device clock', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+    vi.setSystemTime(T0 - 48 * HOUR);
+    const before = createTouchpointContentCache(dataDir);
+    before.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    vi.advanceTimersByTime(HOUR);
+    const after = createTouchpointContentCache(dataDir);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')?.serverTime).toBe(iso(T0 + HOUR));
+    vi.advanceTimersByTime(23 * HOUR);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+  });
+
+  it('accepts a fresh decision fetched after startup and resets the previous clock anchor', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+    vi.setSystemTime(T0);
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    vi.setSystemTime(T0 + 12 * HOUR);
+    expect(cache.replayOffline(MODAL, 'upstream_unreachable')?.serverTime).toBe(iso(T0 + 12 * HOUR));
+
+    vi.setSystemTime(T0);
+    vi.advanceTimersByTime(HOUR);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY, {
+      serverTime: iso(T0 + HOUR),
+    }));
+    expect(cache.replayOffline(MODAL, 'upstream_unreachable')?.serverTime).toBe(iso(T0 + HOUR));
+  });
+
+  it('never replays an ended activity after a backwards-clock restart', () => {
+    const before = createTouchpointContentCache(dataDir);
+    before.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    vi.setSystemTime(T0 + 30 * HOUR);
+    expect(before.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
     vi.setSystemTime(T0 + HOUR);
     const restarted = createTouchpointContentCache(dataDir);
     expect(restarted.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();

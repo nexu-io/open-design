@@ -423,6 +423,14 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     if (!record) return null;
     const schedule = record.schedule ? touchpointScheduleOf(record.schedule) : null;
     if (!schedule) return null;
+    const file = assemblyFile(key);
+    const anchor = marks.get(file);
+    // Without a current-process anchor, a startup behind the persisted local
+    // clock hides an unknown amount of downtime. Keep the bytes available for
+    // online reassembly, but refuse offline authority until remember() records
+    // a fresh server decision. Check bootWall, not today's wall time: waiting
+    // for the clock to catch up cannot recover the missing elapsed time.
+    if (!anchor && bootWall < record.clock.observedAt) return null;
     // The high-water mark alone cannot measure time while the wall clock sits
     // BEHIND it: `max` pins `now` to the mark, `elapsed` stops growing, and an
     // activity keeps its authority for as long as the clock stays wound back.
@@ -431,10 +439,9 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     // one placement is not evidence about another, and nothing survives a
     // restart except the persisted mark itself.
     const monotonicNow = performance.now();
-    const anchor = marks.get(assemblyFile(key));
     const projected = anchor ? anchor.wall + (monotonicNow - anchor.at) : 0;
     const now = Math.max(record.clock.observedAt, projected, nowEstimate());
-    marks.set(assemblyFile(key), { wall: now, at: monotonicNow });
+    marks.set(file, { wall: now, at: monotonicNow });
     if (now > record.clock.observedAt) {
       try {
         writeFileAtomically(
@@ -610,6 +617,9 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
           envelope,
         };
         writeFileAtomically(assemblyFile(key), JSON.stringify(record));
+        // A fresh server answer establishes its own elapsed-time baseline,
+        // including after an uncertain restart or a corrected device clock.
+        marks.set(assemblyFile(key), { wall: fetchedAt, at: performance.now() });
       } catch {
         /* A cache that cannot be written changes nothing the caller has to act on. */
       }
