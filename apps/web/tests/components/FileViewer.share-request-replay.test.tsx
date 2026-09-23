@@ -101,9 +101,9 @@ function viewerWithActionRequest({
 /*
  * `FileViewer` 并不给 `AnchoredMenuShell` 传 `testId`,所以线上那块菜单没有
  * `data-testid` —— 按 testid 查会**恒为 null**,那样每一条断言都会「绿」得毫无
- * 意义(第一版就是这么假绿的)。改认菜单里那一行只在展开时才存在的 `menuitem`。
+ * 意义(第一版就是这么假绿的)。认分享面板展开时的标题，不依赖权限门控或二级部署行。
  */
-const menu = () => screen.queryByRole('menuitem', { name: /Generate and copy link|Deploy to Cloudflare Pages/i });
+const menu = () => screen.queryByRole('heading', { name: 'Share', level: 2 });
 const exportMenu = () => screen.queryByRole('menuitem', { name: /Export as PDF/i });
 const anchoredMenu = () => document.querySelector('[data-anchored-menu]');
 

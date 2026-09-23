@@ -1,6 +1,16 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { ArtifactExportFormat } from '../runtime/chat/artifact-export';
 import { boundedPublishProgress, ShareTab, type SharePublishFailureKey } from './share/ShareTab';
+import { useShareScopeKeyboard } from './share/useShareScopeKeyboard';
+import { AfterExportShareGuide } from './share/AfterExportShareGuide';
+import { CommentSyncBanner } from './share/CommentSyncBanner';
+import commentPanelStyles from './CommentSidePanel.module.css';
+import { useAfterExportShareGuide } from './share/useAfterExportShareGuide';
+import { useShareGuideAppUserId } from './share/useShareGuideAppUserId';
+import { useProjectShareHistory } from './share/useProjectShareHistory';
+import { SharePanelHeader } from './share/SharePanelHeader';
+import { ShareMoreMenu } from './share/ShareMoreMenu';
+import shareEntryStyles from './share/ShareEntry.module.css';
 import { AnchoredMenuShell } from './chat/AnchoredMenuShell';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
@@ -4357,18 +4367,40 @@ function FileVersionManagerModal({
   );
 }
 
+// O7: 刚刚 / N 分钟前 / N 小时前（同一天）/ 昨天 / 短日期（跨年补年份）. The hour
+// bucket is keyed on calendar day, not elapsed duration, so a same-day
+// comment never reads as "N 天前"; days-ago/weeks-ago buckets are dropped.
 function formatCommentTime(ts: number, t: TranslateFn): string {
-  const diff = Date.now() - ts;
+  const now = Date.now();
+  const diff = now - ts;
   if (diff < 60_000) return t('common.justNow');
   const mins = Math.floor(diff / 60_000);
   if (mins < 60) return t('common.minutesAgo', { n: mins });
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return t('common.hoursAgo', { n: hours });
-  const days = Math.floor(hours / 24);
-  if (days < 7) return t('common.daysAgo', { n: days });
-  const weeks = Math.floor(days / 7);
-  if (weeks < 5) return t('common.weeksAgo', { n: weeks });
-  return new Date(ts).toLocaleDateString();
+  const date = new Date(ts);
+  const today = new Date(now);
+  const isSameDay =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate();
+  if (isSameDay) {
+    return t('common.hoursAgo', { n: Math.floor(diff / 3_600_000) });
+  }
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday =
+    date.getFullYear() === yesterday.getFullYear() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getDate() === yesterday.getDate();
+  if (isYesterday) return t('common.yesterday');
+  const crossYear = date.getFullYear() !== today.getFullYear();
+  try {
+    return date.toLocaleDateString(
+      undefined,
+      crossYear ? { year: 'numeric', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' },
+    );
+  } catch {
+    return date.toISOString();
+  }
 }
 
 function commentActivityAt(comment: PreviewComment): number {
@@ -4431,6 +4463,16 @@ export function commentAuthorAvatarColor(seed: string) {
     hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   }
   return COMMENT_AUTHOR_AVATAR_COLORS[hash % COMMENT_AUTHOR_AVATAR_COLORS.length] ?? COMMENT_AUTHOR_AVATAR_COLORS[0];
+}
+
+// Same author-key precedence as CommentAuthorIdentityContent's seed, minus the
+// directory-resolved member-id fallback (not available outside that component's
+// hook): canvas pins pick their color from this so a pin and its author's
+// sidebar avatar always match.
+function commentAuthorPinSeed(comment: PreviewComment): string {
+  return comment.authorKind === 'user'
+    ? (comment.authorKey ?? comment.authorAppUserId ?? '')
+    : (comment.authorKey ?? comment.authorMemberId ?? '');
 }
 
 // First glyph of the display name (code-point aware so a CJK name shows its
@@ -4568,9 +4610,11 @@ function commentDisplayLabel(comment: PreviewComment, t: TranslateFn): string {
 export function CommentSidePanel({
   comments,
   projectId,
+  filePath,
   selectedIds,
   activeCommentId,
   collapsed,
+  hasUnread = false,
   onCollapsedChange,
   onDismiss,
   onToggleSelect,
@@ -4594,9 +4638,14 @@ export function CommentSidePanel({
 }: {
   comments: PreviewComment[];
   projectId?: string;
+  /** The file currently open in the viewer, so the sync banner can scope its
+   *  per-file backfill answer. Absent means "don't ask for backfill status"
+   *  (e.g. no file context yet), never "no file". */
+  filePath?: string;
   selectedIds: Set<string>;
   activeCommentId: string | null;
   collapsed: boolean;
+  hasUnread?: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   /** Closes the panel outright. The floating card uses this so its collapse
    *  control hides the card instead of parking a full-height rail on the
@@ -4752,6 +4801,7 @@ export function CommentSidePanel({
         <RemixIcon name="message-3-line" size={15} />
         <span>{commentsLabel}</span>
         {comments.length > 0 ? <strong>{comments.length}</strong> : null}
+        {hasUnread ? <span className={commentPanelStyles.unreadDot} data-testid="comment-rail-unread-dot" aria-hidden /> : null}
       </button>
     );
   }
@@ -4772,7 +4822,7 @@ export function CommentSidePanel({
       <div className="comment-side-header">
         <div className="comment-side-title">
           <RemixIcon name="message-3-line" size={15} />
-          <span>{commentsLabel}</span>
+          <span>{commentsLabel} <i>{comments.length}</i></span>
         </div>
         <div className="comment-side-header-actions">
           {/* The header's right slot owns collapse; select all moved below
@@ -4791,6 +4841,7 @@ export function CommentSidePanel({
           </button>
         </div>
       </div>
+      <CommentSyncBanner projectId={projectId} workspaceContext={workspaceContext} filePath={filePath} />
       {sendableCount > 0 ? (
         <div className="comment-side-toolbar">
           <button
@@ -4863,7 +4914,9 @@ export function CommentSidePanel({
                   displayNumber={displayCommentNumber(comment, index)}
                   t={t}
                 />
-                <span className="comment-side-time">{formatCommentTime(commentActivityAt(comment), t)}</span>
+                <span className="comment-side-time" title={formatAbsoluteDateTime(commentActivityAt(comment)) ?? undefined}>
+                  {formatCommentTime(commentActivityAt(comment), t)}
+                </span>
                 {sendable ? (
                   <button
                     type="button"
@@ -5055,9 +5108,11 @@ export function computeReorderedSortKey(
 function CommentSideDock({
   comments,
   projectId,
+  filePath,
   selectedIds,
   activeCommentId,
   collapsed,
+  hasUnread = false,
   onCollapsedChange,
   onDismiss,
   onToggleSelect,
@@ -5081,9 +5136,11 @@ function CommentSideDock({
 }: {
   comments: PreviewComment[];
   projectId?: string;
+  filePath?: string;
   selectedIds: Set<string>;
   activeCommentId: string | null;
   collapsed: boolean;
+  hasUnread?: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onDismiss?: () => void;
   onToggleSelect: (commentId: string) => void;
@@ -5116,9 +5173,11 @@ function CommentSideDock({
       <CommentSidePanel
         comments={comments}
         projectId={projectId}
+        filePath={filePath}
         selectedIds={selectedIds}
         activeCommentId={activeCommentId}
         collapsed={collapsed}
+        hasUnread={hasUnread}
         onCollapsedChange={onCollapsedChange}
         onDismiss={onDismiss}
         onToggleSelect={onToggleSelect}
@@ -5984,6 +6043,9 @@ function CommentPreviewOverlays({
         const tooltip = drifted
           ? `${markerNumber}. ${label} · ${anchorStateLabel(anchorState, t)}`
           : `${markerNumber}. ${label}: ${comment.note}`;
+        // 4.2b: the pin carries the same author color as that author's
+        // sidebar avatar (the lost-anchor variant overrides this below).
+        const pinColor = commentAuthorAvatarColor(commentAuthorPinSeed(comment));
         return (
           <div
             key={comment.id}
@@ -6002,6 +6064,7 @@ function CommentPreviewOverlays({
             <button
               type="button"
               className="comment-saved-pin od-tooltip tipd"
+              style={anchorState === 'lost' ? undefined : { background: pinColor.bg, color: pinColor.fg }}
               data-tooltip={tooltip}
               data-tooltip-placement="top"
               onClick={(event) => {
@@ -6047,7 +6110,15 @@ function CommentPreviewOverlays({
       {showActivePin && activeTarget ? (
         <div
           className="comment-active-pin"
-          style={activeCommentPinStyle(activeTarget, scale, overlayOffset)}
+          style={{
+            ...activeCommentPinStyle(activeTarget, scale, overlayOffset),
+            ...(activeSavedComment
+              ? (() => {
+                  const pinColor = commentAuthorAvatarColor(commentAuthorPinSeed(activeSavedComment));
+                  return { background: pinColor.bg, color: pinColor.fg };
+                })()
+              : null),
+          }}
           data-testid="comment-active-pin"
           aria-hidden="true"
         >
@@ -6550,6 +6621,11 @@ function ReactComponentViewer({
   const publicFileRequestSeqRef = useRef(0);
   const publicFileIdentityRef = useRef({ projectId, fileName: file.name });
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const { scopeTriggerRef, scopeOptionsRef, handleScopeKeyDown } = useShareScopeKeyboard({
+    open: shareAccessMenuOpen,
+    disabled: shareAccessBusy || viewerOnly,
+    setOpen: setShareAccessMenuOpen,
+  });
   // HTML entries that load this file as a Babel module. `null` = still
   // checking; `[]` = standalone artifact; non-empty = a module of a
   // multi-file React prototype, which has no standalone preview. Issue #2744.
@@ -6793,7 +6869,7 @@ function ReactComponentViewer({
   }
 
   async function unpublishCurrentFilePublic() {
-    if (!publishedFileSlug || publishingPublicFile) return;
+    if (viewerOnly || !publishedFileSlug || publishingPublicFile) return;
     const requestProjectId = projectId;
     const requestFileName = file.name;
     const requestSlug = publishedFileSlug;
@@ -7047,10 +7123,11 @@ function ReactComponentViewer({
                             <RemixIcon name="question-line" size={14} />
                           </button>
                         </div>
-                        <div className="chrome-access-select">
+                        <div className="chrome-access-select" onKeyDown={handleScopeKeyDown}>
                             <button
                               type="button"
                               className="chrome-access-trigger"
+                              ref={scopeTriggerRef}
                               aria-haspopup="listbox"
                               aria-expanded={shareAccessMenuOpen}
                               disabled={shareAccessBusy || viewerOnly}
@@ -7080,7 +7157,7 @@ function ReactComponentViewer({
                               <RemixIcon name="arrow-down-s-line" size={16} />
                             </button>
                             {shareAccessMenuOpen ? (
-                              <div className="chrome-access-options" role="listbox">
+                              <div className="chrome-access-options" role="listbox" ref={scopeOptionsRef}>
                                 {([
                                   ['private', 'lock-line', t('fileViewer.workspaceAccessPrivate')],
                                   ['workspace', 'team-line', t('fileViewer.workspaceAccessMembers')],
@@ -7147,7 +7224,8 @@ function ReactComponentViewer({
                                 <button
                                   type="button"
                                   className="chrome-publish-button chrome-publish-button--ghost"
-                                  disabled={publishingPublicFile}
+                                  disabled={viewerOnly || publishingPublicFile}
+                                  title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                                   onClick={() => {
                                     void unpublishCurrentFilePublic();
                                   }}
@@ -7616,7 +7694,9 @@ function HtmlViewer({
     const started = performance.now();
     const originPromise = resolveArtifactExportOrigin(context)
       .catch(() => unknownExportOrigin());
+    const completeShareGuide = afterExportGuide.beginExport();
     const finish = async (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
+      if (toastFormats.has(format)) completeShareGuide(result);
       const originProps = await originPromise;
       trackArtifactExportResult(
         analytics.track,
@@ -8291,7 +8371,7 @@ function HtmlViewer({
   }
 
   async function unpublishCurrentFilePublic() {
-    if (!publishedFileSlug || publishingPublicFile) return;
+    if (viewerOnly || !publishedFileSlug || publishingPublicFile) return;
     const requestProjectId = projectId;
     const requestFileName = file.name;
     const requestSlug = publishedFileSlug;
@@ -8329,8 +8409,12 @@ function HtmlViewer({
         publish_duration_ms: Math.round(performance.now() - unpublishStarted),
       });
       if (publicFileRequestSeqRef.current === requestSeq) {
-        setPublishLinkFeedback('failed');
-        setPublishFailureKey(publicFilePublishFailureKey(error));
+        // Stopping a link is not a clipboard operation. Keep the URL and copy
+        // feedback independent while preserving actionable identity failures.
+        const failureKey = publicFilePublishFailureKey(error);
+        setPublishFailureKey(failureKey === 'fileViewer.publishFileFailed'
+          ? 'fileViewer.unpublishFileFailed'
+          : failureKey);
       }
     } finally {
       if (publicFileRequestSeqRef.current === requestSeq) setPublishingPublicFile(false);
@@ -15186,6 +15270,15 @@ function HtmlViewer({
   // of vanishing. `canShare`/`canDownload` keep the `&& !viewerOnly` gate that
   // guards the actual export/publish handlers.
   const rawCanShare = source !== null && isShareableArtifact;
+  const shareGuideAppUserId = useShareGuideAppUserId();
+  const projectShareHistory = useProjectShareHistory(projectId, workspaceContext, JSON.stringify([file.name, publishedFileUrl]));
+  const afterExportGuide = useAfterExportShareGuide({
+    scopeKey: JSON.stringify([projectId, file.name, workspaceAccountScopedCacheKey(workspaceContext)]),
+    appUserId: shareGuideAppUserId,
+    // The URL only invalidates the read; it never establishes binding history.
+    hasEverShared: projectShareHistory?.hasEverShared ?? null,
+    enabled: workspaceActive && !viewerOnly && rawCanShare && !streaming,
+  });
   const rawCanDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
   const canShare = rawCanShare && !viewerOnly;
   const canDownload = rawCanDownload && !viewerOnly;
@@ -16116,10 +16209,6 @@ function HtmlViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectSocialShareKey]);
   const activeProjectSocialShare = projectSocialShare ?? projectSocialShareFallback;
-  const deployActionIconFor = (providerId: WebDeployProviderId) => {
-    if (providerId === 'cloudflare-pages') return 'pages-line';
-    return 'upload-cloud-line';
-  };
   const latestShareDeployment = useMemo(
     () => pickLatestShareDeployment(deploymentsByProvider),
     [deploymentsByProvider],
@@ -16481,6 +16570,7 @@ function HtmlViewer({
     <CommentSideDock
       comments={visibleSideComments}
       projectId={projectId}
+      filePath={file.path || file.name}
       deckSlideCount={effectiveDeck ? slideState?.count : undefined}
       selectedIds={selectedSideCommentIds}
       activeCommentId={activeSideCommentId}
@@ -16489,6 +16579,7 @@ function HtmlViewer({
       // now always floats as a card, so its collapse control has to actually
       // collapse — forcing `false` here made every click a no-op.
       collapsed={commentSidePanelCollapsed}
+      hasUnread={hasUnreadSideComments}
       onCollapsedChange={setCommentSidePanelCollapsed}
       // Escape remains the explicit floating-card close path. The header
       // disclosure always preserves this mounted dock as a reversible rail.
@@ -17185,7 +17276,7 @@ function HtmlViewer({
                 ) : null}
                   <button
                     type="button"
-                    className="chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified"
+                    className={`chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified ${shareEntryStyles.toolbar}`}
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen && unifiedActionTab === 'share'}
                     aria-label={shareMenuLabel}
@@ -17193,9 +17284,44 @@ function HtmlViewer({
                     title={viewerOnly ? viewerOnlyDisabledTitle : !rawCanShare || streaming ? shareUnavailableHint : undefined}
                     onClick={openShareMenu}
                   >
-                    <RemixIcon name="share-forward-line" size={15} />
+                    {/* E0: board's upload-arrow glyph (13px), not RemixIcon's
+                        share-forward-line — the icon shape itself differs. */}
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <path d="M12 4v11M7 9l5-5 5 5M5 14v5h14v-5" />
+                    </svg>
                     <span>{shareMenuLabel}</span>
                   </button>
+                  {afterExportGuide.noticeId !== null ? (
+                    <AfterExportShareGuide
+                      key={afterExportGuide.noticeId}
+                      labels={{
+                        title: t('fileViewer.shareGuide.title'),
+                        description: t('fileViewer.shareGuide.description'),
+                        openShare: t('fileViewer.shareGuide.tryShare'),
+                        neverShow: t('fileViewer.shareGuide.neverShowAgain'),
+                        saveFailed: t('fileViewer.shareGuide.preferenceSaveFailed'),
+                      }}
+                      onDismiss={afterExportGuide.dismiss}
+                      onNeverShow={afterExportGuide.neverShow}
+                      onOpenShare={() => {
+                        setMenuAnchorId(null);
+                        setMenuOrigin('toolbar');
+                        setUnifiedActionTab('share');
+                        setDeployMenuOpen(true);
+                      }}
+                    />
+                  ) : null}
                 {deployMenuOpen && (rawCanShare || rawCanDownload) ? (
                   /*
                     * **同一块菜单,只是可能换个地方开。**
@@ -17224,7 +17350,27 @@ function HtmlViewer({
                     onAnchorHidden={closeDeployMenu}
                   >
                     {unifiedActionTab === 'share' && rawCanShare ? (
+                      <>
+                      <SharePanelHeader
+                        title={t('fileViewer.unifiedShareTab')}
+                        closeLabel={t('common.close')}
+                        onClose={closeDeployMenu}
+                      >
+                        <ShareMoreMenu label={t('fileViewer.moreSharingOptions')} items={DEPLOY_PROVIDER_OPTIONS.map(option => ({
+                          id: option.id,
+                          label: deployActionLabelFor(option.id),
+                          icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                            {option.id === CLOUDFLARE_PAGES_PROVIDER_ID
+                              ? <><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M4 8h16M8 12h8M8 16h5" /></>
+                              : <path d="M7 18H6a4 4 0 0 1-.6-8A7 7 0 0 1 19 9a4.5 4.5 0 0 1-1 9h-1M12 21V11m-3 3 3-3 3 3" />}
+                          </svg>,
+                          disabled: streaming || viewerOnly,
+                          title: viewerOnly ? viewerOnlyDisabledTitle : streaming ? t('fileViewer.shareAfterGenerationComplete') : undefined,
+                          onSelect: () => { void openDeployModal(option.id); },
+                        }))} />
+                      </SharePanelHeader>
                       <ShareTab
+                        publicationStatus={projectShareHistory?.publications.find(publication => publication.sourceFilePath === file.name)?.status ?? null}
                         menuOrigin={menuOrigin}
                         workspaceContext={workspaceContext}
                         t={t}
@@ -17245,11 +17391,7 @@ function HtmlViewer({
                         viewerOnlyDisabledTitle={viewerOnlyDisabledTitle}
                         publishCurrentFilePublic={publishCurrentFilePublic}
                         publishFailureKey={publishFailureKey}
-                        DEPLOY_PROVIDER_OPTIONS={DEPLOY_PROVIDER_OPTIONS}
                         streaming={streaming}
-                        openDeployModal={openDeployModal}
-                        deployActionIconFor={deployActionIconFor}
-                        deployActionLabelFor={deployActionLabelFor}
                         sharePageUrl={sharePageUrl}
                         canCopyShareLink={canCopyShareLink}
                         shareUnavailableHint={shareUnavailableHint}
@@ -17258,6 +17400,7 @@ function HtmlViewer({
                         canOpenSharePage={canOpenSharePage}
                         shareLinkStatusHint={shareLinkStatusHint}
                       />
+                      </>
                     ) : null}
                     {unifiedActionTab === 'export' && rawCanDownload ? (
                       <div className="chrome-unified-panel">

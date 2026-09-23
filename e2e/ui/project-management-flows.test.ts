@@ -2702,7 +2702,490 @@ test('[P1] project detail assistant completion actions support copy, fork, and f
     .not.toBe(conversationId);
 });
 
+for (const origin of ['artifact-card', 'toolbar'] as const) {
+  test(`[P1] share failure recovery matches available actions from ${origin}`, async ({ page }) => {
+    await page.clock.install();
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await mockWritablePersonalProjectScope(page);
+    const { projectId, conversationId } = await seedProjectWithRepeatedArtifactCards(page);
+    const publicationPath = `/api/projects/${projectId}/files/index.html/publish-public`;
+    const url = `https://example.test/artifact/${projectId}/recovery-alias`;
+    let attempts = 0;
+    let releaseRetry = () => {};
+    const retryGate = new Promise<void>(resolve => { releaseRetry = resolve; });
+    await page.route(`**${publicationPath}`, async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({ json: { publication: null } });
+        return;
+      }
+      attempts += 1;
+      if (attempts === 1) {
+        await route.fulfill({ status: 500, json: { error: 'fixture publish failed' } });
+        return;
+      }
+      await retryGate;
+      await route.fulfill({ json: { url, slug: 'recovery-alias', fileName: 'index.html' } });
+    });
+    await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+    await expectWorkspaceReady(page);
+    if (origin === 'artifact-card') await page.getByTestId('artifact-card-publish-index.html').last().click();
+    else await page.locator('.chrome-share-menu--unified > button[aria-label="Share"]').click();
+    const menu = page.locator('.share-menu-popover[role="menu"]');
+    const hint = menu.getByText('Closing this panel will not interrupt the upload.', { exact: true });
+    await expect(hint).toHaveCount(0);
+    const deploy = menu.getByRole('menuitem', { name: 'Deploy to Vercel', exact: true });
+    if (origin === 'toolbar') await expect(deploy).toBeVisible();
+    else await expect(deploy).toHaveCount(0);
+    await test.info().attach(`failure-recovery-${origin}-entry`, { body: await page.screenshot(), contentType: 'image/png' });
+    await menu.getByRole('menuitem', { name: 'Generate and copy link', exact: true }).click();
+    await expect(menu.getByRole('status')).toHaveText('Could not create the share link. Please try again later.');
+    expect(attempts).toBe(1);
+    const retry = menu.getByRole('menuitem', { name: 'Retry', exact: true });
+    await expect(retry).toBeEnabled();
+    await test.info().attach(`failure-recovery-${origin}-failed`, { body: await page.screenshot(), contentType: 'image/png' });
+    try {
+      await retry.click();
+      const progress = menu.getByRole('progressbar');
+      await expect(progress).toBeVisible();
+      // Advance the existing waiting simulation, not upload bytes or the held response.
+      await page.clock.fastForward(3_500);
+      await expect.poll(async () => Number(await progress.getAttribute('value'))).toBeGreaterThan(0.4);
+      await expect(progress).toHaveCSS('height', '32px');
+      await expect(progress).toHaveCSS('border-radius', '6px');
+      await expect(progress).toHaveCSS('background-color', 'rgb(110, 110, 112)');
+      const busy = menu.getByRole('menuitem', { name: /Uploading.*\d+%/ });
+      await expect(busy).toBeDisabled();
+      const spinner = busy.locator('.icon-spin');
+      await expect(spinner).toHaveCSS('width', '13px');
+      await expect(spinner).toHaveCSS('height', '13px');
+      for (const [name, value] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'aria-hidden': 'true', focusable: 'false' })) {
+        await expect(spinner).toHaveAttribute(name, value);
+      }
+      await expect(spinner.locator('path')).toHaveAttribute('d', 'M12 3a9 9 0 1 0 9 9');
+      expect(await spinner.evaluate(node => getComputedStyle(node).animationName)).not.toBe('none');
+      await expect(busy).toHaveCSS('color', 'rgb(255, 255, 255)');
+      await expect(busy).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      expect(await progress.boundingBox()).toEqual(await busy.boundingBox());
+      const rendered = await progress.evaluate(node => ({
+        value: Number(node.getAttribute('value')),
+        text: node.parentElement?.querySelector('button')?.textContent,
+      }));
+      expect(rendered.value).toBeGreaterThan(0.4);
+      expect(rendered.value).toBeLessThanOrEqual(0.9);
+      expect(rendered.text).toContain(`${Math.round(rendered.value * 100)}%`);
+      await expect(menu.getByRole('status')).toHaveCount(0);
+      await expect.poll(() => attempts).toBe(2);
+      await expect(hint).toBeVisible();
+      await expect(hint).toHaveCSS('font-size', '10.5px');
+      await expect(hint).toHaveCSS('line-height', '17px');
+      await expect(hint).toHaveCSS('color', 'rgb(153, 153, 153)');
+      await expect(hint).toHaveCSS('margin', '0px');
+      await test.info().attach(`failure-recovery-${origin}-retry`, { body: await page.screenshot(), contentType: 'image/png' });
+      const close = menu.getByRole('button', { name: 'Close', exact: true });
+      const closeIcon = close.locator('svg');
+      for (const [name, value] of Object.entries({ width: '14', height: '14', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round', 'aria-hidden': 'true', focusable: 'false' })) {
+        await expect(closeIcon).toHaveAttribute(name, value);
+      }
+      await expect(closeIcon).toHaveCSS('width', '14px');
+      await expect(closeIcon).toHaveCSS('height', '14px');
+      await expect(closeIcon.locator('path')).toHaveAttribute('d', 'M4 4l8 8M12 4l-8 8');
+      await close.click();
+      await expect(menu).toBeHidden();
+      await page.clock.fastForward(500);
+      if (origin === 'artifact-card') await page.getByTestId('artifact-card-publish-index.html').last().click();
+      else await page.locator('.chrome-share-menu--unified > button[aria-label="Share"]').click();
+      await expect(hint).toBeVisible();
+      await expect(progress).toBeVisible();
+      expect(Number(await progress.getAttribute('value'))).toBeGreaterThanOrEqual(rendered.value);
+      expect(attempts).toBe(2); // Dismissing does not abort or restart the pending upload.
+      await test.info().attach(`failure-recovery-${origin}-reopened`, { body: await page.screenshot(), contentType: 'image/png' });
+    } finally {
+      releaseRetry();
+    }
+    await expect(menu.getByRole('button', { name: 'Stop sharing', exact: true })).toBeVisible();
+    await expect(menu).not.toContainText('Could not create the share link.');
+    await expect(hint).toHaveCount(0);
+    await expect(menu.getByRole('status')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+    await expect(retry).toHaveCount(0);
+    await expect(menu.getByRole('progressbar')).toHaveCount(0);
+    expect(attempts).toBe(2);
+    if (origin === 'toolbar') await expect(deploy).toBeVisible();
+    else await expect(deploy).toHaveCount(0);
+    await test.info().attach(`failure-recovery-${origin}-success`, { body: await page.screenshot(), contentType: 'image/png' });
+  });
+}
+
+for (const published of [false, true]) {
+  test(`[P1] team scope trigger canvas published=${published}`, async ({ page }) => {
+    await mockWritablePersonalProjectScope(page);
+    const { projectId, conversationId } = await seedProjectWithRepeatedArtifactCards(page);
+    const context = { ...AMR_PERSONAL_WORKSPACE_CONTEXT, workspaceType: 'team', teamId: 'scope-visual-team' };
+    await page.route(`**/api/projects/${projectId}/workspace-scope`, route => route.fulfill({
+      json: { scope: { kind: 'team', projectId, workspaceId: context.workspaceId, visibility: 'team', context } },
+    }));
+    await page.route(`**/api/projects/${projectId}/collab/status`, route => route.fulfill({
+      json: { publishedVersion: null, materializedVersion: null, syncState: 'local_only', ownerMemberId: context.workspaceMemberId },
+    }));
+    await page.route(`**/api/projects/${projectId}/files/index.html/publish-public`, route => route.fulfill({
+      json: { publication: published ? { url: `https://example.test/artifact/${projectId}/stable-alias`, slug: 'stable-alias', fileName: 'index.html' } : null },
+    }));
+    await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+    await expectWorkspaceReady(page);
+    await page.locator('.chrome-share-menu--unified > button[aria-label="Share"]').click();
+    const menu = page.locator('.share-menu-popover[role="menu"]');
+    if (published) await expect(menu.getByRole('button', { name: 'Stop sharing', exact: true })).toBeVisible();
+    else await expect(menu.getByRole('menuitem', { name: 'Generate and copy link', exact: true })).toBeVisible();
+     const heading = menu.locator('.share-menu-section-label--help');
+     await expect(heading).toHaveText('Visibility in workspace');
+     const publicBlock = published ? menu.locator('.chrome-publish-plain') : menu.getByRole('menuitem', { name: 'Generate and copy link', exact: true });
+     const publicBounds = (await publicBlock.boundingBox())!;
+     expect((await heading.locator('..').boundingBox())!.y - publicBounds.y - publicBounds.height).toBe(32);
+     for (const [property, value] of Object.entries({ padding: '0px', color: 'rgb(51, 51, 51)', 'font-size': '13px', 'font-weight': '500', 'line-height': '20px' })) {
+       await expect(heading).toHaveCSS(property, value);
+     }
+     await expect(menu.getByTestId('workspace-access-help')).toHaveCount(0);
+     const description = menu.getByText('Members of this workspace can access this project.', { exact: true });
+     await expect(description).toBeVisible();
+     for (const [property, value] of Object.entries({ margin: '0px', color: 'rgb(136, 136, 136)', 'font-size': '12px', 'line-height': '18px', 'font-weight': '400' })) {
+       await expect(description).toHaveCSS(property, value);
+     }
+     await expect(description.locator('..')).toHaveCSS('gap', '4px');
+     // S12 moved deployment entries into the header overflow, not a body heading.
+     await expect(menu.getByRole('button', { name: 'More sharing options' })).toBeVisible();
+     await expect(menu.locator('.share-menu-section-label:not(.share-menu-section-label--help)')).toHaveCount(0);
+     const trigger = menu.locator('.chrome-access-trigger');
+     const headingBounds = (await heading.boundingBox())!;
+     const triggerBounds = (await trigger.boundingBox())!;
+     expect(headingBounds.y + headingBounds.height / 2).toBe(triggerBounds.y + triggerBounds.height / 2);
+     expect(triggerBounds.x).toBeGreaterThan(headingBounds.x + headingBounds.width);
+     expect((await description.boundingBox())!.y - triggerBounds.y - triggerBounds.height).toBe(4);
+    await expect(trigger).toBeEnabled();
+    await expect(trigger.locator(':scope > .share-menu-icon')).toBeHidden();
+    await expect(trigger.locator(':scope > svg')).toHaveCSS('width', '12px');
+    await expect(trigger.locator(':scope > svg')).toHaveCSS('height', '12px');
+    const chevron = trigger.locator(':scope > svg');
+    for (const [name, value] of Object.entries({ viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false' })) {
+      await expect(chevron).toHaveAttribute(name, value);
+    }
+    await expect(chevron.locator('path')).toHaveAttribute('d', 'm4 6 4 4 4-4');
+    for (const [property, value] of Object.entries({
+      height: '28px', 'min-height': '28px', 'min-width': '88px', padding: '0px 8px', gap: '8px',
+      'border-top-width': '0px', 'border-radius': '5px', 'background-color': 'rgb(246, 246, 246)',
+      color: 'rgb(85, 85, 85)', 'font-size': '12px', display: 'flex',
+    })) await expect(trigger).toHaveCSS(property, value);
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const scopeMenu = menu.getByRole('listbox');
+    for (const [property, value] of Object.entries({
+      padding: '4px', gap: '2px', display: 'flex', 'flex-direction': 'column',
+      'border-top-width': '1px', 'border-top-color': 'rgba(0, 0, 0, 0.03)',
+      'border-radius': '8px', 'background-color': 'rgb(255, 255, 255)',
+      'box-shadow': 'rgba(0, 0, 0, 0.07) 0px 6px 20px 0px, rgba(0, 0, 0, 0.024) 0px 1px 4px 0px',
+    })) await expect(scopeMenu).toHaveCSS(property, value);
+    await expect(scopeMenu).toHaveCSS('min-width', '168px');
+    await expect(scopeMenu).toHaveCSS('width', '168px');
+    const scopeBounds = (await scopeMenu.boundingBox())!;
+    const anchorBounds = (await trigger.boundingBox())!;
+    expect(scopeBounds.x + scopeBounds.width).toBe(anchorBounds.x + anchorBounds.width);
+    const options = menu.getByRole('option');
+    for (const option of await options.all()) {
+      await expect(option.locator(':scope > .share-menu-icon')).toBeHidden();
+      const label = option.locator(':scope > span:nth-child(2)');
+      await expect(label).toHaveCSS('grid-column-start', '2');
+      expect(await label.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    }
+    const check = menu.getByRole('option', { selected: true }).locator(':scope > svg');
+    await expect(check).toHaveCSS('grid-column-start', '1');
+    await expect(check).toHaveCSS('width', '13px');
+    await expect(check).toHaveCSS('height', '13px');
+    for (const [name, value] of Object.entries({ viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false' })) {
+      await expect(check).toHaveAttribute(name, value);
+    }
+    await expect(check.locator('path')).toHaveAttribute('d', 'm3 8 3 3 7-7');
+    await expect(menu.getByRole('option', { selected: false }).locator(':scope > svg')).toHaveCount(0);
+    await expect(options).toHaveCount(2);
+    for (const option of await options.all()) {
+      for (const [property, value] of Object.entries({
+        height: '28px', 'min-height': '28px', padding: '0px 8px', gap: '8px',
+        'border-top-width': '0px', 'border-radius': '4px', 'font-size': '12px', 'font-weight': '400',
+      })) await expect(option).toHaveCSS(property, value);
+    }
+    const selected = menu.getByRole('option', { name: 'Workspace members', exact: true });
+    await expect(selected).toHaveAttribute('aria-selected', 'true');
+    await expect(selected).toHaveCSS('background-color', 'rgb(242, 242, 244)');
+    await expect(selected).toHaveCSS('color', 'rgb(31, 31, 31)');
+    const privateOption = menu.getByRole('option', { name: 'Only me', exact: true });
+    await expect(privateOption).toHaveCSS('color', 'rgb(73, 73, 73)');
+    await privateOption.hover();
+    await expect(privateOption).toHaveCSS('background-color', 'rgb(242, 242, 244)');
+    await expect(privateOption).toHaveCSS('color', 'rgb(31, 31, 31)');
+    await expect(privateOption).toHaveAttribute('aria-selected', 'false');
+    await trigger.hover();
+    await expect(privateOption).toHaveCSS('color', 'rgb(73, 73, 73)');
+    await expect(selected).toHaveAttribute('aria-selected', 'true');
+    await expect(selected).toHaveCSS('background-color', 'rgb(242, 242, 244)');
+    await test.info().attach(`team-scope-${published ? 'published' : 'first'}`, { body: await page.screenshot(), contentType: 'image/png' });
+    await trigger.click();
+    await expect(menu.getByRole('listbox')).toBeHidden();
+
+    // Keyboard navigation must not change visibility or dismiss the Share panel.
+    await trigger.press('ArrowDown');
+    await expect(selected).toBeFocused();
+    await selected.press('Home');
+    await expect(privateOption).toBeFocused();
+    await privateOption.press('End');
+    await expect(selected).toBeFocused();
+    await selected.press('ArrowDown');
+    await expect(privateOption).toBeFocused();
+    await expect(selected).toHaveAttribute('aria-selected', 'true');
+    await privateOption.press('Escape');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('listbox')).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+
+    // A real confirmation/request drives busy state; do not inject DOM classes.
+    const movePath = `/api/workspaces/${context.workspaceId}/projects/${projectId}/move`;
+    let releaseMove = () => {};
+    const moveGate = new Promise<void>(resolve => { releaseMove = resolve; });
+    await page.route(`**${movePath}`, async route => {
+      await moveGate;
+      await route.fulfill({ status: 503, json: { error: { message: 'visual busy-state fixture' } } });
+    });
+    try {
+      await trigger.press('ArrowUp');
+      await expect(selected).toBeFocused();
+      await selected.press('Home');
+      await expect(privateOption).toBeFocused();
+      await privateOption.press('Enter');
+      const confirmation = page.getByRole('alertdialog', { name: 'Move out of team space' });
+      const [request] = await Promise.all([
+        page.waitForRequest(request => new URL(request.url()).pathname === movePath && request.method() === 'POST'),
+        confirmation.getByRole('button', { name: 'Confirm move', exact: true }).click(),
+      ]);
+      expect(request.postDataJSON()).toEqual({ visibility: 'personal' });
+      // Confirmation is outside the anchored popover and dismisses it.
+      await page.locator('.chrome-share-menu--unified > button[aria-label="Share"]').click();
+      await expect(trigger).toBeDisabled();
+      await expect(trigger.locator('.share-menu-icon .icon-spin')).toBeVisible();
+      await test.info().attach(`team-scope-busy-${published ? 'published' : 'first'}`, { body: await page.screenshot(), contentType: 'image/png' });
+      const viewport = page.viewportSize()!;
+      // Give the preview the viewport through the real layout control.
+      await page.getByRole('button', { name: 'Collapse the conversation pane', exact: true }).click();
+      try {
+        await page.setViewportSize({ width: 320, height: 900 });
+        // Collapsing chat changes the anchor layout; reopen the workspace entry.
+        await expect(menu).toBeHidden();
+        await page.locator('.chrome-share-menu--unified > button[aria-label="Share"]').click();
+        await expect(menu).toBeVisible();
+        const menuBox = (await menu.boundingBox())!;
+        const triggerBox = (await trigger.boundingBox())!;
+        const headingBox = (await heading.boundingBox())!;
+        await test.info().attach(`team-scope-narrow-bounds-${published ? 'published' : 'first'}`, {
+          body: JSON.stringify({ viewport: page.viewportSize(), menuBox, triggerBox, headingBox }), contentType: 'application/json',
+        });
+        expect(menuBox.x).toBeGreaterThanOrEqual(0);
+        expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(320);
+        expect(headingBox.x + headingBox.width + 12).toBeLessThanOrEqual(triggerBox.x);
+        expect(triggerBox.x + triggerBox.width).toBeLessThanOrEqual(menuBox.x + menuBox.width - 20);
+        expect(await heading.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+        await expect(trigger.locator('.share-menu-icon .icon-spin')).toBeVisible();
+        await test.info().attach(`team-scope-narrow-busy-${published ? 'published' : 'first'}`, { body: await page.screenshot(), contentType: 'image/png' });
+      } finally {
+        if (!page.isClosed()) await page.setViewportSize(viewport);
+      }
+      await expect(menu).toBeVisible();
+    } finally {
+      releaseMove();
+    }
+    await expect(trigger).toBeEnabled();
+    await expect(trigger.locator(':scope > .share-menu-icon')).toBeHidden();
+    await expect(trigger).toHaveText('Workspace members');
+    await expect(description).toBeVisible(); // Failed move must not announce a different visibility.
+
+    // Reuse this workflow's settled team project for Chinese copy/cascade checks.
+    for (const [locale, label] of [['zh-CN', '团队成员'], ['zh-TW', '團隊成員']] as const) {
+      await page.evaluate(locale => {
+        localStorage.setItem('open-design:locale', locale);
+        localStorage.setItem('open-design:locale-source', 'manual');
+      }, locale);
+      await page.reload();
+      await expectWorkspaceReady(page);
+      await page.locator('.chrome-share-menu--unified > button[aria-label="分享"]').click();
+      await expect(trigger).toHaveText(label);
+      if (published) {
+        const copyButton = menu.getByRole('button', { name: locale === 'zh-CN' ? '复制链接' : '複製連結', exact: true });
+        await expect(copyButton).toBeEnabled();
+        await expect(copyButton).toHaveCSS('height', '32px');
+      }
+      await expect(trigger).toBeEnabled();
+      await trigger.click();
+      const teamOption = menu.getByRole('option', { name: label, exact: true });
+      await expect(teamOption).toHaveAttribute('aria-selected', 'true');
+      await expect(teamOption).toHaveCSS('height', '28px');
+      await expect(menu.getByRole('listbox')).toHaveCSS('width', '168px');
+      const teamLabel = teamOption.locator(':scope > span:nth-child(2)');
+      expect(await teamLabel.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      await expect(menu).not.toContainText(locale === 'zh-CN' ? '工作空间成员' : '工作空間成員');
+      await test.info().attach(`team-scope-${locale}-${published ? 'published' : 'first'}`, { body: await page.screenshot(), contentType: 'image/png' });
+    }
+
+    // Private workspace visibility is independent of the public file link.
+    await page.route(`**/api/projects/${projectId}/collab/status`, route => route.fulfill({
+      json: { publishedVersion: null, materializedVersion: null, syncState: 'local_only' },
+    }));
+    await page.route('**/api/workspace/projects/team', route => route.fulfill({ json: { projects: [] } }));
+    for (const [locale, label, descriptionText] of [
+      ['zh-CN', '仅自己', '只有你可以在工作区内访问此项目。'],
+      ['zh-TW', '只有自己', '只有你可以在工作區內存取此專案。'],
+    ] as const) {
+      await page.evaluate(locale => {
+        localStorage.setItem('open-design:locale', locale);
+        localStorage.setItem('open-design:locale-source', 'manual');
+      }, locale);
+      await page.reload();
+      await expectWorkspaceReady(page);
+      await page.locator('.chrome-share-menu--unified > button[aria-label="分享"]').click();
+      await expect(trigger).toHaveText(label);
+      if (published) {
+        const copyButton = menu.getByRole('button', { name: locale === 'zh-CN' ? '复制链接' : '複製連結', exact: true });
+        await expect(copyButton).toBeEnabled();
+        await expect(copyButton).toHaveCSS('height', '32px');
+      }
+      const privateDescription = menu.getByText(descriptionText, { exact: true });
+      await expect(privateDescription).toBeVisible();
+      await expect(privateDescription).toHaveCSS('font-size', '12px');
+      await expect(privateDescription).toHaveCSS('line-height', '18px');
+      if (published) await expect(menu.getByText(`https://example.test/artifact/${projectId}/stable-alias`, { exact: true })).toBeVisible();
+      else await expect(menu.getByRole('menuitem', { name: locale === 'zh-CN' ? '生成并复制链接' : '產生並複製連結', exact: true })).toBeVisible();
+      await trigger.click();
+      await expect(menu.getByRole('option', { name: label, exact: true })).toHaveAttribute('aria-selected', 'true');
+      await test.info().attach(`team-scope-private-${locale}-${published ? 'published' : 'first'}`, { body: await page.screenshot(), contentType: 'image/png' });
+    }
+    await page.evaluate(() => {
+      localStorage.setItem('open-design:locale', 'de');
+      localStorage.setItem('open-design:locale-source', 'manual');
+    });
+    await page.reload();
+    await expectWorkspaceReady(page);
+    await page.locator('.chrome-share-menu--unified > button[aria-label="Teilen"]').click();
+    await expect(trigger).toHaveText('Nur ich');
+    await trigger.click();
+    await expect(menu.getByRole('option', { name: 'Nur ich', exact: true })).toHaveAttribute('aria-selected', 'true');
+    const germanMembers = menu.getByRole('option', { name: 'Teammitglieder', exact: true });
+    await expect(germanMembers).toHaveAttribute('aria-selected', 'false');
+    await expect(germanMembers).toHaveCSS('height', '28px');
+    const germanLabel = germanMembers.locator(':scope > span:nth-child(2)');
+    expect(await germanLabel.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await test.info().attach(`team-scope-private-de-${published ? 'published' : 'first'}`, { body: await page.screenshot(), contentType: 'image/png' });
+  });
+}
+
+test('[P1] S12 more sharing opens the existing deployment dialog from the share header', async ({ page }) => {
+  await mockWritablePersonalProjectScope(page);
+  const { projectId, conversationId } = await seedProjectWithRepeatedArtifactCards(page);
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+  await expectWorkspaceReady(page);
+  const secondShare = page.getByTestId('artifact-card-publish-index.html').nth(1);
+  await secondShare.click();
+  const menu = page.locator('.share-menu-popover[role="menu"]');
+  const heading = menu.getByRole('heading', { name: 'Share', level: 2 });
+  await expect(heading).toBeVisible();
+  const moreSharing = menu.getByRole('button', { name: 'More sharing options', exact: true });
+  await expect(moreSharing).toBeVisible();
+  await expect(moreSharing).toHaveCSS('width', '20px');
+  await expect(moreSharing).toHaveCSS('height', '20px');
+  await moreSharing.click();
+  const deploymentMenu = menu.getByRole('menu', { name: 'More sharing options', exact: true });
+  await expect(deploymentMenu.getByRole('menuitem')).toHaveText(['Deploy to Vercel', 'Deploy to Cloudflare Pages']);
+  for (const [property, value] of Object.entries({ width: '214px', height: '68px', padding: '4px', gap: '2px', 'border-radius': '8px', 'background-color': 'rgb(255, 255, 255)' })) {
+    await expect(deploymentMenu).toHaveCSS(property, value);
+  }
+  const vercelAction = deploymentMenu.getByRole('menuitem', { name: 'Deploy to Vercel', exact: true });
+  for (const [property, value] of Object.entries({ height: '28px', padding: '0px 8px', gap: '8px', 'font-size': '12px', 'font-weight': '400' })) {
+    await expect(vercelAction).toHaveCSS(property, value);
+  }
+  await expect(vercelAction).toBeFocused();
+  await test.info().attach('s12-more-sharing', { body: await page.screenshot(), contentType: 'image/png' });
+  await page.keyboard.press('ArrowDown');
+  await expect(deploymentMenu.getByRole('menuitem', { name: 'Deploy to Cloudflare Pages' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(deploymentMenu).toBeHidden();
+  await expect(moreSharing).toBeFocused();
+  await expect(heading).toBeVisible();
+  await moreSharing.click();
+  await vercelAction.click();
+  const deployDialog = page.getByRole('dialog');
+  await expect(deployDialog).toBeVisible();
+  await expect(deployDialog.getByRole('combobox', { name: /Provider/i })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(deployDialog).toBeHidden();
+  await secondShare.click();
+  await expect(heading).toBeVisible();
+  // The toolbar consumes the same shell, not a second deployment implementation.
+  await menu.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('.chrome-share-menu--unified > button[aria-label="Share"]').click();
+  await moreSharing.click();
+  await expect(deploymentMenu.getByRole('menuitem')).toHaveCount(2);
+  await test.info().attach('s12-toolbar-sharing', { body: await page.screenshot(), contentType: 'image/png' });
+});
+
+test('[P1] S10 failed stop preserves the share link and retries without republishing', async ({ page }) => {
+  await mockWritablePersonalProjectScope(page);
+  const { projectId, conversationId } = await seedProjectWithRepeatedArtifactCards(page);
+  const publicationPath = `/api/projects/${projectId}/files/index.html/publish-public`;
+  const slug = 's10-stable-alias';
+  const url = `https://example.test/artifact/${projectId}/${slug}`;
+  let stopAttempts = 0;
+  let publishAttempts = 0;
+  await page.route(`**${publicationPath}`, async route => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      await route.fulfill({ json: { publication: { url, slug, fileName: 'index.html', publishedAt: 1 } } });
+    } else if (method === 'DELETE') {
+      stopAttempts += 1;
+      await route.fulfill(stopAttempts === 1
+        ? { status: 500, json: { error: 's10_fixture_stop_failure' } }
+        : { json: { ok: true, slug, fileName: 'index.html' } });
+    } else {
+      publishAttempts += 1;
+      await route.fulfill({ status: 500, json: { error: 'unexpected publish' } });
+    }
+  });
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+  await expectWorkspaceReady(page);
+  await page.getByTestId('artifact-card-publish-index.html').last().click();
+  const menu = page.locator('.share-menu-popover[role="menu"]');
+  const link = menu.locator('.chrome-publish-url');
+  const stop = menu.getByRole('button', { name: 'Stop sharing', exact: true });
+  const copy = menu.getByRole('button', { name: 'Copy share link', exact: true });
+  await expect(link).toHaveText(url);
+  const response = () => page.waitForResponse(r => r.request().method() === 'DELETE'
+    && new URL(r.url()).pathname === publicationPath);
+  const failure = response();
+  await stop.click();
+  expect((await failure).status()).toBe(500);
+  await expect(menu.getByRole('status')).toHaveText('Could not turn off the link. Please try again.');
+  await expect(link).toHaveText(url);
+  await expect(stop).toBeEnabled();
+  await expect(copy).toBeEnabled();
+  await expect(menu).not.toContainText('Please manually copy');
+  expect(stopAttempts).toBe(1);
+  expect(publishAttempts).toBe(0);
+  await test.info().attach('s10-stop-failed', { body: await page.screenshot(), contentType: 'image/png' });
+  const retry = response();
+  await stop.click();
+  expect((await retry).ok()).toBe(true);
+  await expect(menu.getByRole('menuitem', { name: 'Generate and copy link', exact: true })).toBeEnabled();
+  await expect(link).toHaveCount(0);
+  await expect(menu.getByRole('status')).toHaveCount(0);
+  expect(stopAttempts).toBe(2);
+  expect(publishAttempts).toBe(0);
+});
+
 test('[P1] repeated artifact cards anchor Share to the clicked turn and keep the card menu focused', async ({ page }) => {
+  await page.clock.install();
   await mockWritablePersonalProjectScope(page);
   const { projectId, conversationId } = await seedProjectWithRepeatedArtifactCards(page);
 
@@ -2713,6 +3196,25 @@ test('[P1] repeated artifact cards anchor Share to the clicked turn and keep the
   await expect(shareButtons).toHaveCount(2);
   const firstShare = shareButtons.nth(0);
   const secondShare = shareButtons.nth(1);
+  // E0/G1 share-only seams must survive the production global CSS cascade.
+  const toolbarShare = page.locator('.chrome-share-menu--unified > button[aria-label="Share"]');
+  await expect(toolbarShare).toBeVisible();
+  for (const [property, value] of Object.entries({
+    height: '28px', 'border-radius': '6px', gap: '5px',
+    'padding-left': '12px', 'padding-right': '12px',
+    'background-color': 'rgb(40, 40, 40)', color: 'rgb(255, 255, 255)',
+    'font-size': '12px', 'font-weight': '500', 'border-top-width': '0px',
+  })) {
+    await expect(toolbarShare).toHaveCSS(property, value);
+  }
+  for (const [property, value] of Object.entries({
+    height: '30px', 'border-radius': '6px', gap: '5px',
+    'background-color': 'rgb(237, 237, 240)', color: 'rgb(51, 51, 51)',
+    'font-size': '12px', 'font-weight': '500', 'border-top-width': '0px',
+    'backdrop-filter': 'none', 'box-shadow': 'none',
+  })) {
+    await expect(secondShare).toHaveCSS(property, value);
+  }
   const firstAnchor = await firstShare.getAttribute('data-artifact-anchor');
   const secondAnchor = await secondShare.getAttribute('data-artifact-anchor');
   expect(firstAnchor).toBeTruthy();
@@ -2726,6 +3228,39 @@ test('[P1] repeated artifact cards anchor Share to the clicked turn and keep the
   await expect(anchoredMenu).toHaveAttribute('data-anchored-menu', secondAnchor!);
   const menu = anchoredMenu.locator('.share-menu-popover[role="menu"]');
   await expect(menu).toBeVisible();
+  // Shared S1/S2/S3/S4/S4-C/S7 shell, scoped away from the Export tab.
+  for (const [property, value] of Object.entries({
+    width: '360px', padding: '16px 20px', gap: '12px',
+    'border-radius': '12px', 'background-color': 'rgb(255, 255, 255)',
+    'border-top-color': 'rgba(0, 0, 0, 0.03)', 'border-top-width': '1px',
+    'box-shadow': 'rgba(0, 0, 0, 0.063) 0px 8px 28px 0px, rgba(0, 0, 0, 0.024) 0px 2px 6px 0px',
+  })) {
+    await expect(menu).toHaveCSS(property, value);
+  }
+  await expect(menu.locator('.chrome-unified-panel--share')).toHaveCSS('padding', '0px');
+  await expect(menu.locator('.chrome-unified-panel--share')).toHaveCSS('gap', '12px');
+  const heading = menu.getByRole('heading', { name: 'Share', level: 2 });
+  await expect(heading).toBeVisible();
+  for (const [property, value] of Object.entries({ 'font-size': '15px', 'line-height': '22px', 'font-weight': '600', margin: '0px' })) {
+    await expect(heading).toHaveCSS(property, value);
+  }
+  const header = heading.locator('..');
+  for (const [property, value] of Object.entries({ 'min-height': '24px', gap: '12px', 'align-items': 'center', 'justify-content': 'space-between' })) {
+    await expect(header).toHaveCSS(property, value);
+  }
+  const closeShare = menu.getByRole('button', { name: 'Close', exact: true });
+  for (const [property, value] of Object.entries({
+    width: '20px', height: '20px', padding: '3px', 'border-top-width': '0px', 'border-radius': '5px',
+    color: 'rgb(133, 133, 133)', 'background-color': 'rgba(0, 0, 0, 0)',
+  })) {
+    await expect(closeShare).toHaveCSS(property, value);
+  }
+  await test.info().attach('share-header-first', { body: await page.screenshot(), contentType: 'image/png' });
+  await closeShare.focus();
+  await page.keyboard.press('Enter');
+  await expect(menu).toBeHidden();
+  await secondShare.click();
+  await expect(heading).toBeVisible();
   const shareLink = menu.getByRole('menuitem', { name: 'Generate and copy link', exact: true });
   await expect(shareLink).toBeVisible();
   await expect(shareLink).toBeEnabled();
@@ -2743,20 +3278,37 @@ test('[P1] repeated artifact cards anchor Share to the clicked turn and keep the
   await expect(shareLink.locator('svg path')).toHaveAttribute('d', 'M12 15V4m-4 4 4-4 4 4M5 20h14');
   await expect(menu).not.toContainText(/Quick Share/i);
   await expect(menu).not.toContainText('Share project in workspace');
-  await expect(menu).not.toContainText('Deploy to Vercel');
+  await expect(menu).not.toContainText('Visibility in workspace');
+  await expect(menu.getByRole('menuitem', { name: 'Deploy to Vercel', exact: true })).toBeHidden();
   await expect(menu).not.toContainText('Save as template');
 
   // S7 HTTP failure fixture, not a real cloud failure. Only the production API
   // response is mocked; the product module and its CSS remain unmodified.
   let publishAttempts = 0;
+  let releaseFirstPublish!: () => void;
+  const firstPublishGate = new Promise<void>(resolve => { releaseFirstPublish = resolve; });
   await page.route(`**/api/projects/${projectId}/files/index.html/publish-public`, async (route) => {
     if (route.request().method() !== 'POST') { await route.continue(); return; }
     publishAttempts += 1;
+    if (publishAttempts === 1) await firstPublishGate;
     await route.fulfill({ status: 500, json: { error: 's7_fixture_internal_failure' } });
   });
   await shareLink.click();
+  try {
+    await expect(menu.getByRole('progressbar')).toBeVisible();
+    await expect(closeShare).toBeEnabled();
+    await test.info().attach('share-header-publishing', { body: await page.screenshot(), contentType: 'image/png' });
+    await closeShare.click();
+    await expect(menu).toBeHidden();
+    await secondShare.click();
+    await expect(heading).toBeVisible();
+    await expect(menu.getByRole('progressbar')).toBeVisible();
+    expect(publishAttempts).toBe(1); // Closing a shell must not cancel or restart upload.
+  } finally {
+    releaseFirstPublish();
+  }
   const failure = menu.getByRole('status');
-  await expect(failure).toHaveText('Could not create the share link. Try again, or use a deploy option below.');
+  await expect(failure).toHaveText('Could not create the share link. Please try again later.');
   await expect(failure).not.toContainText('s7_fixture_internal_failure');
   for (const [property, value] of Object.entries({
     color: 'rgb(201, 78, 78)', 'font-size': '12px', 'line-height': '18px',
@@ -2780,6 +3332,125 @@ test('[P1] repeated artifact cards anchor Share to the clicked turn and keep the
   expect((await retried).status()).toBe(500);
   await expect(failure).toBeVisible();
   expect(publishAttempts).toBe(2);
+
+  // S11: publication succeeds, but both browser clipboard mechanisms fail.
+  // Mock external boundaries only; selection and CSS exercise the real DOM.
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error('clipboard denied by fixture')) },
+    });
+    document.execCommand = () => false;
+  });
+  const publicUrl = `https://example.test/artifact/${projectId}/stable-alias-for-manual-copy`;
+  await page.route(`**/api/projects/${projectId}/files/index.html/publish-public`, async route => {
+    if (route.request().method() !== 'POST') { await route.continue(); return; }
+    publishAttempts += 1;
+    await route.fulfill({ json: { url: publicUrl, slug: 'stable-alias-for-manual-copy', fileName: 'index.html' } });
+  });
+  await retry.click();
+  const failedCopy = menu.getByRole('button', { name: 'Copy share link', exact: true });
+  await expect(failedCopy).toBeVisible();
+  const manualCopyHint = menu.getByRole('status');
+  await expect(manualCopyHint).toHaveText('Could not copy automatically. Please manually copy the link above.');
+  for (const [property, value] of Object.entries({
+    margin: '0px', color: 'rgb(136, 136, 136)', 'font-size': '12px', 'line-height': '18px',
+  })) {
+    await expect(manualCopyHint).toHaveCSS(property, value);
+  }
+  const fallback = menu.locator('.chrome-publish-url');
+  await expect(fallback).toHaveText(publicUrl);
+  await expect(fallback).toHaveAttribute('title', publicUrl);
+  for (const [property, value] of Object.entries({
+    height: '32px', padding: '0px 9px', 'border-radius': '6px',
+    'border-top-width': '1px', 'border-top-color': 'rgb(229, 229, 229)',
+    'background-color': 'rgb(255, 255, 255)', color: 'rgb(102, 102, 102)',
+    'font-size': '11px', 'line-height': '30px', 'user-select': 'text',
+    'white-space': 'nowrap', 'text-overflow': 'ellipsis',
+  })) {
+    await expect(fallback).toHaveCSS(property, value);
+  }
+  await fallback.click({ clickCount: 3 });
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim())).toBe(publicUrl);
+  await test.info().attach('s11-manual-copy', { body: await page.screenshot(), contentType: 'image/png' });
+  await failedCopy.click();
+  await expect(failedCopy).toBeEnabled();
+  expect(publishAttempts).toBe(3); // Retrying copy must not publish again.
+
+  // S4-C: hold only the external clipboard boundary; the real host settles feedback.
+  // Pause before the copy creates its feedback timer; assert the actual boundary.
+  // Anchor to the browser clock: Playwright actions may have advanced it beyond Node's time.
+  const pauseTime = await page.evaluate(() => Date.now() + 1_000);
+  await page.clock.pauseAt(pauseTime);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => new Promise<void>((resolve) => {
+        window.addEventListener('test:release-copy', () => resolve(), { once: true });
+      }) },
+    });
+  });
+  await failedCopy.click();
+  const copying = menu.getByRole('button', { name: 'Copying…', exact: true });
+  await expect(copying).toBeVisible();
+  await expect(copying).toBeDisabled();
+  await expect(copying).toHaveAttribute('aria-busy', 'true');
+  await expect(copying).toHaveCSS('background-color', 'rgb(90, 90, 92)');
+  await expect(copying).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect(copying).toHaveCSS('opacity', '1');
+  const copySpinner = copying.locator('svg');
+  await expect(copySpinner).toHaveAttribute('stroke-width', '2');
+  await expect(copySpinner.locator('path')).toHaveAttribute('d', 'M12 3a9 9 0 1 0 9 9');
+  await expect(copySpinner).toHaveCSS('width', '13px');
+  expect(await copySpinner.evaluate((node) => getComputedStyle(node).animationName)).not.toBe('none');
+  await expect(fallback).toHaveText(publicUrl);
+  await test.info().attach('s4-c-copy-pending', { body: await page.screenshot(), contentType: 'image/png' });
+  await page.evaluate(() => window.dispatchEvent(new Event('test:release-copy')));
+  const copied = menu.getByRole('button', { name: 'Copied!', exact: true });
+  await expect(copied).toBeVisible();
+  await expect(copied).toBeEnabled();
+  await expect(copied).not.toHaveAttribute('aria-busy');
+  await page.clock.runFor(1799);
+  await expect(copied).toBeVisible();
+  await page.clock.runFor(1);
+  await expect(failedCopy).toBeVisible(); // Existing host feedback timer restores the action.
+  await page.clock.resume();
+  expect(publishAttempts).toBe(3);
+
+  // The same real cards become disabled through the workspace permission boundary.
+  const readonlyContext = {
+    ...AMR_PERSONAL_WORKSPACE_CONTEXT,
+    workspaceType: 'team', teamId: 'disabled-share-team',
+    permissions: { ...AMR_PERSONAL_WORKSPACE_CONTEXT.permissions, canWriteSyncedFiles: false },
+  };
+  await page.route(`**/api/projects/${projectId}/workspace-scope`, route => route.fulfill({
+    json: { scope: { kind: 'team', projectId, workspaceId: readonlyContext.workspaceId, visibility: 'team', context: readonlyContext } },
+  }));
+  await page.route(`**/api/projects/${projectId}/collab/status`, route => route.fulfill({
+    json: { publishedVersion: 1, materializedVersion: 1, syncState: 'synced', ownerMemberId: 'another-owner' },
+  }));
+  await page.reload();
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  await expect(page.getByTestId('chat-composer-input')).toHaveAttribute('aria-readonly', 'true');
+  // Read-only navigation may focus the preview; reveal chat through its UI controls.
+  const showChat = page.getByTestId('workspace-focus-toggle');
+  if (await showChat.isVisible()) await showChat.click();
+  const expandConversation = page.getByRole('button', { name: 'Expand the conversation pane' });
+  if (await expandConversation.isVisible()) await expandConversation.click();
+  await expect(secondShare).toBeVisible();
+  await expect(shareButtons).toHaveCount(2);
+  for (const share of await shareButtons.all()) {
+    await expect(share).toBeDisabled();
+    await expect(share).toHaveAttribute('title', /.+/);
+    for (const [property, value] of Object.entries({ 'background-color': 'rgb(243, 243, 241)', color: 'rgb(189, 189, 184)', opacity: '1', height: '30px' })) {
+      await expect(share).toHaveCSS(property, value);
+    }
+  }
+  await secondShare.hover();
+  await expect(secondShare).toHaveCSS('background-color', 'rgb(243, 243, 241)');
+  await expect(secondShare).toHaveCSS('color', 'rgb(189, 189, 184)');
+  await expect(page.locator('.share-menu-popover[role="menu"]')).toHaveCount(0);
+  await test.info().attach('card-share-disabled', { body: await page.screenshot(), contentType: 'image/png' });
 });
 
 test('[P1] project detail fork emits correlated click and result analytics', async ({ page }) => {
@@ -4198,10 +4869,6 @@ function conversationIdFromMessagesApiPath(url: string): string {
   return match ? decodeURIComponent(match[1]!) : '';
 }
 
-async function openNewProjectPanel(page: Page) {
-  await openNewProjectModal(page);
-}
-
 async function expectDesignsView(page: Page) {
   if (!/\/projects$/.test(new URL(page.url()).pathname)) {
     // The rail's Projects destination went away in #5517; /projects is still a
@@ -4240,22 +4907,6 @@ async function pickComposerModel(page: Page, name: RegExp): Promise<void> {
   await list.getByRole('radio', { name }).click();
   // Selecting a model dismisses the popover.
   await expect(page.locator('.avatar-popover[role="dialog"]')).toHaveCount(0);
-}
-
-async function selectAvatarModelOption(
-  page: Page,
-  modelSelect: Locator,
-  optionName: RegExp,
-) {
-  await expect(modelSelect).toBeVisible();
-  const option = page.getByRole('option', { name: optionName });
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    await modelSelect.click();
-    if (await option.isVisible({ timeout: 2_000 }).catch(() => false)) break;
-    await page.keyboard.press('Escape').catch(() => {});
-  }
-  await expect(option).toBeVisible({ timeout: 10_000 });
-  await option.click();
 }
 
 async function routeComposerPlusFixtures(page: Page) {

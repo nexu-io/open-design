@@ -32,6 +32,7 @@ import type { ProjectFile } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PixelLiquid } from './PixelLiquid';
 import { RemixIcon } from './RemixIcon';
+import shareEntryStyles from './share/ShareEntry.module.css';
 import { HtmlProjectCoverFrame } from './project-cover';
 import { AudioArtifact } from './chat/AudioArtifact';
 import { ARTIFACT_ANCHOR_ATTR, artifactAnchorId } from './chat/AnchoredMenuShell';
@@ -711,7 +712,7 @@ function ArtifactCard({
           {showPublish && onPublish ? (
             <button
               type="button"
-              className="artifact-card-act"
+              className={`artifact-card-act ${shareEntryStyles.card}`}
               aria-haspopup="menu"
               disabled={shareDisabledTitle !== undefined}
               title={shareDisabledTitle}

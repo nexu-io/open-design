@@ -1,0 +1,63 @@
+/* Chain-1-publish E0/G1 (◇): share-only seams. Export retains its own chrome.
+   Include the existing host classes to beat the later global compatibility CSS. */
+:global(.chrome-action.chrome-action-secondary).toolbar {
+  box-sizing: border-box;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 12px;
+  gap: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: #282828;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+:global(.chrome-action.chrome-action-secondary).toolbar:hover:not(:disabled) {
+  background: #282828;
+  color: #FFFFFF;
+}
+
+:global(.chrome-action.chrome-action-secondary).toolbar:disabled {
+  background: #E4E4E6;
+  color: #A6A6AA;
+  opacity: 1;
+}
+
+:global(.chrome-action.chrome-action-secondary).toolbar > svg:first-child {
+  transform: none;
+}
+
+:global(.artifact-card) .card:global(.artifact-card-act) {
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  gap: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: #EDEDF0;
+  color: #333333;
+  font-size: 12px;
+  font-weight: 500;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+:global(.artifact-card) .card:global(.artifact-card-act):hover:not(:disabled) {
+  background: #EDEDF0;
+  color: #333333;
+}
+
+/* Disabled appearance applies to the existing readonly/generation gates only. */
+:global(.artifact-card) .card:global(.artifact-card-act):disabled {
+  background: #F3F3F1;
+  color: #BDBDB8;
+  opacity: 1;
+}
+
+:global(.artifact-card) .card:global(.artifact-card-act) svg {
+  margin-inline-start: 0;
+}

@@ -2102,6 +2102,10 @@ describe('App project creation routing', () => {
   });
 
   it('removes a locally deleted project from workspace tabs and ignores a stale list', async () => {
+    mockedDeleteProject.mockImplementation(async (_id, _context, receive) => {
+      receive?.([{ filePath: 'auto.html', slug: 'auto', retrying: true }, { filePath: 'manual.html', slug: 'manual', retrying: false }]);
+      return true;
+    });
     const initialProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
     mockedListProjects
@@ -2135,7 +2139,10 @@ describe('App project creation routing', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Fresh project' }));
 
     await waitFor(() => {
-      expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', null);
+      expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', null, expect.any(Function));
+      expect(screen.getByText('auto.html')).toBeVisible();
+      expect(screen.getByText('manual.html')).toBeVisible();
+      expect(screen.getAllByRole('button', { name: 'Retry disabling' })).toHaveLength(1);
       expect(screen.queryByTestId('entry-project-project-new')).toBeNull();
       expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(false);
     });
@@ -2146,6 +2153,8 @@ describe('App project creation routing', () => {
     });
 
     expect(screen.queryByTestId('entry-project-project-new')).toBeNull();
+    expect(screen.getByText('auto.html')).toBeVisible();
+    expect(screen.getByText('manual.html')).toBeVisible();
   });
 
   it('keeps a host-imported project routable when getProject and the list lag behind', async () => {
