@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { StrategyTaskProjectionV2 } from '@open-design/contracts';
+
 import { streamViaDaemon } from '../../src/providers/daemon';
 
 afterEach(() => {
@@ -72,6 +74,8 @@ function blockedEndFrame(input: {
 
 async function runBlockedTurn(frame: string) {
   const h = handlers();
+  const onStrategyTaskSettled = vi.fn();
+  const onRunStatus = vi.fn();
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
@@ -85,59 +89,66 @@ async function runBlockedTurn(frame: string) {
     signal: new AbortController().signal,
     handlers: h,
     taskExecutionId: 'task-1',
+    onRunStatus,
+    onStrategyTaskSettled,
   });
-  expect(h.onError).toHaveBeenCalledTimes(1);
-  return h.onError.mock.calls[0]![0] as Error & { code?: string };
+  expect(h.onError).not.toHaveBeenCalled();
+  expect(h.onDone).toHaveBeenCalledTimes(1);
+  expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+  expect(onStrategyTaskSettled).toHaveBeenCalledTimes(1);
+  return onStrategyTaskSettled.mock.calls[0]![0] as StrategyTaskProjectionV2;
 }
 
-describe('a blocked strategy task reaches the user with the daemon\'s own verdict', () => {
+describe('a blocked strategy task reaches the message as the daemon\'s own verdict', () => {
   // The turn the user sees is the one right after they answered a question
   // form: their answers went in, the agent answered, and the task still landed
   // terminal-`blocked` because the reply carried no Runtime State block. The
   // verdict is correct — at the clarification stage the contract admits only
   // `plan_ready` (which needs a Plan Contract the reply never had), `blocked`
-  // or `canceled`. What is NOT correct is handing that to the user as a
-  // sentence with no subject, no reason and nothing to look up.
+  // or `canceled`. The Run itself succeeded, so the turn ends Done: the
+  // verdict is stamped on the message through the settled projection, where
+  // the diagnostics can name the reason, and no run error is raised over it.
   //
-  // These frames stream no visible reply. A turn refused before production
-  // that did reply keeps its success (`sse.test.ts`); one that left the user
-  // nothing to read still raises the card, and the card must name the reason.
-  it('carries the blocking reason code so the card and the diagnostics can name it', async () => {
-    const error = await runBlockedTurn(blockedEndFrame({
+  // These frames stream no visible reply. That no longer changes the outcome:
+  // a succeeded Run stays Done whether or not the agent said anything.
+  it('carries the blocking reason code on the settled verdict so the diagnostics can name it', async () => {
+    const settled = await runBlockedTurn(blockedEndFrame({
       inputStage: 'clarification',
       reasonCodes: ['od_next_protocol_runtime_state_missing'],
     }));
 
-    // Read the property directly rather than asserting through
-    // `not.toHaveBeenCalledWith`: a partial-object matcher passes on an error
-    // that carries no code at all.
-    expect(error.code).toBe('od_next_protocol_runtime_state_missing');
+    expect(settled.outcome).toBe('blocked');
+    expect(settled.blockedContext?.reasonCodes).toEqual(['od_next_protocol_runtime_state_missing']);
   });
 
-  it('says what happened instead of restating that something did not continue', async () => {
-    const error = await runBlockedTurn(blockedEndFrame({
+  it('ends the turn Done instead of raising a run error over the verdict', async () => {
+    const settled = await runBlockedTurn(blockedEndFrame({
       inputStage: 'clarification',
       reasonCodes: ['od_next_protocol_runtime_state_missing'],
     }));
 
-    expect(error.message).not.toBe('The strategy task could not continue.');
-    expect(error.message).toContain('reply');
+    // `runBlockedTurn` already asserts no `onError`, one `onDone` and a final
+    // `succeeded` status; the settled projection is what the message keeps.
+    expect(settled.terminal).toBe(true);
+    expect(settled.inputStage).toBe('clarification');
   });
 
   it('keeps a verdict from a daemon that sent no blocked context', async () => {
     // Older daemons project a blocked task without `blockedContext`. The turn
-    // must still fail — just without a reason code to name.
-    const error = await runBlockedTurn(blockedEndFrame({ inputStage: 'production' }));
+    // still ends Done, and the verdict still lands — without a reason to name.
+    const settled = await runBlockedTurn(blockedEndFrame({ inputStage: 'production' }));
 
-    expect(error.code).toBeUndefined();
-    expect(error.message).not.toBe('The strategy task could not continue.');
+    expect(settled.outcome).toBe('blocked');
+    expect(settled.blockedContext).toBeUndefined();
   });
 });
 
-// Reconciliation with main #7931: project delivery is weaker than delivery by
-// this run, so it needs this run's own nonempty response as well.
-describe('project delivery evidence during blocked run completion', () => {
-  it('fails closed when the daemon answers neither delivery question', async () => {
+// The daemon's two delivery answers (did this run write the entry, does the
+// project hold one) used to decide whether a succeeded Run kept its success
+// beside a blocked task. They no longer take part: the Run's own result
+// decides, and only a Run that did not succeed raises the error.
+describe('delivery evidence during blocked run completion', () => {
+  it('keeps the success when the daemon answers neither delivery question', async () => {
     const h = handlers();
     const reply = 'The existing result is ready.';
     const text = `event: agent\ndata: ${JSON.stringify({ type: 'text_delta', delta: reply })}\n\n`;
@@ -147,24 +158,23 @@ describe('project delivery evidence during blocked run completion', () => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
       if (url === '/api/runs/run-1/events') return sseResponse(text + end);
-      // Older daemons can omit both fields. A nonempty reply is not proof
-      // of delivery, and absence must not default to success.
+      // Older daemons can omit both fields; the outcome does not depend on them.
       if (url === '/api/runs/run-1') return jsonResponse({});
       throw new Error(`unexpected fetch ${url}`);
     }));
     await streamViaDaemon({ agentId: 'mock',
       history: [{ id: 'request', role: 'user', content: 'Check the existing result.' }],
       signal: new AbortController().signal, handlers: h, taskExecutionId: 'task-1' });
-    expect(h.onError).toHaveBeenCalledTimes(1);
-    expect(h.onError.mock.calls[0]![0]).toMatchObject({ code: 'od_next_protocol_runtime_state_missing' });
-    expect(h.onDone).not.toHaveBeenCalled();
+    expect(h.onError).not.toHaveBeenCalled();
+    expect(h.onDone).toHaveBeenCalledTimes(1);
+    expect(h.onDone).toHaveBeenCalledWith(reply);
   });
 
   it.each([
-    { name: 'keeps project delivery with this run reply', reply: 'The existing result is ready.', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: true },
-    { name: 'rejects project delivery without a reply', reply: '', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: false },
-    { name: 'rejects project delivery with only whitespace', reply: '\n  ', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: false },
-    { name: 'rejects a reply without either delivery proof', reply: 'The existing result is ready.', projectValid: false, runValid: false, physicalStatus: 'succeeded', succeeds: false },
+    { name: 'keeps the success with project delivery and this run reply', reply: 'The existing result is ready.', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: true },
+    { name: 'keeps the success with project delivery and no reply', reply: '', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: true },
+    { name: 'keeps the success with project delivery and only whitespace', reply: '\n  ', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: true },
+    { name: 'keeps the success with a reply and neither delivery proof', reply: 'The existing result is ready.', projectValid: false, runValid: false, physicalStatus: 'succeeded', succeeds: true },
     { name: 'keeps this run delivery without prose', reply: '', projectValid: false, runValid: true, physicalStatus: 'succeeded', succeeds: true },
     { name: 'preserves physical failure despite project delivery and prose', reply: 'The existing result is ready.', projectValid: true, runValid: false, physicalStatus: 'failed', succeeds: false },
   ] as const)('$name', async ({ reply, projectValid, runValid, physicalStatus, succeeds }) => {

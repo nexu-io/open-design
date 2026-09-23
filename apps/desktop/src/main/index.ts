@@ -194,6 +194,8 @@ export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): v
 
 export type DesktopMainOptions = {
   beforeShutdown?: (record?: (event: UpdateLifecycleObservation) => Promise<void>) => Promise<void>;
+  /** Prevent packaged renderer traffic from reaching sidecars as they retire. */
+  quiesceRendererTransport?: () => void | Promise<void>;
   onExternalShow?: () => void | Promise<void>;
   discoverWebUrl: () => Promise<string | null>;
   /**
@@ -841,14 +843,32 @@ export async function runDesktopMain(
       console.info("[open-design desktop] shutdown started");
       updateScheduler?.stop("shutdown");
       await updater.recordLifecycle?.({ stage: "shutdown_started", outcome: "started" });
+      // Stop the request-producing renderer before retiring its web/daemon
+      // targets. Keeping the window alive while packaged sidecars drain leaves
+      // polling, SSE reconnects, and ordinary fetches aimed at an origin that
+      // has already gone away for the entire graceful-stop window.
+      disposeMenu();
+      removeDiagnosticsIpc();
+      let rendererQuiesceFailed = false;
+      await desktop?.close().catch(() => {
+        rendererQuiesceFailed = true;
+        shutdownFailed = true;
+      });
+      try {
+        await options.quiesceRendererTransport?.();
+      } catch {
+        rendererQuiesceFailed = true;
+        shutdownFailed = true;
+      }
+      await updater.recordLifecycle?.({
+        stage: "renderer_quiesced",
+        outcome: rendererQuiesceFailed ? "failed" : "completed",
+      });
       await options.beforeShutdown?.((event) => updater.recordLifecycle?.(event) ?? Promise.resolve()).catch((error: unknown) => {
         shutdownFailed = true;
         console.error("desktop beforeShutdown failed", error);
       });
       console.info("[open-design desktop] shutdown sidecars settled", { durationMs: Date.now() - startedAt });
-      disposeMenu();
-      removeDiagnosticsIpc();
-      await desktop?.close().catch(() => { shutdownFailed = true; });
       // Mark clean only after teardown; a stalled cleanup is not a clean exit.
       endDesktopSessionCleanly({ stateFilePath: sessionStatePath });
       console.info("[open-design desktop] shutdown completed", { durationMs: Date.now() - startedAt });

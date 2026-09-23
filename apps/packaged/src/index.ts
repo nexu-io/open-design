@@ -65,6 +65,14 @@ import {
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { createObsoleteInstalledOuterRetirement } from "./obsolete-installed-outer.js";
+import {
+  createDeferredDesktopController,
+  isPackagedManagedLaunch,
+  isPackagedPayloadDelegation,
+  markPackagedManagedOuter,
+  supportsDeferredHeadlessDesktop,
+  watchUserDesktopIntent,
+} from "./managed-headless.js";
 import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { startPackagedSidecars } from "./sidecars.js";
@@ -226,7 +234,11 @@ async function main(): Promise<void> {
   if (exitPackagedLauncherForExistingDesktop(existingDesktop, (code) => app.exit(code))) {
     return;
   }
-  if (headlessRequest.headless) {
+  // On macOS a headless runtime runs the full desktop path with its window
+  // deferred, so the same process can become the desktop when the user opens
+  // the app (see managed-headless.ts). Elsewhere headless keeps its own entry.
+  const deferredHeadless = supportsDeferredHeadlessDesktop(headlessRequest);
+  if (headlessRequest.headless && !deferredHeadless) {
     const { runPackagedHeadless } = await import("./headless-runtime.js");
     await runPackagedHeadless(config, headlessRequest);
     return;
@@ -235,7 +247,8 @@ async function main(): Promise<void> {
     delegated,
     resume: handoffResume,
   });
-  if (await launchPackagedPayloadDesktop(launcherRuntime)) {
+  if (isPackagedPayloadDelegation(launcherRuntime)) markPackagedManagedOuter();
+  if (await launchPackagedPayloadDesktop(launcherRuntime, deferredHeadless ? { extraArgs: ["--headless"] } : {})) {
     app.exit(0);
     return;
   }
@@ -243,6 +256,7 @@ async function main(): Promise<void> {
   const paths = launcherRuntime.paths;
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: launcherRuntime.installedLaunchPath,
+    managed: isPackagedManagedLaunch(launcherRuntime),
   });
 
   // Arm fatal-exit telemetry now that we know the channel key/version. The
@@ -311,7 +325,8 @@ async function main(): Promise<void> {
   // real app has mounted (see createDesktopRuntime). The handle carries the
   // creation timestamp so the runtime's minimum-hold timer counts from here —
   // BEFORE the sidecar boot below — rather than re-adding the delay afterwards.
-  const splash = createSplashWindow();
+  // A deferred headless runtime shows nothing until the user opens the app.
+  let splash: ReturnType<typeof createSplashWindow> | null = deferredHeadless ? null : createSplashWindow();
 
   const runtime = {
     app: APP_KEYS.DESKTOP,
@@ -320,8 +335,12 @@ async function main(): Promise<void> {
     namespace,
     source: convergedStamp.source as SidecarSource,
   } satisfies SidecarRuntimeContext<SidecarStamp>;
+  // The daemon/web peers belong to this process's generation, whose mode is
+  // `headless` for a deferred headless runtime: launchers inspect the peers in
+  // the owner's mode, and MCP registrations address them by that mode.
+  const sidecarRuntime: SidecarRuntimeContext<SidecarStamp> = { ...runtime, mode: convergedStamp.mode };
 
-  const sidecars = await startPackagedSidecars(runtime, paths, {
+  const sidecars = await startPackagedSidecars(sidecarRuntime, paths, {
     appVersion: activeConfig.appVersion,
     amrProfile: activeConfig.amrProfile,
     daemonCliEntry: activeConfig.daemonCliEntry,
@@ -338,8 +357,10 @@ async function main(): Promise<void> {
     // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
     // main alongside the daemon, so the import-folder gate must be
     // pinned ON from request 0. See `apps/packaged/src/headless-runtime.ts`
-    // for the windowless counterpart that passes `false`.
-    requireDesktopAuth: true,
+    // for the windowless counterpart that passes `false`. A deferred
+    // headless runtime has no desktop bridge until it is restored; the
+    // gate then activates when desktop main registers its secret.
+    requireDesktopAuth: !deferredHeadless,
     webSidecarEntry: activeConfig.webSidecarEntry,
     webStandaloneRoot: activeConfig.webStandaloneRoot,
     webOutputMode: activeConfig.webOutputMode,
@@ -356,7 +377,7 @@ async function main(): Promise<void> {
             : phase === "web-spawning"
               ? "interface"
               : "interfaceReady";
-      setSplashStage(splash.window, stage);
+      setSplashStage(splash?.window ?? null, stage);
     },
   });
   if (sidecars.daemon.url) {
@@ -370,11 +391,11 @@ async function main(): Promise<void> {
   // Sidecars are up; the remaining wait is the hidden main window loading and
   // mounting the web bundle (the runtime re-asserts this stage at its reveal
   // gate, which is a no-op when the label is already current).
-  setSplashStage(splash.window, "workspace");
+  setSplashStage(splash?.window ?? null, "workspace");
   // Resolve the web sidecar address per request instead of freezing it here.
   // The restart supervisor may bind a fresh ephemeral port, while a temporary
   // lack of a target should surface as the protocol layer's structured 503.
-  registerOdProtocol(() => sidecars.currentWebUrl());
+  const odProtocol = registerOdProtocol(() => sidecars.currentWebUrl());
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
   let desktopHandle: DesktopMainHandle | null = null;
@@ -382,31 +403,18 @@ async function main(): Promise<void> {
     if (desktopHandle == null) throw new Error("packaged desktop sidecar is not running");
     return await desktopHandle.invoke(action, input);
   };
-  let client!: SidecarClient<DesktopMainHandle>;
-  client = SidecarFactory.create<DesktopMainHandle>({
-    handlers: Object.fromEntries([
-      SIDECAR_MESSAGES.CLICK,
-      SIDECAR_MESSAGES.CONSOLE,
-      SIDECAR_MESSAGES.EVAL,
-      SIDECAR_MESSAGES.EXPORT_ARTIFACT,
-      SIDECAR_MESSAGES.EXPORT_PDF,
-      SIDECAR_MESSAGES.RENDER_FRAMES,
-      SIDECAR_MESSAGES.RENDER_SLIDES,
-      SIDECAR_MESSAGES.SCREENSHOT,
-      SIDECAR_MESSAGES.SHOW,
-      SIDECAR_MESSAGES.UPDATE,
-    ].map((action) => [action, (input: unknown) => invokeDesktop(action, input)])),
-    lifecycle: {
-      async start() {
-        const started = await runDesktopMain(runtime, {
-    splashWindow: splash.window,
-    splashStartedAt: splash.startedAt,
+  const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
+    splashWindow: splash?.window,
+    splashStartedAt: splash?.startedAt,
     async beforeShutdown(record) {
       try {
         await retireObsoleteInstalledOuter();
       } finally {
         await sidecars.close(record);
       }
+    },
+    quiesceRendererTransport() {
+      odProtocol.quiesce();
     },
     async discoverWebUrl() {
       return packagedEntryUrl();
@@ -462,7 +470,48 @@ async function main(): Promise<void> {
       launcherPayloadExtractorPath: activeConfig.resourceRoot == null ? null : join(activeConfig.resourceRoot, "bin", "7z.exe"),
       launcherRuntimePath: launcherRuntime.launcherPaths.runtimePath,
     },
-        });
+  });
+  const deferredDesktop = deferredHeadless
+    ? createDeferredDesktopController({
+      headlessStatus: () => ({
+        pid: process.pid,
+        state: "running",
+        updatedAt: new Date().toISOString(),
+        url: sidecars.currentWebUrl(),
+      }),
+      launch: async () => {
+        splash = createSplashWindow();
+        return await launchDesktop();
+      },
+      onRestoreFailed: (error) => {
+        packagedLogger?.error("failed to restore desktop from headless runtime", { error });
+        if (splash != null && !splash.window.isDestroyed()) splash.window.destroy();
+        splash = null;
+        dialog.showErrorBox(
+          "Open Design",
+          "Open Design could not open its window. Quit Open Design from the Dock and open it again.",
+        );
+      },
+      stopHeadless: async () => { await sidecars.close(); },
+    })
+    : null;
+  let client!: SidecarClient<DesktopMainHandle>;
+  client = SidecarFactory.create<DesktopMainHandle>({
+    handlers: Object.fromEntries([
+      SIDECAR_MESSAGES.CLICK,
+      SIDECAR_MESSAGES.CONSOLE,
+      SIDECAR_MESSAGES.EVAL,
+      SIDECAR_MESSAGES.EXPORT_ARTIFACT,
+      SIDECAR_MESSAGES.EXPORT_PDF,
+      SIDECAR_MESSAGES.RENDER_FRAMES,
+      SIDECAR_MESSAGES.RENDER_SLIDES,
+      SIDECAR_MESSAGES.SCREENSHOT,
+      SIDECAR_MESSAGES.SHOW,
+      SIDECAR_MESSAGES.UPDATE,
+    ].map((action) => [action, (input: unknown) => invokeDesktop(action, input)])),
+    lifecycle: {
+      async start() {
+        const started = deferredDesktop ?? await launchDesktop();
         desktopHandle = started;
         return started;
       },
@@ -474,6 +523,15 @@ async function main(): Promise<void> {
     },
   });
   await client.start();
+  if (deferredDesktop != null) {
+    // A deferred headless runtime is a successful launch of this generation.
+    void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
+      packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
+    });
+    watchUserDesktopIntent(app, () => {
+      void deferredDesktop.restore().catch(() => undefined);
+    });
+  }
 }
 
 void main().catch(async (error: unknown) => {

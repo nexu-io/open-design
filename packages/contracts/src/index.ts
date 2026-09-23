@@ -1,5 +1,6 @@
 export * from './common.js';
 export * from './errors.js';
+export * from './api/failure-detail.js';
 export * from './settings-nav.js';
 export * from './tasks.js';
 export * from './api/app-config.js';
@@ -23,6 +24,7 @@ export * from './api/comments.js';
 export * from './api/collab.js';
 export * from './api/project-sync.js';
 export * from './api/team-resources.js';
+export * from './api/touchpointOffline.js';
 export * from './api/touchpointTestRuntime.js';
 export * from './api/connectionTest.js';
 export * from './api/artifact-focus-marker.js';

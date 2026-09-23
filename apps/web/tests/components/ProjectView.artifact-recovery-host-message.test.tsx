@@ -179,7 +179,7 @@ let fileContents: Map<string, string>;
 let persisted: Map<string, ChatMessage>;
 let requests: Array<{ method: string; path: string; role: string | null; names: string[]; clock: number }>;
 let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
-let physicalStatus: 'running' | 'succeeded';
+let physicalStatus: 'running' | 'failed';
 let runStartedAt: number;
 let accumulatedText: string;
 let eventId: number;
@@ -481,8 +481,12 @@ async function reachPendingArtifactRecovery() {
   });
   expect(fileContents.get('agent-output.html')).toBeUndefined();
   await act(async () => {
-    physicalStatus = 'succeeded'; terminal = true;
-    frame('end', { code: 0, signal: null, status: 'succeeded', artifactCount: 0,
+    // The process exits non-zero, so the turn fails and the recovery path
+    // below runs. A clean exit would keep the turn Done whatever the task
+    // verdict says, and this suite is about what recovery does for a failed
+    // turn.
+    physicalStatus = 'failed'; terminal = true;
+    frame('end', { code: 1, signal: null, status: 'failed', artifactCount: 0,
       artifactPaths: [], strategyTask: strategyTask() });
     streamController?.close();
   });

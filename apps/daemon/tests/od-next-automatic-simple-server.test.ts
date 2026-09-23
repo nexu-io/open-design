@@ -2415,51 +2415,56 @@ process.exit(127);
     expect(researchContract).not.toContain('## assistant');
   });
 
-  it('fails a blocked production exit before publishing its Run and message terminal status (OPEND-2953)', async () => {
+  it('keeps a blocked production turn on its clean process exit instead of a failed Run', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.blocked-production`, '1');
     queueFixtureIds(fixture);
     await postRun(started!.url, createRunRequest(fixture, 'Build the lesson deck.'), {
-      'x-od-analytics-device-id': 'device-opend-2953',
-      'x-od-analytics-session-id': 'session-opend-2953',
+      'x-od-analytics-device-id': 'device-blocked-production',
+      'x-od-analytics-session-id': 'session-blocked-production',
       'x-od-analytics-client-type': 'desktop',
     });
     const task = await waitForTask(fixture.taskExecutionId, 'blocked');
     const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    // The task records the blocked verdict and its reason codes; the physical
+    // Run finished the way the process did, so it stays succeeded with no
+    // error attached and no error frame on its stream.
     expect(terminal).toMatchObject({
-      status: 'failed',
+      status: 'succeeded',
       exitCode: 0,
-      errorCode: 'OD_NEXT_TASK_BLOCKED',
-      failureCategory: 'process_exit',
-      failureDetail: 'execution_failed',
-      retryable: false,
-      strategyTask: { outcome: 'blocked', terminal: true },
+      strategyTask: { outcome: 'blocked', terminal: true, inputStage: 'production' },
     });
-    expect(terminal.error).toContain('od_next_protocol_runtime_state_missing');
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
     const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
       .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
     expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
-    expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
-      status: 'failed', code: 0, artifactCount: 0,
+    const end = records.find((event) => event.event === 'end')?.data;
+    expect(end).toMatchObject({
+      status: 'succeeded',
+      code: 0,
+      artifactCount: 0,
+      strategyTask: { outcome: 'blocked', inputStage: 'production' },
     });
+    expect(end.strategyTask.blockedContext.reasonCodes)
+      .toContain('od_next_protocol_runtime_state_missing');
     expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
-      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'failed', exit_code: 0 });
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
     const response = await fetch(
       `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
     );
     const { messages } = await response.json() as {
       messages: Array<{ runId?: string; runStatus?: string }>;
     };
-    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('failed');
+    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('succeeded');
     const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
     expect(recovery?.properties).toMatchObject({
-      result: 'failed',
-      error_code: 'OD_NEXT_TASK_BLOCKED',
-      failure_stage: 'finalize',
-      failure_detail: 'execution_failed',
-      retryable: false,
+      result: 'success',
+      od_next_blocked_reason_code: 'od_next_canonical_deliverable_invalid',
       rpc_close_reason: 'exit_0',
     });
+    expect(recovery?.properties?.error_code).toBeUndefined();
     for (const mapping of task.runs.slice(0, -1)) {
       expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
     }

@@ -1,31 +1,24 @@
-import {
-  OD_NEXT_AGENT_DECLARED_BLOCK_REASON,
-  type ChatRunStatus,
-  type StrategyTaskProjectionV2,
-} from '@open-design/contracts';
+import type { ChatRunStatus, StrategyTaskProjectionV2 } from '@open-design/contracts';
 
 /**
- * Whether a physical Run that succeeded keeps that success on screen although
- * the strategy task it ran for ended `blocked`. `responseText` must belong to
- * this physical Run.
+ * Whether a physical Run keeps its success on screen although the strategy
+ * task it ran for ended `blocked`.
  *
- * Three cases keep the success:
+ * It does whenever the Run itself succeeded. The Run records how the process
+ * ended; the task records its own verdict, and that verdict still reaches the
+ * message through the task projection — outcome, reason codes, the agent's
+ * visible text — for the settled-verdict fields and the diagnostics. What it
+ * no longer does is turn a clean exit into a failed turn: a turn that wrote
+ * the page, a turn that only edited a secondary page, a turn that answered in
+ * prose, and a turn that produced nothing all end with the agent's own words
+ * and "Done", and the next message starts a new task. A failure card is drawn
+ * only for a Run that did not succeed — a crash, a non-zero exit, a signal, a
+ * timeout, an unavailable upstream.
  *
- * - the Run wrote the canonical deliverable, or the project already holds one
- *   and this turn said something — the user has the file they asked for;
- * - the agent declared the block itself and explained it in its reply;
- * - the task was refused before it reached production and the agent replied.
- *   A greeting, an off-topic question, a request the agent declined to plan a
- *   build for: the reply is the whole outcome of that turn, the daemon keeps
- *   the Run's own clean exit, and nothing was owed that a red card could
- *   restore.
- *
- * A production block with prose beside it does not qualify. There the user
- * asked for a deliverable, the plan was frozen, and the gate refused the turn
- * because nothing usable was written; the prose next to that verdict is not an
- * account of the stop. Neither does an empty reply at any stage: a turn that
- * said nothing and produced nothing leaves the user with a blank, and the
- * failure card is the only thing telling them what happened.
+ * The remaining parameters are the facts the three call sites already resolve
+ * (the task projection, the daemon's two delivery answers, this Run's reply).
+ * They stay in the signature so those sites keep handing them over; none of
+ * them takes part in the decision.
  */
 export function canRetainSuccessfulRunForBlockedStrategy(
   status: ChatRunStatus,
@@ -34,11 +27,5 @@ export function canRetainSuccessfulRunForBlockedStrategy(
   projectDeliverableValid: boolean | undefined,
   responseText: string,
 ): boolean {
-  if (status !== 'succeeded') return false;
-  if (deliverableValid === true) return true;
-  const replied = responseText.trim().length > 0;
-  if (projectDeliverableValid === true && replied) return true;
-  if (strategyTask !== undefined && strategyTask.inputStage !== 'production' && replied) return true;
-  return strategyTask?.blockedContext?.reasonCodes.includes(OD_NEXT_AGENT_DECLARED_BLOCK_REASON) === true
-    && (strategyTask.blockedContext.visibleText?.trim().length ?? 0) > 0;
+  return status === 'succeeded';
 }

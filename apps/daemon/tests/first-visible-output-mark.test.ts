@@ -226,9 +226,9 @@ describe('first_visible_output is stamped at emission, not at first token', () =
       expect(created.pluginId).toBe('od-next-strategy');
       expect(created.strategyTask).toBeDefined();
       // The deliberately incomplete state still releases the withheld tail,
-      // and the strategy gate records the refusal on the task. The refusal
-      // lands at the request stage, where the reply is the turn's outcome, so
-      // the Run keeps the clean exit the process actually made.
+      // and the strategy gate records the refusal on the task. The verdict
+      // stays on the task; the Run keeps the clean exit the process actually
+      // made.
       expect(run).toMatchObject({
         status: 'succeeded',
         exitCode: 0,

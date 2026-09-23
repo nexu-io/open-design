@@ -55,6 +55,7 @@ import {
   serializeRunEventsForStorage,
 } from './runtimes/run-event-payload-budget.js';
 import { migrateStrategyTaskStore } from './strategies/task-store.js';
+import { observeRead } from './services/daemon-health.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -1689,6 +1690,15 @@ export function deleteWorkspaceResourceByResourceId(
  * is then inspected, through {@link completenessEventsOfMessage}.
  */
 export function listLatestProjectRunStatuses(db: SqliteDb) {
+  // Low-frequency, historically the largest read (full-history events before
+  // #8170): always leave an in-flight marker so an OOM inside it is attributable.
+  return observeRead('project_run_statuses', () => listLatestProjectRunStatusesUnobserved(db), {
+    mark: 'always',
+    rows: (result) => result.size,
+  });
+}
+
+function listLatestProjectRunStatusesUnobserved(db: SqliteDb) {
   const rows = db
     .prepare(
       `SELECT projectId, messageId, runId, status, updatedAt
@@ -2925,6 +2935,12 @@ export function listSiblingRunDoneKeys(
 }
 
 export function listMessages(db: SqliteDb, conversationId: string) {
+  return observeRead('conversation_messages', () => listMessagesUnobserved(db, conversationId), {
+    rows: (result) => result.length,
+  });
+}
+
+function listMessagesUnobserved(db: SqliteDb, conversationId: string) {
   const messages = db
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
