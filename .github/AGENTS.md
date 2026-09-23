@@ -14,6 +14,7 @@ Before changing GitHub automation, read the current versions of:
 - `.github/config/runners.json`, `.github/config/scopes.json`, and `.github/config/convergence.json`
 - `.github/scripts/runners.py`, `.github/scripts/scopes.py`, and `.github/scripts/convergence.py`
 - `.github/workflows/convergence.atom.yml` and `.github/scripts/lib/r2.py` when changing reusable workload results
+- `docs/ci/workload-products.md` when changing reusable workload product publication or restoration
 - `specs/current/ci.md` when changing scope rules, confidence tiers, or planner invariants
 - `e2e/tests/packaged-smoke-workflow.test.ts`
 - `scripts/approve-fork-pr-workflows.ts` and `e2e/tests/scripts/approve-fork-pr-workflows.test.ts` when touching fork PR approval behavior
@@ -61,11 +62,33 @@ must never invoke these scripts. Keep runner placement, changed-file relevance,
 reusable-result convergence, and fine-grained commands inside a workload independent.
 
 `convergence.py` computes workload identities from declared Git inputs, the
-execution class, product mode, and the convergence control contract. Public
-result reads are credential-free and fail open to execution. Only a successful
-gate may produce a `handoff/convergence` candidate; only trusted
+execution class, product mode, policy, and `schema.version`. Changes to hashing
+or declaration interpretation require a schema version bump. The control file
+set remains a trusted-writer admission boundary, not an implicit global cache
+input; execution-affecting configuration must be declared by workloads. Public
+result reads are credential-free. Only confirmed missing receipts select
+execution; transient transport failures fail visibly after their bounded retry.
+Only a successful gate may produce a `handoff/convergence` candidate; only trusted
 `convergence.atom.yml` code may publish immutable results. `lib/r2.py` knows R2
 transport only and must not interpret workload policy or handoff schemas.
+
+Workloads prepared through workflow postinstall may declare `postinstallIntent`.
+The shared stdlib Python resolver projects that intent and the selected Git tree
+into one canonical Plan; the Plan digest, rather than setup-action implementation
+details, enters the workload identity. The Plan describes delivered workspace
+state only. Job IDs, concurrency, cache hits, cache formats, compression,
+storage, retries, and timing are execution policy and stay outside its digest.
+`postinstall.py` and `convergence.py` must use the same resolver, and receipts
+must bind the executed or restored closure to the canonical Plan.
+
+Product workloads may declare `batches` in their workflow configuration. Each
+entry binds one workload, one business execution request, and one product name.
+Python projects build/restore requests and verified artifact references;
+executors do not parse pending Plan state or construct workload identities.
+Requests affect identity, while batch and transport artifact names do not.
+Cross-job projections carry product keys and SHA-256 values rather than public
+origins or complete URLs. Missing publication output must not fall back to an
+incomplete cold Plan.
 
 ## Handoff contract
 
