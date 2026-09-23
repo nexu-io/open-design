@@ -43,6 +43,7 @@ import { ProductionCampaignBadge } from "../../src/components/ProductionCampaign
 import { ProductionCampaignHover } from "../../src/components/ProductionCampaignHover";
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
+import { SERVER_FAULT_HEARTBEAT_MS } from "../../src/components/touchpoint-lifecycle";
 
 const T0 = "2030-01-01T00:00:00.000Z";
 const at = (offsetMs: number) => new Date(Date.parse(T0) + offsetMs).toISOString();
@@ -267,5 +268,80 @@ describe("a cache-replayed activity keeps every production placement up", () => 
 			await vi.advanceTimersByTimeAsync(120_000);
 		});
 		expect(screen.queryByRole("dialog", { name: "Campaign" })).toBeNull();
+	});
+});
+
+// The case the whole fallback bargain rests on, driven through the real
+// loader: daemon HTTP 200 in, revocation out, and not one browser event in
+// between.
+//
+// The bargain OPEND-3436 struck is "revocation depends on being connected:
+// clean up as soon as a recovery check learns about it". The trap is that the
+// browser IS connected for the whole of this story. It talks to its local
+// daemon and gets a 200 every time it asks; what is unreachable is the runtime
+// BEHIND the daemon, which this browser cannot observe at all. So
+// `navigator.onLine` never goes false and `online` never fires; the user is
+// sitting on the home page where the activity is shown, so `focus`,
+// `pageshow` and `visibilitychange` do not fire either. No event in this case
+// is not an omission — it is the case.
+//
+// Which means: if the client does not ask on a clock, nothing else will ever
+// ask, and the pulled activity stays on screen until `endsAt` — here five
+// hours away, and in production a schedule that may run for years.
+describe("a withdrawal reaches a screen only the daemon's cache is feeding", () => {
+	const REVOKED = {
+		error: "production_runtime_revoked",
+		receipt: {
+			touchpointDecisionId: "decision-opend.home.campaign-modal",
+			deploymentId: "deployment-1",
+			activityId: "activity-1",
+			contentVersionId: "version-opend.home.campaign-modal",
+		},
+	};
+	/** Decision requests only; delivery beacons are POSTs and are not asking anything. */
+	const asked = (fetchMock: ReturnType<typeof router>) =>
+		fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method !== "POST")
+			.length;
+
+	it("asks on its own clock, because nothing else in this story ever will", async () => {
+		const fetchMock = router({ "opend.home.campaign-modal": live("opend.home.campaign-modal") });
+		vi.stubGlobal("fetch", fetchMock);
+		render(<ProductionCampaignModal authenticated sessionSubject="account-a" />);
+		await screen.findByRole("dialog", { name: "Campaign" });
+
+		// The runtime goes away behind the daemon. The daemon answers 200 from
+		// its own cache, re-timed to the end of the activity — five hours out.
+		fetchMock.mockImplementation(
+			router({ "opend.home.campaign-modal": replayed("opend.home.campaign-modal") }),
+		);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		const afterReplay = asked(fetchMock);
+
+		// Two minutes of the bargain as it stands: the poll is down and the
+		// activity is up. This is the behaviour the ticket wanted and it is
+		// unchanged.
+		await wellPastTheAuthorization();
+		expect(asked(fetchMock)).toBe(afterReplay);
+		expect(screen.getByRole("dialog", { name: "Campaign" })).toBeTruthy();
+
+		// The operator pulls the activity. The runtime is answering again, but
+		// no event has announced that and none can: nothing is dispatched here.
+		fetchMock.mockImplementation((_input: RequestInfo | URL, init?: RequestInit) =>
+			Promise.resolve(
+				init?.method === "POST"
+					? new Response("{}", { status: 200 })
+					: new Response(JSON.stringify(REVOKED), { status: 410 }),
+			),
+		);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS);
+		});
+
+		// The withdrawal was asked for, and acted on. Without the heartbeat the
+		// activity would sit here until `endsAt`.
+		expect(asked(fetchMock)).toBeGreaterThan(afterReplay);
+		await waitFor(() => expect(screen.queryByRole("dialog", { name: "Campaign" })).toBeNull());
 	});
 });

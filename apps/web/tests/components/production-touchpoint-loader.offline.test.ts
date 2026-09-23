@@ -99,6 +99,48 @@ describe("which failures mean the runtime was unreachable", () => {
 		}
 	});
 
+	// The daemon does NOT pass an upstream 5xx through. It answers 200 with the
+	// decision it had cached and an `offlineReplay` marker saying why — which is
+	// how BOTH reasons actually reach this browser. Collapsing that marker to a
+	// boolean here throws away the only thing downstream needs to decide whether
+	// anything will announce the end of it.
+	it("hands the replay marker up whole instead of collapsing it to a flag", async () => {
+		const body = (replay?: Record<string, string>) => ({
+			activityId: "activity-1",
+			deploymentId: "deployment-1",
+			touchpointDecisionId: "decision-1",
+			placementKey: "opend.home.campaign-modal",
+			content: { id: "version-1", placementKey: "opend.home.campaign-modal" },
+			serverTime: "2030-01-01T00:00:00.000Z",
+			startsAt: "2030-01-01T00:00:00.000Z",
+			endsAt: "2030-01-02T00:00:00.000Z",
+			authorizationExpiresAt: "2030-01-02T00:00:00.000Z",
+			...(replay ? { offlineReplay: replay } : {}),
+		});
+		const decision = async (value: unknown) => {
+			vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify(value), { status: 200 }))));
+			return loadProductionTouchpointDecision(
+				"opend.home.campaign-modal",
+				"en-US",
+				new AbortController().signal,
+			);
+		};
+		for (const reason of ["upstream_unavailable", "upstream_unreachable"] as const) {
+			const replay = {
+				reason,
+				cachedServerTime: "2030-01-01T00:00:00.000Z",
+				effectiveServerTime: "2030-01-01T00:00:30.000Z",
+			};
+			expect(await decision(body(replay)), `${reason} must survive the loader`).toMatchObject({
+				kind: "decision",
+				offlineReplay: replay,
+			});
+		}
+		// A live answer carries no marker, and says so as itself rather than as
+		// the absence of a flag.
+		expect(await decision(body())).toMatchObject({ kind: "decision", offlineReplay: null });
+	});
+
 	it("does not mark a body it could not parse as a transport failure", async () => {
 		// The bytes arrived. Whatever is wrong with them, the runtime was reached,
 		// and replaying cached content over a live answer is not this ticket's job.

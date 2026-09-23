@@ -179,12 +179,21 @@ export const touchpointLeaseValue = <T extends object>(decision: T): TouchpointL
 
 export type TouchpointLifecycleLoad<T> =
 	/**
-	 * `offline` (OPEND-3436) marks a decision the daemon rebuilt from its own
-	 * cache because the runtime was unreachable. It changes nothing about how
-	 * the decision is presented — same key, same value, same window — only
-	 * whether this client goes on asking for a newer one.
+	 * `offlineRecovery` (OPEND-3436) is present exactly when the daemon rebuilt
+	 * this decision from its own cache because the runtime was unreachable. It
+	 * changes nothing about how the decision is presented — same key, same
+	 * value, same window — only whether this client goes on asking for a newer
+	 * one, and how it will find out when it should.
+	 *
+	 * It is a recovery POLICY rather than a flag, and rather than the daemon's
+	 * own reason code, for two different reasons. Against a flag: "stop asking"
+	 * and "nothing will tell you when to start again" are different facts, and
+	 * collapsing them is what let a cached campaign outlive its own withdrawal.
+	 * Against the reason code: the reasons belong to the CMS runtime and this
+	 * hook is shared with the Test channel, so the mapping stays at the loader
+	 * that already speaks that vocabulary.
 	 */
-	| Readonly<{ kind: "decision"; value: T; key: string; validForMs: number; offline?: boolean }>
+	| Readonly<{ kind: "decision"; value: T; key: string; validForMs: number; offlineRecovery?: TouchpointOfflineRecovery }>
 	| Readonly<{ kind: "waiting"; retryAfterMs: number }>
 	| Readonly<{ kind: "retain" }>
 	| Readonly<{ kind: "clear"; ended?: boolean }>;
@@ -285,40 +294,52 @@ export const touchpointEntersOfflineFallback = (error: unknown) =>
 	typeof error === "object" && error !== null && (error as { touchpointOfflineFallback?: unknown }).touchpointOfflineFallback === true;
 
 /**
- * Of the failures that enter fallback, which ones will have NOTHING to announce
- * their recovery.
+ * The one question that decides whether going quiet is safe: if this state
+ * ends, will anything TELL this client?
  *
- * Both halves of {@link touchpointEntersOfflineFallback} mean "the runtime was
- * not reached", and for going quiet that is the only distinction that matters.
- * For coming BACK they are opposites, and the difference is not about blame —
- * it is about which of them the browser can observe ending:
+ * The criterion is not who is at fault. It is whether the browser can observe
+ * the fault ending, and that turns on one thing only — whether the browser's
+ * OWN connection is what failed.
  *
- *  - A transport failure, a refused connection, a dead DNS, a request that
- *    burned its whole budget: the device's own network is the thing that
- *    broke, so its repair fires `online`, and usually `focus` or
- *    `visibilitychange` with it. The four events ARE the recovery signal.
- *  - A 5xx: the request left, crossed the network and came back with an
- *    answer. The network never broke, so `navigator.onLine` stayed true the
- *    whole time and `online` will never fire; a user who simply leaves the app
- *    open on the page the activity appears on fires none of the other three
- *    either. There is no event, anywhere, that says the server is healthy
- *    again — the only way to find out is to ask.
+ *  - `"announced"`. The device's network is what broke: a refused connection,
+ *    a dead DNS, a request that burned its whole budget. Its repair fires
+ *    `online`, usually with `focus` or `visibilitychange` behind it. The four
+ *    events ARE the recovery signal and nothing else is needed.
+ *  - `"unannounced"`. Everything the browser can see is healthy and something
+ *    it CANNOT see is down. `navigator.onLine` stays true, so `online` will
+ *    never fire; a user who simply leaves the app open on the page the
+ *    activity appears on fires none of the other three either. No event
+ *    anywhere says the state is over. Only asking can find out.
+ */
+export type TouchpointOfflineRecovery = "announced" | "unannounced";
+
+/**
+ * The `"unannounced"` half of {@link TouchpointOfflineRecovery}, for a failure
+ * that arrived as a thrown error.
  *
- * So only the second kind earns {@link SERVER_FAULT_HEARTBEAT_MS}. A timeout is
- * deliberately the first kind: `refresh` already classifies a spent budget as
- * "the same condition as a refused connection, reported by a different
- * observer", and this must not quietly reclassify it.
+ * This covers a 5xx from the daemon ITSELF — the request crossed the network
+ * and came back with an answer, so the network never broke. A timeout is
+ * deliberately excluded: `refresh` already classifies a spent budget as "the
+ * same condition as a refused connection, reported by a different observer",
+ * and this must not quietly reclassify it.
+ *
+ * Note what this does NOT cover, because it is most of the real traffic. An
+ * unreachable RUNTIME never reaches this client as an error at all: the daemon
+ * absorbs it and answers 200 with a cached decision plus a replay marker. That
+ * path arrives as a `decision` carrying `offlineRecovery`, not as a rejection,
+ * and it was the whole of the production case this heartbeat exists for.
  */
 export const touchpointFallbackFromServerError = (error: unknown) =>
 	typeof error === "object" && error !== null && (error as { touchpointServerError?: unknown }).touchpointServerError === true;
 
 /**
- * How long this client will go without asking, while it is in fallback because
- * the server answered 5xx. Fixed, and deliberately not backed off.
+ * How long this client will go without asking, while it is in a fallback whose
+ * end nothing will announce ({@link TouchpointOfflineRecovery}). Fixed, and
+ * deliberately not backed off.
  *
  * Backoff would be the right shape if the heartbeat's job were "recover as
  * early as possible". It is not, and reading it that way is how this interval
- * gets doubled by someone trying to be kind to a struggling server. Its job is
+ * gets doubled by someone trying to be kind to a struggling runtime. Its job is
  * to put an UPPER BOUND on how late a withdrawal can reach a screen. A
  * revocation is only ever delivered in the answer to a request this client
  * makes, so the longest a pulled activity can stay up is exactly the longest
@@ -329,6 +350,10 @@ export const touchpointFallbackFromServerError = (error: unknown) =>
  * consecutive-failure count happened to have reached, which nobody can state
  * in advance.
  *
+ * Without it the bound is not long, it is `endsAt` — the replayed schedule's
+ * own end, which the daemon re-times to the full remaining window and which a
+ * production campaign may set years out.
+ *
  * The same bound covers the operator's other two cases for free, because they
  * are the same mechanism: a shortened schedule and a newly published activity
  * both reach this client in the answer to the next request it makes.
@@ -336,7 +361,9 @@ export const touchpointFallbackFromServerError = (error: unknown) =>
  * This is a floor on responsiveness, not a replacement for anything. `online`,
  * `focus`, `pageshow` and `visibilitychange` remain the fast path and are
  * unchanged; the heartbeat is what exists for the case where none of them ever
- * fire.
+ * fire. A fallback they DO cover — the device's own network being down — gets
+ * no heartbeat, because there every request fails the same way for the same
+ * reason and the event that matters is already on its way.
  */
 export const SERVER_FAULT_HEARTBEAT_MS = 5 * 60_000;
 
@@ -371,11 +398,16 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		let heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
 		let retryIndex = 0;
 		/**
-		 * OPEND-3436. True once a failure said the runtime was not reached, and
-		 * false again the moment any answer comes back from it. While it is true
-		 * this client asks only when something happened that could plausibly have
-		 * changed the answer — a reconnection, a return to the page, the end of
-		 * the window — never on a clock.
+		 * OPEND-3436. True while the runtime is not being reached — whether a
+		 * failure said so or the daemon answered from its own cache — and false
+		 * again the moment a live answer comes back.
+		 *
+		 * While it is true, the 30s poll stands down and this client asks only
+		 * when something happened that could plausibly have changed the answer: a
+		 * reconnection, a return to the page, the end of the window. Where
+		 * NOTHING can happen to announce it — see
+		 * {@link TouchpointOfflineRecovery} — a bounded heartbeat joins that
+		 * list, because the alternative is never asking again at all.
 		 */
 		let offline = false;
 		/**
@@ -408,10 +440,11 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			publish();
 		};
 		/**
-		 * The 5xx heartbeat: one request every {@link SERVER_FAULT_HEARTBEAT_MS},
-		 * for as long as fallback is held by a server that ANSWERED rather than a
-		 * transport that failed. It is the only thing that asks during that state,
-		 * and the only reason a withdrawal can still reach this screen.
+		 * One request every {@link SERVER_FAULT_HEARTBEAT_MS}, for as long as
+		 * fallback is held by something the browser cannot observe ending —
+		 * a cached answer from a reachable daemon, or a 5xx from that daemon
+		 * itself. It is the only thing that asks during that state, and the only
+		 * reason a withdrawal can still reach this screen.
 		 *
 		 * It re-arms before it asks, not after it hears back, because the bound
 		 * belongs to the condition rather than to any one request. A hidden page
@@ -442,6 +475,19 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			heartbeatTimer = undefined;
 		};
 		/**
+		 * The single place a recovery policy becomes a timer, so the two ways of
+		 * entering fallback — a thrown failure and a cached 200 — cannot end up
+		 * with different answers to the same question.
+		 *
+		 * `null` means the answer was live, which is also the only thing that
+		 * ends the heartbeat: a cached answer, however many arrive, leaves the
+		 * runtime exactly as unreachable as it was.
+		 */
+		const applyOfflineRecovery = (recovery: TouchpointOfflineRecovery | null) => {
+			if (recovery === "unannounced") armServerFaultHeartbeat();
+			else stopServerFaultHeartbeat();
+		};
+		/**
 		 * A timeout or transport failure is not a revocation. Cancel the attempt
 		 * and keep display authority the server already granted; `armExpiry`
 		 * still retires it at its own deadline, so one poll may be missed and a
@@ -467,8 +513,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				// into a dead transport hands the job back to `online`; a dead
 				// transport that comes back to a still-broken server takes it up
 				// again on that server's next 5xx.
-				if (touchpointFallbackFromServerError(error)) armServerFaultHeartbeat();
-				else stopServerFaultHeartbeat();
+				applyOfflineRecovery(touchpointFallbackFromServerError(error) ? "unannounced" : "announced");
 			}
 			if (touchpointWithdrawsDisplay(error) || !recoverable || elapsed(recoverable.start) >= recoverable.validForMs) {
 				revalidationLease = null;
@@ -556,15 +601,20 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				// A completed attempt restores the full retry budget for the next one.
 				retryIndex = 0;
 				clearTimeout(retryTimer);
-				// An answer arrived, so the runtime is reachable. Only a decision the
-				// daemon rebuilt from cache says otherwise, and it says so explicitly.
-				offline = offlineFallback && result.kind === "decision" && result.offline === true;
-				// Reachable again, so the fault the heartbeat was bounding is over
-				// and the 30s poll takes recovery back. The one answer that keeps
-				// `offline` true is a decision the daemon rebuilt from cache, and it
-				// keeps the heartbeat with it: the daemon still cannot reach the
-				// runtime, so a withdrawal still has no way in but this one.
-				if (!offline) stopServerFaultHeartbeat();
+				// An answer arrived, so the DAEMON is reachable. Only a decision it
+				// rebuilt from its own cache says the runtime behind it is not, and
+				// it says so explicitly.
+				//
+				// This is the entry that happens in production, and for a long time
+				// it was the one that got nothing: the daemon absorbs an unreachable
+				// runtime and answers 200, so the failure never arrives as an error
+				// and the `abandonAttempt` branch above never runs. A client that
+				// only armed there stood its poll down on this path and then had no
+				// way at all to learn about a withdrawal — over a connection that
+				// was working the entire time.
+				const recovery = offlineFallback && result.kind === "decision" ? result.offlineRecovery ?? null : null;
+				offline = recovery !== null;
+				applyOfflineRecovery(recovery);
 				if (result.kind === "retain") {
 					if (!lease.current && revalidationLease && elapsed(revalidationLease.start) < revalidationLease.validForMs) {
 						lease.current = { ...revalidationLease, generation: generation.current };

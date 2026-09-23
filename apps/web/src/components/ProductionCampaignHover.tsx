@@ -20,6 +20,8 @@ import {
 import {
 	emitProductionTouchpointLoadDiagnostic,
 	loadProductionTouchpointDecision,
+	productionTouchpointPairRecovery,
+	productionTouchpointRecovery,
 } from "./production-touchpoint-loader";
 import {
 	resolveAuthorizationDeadline,
@@ -207,11 +209,13 @@ export function ProductionCampaignHover({
 				// the pair still rebuilds.
 				key: `${touchpointContentIdentity(entry.valid.decision)}:${layer.valid.decision.content.id}`,
 				validForMs: Math.min(entry.validForMs, layer.validForMs),
-				// Both halves, not either. One replayed half means the runtime
-				// answered for the other one, so it is still worth polling — and
-				// polling too often is a cost, while polling too seldom is a
-				// campaign that misses a schedule change.
-				offline: entryLoaded.offline && layerLoaded.offline,
+				// Both halves, not either — see `productionTouchpointPairRecovery`,
+				// which also owns how the two recovery policies combine.
+				offlineRecovery:
+					productionTouchpointPairRecovery(
+						productionTouchpointRecovery(entryLoaded.offlineReplay),
+						productionTouchpointRecovery(layerLoaded.offlineReplay),
+					) ?? undefined,
 			};
 		},
 		[locale, sessionSubject],

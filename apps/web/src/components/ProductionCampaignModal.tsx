@@ -21,6 +21,7 @@ import {
 import {
 	emitProductionTouchpointLoadDiagnostic,
 	loadProductionTouchpointDecision,
+	productionTouchpointRecovery,
 } from "./production-touchpoint-loader";
 import {
 	resolveAuthorizationDeadline,
@@ -333,7 +334,7 @@ export function ProductionCampaignModal({
 			// suppressed offer has to clear instead.
 			if (!continuesOpenPresentation && wasDisplayed(sessionSubject, next.activityId))
 				return openPresentation.current ? { kind: "retain" } : { kind: "clear" };
-			return { kind: "decision", value: { ...touchpointLeaseValue(next), sessionSubject }, key: touchpointContentIdentity(next), validForMs: deadline - serverTime, offline: loaded.offline };
+			return { kind: "decision", value: { ...touchpointLeaseValue(next), sessionSubject }, key: touchpointContentIdentity(next), validForMs: deadline - serverTime, offlineRecovery: productionTouchpointRecovery(loaded.offlineReplay) ?? undefined };
 		},
 		[clearOpenPresentation, locale, sessionSubject],
 	);

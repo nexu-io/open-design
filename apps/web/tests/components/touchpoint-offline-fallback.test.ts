@@ -65,12 +65,19 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+/**
+ * What the daemon actually answers when the runtime is unreachable: 200, this
+ * decision rebuilt from its cache, and a marker saying so. The browser's own
+ * connection is fine — the answer came over it — so nothing will announce the
+ * runtime's return; `"unannounced"` is that fact, and it is the same fact for
+ * both reasons the daemon can give.
+ */
 const offlineDecision = (validForMs: number): TouchpointLifecycleLoad<Content> => ({
 	kind: "decision",
 	value: first,
 	key: "same",
 	validForMs,
-	offline: true,
+	offlineRecovery: "unannounced",
 });
 
 describe("offline fallback stops the client asking", () => {
@@ -570,5 +577,103 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 		});
 		expect(load).toHaveBeenCalledTimes(3);
 		expect(result.current.current).toBeNull();
+	});
+});
+
+// The entry that actually happens in production.
+//
+// A failed REQUEST is not how this client learns the runtime is gone. The
+// daemon absorbs that: it answers 200 with the decision it had cached and an
+// `offlineReplay` marker. So the browser's own connection is demonstrably
+// healthy — this very answer crossed it — which is precisely why nothing will
+// announce the runtime coming back, and why the cases above that reject a
+// `serverError()` were pinning a path production never takes.
+describe("a cached answer from a reachable daemon keeps the same heartbeat", () => {
+	const cached = (): TouchpointLifecycleLoad<Content> => ({
+		kind: "decision",
+		value: first,
+		key: "same",
+		validForMs: 3_600_000,
+		offlineRecovery: "unannounced",
+	});
+
+	it("arms on the 200 the daemon actually sends, not only on a failed request", async () => {
+		const load = vi
+			.fn<Load>()
+			.mockResolvedValueOnce({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 })
+			.mockResolvedValue(cached());
+		renderHook(() =>
+			useTouchpointLifecycle({
+				enabled: true,
+				identity: "production",
+				load,
+				offlineFallback: true,
+			}),
+		);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+
+		// The existing bargain, unchanged: two minutes of standing down.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(120_000);
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+
+		// And then the bound, which is the only thing that will ever ask again.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS - 120_000);
+		});
+		expect(load).toHaveBeenCalledTimes(3);
+
+		// Still cached, so still bounded — one per interval, not a chain.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS - 1);
+		});
+		expect(load).toHaveBeenCalledTimes(3);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1);
+		});
+		expect(load).toHaveBeenCalledTimes(4);
+	});
+
+	it("stops the heartbeat the moment the daemon has a live answer again", async () => {
+		const load = vi
+			.fn<Load>()
+			.mockResolvedValueOnce({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 })
+			.mockResolvedValueOnce(cached())
+			.mockResolvedValue({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 });
+		renderHook(() =>
+			useTouchpointLifecycle({
+				enabled: true,
+				identity: "production",
+				load,
+				offlineFallback: true,
+			}),
+		);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS);
+		});
+		expect(load).toHaveBeenCalledTimes(3);
+		// Live again: the 30s poll takes recovery back and the heartbeat is gone.
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(4);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(load).toHaveBeenCalledTimes(5);
 	});
 });
