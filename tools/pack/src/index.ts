@@ -103,7 +103,6 @@ function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
 function addMacBuildOptions(command: CacCommand) {
   return addBuildOptions(command, "mac")
     .option("--mac-compression <mode>", "mac artifact compression: normal|maximum|store (default: normal)")
-    .option("--payload-profile <profile>", "packaging probe payload: full|without-web-daemon (default: full)")
     .option("--mac-runtime-product <path>", "restored platform runtime product root")
     .option("--archive <path>", "runtime-restore: local product archive")
     .option("--output <path>", "runtime-export/runtime-restore output path")

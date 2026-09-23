@@ -10,7 +10,6 @@ import {
   copyMacPrebundleRuntimeDependencies,
   copyResourceTree,
   createMacElectronRebuildOptions,
-  removeMacSidecarRuntimeDependencies,
   renderMacPackagedConfig,
   toRelativeImportSpecifier,
   validateMacNativeRebuildOutput,
@@ -277,27 +276,6 @@ describe("copyMacPrebundleRuntimeDependencies", () => {
   });
 });
 
-describe("removeMacSidecarRuntimeDependencies", () => {
-  it("removes only the web and daemon runtime closure roots", () => {
-    const manifest: Record<string, unknown> = {
-      dependencies: {
-        "@ffmpeg-installer/ffmpeg": "1.1.0",
-        "@open-design/sidecar": "0.23.1",
-        "better-sqlite3": "12.10.0",
-        "blake3-wasm": "2.1.5",
-        hyperframes: "0.8.1",
-        "node-pty": "1.1.0",
-        sharp: "0.35.3",
-      },
-      optionalDependencies: { fsevents: "2.3.3" },
-    };
-
-    removeMacSidecarRuntimeDependencies(manifest);
-
-    expect(manifest).toEqual({ dependencies: { "@open-design/sidecar": "0.23.1" } });
-  });
-});
-
 describe("renderMacPackagedConfig", () => {
   it("omits nodeCommandRelative so packaged mac sidecars use Electron as Node", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
@@ -434,7 +412,6 @@ describe("runElectronBuilder", () => {
     await runElectronBuilder(config, paths, ["dir"]);
 
     return JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
-      afterPack?: string;
       afterSign?: string;
       mac?: {
         notarize?: boolean;
@@ -461,20 +438,6 @@ describe("runElectronBuilder", () => {
 
       expect(builderConfig.afterSign).toBeUndefined();
       expect(builderConfig.mac?.notarize).toBe(false);
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  it("omits the web copy hook for the without-web-daemon timing probe", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
-    try {
-      const builderConfig = await prepareElectronBuilderConfig(root, {
-        payloadProfile: "without-web-daemon",
-        webOutputMode: "standalone",
-      });
-
-      expect(builderConfig.afterPack).toBeUndefined();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

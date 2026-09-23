@@ -14,7 +14,6 @@ export { WORKSPACE_ROOT } from "../workspace-root.js";
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
-export type ToolPackPayloadProfile = "full" | "without-web-daemon";
 export type ToolPackWebOutputMode = "server" | "standalone";
 export type ToolPackAmrProfile = "prod" | "test" | "feature-test" | "local";
 export type ToolPackVelaWebUrls = Partial<Record<ToolPackAmrProfile, string>>;
@@ -33,7 +32,6 @@ export type ToolPackCliOptions = {
   json?: boolean;
   macCompression?: string;
   macRuntimeProduct?: string;
-  payloadProfile?: string;
   notarize?: boolean;
   namespace?: string;
   path?: string;
@@ -79,7 +77,6 @@ export type ToolPackConfig = {
   electronVersion: string;
   macCompression: ToolPackMacCompression;
   macNotarize?: boolean;
-  payloadProfile?: ToolPackPayloadProfile;
   namespace: string;
   platform: ToolPackPlatform;
   portable: boolean;
@@ -171,12 +168,6 @@ function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCo
   if (value == null || value.length === 0) return "normal";
   if (value === "store" || value === "normal" || value === "maximum") return value;
   throw new Error(`unsupported mac --mac-compression value: ${value}`);
-}
-
-function resolveToolPackPayloadProfile(value: string | undefined): ToolPackPayloadProfile {
-  if (value == null || value.length === 0 || value === "full") return "full";
-  if (value === "without-web-daemon") return value;
-  throw new Error(`unsupported --payload-profile value: ${value}`);
 }
 
 function resolveToolPackAppVersion(value: string | undefined): string | undefined {
@@ -407,7 +398,6 @@ export function resolveToolPackConfig(
     electronVersion: resolveElectronVersion(WORKSPACE_ROOT),
     macCompression: resolveToolPackMacCompression(options.macCompression),
     macNotarize: options.notarize === true,
-    payloadProfile: resolveToolPackPayloadProfile(options.payloadProfile),
     namespace,
     platform,
     portable: options.portable === true,

@@ -2716,16 +2716,9 @@ process.stdin.on("end", () => {
     expect(build).toContain("dmg-probe/phases.jsonl");
     expect(build).toContain("dmg-probe/preflight.jsonl");
     expect(build).toContain("dmg-probe/fs-usage*.log");
-    const payloadPlan = await runBetaExecutionPlan({
-      profile: "mac-x64-payload-probe", targets: "default", promote: true,
-    });
-    expect(payloadPlan).toMatchObject({
-      release: { publish: false, promote: false },
-      platforms: { mac_x64: { enabled: true, payloadProfile: "without-web-daemon", smokeMode: "skip" } },
-      jobs: { test: false, build_mac_x64: true, publish: false },
-    });
-    expect(build).toContain('--payload-profile "${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_x64.payloadProfile }}"');
     expect(build).toContain("Preserve nonpublishing mac_x64 artifacts");
+    expect(workflow).not.toContain("mac-x64-payload-probe");
+    expect(workflow).not.toContain("--payload-profile");
   });
 
   it("[P2] excludes Linux from stable planning, builds, outputs, and publication", async () => {

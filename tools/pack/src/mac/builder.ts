@@ -93,8 +93,7 @@ export async function runElectronBuilder(
   const identity = resolveMacInstallIdentity(config);
   const packagedVersion = await readPackagedVersion(config);
   const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
-  const includeSidecars = config.webOutputMode === "standalone" && config.payloadProfile !== "without-web-daemon";
-  const webStandaloneHookConfigPath = includeSidecars
+  const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
     ? await writeWebStandaloneHookConfig(config, paths)
     : null;
   const builderConfig = {
@@ -193,13 +192,11 @@ export async function runElectronBuilder(
   });
   await assertPackagedSidecarRuntime(join(paths.appPath, "Contents", "Resources", "app"), [
     "main.cjs",
-    ...(includeSidecars ? [MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH].map((entry) => entry.slice("app/".length)) : []),
+    ...(config.webOutputMode === "standalone" ? [MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH].map((entry) => entry.slice("app/".length)) : []),
   ]);
-  if (includeSidecars) {
-    await assertNodePtyRuntime({
-      appRoot: join(paths.appPath, "Contents", "Resources", "app"),
-      arch: resolveNodePtyRuntimeArch(process.arch),
-      platform: "darwin",
-    });
-  }
+  await assertNodePtyRuntime({
+    appRoot: join(paths.appPath, "Contents", "Resources", "app"),
+    arch: resolveNodePtyRuntimeArch(process.arch),
+    platform: "darwin",
+  });
 }

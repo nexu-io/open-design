@@ -57,7 +57,6 @@ export async function toRelativeImportSpecifier(fromDirectory: string, targetPat
 async function buildPrebundledStandaloneRuntime(
   config: ToolPackConfig,
   paths: MacPaths,
-  includeSidecars = true,
 ): Promise<void> {
   const resolverNodeModules = join(config.roots.output.namespaceRoot, "prebundle-resolver", "node_modules");
   await rm(dirname(resolverNodeModules), { force: true, recursive: true });
@@ -88,7 +87,6 @@ async function buildPrebundledStandaloneRuntime(
     metafilePath: paths.packagedMainPrebundleMetaPath,
     policyName: "packagedMain",
   });
-  if (!includeSidecars) return;
   await runEsbuild(config, [
     join(config.workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
     "--bundle",
@@ -236,20 +234,6 @@ export async function copyMacPrebundleRuntimeDependencies(
     const targetRoot = join(appRoot, "node_modules", packageName);
     await rm(targetRoot, { force: true, recursive: true });
     await cp(sourceRoot, targetRoot, { dereference: true, recursive: true });
-  }
-}
-
-export function removeMacSidecarRuntimeDependencies(manifest: Record<string, unknown>): void {
-  for (const field of ["dependencies", "optionalDependencies"] as const) {
-    const dependencies = manifest[field];
-    if (dependencies == null || typeof dependencies !== "object" || Array.isArray(dependencies)) continue;
-    for (const dependency of [
-      ...Object.keys(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES),
-      ...Object.keys(MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES),
-    ]) {
-      delete (dependencies as Record<string, unknown>)[dependency];
-    }
-    if (Object.keys(dependencies).length === 0) delete manifest[field];
   }
 }
 
@@ -429,13 +413,11 @@ export async function writeAssembledApp(
     join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
     join(paths.assembledAppRoot, "preload.cjs"),
   );
-  const usePrebundledRuntime = shouldUseMacStandalonePrebundle(config.webOutputMode);
-  const includeSidecars = usePrebundledRuntime && config.payloadProfile !== "without-web-daemon";
+  const usePrebundledStandaloneWeb = shouldUseMacStandalonePrebundle(config.webOutputMode);
   if (runtimeProductRoot == null) {
     await writeMacAssembledPackageJson(config, paths, packedTarballs, packagedVersion);
   } else {
     const productManifest = JSON.parse(await readFile(join(runtimeProductRoot, "app-package.json"), "utf8")) as Record<string, unknown>;
-    if (!includeSidecars) removeMacSidecarRuntimeDependencies(productManifest);
     const identity = resolveMacInstallIdentity(config);
     await writeFile(paths.assembledPackageJsonPath, `${JSON.stringify({
       ...productManifest,
@@ -455,11 +437,11 @@ export async function writeAssembledApp(
       recursive: true,
     });
   }
-  if (usePrebundledRuntime) await buildPrebundledStandaloneRuntime(config, paths, includeSidecars);
+  if (usePrebundledStandaloneWeb) await buildPrebundledStandaloneRuntime(config, paths);
   if (resolverTarballs.length > 0 || runtimeProductRoot != null) await runNpmPrune(paths.assembledAppRoot);
   await writeFile(
     paths.assembledMainEntryPath,
-    renderMacPackagedMainEntry(usePrebundledRuntime),
+    renderMacPackagedMainEntry(usePrebundledStandaloneWeb),
     "utf8",
   );
   await writeFile(
@@ -467,11 +449,11 @@ export async function writeAssembledApp(
     renderMacPackagedConfig({
       appVersion: packagedVersion,
       config,
-      usePrebundledStandaloneWeb: includeSidecars,
+      usePrebundledStandaloneWeb,
     }),
     "utf8",
   );
-  if (runtimeProductRoot == null && includeSidecars) {
+  if (runtimeProductRoot == null && usePrebundledStandaloneWeb) {
     await copyMacPrebundleRuntimeDependencies(config, paths.assembledAppRoot);
   }
   if (runtimeProductRoot == null) {

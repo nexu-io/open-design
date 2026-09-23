@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 
-PROFILES = {"publish", "build", "validate", "mac-x64-dmg-probe", "mac-x64-payload-probe"}
+PROFILES = {"publish", "build", "validate", "mac-x64-dmg-probe"}
 TARGETS = ("mac_arm64", "mac_x64", "win_x64")
 TARGET_ALIASES = {target: target for target in TARGETS} | {
     "mac-arm64": "mac_arm64",
@@ -31,7 +31,6 @@ PLATFORM_FIELDS = {
         "target": {"dmg", "all"},
         "dmgProbe": bool,
         "dmgPreflight": bool,
-        "payloadProfile": {"full", "without-web-daemon"},
     },
     "win_x64": {
         "signMode": {"off", "on"},
@@ -65,7 +64,6 @@ def parse_targets(profile: str, raw: str) -> set[str]:
         "build": set(TARGETS),
         "validate": set(),
         "mac-x64-dmg-probe": {"mac_x64"},
-        "mac-x64-payload-probe": {"mac_x64"},
     }
     normalized = raw.strip().lower()
     if normalized in {"", "default"}:
@@ -105,7 +103,6 @@ def default_platforms() -> dict[str, dict[str, Any]]:
             "target": "all",
             "dmgProbe": False,
             "dmgPreflight": False,
-            "payloadProfile": "full",
         },
         "win_x64": {
             "enabled": False,
@@ -191,12 +188,6 @@ def resolve(inputs: dict[str, str], requests: dict[str, Any], contribution: bool
             platform["smokeMode"] = "skip"
     elif profile == "mac-x64-dmg-probe":
         plan["platforms"]["mac_x64"].update({"smokeMode": "skip", "dmgProbe": True, "dmgPreflight": True})
-    elif profile == "mac-x64-payload-probe":
-        plan["platforms"]["mac_x64"].update({
-            "smokeMode": "skip",
-            "dmgPreflight": True,
-            "payloadProfile": "without-web-daemon",
-        })
 
     apply_overrides(plan, inputs.get("plan_overrides", ""))
 

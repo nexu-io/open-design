@@ -11,7 +11,6 @@ on:
           - build
           - validate
           - mac-x64-dmg-probe
-          - mac-x64-payload-probe
         default: publish
       targets:
         description: "Native targets: default, all, none, or a comma-separated list of mac_arm64, mac_x64, win_x64."
@@ -939,7 +938,6 @@ jobs:
             --build-json "$RUNNER_TEMP/release-build/mac_x64/build.json"
             --mac-runtime-product "$RUNNER_TEMP/mac-runtime-product"
             --mac-compression "${{ fromJSON(needs.release_prepare.outputs.execution_plan).release.macCompression }}"
-            --payload-profile "${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_x64.payloadProfile }}"
             --to "${{ fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_x64.target }}"
             --json
             --require-vela-cli
@@ -1027,24 +1025,6 @@ jobs:
       - name: Publish mac_x64 report summary
         if: ${{ !cancelled() && steps.report_mac_x64.outcome == 'success' }}
         run: cat "${{ runner.temp }}/release-report/mac_x64/summary.md" >> "$GITHUB_STEP_SUMMARY"
-      - name: Summarize mac_x64 payload probe
-        if: ${{ !cancelled() && fromJSON(needs.release_prepare.outputs.execution_plan).platforms.mac_x64.payloadProfile == 'without-web-daemon' && steps.mac_x64_tools_pack_build.outcome == 'success' }}
-        run: |
-          set -euo pipefail
-          root="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta-x64"
-          {
-            echo "## mac_x64 payload isolation probe"
-            echo
-            echo "| Artifact | Bytes |"
-            echo "| --- | ---: |"
-            find "$root" -type f \( -name "*.dmg" -o -name "*.zip" \) -print0 | while IFS= read -r -d "" file; do
-              printf "| \`%s\` | %s |\n" "${file#"$root"/}" "$(stat -f "%z" "$file")"
-            done
-            app="$(find "$root" -type d -name '*.app' -print -quit)"
-            if [ -n "$app" ]; then
-              printf "| \`%s\` | %s |\n" "${app#"$root"/}" "$(( $(du -sk "$app" | cut -f1) * 1024 ))"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve nonpublishing mac_x64 artifacts
         if: ${{ !cancelled() && !fromJSON(needs.release_prepare.outputs.execution_plan).release.publish && steps.mac_x64_tools_pack_build.outcome == 'success' }}
         uses: actions/upload-artifact@v7

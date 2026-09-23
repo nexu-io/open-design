@@ -66,9 +66,7 @@ async function executeMacPackaging(
     });
     // Public source results preserve pristine maps. Per-release upload and
     // stripping are packaging work even when source compilation was omitted.
-    await runPhase("web-sourcemaps", async () => {
-      if (config.payloadProfile !== "without-web-daemon") await processWebSourcemaps(config);
-    });
+    await runPhase("web-sourcemaps", async () => processWebSourcemaps(config));
   }
   await runPhase("seed-app-config", async () => {
     await seedPackagedAppConfig(config);
